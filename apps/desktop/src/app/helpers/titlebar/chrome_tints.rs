@@ -325,10 +325,22 @@ mod full_colour_tests {
         for (preset, _, _) in DARK_THEME_PRESET_CONTROLS {
             for points in subtle_to_vivid() {
                 let object = settings(preset, "#808080", 96.0, points);
-                assert_eq!(
-                    resolved(&object),
-                    depth_only(&object),
-                    "{preset} at {points}"
+                let (sidebar, work) = resolved(&object);
+                let (sidebar_l, sidebar_c, _) = ghostex_settings_catalog::dark_chrome::srgb_to_oklch(
+                    sidebar_titlebar_rgb_channels(sidebar).map(f64::from),
+                );
+                let (work_l, work_c, _) = ghostex_settings_catalog::dark_chrome::srgb_to_oklch(
+                    sidebar_titlebar_rgb_channels(work).map(f64::from),
+                );
+                assert!(
+                    sidebar_c <= ghostex_settings_catalog::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA + 0.004
+                        && sidebar_l <= ghostex_settings_catalog::dark_chrome::SUBTLE_DARK_MAX_LIGHTNESS + 0.008,
+                    "{preset} at {points}: sidebar {sidebar:06x} (L={sidebar_l:.3}, C={sidebar_c:.4})"
+                );
+                assert!(
+                    work_c <= ghostex_settings_catalog::dark_chrome::SUBTLE_WORK_AREA_MAX_CHROMA + 0.004
+                        && work_l <= ghostex_settings_catalog::dark_chrome::SUBTLE_DARK_MAX_LIGHTNESS + 0.008,
+                    "{preset} at {points}: work {work:06x} (L={work_l:.3}, C={work_c:.4})"
                 );
             }
         }
@@ -344,8 +356,13 @@ mod full_colour_tests {
     #[test]
     fn vivid_values_below_the_limit_are_still_cut_to_85() {
         // A preset at Vivid computes 94 - 12 = 82, a custom colour 96 - 12 = 84, and a hand-edited
-        // file may hold 84 or 82: all still draw what depth 85 draws.
-        let at_85 = sidebar_titlebar_background_for_darkness(85.0, 0x2f7f7f);
+        // file may hold 84 or 82: all still draw what depth 85 draws (presets with the subtle cap).
+        let at_85 = ghostex_settings_catalog::theme_colours::sidebar_titlebar_background_toward_full_subtle(
+            85.0,
+            0x2f7f7f,
+            0.0,
+            ghostex_settings_catalog::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA,
+        );
         assert_eq!(resolved(&settings("teal", "#808080", 96.0, -12.0)).0, at_85);
         for stored in [84.0, 82.0, 0.0] {
             let object = settings("custom", "#273136", stored, -12.0);
@@ -462,17 +479,26 @@ mod full_colour_tests {
 
     #[test]
     fn light_mode_is_unchanged_from_subtle_to_vivid() {
-        for (preset, lightness, tint) in LIGHT_THEME_PRESET_CONTROLS {
+        for (preset, _, _) in LIGHT_THEME_PRESET_CONTROLS {
             for points in subtle_to_vivid() {
                 let object = light_settings(preset, "#808080", 96.0, points);
-                let before = sidebar_titlebar_light_background_for_lightness(
-                    clamp_sidebar_titlebar_light_background_lightness_percent(lightness + points),
-                    tint,
+                let (sidebar, work) = resolved_light(&object);
+                let (_, sidebar_c, _) = ghostex_settings_catalog::dark_chrome::srgb_to_oklch(
+                    sidebar_titlebar_rgb_channels(sidebar).map(f64::from),
                 );
-                assert_eq!(
-                    resolved_light(&object),
-                    (before, before),
-                    "{preset} at {points}"
+                let (_, work_c, _) = ghostex_settings_catalog::dark_chrome::srgb_to_oklch(
+                    sidebar_titlebar_rgb_channels(work).map(f64::from),
+                );
+                assert!(
+                    sidebar_c
+                        <= ghostex_settings_catalog::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA + 0.004,
+                    "{preset} at {points}: sidebar {sidebar:06x} C={sidebar_c:.4}"
+                );
+                assert!(
+                    work_c
+                        <= ghostex_settings_catalog::dark_chrome::SUBTLE_WORK_AREA_MAX_CHROMA
+                            + 0.004,
+                    "{preset} at {points}: work {work:06x} C={work_c:.4}"
                 );
             }
         }
@@ -574,29 +600,28 @@ mod full_colour_tests {
         );
     }
 
-    /// The theme's own background each preset's work area paints, from the theme projects;
-    /// Solarized Dark keeps red 3, the least the dark work area's step toward white leaves.
+    /// The subtle-capped theme background each preset's work area paints.
     const PRESET_WORK_AREA: [(&str, u32); 20] = [
-        ("mocha", 0x1e1e2e),
-        ("macchiato", 0x24273a),
-        ("frappe", 0x303446),
+        ("mocha", 0x1a1b23),
+        ("macchiato", 0x1a1c25),
+        ("frappe", 0x1c1d24),
         ("latte", 0xeff1f5),
-        ("dracula", 0x282a36),
-        ("alucard", 0xfffbeb),
-        ("sol-dark", 0x032b36),
-        ("sol-light", 0xfdf6e3),
-        ("tn-night", 0x1a1b26),
-        ("tn-storm", 0x24283b),
-        ("tn-moon", 0x222436),
+        ("dracula", 0x1b1c24),
+        ("alucard", 0xfefbf0),
+        ("sol-dark", 0x141f22),
+        ("sol-light", 0xfaf6ec),
+        ("tn-night", 0x191a22),
+        ("tn-storm", 0x191c25),
+        ("tn-moon", 0x1a1c24),
         ("tn-day", 0xe1e2e7),
-        ("nord", 0x2e3440),
-        ("kg-wave", 0x1f1f28),
+        ("nord", 0x191d25),
+        ("kg-wave", 0x1c1c24),
         ("kg-dragon", 0x181616),
-        ("kg-lotus", 0xf2ecbc),
-        ("ef-dark", 0x2d353b),
-        ("ef-light", 0xfdf6e3),
-        ("gm-dark", 0x282828),
-        ("gm-light", 0xfbf1c7),
+        ("kg-lotus", 0xecebe0),
+        ("ef-dark", 0x161e23),
+        ("ef-light", 0xfaf6ec),
+        ("gm-dark", 0x1c1c1c),
+        ("gm-light", 0xf3f1e6),
     ];
 
     #[test]

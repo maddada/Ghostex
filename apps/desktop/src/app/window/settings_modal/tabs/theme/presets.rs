@@ -592,29 +592,28 @@ mod tests {
     use super::super::colours::{hex_of, preview_colours, preview_scheme_dark};
     use super::*;
 
-    /// The work area each preset paints at Full: the theme's own background. Solarized Dark's
-    /// `#002b36` keeps red 3, the least the dark work area's step toward white leaves.
+    /// The work area each preset paints at Full: the preset's subtle-capped theme background.
     const WORK_AREA: [(&str, &str); 20] = [
-        ("mocha", "#1e1e2e"),
-        ("macchiato", "#24273a"),
-        ("frappe", "#303446"),
+        ("mocha", "#1a1b23"),
+        ("macchiato", "#1a1c25"),
+        ("frappe", "#1c1d24"),
         ("latte", "#eff1f5"),
-        ("dracula", "#282a36"),
-        ("alucard", "#fffbeb"),
-        ("sol-dark", "#032b36"),
-        ("sol-light", "#fdf6e3"),
-        ("tn-night", "#1a1b26"),
-        ("tn-storm", "#24283b"),
-        ("tn-moon", "#222436"),
+        ("dracula", "#1b1c24"),
+        ("alucard", "#fefbf0"),
+        ("sol-dark", "#141f22"),
+        ("sol-light", "#faf6ec"),
+        ("tn-night", "#191a22"),
+        ("tn-storm", "#191c25"),
+        ("tn-moon", "#1a1c24"),
         ("tn-day", "#e1e2e7"),
-        ("nord", "#2e3440"),
-        ("kg-wave", "#1f1f28"),
+        ("nord", "#191d25"),
+        ("kg-wave", "#1c1c24"),
         ("kg-dragon", "#181616"),
-        ("kg-lotus", "#f2ecbc"),
-        ("ef-dark", "#2d353b"),
-        ("ef-light", "#fdf6e3"),
-        ("gm-dark", "#282828"),
-        ("gm-light", "#fbf1c7"),
+        ("kg-lotus", "#ecebe0"),
+        ("ef-dark", "#161e23"),
+        ("ef-light", "#faf6ec"),
+        ("gm-dark", "#1c1c1c"),
+        ("gm-light", "#f3f1e6"),
     ];
 
     fn apply(start: &[(&str, Value)], id: &str, light_picked: bool) -> SettingsValues {
@@ -647,7 +646,7 @@ mod tests {
         let expected = json!({
             "sidebarTheme": "dark-2",
             "darkThemePreset": "custom",
-            "customSidebarTitlebarBackgroundTintColor": "#1c1c2c",
+            "customSidebarTitlebarBackgroundTintColor": "#181921",
             "terminalGhosttyTheme": "Ghostex Catppuccin Mocha",
             "lightThemePreset": "custom",
             "customSidebarTitlebarLightBackgroundTintColor": "#eaecf2",

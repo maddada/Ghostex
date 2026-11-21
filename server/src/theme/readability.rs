@@ -84,9 +84,9 @@ fn sidebar(settings: &Map<String, Value>, light: bool) -> [f64; 3] {
     ))
 }
 
-/// A role's colour laid over `under`.
-fn over(value: RoleValue, light: bool, under: [f64; 3]) -> [f64; 3] {
-    let [r, g, b, a] = value.rgba(light);
+/// A role's colour laid over `under` (with `base` as the work area colour for relative `base+N%` roles).
+fn over(value: RoleValue, light: bool, under: [f64; 3], base: u32) -> [f64; 3] {
+    let [r, g, b, a] = value.rgba_on_base(light, base);
     let a = f64::from(a);
     let top = [r, g, b].map(|channel| f64::from(channel) * 255.0);
     [0, 1, 2].map(|index| under[index] + (top[index] - under[index]) * a)
@@ -119,10 +119,12 @@ const BACKGROUND_KEYS: [&str; 7] = [
 
 /// What the theme colours of one appearance make hard to read.
 fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: &mut Vec<Warning>) {
-    let page = work_area(settings, light);
+    let page_rgb = work_area_background_for_variant(settings, light);
+    let page = channels(page_rgb);
     let side = sidebar(settings, light);
     let text_on = |fill: [f64; 3]| {
-        role(settings, light, "text").map_or(default_text(light), |text| over(text, light, fill))
+        role(settings, light, "text")
+            .map_or(default_text(light), |text| over(text, light, fill, page_rgb))
     };
     let mut push = |id: &str, text: String, extra: Vec<String>| {
         let mut keys = vec![role_key(light, id)];
@@ -137,8 +139,8 @@ fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: 
         let Some(value) = role(settings, light, id) else {
             continue;
         };
-        let ratio =
-            contrast(over(value, light, page), page).min(contrast(over(value, light, side), side));
+        let ratio = contrast(over(value, light, page, page_rgb), page)
+            .min(contrast(over(value, light, side, page_rgb), side));
         if ratio < needed {
             text_fails |= id == "text";
             push(
@@ -162,7 +164,7 @@ fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: 
         let Some(value) = role(settings, light, id) else {
             continue;
         };
-        let ratio = contrast(over(value, light, page), page);
+        let ratio = contrast(over(value, light, page, page_rgb), page);
         if ratio < 3.0 {
             push(
                 id,
@@ -176,7 +178,7 @@ fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: 
         let Some(value) = role(settings, light, id) else {
             continue;
         };
-        let ratio = contrast(over(value, light, page), page);
+        let ratio = contrast(over(value, light, page, page_rgb), page);
         if ratio < 1.05 {
             push(
                 id,
@@ -199,7 +201,7 @@ fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: 
         let Some(value) = role(settings, light, id).filter(|_| !text_fails) else {
             continue;
         };
-        let fill = over(value, light, page);
+        let fill = over(value, light, page, page_rgb);
         let ratio = contrast(text_on(fill), fill);
         if ratio < 4.5 {
             push(

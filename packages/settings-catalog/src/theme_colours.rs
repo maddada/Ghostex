@@ -547,6 +547,78 @@ pub fn light_chrome_raw_controls(object: &Map<String, Value>) -> (f64, u32) {
     (lightness + theme_contrast_offset(object), tint)
 }
 
+/// The dark chrome at `darkness` for `tint`, faded `fade` of the way toward the tint itself,
+/// capped by the built-in subtle tint rule (`max_chroma` and `SUBTLE_DARK_MAX_LIGHTNESS`).
+pub fn sidebar_titlebar_background_toward_full_subtle(
+    darkness_percent: f64,
+    tint: u32,
+    fade: f64,
+    max_chroma: f64,
+) -> u32 {
+    let vivid = sidebar_titlebar_background_for_darkness(darkness_percent, tint);
+    let channels = |color: u32| sidebar_titlebar_rgb_channels(color).map(f64::from);
+    sidebar_titlebar_pack_rgb(
+        crate::dark_chrome::dark_chrome_toward_full_subtle(
+            channels(vivid),
+            channels(tint),
+            fade,
+            max_chroma,
+            crate::dark_chrome::SUBTLE_DARK_MAX_LIGHTNESS,
+        )
+        .map(|channel| channel as f32),
+    )
+}
+
+/// The light chrome at `lightness` for `tint`, faded `fade` of the way toward the tint itself,
+/// capped by the built-in subtle chroma rule (`max_chroma`).
+pub fn sidebar_titlebar_light_background_toward_full_subtle(
+    lightness_percent: f64,
+    tint: u32,
+    fade: f64,
+    max_chroma: f64,
+) -> u32 {
+    let vivid = sidebar_titlebar_light_background_for_lightness(lightness_percent, tint);
+    let channels = |color: u32| sidebar_titlebar_rgb_channels(color).map(f64::from);
+    sidebar_titlebar_pack_rgb(
+        crate::dark_chrome::light_chrome_toward_full_subtle(
+            channels(vivid),
+            channels(tint),
+            fade,
+            max_chroma,
+        )
+        .map(|channel| channel as f32),
+    )
+}
+
+/// Whether the dark appearance uses a Custom colour rather than one of the built-in colour squares
+/// (matches `dark_chrome_raw_controls`). Custom colours are never capped by the built-in subtle
+/// tint rule.
+pub fn dark_preset_is_custom(object: &Map<String, Value>) -> bool {
+    let preset = object.get("darkThemePreset").and_then(Value::as_str);
+    if preset == Some("custom") {
+        return true;
+    }
+    if preset.is_some_and(|name| {
+        DARK_THEME_PRESET_CONTROLS
+            .iter()
+            .any(|(key, _, _)| *key == name)
+    }) {
+        return false;
+    }
+    let default_preset = crate::default_value("darkThemePreset").and_then(J::as_str);
+    default_preset == Some("custom")
+        || custom_dark_chrome_controls(object)
+            != (
+                DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
+                default_custom_dark_tint_rgb(),
+            )
+}
+
+/// Whether the light appearance uses a Custom colour rather than one of the built-in colour squares.
+pub fn light_preset_is_custom(object: &Map<String, Value>) -> bool {
+    object.get("lightThemePreset").and_then(Value::as_str) == Some("custom")
+}
+
 /// The chrome background one appearance resolves to from the saved settings, whichever
 /// appearance the app is currently on. Chat uses this with its own theme's variant.
 pub fn resolved_custom_sidebar_titlebar_background_for_variant(
@@ -555,18 +627,30 @@ pub fn resolved_custom_sidebar_titlebar_background_for_variant(
 ) -> u32 {
     if light {
         let (lightness, tint) = light_chrome_controls(object);
-        sidebar_titlebar_light_background_toward_full(
-            lightness,
-            tint,
-            theme_full_colour_fade(object, "themeSidebarContrast"),
-        )
+        let fade = theme_full_colour_fade(object, "themeSidebarContrast");
+        if light_preset_is_custom(object) {
+            sidebar_titlebar_light_background_toward_full(lightness, tint, fade)
+        } else {
+            sidebar_titlebar_light_background_toward_full_subtle(
+                lightness,
+                tint,
+                fade,
+                crate::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA,
+            )
+        }
     } else {
         let (darkness, tint) = dark_chrome_controls(object);
-        sidebar_titlebar_background_toward_full(
-            darkness,
-            tint,
-            theme_full_colour_fade(object, "themeSidebarContrast"),
-        )
+        let fade = theme_full_colour_fade(object, "themeSidebarContrast");
+        if dark_preset_is_custom(object) {
+            sidebar_titlebar_background_toward_full(darkness, tint, fade)
+        } else {
+            sidebar_titlebar_background_toward_full_subtle(
+                darkness,
+                tint,
+                fade,
+                crate::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA,
+            )
+        }
     }
 }
 
@@ -576,18 +660,32 @@ pub fn resolved_work_area_chrome_for_variant(object: &Map<String, Value>, light:
     let delta = work_area_contrast_delta(object);
     if light {
         let (lightness, tint) = light_chrome_raw_controls(object);
-        sidebar_titlebar_light_background_toward_full(
-            clamp_sidebar_titlebar_light_background_lightness_percent(lightness + delta),
-            tint,
-            theme_full_colour_fade(object, "themeWorkAreaContrast"),
-        )
+        let lightness = clamp_sidebar_titlebar_light_background_lightness_percent(lightness + delta);
+        let fade = theme_full_colour_fade(object, "themeWorkAreaContrast");
+        if light_preset_is_custom(object) {
+            sidebar_titlebar_light_background_toward_full(lightness, tint, fade)
+        } else {
+            sidebar_titlebar_light_background_toward_full_subtle(
+                lightness,
+                tint,
+                fade,
+                crate::dark_chrome::SUBTLE_WORK_AREA_MAX_CHROMA,
+            )
+        }
     } else {
         let (darkness, tint) = dark_chrome_raw_controls(object);
-        sidebar_titlebar_background_toward_full(
-            clamp_sidebar_titlebar_background_darkness_percent(darkness + delta),
-            tint,
-            theme_full_colour_fade(object, "themeWorkAreaContrast"),
-        )
+        let darkness = clamp_sidebar_titlebar_background_darkness_percent(darkness + delta);
+        let fade = theme_full_colour_fade(object, "themeWorkAreaContrast");
+        if dark_preset_is_custom(object) {
+            sidebar_titlebar_background_toward_full(darkness, tint, fade)
+        } else {
+            sidebar_titlebar_background_toward_full_subtle(
+                darkness,
+                tint,
+                fade,
+                crate::dark_chrome::SUBTLE_WORK_AREA_MAX_CHROMA,
+            )
+        }
     }
 }
 
@@ -595,7 +693,30 @@ pub fn resolved_work_area_chrome_for_variant(object: &Map<String, Value>, light:
 /// User: "make the contrast show as a slider in the advanced and make sidebar and main contrast different please". The work area's own colour (chat, terminals, the workspace and its glass tint, web pages' content colour) comes from the theme at the work area contrast, while the sidebar keeps the sidebar contrast.
 /// SEE-ALSO: `getWorkAreaBackgroundForSettings` in packages/shared/ghostex-settings/titlebar-color.ts (deleted 2026-10-01).
 pub fn work_area_background_for_variant(object: &Map<String, Value>, light: bool) -> u32 {
-    session_chat_background_for_chrome(resolved_work_area_chrome_for_variant(object, light))
+    let background =
+        session_chat_background_for_chrome(resolved_work_area_chrome_for_variant(object, light));
+    let is_custom = if light {
+        light_preset_is_custom(object)
+    } else {
+        dark_preset_is_custom(object)
+    };
+    if is_custom {
+        return background;
+    }
+    let channels = sidebar_titlebar_rgb_channels(background).map(f64::from);
+    let capped = if light {
+        crate::dark_chrome::cap_subtle_light_rgb(
+            channels,
+            crate::dark_chrome::SUBTLE_WORK_AREA_MAX_CHROMA,
+        )
+    } else {
+        crate::dark_chrome::cap_subtle_dark_rgb(
+            channels,
+            crate::dark_chrome::SUBTLE_WORK_AREA_MAX_CHROMA,
+            crate::dark_chrome::SUBTLE_DARK_MAX_LIGHTNESS,
+        )
+    };
+    sidebar_titlebar_pack_rgb(capped.map(|channel| channel as f32))
 }
 
 pub fn sidebar_titlebar_blend_toward_white(color: u32, amount: f32) -> u32 {

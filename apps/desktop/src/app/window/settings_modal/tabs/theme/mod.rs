@@ -279,11 +279,21 @@ impl ThemeTab {
         }
         // The preview binary's `theme-role-picker` opens Your messages' Pick Color dialog.
         if state == "theme-role-picker" {
-            let roles = self.store.read(cx).values().value("themeRoles");
+            let values = self.store.read(cx).values();
+            let roles = values.value("themeRoles");
+            let base = ghostex_settings_catalog::theme_colours::work_area_background_for_variant(
+                values.map(),
+                false,
+            );
             let hex = roles["dark"]["userMessage"]
                 .as_str()
-                .map_or("#808080", |raw| raw.get(..7).unwrap_or(raw))
-                .to_string();
+                .and_then(|raw| ghostex_settings_catalog::theme_roles::parse_role_value(raw).ok())
+                .map(|value| {
+                    let [r, g, b, _] = value.rgba_on_base(false, base);
+                    let byte = |channel: f32| (channel * 255.0).round() as u8;
+                    format!("#{:02x}{:02x}{:02x}", byte(r), byte(g), byte(b))
+                })
+                .unwrap_or_else(|| "#808080".to_string());
             self.open_role_picker("userMessage", false, &hex, None, window, cx);
         }
         if state == "theme-light-scheme" {

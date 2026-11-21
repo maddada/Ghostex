@@ -199,7 +199,8 @@ fn live_background_colors(
     contrast_points: f64,
 ) -> [[f32; 3]; 3] {
     let vivid = ((4.0 - contrast_points) / 16.0).clamp(0.0, 1.0) as f32;
-    let saturation = 0.35 + 0.5 * vivid;
+    // CDXC:Theming 2026-11-21 (Q4388 subtle rule): Live backgrounds shown at 70% of their colour.
+    let saturation = (0.35 + 0.5 * vivid) * 0.70;
     let (tint_hue, tint_saturation, _) = hsl_of(tint);
     let (accent_hue, accent_saturation, _) = hsl_of(accent);
     let (hue, second_hue, saturation) = if tint_saturation >= 0.08 {

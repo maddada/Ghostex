@@ -48,6 +48,15 @@ pub const FULL_COLOUR_MAX_LUMINANCE: f64 = 0.04;
 /// chrome's #262626 text keeps about 10:1 and its grey labels (about #6b7280) about 3:1.
 pub const LIGHT_FULL_COLOUR_MIN_LUMINANCE: f64 = 0.62;
 
+/// CDXC:Theming 2026-11-21 DECISION:
+/// User (Q4388, theme-editor page): built-in themes and built-in colour squares keep their hue as
+/// a subtle tint rather than a saturated surface: OKLCH chroma at most 0.020 in the sidebar and
+/// 0.016 (80%) in the work area, and dark lightness at most 23% (0.23). Custom colours, Fine-tune
+/// colours and the accent are never capped, so the user can still pick anything.
+pub const SUBTLE_SIDEBAR_MAX_CHROMA: f64 = 0.020;
+pub const SUBTLE_WORK_AREA_MAX_CHROMA: f64 = 0.016;
+pub const SUBTLE_DARK_MAX_LIGHTNESS: f64 = 0.23;
+
 /// Contrast points rounded to the half point Colourfulness moves in, over the whole slider
 /// (Subtle to Full). Depth uses the narrower Subtle-to-Vivid clamp on top of this.
 pub fn round_theme_contrast_points(points: f64) -> f64 {
@@ -128,6 +137,101 @@ pub fn light_full_colour_target(picked: [f64; 3]) -> [f64; 3] {
         }
     }
     toward_white(high)
+}
+
+fn delinear(value: f64) -> f64 {
+    let value = value.max(0.0);
+    if value <= 0.0031308 {
+        12.92 * value
+    } else {
+        1.055 * value.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+/// sRGB (0-255 channels) to OKLCH `(L, C, h_radians)`.
+pub fn srgb_to_oklch(rgb: [f64; 3]) -> (f64, f64, f64) {
+    let [r, g, b] = rgb.map(linear);
+    let l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b).cbrt();
+    let m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b).cbrt();
+    let s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b).cbrt();
+    let lightness = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+    let a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+    let b = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+    (lightness, a.hypot(b), b.atan2(a))
+}
+
+/// OKLCH `(L, C, h_radians)` back to sRGB (0-255 channels, clamped to sRGB gamut).
+pub fn oklch_to_srgb(lightness: f64, chroma: f64, hue: f64) -> [f64; 3] {
+    let a = chroma * hue.cos();
+    let b = chroma * hue.sin();
+    let l = (lightness + 0.3963377774 * a + 0.2158037573 * b).powi(3);
+    let m = (lightness - 0.1055613458 * a - 0.0638541728 * b).powi(3);
+    let s = (lightness - 0.0894841775 * a - 1.2914855480 * b).powi(3);
+    let r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    let g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    let b = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+    [r, g, b].map(|value| delinear(value).clamp(0.0, 1.0) * 255.0)
+}
+
+/// Caps a dark built-in surface colour in OKLCH to at most `max_chroma` and `max_lightness`,
+/// keeping colours that are already within the bounds unchanged.
+pub fn cap_subtle_dark_rgb(rgb: [f64; 3], max_chroma: f64, max_lightness: f64) -> [f64; 3] {
+    let (lightness, chroma, hue) = srgb_to_oklch(rgb);
+    if chroma <= max_chroma && lightness <= max_lightness {
+        return rgb;
+    }
+    oklch_to_srgb(
+        lightness.min(max_lightness),
+        chroma.min(max_chroma),
+        hue,
+    )
+}
+
+/// Caps a light built-in surface colour in OKLCH to at most `max_chroma`, keeping colours that are
+/// already within the chroma bound unchanged.
+pub fn cap_subtle_light_rgb(rgb: [f64; 3], max_chroma: f64) -> [f64; 3] {
+    let (lightness, chroma, hue) = srgb_to_oklch(rgb);
+    if chroma <= max_chroma {
+        return rgb;
+    }
+    oklch_to_srgb(lightness, max_chroma, hue)
+}
+
+/// Built-in dark colour squares' chrome at `fade` (0 at Vivid and above, 1 at Full), with both the
+/// Vivid base and the Full target capped to `(max_chroma, max_lightness)` so every step stays a
+/// subtle tint and Full reaches the capped tint smoothly.
+pub fn dark_chrome_toward_full_subtle(
+    vivid: [f64; 3],
+    picked: [f64; 3],
+    fade: f64,
+    max_chroma: f64,
+    max_lightness: f64,
+) -> [f64; 3] {
+    let vivid = cap_subtle_dark_rgb(vivid, max_chroma, max_lightness);
+    if fade <= 0.0 {
+        return vivid;
+    }
+    let target = cap_subtle_dark_rgb(full_colour_target(picked), max_chroma, max_lightness);
+    let fade = fade.min(1.0);
+    let mixed = [0, 1, 2].map(|index| vivid[index] + (target[index] - vivid[index]) * fade);
+    cap_subtle_dark_rgb(mixed, max_chroma, max_lightness)
+}
+
+/// Built-in light colour squares' chrome at `fade`, with both Vivid and Full capped to `max_chroma`.
+pub fn light_chrome_toward_full_subtle(
+    vivid: [f64; 3],
+    picked: [f64; 3],
+    fade: f64,
+    max_chroma: f64,
+) -> [f64; 3] {
+    let vivid = cap_subtle_light_rgb(vivid, max_chroma);
+    if fade <= 0.0 {
+        return vivid;
+    }
+    let target = cap_subtle_light_rgb(light_full_colour_target(picked), max_chroma);
+    let fade = fade.min(1.0);
+    let mixed = [0, 1, 2].map(|index| vivid[index] + (target[index] - vivid[index]) * fade);
+    cap_subtle_light_rgb(mixed, max_chroma)
 }
 
 /// The light chrome `fade` of the way from `vivid` (what lightness draws at Vivid) to the picked

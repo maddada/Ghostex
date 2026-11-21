@@ -159,7 +159,13 @@ pub(crate) fn window_art_redraw_key() -> u64 {
     hasher.finish()
 }
 
-/// Decodes `bytes` into the BGRA bitmap GPUI draws, blurred by `blur` points first.
+/// How much of its colour saturation a built-in artwork keeps behind the window
+/// (CDXC:Theming 2026-11-21, Q4388 subtle rule: Art backgrounds dimmed to 45% and shown at 70%
+/// of their colour).
+const ART_COLOUR_SATURATION: f32 = 0.70;
+
+/// Decodes `bytes` into the BGRA bitmap GPUI draws, blurred by `blur` points first and toned to
+/// [`ART_COLOUR_SATURATION`] of its colour.
 fn decode_artwork(bytes: &[u8], blur: u8) -> Option<Arc<RenderImage>> {
     let decoded = image::load_from_memory_with_format(bytes, image::ImageFormat::WebP).ok()?;
     let mut rgba = decoded.into_rgba8();
@@ -169,7 +175,22 @@ fn decode_artwork(bytes: &[u8], blur: u8) -> Option<Arc<RenderImage>> {
         rgba = image::imageops::fast_blur(&rgba, f32::from(blur) * 1.5);
     }
     for pixel in rgba.pixels_mut() {
-        pixel.0.swap(0, 2);
+        let r = f32::from(pixel.0[0]);
+        let g = f32::from(pixel.0[1]);
+        let b = f32::from(pixel.0[2]);
+        let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        let tone = |channel: f32| {
+            (luma + (channel - luma) * ART_COLOUR_SATURATION)
+                .round()
+                .clamp(0.0, 255.0) as u8
+        };
+        let nr = tone(r);
+        let ng = tone(g);
+        let nb = tone(b);
+        // GPUI RenderImage expects BGRA.
+        pixel.0[0] = nb;
+        pixel.0[1] = ng;
+        pixel.0[2] = nr;
     }
     Some(Arc::new(RenderImage::new(vec![image::Frame::new(rgba)])))
 }

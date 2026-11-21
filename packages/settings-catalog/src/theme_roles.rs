@@ -4,10 +4,16 @@
 //! exactly.
 //!
 //! A role's value is the ink at an opacity (`"6%"`: white in dark mode, black in light mode, laid
-//! over whatever is under it), or a colour (`"#7dd3fc"`, or `"#7dd3fc80"` with its opacity).
+//! over whatever is under it), a colour (`"#7dd3fc"`, or `"#7dd3fc80"` with its opacity), or a step
+//! off the appearance's work area base colour (`"base+4%"`, `"base-15%"`, or `"base+4%/80%"` with
+//! its opacity: positive steps toward the ink, negative toward the opposite pole, so built-in
+//! theme fills follow whatever window colour the user picks).
 //!
 //! CDXC:Theming 2026-11-14 DECISION:
 //! User (Q3113 B and Q3195, agent theming page): after the look settings, agents restyle Ghostex through about sixteen named theme roles, "border, hairline, muted text, accent, surfaces, menu", that override what the palettes derive, per appearance, in one synced setting, so "the white borders feel too bright, tone them down" works. Borders, dividers and grey text are washes of the ink by default, so on window glass they stay see-through and on a solid fill they read the same: a role set as an opacity keeps that, and one set as a colour paints that colour on both.
+//!
+//! CDXC:Theming 2026-11-21 DECISION:
+//! User (Q4390 Option B, theme-editor page): theme surface fills (`userMessage`, `chatBox`, `surface`, `control`, `menu`, `codeBlock`, `selection`) are saved relative to the window colour (`base+N%`, `base-N%`, with optional `/A%` opacity) so picking any Dark/Light colour square or Custom colour shifts every fill naturally while still allowing any custom hex colour override.
 //! SEE-ALSO: apps/desktop/src/app/helpers/theme_roles.rs (the desktop applies them), server/src/theme/ (`ghostex theme`), server/src/ghostex_cli/help_guide.md.
 
 use crate::json::ToJson;
@@ -125,11 +131,20 @@ pub enum RoleValue {
     Ink(f32),
     /// A colour, with its opacity, 0 to 1.
     Colour { rgb: [u8; 3], alpha: f32 },
+    /// Relative to the appearance's work area base colour: `step` (-1 to 1, positive toward the
+    /// ink: white in dark mode, black in light mode; negative toward the opposite pole), with its
+    /// opacity `alpha` (0 to 1).
+    Base { step: f32, alpha: f32 },
 }
 
 impl RoleValue {
-    /// Red, green, blue and opacity, each 0 to 1, in one appearance.
+    /// Red, green, blue and opacity, each 0 to 1, in one appearance over its neutral fallback base.
     pub fn rgba(self, light: bool) -> [f32; 4] {
+        self.rgba_on_base(light, if light { 0xf7f7f7 } else { 0x0d0d0d })
+    }
+
+    /// Red, green, blue and opacity, each 0 to 1, in one appearance with work area base `base_rgb`.
+    pub fn rgba_on_base(self, light: bool, base_rgb: u32) -> [f32; 4] {
         match self {
             RoleValue::Ink(alpha) => {
                 let ink = if light { 0.0 } else { 1.0 };
@@ -141,13 +156,73 @@ impl RoleValue {
                 f32::from(rgb[2]) / 255.0,
                 alpha,
             ],
+            RoleValue::Base { step, alpha } => {
+                let base = [
+                    f32::from(((base_rgb >> 16) & 0xff) as u8) / 255.0,
+                    f32::from(((base_rgb >> 8) & 0xff) as u8) / 255.0,
+                    f32::from((base_rgb & 0xff) as u8) / 255.0,
+                ];
+                let (target, amount) = if step >= 0.0 {
+                    (if light { 0.0 } else { 1.0 }, step.clamp(0.0, 1.0))
+                } else {
+                    (if light { 1.0 } else { 0.0 }, (-step).clamp(0.0, 1.0))
+                };
+                [
+                    (base[0] + (target - base[0]) * amount).clamp(0.0, 1.0),
+                    (base[1] + (target - base[1]) * amount).clamp(0.0, 1.0),
+                    (base[2] + (target - base[2]) * amount).clamp(0.0, 1.0),
+                    alpha.clamp(0.0, 1.0),
+                ]
+            }
         }
     }
 }
 
-/// Reads `"6%"`, `"#rrggbb"`, `"#rgb"` or `"#rrggbbaa"`.
+fn parse_percent(raw: &str, label: &str) -> Result<f32, String> {
+    let percent = raw
+        .trim()
+        .strip_suffix('%')
+        .ok_or_else(|| format!("\"{label}\" is not a percentage."))?;
+    let number: f32 = percent
+        .trim()
+        .parse()
+        .map_err(|_| format!("\"{label}\" is not a percentage."))?;
+    if !number.is_finite() || !(0.0..=100.0).contains(&number) {
+        return Err(format!("\"{label}\" must be from 0% to 100%."));
+    }
+    Ok(number / 100.0)
+}
+
+fn parse_base_value(text: &str) -> Result<RoleValue, String> {
+    let rest = text[4..].trim();
+    let (step_part, alpha_part) = match rest.split_once('/') {
+        Some((step, alpha)) => (step.trim(), Some(alpha.trim())),
+        None => (rest, None),
+    };
+    let step = if step_part.is_empty() {
+        0.0
+    } else if let Some(pos) = step_part.strip_prefix('+') {
+        parse_percent(pos, text)?
+    } else if let Some(neg) = step_part.strip_prefix('-') {
+        -parse_percent(neg, text)?
+    } else {
+        return Err(format!(
+            "\"{text}\" is not a relative colour: use base+4%, base-15% or base+4%/80%."
+        ));
+    };
+    let alpha = match alpha_part {
+        Some(raw) => parse_percent(raw, text)?,
+        None => 1.0,
+    };
+    Ok(RoleValue::Base { step, alpha })
+}
+
+/// Reads `"6%"`, `"base+4%"` (or `"base-15%"`, `"base+4%/80%"`), `"#rrggbb"`, `"#rgb"` or `"#rrggbbaa"`.
 pub fn parse_role_value(raw: &str) -> Result<RoleValue, String> {
     let text = raw.trim();
+    if text.len() >= 4 && text[..4].eq_ignore_ascii_case("base") {
+        return parse_base_value(text);
+    }
     if let Some(percent) = text.strip_suffix('%') {
         let number: f32 = percent
             .trim()
@@ -159,7 +234,7 @@ pub fn parse_role_value(raw: &str) -> Result<RoleValue, String> {
         return Ok(RoleValue::Ink(number / 100.0));
     }
     let digits = text.strip_prefix('#').ok_or_else(|| {
-        format!("\"{text}\" is not a role value: give an opacity such as 6%, or a colour such as #7dd3fc.")
+        format!("\"{text}\" is not a role value: give an opacity such as 6%, a base step such as base+4%, or a colour such as #7dd3fc.")
     })?;
     let expanded: String = match digits.len() {
         3 => digits.chars().flat_map(|digit| [digit, digit]).collect(),
@@ -183,17 +258,20 @@ pub fn parse_role_value(raw: &str) -> Result<RoleValue, String> {
     Ok(RoleValue::Colour { rgb, alpha })
 }
 
-/// The value in the words `ghostex theme` and Settings show it in: `6%` or `#7dd3fc`.
+fn format_percent(fraction: f32) -> String {
+    let percent = (fraction * 1000.0).round() / 10.0;
+    if percent.fract() == 0.0 {
+        format!("{}%", percent as i32)
+    } else {
+        format!("{percent}%")
+    }
+}
+
+/// The value in the words `ghostex theme` and Settings show it in: `6%`, `base+4%`, `base+4%/80%`
+/// or `#7dd3fc`.
 pub fn format_role_value(value: RoleValue) -> String {
     match value {
-        RoleValue::Ink(alpha) => {
-            let percent = (alpha * 1000.0).round() / 10.0;
-            if percent.fract() == 0.0 {
-                format!("{}%", percent as i32)
-            } else {
-                format!("{percent}%")
-            }
-        }
+        RoleValue::Ink(alpha) => format_percent(alpha),
         RoleValue::Colour { rgb, alpha } if alpha >= 1.0 => {
             format!("#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2])
         }
@@ -204,6 +282,15 @@ pub fn format_role_value(value: RoleValue) -> String {
             rgb[2],
             (alpha * 255.0).round() as u8
         ),
+        RoleValue::Base { step, alpha } => {
+            let sign = if step < 0.0 { "-" } else { "+" };
+            let magnitude = format_percent(step.abs());
+            if alpha >= 1.0 {
+                format!("base{sign}{magnitude}")
+            } else {
+                format!("base{sign}{magnitude}/{}", format_percent(alpha))
+            }
+        }
     }
 }
 

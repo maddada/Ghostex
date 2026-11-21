@@ -65,9 +65,11 @@ fn gpui_onboarding_theme_table() -> ThemeTable {
             chrome: points
                 .iter()
                 .map(|points| {
-                    sidebar_titlebar_background_for_darkness(
+                    ghostex_settings_catalog::theme_colours::sidebar_titlebar_background_toward_full_subtle(
                         clamp_sidebar_titlebar_background_darkness_percent(darkness + points),
                         *tint,
+                        ghostex_settings_catalog::dark_chrome::full_colour_fade(*points),
+                        ghostex_settings_catalog::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA,
                     )
                 })
                 .collect(),
@@ -81,11 +83,13 @@ fn gpui_onboarding_theme_table() -> ThemeTable {
             chrome: points
                 .iter()
                 .map(|points| {
-                    sidebar_titlebar_light_background_for_lightness(
+                    ghostex_settings_catalog::theme_colours::sidebar_titlebar_light_background_toward_full_subtle(
                         clamp_sidebar_titlebar_light_background_lightness_percent(
                             lightness + points,
                         ),
                         *tint,
+                        ghostex_settings_catalog::dark_chrome::full_colour_fade(*points),
+                        ghostex_settings_catalog::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA,
                     )
                 })
                 .collect(),

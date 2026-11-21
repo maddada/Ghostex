@@ -282,7 +282,7 @@ const ART_TINTS_LIGHT: [(&str, &str); 2] = [
     ("windowGlassSidebarOpacityLight", "80"),
     ("windowGlassWorkAreaTintLight", "68"),
 ];
-const ART_DIM_DARK: &str = "30";
+const ART_DIM_DARK: &str = "45";
 const ART_DIM_LIGHT: &str = "12";
 
 /// The glass tints keys of one appearance.

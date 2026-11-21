@@ -324,7 +324,7 @@ fn roles_group(settings: &Map<String, Value>) -> Value {
     json!({
         "id": "roles",
         "title": "Theme colours",
-        "about": "Each one an opacity of the text colour over what is under it (4%), which stays see-through on glass, or a colour (#7dd3fc, or #7dd3fc80 with its opacity); default keeps the theme's own.",
+        "about": "Each one an opacity of the text colour over what is under it (4%), a step off the window colour (base+4%, base-15% or base+4%/80% with opacity) so fills follow the picked colour, or a colour (#7dd3fc, or #7dd3fc80 with its opacity); default keeps the theme's own.",
         "roles": rows,
     })
 }

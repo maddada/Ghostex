@@ -84,8 +84,10 @@ they ask for one.
      `warning`, `danger`.
      Name one as `dark.border` or `light.border`; a bare name sets both, or add
      `--dark` or `--light`. A value is an opacity of the text colour over what
-     is under it (`4%`: stays see-through on glass), or a colour (`#7dd3fc`,
-     `#7dd3fc80` with its opacity); `default` puts the theme's own back. To tone
+     is under it (`4%`: stays see-through on glass), a step off the window
+     colour (`base+4%`, `base-15%`, or `base+4%/80%` with opacity, so fills
+     follow the picked colour), or a colour (`#7dd3fc`, `#7dd3fc80` with its
+     opacity); `default` puts the theme's own back. To tone
      lines down, lower `border` and `divider` a point or two; to make grey
      text easier to read, raise `mutedText`. The user also finds them in
      Settings > Themes > Fine-tune colours. They change the computer and the

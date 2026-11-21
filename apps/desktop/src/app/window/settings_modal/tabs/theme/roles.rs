@@ -47,7 +47,7 @@ const FIRST_ROLES: usize = 0;
 
 /// The swatch's side, and the slider track's width beside the text box.
 const SWATCH: f32 = 24.0;
-const TEXT_BOX: f32 = 108.0;
+const TEXT_BOX: f32 = 128.0;
 const READOUT: f32 = 36.0;
 
 /// The colour the Pick Color dialog starts on for a role not set whose default is not known (the
@@ -159,13 +159,15 @@ fn field_key(kind: &str, role: &str, light: bool) -> &'static str {
 /// A role's opacity, 0 to 1.
 fn alpha_of(value: RoleValue) -> f32 {
     match value {
-        RoleValue::Ink(alpha) | RoleValue::Colour { alpha, .. } => alpha,
+        RoleValue::Ink(alpha) | RoleValue::Colour { alpha, .. } | RoleValue::Base { alpha, .. } => {
+            alpha
+        }
     }
 }
 
-/// `#rrggbb` of what a role paints in one appearance.
-fn hex_of(value: RoleValue, light: bool) -> String {
-    let [r, g, b, _] = value.rgba(light);
+/// `#rrggbb` of what a role paints in one appearance over `base_rgb`.
+fn hex_of(value: RoleValue, light: bool, base_rgb: u32) -> String {
+    let [r, g, b, _] = value.rgba_on_base(light, base_rgb);
     let byte = |channel: f32| (channel * 255.0).round() as u8;
     format!("#{:02x}{:02x}{:02x}", byte(r), byte(g), byte(b))
 }
@@ -237,6 +239,7 @@ impl ThemeTab {
         &mut self,
         p: &SettingsPalette,
         saved: &Value,
+        base_rgb: u32,
         role: &'static str,
         light: bool,
         label: Option<&'static str>,
@@ -256,7 +259,10 @@ impl ThemeTab {
         let default = role_default(saved, role, light);
         let shown = value.or(default);
         let on_default = value.is_none() && default.is_some();
-        let hex = shown.map_or_else(|| UNSET_PICK.to_string(), |shown| hex_of(shown, light));
+        let hex = shown.map_or_else(
+            || UNSET_PICK.to_string(),
+            |shown| hex_of(shown, light, base_rgb),
+        );
         // The swatch, and its dialog while it is open.
         let colour_key = field_key("colour", role, light);
         let picker_open = self
@@ -272,7 +278,7 @@ impl ThemeTab {
         let rim = hsla(p.hairline);
         let dashed = hsla(p.foreground_alpha(0.4));
         let fill = shown.map(|shown| {
-            let [r, g, b, a] = shown.rgba(light);
+            let [r, g, b, a] = shown.rgba_on_base(light, base_rgb);
             gpui::Hsla::from(gpui::Rgba { r, g, b, a })
         });
         let pick_hex = hex.clone();
@@ -363,14 +369,15 @@ impl ThemeTab {
                         current.or(default).map(|current| match current {
                             RoleValue::Ink(_) => RoleValue::Ink(alpha),
                             RoleValue::Colour { rgb, .. } => RoleValue::Colour { rgb, alpha },
+                            RoleValue::Base { step, .. } => RoleValue::Base { step, alpha },
                         })
                     },
                     cx,
                 );
             });
             let track = step_slider(self, p, binding, f64::from(percent), saver, window, cx);
-            // An opacity (8%) already reads in the text box; a colour's opacity does not.
-            let readout = matches!(value, RoleValue::Colour { .. }).then(|| {
+            // An opacity (8%) already reads in the text box; a colour's or base step's opacity does not.
+            let readout = matches!(value, RoleValue::Colour { .. } | RoleValue::Base { .. }).then(|| {
                 div()
                     .flex_shrink_0()
                     .w(px(READOUT))
@@ -432,9 +439,14 @@ impl ThemeTab {
             {
                 set_here.push(light);
             }
+            let base_rgb = ghostex_settings_catalog::theme_colours::work_area_background_for_variant(
+                t.values.map(),
+                light,
+            );
             lines.push(self.role_editor_line(
                 &p,
                 &saved,
+                base_rgb,
                 role,
                 light,
                 both.then_some(label),
@@ -516,7 +528,7 @@ impl ThemeTab {
             &p,
             "Fine-tune colours",
             Some(SharedString::from(
-                "Pick a colour, or drag its opacity so the glass shows through. A value can also be an opacity of the text colour (4%) or a colour (#7dd3fc). Empty keeps the theme's own; your messages, the chat box, cards and the accent are in Chat colours.",
+                "Pick a colour, or drag its opacity so the glass shows through. A value can also be an opacity of the text colour (4%), a step off the window colour (base+4% or base+4%/80%) or a colour (#7dd3fc). Empty keeps the theme's own; your messages, the chat box, cards and the accent are in Chat colours.",
             )),
             None,
             rows,

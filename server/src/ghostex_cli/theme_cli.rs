@@ -63,8 +63,9 @@ Theme colours:
   as dark.<colour> or light.<colour>; a bare name sets both, or the
   appearance --dark or --light picks. A value is an opacity of the text
   colour over what is under it (4%: see-through, right on glass and off it),
-  or a colour (#7dd3fc, #7dd3fc80 with its opacity); default puts the
-  theme's own back.
+  a step off the window colour (base+4%, base-15%, or base+4%/80% with
+  opacity, so fills follow the picked colour), or a colour (#7dd3fc,
+  #7dd3fc80 with its opacity); default puts the theme's own back.
 
 Limits:
   Only the settings and colours `read` lists can change. You can't see the

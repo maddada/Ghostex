@@ -86,11 +86,15 @@ fn bubble_fill(background: Rgb, light: bool) -> Hsla {
 /// The colour theme role `id` sets in one appearance (helpers/theme_roles.rs reads the applied
 /// settings the same way), or `None` while it keeps the chat's own.
 fn preview_role(values: &SettingsValues, id: &str, light: bool) -> Option<Hsla> {
+    let base = ghostex_settings_catalog::theme_colours::work_area_background_for_variant(
+        values.map(),
+        light,
+    );
     let [r, g, b, a] = roles_for(values.map(), light)
         .into_iter()
         .find(|(role, _)| *role == id)?
         .1
-        .rgba(light);
+        .rgba_on_base(light, base);
     Some(gpui::Rgba { r, g, b, a }.into())
 }
 

@@ -7,9 +7,11 @@
 use super::super::super::catalog::{module, settings_catalog};
 use super::super::super::store::SettingsValues;
 use ghostex_settings_catalog::dark_chrome::{
-    MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT, THEME_CONTRAST_FULL_POINTS,
-    THEME_CONTRAST_VIVID_POINTS, dark_chrome_toward_full, full_colour_fade,
-    light_chrome_toward_full,
+    MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT, SUBTLE_DARK_MAX_LIGHTNESS,
+    SUBTLE_SIDEBAR_MAX_CHROMA, SUBTLE_WORK_AREA_MAX_CHROMA, THEME_CONTRAST_FULL_POINTS,
+    THEME_CONTRAST_VIVID_POINTS, cap_subtle_dark_rgb, cap_subtle_light_rgb,
+    dark_chrome_toward_full, dark_chrome_toward_full_subtle, full_colour_fade,
+    light_chrome_toward_full, light_chrome_toward_full_subtle,
 };
 use serde_json::{Map, Value, json};
 
@@ -231,6 +233,25 @@ pub(super) fn dark_chrome_full(darkness: f64, tint: &str, fade: f64) -> Rgb {
     Rgb(dark_chrome_toward_full(vivid.0, picked.0, fade).map(channel))
 }
 
+/// Built-in colour squares' dark chrome, capped by the subtle tint rule (`max_chroma`, `SUBTLE_DARK_MAX_LIGHTNESS`).
+pub(super) fn dark_chrome_full_subtle(
+    darkness: f64,
+    tint: &str,
+    fade: f64,
+    max_chroma: f64,
+) -> Rgb {
+    let vivid = dark_chrome(darkness, tint);
+    let picked = parse_hex(&normalize_hex(tint, DEFAULT_TINT));
+    Rgb(dark_chrome_toward_full_subtle(
+        vivid.0,
+        picked.0,
+        fade,
+        max_chroma,
+        SUBTLE_DARK_MAX_LIGHTNESS,
+    )
+    .map(channel))
+}
+
 /// `light_chrome` faded `fade` of the way toward the tint itself
 /// (`sidebar_titlebar_light_background_toward_full`).
 pub(super) fn light_chrome_full(lightness: f64, tint: &str, fade: f64) -> Rgb {
@@ -240,6 +261,18 @@ pub(super) fn light_chrome_full(lightness: f64, tint: &str, fade: f64) -> Rgb {
     }
     let picked = parse_hex(&normalize_hex(tint, DEFAULT_TINT));
     Rgb(light_chrome_toward_full(vivid.0, picked.0, fade).map(channel))
+}
+
+/// Built-in colour squares' light chrome, capped by the subtle chroma rule (`max_chroma`).
+pub(super) fn light_chrome_full_subtle(
+    lightness: f64,
+    tint: &str,
+    fade: f64,
+    max_chroma: f64,
+) -> Rgb {
+    let vivid = light_chrome(lightness, tint);
+    let picked = parse_hex(&normalize_hex(tint, DEFAULT_TINT));
+    Rgb(light_chrome_toward_full_subtle(vivid.0, picked.0, fade, max_chroma).map(channel))
 }
 
 /// `getSidebarTitlebarLightBackgroundForLightness`.
@@ -387,20 +420,23 @@ pub(super) fn preset_label(dark: bool, preset: &str) -> String {
         .unwrap_or_else(|| preset.to_string())
 }
 
-/// `presetChromeAtStep`: a preset's chrome at some Colourfulness contrast points.
+/// `presetChromeAtStep`: a preset's chrome at some Colourfulness contrast points, capped by the
+/// built-in subtle tint rule.
 fn preset_chrome_at_points(dark: bool, preset: &str, points: f64) -> Rgb {
     let (percent, tint) = preset_controls(dark, preset).unwrap_or((96.0, DEFAULT_TINT.to_string()));
     if dark {
-        dark_chrome_full(
+        dark_chrome_full_subtle(
             clamp_darkness(percent + clamp_contrast(points)),
             &tint,
             full_colour_fade(points),
+            SUBTLE_SIDEBAR_MAX_CHROMA,
         )
     } else {
-        light_chrome_full(
+        light_chrome_full_subtle(
             clamp_lightness(percent + clamp_contrast(points)),
             &tint,
             full_colour_fade(points),
+            SUBTLE_SIDEBAR_MAX_CHROMA,
         )
     }
 }
@@ -567,27 +603,73 @@ pub(super) fn preview_scheme_dark(sidebar_theme: &str, system_dark: bool) -> boo
 /// `ColourfulnessPreview`: the sidebar chrome and the work area colour of one appearance, and the
 /// foreground its divider is drawn with.
 pub(super) fn preview_colours(values: &SettingsValues, dark: bool) -> (Rgb, Rgb, Rgb) {
+    let is_custom = if dark {
+        ghostex_settings_catalog::theme_colours::dark_preset_is_custom(values.map())
+    } else {
+        ghostex_settings_catalog::theme_colours::light_preset_is_custom(values.map())
+    };
     let (percent, tint) = chrome_controls(values, dark);
     let sidebar_fade = full_colour_fade(values.f64("themeSidebarContrast"));
     let chrome = if dark {
-        dark_chrome_full(clamp_darkness(percent), &tint, sidebar_fade)
-    } else {
+        if is_custom {
+            dark_chrome_full(clamp_darkness(percent), &tint, sidebar_fade)
+        } else {
+            dark_chrome_full_subtle(
+                clamp_darkness(percent),
+                &tint,
+                sidebar_fade,
+                SUBTLE_SIDEBAR_MAX_CHROMA,
+            )
+        }
+    } else if is_custom {
         light_chrome_full(clamp_lightness(percent), &tint, sidebar_fade)
+    } else {
+        light_chrome_full_subtle(
+            clamp_lightness(percent),
+            &tint,
+            sidebar_fade,
+            SUBTLE_SIDEBAR_MAX_CHROMA,
+        )
     };
     // `getWorkAreaBackgroundForSettings`.
     let delta = contrast_points(values, "themeWorkAreaContrast")
         - contrast_points(values, "themeSidebarContrast");
     let work_fade = full_colour_fade(values.f64("themeWorkAreaContrast"));
     let work_chrome = if dark {
-        dark_chrome_full(clamp_darkness(percent + delta), &tint, work_fade)
-    } else {
+        if is_custom {
+            dark_chrome_full(clamp_darkness(percent + delta), &tint, work_fade)
+        } else {
+            dark_chrome_full_subtle(
+                clamp_darkness(percent + delta),
+                &tint,
+                work_fade,
+                SUBTLE_WORK_AREA_MAX_CHROMA,
+            )
+        }
+    } else if is_custom {
         light_chrome_full(clamp_lightness(percent + delta), &tint, work_fade)
+    } else {
+        light_chrome_full_subtle(
+            clamp_lightness(percent + delta),
+            &tint,
+            work_fade,
+            SUBTLE_WORK_AREA_MAX_CHROMA,
+        )
     };
-    (
-        chrome,
-        chat_background_for_chrome(work_chrome),
-        foreground_for(chrome),
-    )
+    let mut work_bg = chat_background_for_chrome(work_chrome);
+    if !is_custom {
+        work_bg = if dark {
+            Rgb(cap_subtle_dark_rgb(
+                work_bg.0,
+                SUBTLE_WORK_AREA_MAX_CHROMA,
+                SUBTLE_DARK_MAX_LIGHTNESS,
+            )
+            .map(channel))
+        } else {
+            Rgb(cap_subtle_light_rgb(work_bg.0, SUBTLE_WORK_AREA_MAX_CHROMA).map(channel))
+        };
+    }
+    (chrome, work_bg, foreground_for(chrome))
 }
 
 /// `colourfulnessStepForPoints`: the Colourfulness position that sets exactly `points`, if any.
