@@ -6641,7 +6641,8 @@ choice in a new chat and in New Thread shows once you've connected a provider
   Filter > Cloud Box Sessions shows only them. Each box session works on its own new branch, cut from the
   latest base branch and named from the first message; pictures attached to
   that message go to the box with it. The agent pushes the branch (a GitHub
-  login saved in the project's snapshot lets it), and Pull branch brings it to
+  login saved in the project's snapshot lets it; a private repository needs
+  that login to be fetched at all, and a box without one says so), and Pull branch brings it to
   this computer as a worktree of the project (an existing worktree of that
   branch is brought up to date).
 - **Set up cloud box**: Settings > Projects > Cloud box opens a new chat on a
