@@ -485,8 +485,12 @@ fn download_toolchain(directory: &Path) -> Step<PathBuf> {
             .map_err(|error| error.to_string())
             .and_then(|archive| zip::ZipArchive::new(archive).map_err(|error| error.to_string()))
             .and_then(|mut archive| {
+                // zip 9: refuse archives whose local headers disagree with the central directory (RUSTSEC-2026-0548).
                 archive
-                    .extract(directory)
+                    .extract_with_options(
+                        directory,
+                        zip::read::ExtractOptions::default().enforce_header_consistency(true),
+                    )
                     .map_err(|error| error.to_string())
             })
             .map_err(|error| Failure::new(BUILD_FAILED, format!("unpack Go: {error}")))?;

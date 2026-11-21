@@ -166,7 +166,13 @@ pub(crate) fn extract(archive: &Path, into: &Path) -> Result<(), String> {
     if name.ends_with(".zip") {
         let file = File::open(archive).map_err(|error| error.to_string())?;
         zip::ZipArchive::new(file)
-            .and_then(|mut zip| zip.extract(into))
+            // zip 9: refuse archives whose local headers disagree with the central directory (RUSTSEC-2026-0548).
+            .and_then(|mut zip| {
+                zip.extract_with_options(
+                    into,
+                    zip::read::ExtractOptions::default().enforce_header_consistency(true),
+                )
+            })
             .map_err(|error| format!("Could not unpack {name}: {error}"))?;
         return Ok(());
     }
