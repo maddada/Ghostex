@@ -149,16 +149,22 @@ brew install ghostex
 
 </details>
 
-**Windows:** [x64 installer](https://maddada.com/download/windows-x64) · [ARM64 installer](https://maddada.com/download/windows-arm64)
-
-<details>
-<summary>PowerShell install and Windows details</summary>
+**Windows:** paste this in PowerShell
 
 ```powershell
 irm https://ghostex.dev/install.ps1 | iex
 ```
 
-The [script](tooling/install/install.ps1) downloads the installer for your PC from GitHub, checks it against GitHub's SHA-256 digest, and runs it.
+Or download the [x64 installer](https://maddada.com/download/windows-x64) · [ARM64 installer](https://maddada.com/download/windows-arm64). If Windows says it protected your PC, click **More info**, then **Run anyway**; the publisher is "Open Source Developer Mohamad Yahia Youssef".
+
+<details>
+<summary>WinGet and Windows details</summary>
+
+```powershell
+winget install --id maddada.Ghostex --exact
+```
+
+The PowerShell [script](tooling/install/install.ps1) downloads the installer for your PC from GitHub, checks it against GitHub's SHA-256 digest, and runs it, so Windows shows no SmartScreen prompt.
 
 Agents run in native PowerShell by default. Prefer Linux? Switch to WSL in Settings → General → Terminal → Windows Environment. Updates arrive automatically.
 
