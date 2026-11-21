@@ -1259,6 +1259,14 @@ impl NativeChatView {
             self.dock_context_icon(&key, row, p, cx)
         };
         let reply_width = reply_width + context_button.as_ref().map_or(0.0, |_| icon_width + 6.0);
+        // Mark as read (an open envelope) leads a dock row's buttons, on any row with a Dismiss or
+        // Mark as read in its menu (`dock_mark_read_icon`). A Work panel card keeps its own ⋯.
+        let mark_read = if look.age.is_some() || look.buttons.is_some() || settled {
+            None
+        } else {
+            self.dock_mark_read_icon(&key, row, p, cx)
+        };
+        let reply_width = reply_width + mark_read.as_ref().map_or(0.0, |_| icon_width + 6.0);
         let all_width = buttons_width(&widths) + reply_width;
         // The answers and Reply are one line, never wrapped: when they do not all fit beside the
         // title, the answers fold into one Choose an answer dropdown in their place. Measured, with
@@ -1279,15 +1287,16 @@ impl NativeChatView {
             && !answers.is_empty()
             && buttons_width(&widths) > choose_width
             && all_width > beside_room;
-        let mut buttons: Vec<AnyElement> = match &action {
-            _ if look.buttons.is_some() => look.buttons.into_iter().collect(),
+        let mut buttons: Vec<AnyElement> = mark_read.into_iter().collect();
+        buttons.extend(match &action {
+            _ if look.buttons.is_some() => look.buttons.into_iter().collect::<Vec<_>>(),
             Some(_) => self
                 .dock_row_icon_action(&key, row, p, cx)
                 .into_iter()
                 .collect(),
             None if fold => vec![self.answers_dropdown(&key, &answers, busy, p, cx)],
             None => self.work_answer_buttons(&key, &answers, busy, p, cx),
-        };
+        });
         // Reply is always the rightmost button, whatever stands before it (answers, Details, Jump
         // to context), so it never shifts between rows.
         //
