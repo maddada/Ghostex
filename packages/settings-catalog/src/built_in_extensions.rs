@@ -341,7 +341,7 @@ pub fn turned_off_message(id: &str) -> String {
 
 /*
 CDXC:Extensions 2026-11-21 DECISION:
-User (GitHub #695, Q4326 = A): Main Hub and GBots are switched on per computer, so turning them on in the laptop's app left a headless server's Chief of Staff refusing to start with no way to turn them on there. Settings > Extensions gets the machine picker Agents and Integrations have, and the owner's own app turns these switches on or off for a connected computer through that computer's gxserver (`/api/machineExtensions`, server/src/machine_extensions.rs); agents still can't. The refusal names the computer and says to pick it in Settings > Extensions. CLIProxyAPI joins them: its switch is per computer and only the user may flip it too.
+User (GitHub #695, Q4326 = A): Main Hub and GBots are switched on per computer, so turning them on in the laptop's app left a headless server's Chief of Staff refusing to start with no way to turn them on there. Settings > Extensions gets the machine picker Agents and Integrations have, and the owner's own app turns these switches on or off for a connected computer through that computer's gxserver (`/api/machineExtensions`, server/src/machine_extensions.rs); agents still can't. The refusal names the computer and says to pick it in Settings > Extensions. CLIProxyAPI joins them: its switch is per computer and, like Main Hub's, only the user may flip it. GBots' switch stays agent-writable, as decided on 10 Nov; "agents still can't" is about this route.
 SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/extensions/remote_machine.rs, apps/desktop/src/app/remote_conn/settings_rpc.rs.
 */
 /// The built-in extensions whose switch the owner's app may flip on a connected computer from

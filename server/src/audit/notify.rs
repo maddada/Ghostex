@@ -68,6 +68,9 @@ const OPENING_ACTIONS: &[&str] = &[
     "gbots.apiOn",
     "gbots.apiNewKey",
     "gbotsSetComputer",
+    // Main Hub (Chief of Staff steers every agent) or GBots turned on from another computer's
+    // Settings > Extensions (machine_extensions.rs)
+    crate::machine_extensions::AGENT_POWERS_ON_ACTION,
     // Installing Collab: downloads a component and runs it
     "installExtensionComponent",
 ];

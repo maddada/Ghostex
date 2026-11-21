@@ -29,6 +29,20 @@ fn digest(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+/// The hashes `headless-settings.json` vouches for: the file as gxserver last saved it, and the
+/// one before it while that save is under way (`previous`, so a crash between writing the marker
+/// and the settings file leaves a file gxserver still owns). `None` when there is no marker.
+fn vouched_hashes(paths: &GxserverPaths) -> Option<Vec<String>> {
+    let marker = std::fs::read(marker_path(paths)).ok()?;
+    let marker = serde_json::from_slice::<Value>(&marker).ok()?;
+    Some(
+        ["sha256", "previous"]
+            .iter()
+            .filter_map(|key| marker[*key].as_str().map(str::to_string))
+            .collect(),
+    )
+}
+
 /// Whether the settings file is one no desktop app wrote: there is none, or it holds exactly what
 /// gxserver last saved. `None` when the file could not be read.
 fn gxserver_owns_settings(paths: &GxserverPaths) -> Option<bool> {
@@ -37,11 +51,32 @@ fn gxserver_owns_settings(paths: &GxserverPaths) -> Option<bool> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Some(true),
         Err(_) => return None,
     };
-    let saved = std::fs::read(marker_path(paths))
-        .ok()
-        .and_then(|marker| serde_json::from_slice::<Value>(&marker).ok())
-        .and_then(|marker| marker["sha256"].as_str().map(str::to_string));
-    Some(saved.is_some_and(|saved| saved == digest(&bytes)))
+    let hash = digest(&bytes);
+    Some(vouched_hashes(paths).is_some_and(|hashes| hashes.contains(&hash)))
+}
+
+/// Why gxserver left a save to the app.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LeftToTheApp {
+    /// gxserver never saved this file: the desktop app did (or a person made it).
+    AppsFile,
+    /// gxserver saved it before, and something else changed it since: the app on its first start,
+    /// Settings sync through the app, or a person editing it by hand.
+    ChangedSince,
+}
+
+/// Why [`save_settings_patch`] answered `Ok(None)`, for a caller that words the refusal itself.
+pub(crate) fn left_to_the_app(paths: &GxserverPaths) -> LeftToTheApp {
+    if vouched_hashes(paths).is_some() {
+        LeftToTheApp::ChangedSince
+    } else {
+        LeftToTheApp::AppsFile
+    }
+}
+
+/// The settings file gxserver and the app read and write.
+pub(crate) fn settings_file_path(paths: &GxserverPaths) -> PathBuf {
+    settings_path(paths)
 }
 
 /// Saves an `updateSettingsPatch` patch when gxserver owns the settings file here (a `null`
@@ -50,10 +85,17 @@ pub(crate) fn save_settings_patch(
     paths: &GxserverPaths,
     patch: &Map<String, Value>,
 ) -> Result<Option<Value>, String> {
+    // One save at a time: each reads the file, changes it and writes it back with its hash, so two
+    // at once would drop one's change or leave a hash that is not the file's.
+    static SAVING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one_at_a_time = SAVING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if gxserver_owns_settings(paths) != Some(true) {
         return Ok(None);
     }
     let path = settings_path(paths);
+    let previous = std::fs::read(&path).ok().map(|bytes| digest(&bytes));
     let read = ghostex_paths::settings_file::read(&path)
         .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
     let mut settings = read.object.unwrap_or_default();
@@ -76,14 +118,18 @@ pub(crate) fn save_settings_patch(
         std::fs::create_dir_all(folder)
             .map_err(|error| format!("Could not create {}: {error}", folder.display()))?;
     }
+    // The marker first, vouching for the file before and after this save, each write durable: a
+    // crash at any point leaves a file the marker vouches for, so gxserver keeps saving here.
+    let marker = marker_path(paths);
+    let vouch = |hashes: Value| {
+        ghostex_paths::durable_file::write_durably(&marker, hashes.to_string().as_bytes())
+            .map_err(|error| format!("Could not save {}: {error}", marker.display()))
+    };
+    let new_hash = digest(&bytes);
+    vouch(json!({ "sha256": new_hash, "previous": previous }))?;
     ghostex_paths::settings_file::save(&path, &bytes)
         .map_err(|error| format!("Could not save {}: {error}", path.display()))?;
-    let marker = marker_path(paths);
-    if let Some(folder) = marker.parent() {
-        let _ = std::fs::create_dir_all(folder);
-    }
-    std::fs::write(&marker, json!({ "sha256": digest(&bytes) }).to_string())
-        .map_err(|error| format!("Could not save {}: {error}", marker.display()))?;
+    vouch(json!({ "sha256": new_hash }))?;
     Ok(Some(json!({
         "ok": true,
         "savedBy": "gxserver",
