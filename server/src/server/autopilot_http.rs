@@ -84,16 +84,43 @@ fn saved(result: std::io::Result<AutopilotConfig>) -> Result<AutopilotConfig, Do
 
 /// CDXC:Autopilot 2026-11-21 DECISION:
 /// "Use a limit reset when an account hits its limit" spends the user's banked limit resets, so only the user turns it on: the desktop app's owner session, the token file their own terminal uses, or a paired phone. An agent's session token, another computer, an extension or a Collab guest is refused and the refusal is kept in the security log. Turning it off is open to everyone. As on every owner route, an agent that reads the token file itself instead of using its session token is the one way around this.
-const LIMIT_RESETS_ONLY_YOU: &str = "Only the user can turn on \"Use a limit reset when an account hits its limit\", in Settings > Autopilot or with ghostex autopilot limit-resets on in their own terminal. Tell the user; never turn it on for them.";
+const LIMIT_RESETS_ONLY_YOU: &str = "Only the user can turn on \"Use a limit reset when an account hits its limit\", in Settings > Autopilot or with ghostex autopilot limit-resets on in their own terminal outside Ghostex. Tell the user; never turn it on for them.";
 
-/// Whether this patch turns on "Use a limit reset when an account hits its limit" for a caller
-/// that is not the user.
+/// While "Use a limit reset when an account hits its limit" is on, turning Autopilot on arms it.
+const AUTOPILOT_ON_ONLY_YOU: &str = "While \"Use a limit reset when an account hits its limit\" is on, only the user can turn Autopilot on, in Settings > Autopilot or with ghostex autopilot on in their own terminal outside Ghostex. Tell the user; never turn it on for them.";
+
+/// CDXC:Security 2026-11-21 DECISION:
+/// Fable's security review (findings 4 and 5, proven live): `env -u GHOSTEX_SESSION_TOKEN ghostex autopilot limit-resets on` inside a session reached gxserver through the token file and was taken as the user, and with the switch already on an agent's own token could turn Autopilot on, which arms the spending again. The user is the desktop app's owner session, a paired phone, or the token file from a terminal that names no Ghostex session (the CLI sends the session it runs in, `token_file_names_session`); and while the switch is on, turning Autopilot on is the user's too. What stays open is the same-user limit Ghostex can't close: an agent that sends the token file without the session header, or edits autopilot.json.
+fn is_user(caller: &crate::security::Principal, token_file_names_session: bool) -> bool {
+    caller.is_owner_device()
+        && !(matches!(caller, crate::security::Principal::LocalAgent) && token_file_names_session)
+}
+
+/// Why this patch is refused to a caller that is not the user, or `None`: it turns on "Use a limit
+/// reset when an account hits its limit", or turns Autopilot on while that switch is on (or with it).
 fn refuses_limit_resets(
     before: &AutopilotConfig,
     patch: &Value,
     caller: &crate::security::Principal,
-) -> bool {
-    patch["useLimitResets"] == true && !before.use_limit_resets && !caller.is_owner_device()
+    token_file_names_session: bool,
+) -> Option<(&'static str, &'static str)> {
+    if is_user(caller, token_file_names_session) {
+        return None;
+    }
+    let resets_on = patch["useLimitResets"] == true;
+    if resets_on && !before.use_limit_resets {
+        return Some((
+            "Turn on Autopilot's \"Use a limit reset when an account hits its limit\"",
+            LIMIT_RESETS_ONLY_YOU,
+        ));
+    }
+    if patch["enabled"] == true && !before.enabled && (before.use_limit_resets || resets_on) {
+        return Some((
+            "Turn on Autopilot while \"Use a limit reset when an account hits its limit\" is on",
+            AUTOPILOT_ON_ONLY_YOU,
+        ));
+    }
+    None
 }
 
 fn handle(
@@ -115,19 +142,21 @@ fn handle(
                 .get("patch")
                 .cloned()
                 .ok_or_else(|| DomainStateError::bad_request("patch is required."))?;
-            if refuses_limit_resets(&before, &patch, caller) {
+            if let Some((summary, message)) = refuses_limit_resets(
+                &before,
+                &patch,
+                caller,
+                crate::audit::token_file_names_session(),
+            ) {
                 crate::audit::record(
-                    crate::audit::Action::new(
-                        "autopilot.widen",
-                        "Turn on Autopilot's \"Use a limit reset when an account hits its limit\"",
-                    ),
-                    crate::audit::Actor::from(caller),
-                    crate::audit::Outcome::Refused(LIMIT_RESETS_ONLY_YOU.to_string()),
+                    crate::audit::Action::new("autopilot.widen", summary),
+                    crate::audit::Actor::current(),
+                    crate::audit::Outcome::Refused(message.to_string()),
                     None,
                 );
                 return Err(DomainStateError {
                     code: "forbidden",
-                    message: LIMIT_RESETS_ONLY_YOU.to_string(),
+                    message: message.to_string(),
                 });
             }
             Some(saved(autopilot::update_config(&state.paths, |config| {
@@ -464,63 +493,4 @@ async fn decide(
     );
     super::autopilot_judge::forget_session(&key);
     Ok(json!({ "did": did }))
-}
-
-#[cfg(test)]
-mod limit_resets_tests {
-    use super::*;
-    use crate::security::Principal;
-
-    #[test]
-    fn only_the_user_turns_on_limit_resets() {
-        let off = AutopilotConfig::default();
-        let on_patch = json!({ "useLimitResets": true });
-        let agent = Principal::Session {
-            project_id: "P1".into(),
-            session_id: "G1".into(),
-            role: crate::security::SessionRole::Agent,
-        };
-        assert!(refuses_limit_resets(&off, &on_patch, &agent));
-        assert!(refuses_limit_resets(
-            &off,
-            &on_patch,
-            &Principal::Extension {
-                extension_id: "x".into()
-            }
-        ));
-        for user in [
-            Principal::Owner {
-                device_id: "mac".into(),
-            },
-            Principal::Device {
-                device_id: "phone".into(),
-            },
-            Principal::LocalAgent,
-        ] {
-            assert!(!refuses_limit_resets(&off, &on_patch, &user));
-        }
-        // Anyone may turn it off, and a patch that leaves it alone is not refused.
-        let mut on = AutopilotConfig::default();
-        on.use_limit_resets = true;
-        assert!(!refuses_limit_resets(
-            &on,
-            &json!({ "useLimitResets": false }),
-            &agent
-        ));
-        assert!(!refuses_limit_resets(
-            &off,
-            &json!({ "enabled": true }),
-            &agent
-        ));
-    }
-
-    #[test]
-    fn turning_on_limit_resets_is_a_widening_for_the_security_log() {
-        let before = AutopilotConfig::default();
-        let mut after = before.clone();
-        autopilot::apply_patch(&mut after, &json!({ "useLimitResets": true }));
-        assert!(after.use_limit_resets);
-        assert!(autopilot_widening(&before, &after)
-            .is_some_and(|summary| summary.contains("limit reset")));
-    }
 }

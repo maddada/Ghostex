@@ -10132,7 +10132,7 @@
     {
       "key": "autopilotUseLimitResets",
       "title": "Use a limit reset when an account hits its limit",
-      "subtitle": "Off by default. When on, a Claude account that reaches a usage limit uses one of its banked limit resets right away, the soonest-expiring one that clears that limit, unless the limit lifts on its own within 30 minutes. Each use is in the security log and the bell. Only you can turn it on (agents are refused). Also ghostex autopilot limit-resets on|off.",
+      "subtitle": "Off by default. When a session Autopilot covers waits on its Claude account's usage limit and no other account has room, Autopilot uses one of that account's limit resets: the soonest-expiring one that clears the limit, once Anthropic confirms the account is at that limit. It waits if the limit lifts on its own within 30 minutes. Each use is in the security log and the bell. Only you can turn it on (agents are refused). Also ghostex autopilot limit-resets on|off.",
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "allowed",

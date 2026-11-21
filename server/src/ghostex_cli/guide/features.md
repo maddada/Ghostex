@@ -4864,12 +4864,14 @@ all of them every 2 minutes (1 to 10 minutes under **Advanced**). It then:
   but limits** when Claude offers it, never auto mode) and judges the thread's
   edits and commands like any other session's.
 - **Use a limit reset when an account hits its limit** (off by default): when a
-  Claude account reaches a usage limit and Anthropic offers it a limit reset
-  that clears that limit, Autopilot uses it right away, the soonest-expiring one
-  first, so a Fable-only reset is never spent on the weekly limit. It waits when
-  the limit lifts on its own within 30 minutes. Each use is in the security log
-  and the bell. Only you turn it on (here, on the phone or in your own
-  terminal); an agent that tries is refused.
+  session Autopilot covers waits on its Claude account's usage limit and no
+  other account has room, Autopilot uses one of that account's limit resets,
+  the soonest-expiring one that clears the limit (a Fable-only reset is never
+  spent on the weekly limit), once Anthropic confirms the account is at that
+  limit. It waits when the limit lifts on its own within 30 minutes. Each use is
+  in the security log and the bell. Only you turn it on (here, on the phone or in
+  your own terminal outside Ghostex); an agent that tries is refused, and while
+  it is on, only you can turn Autopilot on.
 
 **Hard limits it may cross** show with **All but limits** only, each a switch
 off until you turn it on: push a branch, finish a release you asked for, push

@@ -413,7 +413,7 @@ impl AutopilotTab {
             p,
             "autopilotUseLimitResets",
             RowSpec::new("Use a limit reset when an account hits its limit").description(
-                "When a Claude account reaches a usage limit and Anthropic offers it a limit reset that clears that limit, Autopilot uses it right away (the soonest-expiring one first). It waits if the limit lifts on its own within 30 minutes. Each use is in the security log and the bell. Off by default; agents can't turn it on.",
+                "When a session Autopilot covers waits on its Claude account's usage limit and no other account has room, Autopilot uses one of that account's limit resets: the soonest-expiring one that clears the limit, once Anthropic confirms the account is at that limit. It waits if the limit lifts on its own within 30 minutes. Each use is in the security log and the bell. Off by default; only you can turn it on.",
             ),
             config["useLimitResets"].as_bool() == Some(true),
             None,
