@@ -602,8 +602,11 @@ works.
    through its link answers to you like the cover, its answers and Mark as
    read reach you, and it waits in the reader's Needs you once opened. A file
    outside the cover's folder opens only if you publish it with
-   `ghostex show` yourself. On older versions such a link says 404, so give
-   each page its own card there.
+   `ghostex show` yourself. Link only pages you wrote: a linked page can send
+   you answers as the reader, so a page someone else wrote could speak to you
+   in the reader's name. One cover's links make at most 50 such pages; past that a
+   link opens read-only. On older versions such a link says 404, so give each
+   page its own card there.
 3. Publish it:
 
    ```bash
