@@ -259,3 +259,34 @@ pub(crate) mod window {
     pub(crate) use crate::native_modal_kit;
     pub(crate) use crate::round_close_button;
 }
+
+/// The sidebar items Settings reads (app/native_sidebar): the Ask Ghostex AI flower icon
+/// (Settings > Extensions) and the 4pt corner dot an account with an issue wears (Settings >
+/// Accounts). The demo already compiles the chief row's own file, so that one is the app's.
+pub(crate) mod native_sidebar {
+    pub(crate) use crate::chief_row_view;
+
+    pub(crate) mod status {
+        use gpui::{Hsla, ParentElement as _, SharedString, Styled as _, div, px};
+
+        /// Stand-in for app/native_sidebar/status.rs `corner_dot`: the same 4pt dot, 3pt in from
+        /// the top-right corner, with a 1pt ring of what it sits on; the preview has no hover.
+        pub(crate) fn corner_dot(
+            color: Hsla,
+            scale: f32,
+            ring: Hsla,
+            _hover: Option<(Hsla, SharedString)>,
+        ) -> gpui::Div {
+            let offset = 2.0 * scale;
+            div()
+                .absolute()
+                .top(px(offset))
+                .right(px(offset))
+                .size(px(6.0 * scale))
+                .rounded_full()
+                .bg(ring)
+                .p(px(scale))
+                .child(div().size(px(4.0 * scale)).rounded_full().bg(color))
+        }
+    }
+}
