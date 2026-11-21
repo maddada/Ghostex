@@ -35,8 +35,9 @@ use std::{
 /// After a claim reached Anthropic, the account is not tried again for this long.
 const AFTER_CLAIM: Duration = Duration::from_secs(10 * 60);
 /// After Anthropic's fresh status said no (or could not be read), the next look waits this long,
-/// so the usage endpoint, which rate-limits per account, is not asked on every pass.
-const AFTER_NO: Duration = Duration::from_secs(2 * 60);
+/// so the usage endpoint, which rate-limits per account, is not asked on every pass; the answer
+/// itself stays in claude_resets.rs's reading for 15 minutes.
+const AFTER_NO: Duration = Duration::from_secs(12 * 60);
 
 /// What one look at an account came to.
 pub(crate) enum Check {
@@ -58,13 +59,21 @@ fn not_now(reason: impl Into<String>) -> Check {
 /// When each account was last tried, and how long until the next try.
 static TRIED: Mutex<Option<HashMap<String, (Instant, Duration)>>> = Mutex::new(None);
 
-fn tried_recently(account_id: &str) -> bool {
-    TRIED
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get_or_insert_with(HashMap::new)
+/// Takes the account's turn under one lock: `false` while an earlier try still holds it. The 5-minute
+/// pass and the at-limit check can look at the same account at once, and only one of them may go on
+/// to ask Anthropic (Fable's re-check, 2026-11-21). The turn is held as if a claim ran until
+/// `remember_try` sets how long the outcome keeps it.
+fn take_turn(account_id: &str) -> bool {
+    let mut tried = TRIED.lock().unwrap_or_else(|e| e.into_inner());
+    let tried = tried.get_or_insert_with(HashMap::new);
+    if tried
         .get(account_id)
         .is_some_and(|(at, wait)| at.elapsed() < *wait)
+    {
+        return false;
+    }
+    tried.insert(account_id.to_string(), (Instant::now(), AFTER_CLAIM));
+    true
 }
 
 fn remember_try(account_id: &str, wait: Duration) {
@@ -259,8 +268,8 @@ pub(crate) fn check(
             credit.id
         ));
     }
-    if tried_recently(&saved.id) {
-        return not_now("Tried a few minutes ago.");
+    if !take_turn(&saved.id) {
+        return not_now("Tried a few minutes ago, or another check is asking now.");
     }
     let home = &state.paths.home_dir;
     let slot = match claude_resets::ClaudeSlot::read(home, &saved.selector) {

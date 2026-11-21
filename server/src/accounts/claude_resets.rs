@@ -503,7 +503,14 @@ pub(crate) fn cached(home: &Path, slot: &str) -> Result<Status, String> {
         }
     }
     let result = fetch(home, &slot);
-    let ttl = match &result {
+    keep(&slot, &result);
+    result
+}
+
+/// Keeps a reading of the account's resets: 15 minutes, 30 after Anthropic's rate limit, 5 after
+/// another error.
+fn keep(slot: &ClaudeSlot, result: &Result<Status, String>) {
+    let ttl = match result {
         Ok(_) => Duration::from_secs(15 * 60),
         Err(error) if error.contains("limiting") => Duration::from_secs(30 * 60),
         Err(_) => Duration::from_secs(5 * 60),
@@ -512,8 +519,7 @@ pub(crate) fn cached(home: &Path, slot: &str) -> Result<Status, String> {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .get_or_insert_with(HashMap::new)
-        .insert(key, (Instant::now(), ttl, result.clone()));
-    result
+        .insert(slot.identity(), (Instant::now(), ttl, result.clone()));
 }
 
 /// One grant as Anthropic reports it right now, with the account's limit state, for Autopilot's
@@ -538,8 +544,16 @@ pub(crate) fn fresh_grant(
     slot: &ClaudeSlot,
     grant_id: &str,
 ) -> Result<Option<FreshGrant>, String> {
-    forget(slot);
-    let block = fetch_block(home, slot)?;
+    // The fresh answer replaces the kept reading, so the account's displays and the next pass use
+    // it instead of asking Anthropic again (its usage endpoint rate-limits per account).
+    let block = match fetch_block(home, slot) {
+        Ok(block) => block,
+        Err(error) => {
+            keep(slot, &Err(error.clone()));
+            return Err(error);
+        }
+    };
+    keep(slot, &Ok(parse(&block, chrono::Utc::now())));
     let names = |value: &Value| -> Vec<String> {
         value
             .as_array()
