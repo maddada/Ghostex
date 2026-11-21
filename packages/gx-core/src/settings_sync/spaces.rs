@@ -566,6 +566,22 @@ pub fn describe_spaces_key(
             Some(other) => other.to_string(),
         }
     };
+    // Hide Space (CDXC:Spaces 2026-11-21 in sidebar_view/spaces.rs `Space::shown`): a true or
+    // false, said as hidden or shown rather than through the generic value words below.
+    if (kind, field) == ("space", "hidden") {
+        let state = |value: &Option<Value>| match value {
+            Some(Value::Bool(true)) => "hidden",
+            _ => "shown",
+        };
+        return Some(format!(
+            "Space “{}” is {}, as on {}; {} had it {}.",
+            name_of("space", id),
+            state(&conflict.kept.value),
+            conflict.kept.origin_name,
+            conflict.lost.origin_name,
+            state(&conflict.lost.value),
+        ));
+    }
     let subject = match (kind, field) {
         ("space", "name") => "A Space's name".to_string(),
         ("space", "exists") => format!("Space “{}”", name_of("space", id)),
