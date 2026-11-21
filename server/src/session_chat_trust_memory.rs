@@ -645,6 +645,27 @@ pub(crate) fn dispatch_auto_trust(
     let project_id = project_id.to_string();
     let session_id = session_id.to_string();
     let agent = agent.map(str::to_string);
+    // Ask Ghostex AI's own chat at the home folder on Antigravity: agy saves `~` as trusted when its
+    // question is answered, which would let every agy session there skip it; Ghostex takes that
+    // entry out again unless the user had trusted the home folder themselves (agy_trust.rs).
+    let agy_home = (agent.as_deref() == Some("antigravity"))
+        .then(|| crate::resume_lookup::home_dir())
+        .filter(|_| {
+            crate::storage::open_gxserver_database(&crate::paths::get_gxserver_paths(None))
+                .ok()
+                .is_some_and(|db| {
+                    crate::chief::chief_home_session_trusted(
+                        &DomainRepository::new(&db, ""),
+                        &project_id,
+                        &session_id,
+                    )
+                })
+        })
+        .map(|home| {
+            let key = crate::agent_folder_trust::agy_folder_key(&home);
+            (home, key)
+        })
+        .filter(|(home, key)| !crate::agent_folder_trust::agy_trusts(home, key));
     handle.spawn(async move {
         let mut cleared = false;
         for _ in 0..AUTO_TRUST_ATTEMPTS_PER_DISPATCH {
@@ -678,6 +699,11 @@ pub(crate) fn dispatch_auto_trust(
             if cleared {
                 break;
             }
+        }
+        if let Some((home, key)) = agy_home.as_ref() {
+            // agy writes its settings as it takes the answer; give it a moment.
+            tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
+            crate::agent_folder_trust::agy_forget(home, key);
         }
         if cleared {
             clear_auto_trust_failure(&project_id, &session_id);
