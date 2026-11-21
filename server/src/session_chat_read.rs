@@ -765,6 +765,21 @@ pub(crate) async fn handle_read_session_chat_http(
     if let Some(pins) = crate::session_chat_status_line::status_line_pins(&state.paths) {
         result.insert("statusLinePins".to_string(), json!(pins));
     }
+    // Offer to compact long chats before sending (Q4396) and its size threshold ride every read
+    // so web and phone follow this computer's settings; older clients ignore both optional fields.
+    result.insert(
+        "offerCompactBeforeSending".to_string(),
+        json!(
+            settings
+                .get(crate::agents::claude_idle_compaction::OFFER_COMPACT_BEFORE_SENDING_SETTING)
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+        ),
+    );
+    let compact_above =
+        crate::agents::claude_idle_compaction::ClaudeCompaction::from_settings(Some(&settings))
+            .min_tokens;
+    result.insert("compactChatsAbove".to_string(), json!(compact_above));
     if let Some(session_agent_id) = session_agent_id.as_deref() {
         result.insert("sessionAgentId".to_string(), json!(session_agent_id));
     }

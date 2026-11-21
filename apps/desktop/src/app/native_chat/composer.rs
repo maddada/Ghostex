@@ -101,6 +101,10 @@ impl NativeChatView {
         if self.hold_secret_like_send(cx) {
             return;
         }
+        // Long chats whose prompt cache expired offer to compact first (compact_prompt.rs, Q4396).
+        if self.hold_compact_before_send(mode, interrupt, cx) {
+            return;
+        }
         let next_id = match crate::app::helpers::gpui_random_uuid_string() {
             Ok(id) => id,
             Err(error) => {
@@ -555,6 +559,9 @@ impl NativeChatView {
         self.open_requested_boost_menu(window, cx);
         if let Some(card) = self.render_catch_up(p, window, cx) {
             waiting.push(card.into_any_element());
+        }
+        if let Some(card) = self.render_compact_prompt(p, cx) {
+            waiting.push(card);
         }
         // A coordinator's dock (work_cards.rs) sits above the working card, which says how long
         // the turn took and what it changed, so the order over the box is the transcript, the

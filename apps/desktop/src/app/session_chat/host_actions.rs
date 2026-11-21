@@ -222,6 +222,19 @@ impl GhostexGpuiApp {
             );
             return;
         }
+        // The Ask-on-Enter compact-before-sending prompt's "Don't ask again: Always" (Q4396):
+        // turns off Settings > Agents > Claude Code > Offer to compact long chats before sending.
+        if action == "disableOfferCompactBeforeSending" {
+            self.handle_gpui_app_modal_update_settings_patch_message(
+                &serde_json::json!({
+                    "patch": { "offerCompactBeforeSending": false },
+                    "source": "chat:compactBeforeSend",
+                    "type": "updateSettingsPatch",
+                }),
+                cx,
+            );
+            return;
+        }
         // The coordinator board's view switch (native_chat/coordinator_board.rs): the Board pill
         // opens that view until it is switched again, on every chat and every computer.
         if action == "setCoordinatorBoardView" {

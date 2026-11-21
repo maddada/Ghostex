@@ -18,9 +18,15 @@ pub(crate) const IDLE_COMPACTION_SETTING: &str = "claudeIdleCompaction";
 pub(crate) const IDLE_COMPACT_MIN_TOKENS_SETTING: &str = "claudeIdleCompactAbove";
 /// Whether every Claude session asks for the one-hour prompt cache (`promptCacheTtl: "1h"`).
 pub(crate) const ONE_HOUR_CACHE_SETTING: &str = "claudeOneHourPromptCache";
+/// Whether pressing Enter on a long, cold chat offers to compact first (Q4396, on by default).
+pub(crate) const OFFER_COMPACT_BEFORE_SENDING_SETTING: &str = "offerCompactBeforeSending";
 
 /// Claude Code's own size floor when nothing sets one.
 const CLAUDE_DEFAULT_MIN_TOKENS: u64 = 200_000;
+/// Claude Code's hard lower bound for `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` (100K).
+const CLAUDE_MIN_TOKENS_FLOOR: u64 = 100_000;
+/// Sanity cap on how far in the future a cached `expiresAt` can defer Auto Sleep (2 hours).
+const MAX_IDLE_COMPACT_WAIT_MS: i64 = 2 * 60 * 60_000;
 /// The variable Claude reads for that size.
 const MIN_TOKENS_VARIABLE: &str = "CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS";
 
@@ -113,7 +119,18 @@ impl ClaudeCompaction {
     }
 }
 
-/// `/api/readClaudeCompaction`: the three values as Settings shows them, for the phone's Settings ›
+/// Whether "Offer to compact long chats before sending" is on (on by default).
+pub(crate) fn offer_compact_before_sending_enabled() -> bool {
+    crate::session_lifecycle::read_sidebar_settings(&crate::paths::get_gxserver_paths(None))
+        .and_then(|settings| {
+            settings
+                .get(OFFER_COMPACT_BEFORE_SENDING_SETTING)
+                .and_then(Value::as_bool)
+        })
+        .unwrap_or(true)
+}
+
+/// `/api/readClaudeCompaction`: the values as Settings shows them, for the phone's Settings >
 /// Chat, which changes them on a computer through `updateSettingsPatch` like any settings write
 /// (apps/mobile/app/src/screens/settings/ClaudeCompactionRows.tsx).
 pub(crate) fn read_endpoint_value() -> Value {
@@ -122,8 +139,102 @@ pub(crate) fn read_endpoint_value() -> Value {
         "idleCompaction": compaction.idle_compaction,
         "idleCompactAbove": compaction.min_tokens.to_string(),
         "oneHourPromptCache": compaction.one_hour_cache,
+        "offerCompactBeforeSending": offer_compact_before_sending_enabled(),
         "compactWorkersBeforeReturn": crate::carry_on_compaction::compact_workers_enabled(),
     })
+}
+
+/// CDXC:SessionSleep 2026-11-22 DECISION:
+/// User (Q4395, "sleep waits"): Agent Auto Sleep used to sleep background Claude Code sessions
+/// after `autoSleepAgentIdleMinutes` (e.g. 10 min), killing the process before Claude's built-in
+/// `idleCompaction` timer could run at ~54 minutes (90% of the 1-hour cache). When a Claude
+/// session qualifies for built-in idle compaction (idle compaction on, last measured context at or
+/// above Compact chats above, warm 1-hour prompt cache that has not yet expired), Auto Sleep
+/// defers sleeping it until idle compaction completes (which clears or shrinks measured context)
+/// or the 1-hour cache window ends (`expiresAt`, bounded by `MAX_IDLE_COMPACT_WAIT_MS`), so the
+/// session never stays awake forever. Sessions that do not qualify (below threshold, already
+/// compacted, 5-minute cache, idle compaction turned off, or non-Claude agents) sleep on the
+/// normal schedule. An explicit Sleep from the user still goes through.
+pub(crate) fn should_wait_for_idle_compaction(
+    compaction: ClaudeCompaction,
+    used_tokens: Option<u64>,
+    prompt_cache: Option<&Value>,
+    now_ms: i64,
+) -> bool {
+    if !compaction.idle_compaction {
+        return false;
+    }
+    let min_tokens = compaction.min_tokens.max(CLAUDE_MIN_TOKENS_FLOOR);
+    let Some(tokens) = used_tokens else {
+        return false;
+    };
+    if tokens < min_tokens {
+        return false;
+    }
+    let Some(cache) = prompt_cache.and_then(Value::as_object) else {
+        return false;
+    };
+    if cache.get("warm").and_then(Value::as_bool) != Some(true) {
+        return false;
+    }
+    if cache.get("ttl").and_then(Value::as_str) != Some("1h") {
+        return false;
+    }
+    let Some(expires_at_secs) = cache
+        .get("expiresAt")
+        .and_then(|value| value.as_i64().or_else(|| value.as_f64().map(|n| n as i64)))
+    else {
+        return false;
+    };
+    let expires_at_ms = expires_at_secs.saturating_mul(1_000);
+    expires_at_ms > now_ms && expires_at_ms.saturating_sub(now_ms) <= MAX_IDLE_COMPACT_WAIT_MS
+}
+
+/// Whether Auto Sleep should wait for Claude Code's built-in idle compaction on `session`.
+pub(crate) fn session_waiting_for_idle_compaction(
+    paths: &crate::paths::GxserverPaths,
+    session: &Value,
+    now_ms: i64,
+) -> bool {
+    let agent = crate::session_chat_composer::session_chat_composer_agent_id(session)
+        .or_else(|| crate::session_chat_follower::session_chat_display_agent_for_session(session));
+    if crate::session_chat_options::session_chat_option_agent(agent.as_deref())
+        != Some(crate::session_chat_options::SessionChatOptionAgent::Claude)
+    {
+        return false;
+    }
+    let compaction = ClaudeCompaction::from_settings(
+        crate::shared_settings_file::read_shared_settings(paths).as_ref(),
+    );
+    if !compaction.idle_compaction {
+        return false;
+    }
+    let Some(agent_session_id) = session
+        .pointer("/runtimeSettings/agentSessionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    else {
+        return false;
+    };
+    let hook_state_directory = crate::session_chat_options::session_chat_hook_state_directory(paths);
+    let Some((selection, _)) = crate::session_chat_options::read_claude_statusline_reading(
+        &hook_state_directory,
+        agent_session_id,
+        false,
+    ) else {
+        return false;
+    };
+    let used_tokens = selection.context_usage.and_then(|usage| {
+        usage
+            .used_tokens
+            .or_else(|| Some(u64::from(usage.used_percentage?) * usage.window_size? / 100))
+    });
+    let prompt_cache = selection
+        .claude_status
+        .as_ref()
+        .and_then(|status| status.get("promptCache"));
+    should_wait_for_idle_compaction(compaction, used_tokens, prompt_cache, now_ms)
 }
 
 /// `command` with this computer's idle compaction and cache length in its `--settings` JSON, for a

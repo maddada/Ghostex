@@ -142,6 +142,12 @@ pub struct ComposerState {
     /// `delivery_card::RETRIED_LIMIT`: one that fails again says "Still not sent" and leads with
     /// Fix it (`composer/delivery_card.rs`).
     pub retried_prompt_ids: Vec<String>,
+    /// The Ask-on-Enter compact-before-sending prompt is open above the chat box
+    /// (`composer/compact_prompt.rs`).
+    pub compact_prompt_open: bool,
+    /// The user chose "Don't ask again -> This chat" for compact-before-sending in this session
+    /// (`composer/compact_prompt.rs`).
+    pub compact_prompt_dismissed_session: bool,
 }
 
 /// How many taken send ids a core remembers. A host waits on a handful at most.

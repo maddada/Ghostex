@@ -221,7 +221,8 @@ impl NativeChatView {
             .as_ref()
             .is_some_and(|input| input.read(cx).focus_handle(cx).is_focused(window));
         if event.is_held
-            && ((event.keystroke.key == "enter" && self.secret_send_warned())
+            && ((event.keystroke.key == "enter"
+                && (self.secret_send_warned() || self.compact_prompt_open()))
                 || (event.keystroke.key == "tab" && composer_focused))
         {
             cx.stop_propagation();
@@ -567,6 +568,10 @@ impl NativeChatView {
             && this.snapshot["queue"]["capabilities"]["canQueue"] == true
         {
             this.send(true, window, cx);
+            cx.stop_propagation();
+            window.prevent_default();
+        } else if key.key == "escape" && !key.modifiers.shift && this.dismiss_compact_prompt(cx) {
+            // Escape closes an open compact-before-sending prompt without interrupting the agent.
             cx.stop_propagation();
             window.prevent_default();
         } else if key.key == "escape" && !key.modifiers.shift && this.cancel_dictation(cx) {

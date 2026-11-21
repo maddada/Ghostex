@@ -375,6 +375,12 @@ pub struct ChatSettings {
     /// phone's from its own settings. Absent keeps the whole row (an older host).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub composer_row: Option<crate::composer::row::ComposerRowSettings>,
+    /// Whether pressing Enter on a long, cold chat offers to compact first (`offerCompactBeforeSending`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offer_compact_before_sending: Option<bool>,
+    /// The "Compact chats above" threshold in tokens (`claudeIdleCompactAbove`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compact_chats_above: Option<u64>,
 }
 
 /// A size or position only the renderer can know, folded back into the document.

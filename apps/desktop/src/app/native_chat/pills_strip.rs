@@ -515,8 +515,9 @@ impl NativeChatView {
     }
 
     /// The "Option + Enter to compact then send" hint at the strip's left, after the view chips,
-    /// on a Codex chat idle for over a day (gx-chat-core composer/compact_hint.rs has the user's
-    /// words). It only names the key, so it takes no click; it reads "Alt" off a Mac keyboard.
+    /// on a Codex chat idle for over 30 minutes (gx-chat-core composer/compact_hint.rs has the
+    /// user's words). It only names the key, so it takes no click; it reads "Alt" off a Mac
+    /// keyboard.
     fn compact_hint_chip(&self, p: &ChatAppearance) -> Option<AnyElement> {
         let hint = Some(&self.snapshot["compactHint"]).filter(|hint| hint.is_object())?;
         let s = p.scale;

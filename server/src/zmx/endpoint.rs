@@ -670,6 +670,25 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                         presentation_session: None,
                     });
                 }
+                /*
+                CDXC:SessionSleep 2026-11-22 DECISION:
+                User (Q4395, "sleep waits"): a Claude Code session that qualifies for built-in
+                idle compaction (at or above Compact chats above on a warm 1-hour cache) waits
+                until idle compaction finishes or the 1-hour cache window expires before automatic
+                sleep puts it down. An explicit Sleep from the user still goes through.
+                */
+                let paths = get_gxserver_paths(None);
+                if crate::agents::claude_idle_compaction::session_waiting_for_idle_compaction(
+                    &paths,
+                    &session,
+                    chrono::Utc::now().timestamp_millis(),
+                ) {
+                    return Ok(ZmxEndpointOutput {
+                        created_workspace_terminal: None,
+                        result: json!({ "declined": "awaitingIdleCompaction", "session": session }),
+                        presentation_session: None,
+                    });
+                }
             }
             let target_lifecycle = if endpoint_path == "/api/sleepSession" {
                 "sleeping"

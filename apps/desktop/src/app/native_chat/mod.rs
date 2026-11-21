@@ -32,6 +32,7 @@ mod chief_welcome;
 pub(crate) mod child_window;
 mod choice_rows;
 mod collab;
+mod compact_prompt;
 mod completed_work_row;
 mod composer_animation;
 mod composer_attach;

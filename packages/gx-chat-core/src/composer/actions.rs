@@ -276,7 +276,16 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             context,
             action.param("confirm").and_then(Value::as_bool) == Some(true),
         ),
+        ActionKind::CompactPromptOpen => {
+            crate::composer::compact_prompt::open(state, context)
+        }
+        ActionKind::CompactPromptClose => crate::composer::compact_prompt::close(state),
+        ActionKind::CompactPromptDismiss => crate::composer::compact_prompt::dismiss(
+            state,
+            string_param(action, "scope"),
+        ),
         ActionKind::Send | ActionKind::Queue | ActionKind::Compact => {
+            state.composer.compact_prompt_open = false;
             // The chat box names its message at Enter and sends the action again while it cannot
             // see it taken: the second arrival is the same message, not another one.
             let named = action

@@ -304,6 +304,7 @@ pub(crate) struct NativeChatView {
     pub(super) terminal_dialog_input: Option<super::terminal_dialog::TerminalDialogInput>,
     pub(super) secret_request_inputs: super::secret_request::SecretRequestInputs,
     pub(super) secret_send_warning: super::secret_send_warning::SecretSendWarning,
+    pub(super) compact_prompt: super::compact_prompt::CompactPromptGuard,
     pub(super) terminal_dialog_key_focus: gpui::FocusHandle,
     pub(super) terminal_picker_input: Option<super::terminal_picker::TerminalPickerInput>,
     /// The pass-through card's screen region, kept scrolled to its end (terminal_picker.rs).
@@ -708,6 +709,7 @@ impl NativeChatView {
             terminal_dialog_input: None,
             secret_request_inputs: Default::default(),
             secret_send_warning: Default::default(),
+            compact_prompt: Default::default(),
             terminal_dialog_key_focus: cx.focus_handle(),
             terminal_picker_input: None,
             passthrough_screen_scroll: Default::default(),

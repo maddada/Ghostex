@@ -9,6 +9,7 @@ pub mod attaching;
 pub mod attachment_moves;
 pub mod catch_up;
 pub mod compact_hint;
+pub mod compact_prompt;
 pub mod delivery;
 pub mod delivery_card;
 pub mod document;

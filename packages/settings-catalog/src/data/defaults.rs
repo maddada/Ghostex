@@ -702,6 +702,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("claudeIdleCompaction", J::Bool(true)),
     ("claudeIdleCompactAbove", J::Str("200000")),
     ("claudeOneHourPromptCache", J::Bool(false)),
+    // CDXC:SessionChat 2026-11-22 DECISION: User (Q4396, ask on enter): when pressing Enter on a long chat (>= Compact chats above) whose prompt cache has expired, offer to compact first to save usage, with Don't ask again for This chat or Always (which turns this off). On by default.
+    ("offerCompactBeforeSending", J::Bool(true)),
     ("compactWorkersBeforeReturn", J::Bool(true)),
     // CDXC:AgentProviders 2026-11-20 SEE-ALSO: a message sent to a busy OMP or Pi steers it, as Enter does in its own terminal (server/src/session_chat_queue_runtime/pi_channel_send.rs, where the user's decision is).
     ("piMessagesWhileWorking", J::Str("steer")),

@@ -688,6 +688,8 @@ fn empty_result() -> ReadSessionChatResult {
         chat_view: None,
         quiet_view: None,
         status_line_pins: None,
+        offer_compact_before_sending: None,
+        compact_chats_above: None,
         fork_info: None,
         subagent: None,
         error: None,

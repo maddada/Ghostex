@@ -3192,22 +3192,31 @@ started or woken afterwards. Claude only for now. Settings:
 `sessionDetailsPanelHidden`, `sessionDetailsClaudeTaskTools`. Command:
 `ghostex read-session-details <selector> [--refresh] --json`.
 
-Idle compaction (Claude Code): Claude Code compacts a long chat that has sat idle for about 54
-minutes, just before its 1-hour prompt cache expires, so your next message doesn't re-read the whole
-chat uncached. Expand Claude Code's row in Settings > Agents: its Context group has Compact idle
-chats before the prompt cache expires (on by default), Only above (the smallest chat it compacts,
-100K to 500K, 200K by default; shown while the switch is on) and Use a 1-hour prompt cache (off by
-default). Idle compaction runs only on a 1-hour cache, which a Claude subscription gets; an API key,
-Bedrock, Vertex or Foundry gets 5 minutes unless Use a 1-hour prompt cache is on, and 1-hour cache
-writes cost more. Ghostex passes a value to Claude only once you have changed it in Ghostex (then it wins over your
-Claude settings files, even when it matches Claude's default); one you never touched leaves your own
-Claude settings in charge. They apply to Claude sessions started or resumed afterwards. On the phone they are
-in Settings › Chat › Claude Code, for the computer picked there (a computer needs this Ghostex
-version or later). The Session details
-Cache card shows the cache length, when the chat will be compacted if it stays idle, or that a
-5-minute cache never compacts while idle; a compaction shows in the chat as Context compacted with a
-note saying it happened while idle. Settings: `claudeIdleCompaction`, `claudeIdleCompactAbove`,
-`claudeOneHourPromptCache`.
+Idle compaction (Claude Code) and compact before sending: Claude Code compacts a long chat that has
+sat idle for about 54 minutes, just before its 1-hour prompt cache expires, so your next message
+doesn't re-read the whole chat uncached. Agent Auto Sleep waits for a qualifying Claude chat's idle
+compaction to finish (or until its 1-hour cache ends) before sleeping it, while smaller chats,
+already-compacted chats and other agents sleep on the normal schedule. Expand Claude Code's row in
+Settings > Agents: its Context group has Compact idle chats before the prompt cache expires (on by
+default), Compact chats above (the smallest chat it compacts and the threshold Ghostex uses before
+offering to compact or carrying a session on, 100K to 500K, 200K by default), Offer to compact long
+chats before sending (on by default), Compact workers before a coordinator returns to them (on by
+default; waits for Claude's 5-minute or 1-hour cache, or 30 minutes for Codex) and Use a 1-hour
+prompt cache (off by default). When Offer to compact long chats before sending is on and you press
+Enter on a chat at or above Compact chats above whose prompt cache has expired (for any agent with a
+compact command), Ghostex shows a card above the chat box explaining that compacting first saves
+usage, with Compact, then send (Option + Enter), Send now (Enter again) and Don't ask again for This
+chat or Always. Idle compaction runs only on a 1-hour cache, which a Claude subscription gets; an
+API key, Bedrock, Vertex or Foundry gets 5 minutes unless Use a 1-hour prompt cache is on, and
+1-hour cache writes cost more. Ghostex passes a value to Claude only once you have changed it in
+Ghostex (then it wins over your Claude settings files, even when it matches Claude's default); one
+you never touched leaves your own Claude settings in charge. They apply to Claude sessions started
+or resumed afterwards. On the phone they are in Settings › Chat › Claude Code, for the computer
+picked there (a computer needs this Ghostex version or later). The Session details Cache card shows
+the cache length, when the chat will be compacted if it stays idle, or that a 5-minute cache never
+compacts while idle; a compaction shows in the chat as Context compacted with a note saying it
+happened while idle. Settings: `claudeIdleCompaction`, `claudeIdleCompactAbove`,
+`offerCompactBeforeSending`, `compactWorkersBeforeReturn`, `claudeOneHourPromptCache`.
 
 Files & Links: More actions > Files & Links (or its shortcut, Option+Ctrl+L
 on macOS and Ctrl+Alt+Shift+L on Windows and Linux, changeable in Settings >

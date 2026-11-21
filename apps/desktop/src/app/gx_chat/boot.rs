@@ -216,6 +216,22 @@ pub(super) fn chat_settings() -> ChatSettings {
                 maximize: switch("chatComposerMaximize"),
             }
         }),
+        offer_compact_before_sending: (!object.is_empty()).then(|| {
+            object
+                .get("offerCompactBeforeSending")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+        }),
+        compact_chats_above: (!object.is_empty()).then(|| {
+            object
+                .get("claudeIdleCompactAbove")
+                .and_then(|value| {
+                    value
+                        .as_u64()
+                        .or_else(|| value.as_str().and_then(|text| text.trim().parse::<u64>().ok()))
+                })
+                .unwrap_or(ghostex_gx_chat_core::composer::compact_prompt::DEFAULT_COMPACT_CHATS_ABOVE)
+        }),
     }
 }
 

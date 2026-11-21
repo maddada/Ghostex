@@ -289,6 +289,14 @@ impl GhostexGpuiApp {
                 crate::shared_settings::install(settings);
                 cx.refresh_windows();
             }
+            Some("disableOfferCompactBeforeSending") => {
+                let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
+                    .object()
+                    .clone();
+                settings.insert("offerCompactBeforeSending".into(), false.into());
+                crate::shared_settings::install(settings);
+                cx.refresh_windows();
+            }
             // A chat's zoom chords. The page cannot save Settings, so the zoom changes every chat
             // on this page until it reloads.
             Some("setChatZoomPercent") => {

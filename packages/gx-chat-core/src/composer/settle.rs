@@ -262,6 +262,7 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
     }
     crate::composer::attaching::settle(state, context);
     crate::composer::compact_hint::settle(state, context);
+    crate::composer::compact_prompt::settle(state, context);
     match event {
         Event::ComposerBootRead(read) => adopt_boot_read(state, read),
         Event::RpcSettled {

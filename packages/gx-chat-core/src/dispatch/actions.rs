@@ -139,6 +139,9 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::Send
         | ActionKind::Queue
         | ActionKind::Compact
+        | ActionKind::CompactPromptOpen
+        | ActionKind::CompactPromptClose
+        | ActionKind::CompactPromptDismiss
         | ActionKind::SendKey
         | ActionKind::Interrupt
         | ActionKind::Handoff

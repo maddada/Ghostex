@@ -393,6 +393,8 @@ pub(crate) mod tests {
                 )]
                 .into(),
             ),
+            offer_compact_before_sending: Some(flag),
+            compact_chats_above: Some(200_000),
             fork_info: Some(ChatForkInfo {
                 forked_from_id: Some("parent".into()),
                 ancestor_ids: vec!["root".into()],

@@ -79,6 +79,12 @@ pub struct CoreState {
     /// The Text strength setting (`sessionChatTextStrengthPercent`), from the chat settings or the
     /// latest read; `None` is the default, 0%: today's colour.
     pub chat_text_strength: Option<u8>,
+    /// Whether pressing Enter on a long, cold chat offers to compact first (`offerCompactBeforeSending`),
+    /// from the chat settings or the latest read; `None` is the default, on.
+    pub offer_compact_before_sending: Option<bool>,
+    /// The "Compact chats above" threshold (`claudeIdleCompactAbove`), from the chat settings or
+    /// the latest read; `None` is the default, 200K.
+    pub compact_chats_above: Option<u64>,
     /// The session's display title, or `None` when it has none.
     pub title: Option<String>,
     /// Every deadline the core is waiting on. Any family may arm one by key; the host only ever

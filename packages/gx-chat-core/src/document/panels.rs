@@ -153,7 +153,7 @@ pub struct SavedDraftPill {
 }
 
 /// The "Option + Enter to compact then send" hint pinned at the left of the chat box's pill strip
-/// (`composer::compact_hint`): a Codex chat idle for more than a day.
+/// (`composer::compact_hint`): a Codex chat idle for more than 30 minutes.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompactHint {
@@ -163,6 +163,27 @@ pub struct CompactHint {
     pub label: String,
     /// What a screen reader says for the hint.
     pub aria_label: String,
+}
+
+/// The Ask-on-Enter compact-before-sending offer (`composer::compact_prompt`): present whenever a
+/// long chat's prompt cache has expired and compacting first is offered. When `open` is `true`,
+/// the confirmation card is shown above the chat box.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompactBeforeSendOffer {
+    /// Whether the confirmation card is currently open (the user pressed Enter / Send once).
+    pub open: bool,
+    /// Raw context token count.
+    pub tokens: u64,
+    /// Short formatted token count, e.g. "330K".
+    pub tokens_label: String,
+    /// Concise idle time since the last reply, e.g. "1h 40m", when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_label: Option<String>,
+    /// Short plain-language card title.
+    pub title: String,
+    /// Plain-language explanation noting that compacting first saves usage.
+    pub detail: String,
 }
 
 /// The agent terminal's last lines, offered when the chat cannot explain what is happening.

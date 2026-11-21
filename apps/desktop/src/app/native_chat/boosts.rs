@@ -182,8 +182,10 @@ impl NativeChatView {
         let active = pill["active"] == true;
         let bounds: Rc<Cell<Bounds<Pixels>>> = self.boost_pill_bounds.clone();
         let measured = bounds.clone();
-        // The callout, while it has not been seen and nothing covers the pane.
+        // The callout, while it has not been seen, no compact prompt sits above the composer,
+        // and nothing covers the pane.
         let hint_wanted = boosts["hint"].is_object()
+            && !self.compact_prompt_open()
             && !self.frosted_overlay_covered(
                 super::frosted_overlay_window::FrostedOverlay::BoostHint,
                 cx,

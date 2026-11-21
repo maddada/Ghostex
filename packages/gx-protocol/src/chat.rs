@@ -728,6 +728,13 @@ pub struct ReadSessionChatResult {
     /// computer with no desktop app: the host keeps its own line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_line_pins: Option<std::collections::BTreeMap<String, Value>>,
+    /// Whether pressing Enter on a long, cold chat offers to compact first (`offerCompactBeforeSending`),
+    /// so clients without the settings file (web, phone) follow the computer's switch; absent on older daemons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offer_compact_before_sending: Option<bool>,
+    /// The "Compact chats above" token threshold (`claudeIdleCompactAbove`), the same way; absent on older daemons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compact_chats_above: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_info: Option<ChatForkInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

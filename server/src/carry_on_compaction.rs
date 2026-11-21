@@ -127,16 +127,17 @@ pub(crate) async fn send_like_coordinator(
 /// The cache life is the agent's real one: a Claude session's last cache write in its transcript
 /// says whether it used the 1-hour cache (`ephemeral_1h_input_tokens`) or the 5-minute one
 /// (`ephemeral_5m_input_tokens`), and with no write to read it counts as 1 hour (a subscription's
-/// cache, so a worker is not compacted early); Codex's cached prefix lasts about a day (the 24 hours
-/// the Codex compact-then-send hint uses, packages/gx-chat-core/src/composer/compact_hint.rs). Other
-/// agents' cache life is not known, so they are never compacted for this.
+/// cache, so a worker is not compacted early); Codex's cached prefix lasts at least 30 minutes on
+/// GPT-5.6 and later (matching OpenAI's documented default minimum and the Codex compact-then-send
+/// hint in packages/gx-chat-core/src/composer/compact_hint.rs). Other agents' cache life is not
+/// known, so they are never compacted for this.
 /// SEE-ALSO: server/src/session_chat_send/send_reopen.rs (where the send is held),
 /// server/src/ghostex_cli/agents/delivery.rs (what the CLI prints).
 pub(crate) const COMPACT_WORKERS_SETTING: &str = "compactWorkersBeforeReturn";
 
 const FIVE_MINUTES_MS: i64 = 5 * 60_000;
+const THIRTY_MINUTES_MS: i64 = 30 * 60_000;
 const ONE_HOUR_MS: i64 = 60 * 60_000;
-const ONE_DAY_MS: i64 = 24 * ONE_HOUR_MS;
 /// How much of a Claude transcript's end is read for its last cache write.
 const TRANSCRIPT_TAIL_BYTES: u64 = 512 * 1024;
 
@@ -176,7 +177,7 @@ fn cache_life_ms(repository: &DomainRepository<'_>, session: &Value) -> Option<i
     let agent = crate::session_chat_composer::session_chat_composer_agent_id(session)
         .or_else(|| crate::session_chat_follower::session_chat_display_agent_for_session(session));
     match crate::session_chat_options::session_chat_option_agent(agent.as_deref())? {
-        crate::session_chat_options::SessionChatOptionAgent::Codex => Some(ONE_DAY_MS),
+        crate::session_chat_options::SessionChatOptionAgent::Codex => Some(THIRTY_MINUTES_MS),
         crate::session_chat_options::SessionChatOptionAgent::Claude => {
             let paths = crate::paths::get_gxserver_paths(None);
             let path = crate::session_chat_options::claude_session_transcript_path(

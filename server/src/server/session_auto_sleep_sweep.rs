@@ -110,16 +110,30 @@ fn select_targets(state: &AppState, settings: AutoSleepSettings) -> Vec<(String,
     else {
         return Vec::new();
     };
-    // A coordinator's thread that still owes work stays awake (zmx/endpoint.rs declines it too).
+    // A coordinator's thread that still owes work stays awake, and a Claude session waiting for
+    // its built-in idle compaction stays awake until compaction finishes or its 1-hour cache ends
+    // (zmx/endpoint.rs declines both too).
+    let now_ms = chrono::Utc::now().timestamp_millis();
     sessions_to_sleep(
         &snapshot,
         &|project_id, session_id| session_keep_awake::is_held_awake(project_id, session_id),
         settings,
-        chrono::Utc::now().timestamp_millis(),
+        now_ms,
     )
     .into_iter()
     .filter(|(project_id, session_id)| {
         !crate::coordinators::thread_owes_work(project_id, session_id)
+            && !repository
+                .get_session(project_id, session_id)
+                .ok()
+                .flatten()
+                .is_some_and(|session| {
+                    crate::agents::claude_idle_compaction::session_waiting_for_idle_compaction(
+                        &state.paths,
+                        &session,
+                        now_ms,
+                    )
+                })
     })
     .collect()
 }

@@ -17,6 +17,8 @@ use serde_json::json;
 const IDLE_COMPACTION: &str = "claudeIdleCompaction";
 const MIN_TOKENS: &str = "claudeIdleCompactAbove";
 const ONE_HOUR_CACHE: &str = "claudeOneHourPromptCache";
+/// CDXC:SessionChat 2026-11-22 DECISION in packages/gx-chat-core/src/composer/compact_prompt.rs: on by default (Q4396).
+const OFFER_COMPACT_BEFORE_SENDING: &str = "offerCompactBeforeSending";
 /// CDXC:Coordinators 2026-11-15 DECISION in server/src/carry_on_compaction.rs: on by default.
 const COMPACT_WORKERS: &str = "compactWorkersBeforeReturn";
 
@@ -27,9 +29,15 @@ pub(super) const CLAUDE_AGENT_ID: &str = "claude";
 pub(super) fn search_opens_claude(search: &TabSearch) -> bool {
     let section = search.section("agentList");
     section.is_searching
-        && [IDLE_COMPACTION, MIN_TOKENS, ONE_HOUR_CACHE, COMPACT_WORKERS]
-            .iter()
-            .any(|key| section.visible_keys.contains(*key))
+        && [
+            IDLE_COMPACTION,
+            MIN_TOKENS,
+            OFFER_COMPACT_BEFORE_SENDING,
+            ONE_HOUR_CACHE,
+            COMPACT_WORKERS,
+        ]
+        .iter()
+        .any(|key| section.visible_keys.contains(*key))
 }
 
 impl AgentsTab {
@@ -48,7 +56,7 @@ impl AgentsTab {
             IDLE_COMPACTION,
             RowSpec::new("Compact idle chats before the prompt cache expires")
                 .description(
-                    "Claude Code compacts a long chat that has been idle for about 54 minutes, just before its 1-hour prompt cache expires, so your next message doesn't re-read the whole chat uncached. Runs only on a 1-hour cache. Applies to Claude sessions started or resumed after you change it.",
+                    "Claude Code compacts a long chat that has been idle for about 54 minutes, just before its 1-hour prompt cache expires, so your next message doesn't re-read the whole chat uncached. Runs only on a 1-hour cache. Auto Sleep waits for it before sleeping a qualifying Claude chat. Applies to Claude sessions started or resumed after you change it.",
                 )
                 .keyed(&values, IDLE_COMPACTION),
             idle_compaction,
@@ -68,7 +76,7 @@ impl AgentsTab {
                 MIN_TOKENS,
                 RowSpec::new("Compact chats above")
                     .description(
-                        "The size at and above which Claude Code compacts an idle chat, and Ghostex compacts any session before carrying it on after a restart or a usage-limit reset. Claude Code's default is 200K.",
+                        "The size at and above which Claude Code compacts an idle chat, and Ghostex offers to compact before sending or compacts before carrying a session on after a restart or a usage-limit reset. Claude Code's default is 200K.",
                     )
                     .keyed(&values, MIN_TOKENS),
                 Some(reset_key::<Self>(MIN_TOKENS)),
@@ -83,9 +91,21 @@ impl AgentsTab {
         rows.push(toggle_field(
             self,
             p,
+            OFFER_COMPACT_BEFORE_SENDING,
+            RowSpec::new("Offer to compact long chats before sending")
+                .description(
+                    "When a chat is at or above Compact chats above and its prompt cache has expired, pressing Enter offers to compact it first to save usage (Option + Enter). For every agent with a compact command.",
+                )
+                .keyed(&values, OFFER_COMPACT_BEFORE_SENDING),
+            values.bool(OFFER_COMPACT_BEFORE_SENDING),
+            cx,
+        ));
+        rows.push(toggle_field(
+            self,
+            p,
             COMPACT_WORKERS,
             RowSpec::new("Compact workers before a coordinator returns to them")
-                .description("When a coordinator messages one of its workers after the worker sat idle longer than its prompt cache lasts (5 minutes or 1 hour for Claude, about a day for Codex), Ghostex compacts a worker at or above Compact chats above first, then hands it the message, to save tokens. Messages you type are never held.")
+                .description("When a coordinator messages one of its workers after the worker sat idle longer than its prompt cache lasts (5 minutes or 1 hour for Claude, 30 minutes for Codex), Ghostex compacts a worker at or above Compact chats above first, then hands it the message, to save tokens. Messages you type are never held.")
                 .keyed(&values, COMPACT_WORKERS),
             values.bool(COMPACT_WORKERS),
             cx,
