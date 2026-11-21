@@ -553,7 +553,14 @@ Ghostex note, Marked handovers, and for an ordinary session the extensions' line
 /// Agents whose launch command cannot carry the Ghostex note (agents/marked_handovers.rs
 /// `with_note_at`) but whose SessionStart hook adds its output to the agent's context, so the note
 /// rides that hook instead. agent_hooks/notify_runtime.rs prints it in each one's shape.
-pub(crate) const SESSION_START_NOTE_AGENTS: &[&str] = &["zcode", "antigravity"];
+///
+/// CDXC:AgentGuide 2026-11-21 WHY: Kiro adds a successful `agentSpawn` hook's stdout to the
+/// agent's context, and CodeBuddy and Qoder read SessionStart's `additionalContext` as Claude does
+/// (each one's hooks docs). Kimi Code's SessionStart is observation-only, so Kimi is not here.
+/// Qoder also fires SessionStart on `resume`, whose conversation already holds the note, so a
+/// resume gets nothing, as a Claude coordinator's does.
+pub(crate) const SESSION_START_NOTE_AGENTS: &[&str] =
+    &["zcode", "antigravity", "kiro", "codebuddy", "qoder"];
 
 fn coordinator_session_start_context(
     repository: &DomainRepository<'_>,
@@ -586,7 +593,12 @@ fn coordinator_session_start_context(
             &source,
         ));
     }
-    if !(SESSION_START_NOTE_AGENTS.contains(&agent.as_str()) && is_session_start) {
+    let is_session_start = is_session_start
+        || (agent == "kiro"
+            && read_text(params, "eventName")
+                .is_some_and(|event| event.eq_ignore_ascii_case("agentSpawn")));
+    let resumed = read_text(params, "hookSource").is_some_and(|source| source == "resume");
+    if !(SESSION_START_NOTE_AGENTS.contains(&agent.as_str()) && is_session_start) || resumed {
         return Ok(None);
     }
     let coordinator = crate::coordinators::read_coordinator(
