@@ -11,6 +11,7 @@
 //!
 //! This module depends only on the kit, gpui and gpui-component so the preview binary can include it with `#[path]`.
 use super::native_modal_kit::*;
+use super::settings_modal::fields::strip_wheel::{StripWheelLock, strip_wheel_layer};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Div, ElementId, Entity, InteractiveElement as _,
@@ -491,6 +492,8 @@ pub(crate) struct GpuiNewThreadPickerWindow {
     run_on: RunOnState,
     /// The Run on chips' horizontal scroll (new_thread_picker_run_on.rs).
     run_on_scroll: ScrollHandle,
+    /// The axis the chips' current swipe is locked to.
+    run_on_wheel: StripWheelLock,
     query: String,
     selected: usize,
     scope: Option<usize>,
@@ -592,6 +595,7 @@ impl GpuiNewThreadPickerWindow {
             run_on: RunOnState::new(config.boxes, config.default_run_location)
                 .with_cloud_box(config.cloud_box),
             run_on_scroll: ScrollHandle::new(),
+            run_on_wheel: Default::default(),
             query: String::new(),
             selected: 0,
             scope: None,

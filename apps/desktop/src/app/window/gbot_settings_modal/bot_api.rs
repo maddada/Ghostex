@@ -29,6 +29,9 @@ pub(crate) struct GbotApiTab {
     pub(super) key: Option<String>,
     /// What was last copied, for the button's "Copied".
     pub(super) copied: Option<&'static str>,
+    /// The command block's sideways scroll and the axis its current swipe is locked to.
+    pub(super) command_scroll: gpui::ScrollHandle,
+    pub(super) command_wheel: super::super::settings_modal::fields::strip_wheel::StripWheelLock,
 }
 
 /// Where a Bot API op's answer goes: the window that asked.
@@ -211,24 +214,37 @@ impl GpuiGbotSettingsModalWindow {
                 // Each line of the command stays whole (a wrapped line would leave its `\` alone
                 // on the next); a narrow window scrolls the block sideways instead.
                 div()
-                    .id("gbot-api-command")
+                    .relative()
                     .w_full()
                     .min_w_0()
-                    .overflow_x_scroll()
-                    .px(px(12.0))
-                    .py(px(10.0))
-                    .rounded(px(MODAL_RADIUS_CONTROL))
-                    .border_1()
-                    .border_color(hsla(p.hairline))
-                    .bg(hsla(p.input_background()))
-                    .font_family(MODAL_MONO_FONT)
-                    .text_size(px(11.5))
-                    .line_height(px(17.0))
-                    .text_color(hsla(p.foreground))
-                    .children(
-                        command
-                            .lines()
-                            .map(|line| div().whitespace_nowrap().child(line.to_string())),
+                    .child(
+                        div()
+                            .id("gbot-api-command")
+                            .w_full()
+                            .overflow_x_scroll()
+                            .restrict_scroll_to_axis()
+                            .track_scroll(&self.bot_api.command_scroll)
+                            .px(px(12.0))
+                            .py(px(10.0))
+                            .rounded(px(MODAL_RADIUS_CONTROL))
+                            .border_1()
+                            .border_color(hsla(p.hairline))
+                            .bg(hsla(p.input_background()))
+                            .font_family(MODAL_MONO_FONT)
+                            .text_size(px(11.5))
+                            .line_height(px(17.0))
+                            .text_color(hsla(p.foreground))
+                            .children(
+                                command
+                                    .lines()
+                                    .map(|line| div().whitespace_nowrap().child(line.to_string())),
+                            ),
+                    )
+                    .child(
+                        super::super::settings_modal::fields::strip_wheel::strip_wheel_layer(
+                            &self.bot_api.command_scroll,
+                            &self.bot_api.command_wheel,
+                        ),
                     ),
             )
             .child(buttons)

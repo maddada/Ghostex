@@ -736,35 +736,42 @@ impl GpuiNewThreadPickerWindow {
                     .child(RUN_ON_LABEL),
             )
             .child(
-                h_flex()
-                    .id("ghostex-gpui-new-thread-picker-run-on-chips")
+                div()
+                    .relative()
                     .flex_1()
                     .min_w_0()
-                    .gap(px(5.0))
-                    .items_center()
-                    .overflow_x_scroll()
-                    .track_scroll(&self.run_on_scroll)
-                    .children(chips)
-                    .when(set_up, |row| {
-                        row.child(
-                            div()
-                                .id("ghostex-gpui-new-thread-picker-run-on-setup")
-                                .flex_shrink_0()
-                                .ml(px(3.0))
-                                .text_size(px(12.0))
-                                .whitespace_nowrap()
-                                .text_color(hsla(rgba_of(c.muted, 0.9)))
-                                .hover(|link| link.text_color(hsla(c.foreground)))
-                                .child(SET_UP_LINK)
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.finish(
-                                        NewThreadPickerCommand::OpenCloudBoxesSettings,
-                                        window,
-                                        cx,
-                                    );
-                                })),
-                        )
-                    }),
+                    .child(
+                        h_flex()
+                            .id("ghostex-gpui-new-thread-picker-run-on-chips")
+                            .w_full()
+                            .gap(px(5.0))
+                            .items_center()
+                            .overflow_x_scroll()
+                            .restrict_scroll_to_axis()
+                            .track_scroll(&self.run_on_scroll)
+                            .children(chips)
+                            .when(set_up, |row| {
+                                row.child(
+                                    div()
+                                        .id("ghostex-gpui-new-thread-picker-run-on-setup")
+                                        .flex_shrink_0()
+                                        .ml(px(3.0))
+                                        .text_size(px(12.0))
+                                        .whitespace_nowrap()
+                                        .text_color(hsla(rgba_of(c.muted, 0.9)))
+                                        .hover(|link| link.text_color(hsla(c.foreground)))
+                                        .child(SET_UP_LINK)
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.finish(
+                                                NewThreadPickerCommand::OpenCloudBoxesSettings,
+                                                window,
+                                                cx,
+                                            );
+                                        })),
+                                )
+                            }),
+                    )
+                    .child(strip_wheel_layer(&self.run_on_scroll, &self.run_on_wheel)),
             )
     }
 }
