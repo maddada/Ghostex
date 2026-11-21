@@ -284,6 +284,12 @@ pub fn is_coordinator(threads: Option<&Value>) -> bool {
     threads.is_some_and(Value::is_object)
 }
 
+/// Whether the chat is this computer's Chief of Staff (`coordinatorThreads.chief`, which gxserver
+/// sets on Chief of Staff's current chat: server/src/coordinators/panel.rs).
+pub fn is_chief(threads: Option<&Value>) -> bool {
+    threads.and_then(|threads| threads.get("chief")) == Some(&Value::Bool(true))
+}
+
 fn plural(count: usize, one: &str, many: &str) -> String {
     format!("{count} {}", if count == 1 { one } else { many })
 }
@@ -987,9 +993,15 @@ mod tests {
         .unwrap();
         assert_eq!(panel.rows[0].now_line, "Taking out the tests");
         let labels = |row: &super::CoordinatorThreadRow| {
-            row.stats.iter().map(|stat| stat.label.clone()).collect::<Vec<_>>()
+            row.stats
+                .iter()
+                .map(|stat| stat.label.clone())
+                .collect::<Vec<_>>()
         };
-        assert_eq!(labels(&panel.rows[0]), ["Building", "46 tool calls", "3 files"]);
+        assert_eq!(
+            labels(&panel.rows[0]),
+            ["Building", "46 tool calls", "3 files"]
+        );
         assert_eq!(
             panel.rows[0].detail, "[x](y) one",
             "the phone's line is unchanged"

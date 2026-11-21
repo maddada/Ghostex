@@ -195,7 +195,16 @@ pub fn insert_coordinator_threads(
             .get(&(project_id.to_string(), session_id.to_string()))
             .map(|panel| panel.summary.clone())
     });
-    if let Some(value) = value {
+    if let Some(mut value) = value {
+        // Chief of Staff's chat says what it is for (gx-chat-core extras/document.rs).
+        let chief = crate::chief::chief_key(&crate::paths::get_gxserver_paths(None)).is_some_and(
+            |(chief_project, chief_session)| {
+                chief_project == project_id && chief_session == session_id
+            },
+        );
+        if chief {
+            value["chief"] = Value::Bool(true);
+        }
         frame.insert("coordinatorThreads".to_string(), value);
     }
     // An ordinary session's own work items ride beside it (session_work.rs).
