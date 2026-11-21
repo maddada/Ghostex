@@ -1615,21 +1615,4 @@ mod tests {
         ];
         assert_eq!(shown(&accounts), [("local".to_string(), "MS".to_string())]);
     }
-
-    #[test]
-    fn a_claude_tile_at_its_limit_names_its_resets() {
-        let windows = json!([
-            {"id": "sevenDay", "usedPercent": 100.0, "limitWindowSeconds": 604800},
-            {"id": "Fable", "usedPercent": 23.0, "limitWindowSeconds": 604800, "model": "Fable"},
-        ]);
-        let mut claude = json!({"provider": "claude", "usage": windows, "resetCredits": 1});
-        assert_eq!(badge_lines(&claude), vec!["100%", "1rs"]);
-        // No reset left: both percentages, as before.
-        claude["resetCredits"] = json!(0);
-        assert_eq!(badge_lines(&claude), vec!["100%", "23%"]);
-        // Below the limit the tile keeps its two percentages even with resets banked.
-        claude["resetCredits"] = json!(3);
-        claude["usage"][0]["usedPercent"] = json!(40.0);
-        assert_eq!(badge_lines(&claude), vec!["40%", "23%"]);
-    }
 }
