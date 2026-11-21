@@ -28,7 +28,8 @@
 //! agent (file_page.rs `page_for_cover_link`, where the decision lives), and the cover's session
 //! lists it from the first click until it is answered or marked as read
 //! (session_chat_open_questions.rs `note_linked_page`). The rule for a link out of the folder is
-//! unchanged.
+//! unchanged. A section's own links are bounded by its cover's folder, so a section in a
+//! subfolder can link back up to a sibling that is still under the cover.
 
 use std::{
     fs,
@@ -44,7 +45,9 @@ use axum::{
 use crate::server::{AppState, RoutedResponse};
 
 use super::{
-    file_page::{page_for_cover_link, page_for_linked_file, page_show_published, LinkedSession},
+    file_page::{
+        cover_of, page_for_cover_link, page_for_linked_file, page_show_published, LinkedSession,
+    },
     prepare::anchor_hrefs,
     serve::{PAGE_SCRIPT_QUERY, READ_ONLY_QUERY, VISUAL_PAGE_ROUTE_PREFIX},
     store::{is_page_id, page_source_path, read_page},
@@ -137,7 +140,19 @@ fn linked_page(
     // Symlinks resolved on both sides, so a link inside the folder cannot lead out of it.
     let folder = fs::canonicalize(Path::new(&source).parent()?).ok()?;
     let file = fs::canonicalize(folder.join(relative)).ok()?;
-    if !file.starts_with(&folder) {
+    // A section's links stay inside its cover's folder, not only its own: one in a subfolder can
+    // link back up to a sibling (`../a.html`) while the file stays under the cover.
+    let cover = cover_of(gxserver_state_dir, id);
+    let bound = if cover == id {
+        folder
+    } else {
+        page_source_path(gxserver_state_dir, &cover)
+            .and_then(|cover| Path::new(&cover).parent().map(Path::to_path_buf))
+            .and_then(|cover| fs::canonicalize(cover).ok())
+            .filter(|cover| folder.starts_with(cover))
+            .unwrap_or(folder)
+    };
+    if !file.starts_with(&bound) {
         return page_show_published(gxserver_state_dir, &file).map(|page| (page.id, None));
     }
     match page_for_cover_link(gxserver_state_dir, &file, id) {

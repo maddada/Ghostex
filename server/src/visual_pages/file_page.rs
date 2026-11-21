@@ -194,7 +194,9 @@ pub(super) fn page_for_cover_link(
     let awaits_seen = asks_nothing(&source);
     // Held from the lookup to the write, so first clicks that arrive together open one page.
     static MAKING: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let _making = MAKING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _making = MAKING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some((id, record)) = published_from(gxserver_state_dir, &file, |record| {
         linked_from(record) == Some(cover_id)
     }) {
@@ -210,6 +212,11 @@ pub(super) fn page_for_cover_link(
                 awaits_seen,
             }),
         }));
+    }
+    // A backstop against a folder of generated sections: past the cap a link opens the file
+    // read-only, as a file nobody published (the caller's fallback).
+    if pages_linked_from(gxserver_state_dir, cover_id) >= LINKED_PAGES_PER_COVER {
+        return Ok(None);
     }
     let prepared = prepare()?;
     let title = prepared.title.clone().unwrap_or_else(|| {
@@ -237,6 +244,43 @@ pub(super) fn page_for_cover_link(
             awaits_seen,
         }),
     }))
+}
+
+/// How many pages one cover's links may make (`page_for_cover_link`); a link to another file past
+/// that opens it read-only.
+///
+/// CDXC:SessionChat 2026-11-21 DECISION:
+/// After the security review of linked sections: "cap linked-section pages per cover at 50
+/// (beyond that, links open read-only)". Each page is one row in the cover's Needs you and one
+/// page on disk, so a folder of generated sections, or anyone holding a cover's address, cannot add
+/// them without end.
+const LINKED_PAGES_PER_COVER: usize = 50;
+
+/// How many pages links made for the cover `cover_id` (`linkedFrom`).
+fn pages_linked_from(gxserver_state_dir: &Path, cover_id: &str) -> usize {
+    let Ok(entries) = fs::read_dir(visual_pages_dir(gxserver_state_dir)) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            name.strip_suffix(".json")
+                .and_then(|id| read_record(gxserver_state_dir, id))
+        })
+        .filter(|record| linked_from(record) == Some(cover_id))
+        .count()
+}
+
+/// The cover a page opened through a cover's link belongs to: the page itself when it is no
+/// section, else the cover its record names. linked.rs keeps a section's links inside that cover's
+/// folder, so a section in a subfolder can link back up to a sibling (`../a.html`).
+pub(super) fn cover_of(gxserver_state_dir: &Path, page_id: &str) -> String {
+    read_record(gxserver_state_dir, page_id)
+        .as_ref()
+        .and_then(linked_from)
+        .unwrap_or(page_id)
+        .to_string()
 }
 
 /// What [`page_for_cover_link`] opens.
