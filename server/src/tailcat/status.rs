@@ -192,7 +192,7 @@ fn change_tailcat_state<T>(
     if let Some(transaction) = transaction {
         transaction.commit()?;
     }
-    if let Some(runtime) = runtime {
+    if let Some(runtime) = runtime.filter(|_| helpers_may_start_here()) {
         runtime.apply(paths, &record.state);
     }
     Ok((record, out))
@@ -221,7 +221,9 @@ pub fn reconcile_tailcat_runtime(
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let state = read_tailcat_state_or_default(&TailcatRepository::new(db))?;
-    runtime.apply(paths, &state);
+    if helpers_may_start_here() {
+        runtime.apply(paths, &state);
+    }
     Ok(())
 }
 
@@ -289,6 +291,17 @@ pub fn hold_tailcat_pairing_window_open(paths: &GxserverPaths, runtime: &Tailcat
 /// whose gxserver started again without a boot stays closed until the computer or phone wakes it.
 static BOX_DEVICES_FROM_BOOT: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the helpers may be brought in line with the saved state now: always, except on a Cloud
+/// Box before this process applied its boot's `enableForBoxDevices` (see BOX_DEVICES_FROM_BOOT).
+///
+/// CDXC:CloudBoxes 2026-11-21 FIX: review of 885dbd397: the wait sat only in gxserver's start, so
+/// any Easy Connect write before the boot's update (`pruneToBoxTicket`, an approval, a setting)
+/// still started the helper on the old list. Every write applies the helpers through here.
+fn helpers_may_start_here() -> bool {
+    BOX_DEVICES_FROM_BOOT.load(std::sync::atomic::Ordering::SeqCst)
+        || crate::cloud_boxes::box_mode::boot::devices_ticket_names().is_none()
+}
 
 /// Boot reconcile: restart the sidecar for a state that was left enabled.
 pub fn start_tailcat_from_persisted_state(paths: &GxserverPaths, runtime: &TailcatRuntime) {

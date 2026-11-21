@@ -91,11 +91,9 @@ fn slots() -> &'static Mutex<HashMap<String, usize>> {
 }
 
 /// The slot `box_id` dials with: the one it holds, else the lowest no open box holds. A box gives
-/// its slot back once it is no longer among `open` (running, idle or being dialed now).
-fn slot_for(box_id: &str, open: &[String]) -> usize {
-    let mut held = slots()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+/// its slot back once it is no longer among `open` (running, idle or being dialed now). `held` is
+/// the locked table, taken before the rows were read so two asks can't both take one slot.
+fn slot_for(held: &mut HashMap<String, usize>, box_id: &str, open: &[String]) -> usize {
     held.retain(|holder, _| holder == box_id || open.iter().any(|id| id == holder));
     if let Some(slot) = held.get(box_id) {
         return *slot;
@@ -115,6 +113,11 @@ pub(crate) fn own_box_key(paths: &GxserverPaths, address: &str, purpose: &str) -
     if !PURPOSES.contains(&purpose) || address.is_empty() {
         return None;
     }
+    // Before the rows are read (review of eaa2dfdb1): an ask that read them earlier could otherwise
+    // give back a slot another ask had just taken for a box it hadn't seen yet.
+    let mut held = slots()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let rows: Vec<_> = store::list_boxes(paths)
         .ok()?
         .into_iter()
@@ -131,7 +134,7 @@ pub(crate) fn own_box_key(paths: &GxserverPaths, address: &str, purpose: &str) -
         .filter(|other| other.state.is_reachable() || other.box_id == row.box_id)
         .map(|other| other.box_id.clone())
         .collect();
-    let file = key_file(paths, purpose, slot_for(&row.box_id, &open));
+    let file = key_file(paths, purpose, slot_for(&mut held, &row.box_id, &open));
     file.is_file().then_some(file)
 }
 
