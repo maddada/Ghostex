@@ -329,7 +329,7 @@ impl GpuiOnboardingWindow {
                 .unwrap_or_else(|| agent_id.clone());
             self.add_extra(
                 "default".into(),
-                format!("{name} set as your default"),
+                format!("{name} set as your default; Chief of Staff runs on it"),
                 ExtraTone::Acc,
             );
         }
