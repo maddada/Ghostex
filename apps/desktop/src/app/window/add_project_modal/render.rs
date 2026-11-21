@@ -335,6 +335,7 @@ impl GpuiAddProjectModalWindow {
                         .appearance(false)
                         .bordered(false)
                         .focus_bordered(false)
+                        .disabled(busy)
                         .w_full()
                         .px(px(0.0))
                         .py(px(0.0))

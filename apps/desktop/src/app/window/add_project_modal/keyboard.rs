@@ -112,6 +112,9 @@ impl GpuiAddProjectModalWindow {
 
     /// Tab in the path field completes the typed folder name to the first match.
     pub(super) fn complete_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.busy.is_some() {
+            return;
+        }
         let d = self.derive();
         if has_trailing_path_separator(&self.query) || !d.is_browsing {
             return;

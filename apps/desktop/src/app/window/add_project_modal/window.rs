@@ -413,6 +413,9 @@ impl GpuiAddProjectModalWindow {
         let subscriptions = vec![
             on_change(&path_input, window, cx, Self::on_path_input_changed),
             on_change(&branch_input, window, cx, |this, value, _window, cx| {
+                if this.busy.is_some() || value == this.clone_options.branch_name {
+                    return;
+                }
                 this.clone_options.branch_name = value;
                 this.clone_preview = None;
                 this.clone_generation += 1;
@@ -584,6 +587,8 @@ impl GpuiAddProjectModalWindow {
         let busy = self.busy.is_some();
         if busy != self.branch_input_disabled {
             self.branch_input_disabled = busy;
+            self.path_input
+                .update(cx, |input, cx| input.set_disabled(busy, cx));
             self.branch_input
                 .update(cx, |input, cx| input.set_disabled(busy, cx));
         }
@@ -743,16 +748,13 @@ impl GpuiAddProjectModalWindow {
 
         // A pasted `machine:path` opens that machine; a pasted `cd …`, `file://` or escaped path
         // becomes the plain path.
-        if !d.is_browsing {
+        if !d.is_browsing && self.busy.is_none() {
             match classify_add_project_input(&self.query, &self.machines) {
                 Some(DetectedProjectInput::Browse {
                     query,
                     machine_id: target,
                 }) => {
                     if let Some(target) = target.filter(|target| target != &machine_id) {
-                        if self.busy.is_some() {
-                            return false;
-                        }
                         self.machine_id = Some(target);
                         self.reset_for_machine();
                         self.column_root = None;

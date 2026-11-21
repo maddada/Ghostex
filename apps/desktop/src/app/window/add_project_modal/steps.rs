@@ -134,7 +134,7 @@ impl GpuiAddProjectModalWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if value == self.query {
+        if self.busy.is_some() || value == self.query {
             return;
         }
         self.highlight = None;
@@ -377,6 +377,9 @@ impl GpuiAddProjectModalWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.busy.is_some() {
+            return;
+        }
         self.sheet = Some(Sheet::Clone);
         self.new_folder_name = None;
         self.clone_preview = None;
@@ -428,6 +431,9 @@ impl GpuiAddProjectModalWindow {
     }
 
     pub(super) fn choose_clone_source(&mut self, source: AddProjectSourceId) {
+        if self.busy.is_some() {
+            return;
+        }
         self.clone_source = source;
         self.clone_preview = None;
         self.clone_flow = None;
@@ -441,7 +447,7 @@ impl GpuiAddProjectModalWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if value == self.clone_repo_text {
+        if self.busy.is_some() || value == self.clone_repo_text {
             return;
         }
         // A pasted URL or command picks its source; a bare `owner/repo` keeps the chosen one.
