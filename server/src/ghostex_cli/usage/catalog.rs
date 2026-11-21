@@ -306,6 +306,10 @@ pub fn usage() -> String {
             "File a Ghostex bug or feedback issue on GitHub through the Ghostex feedback relay; --dry-run prints the request instead",
         ),
         format_help_command(
+            "feedback brief --github-user name [--image file]...",
+            "Get a report folder and the steps Send Bug / Feedback's agent follows to file an issue (read only, private things kept out, the draft shown to the user before feedback send posts it); posts nothing",
+        ),
+        format_help_command(
             "show <file.html> [--title text] [--json] [--no-check]",
             "Publish a Live page (once called a Ghostex page or gx page): a self-contained HTML page, and print the ```visual block that shows it as a card in the chat; the card opens it where the reader's Open Live pages in setting says (a floating window over the chat by default). Questions written as <gx-questions> (or the page's own ghostex.submit(answers)) send the reader's answers back to you as a message; the block then lists the questions' tags, so the chat counts the page as unanswered until they arrive. When Chrome is installed it then opens the page at 360 and 600px and at 900px with large text and says what overflows, overlaps or did not fit (--no-check skips that). Ghostex paints the page's backdrop and glass cards itself; for a page that looks good at a glance (a strong header, options side by side in .gx-options with Pick buttons, one question under them, about one screen) follow `ghostex visual guide pages` and the page `ghostex visual guide example` prints",
         ),

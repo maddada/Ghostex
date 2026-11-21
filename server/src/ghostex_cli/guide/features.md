@@ -4815,9 +4815,19 @@ itself ("what's stuck?", "how do I pair my phone?").
   it is done, a white **Ask me anything about Ghostex** button and a few
   questions to start with. Once you have a project and have started an agent it
   says **Hi again!** with how many agents are running and how many need you, and
-  offers questions about your work and about Ghostex. Tapping any of them only
-  puts it in the chat box; nothing is sent until you send it. The ghost holds
-  still when your computer or phone asks for reduced motion.
+  offers questions about your work and about Ghostex. Both have a small
+  **Report a bug** chip at the bottom. Tapping any of them only puts it in the
+  chat box (after anything you already typed); nothing is sent until you send
+  it. The ghost holds still when your computer or phone asks for reduced motion.
+- **When something in Ghostex is wrong**: tell Ghostex AI what happened. It
+  reads Ghostex's logs, settings and status on this computer to find the cause,
+  explains it, and fixes it only once you say yes (a setting it may change, for
+  example); what only you can change, it shows you where. To report a bug, it
+  asks for your GitHub username and follows the same steps as Send Bug /
+  Feedback's "Collect more data with an agent" (`ghostex feedback brief`): it
+  checks you're on the latest version, gathers details without changing
+  anything, keeps tokens, passwords and your files' contents out, shows you the
+  whole draft issue and posts it only after you say yes.
 - **Getting started**: on its first start Ghostex AI greets you and offers
   first steps as a form: add your projects, theme Ghostex, configure it, connect
   your phone or another computer, set up Boosts and Autopilot, or a short tour.
@@ -8789,7 +8799,9 @@ changing anything, keeps tokens, passwords and your files' contents out of the
 issue, then shows you the whole draft in the chat and posts it once you say yes.
 It files the issue with `ghostex feedback send --title <text> --body-file <file>
 --github-user <name> [--image <file>]...`, which you or any agent can also run
-by hand (`--dry-run` prints what would be sent without posting). When the
+by hand (`--dry-run` prints what would be sent without posting). Ask Ghostex
+AI files reports the same way: `ghostex feedback brief --github-user <name>
+[--image <file>]...` gives it a report folder and this agent's own steps. When the
 session you are looking at (or, with none focused, the active project) is on a
 connected remote machine, the agent starts on that machine instead, in its own
 Ghostex config folder, and reads that machine's version, settings and logs; the

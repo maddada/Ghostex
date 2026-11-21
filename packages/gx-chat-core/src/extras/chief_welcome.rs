@@ -9,6 +9,8 @@
 //!
 //! CDXC:Chief 2026-11-21 DECISION:
 //! User (relayed by Chief of Staff, the approved spec cos-welcome-card-v3): a new welcome card for Ask Ghostex AI's empty chat only (other chats keep today's welcome): the clipboard ghost, "Welcome to Ghostex!", a First steps card (add a project, sign in to Claude or Codex, start an agent, put Ghostex on your phone; each ticks itself off from real state), a white "Ask me anything about Ghostex" button and four chips; once there is a project and an agent has been started, "Hi again!" with a live status line, the ask button, two work prompts and two teaching prompts. Tapping a prompt only fills the chat box, never sends. The spec's "I'm your Chief of Staff" line becomes "I'm Ghostex AI. Ask me anything, or let's get you set up."
+//! CDXC:Chief 2026-11-21 DECISION:
+//! User: Ask Ghostex AI "can help the user fix issues with ghostex and submit bug reports also"; the brief asked for a "Report a bug" chip where it fits the card. Both cards end with a small "Report a bug" chip in the spec's chip style (after the new user's four, and alone under the set-up card's prompts, whose grid stays two by two). Like every prompt it only fills the chat box; the playbook's "When Ghostex misbehaves" takes it from there (server/src/chief/playbook.md).
 //! SEE-ALSO: apps/desktop/src/app/native_chat/chief_welcome.rs and apps/mobile/app/src/chat/native/cards/ChiefWelcome.tsx (the two cards), server/src/chief/welcome.rs (the state).
 
 use serde::{Deserialize, Serialize};
@@ -59,7 +61,8 @@ pub struct ChiefWelcome {
     pub steps: Vec<WelcomeStep>,
     pub ask_title: String,
     pub ask_detail: String,
-    /// The small asks under the ask button (new user only).
+    /// The small asks at the bottom: the new user's four and Report a bug; on the set-up card,
+    /// Report a bug only.
     pub chips: Vec<WelcomePrompt>,
     /// The live status line (set up only).
     pub status: Option<WelcomeStatus>,
@@ -82,6 +85,7 @@ const GOING_ON: &str = "What's going on right now?";
 const STUCK: &str = "Which agents are stuck?";
 const CATCH_UP: &str = "Catch me up on a project";
 const NEEDS_ME: &str = "What needs me?";
+const REPORT_BUG: &str = "Something in Ghostex isn't working. Help me fix it or report a bug.";
 
 /// Every text a tap can put in the chat box; gxserver remembers which of them the user sent, so a
 /// teaching prompt already asked is not offered again.
@@ -98,6 +102,7 @@ pub const PROMPT_FILLS: &[&str] = &[
     STUCK,
     CATCH_UP,
     NEEDS_ME,
+    REPORT_BUG,
 ];
 
 /// Whether `text`, as sent, is one of the card's prompts (trimmed, exact).
@@ -111,6 +116,10 @@ fn prompt(label: &str, icon: &str, fill: &str) -> WelcomePrompt {
         icon: icon.to_string(),
         fill: fill.to_string(),
     }
+}
+
+fn report_bug() -> WelcomePrompt {
+    prompt("Report a bug", "bug", REPORT_BUG)
 }
 
 fn plural(count: u64, one: &str, many: &str) -> String {
@@ -155,6 +164,7 @@ pub fn build(data: &Value) -> ChiefWelcome {
                 prompt(WHAT_CAN, "sparkles", WHAT_CAN),
                 prompt(COORDINATORS, "coordinator-crown-points", COORDINATORS),
                 prompt(LOOKS, "palette", LOOKS),
+                report_bug(),
             ],
             status: None,
             prompts: Vec::new(),
@@ -207,7 +217,7 @@ pub fn build(data: &Value) -> ChiefWelcome {
         steps: Vec::new(),
         ask_title: "Ask me anything".to_string(),
         ask_detail: "About Ghostex, or any agent, project or computer".to_string(),
-        chips: Vec::new(),
+        chips: vec![report_bug()],
         status: Some(status),
         prompts,
     }

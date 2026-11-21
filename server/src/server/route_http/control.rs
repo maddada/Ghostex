@@ -5,7 +5,10 @@ use serde_json::json;
 
 use crate::{
     extensions::handle_extensions_http,
-    feedback::{handle_feedback_http, handle_start_feedback_agent_http},
+    feedback::{
+        handle_feedback_brief_http, handle_feedback_http, handle_start_feedback_agent_http,
+        FEEDBACK_BRIEF_ENDPOINT,
+    },
     protocol::rpc_success,
     remote_access::handle_remote_access_http,
     tailcat::handle_tailcat_http,
@@ -81,6 +84,9 @@ pub(super) async fn route_control_http(
         }
         "/api/startFeedbackAgent" => {
             handle_start_feedback_agent_http(&state, endpoint.path, request_id, &body_json).await
+        }
+        FEEDBACK_BRIEF_ENDPOINT => {
+            handle_feedback_brief_http(&state, endpoint.path, request_id, &body_json)
         }
         crate::security_upgrade::SECURITY_UPGRADE_NOTICE_ENDPOINT => {
             crate::security_upgrade::handle_http(

@@ -237,23 +237,7 @@ impl NativeChatView {
             region = region.child(self.chief_welcome_steps(welcome, column, p, cx));
         }
         region = region.child(self.chief_welcome_ask(welcome, column, p, cx));
-        if new_user {
-            region = region.child(
-                div()
-                    .max_w(px(column))
-                    .flex()
-                    .flex_wrap()
-                    .justify_center()
-                    .gap(px(6.0 * s))
-                    .children(
-                        welcome
-                            .chips
-                            .iter()
-                            .enumerate()
-                            .map(|(index, chip)| self.chief_welcome_chip(index, chip, p, cx)),
-                    ),
-            );
-        } else {
+        if !new_user {
             // Two by two, one a row on a narrow chat.
             let two = column >= 410.0 * s;
             let width = if two {
@@ -270,6 +254,24 @@ impl NativeChatView {
                     .children(welcome.prompts.iter().enumerate().map(|(index, prompt)| {
                         self.chief_welcome_prompt(index, prompt, width, p, cx)
                     })),
+            );
+        }
+        // The new user's four asks and Report a bug; on the set-up card Report a bug alone.
+        if !welcome.chips.is_empty() {
+            region = region.child(
+                div()
+                    .max_w(px(column))
+                    .flex()
+                    .flex_wrap()
+                    .justify_center()
+                    .gap(px(6.0 * s))
+                    .children(
+                        welcome
+                            .chips
+                            .iter()
+                            .enumerate()
+                            .map(|(index, chip)| self.chief_welcome_chip(index, chip, p, cx)),
+                    ),
             );
         }
         region.into_any_element()

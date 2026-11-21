@@ -1241,6 +1241,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         listener caller must never post issues in this user's name.
         */
         "/api/draftFeedback" | "/api/sendFeedback" | "/api/startFeedbackAgent" => full_local(path),
+        // CDXC:Feedback 2026-11-21 WHY: `ghostex feedback brief` writes a report folder on this computer for an agent here (Ask Ghostex AI) to file an issue from; like the feedback calls above, only this computer's own clients reach it.
+        crate::feedback::FEEDBACK_BRIEF_ENDPOINT => full_local(path),
         // CDXC:Chief 2026-11-08 WHY: another computer's Chief finds this computer's Chief through `status` (`ghostex chief send --computer`), and the desktop reaches a connected computer's Chief through its tunnel. Creating or moving Chief stays with this computer's own app, phone and terminal: the handler refuses peers and sessions (chief/endpoint.rs `may_change_chief`).
         crate::chief::CHIEF_ENDPOINT => remote_allowed(path),
         // CDXC:GBots 2026-11-09 WHY: a GBot's chat on a connected computer reads its brief and keeps its memory on the GBot's home computer; that computer's gxserver sends the call (never its relay, relay.rs), and the handler answers only a peer, for a session it started there as that GBot's chat (gbots/computer/home.rs).

@@ -3,7 +3,6 @@
 //! agent session in the Ghostex config folder's project and starts it, so every client gets the
 //! same flow and only has to open the session it answers with.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use axum::http::StatusCode;
@@ -23,18 +22,13 @@ use crate::sidebar_hud::sidebar_agent_buttons_from_projects;
 use crate::storage::open_gxserver_database;
 use crate::zmx::{dispatch_zmx_lifecycle_endpoint, ZmxEndpointError, ZmxServerContext};
 
+use super::brief::{new_report_folder, report_steps, save_screenshots, screenshot_lines};
 use super::brief_wait::wait_for_feedback_agent_brief;
 use super::draft::github_username;
 use super::relay::FeedbackImage;
 
 /// The new session's title in the sidebar.
 const FEEDBACK_AGENT_SESSION_TITLE: &str = "Bug / Feedback";
-
-/// Whether the agent shows the user its draft and waits for a yes before it posts.
-///
-/// CDXC:Feedback 2026-10-16 DECISION:
-/// User, asked whether the feedback agent may post the issue straight away: "Show me the draft in its chat first". The agent shows its full draft (title, body and the screenshots it will attach) in its chat and posts only after the user says yes there, as the 2026-10-04 rule has the pop-up's Review step do (apps/desktop/src/app/window/feedback_modal/state.rs). `feedback_agent_prompt` words the last step from this switch.
-const FEEDBACK_AGENT_ASKS_BEFORE_POSTING: bool = true;
 
 /// `startFeedbackAgent { message, githubUsername, images: [{ name, dataBase64 }], agentId? }`
 /// answers `{ projectId, sessionId, agentId, agentName, providerStarted }` once the agent has
@@ -226,15 +220,7 @@ fn start_report_folder(
     params: &Map<String, Value>,
 ) -> Result<ReportFolder, DomainStateError> {
     let config_dir = &state.paths.app_config_dir;
-    let folder = config_dir.join("feedback").join(
-        chrono::Local::now()
-            .format("%Y-%m-%d-%H%M%S%3f")
-            .to_string(),
-    );
-    fs::create_dir_all(&folder).map_err(|error| DomainStateError {
-        code: "internalError",
-        message: format!("Could not create the report folder: {error}"),
-    })?;
+    let folder = new_report_folder(config_dir)?;
     let known: Vec<String> = repository
         .list_projects()?
         .iter()
@@ -260,63 +246,14 @@ fn start_report_folder(
     Ok(ReportFolder { project, folder })
 }
 
-/// Writes the pasted screenshots into the report's folder (`screenshots/screenshot-N.png`) and
-/// returns their paths, in order.
-fn save_screenshots(
-    workspace: &Path,
-    images: &[FeedbackImage],
-) -> Result<Vec<PathBuf>, DomainStateError> {
-    if images.is_empty() {
-        return Ok(Vec::new());
-    }
-    let folder = workspace.join("screenshots");
-    fs::create_dir_all(&folder).map_err(|error| DomainStateError {
-        code: "internalError",
-        message: format!("Could not save the screenshots: {error}"),
-    })?;
-    images
-        .iter()
-        .enumerate()
-        .map(|(index, image)| {
-            let path = folder.join(format!("screenshot-{}.{}", index + 1, image.extension()));
-            fs::write(&path, image.bytes()).map_err(|error| DomainStateError {
-                code: "internalError",
-                message: format!("Could not save {}: {error}", image.name()),
-            })?;
-            Ok(path)
-        })
-        .collect()
-}
-
 /// The agent's first message: what the user wrote, their screenshots, and how to turn it into an
-/// issue.
+/// issue (the steps are brief.rs's, shared with Ask Ghostex AI).
 pub(super) fn feedback_agent_prompt(
     message: &str,
     username: &str,
     report_folder: &Path,
     images: &[PathBuf],
 ) -> String {
-    let report_folder = report_folder.display();
-    let screenshots = if images.is_empty() {
-        "They pasted no screenshots.".to_string()
-    } else {
-        let list = images
-            .iter()
-            .enumerate()
-            .map(|(index, path)| format!("[Image #{}]({})", index + 1, path.display()))
-            .collect::<Vec<_>>()
-            .join("\n");
-        format!("Their screenshots:\n{list}")
-    };
-    let image_flags = images
-        .iter()
-        .map(|path| format!(" --image \"{}\"", path.display()))
-        .collect::<String>();
-    let posting = if FEEDBACK_AGENT_ASKS_BEFORE_POSTING {
-        "8. Show the user the whole draft here: the title, the full body, and the screenshots you will attach. Ask whether to post it, apply any changes they ask for, and post only after they say yes."
-    } else {
-        "8. Post the issue when the draft is complete."
-    };
     format!(
         r#"A Ghostex user is reporting a bug or giving feedback with Send Bug / Feedback, and asked you to collect the details that help the Ghostex team fix it, then file it as a GitHub issue on the Ghostex repository.
 
@@ -327,20 +264,11 @@ What they wrote:
 {message}
 """
 
-{screenshots}
+{}
 
-What to do:
-1. Check the version first. Run `ghostex app-update check`; its JSON says `updateAvailable` and `availableVersion` when a newer Ghostex than the installed `appVersion` is out. If one is, stop here: tell the user "You're on <appVersion>; <availableVersion> is out. Please update first: it may already be fixed.", say they can update from Settings > Updates (or the Update button in the top bar), and ask whether to update first or carry on anyway. Do not install it yourself. Carry on with the steps below only once they say to carry on; if they update, the report waits for them to come back on the new version. When the check says nothing is available, or cannot tell (an error, no network, `updateAvailable` missing), say nothing about it and go on.
-2. Read `ghostex guide` (the overview) and `ghostex guide features` for how the part of Ghostex they describe is meant to work, so the issue says what was expected.
-3. Gather what helps us fix it from this computer: the Ghostex version (`ghostex server status --json`), the operating system, the settings that touch this feature (`ghostex settings list`, `ghostex settings get <key>`), the recent gxserver and app logs around it (`ghostex logs --lines 200`, `ghostex logs --grep <text>`), and the sessions involved (`ghostex sessions`).
-4. Debug it, and reproduce it where you can do that safely, to find what goes wrong and, if you can, why.
-5. Change nothing on this computer: do not change settings, files, projects or sessions, do not restart Ghostex or its background service, and do not install anything. The only files you write are your notes and the draft, in this report's folder: {report_folder}
-6. Keep private things out of the issue: no tokens, keys, passwords, cookies, email addresses or account names other than @{username}, and no contents of the user's own files. Shorten paths in their home folder to ~, and quote only the log lines that matter.
-7. Draft the issue: a short title, and a body with What happened, What was expected, Steps to reproduce, What you found (Ghostex version, operating system, relevant settings, log excerpts) and the likely cause if you found one.
-{posting}
-9. Post it: write the body to a file in {report_folder}, then run
-   ghostex feedback send --title "<title>" --body-file <file> --github-user {username}{image_flags}
-   It adds "Reported by @{username}" at the top so GitHub tells them about the issue, and Ghostex adds a line with its version and the operating system. Run it with --dry-run first if you want to see exactly what will be sent. Then give the user the issue link it prints."#
+{}"#,
+        screenshot_lines(images),
+        report_steps(username, report_folder, images)
     )
 }
 

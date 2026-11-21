@@ -900,12 +900,19 @@ pub fn feedback_usage() -> String {
     r#"Usage:
   ghostex feedback send --title <text> --body-file <file> --github-user <name> [--image <file>]... [--dry-run] [--json]
   ghostex feedback send --title <text> --body <text> --github-user <name>
+  ghostex feedback brief --github-user <name> [--image <file>]... [--json]
 
 Files a Ghostex bug or feedback issue on the Ghostex GitHub through the Ghostex feedback relay,
 the same way Send Bug / Feedback does. The issue starts with "Reported by @<name>" so GitHub
 notifies that user, and Ghostex adds a line with its version and the operating system. Attach
 up to five PNG, JPEG or WebP screenshots of 5 MB each with --image. The issue is public.
---dry-run prints the exact request (images shown by size) without posting it."#
+--dry-run prints the exact request (images shown by size) without posting it.
+
+brief is for an agent filing a report from its own chat (Ask Ghostex AI): it makes a report
+folder in the Ghostex config folder, copies the screenshots into it, and prints the same steps
+Send Bug / Feedback's "Collect more data with an agent" gives its agent: check the version, read
+logs and settings without changing anything, keep private things out, show the user the whole
+draft and post with feedback send only after they say yes. It posts nothing."#
         .to_string()
 }
 
