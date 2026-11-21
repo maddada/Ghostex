@@ -23,7 +23,7 @@ USAGE
   ghostex box write-back [--ack <id,id>]
   ghostex box relay --listen <addr:port> --to <addr:port>
   ghostex box idle-watch
-  ghostex box forget-devices --keys <key,key>
+  ghostex box forget-devices --keys <key,key> --home <id>
 ";
 
 fn print_ok(mut value: Value) {
@@ -100,7 +100,10 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 .filter(|key| !key.is_empty())
                 .map(str::to_string)
                 .collect();
-            answer(box_mode::boot::run_forget_devices(&keys))
+            answer(box_mode::boot::run_forget_devices(
+                &keys,
+                flags.string_value("home"),
+            ))
         }
         box_verbs::RELAY => {
             let (Some(listen), Some(target)) =

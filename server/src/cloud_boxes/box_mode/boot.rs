@@ -310,11 +310,19 @@ pub(crate) fn devices_ticket_names() -> Option<Vec<String>> {
     )
 }
 
-/// `ghostex box forget-devices --keys <key,key>`: takes those devices out of this box's ticket and
-/// has gxserver take every saved device the ticket no longer names off Easy Connect
-/// (`pruneToBoxTicket`, removal only). Run again, it changes nothing.
-pub(crate) fn run_forget_devices(keys: &[String]) -> Result<Value, String> {
+/// `ghostex box forget-devices --keys <key,key> --home <id>`: takes those devices out of this box's
+/// ticket and has gxserver take every saved device the ticket no longer names off Easy Connect
+/// (`pruneToBoxTicket`, removal only). Refused unless `home` is the computer the ticket names, so
+/// another computer seeing this box on a shared provider account can't take its devices off. Run
+/// again, it changes nothing.
+pub(crate) fn run_forget_devices(keys: &[String], home: Option<&str>) -> Result<Value, String> {
     let mut ticket = state::read_ticket().ok_or_else(|| super::not_in_box_mode().message)?;
+    if home.is_none() || ticket.home_machine_id.as_deref() != home {
+        return Err(
+            "This box belongs to another computer, so only that computer can take devices off it."
+                .to_string(),
+        );
+    }
     let before = ticket.allow_device_keys.len();
     ticket
         .allow_device_keys

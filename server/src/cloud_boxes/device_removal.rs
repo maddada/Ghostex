@@ -13,28 +13,43 @@
 //! booted on a ticket written before, so the boot's last step takes off whatever that ticket names
 //! and this computer no longer lists (`catch_up_after_boot`). A box that can't be reached now
 //! (stopped, paused) gets a ticket without the device when it next starts, as before.
+//! Review of 0227aa45e: a box that failed a later start but was left running for its sessions is
+//! told too; this computer's own box keys are never sent; and the verb names this computer, so a
+//! box adopted from another computer on the same provider account (its ticket names that home)
+//! refuses it and keeps that computer's devices.
 //! SEE-ALSO: server/src/remote_access/paired_devices.rs (`remove_paired_device_using`, the caller),
 //! server/src/cloud_boxes/box_mode/boot.rs (`run_forget_devices`), server/src/tailcat/status.rs.
 
-use ghostex_gx_protocol::cloud_box::{box_verbs, BoxBootTicket, CloudProviderId};
+use ghostex_gx_protocol::cloud_box::{box_verbs, BoxBootTicket, CloudBoxState, CloudProviderId};
 
 use super::boot_steps;
 use super::ops::{Ops, Target};
 use super::store;
 use crate::paths::GxserverPaths;
 
-fn forget_on_box(ops: &Ops, target: &Target, keys: &[String]) -> Result<(), String> {
+/// Runs `forget-devices` on a box, naming this computer (`home`) so a box whose ticket names
+/// another home refuses it.
+fn forget_on_box(ops: &Ops, target: &Target, keys: &[String], home: &str) -> Result<(), String> {
     boot_steps::run_box_verb(
         ops,
         target,
         box_verbs::FORGET_DEVICES,
-        &["--keys", &keys.join(",")],
+        &["--keys", &keys.join(","), "--home", home],
         60,
     )
     .map(|_| ())
 }
 
-/// The running boxes of this computer reached over Easy Connect: provider, target and name.
+/// This computer's gxserver id, which every ticket it writes (and the phone's kit) names as home.
+fn this_computer(paths: &GxserverPaths) -> Option<String> {
+    crate::identity::ensure_gxserver_identity(paths)
+        .ok()
+        .map(|identity| identity.server_id)
+}
+
+/// The boxes of this computer reached over Easy Connect that may be running: running, idle, or
+/// failed with a machine (a box left running for its sessions after a later start failed; an exec
+/// to one that was stopped just fails). Provider, target and name.
 fn running_boxes(paths: &GxserverPaths) -> Vec<(CloudProviderId, Target, String)> {
     let Ok(boxes) = store::list_boxes(paths) else {
         return Vec::new();
@@ -42,7 +57,10 @@ fn running_boxes(paths: &GxserverPaths) -> Vec<(CloudProviderId, Target, String)
     boxes
         .into_iter()
         .map(|stored| stored.row)
-        .filter(|row| row.state.is_reachable() && row.provider != CloudProviderId::Local)
+        .filter(|row| {
+            (row.state.is_reachable() || row.state == CloudBoxState::Failed)
+                && row.provider != CloudProviderId::Local
+        })
         .filter_map(|row| {
             Some((
                 row.provider.clone(),
@@ -72,12 +90,21 @@ pub(crate) fn take_off_running_boxes(paths: &GxserverPaths, keys: Vec<String>) {
     if running.is_empty() {
         return;
     }
+    // Never this computer's own box keys, whatever a device claimed (review of 0227aa45e).
+    let own = super::home_keys::public_keys(paths);
+    let keys: Vec<String> = keys.into_iter().filter(|key| !own.contains(key)).collect();
+    let Some(home) = this_computer(paths) else {
+        return;
+    };
+    if keys.is_empty() {
+        return;
+    }
     let paths = paths.clone();
     std::thread::spawn(move || {
         for (provider, target, name) in running {
             let outcome = Ops::for_provider(&paths, &provider)
                 .map_err(|error| error.message)
-                .and_then(|ops| forget_on_box(&ops, &target, &keys));
+                .and_then(|ops| forget_on_box(&ops, &target, &keys, &home));
             match outcome {
                 Ok(()) => eprintln!(
                     "[gxserver] Cloud Boxes: took an unpaired device off {name} ({})",
@@ -121,10 +148,13 @@ pub(super) fn catch_up_after_boot(
     ticket: &BoxBootTicket,
 ) {
     let stale = unpaired_since(paths, ticket);
+    let Some(home) = ticket.home_machine_id.as_deref() else {
+        return;
+    };
     if stale.is_empty() {
         return;
     }
-    if let Err(error) = forget_on_box(ops, target, &stale) {
+    if let Err(error) = forget_on_box(ops, target, &stale, home) {
         eprintln!(
             "[gxserver] Cloud Boxes: couldn't take a device unpaired during the start off {} ({error})",
             target.box_id
