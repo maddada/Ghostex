@@ -15,6 +15,14 @@ code_server_node_distribution_arch() {
 code_server_node_distribution_sha256() {
 	local distribution_arch="$1"
 	case "$CODE_SERVER_APP_NODE_VERSION:$distribution_arch" in
+	24.22.3:arm64)
+		printf '1d64136c8a43d648d1b3bad10797a4c995b1ca032d2bde8799de43b37f058fe5\n'
+		return 0
+		;;
+	24.22.3:x64)
+		printf '4daeec962855c1a6e66cda398a25037319dc1bbd4a0939188b3547afbbfb6490\n'
+		return 0
+		;;
 	24.22.1:arm64)
 		printf '654ba79de6155647e22321932b45f2a1ccb705976cc337c9b8e278beb085a628\n'
 		return 0
