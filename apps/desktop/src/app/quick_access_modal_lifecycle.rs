@@ -35,6 +35,31 @@ impl GhostexGpuiApp {
                 open[target] = value.clone();
             }
         }
+        // A project's History across computers: each copy wears its computer's icon, as the
+        // sidebar draws it (gx_store/computer_icons.rs).
+        if let Some(copies) = message
+            .get("initialProjectCopies")
+            .and_then(serde_json::Value::as_array)
+        {
+            open["projectCopies"] = serde_json::Value::Array(
+                copies
+                    .iter()
+                    .map(|copy| {
+                        let mut copy = copy.clone();
+                        let icon = copy
+                            .get("machineId")
+                            .and_then(serde_json::Value::as_str)
+                            .and_then(|machine_id| self.sidebar_machine_icon_asset(machine_id))
+                            .and_then(|asset| asset.strip_prefix("titlebar/"))
+                            .and_then(|asset| asset.strip_suffix(".svg"));
+                        if let Some(icon) = icon {
+                            copy["icon"] = serde_json::json!(icon);
+                        }
+                        copy
+                    })
+                    .collect(),
+            );
+        }
         // A second open request while the window is up only switches its tab.
         if self
             .native_app_modal_kind()

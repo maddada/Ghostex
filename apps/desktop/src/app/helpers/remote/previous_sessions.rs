@@ -121,6 +121,15 @@ pub(crate) fn gpui_previous_sessions_request_from_command(
             .get("projectId")
             .and_then(serde_json::Value::as_str)
             .map(str::to_string),
+        project_ids: command
+            .get("projectIds")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str)
+            .filter(|id| !id.is_empty())
+            .map(str::to_string)
+            .collect(),
         external_only: command
             .get("externalOnly")
             .and_then(serde_json::Value::as_bool)
@@ -145,6 +154,9 @@ pub(crate) fn gpui_previous_sessions_result_message(
     CDXC:Sessions 2026-06-24-11:53:
     GPUI Previous Sessions loads real local gxserver history through `/api/listPreviousSessions` with the same bounded previous-only params the TypeScript sidebar runtime used. The response is a transient `previousSessionsResult` sidebarState payload so the shared modal clears loading without replacing the stored hydrate snapshot, and transport/token/network/parser failures return an empty contract-shaped result without logging private daemon data.
     */
+    if !request.project_ids.is_empty() {
+        return gpui_project_copies_previous_sessions_result_message(request, remote_sources);
+    }
     let local_page = gpui_list_previous_sessions_from_gxserver(&request).unwrap_or_default();
     let mut projects = local_page.projects;
     let mut next_cursor = local_page.cursor;
@@ -166,6 +178,63 @@ pub(crate) fn gpui_previous_sessions_result_message(
         previous_sessions,
     );
     payload["projects"] = serde_json::json!(projects);
+    payload
+}
+
+/// History of a project the sidebar's one list merged (CDXC:RemoteMachines 2026-11-21 in gx-core
+/// quick_access/sessions.rs): each copy's closed sessions read on its own computer, this one's
+/// from the local gxserver and another's through its connection, newest first. A computer that is
+/// not connected, or does not answer, is named in `unreachableMachineIds`; closed sessions are not
+/// kept on this computer, so there is nothing older to show for it.
+fn gpui_project_copies_previous_sessions_result_message(
+    request: GpuiPreviousSessionsRequest,
+    remote_sources: Vec<GpuiRemotePreviousSessionSource>,
+) -> serde_json::Value {
+    let mut projects = Vec::new();
+    let mut next_cursor: Option<String> = None;
+    let mut previous_sessions = Vec::new();
+    let mut unreachable: Vec<String> = Vec::new();
+    for project_id in &request.project_ids {
+        let mut scoped_request = request.clone();
+        scoped_request.project_ids = Vec::new();
+        scoped_request.project_id = Some(project_id.clone());
+        let page = match gpui_remote_project_reference_from_project_id(project_id) {
+            None => gpui_list_previous_sessions_from_gxserver(&scoped_request)
+                .map_err(|_| ghostex_gx_core::LOCAL_MACHINE_ID.to_string()),
+            Some(reference) => remote_sources
+                .iter()
+                .find(|source| source.remote_machine_id == reference.remote_machine_id)
+                .ok_or(())
+                .and_then(|source| {
+                    gpui_list_previous_sessions_from_remote_gxserver(&scoped_request, source)
+                        .map_err(|_| ())
+                })
+                .map_err(|()| reference.remote_machine_id),
+        };
+        match page {
+            Ok(page) => {
+                if next_cursor.is_none() {
+                    next_cursor = page.cursor;
+                }
+                projects.extend(page.projects);
+                previous_sessions.extend(page.items);
+            }
+            Err(machine_id) => {
+                if !unreachable.contains(&machine_id) {
+                    unreachable.push(machine_id);
+                }
+            }
+        }
+    }
+    gpui_sort_previous_session_items_by_closed_time(&mut previous_sessions);
+    let mut payload = gpui_previous_sessions_result_payload(
+        &request.request_id,
+        request.query.as_deref(),
+        next_cursor.as_deref(),
+        previous_sessions,
+    );
+    payload["projects"] = serde_json::json!(projects);
+    payload["unreachableMachineIds"] = serde_json::json!(unreachable);
     payload
 }
 

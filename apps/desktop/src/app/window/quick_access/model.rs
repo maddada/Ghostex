@@ -106,6 +106,8 @@ pub(crate) enum QuickAccessRow {
         #[serde(default)]
         project_label: String,
         #[serde(default)]
+        computer_icon: QuickAccessIcon,
+        #[serde(default)]
         file_size: String,
         #[serde(default)]
         file_size_loading: bool,
@@ -315,6 +317,8 @@ pub(crate) struct QuickAccessSnapshot {
     pub(crate) primary_action: String,
     #[serde(default)]
     pub(crate) action_hotkeys: Vec<String>,
+    #[serde(default)]
+    pub(crate) notices: Vec<String>,
     #[serde(default)]
     pub(crate) editor: Option<QuickAccessPromptEditor>,
     #[serde(default)]
