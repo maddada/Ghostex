@@ -680,9 +680,11 @@ impl ChatOptionMenuPanel {
                 })
                 .tooltip(move |window, cx| {
                     let tooltip = tooltip.clone();
-                    gpui_component::tooltip::Tooltip::element(move |window, _| {
+                    // CDXC:Tooltips 2026-11-21 DECISION:
+                    // User: the "Fetch latest models" tooltip wrapped onto two lines; it must stay on one. A short tooltip sizes to its text and only the long reason of a fixed-list agent wraps, at `HINT_TOOLTIP_WIDTH`. The cap is a constant here, not `hint_tooltip_width`: with glass on the bubble is drawn again in the frosted tooltip window, which is only as wide as the bubble itself, so a cap read from that window's width came out 8px short of the text and wrapped it. The overlay still narrows the bubble to the picker's own room.
+                    gpui_component::tooltip::Tooltip::element(move |_, _| {
                         div()
-                            .max_w(hint_tooltip_width(scale, window))
+                            .max_w(px(HINT_TOOLTIP_WIDTH * scale))
                             .whitespace_normal()
                             .child(tooltip.clone())
                     })
