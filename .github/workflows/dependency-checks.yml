@@ -1,0 +1,126 @@
+# CDXC:Deps 2026-11-21 WHY: the 2026-11-21 dependency audit found the zip, SQLite and Go standard
+# library advisories by hand. The user asked for cargo-deny (advisories, licences and bans, deny.toml)
+# over every Rust project and govulncheck over the tailcat gomobile bridge in CI, so a pull request
+# that brings in a vulnerable or unlicensed dependency fails, and the daily run catches advisories
+# published after a lockfile was committed.
+name: Dependency checks
+
+on:
+  pull_request:
+    paths:
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '**/rust-toolchain.toml'
+      - 'deny.toml'
+      - '.dependencies/zed'
+      - '.dependencies/gpui-component'
+      - '.dependencies/cef-rs'
+      - 'apps/mobile/tailcat-bridge/**'
+      - '.github/workflows/dependency-checks.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '**/rust-toolchain.toml'
+      - 'deny.toml'
+      - '.dependencies/zed'
+      - '.dependencies/gpui-component'
+      - '.dependencies/cef-rs'
+      - 'apps/mobile/tailcat-bridge/**'
+      - '.github/workflows/dependency-checks.yml'
+  schedule:
+    # Daily, for advisories published after the lockfiles were committed.
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cargo-deny:
+    name: cargo-deny (${{ matrix.root }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every Cargo.lock in the repository; each project resolves on its own.
+        root:
+          - apps/desktop
+          - apps/editor/desktop
+          - apps/gpui-web
+          - apps/history-cli
+          - packages/agent-sync
+          - packages/client-storage-native
+          - packages/editor-client
+          - packages/find
+          - packages/gx-chat-wasm
+          - packages/project-docs
+          - server
+          - server/collab
+          - server/push-relay
+          - server/share-relay
+          - tooling/xtask
+    env:
+      CARGO_DENY_VERSION: '0.22.0'
+      CARGO_DENY_SHA256: 98c56e6a408bfa5c3c60744b6015aaa6aa08f743fdeb88386d06fca035bb1786
+      # apps/desktop/.cargo/config.toml compiles through kache; `cargo metadata` only needs rustc -vV,
+      # so turn the wrapper off instead of installing kache here.
+      RUSTC_WRAPPER: ''
+      CARGO_BUILD_RUSTC_WRAPPER: ''
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      # The desktop app and the web build depend on the GPUI forks by path; nothing else does.
+      - name: Check out the GPUI submodules
+        if: matrix.root == 'apps/desktop' || matrix.root == 'apps/gpui-web'
+        run: tooling/release-gpui/retry.sh 3 5 -- git submodule update --init --depth=1 -- .dependencies/zed .dependencies/gpui-component .dependencies/cef-rs
+      - name: Install cargo-deny
+        run: |
+          archive="cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl"
+          tooling/release-gpui/retry.sh 3 5 -- curl -sSfL -o "$RUNNER_TEMP/$archive.tar.gz" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/$archive.tar.gz"
+          echo "${CARGO_DENY_SHA256}  $RUNNER_TEMP/$archive.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive.tar.gz" -C "$RUNNER_TEMP"
+          install -m 0755 "$RUNNER_TEMP/$archive/cargo-deny" "$RUNNER_TEMP/cargo-deny"
+      # Run inside the project so rustup uses its rust-toolchain.toml pin.
+      - name: Install the pinned Rust toolchain
+        working-directory: ${{ matrix.root }}
+        run: '"$GITHUB_WORKSPACE/tooling/release-gpui/retry.sh" 3 5 -- rustup toolchain install --profile minimal'
+      - name: cargo deny check
+        working-directory: ${{ matrix.root }}
+        run: |
+          "$RUNNER_TEMP/cargo-deny" --manifest-path Cargo.toml --config "$GITHUB_WORKSPACE/deny.toml" --locked \
+            check advisories licenses bans
+
+  govulncheck:
+    name: govulncheck (tailcat bridge, ${{ matrix.goos }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # The bridge ships in the iPhone and Android apps; each platform compiles different files.
+        goos: [android, ios]
+    env:
+      GOVULNCHECK_VERSION: v1.10.0
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.4'
+          cache-dependency-path: apps/mobile/tailcat-bridge/go.sum
+      - name: Install govulncheck
+        run: tooling/release-gpui/retry.sh 3 5 -- go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+      - name: govulncheck
+        working-directory: apps/mobile/tailcat-bridge
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: arm64
+        run: '"$(go env GOPATH)/bin/govulncheck" ./...'
