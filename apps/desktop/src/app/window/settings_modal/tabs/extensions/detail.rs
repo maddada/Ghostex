@@ -6,7 +6,6 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::SettingOption;
 use super::super::super::fields::RowControl;
-use super::super::super::fields::strip_wheel::strip_wheel_layer;
 use super::super::super::fields::{
     FieldStates, SizedButtonSize, SizedButtonVariant, settings_icon, settings_select,
     settings_sized_button, settings_square_button, settings_text_input, small_switch_control,

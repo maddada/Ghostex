@@ -31,7 +31,7 @@ pub(crate) struct GbotApiTab {
     pub(super) copied: Option<&'static str>,
     /// The command block's sideways scroll and the axis its current swipe is locked to.
     pub(super) command_scroll: gpui::ScrollHandle,
-    pub(super) command_wheel: super::super::settings_modal::fields::strip_wheel::StripWheelLock,
+    pub(super) command_wheel: StripWheelLock,
 }
 
 /// Where a Bot API op's answer goes: the window that asked.
@@ -240,12 +240,10 @@ impl GpuiGbotSettingsModalWindow {
                                     .map(|line| div().whitespace_nowrap().child(line.to_string())),
                             ),
                     )
-                    .child(
-                        super::super::settings_modal::fields::strip_wheel::strip_wheel_layer(
-                            &self.bot_api.command_scroll,
-                            &self.bot_api.command_wheel,
-                        ),
-                    ),
+                    .child(strip_wheel_layer(
+                        &self.bot_api.command_scroll,
+                        &self.bot_api.command_wheel,
+                    )),
             )
             .child(buttons)
             .into_any_element()

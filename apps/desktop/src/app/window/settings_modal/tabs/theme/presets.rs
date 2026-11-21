@@ -15,7 +15,6 @@
 //! packages/settings-catalog/src/data/theme_presets.rs.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::{module, settings_catalog};
-use super::super::super::fields::strip_wheel::{StripWheelLock, strip_wheel};
 use super::super::super::fields::{settings_icon, tooltip_text};
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsValues;

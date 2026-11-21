@@ -67,7 +67,7 @@ pub(crate) struct BrowserState {
     pub(crate) screenshots: HashMap<String, ScreenshotSlot>,
     /// The screenshots strip's sideways scroll and the axis its current swipe is locked to.
     pub(crate) screenshots_scroll: gpui::ScrollHandle,
-    pub(crate) screenshots_wheel: super::super::super::fields::strip_wheel::StripWheelLock,
+    pub(crate) screenshots_wheel: super::super::super::super::native_modal_kit::StripWheelLock,
 }
 
 impl BrowserState {

@@ -11,7 +11,6 @@
 //!
 //! This module depends only on the kit, gpui and gpui-component so the preview binary can include it with `#[path]`.
 use super::native_modal_kit::*;
-use super::settings_modal::fields::strip_wheel::{StripWheelLock, strip_wheel_layer};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Div, ElementId, Entity, InteractiveElement as _,

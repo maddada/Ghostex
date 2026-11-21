@@ -19,6 +19,7 @@ pub(crate) mod segmented_and_rail;
 pub(crate) mod select;
 pub(crate) mod shell;
 pub(crate) mod skinned;
+pub(crate) mod strip_wheel;
 
 pub(crate) use controls::*;
 pub(crate) use legacy::*;
@@ -29,3 +30,4 @@ pub(crate) use segmented_and_rail::*;
 pub(crate) use select::*;
 pub(crate) use shell::*;
 pub(crate) use skinned::*;
+pub(crate) use strip_wheel::*;

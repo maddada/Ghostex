@@ -14,7 +14,6 @@ use super::super::super::fields::{
     ButtonVariant, SizedButtonSize, SizedButtonVariant, settings_icon, settings_icon_button,
     settings_sized_button,
 };
-use super::super::super::fields::strip_wheel::{StripWheelLock, strip_wheel_layer};
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{SettingsValues, post_store_message, store_gxserver_rpc};
 use super::ThemeTab;

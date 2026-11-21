@@ -1,6 +1,7 @@
-//! Sideways strips in Settings (the themes row, the backgrounds gallery, extension screenshots)
-//! lock a trackpad gesture to one axis, so a sideways swipe moves only the strip and never the
-//! page behind it, while a mostly vertical swipe over the strip still scrolls the page.
+//! Sideways strips in native modals (Settings themes row, Backgrounds gallery, extension
+//! screenshots, New Thread picker run-on chips, GBot Settings API command block) lock a trackpad
+//! gesture to one axis, so a sideways swipe moves only the strip and never the page behind it,
+//! while a mostly vertical swipe over the strip still scrolls the page.
 //!
 //! GPUI's own scroll listener moves the strip but never stops the event, so the page above it
 //! also scrolled by the swipe's vertical drift. [`strip_wheel`] listens first (capture phase),
@@ -16,7 +17,8 @@ use gpui::{
 };
 use std::cell::Cell;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 /// How far a gesture travels before its axis is decided; earlier events follow their own lean.
 const DECIDE_DISTANCE: f32 = 4.0;
@@ -25,7 +27,7 @@ const DECIDE_DISTANCE: f32 = 4.0;
 const GESTURE_GAP: Duration = Duration::from_millis(200);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum StripRoute {
+enum StripRoute {
     /// The strip moves by it and the page does not see it.
     Strip,
     /// The page scrolls by it; the strip stays.
