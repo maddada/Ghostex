@@ -113,7 +113,8 @@ serde_json = "1"
 # `rc` makes `Arc<Value>` deserializable, which the sidebar snapshot needs: a group's menu and
 # its header buttons are the two heavy fields of a list that is cloned per patch and per install.
 serde = { version = "1", features = ["derive", "rc"] }
-rusqlite = "0.40"
+# SQLite is compiled in on every platform: CDXC:Deps 2026-11-21 DECISION in server/Cargo.toml.
+rusqlite = { version = "0.43", features = ["bundled"] }
 # CDXC:Browser 2026-10-22 WHY: the remote sites menu reads a page's `<title>` and icon link with the html5ever and RcDom versions gpui-component's base crate already links. `scraper` did this before and brought a second html5ever copy into the binary; keep these two on gpui-base's versions so no new copy appears.
 html5ever = "0.27"
 markup5ever_rcdom = "0.3"
@@ -144,10 +145,6 @@ rodio = { version = "0.23", default-features = false, features = ["playback", "s
 cpal = "0.18"
 sonora = "=0.2.0"
 sonora-common-audio = "=0.2.0"
-
-# macOS links the system SQLite: CDXC:Release 2026-10-23 DECISION in server/Cargo.toml.
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-rusqlite = { version = "0.40", features = ["bundled"] }
 
 # CDXC:Memory 2026-11-10 WHY: the app's Rust heap on macOS (src/heap_counter.rs). CEF installs
 # PartitionAlloc as the process malloc, where the running app held 1.2 to 1.9 GB against about

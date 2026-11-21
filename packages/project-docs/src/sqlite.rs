@@ -87,7 +87,8 @@ pub fn sqlite_action(file: &Path, params: &Map<String, Value>) -> Result<Value, 
 }
 
 fn open_read_only(file: &Path) -> Result<Connection, String> {
-    let connection = Connection::open_with_flags(
+    // rusqlite 0.41+: installing the progress handler needs `&mut Connection`.
+    let mut connection = Connection::open_with_flags(
         file,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )

@@ -120,7 +120,7 @@ write_bundle() {
 	<key>CFBundleVersion</key>
 	<string>$(xml_escape "$VERSION")</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>15.0</string>
 	<key>LSUIElement</key>
 	<true/>
 $(usage_descriptions "$name")

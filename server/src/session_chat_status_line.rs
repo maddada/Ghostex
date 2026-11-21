@@ -75,28 +75,34 @@ pub(crate) fn status_line_pins(paths: &GxserverPaths) -> Option<BTreeMap<String,
 /// leaves it when it quits. With no `-wal` file either, every record is in the main file, so it is
 /// then read as immutable (no locks, no side files written); with a `-wal` but no `-shm` (a crash)
 /// nothing is sent until the desktop opens it again.
+///
+/// CDXC:Deps 2026-11-21 WHY: the missing `-shm` is checked here, not left to the open failing.
+/// macOS's own SQLite refuses that read-only open, but the SQLite compiled into gxserver on every
+/// platform since rusqlite 0.43 (CDXC:Deps 2026-11-21 DECISION in server/Cargo.toml) opens it and
+/// writes a new `-shm` beside the desktop's storage.
 fn read_pins(file: &Path) -> Option<BTreeMap<String, Value>> {
     let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-    Connection::open_with_flags(file, flags)
-        .ok()
-        .and_then(|connection| read_from(&connection))
-        .or_else(|| {
-            if wal_file(file).exists() {
-                return None;
-            }
-            let connection = Connection::open_with_flags(
-                immutable_uri(file)?,
-                flags | OpenFlags::SQLITE_OPEN_URI,
-            )
+    if side_file(file, "-shm").exists() {
+        let connection = Connection::open_with_flags(file, flags).ok()?;
+        return read_from(&connection);
+    }
+    if side_file(file, "-wal").exists() {
+        return None;
+    }
+    let connection =
+        Connection::open_with_flags(immutable_uri(file)?, flags | OpenFlags::SQLITE_OPEN_URI)
             .ok()?;
-            read_from(&connection)
-        })
+    read_from(&connection)
 }
 
 fn wal_file(file: &Path) -> PathBuf {
-    let mut wal = file.as_os_str().to_owned();
-    wal.push("-wal");
-    PathBuf::from(wal)
+    side_file(file, "-wal")
+}
+
+fn side_file(file: &Path, suffix: &str) -> PathBuf {
+    let mut side = file.as_os_str().to_owned();
+    side.push(suffix);
+    PathBuf::from(side)
 }
 
 /// `file:<path>?immutable=1`, with the characters a URI path cannot hold escaped.

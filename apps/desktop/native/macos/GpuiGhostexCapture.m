@@ -6,7 +6,8 @@
 // open window, keep a pop-up visible while another app is active, or register a system-wide
 // hotkey. Carbon's RegisterEventHotKey is used because it needs no Accessibility or Input
 // Monitoring permission, unlike an NSEvent global monitor. Screenshots use the same WindowServer
-// API as App Shots, which needs this file compiled against the macOS 13 deployment target.
+// API as App Shots. The SDK marks it obsoleted in macOS 15.0, so build.rs compiles this file alone
+// against a 14.0 deployment target (gpui_macos_capture_objc_build); macOS 15 and later still export it.
 
 #import <AppKit/AppKit.h>
 #import <Carbon/Carbon.h>

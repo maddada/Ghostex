@@ -679,13 +679,13 @@ async function verify(cleanupPaths) {
         `sha256 "${dmgDigest}"`,
         'url "https://github.com/maddada/Ghostex/releases/download/v#{version}/ghostex-#{version}-arm64.dmg"',
         'depends_on arch: :arm64',
-        'depends_on macos: :ventura',
+        'depends_on macos: :sequoia',
       ]) {
         if (!official.includes(required)) {
           throw new Error(`${officialCask.label} ghostex ${version} is missing required stanza: ${required}`);
         }
       }
-      return `${officialCask.label} at ${version}, arm64-only, :ventura`;
+      return `${officialCask.label} at ${version}, arm64-only, :sequoia`;
     }
     const pendingBump = await findOpenPullRequest({ version });
     if (!pendingBump) {

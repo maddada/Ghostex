@@ -81,6 +81,7 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: 'CHANGELOG.md', why: 'Release notes source; metadata only (§4.11 rule 8).' },
   { path: 'CLAUDE.md', why: 'Agent instructions; metadata only.' },
   { path: 'CONTRIBUTING.md', why: 'Contributor guide; metadata only.' },
+  { path: 'deny.toml', why: 'cargo-deny policy for the Dependency checks workflow; changes no artifact.' },
   { path: 'docs', why: 'Design and implementation documentation; never compiled into a release artifact.' },
   { path: 'LICENSE', why: 'Metadata only.' },
   { path: 'README.md', why: 'Metadata only.' },

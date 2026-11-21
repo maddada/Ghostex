@@ -914,7 +914,7 @@ EOF
 		ZMX_TARGET="aarch64-macos.15.0"
 		;;
 	x86_64)
-		ZMX_TARGET="x86_64-macos.13.0"
+		ZMX_TARGET="x86_64-macos.15.0"
 		;;
 	esac
 	build_zmx_if_needed
