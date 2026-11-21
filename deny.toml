@@ -1,0 +1,91 @@
+# cargo-deny policy for every Rust project in this repository (15 separate Cargo.lock roots).
+# CI runs `cargo deny --manifest-path <root>/Cargo.toml check --config deny.toml advisories licenses bans`
+# for each root (.github/workflows/dependency-checks.yml).
+#
+# CDXC:Deps 2026-11-21 WHY: the dependency audit of 2026-11-21 found zip and SQLite advisories only by
+# hand. The user asked for cargo-deny in CI (advisories, plus a licenses and bans config that passes
+# on that day's tree), so a new RustSec advisory, a new licence or an OpenSSL dependency shows up on
+# the pull request that brings it in, and the daily run catches advisories published later.
+
+[graph]
+# Every platform Ghostex ships on is checked (no `targets` filter).
+all-features = false
+
+[advisories]
+# Vulnerabilities and yanked versions fail anywhere in the graph. "Unmaintained" and "unsound" notices
+# only fail for crates our own crates depend on directly; the transitive ones come from the GPUI stack,
+# velopack and the like, and are fixed upstream.
+yanked = "deny"
+unmaintained = "workspace"
+unsound = "workspace"
+ignore = [
+  # libsqlite3-sys 0.38 bundles SQLite 3.53.2 (CVE-2026-119375: stale page-cache bytes from a crafted
+  # database plus -wal pair; local). The fix is rusqlite 0.41+, which needs SQLite 3.44+ while the macOS
+  # build links the system SQLite (3.39 on macOS 13). Remove once that decision lands.
+  { id = "RUSTSEC-2026-0459", reason = "rusqlite 0.41+ needs SQLite 3.44+, the macOS build links the system SQLite; pending decision" },
+  # zip 8.6.0 is only velopack's copy in the desktop lock (our own code is on zip 9.8.1). velopack
+  # 1.2.161 requires zip ^8.6 and unpacks only our own signed update packages. Remove these when
+  # velopack ships a stable release on zip 9.
+  { id = "RUSTSEC-2026-0367", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
+  { id = "RUSTSEC-2026-0368", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
+  { id = "RUSTSEC-2026-0369", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
+  { id = "RUSTSEC-2026-0429", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
+  { id = "RUSTSEC-2026-0545", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
+  { id = "RUSTSEC-2026-0546", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
+  { id = "RUSTSEC-2026-0547", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
+  { id = "RUSTSEC-2026-0548", reason = "zip 8.6.0 via velopack only; our own code is on zip 9" },
+  # crypto-bigint 0.5 (timing) comes with p256 0.13 in server/push-relay; the fix is the p256 0.14
+  # RustCrypto generation (elliptic-curve >= 0.14.3), a planned upgrade of its own.
+  { id = "RUSTSEC-2026-0387", reason = "push-relay's p256 0.13; fixed by the planned p256 0.14 upgrade" },
+  # Unmaintained, used directly: chrono (gxserver, desktop, collab, history-cli and the GPUI stack;
+  # jiff is the successor, adopted gradually) and instant (the desktop and web builds).
+  { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained; moving to jiff gradually, no vulnerability" },
+  { id = "RUSTSEC-2024-0384", reason = "instant is unmaintained; no vulnerability, replace with web-time when touched" },
+]
+
+[licenses]
+# Every licence in the 15 lockfiles on 2026-11-21. Adding one is a deliberate change to this list.
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0",
+  "NCSA",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+  "bzip2-1.0.6",
+]
+confidence-threshold = 0.9
+
+# First-party crates are `publish = false` and carry no licence field; the repository is MIT (LICENSE).
+[licenses.private]
+ignore = true
+
+# gxserver is the one first-party crate without `publish = false`.
+[[licenses.clarify]]
+crate = "gxserver"
+expression = "MIT"
+license-files = []
+
+[bans]
+# Duplicate versions are common in the GPUI stack and are not a failure.
+multiple-versions = "allow"
+# Path dependencies have no version requirement. cargo-deny only excuses them in `publish = false`
+# crates, and gxserver, ghostex-history and the GPUI forks in .dependencies (gpui-base, gpui-component,
+# zorite and others) are publishable crates that use path dependencies, so wildcards are allowed.
+wildcards = "allow"
+deny = [
+  # Every TLS client in the app and its servers uses rustls; OpenSSL would add a system library to
+  # every platform build.
+  { crate = "openssl-sys", reason = "TLS goes through rustls everywhere" },
+  { crate = "native-tls", reason = "TLS goes through rustls everywhere" },
+]
