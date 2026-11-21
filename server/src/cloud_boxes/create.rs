@@ -535,6 +535,18 @@ async fn finish_boot(
     let Some(result) = step(state, &box_id, Step::Boot, move || {
         boot_steps::install_package(&boot_ops, &boot_target)
             .and_then(|()| boot_steps::boot(&boot_ops, &boot_target, &ticket))
+            // The address is saved and later handed to tailcat as an argument: only a real Easy
+            // Connect address is kept (review of c1d1a8a3a, finding 3).
+            .and_then(|result| match result.tailcat_address.as_deref() {
+                Some(address)
+                    if !crate::remote_access::server_link_dialer::is_easy_connect_address(
+                        address.trim(),
+                    ) =>
+                {
+                    Err("The box answered with an Easy Connect address Ghostex can't use.".to_string())
+                }
+                _ => Ok(result),
+            })
             // A device unpaired while the box was starting goes now (device_removal.rs).
             .inspect(|_| {
                 super::device_removal::catch_up_after_boot(
