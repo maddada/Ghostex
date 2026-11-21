@@ -6708,8 +6708,9 @@ choice in a new chat and in New Thread shows once you've connected a provider
   delete it. A box that was already running sessions when a start failed is
   left running for them, and the reason says so. A box answers only your own
   paired devices and the computer that made it: it turns on its Easy Connect
-  with exactly those in one step, never open to anyone else, and a device you
-  unpaired is taken off the box the next time it starts. The computer reaches
+  with exactly those in one step, never open to anyone else. A device you
+  unpair is taken off your running boxes at once (a box that can't be reached
+  then, or is stopped, drops it the next time it starts). The computer reaches
   its boxes with keys made only for them (not the key it uses for anything
   else), which are replaced once its last box is deleted.
 - **From your phone**: cloud sessions sit in their project on the phone too,

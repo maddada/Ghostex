@@ -216,6 +216,11 @@ fn easy_connect_audit_action(
                 None => "Turn on Easy Connect for this Cloud Box's devices".to_string(),
             },
         ),
+        TailcatStateUpdate::PruneToBoxTicket {} => Action::new(
+            "easyConnect.allowList",
+            "Took the devices this Cloud Box's ticket no longer names off its Easy Connect"
+                .to_string(),
+        ),
         TailcatStateUpdate::SetPorts { ports } => Action::new(
             "easyConnect.ports",
             format!(

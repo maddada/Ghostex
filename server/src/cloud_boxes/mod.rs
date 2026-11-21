@@ -9,6 +9,7 @@ mod boot_steps;
 pub(crate) mod box_mode;
 mod connect;
 mod create;
+pub(crate) mod device_removal;
 mod docker;
 pub(crate) mod endpoint;
 mod events;

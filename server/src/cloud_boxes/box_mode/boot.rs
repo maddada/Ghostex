@@ -310,6 +310,30 @@ pub(crate) fn devices_ticket_names() -> Option<Vec<String>> {
     )
 }
 
+/// `ghostex box forget-devices --keys <key,key>`: takes those devices out of this box's ticket and
+/// has gxserver take every saved device the ticket no longer names off Easy Connect
+/// (`pruneToBoxTicket`, removal only). Run again, it changes nothing.
+pub(crate) fn run_forget_devices(keys: &[String]) -> Result<Value, String> {
+    let mut ticket = state::read_ticket().ok_or_else(|| super::not_in_box_mode().message)?;
+    let before = ticket.allow_device_keys.len();
+    ticket
+        .allow_device_keys
+        .retain(|key| !keys.iter().any(|gone| gone.trim() == key.trim()));
+    let removed = before - ticket.allow_device_keys.len();
+    if removed > 0 {
+        state::write_json(&state::ticket_file(), &ticket)?;
+    }
+    if ticket.tailcat {
+        rpc::call_gxserver_rpc(
+            "/api/updateTailcatState",
+            &json!({ "kind": "pruneToBoxTicket" }),
+            &Flags::default(),
+        )
+        .map_err(|error| format!("The box's gxserver did not take the devices off: {error}"))?;
+    }
+    Ok(json!({ "removedFromTicket": removed }))
+}
+
 pub(crate) fn run_boot(ticket: &BoxBootTicket) -> Result<BoxBootResult, String> {
     if !ghostex_gx_cloud::ids::is_gx_id(&ticket.box_id) {
         return Err(format!("\"{}\" is not a box id.", ticket.box_id));
