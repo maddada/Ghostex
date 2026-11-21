@@ -1,4 +1,4 @@
-//! Drawing the rail: a 40pt column at the window's left, Toggle sidebar in the slot at its top
+//! Drawing the rail: a 52pt column at the window's left, Toggle sidebar in the slot at its top
 //! (the sidebar's top row's height), the pinned icons, an unpinned item while its view shows
 //! (under a dashed line), ⋯, and at its foot the workspace and the account usage toggle.
 

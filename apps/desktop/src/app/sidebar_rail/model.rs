@@ -8,10 +8,18 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 use gpui::{Bounds, Hsla, Pixels};
 
-/// The rail's width, unscaled: the user's "40px max".
-pub(crate) const RAIL_WIDTH: f32 = 40.0;
+/// CDXC:Sidebar 2026-11-21 DECISION:
+/// User: "can we please make our sidebar more similar in terms of gaps between buttons and size of
+/// buttons and font size to this?", next to another app's sidebar (only its spacing and sizes, not
+/// its look). Measured from its @2x screenshot: a 52pt column, 36pt rounded-square buttons 8pt in
+/// from each side and 44pt apart, 16pt glyphs. The rail takes those measures; this supersedes the
+/// 2026-11-20 "40px max" column with 32pt buttons 2pt apart. The icons keep their 20pt box (their
+/// glyphs were already the reference's size).
+///
+/// The rail's width, unscaled.
+pub(crate) const RAIL_WIDTH: f32 = 52.0;
 /// A rail button, square.
-pub(crate) const RAIL_BUTTON: f32 = 32.0;
+pub(crate) const RAIL_BUTTON: f32 = 36.0;
 /// An outline icon's box (the user's "20px icons").
 pub(crate) const RAIL_ICON: f32 = 20.0;
 /// Meet the rail's window size, for the app modal kinds (model/app_modal_kind.rs). The pop-up is
@@ -22,9 +30,9 @@ pub(crate) use crate::app::window::{RAIL_INTRO_MODAL_INITIAL_HEIGHT, RAIL_INTRO_
 pub(crate) const RAIL_INTRO_MODAL_WIDTH: f32 = 0.0;
 #[cfg(ghostex_web)]
 pub(crate) const RAIL_INTRO_MODAL_INITIAL_HEIGHT: f32 = 0.0;
-/// Between two buttons.
-pub(crate) const RAIL_GAP: f32 = 2.0;
-pub(crate) const RAIL_BUTTON_RADIUS: f32 = 8.0;
+/// Between two buttons: a 44pt pitch.
+pub(crate) const RAIL_GAP: f32 = 8.0;
+pub(crate) const RAIL_BUTTON_RADIUS: f32 = 9.0;
 
 /// Whether this computer's settings choose the rail.
 pub(crate) fn sidebar_rail_on() -> bool {

@@ -10,9 +10,13 @@ use super::{
 };
 use crate::GhostexGpuiApp;
 
-pub(super) const SESSION_HEIGHT: f32 = 34.0;
+/// CDXC:Sidebar 2026-11-21 DECISION:
+/// User: the sidebar's gaps, buttons and text like another app's sidebar (spacing and sizes only).
+/// Its rows are 31pt apart at the same text size as ours, so a row is 30pt plus the 1pt spacing
+/// (it was 34pt). Section headings and the gaps between groups follow (sections.rs).
+pub(super) const SESSION_HEIGHT: f32 = 30.0;
 /// A work-mode card with links: line 1 exactly as tall as every other card, then the chips.
-pub(super) const WORK_SESSION_HEIGHT: f32 = 52.0;
+pub(super) const WORK_SESSION_HEIGHT: f32 = SESSION_HEIGHT + 18.0;
 pub(super) const SESSION_SPACING: f32 = 1.0;
 /// Horizontal gap between the list edge and a session card's rounded body.
 pub(super) const SESSION_INSET_X: f32 = 3.0;
