@@ -12,6 +12,36 @@ pub(crate) mod gx_chat {
     }
 }
 
+/// The sidebar's corner dot (`app/native_sidebar/status.rs`), which Settings > Accounts puts on an
+/// account that needs signing in again: a 4pt dot 3pt in from the top-right corner, ringed.
+pub(crate) mod native_sidebar {
+    pub(crate) mod status {
+        use gpui::{Hsla, ParentElement as _, SharedString, Styled as _, div, px};
+
+        pub(crate) fn corner_dot(
+            color: Hsla,
+            scale: f32,
+            ring: Hsla,
+            _hover: Option<(Hsla, SharedString)>,
+        ) -> gpui::Div {
+            div()
+                .absolute()
+                .top(px(2.0 * scale))
+                .right(px(2.0 * scale))
+                .child(
+                    div()
+                        .size(px(6.0 * scale))
+                        .rounded_full()
+                        .bg(ring)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(div().size(px(4.0 * scale)).rounded_full().bg(color)),
+                )
+        }
+    }
+}
+
 pub(crate) mod actions {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, gpui::Action)]
     #[action(namespace = ghostex_gpui, no_json)]
