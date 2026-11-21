@@ -46,3 +46,7 @@
 	path = .dependencies/agentation
 	url = https://github.com/maddada/agentation.git
 	branch = ghostex
+# CDXC:Theming 2026-11-21 DECISION: User (Q4365): "i want this ghostex-components thingy to be a sub repo under ghostex (under deps folder) like we did for ghostex-mobile exactly". The components repository (on-demand downloads: CEF, code-server, Collab releases, and theme-art/, the theme artworks with their manifest) is pinned here; tooling/theme-art/publish.sh publishes its `theme-art` release from it. No build reads it: CI and setup-worktree check out submodules by path, and only publishing needs this one.
+[submodule "ghostex-components"]
+	path = .dependencies/ghostex-components
+	url = https://github.com/maddada/ghostex-components.git
