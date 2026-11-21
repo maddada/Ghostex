@@ -8,7 +8,7 @@
 /// `(page id, intro)`, in rail order.
 pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("updates", "Your Ghostex version, newer releases, and the tools Ghostex installs for you, such as Hex."),
-    ("experience", "How many buttons and details Ghostex shows: Chill, Regular or Advanced, for the whole app or each area."),
+    ("experience", "How many buttons and details Ghostex shows: Chill, Regular or Advanced, for the whole app or each area. Try one on the preview first; nothing changes until you press Apply."),
     ("chat", "How agent chats look and behave: the default view, transcript width, question cards and Live pages."),
     ("sidebar", "How the sidebar lists your sessions, what each card shows, and parking and sleeping sessions."),
     ("terminal", "The terminal's width, cursor, scrolling and tab behavior, and the Commands pane."),

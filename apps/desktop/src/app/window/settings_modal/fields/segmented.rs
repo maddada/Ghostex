@@ -23,6 +23,31 @@ pub(crate) fn settings_segmented<V: 'static>(
     on_select: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + Clone + 'static,
     cx: &mut Context<V>,
 ) -> AnyElement {
+    segmented(p, id, options, selected, false, on_select, cx)
+}
+
+/// [`settings_segmented`] whose pressed segment still answers a click: Experience's Custom
+/// segment opens and closes its area's switches.
+pub(crate) fn settings_segmented_repress<V: 'static>(
+    p: &SettingsPalette,
+    id: &str,
+    options: &[SettingOption],
+    selected: Option<&str>,
+    on_select: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + Clone + 'static,
+    cx: &mut Context<V>,
+) -> AnyElement {
+    segmented(p, id, options, selected, true, on_select, cx)
+}
+
+fn segmented<V: 'static>(
+    p: &SettingsPalette,
+    id: &str,
+    options: &[SettingOption],
+    selected: Option<&str>,
+    repress: bool,
+    on_select: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + Clone + 'static,
+    cx: &mut Context<V>,
+) -> AnyElement {
     let pressed_bg = p.foreground_alpha(0.13);
     let hover_bg = p.foreground_alpha(0.06);
     let resting_text = p.foreground_alpha(0.78);
@@ -53,7 +78,7 @@ pub(crate) fn settings_segmented<V: 'static>(
                 this.hover(move |this| this.bg(hsla(hover_bg)).text_color(hsla(text)))
             })
             .on_press(cx, move |this, window, cx| {
-                if !pressed {
+                if !pressed || repress {
                     on_select(this, value.clone(), window, cx);
                 }
             })

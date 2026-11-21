@@ -70,6 +70,33 @@ pub const COMPOSER_MAXIMIZE_KEY: &str = "chatComposerMaximize";
 /// Chill's Quiet View: the newest turn stays one line with its time, and lines name only reports.
 pub const QUIET_VIEW_CALM_KEY: &str = "chatQuietViewCalm";
 
+/// One switch an area's presets set, as the Experience page names it: `label` is what the switch
+/// shows when on, which is when the setting holds `shown_when` (the sessions list's `hide…` keys
+/// show their part while false).
+#[derive(Clone, Copy, Debug)]
+pub struct Control {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub hint: &'static str,
+    pub shown_when: bool,
+}
+
+impl Control {
+    /// Whether the part shows for the setting's `value`.
+    pub fn shown(&self, value: &Value) -> bool {
+        value.as_bool() == Some(self.shown_when)
+    }
+
+    /// The setting's value that shows (`true`) or hides (`false`) the part.
+    pub fn value_for(&self, shown: bool) -> Value {
+        Value::Bool(if shown {
+            self.shown_when
+        } else {
+            !self.shown_when
+        })
+    }
+}
+
 /// One area of the app and the settings each preset gives it.
 #[derive(Clone, Copy, Debug)]
 pub struct Area {
@@ -78,6 +105,12 @@ pub struct Area {
     pub description: &'static str,
     /// Chill, Regular, Advanced, in that order; every preset names the same keys.
     pub presets: [&'static [(&'static str, J)]; 3],
+    /// What each preset shows, in plain words (Chill, Regular, Advanced).
+    pub words: [&'static str; 3],
+    /// What the area always shows, whatever its preset.
+    pub always: &'static [&'static str],
+    /// The switches its presets set, in the order the page lists them (every key of `presets`).
+    pub controls: &'static [Control],
 }
 
 impl Area {
@@ -96,7 +129,19 @@ impl Area {
 const CHAT_BOX: Area = Area {
     id: "chatBox",
     label: "Chat box",
-    description: "Chill: the field, the model, the effort, •••, attach, the mic and Send. Regular adds the mode and Maximize. Advanced adds the terminal button and the context ring.",
+    description: "Chill: the field, the model, the effort, •••, attach, the mic and Send. Regular adds the mode and Maximize chat box. Advanced adds the terminal button and the context ring.",
+    words: [
+        "Just the field, the model, the effort, •••, attach, the mic and Send. Sessions run in Auto.",
+        "Adds the mode picker and Maximize chat box. The terminal stays in •••.",
+        "Adds the terminal button and the context ring.",
+    ],
+    always: &["Field", "Model", "Effort", "•••", "Attach", "Mic", "Send"],
+    controls: &[
+        Control { key: COMPOSER_MODE_PICKER_KEY, label: "Mode picker", hint: "Off, sessions run in Auto, or in Bypass permissions while Skip permissions is on.", shown_when: true },
+        Control { key: COMPOSER_MAXIMIZE_KEY, label: "Maximize chat box", hint: "The button that makes the chat box fill the chat.", shown_when: true },
+        Control { key: COMPOSER_TERMINAL_BUTTON_KEY, label: "Terminal button", hint: "Off, Terminal View is in the ••• menu.", shown_when: true },
+        Control { key: COMPOSER_CONTEXT_RING_KEY, label: "Context ring", hint: "Off, it stays in ••• › More › Context window.", shown_when: true },
+    ],
     presets: [
         &[
             (COMPOSER_MODE_PICKER_KEY, J::Bool(false)),
@@ -125,6 +170,20 @@ const CHAT: Area = Area {
     id: "chat",
     label: "Chat",
     description: "Chill: Quiet View keeps the running turn as one line and names only reports. Regular and Advanced: Quiet View with the last turn open.",
+    words: [
+        "Quiet View, and the running turn is one line: Working · 1m 12s. Lines name only reports.",
+        "Quiet View with the newest turn open, so you see its tool calls.",
+        "The same as Regular for now.",
+    ],
+    always: &["Your messages", "Replies"],
+    controls: &[
+        Control { key: "chatQuietViewExpandLast", label: "Newest turn open", hint: "The work after the newest reply stays open instead of one line.", shown_when: true },
+        Control { key: QUIET_VIEW_CALM_KEY, label: "Calm Quiet View", hint: "The running turn is one line with its time, and lines name only reports.", shown_when: true },
+        Control { key: "chatQuietViewCoordinators", label: "Quiet View for coordinators", hint: "The work between two replies folds into one line.", shown_when: true },
+        Control { key: "chatQuietViewChats", label: "Quiet View for other chats", hint: "The same for every other chat. The preview above is a coordinator.", shown_when: true },
+        Control { key: "sessionChatDetailedView", label: "Detailed view", hint: "New chats open with every folded line open.", shown_when: true },
+        Control { key: "sessionChatFileEditPreviews", label: "File edit previews", hint: "The first seven code lines of each file edit.", shown_when: true },
+    ],
     presets: [
         &[
             ("chatQuietViewCoordinators", J::Bool(true)),
@@ -160,6 +219,20 @@ const SESSIONS_LIST: Area = Area {
     label: "Sessions list",
     description:
         "Chill is the Sidebar's Minimal preset, Regular its Recommended and Advanced its Detailed.",
+    words: [
+        "Names only. Agent icons and favicons show when you point at a row. No times, no +/− counts.",
+        "Adds project icons, agent icons, favicons and +/− counts.",
+        "Adds last active times.",
+    ],
+    always: &["Session names", "Computer"],
+    controls: &[
+        Control { key: "showProjectIcons", label: "Project icons", hint: "Project artwork beside each project's name.", shown_when: true },
+        Control { key: "hideSessionAgentIconUntilHover", label: "Agent icons", hint: "Off, they show when you point at a row.", shown_when: false },
+        Control { key: "hideBrowserFaviconUntilHover", label: "Browser favicons", hint: "Off, they show when you point at a row.", shown_when: false },
+        Control { key: "hideProjectHeaderDiffStats", label: "Project +/− counts", hint: "Lines added and removed beside each project.", shown_when: false },
+        Control { key: "hideLastActiveTimeOnSessionCards", label: "Last active time", hint: "How long ago each session was active.", shown_when: false },
+        Control { key: "showProjectEditorDiffFileCount", label: "Changed-file count", hint: "Off in all three levels.", shown_when: true },
+    ],
     presets: [
         &[
             ("showProjectIcons", J::Bool(false)),
