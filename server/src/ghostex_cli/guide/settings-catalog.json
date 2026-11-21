@@ -14458,7 +14458,7 @@
     },
     {
       "id": "toggleChatFilesLinks",
-      "title": "Files and Links",
+      "title": "Files & Links",
       "description": "Show or hide the files and links mentioned in the chat session you are in.",
       "defaultKey": "ctrl+alt+l",
       "windowsLinuxDefaultKey": "cmd+alt+shift+l",

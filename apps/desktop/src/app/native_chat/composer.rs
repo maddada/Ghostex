@@ -219,7 +219,7 @@ impl NativeChatView {
             "maximizeComposer" if self.maximized_window.is_some() => "Exit maximize",
             "maximizeComposer" => "Maximize",
             "sessionNote" => "Note",
-            "filesLinks" => "Files and Links",
+            "filesLinks" => "Files & Links",
             "attachPath" => "Attach a file or folder",
             "terminalView" => "Terminal View",
             "dictate" if self.dictating(cx) => "Stop dictating",

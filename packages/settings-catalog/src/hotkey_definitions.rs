@@ -79,7 +79,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "toggleChatFilesLinks",
-        title: "Files and Links",
+        title: "Files & Links",
         description: "Show or hide the files and links mentioned in the chat session you are in.",
         default_key: "ctrl+alt+l",
         windows_linux_default_key: Some("cmd+alt+shift+l"),

@@ -12,7 +12,7 @@
 //! thread that did.
 //!
 //! CDXC:FilesAndLinks 2026-10-15 DECISION:
-//! User (2026-10-15): "move files & links inside the 3 dots pls and make it open a pop up menu not push the chat transcript please", and a hotkey for it (`toggleChatFilesLinks`). This supersedes the toolbar button and the card above the composer of 2026-10-12: the entry is a More actions row, and `open` now drives a floating menu (apps/desktop/src/app/native_chat/actions.rs and files_links.rs; the phone's sheet). The rest stands. User (2026-10-12): "i want to add a feature to see all the attachements and links that were mentioned in a session (and for coordinator threads should be that session and it's own sub sessions) should be a button, when i click it then it should show me a list that shows these files locations and links so i can go through them quick". The list shows Attachments, Files and Links, each item once with its first and last mention, and a coordinator's list covers its own chat and every thread, done ones included, grouped by thread title.
+//! User (2026-10-15): "move files & links inside the 3 dots pls and make it open a pop up menu not push the chat transcript please", and a hotkey for it (`toggleChatFilesLinks`). This supersedes the toolbar button and the card above the composer of 2026-10-12: the entry is a More actions row, and `open` now drives a floating menu (apps/desktop/src/app/native_chat/actions.rs and files_links.rs; the phone's sheet). The rest stands. User (2026-10-12): "i want to add a feature to see all the attachements and links that were mentioned in a session (and for coordinator threads should be that session and it's own sub sessions) should be a button, when i click it then it should show me a list that shows these files locations and links so i can go through them quick". The list shows Attachments, Files & Links, each item once with its first and last mention, and a coordinator's list covers its own chat and every thread, done ones included, grouped by thread title.
 //! CDXC:FilesAndLinks 2026-10-12 WHY:
 //! A row's jump finds the message among the rows the transcript has loaded, and a message folded into a finished turn lands on that turn. One older than the loaded history (a coordinator's First is often days back) pages the history in the way "Load earlier" does, one page per settle and at most `MAX_JUMP_PAGES`, then scrolls; a note says so only when it still cannot be reached.
 //! CDXC:FilesAndLinks 2026-10-12 WHY:
@@ -443,7 +443,7 @@ pub fn settle(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) -> O
         // An older gxserver has no `readSessionFilesLinks` and refuses it without a sentence.
         RpcOutcome::Err { message, .. } if !message.chars().any(char::is_alphabetic) => {
             files_links.error = Some(
-                "Ghostex on this computer is too old for Files and Links. Update it and try again."
+                "Ghostex on this computer is too old for Files & Links. Update it and try again."
                     .to_string(),
             );
         }

@@ -1216,7 +1216,7 @@ impl GhostexGpuiApp {
                                         .flex_shrink_0(),
                                 )
                                 .child(
-                                    // Up to two lines: a long name ("Files and Links") wraps
+                                    // Up to two lines: a long name ("Files & Links") wraps
                                     // rather than being cut off (`quick_row_height`).
                                     div()
                                         .max_w_full()

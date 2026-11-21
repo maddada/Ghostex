@@ -457,7 +457,7 @@ impl SidebarMenuPanel {
     }
 
     /// A quick row's height: one line of labels, or two when a label is wider than its tile
-    /// ("Files and Links"); the tiles share the panel's width.
+    /// ("Files & Links"); the tiles share the panel's width.
     pub(crate) fn quick_row_height(&self, buttons: &[Value]) -> f32 {
         // 11px label, slightly wide so a one-line estimate never clips a wrapped label.
         const TILE_PX_PER_CHAR: f32 = 6.4;
