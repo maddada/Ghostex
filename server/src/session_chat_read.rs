@@ -66,8 +66,9 @@ pub(crate) struct SessionChatReadResolution {
     switchable_agents: Option<Value>,
     /// Whether the session runs on its own login, so the chat offers no account (CDXC:AgentProviders 2026-10-09 in accounts/launch.rs).
     uses_own_login: bool,
-    /// The agents turned on in Settings › Agents (`crate::agents::enabled_agent_icons`), in the
-    /// fingerprint so a long-polling phone learns when one is turned on or off.
+    /// The agents turned on in Settings › Agents and installed here
+    /// (`crate::agents::enabled_agent_icons`), in the fingerprint so a long-polling phone learns
+    /// when one is turned on or off, or installed.
     enabled_agent_icons: Vec<String>,
     pub(crate) fingerprint: String,
 }

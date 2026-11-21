@@ -335,10 +335,14 @@ built-ins, custom agents, and display order identical between both menus.
 pub(crate) fn available_draft_agents(project: &Value) -> Value {
     let agents =
         crate::sidebar_hud::sidebar_agent_buttons_from_projects(std::slice::from_ref(project));
+    let home_dir = super::agent_probe_home();
     let agents = agents
         .as_array()
         .into_iter()
         .flatten()
+        // An agent whose CLI isn't installed is not offered (CDXC:AgentLauncher 2026-11-21 in
+        // cli_missing.rs).
+        .filter(|agent| !super::launcher_row_cli_missing(agent, &home_dir))
         .filter_map(Value::as_object)
         .filter_map(|agent| {
             let agent_id = read_text_from_map(agent, "agentId")?;
@@ -356,15 +360,21 @@ pub(crate) fn available_draft_agents(project: &Value) -> Value {
     Value::Array(agents.iter().map(AvailableDraftAgent::to_value).collect())
 }
 
-/// The icons of the agents turned on in Settings › Agents (an agent with no icon gives its id),
-/// in launcher order, for the chat's model menu: it shows a provider's tab only when one of these
-/// runs it (CDXC:AgentLauncher 2026-11-08 in packages/gx-chat-core/src/menus/picker/inputs.rs).
-/// Every project stores the same agent list, so the session's own project answers for all.
+/// The icons of the agents turned on in Settings › Agents whose CLI is installed here (an agent
+/// with no icon gives its id), in launcher order, for the chat's model menu: it shows a provider's
+/// tab only when one of these runs it (CDXC:AgentLauncher 2026-11-08 in
+/// packages/gx-chat-core/src/menus/picker/inputs.rs; installed only since CDXC:AgentLauncher
+/// 2026-11-21 in cli_missing.rs). Every project stores the same agent list, so the session's own
+/// project answers for all.
 pub(crate) fn enabled_agent_icons(project: &Value) -> Vec<String> {
     let agents =
         crate::sidebar_hud::sidebar_agent_buttons_from_projects(std::slice::from_ref(project));
+    let home_dir = super::agent_probe_home();
     let mut icons = Vec::new();
     for agent in agents.as_array().into_iter().flatten() {
+        if super::launcher_row_cli_missing(agent, &home_dir) {
+            continue;
+        }
         let Some(agent) = agent.as_object() else {
             continue;
         };

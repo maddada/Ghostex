@@ -50,6 +50,10 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                     .unwrap_or("cloudBoxes"),
             })),
         }],
+        ActionKind::OpenAgentSettings => vec![Effect::HostAction {
+            action: "openSettingsPage".to_string(),
+            params: Box::new(serde_json::json!({ "page": "agents" })),
+        }],
         ActionKind::SwitchToTerminal => vec![Effect::HostAction {
             action: "switchToTerminal".to_string(),
             params: Box::new(serde_json::json!({})),

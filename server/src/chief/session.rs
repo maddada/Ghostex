@@ -85,6 +85,7 @@ pub(super) fn open_chief(
     let db = database(state)?;
     let repository = DomainRepository::new(&db, &state.metadata.server_id);
     if let Some(record) = read_record(&db).filter(|record| session_exists(&repository, record)) {
+        let record = move_off_missing_agent(state, &db, &repository, record)?;
         return Ok(json!({ "status": "existing", "chief": record }));
     }
     // No agent named: the user's default agent (model.rs, CDXC:Chief 2026-11-21).
@@ -112,6 +113,47 @@ pub(super) fn open_chief(
     let (record, started) =
         create_chief_session(state, &db, &repository, agent_id, earlier, hand_pick)?;
     Ok(json!({ "status": "created", "chief": record, "providerStarted": started }))
+}
+
+/// A Chief chat that never started a conversation, on an agent whose CLI isn't installed (one
+/// picked before Ghostex checked), switches in place to the installed default agent, the way the
+/// chat's own agent tabs switch it (CDXC:AgentLauncher 2026-11-21 in agents/cli_missing.rs). A
+/// chat with a conversation keeps its agent: Change Agent moves it.
+fn move_off_missing_agent(
+    state: &AppState,
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    record: ChiefRecord,
+) -> Result<ChiefRecord, DomainStateError> {
+    let rows = chief_agent_rows(&repository.list_projects()?);
+    let on_missing_agent = rows
+        .iter()
+        .find(|row| row.get("agentId").and_then(Value::as_str) == Some(record.agent_id.as_str()))
+        .is_some_and(|row| {
+            crate::agents::launcher_row_cli_missing(row, state.paths.agent_config_home_dir())
+        });
+    if !on_missing_agent {
+        return Ok(record);
+    }
+    let unstarted = repository
+        .get_session(&record.project_id, &record.session_id)?
+        .is_some_and(|session| crate::agents::session_has_no_conversation(db, &session));
+    let Some(agent_id) = super::model::default_agent(&state.paths, db, &rows)
+        .filter(|agent_id| unstarted && *agent_id != record.agent_id)
+    else {
+        return Ok(record);
+    };
+    let mut params = Map::new();
+    params.insert("projectId".into(), json!(record.project_id));
+    params.insert("sessionId".into(), json!(record.session_id));
+    params.insert("agentId".into(), json!(agent_id));
+    let _ = crate::server::dispatch_agent_http_blocking(
+        state,
+        "/api/switchDraftAgent".to_string(),
+        "chief-agent-not-installed".to_string(),
+        params,
+    );
+    Ok(read_record(db).unwrap_or(record))
 }
 
 /// New Chat (`agent_id` `None`) and Change Agent: a new session that takes over the old one's

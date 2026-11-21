@@ -127,6 +127,21 @@ pub(crate) fn create_agent_session_params_for_project(
         }
         None => None,
     };
+    // A local agent whose CLI isn't installed is refused before any session exists
+    // (CDXC:AgentLauncher 2026-11-21 in cli_missing.rs); a box runs its own CLIs.
+    if agentbox_provider.is_none() {
+        let family =
+            resume_agent_family_id(Some(agent_id.clone()), &agent_config, &launch_settings);
+        if let Some(family) = family.as_deref() {
+            let home_dir = super::agent_probe_home();
+            if super::launch_cli_missing(family, configured_command.as_deref(), &home_dir) {
+                let name = read_text_from_map(&agent_config, "name")
+                    .or_else(|| crate::sidebar_hud::default_agent_name(family).map(str::to_string))
+                    .unwrap_or_else(|| family.to_string());
+                return Err(super::agent_not_installed_error(&name));
+            }
+        }
+    }
     let configured_command = if agentbox_provider.is_none() {
         pin_remembered_agent_model(
             &agent_id,

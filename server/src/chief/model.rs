@@ -143,12 +143,20 @@ pub(crate) fn pick(family: &str) -> Option<ChiefModel> {
 
 /// The user's default agent (`defaultPromptAgentId`: the settings file, which onboarding and
 /// Settings > Agents write, then gxserver's own copy) when it can run Chief of Staff, else the
-/// first agent that can, in the coordinator families' order.
+/// first agent that can, in the coordinator families' order. Only an agent whose CLI is installed
+/// can (CDXC:AgentLauncher 2026-11-21 in agents/cli_missing.rs): a default that names a missing
+/// CLI falls to the first installed one.
 pub(crate) fn default_agent(
     paths: &crate::paths::GxserverPaths,
     db: &rusqlite::Connection,
     agent_rows: &[Value],
 ) -> Option<String> {
+    let agent_rows: Vec<Value> = agent_rows
+        .iter()
+        .filter(|row| !crate::agents::launcher_row_cli_missing(row, paths.agent_config_home_dir()))
+        .cloned()
+        .collect();
+    let agent_rows = agent_rows.as_slice();
     let runnable = |id: &str| {
         agent_rows
             .iter()

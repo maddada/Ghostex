@@ -254,6 +254,8 @@ action_kinds! {
     SetDraftWorktree => "setDraftWorktree",
     SetDraftCloudBox => "setDraftCloudBox",
     OpenCloudBoxSettings => "openCloudBoxSettings",
+    // The model picker's "+" after the agent tabs: Settings > Agents (`menus/actions.rs`).
+    OpenAgentSettings => "openAgentSettings",
     SwitchToTerminal => "switchToTerminal",
     SelectForkBranch => "selectForkBranch",
 

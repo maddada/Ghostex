@@ -182,6 +182,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::SetDraftWorktree
         | ActionKind::SetDraftCloudBox
         | ActionKind::OpenCloudBoxSettings
+        | ActionKind::OpenAgentSettings
         | ActionKind::SwitchToTerminal
         | ActionKind::SelectForkBranch
         | ActionKind::ContextEdit
