@@ -86,6 +86,7 @@ fn pill(
     let signed_out = sign_in_note.is_some();
     let mut item = div()
         .id(format!("chat-{kind}-picker"))
+        .group(format!("chat-{kind}-picker"))
         .relative()
         .role(gpui::Role::Button)
         .aria_label(title.clone())
@@ -133,6 +134,29 @@ fn pill(
         can sit centred on it in the account monospace, 9.9px semibold, muted except on Codex.
         A session without a bound account keeps the plain 14px logo.
         */
+        // CDXC:AgentProviders 2026-11-21 DECISION:
+        // User: an account with an issue gets "a small dot top right of the account's icon" instead of
+        // its name turning yellow. A session bound to an account that needs signing in on its
+        // computer (Q4198 A; the tooltip says where) keeps the letters' usual colour and the mark
+        // wears the Space tile's 4pt dot (native_sidebar/status.rs `corner_dot`) in Settings >
+        // Accounts' Needs sign-in amber, as on the sidebar's cards.
+        let issue_dot = || {
+            signed_out.then(|| {
+                crate::app::native_sidebar::status::corner_dot(
+                    gpui::Hsla::from(gpui::rgb(if appearance.light {
+                        0xb45309
+                    } else {
+                        0xfcd34d
+                    })),
+                    scale,
+                    appearance.composer_background,
+                    Some((
+                        appearance.composer_background.blend(appearance.border),
+                        format!("chat-{kind}-picker").into(),
+                    )),
+                )
+            })
+        };
         item = item.child(match indicator {
             Some(indicator) => div()
                 .relative()
@@ -149,24 +173,20 @@ fn pill(
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_size(px(9.9 * scale))
                         .line_height(px(9.9 * scale))
-                        .text_color(if signed_out {
-                            // Settings > Accounts' Needs sign-in amber, as on the sidebar's cards.
-                            gpui::Hsla::from(gpui::rgb(if appearance.light {
-                                0xb45309
-                            } else {
-                                0xfcd34d
-                            }))
-                        } else if icon == "codex" {
+                        .text_color(if icon == "codex" {
                             gpui::Hsla::from(gpui::rgb(0x7db8fb))
                         } else {
                             appearance.muted
                         })
                         .child(indicator.to_owned()),
-                ),
+                )
+                .children(issue_dot()),
             None => div()
+                .relative()
                 .flex_shrink_0()
                 .mr(px(2.0 * scale))
-                .child(logo.size(px(14.0 * scale))),
+                .child(logo.size(px(14.0 * scale)))
+                .children(issue_dot()),
         });
     }
     if icon_only {

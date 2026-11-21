@@ -228,18 +228,44 @@ pub(crate) fn tile_status_dot(
     scale: f32,
     backdrop: DotBackdrop,
 ) -> Option<gpui::Div> {
-    let color = counts.color()?;
-    // Absolute insets count from the tile's outer edge, and the ring adds 1pt round the dot.
+    Some(corner_dot(
+        counts.color()?,
+        scale,
+        backdrop.rest,
+        Some((backdrop.hover, backdrop.group)),
+    ))
+}
+
+/// A 4pt dot of `color` in its owner's top-right corner (see [`tile_status_dot`]), with a 1px ring
+/// in `ring`, the colour behind it (`hover`: the colour while the pointer is over the owner's
+/// group). The owner must be `relative()`.
+///
+/// CDXC:AgentProviders 2026-11-21 DECISION:
+/// User: "change how we indicate that an account has issues: instead of the text name of the
+/// account becoming yellow, add a small dot top right of the account's icon (like the one we have
+/// on top right of space icon now)". An account's icon or mark (the sidebar usage meters, the chat's
+/// model pill, Settings > Accounts' list, the phone's Usage pane) draws this very dot, in the
+/// amber its letters used to turn (`needs_sign_in_amber`), so the dot is the Space tile's in size,
+/// inset and ring.
+pub(crate) fn corner_dot(
+    color: Hsla,
+    scale: f32,
+    ring: Hsla,
+    hover: Option<(Hsla, SharedString)>,
+) -> gpui::Div {
+    // Absolute insets count from the owner's outer edge, and the ring adds 1pt round the dot.
     let offset = (TILE_DOT_INSET - 1.0) * scale;
-    Some(
-        div().absolute().top(px(offset)).right(px(offset)).child(sized_overlapped_dots(
+    div()
+        .absolute()
+        .top(px(offset))
+        .right(px(offset))
+        .child(sized_overlapped_dots(
             vec![color],
             TILE_DOT_SIZE,
             scale,
-            backdrop.rest,
-            Some((backdrop.hover, backdrop.group)),
-        )),
-    )
+            ring,
+            hover,
+        ))
 }
 
 /// The colours of a folded coordinator's overlapping stack, back to front, least urgent first: grey

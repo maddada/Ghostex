@@ -52,9 +52,10 @@ fn distinct_accounts(accounts: &[Value]) -> Vec<&Value> {
 /// the other computers' copies in the published order.
 ///
 /// CDXC:AgentProviders 2026-11-19 DECISION:
-/// User (Q4198 A, the signed-out accounts page): a signed-out account's card turns its letters and
-/// numbers amber, and only its letters while it is signed out on another computer only, so the
-/// card has to know every computer's copy, not only the one it shows.
+/// User (Q4198 A, the signed-out accounts page): a signed-out account's card is marked, and only
+/// its icon's dot says it is signed out on another computer only, so the card has to know every
+/// computer's copy, not only the one it shows. Since 2026-11-21 the mark is a dot on the icon's
+/// top-right corner, not amber letters and numbers (`render_account_usage_meter`).
 fn distinct_account_copies(accounts: &[Value]) -> Vec<Vec<&Value>> {
     let saved = swap_logins();
     let swap_login = |hub: &Value| {
@@ -186,7 +187,8 @@ fn provider_label(provider: &str) -> &'static str {
 }
 
 /// The amber Settings > Accounts gives "Needs sign-in" (settings_modal/tabs/accounts/widgets.rs
-/// `TagTone::Warning`): the account's letters and numbers on a signed-out card.
+/// `TagTone::Warning`): the dot on a signed-out card's icon (its letters and numbers were this
+/// colour until 2026-11-21).
 ///
 /// CDXC:AgentProviders 2026-11-19 WHY:
 /// In light mode a Claude card's letters are Claude's own #9c4328, and the Settings amber #b45309
@@ -203,10 +205,10 @@ pub(crate) fn needs_sign_in_amber(claude: bool) -> gpui::Rgba {
 pub(crate) enum MeterSignIn {
     #[default]
     SignedIn,
-    /// The copy the card shows (this computer's, when it has one) is signed out: letters and
-    /// numbers turn amber.
+    /// The copy the card shows (this computer's, when it has one) is signed out: the icon's dot.
     SignedOut,
-    /// The shown copy is signed in, another computer's is not: only the letters turn amber.
+    /// The shown copy is signed in, another computer's is not: the same dot, and a tooltip that
+    /// names the computer.
     SignedOutElsewhere,
 }
 
@@ -1040,35 +1042,39 @@ impl GhostexGpuiApp {
         };
         let indicator = meter.indicator.clone();
         let claude_card = meter.provider == "claude";
-        let indicator_color = if meter.sign_in != MeterSignIn::SignedIn {
-            needs_sign_in_amber(claude_card)
-        } else if meter.codex {
+        // CDXC:AgentProviders 2026-11-21 DECISION:
+        // User: "change how we indicate that an account has issues: instead of the text name of the
+        // account becoming yellow, add a small dot top right of the account's icon (like the one we
+        // have on top right of space icon now)". A card whose account needs a sign-in, here or on
+        // another computer, keeps its letters, numbers and logo in their usual colours and its icon
+        // wears the Space tile's 4pt dot in its top-right corner, in the amber the letters used to
+        // turn (`needs_sign_in_amber`); the tooltip (`meter_state`) says which computer. This
+        // supersedes the amber letters, numbers and logo of 2026-11-19 (Q4198 A).
+        let indicator_color = if meter.codex {
             chrome_color(0x7db8fb, 0x285b8c)
         } else {
             chrome_color(0xa4a8af, 0x9c4328)
         };
-        let badge_color = if meter.sign_in == MeterSignIn::SignedOut {
-            needs_sign_in_amber(claude_card)
-        } else {
-            chrome_color(0xb9b9b9, 0x404040)
-        };
+        let badge_color = chrome_color(0xb9b9b9, 0x404040);
         let unreachable = meter.unreachable;
-        // A card with no letters (Gemini, Cursor, Copilot, a "-" label) or no numbers would show
-        // its sign-in state only in its tooltip, so its logo itself turns amber: the agent logo
-        // as a one-colour mask in the amber (CDXC:AgentProviders 2026-11-19, the re-check of
-        // 3f01dc86c).
-        let amber_logo = (meter.sign_in != MeterSignIn::SignedIn
-            && (indicator.is_none() || badge_lines.is_empty()))
-        .then(|| {
-            let key = match meter.provider.as_str() {
-                "cursor" => "cursor-cli",
-                provider => provider,
+        let issue_dot = (meter.sign_in != MeterSignIn::SignedIn).then(|| {
+            let ring_rest = if open {
+                host.open_background
+            } else {
+                host.background
+            };
+            let ring_hover = if open {
+                host.open_background
+            } else {
+                host.hover_background
             };
             (
-                format!("agent-icons/{key}.svg"),
-                needs_sign_in_amber(claude_card),
+                gpui::Hsla::from(needs_sign_in_amber(claude_card)),
+                ring_rest,
+                ring_hover,
             )
         });
+        let dot_group = format!("{}-{}", host.element_id_prefix, account_id.as_str());
         let tooltip = meter.tooltip.clone();
         let tooltip_delay = host.tooltip_delay;
         let hover_background = host.hover_background;
@@ -1088,26 +1094,14 @@ impl GhostexGpuiApp {
                 .items_center()
                 .justify_center()
                 .flex_shrink_0()
-                .map(|this| match amber_logo.clone() {
-                    Some((path, amber)) => this.child(
-                        gpui::svg()
-                            .path(path)
-                            .text_color(amber)
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .size(px(size))
-                            .when(indicator.is_some(), |this| this.opacity(0.3)),
-                    ),
-                    None => this.child(
-                        img(icon_image.clone())
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .size(px(size))
-                            .when(indicator.is_some(), |this| this.opacity(0.3)),
-                    ),
-                })
+                .child(
+                    img(icon_image.clone())
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size(px(size))
+                        .when(indicator.is_some(), |this| this.opacity(0.3)),
+                )
                 .when_some(indicator.clone(), |this, indicator| {
                     this.child(
                         div()
@@ -1121,6 +1115,16 @@ impl GhostexGpuiApp {
                             .child(indicator),
                     )
                 })
+                .children(issue_dot.clone().map(|(color, rest, hover)| {
+                    // The ring is the sidebar's colour under the card's own fill.
+                    let base = crate::app::helpers::titlebar_background();
+                    crate::app::native_sidebar::status::corner_dot(
+                        color,
+                        scale,
+                        base.blend(rest),
+                        Some((base.blend(hover), dot_group.clone().into())),
+                    )
+                }))
         };
 
         div()
@@ -1129,6 +1133,7 @@ impl GhostexGpuiApp {
                 host.element_id_prefix,
                 account_id.as_str()
             ))
+            .group(dot_group.clone())
             .when(!host.fill_width, |this| this.flex_shrink_0())
             .when(host.fill_width, |this| {
                 this.w_full().min_w_0().overflow_hidden()
@@ -1396,7 +1401,7 @@ mod tests {
         meter_state("ST", &copies)
     }
 
-    /// Q4198 A: signed out on this computer turns letters and numbers amber.
+    /// Q4198 A: signed out on this computer marks the card (the icon's dot since 2026-11-21).
     #[test]
     fn a_signed_out_copy_shown_here_is_signed_out() {
         let here = with(
@@ -1416,8 +1421,8 @@ mod tests {
         );
     }
 
-    /// Signed in here, signed out on the Windows machine: only the letters turn amber, and the
-    /// card shows this computer's copy whatever the order.
+    /// Signed in here, signed out on the Windows machine: the card is marked, and shows this
+    /// computer's copy whatever the order.
     #[test]
     fn signed_out_on_another_computer_only_is_elsewhere() {
         let windows = "remote-mvb5laq3-4aol2";
