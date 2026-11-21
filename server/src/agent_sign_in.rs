@@ -349,8 +349,42 @@ fn start(home: &Path, agent_id: &str) -> Result<(), DomainStateError> {
                     .unwrap_or_else(|e| e.into_inner())
                     .get_mut(&reader_id)
                 {
-                    sign_in.url.get_or_insert(url);
+                    // A long link (Google's) can reach the screen over several reads: a longer
+                    // one with the same start is the same link, more of it.
+                    let longer = sign_in.url.as_ref().is_none_or(|kept| {
+                        url.len() > kept.len() && url.starts_with(kept.as_str())
+                    });
+                    if longer {
+                        sign_in.url = Some(url);
+                    }
                 }
+            }
+        }
+    });
+    // A login that goes on into the agent once signed in (agy) is stopped here, not only when the
+    // panel next asks: closing setup mid-sign-in must not leave it running. Every login is held
+    // to the time limit the same way.
+    let stays_open = commands.stays_open;
+    let watched_id = id.clone();
+    let mut watched_killer = child.clone_killer();
+    let watch_home = home.to_path_buf();
+    std::thread::spawn(move || {
+        let started = Instant::now();
+        loop {
+            std::thread::sleep(Duration::from_secs(5));
+            let running = SIGN_INS
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&watched_id)
+                .is_some_and(|sign_in| sign_in.finished.is_none());
+            if !running {
+                return;
+            }
+            let done = started.elapsed() > SIGN_IN_LIMIT
+                || (stays_open && read_signed_in(&watch_home, &watched_id) == Some(true));
+            if done {
+                let _ = watched_killer.kill();
+                return;
             }
         }
     });
