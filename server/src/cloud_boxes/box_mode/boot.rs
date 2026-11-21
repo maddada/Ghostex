@@ -221,10 +221,10 @@ fn start_relay(bin: &Path, gxserver_port: u16) -> Result<(), String> {
 /// update: gxserver reads the devices from this box's ticket and saves them with Easy Connect on in
 /// one write, so this update never serves anyone the ticket doesn't name. That update is refused on
 /// a computer that isn't a box, so the off rule holds for every other caller. A box whose saved
-/// state already has Easy Connect on (a woken box, one made from a snapshot) starts its helper when
-/// gxserver starts, before this update: gxserver first drops the saved devices the ticket no longer
-/// names (`start_tailcat_from_persisted_state`), so that start too serves only devices the ticket
-/// names, and this update then sets exactly the ticket's list.
+/// state already has Easy Connect on (a woken box, one made from a snapshot) no longer starts its
+/// helper when gxserver starts: gxserver drops the saved devices the ticket no longer names and
+/// waits for this update (`BOX_DEVICES_FROM_BOOT` in tailcat/status.rs), which sets exactly the
+/// ticket's list and starts the helper.
 fn start_tailcat(ticket: &BoxBootTicket) -> Result<String, String> {
     if ticket.allow_device_keys.is_empty() {
         return Err(

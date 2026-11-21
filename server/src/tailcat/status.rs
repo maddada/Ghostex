@@ -119,6 +119,7 @@ pub fn apply_tailcat_state_update(
                     .map_err(|refusal| anyhow::Error::new(TailcatRefusal(refusal)))?;
                 state.allowed_client_keys = normalize_tailcat_client_keys(keys);
                 state.enabled = true;
+                BOX_DEVICES_FROM_BOOT.store(true, std::sync::atomic::Ordering::SeqCst);
             }
             // Removal only, like the start's pruning below: a ticket can't add anyone here.
             TailcatStateUpdate::PruneToBoxTicket {} => {
@@ -278,6 +279,17 @@ pub fn hold_tailcat_pairing_window_open(paths: &GxserverPaths, runtime: &Tailcat
     runtime.hold_pairing_window_open(paths, &state, TAILCAT_PAIRING_WINDOW_HOLD);
 }
 
+/// Set once this gxserver applied a Cloud Box boot's `enableForBoxDevices`.
+///
+/// CDXC:CloudBoxes 2026-11-21 FIX: review of c1d1a8a3a (finding 6, left over from #698): a box that
+/// was stopped when a device was unpaired started its helper at the next wake from the saved state
+/// (pruned to the old ticket, which still named the device) until the boot's update landed, after
+/// the install step. On a box, gxserver's own start now never starts the helper; only the boot's
+/// `enableForBoxDevices` does, and restarts after it in this process go on as anywhere else. A box
+/// whose gxserver started again without a boot stays closed until the computer or phone wakes it.
+static BOX_DEVICES_FROM_BOOT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Boot reconcile: restart the sidecar for a state that was left enabled.
 pub fn start_tailcat_from_persisted_state(paths: &GxserverPaths, runtime: &TailcatRuntime) {
     let Ok(db) = open_gxserver_database(paths) else {
@@ -320,6 +332,10 @@ pub fn start_tailcat_from_persisted_state(paths: &GxserverPaths, runtime: &Tailc
                     None,
                 );
             }
+        }
+        // On a box, only the boot's own update starts the helper (see BOX_DEVICES_FROM_BOOT).
+        if !BOX_DEVICES_FROM_BOOT.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
         }
     }
     // In turn with the writes, so a reload that read "on" can't start the helpers after an Off.
