@@ -6246,8 +6246,10 @@ agents, a connection from either side is enough.
   that menu opens New pane there: a pick replaces its session, and closing it
   keeps the session. Tap a pane to make it active, drag its title onto the other pane
   to swap them, or drag the divider with the keyboard down to resize them.
-  Tapping the other pane while the keyboard is up lowers the keyboard; with the
-  Command pad open the keyboard stays as it was.
+  With the keyboard up, tapping from a terminal or a chat into the other pane
+  lowers the keyboard. The one exception is the Command pad: while it is open
+  over the terminal, tapping the other session pane (a terminal or a chat)
+  leaves the keyboard as it was.
   Upright they stack; across and in laptop mode they stand side by side, with
   layouts remembered for each arrangement. A session can show Chat in its pane,
   but only one pane shows Chat at a time; a chat in a pane has a compact chat
