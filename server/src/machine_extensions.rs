@@ -9,7 +9,7 @@
 //!   file holds it, then answers the status.
 //!
 //! CDXC:Extensions 2026-11-21 WHY:
-//! These switches are user-only: `ghostex settings set` and `updateSettingsPatch` refuse them for every caller (settings_agent_writable.rs), so a headless server's Main Hub could never be turned on (GitHub #695). This route changes only them, and only for the owner's own apps on this computer's token: the owner session (`gxo_`) or the token file, which is what a desktop connected through Settings > Remote holds here. An agent's session token, a paired phone (it has no Extensions page), another computer's agents, a Collab guest and an extension are refused and logged. The token file is the same door the user's own terminal uses, so an agent that bypasses its session token to read it is outside what this check can tell apart, as for every other owner-device route.
+//! Main Hub's and CLIProxyAPI's switches are user-only: `ghostex settings set` and `updateSettingsPatch` refuse them for every API caller (settings_agent_writable.rs), so a headless server's Main Hub could never be turned on (GitHub #695). GBots' switch is not: agents may turn it on through those routes, as decided on 10 Nov, and it only matters once Main Hub is on; it is here so the picked computer's GBots card works. This route changes only these three, and only for the owner's own apps on this computer's token: the owner session (`gxo_`) or the token file, which is what a desktop connected through Settings > Remote holds here. An agent's session token and a paired phone (it has no Extensions page) reach this handler and are refused here, with a security-log entry. Another computer's agents, a Collab guest and an extension are stopped earlier by their own allow-lists (connected_computers/scope.rs, collab_shim/registry.rs, the extension registry), with no entry here; this handler would refuse them too. The token file is the same door the user's own terminal uses, so an agent that bypasses its session token to read it is outside what this check can tell apart, as for every other owner-device route.
 //! SEE-ALSO: packages/settings-catalog/src/built_in_extensions.rs (CDXC:Extensions 2026-11-21), apps/desktop/src/app/remote_conn/settings_rpc.rs, apps/desktop/src/app/window/settings_modal/tabs/extensions/remote_machine.rs.
 
 use std::time::{Duration, Instant};
@@ -98,18 +98,61 @@ pub(crate) fn switch_patch(id: &str, on: bool) -> Result<Map<String, Value>, Dom
     Ok(patch)
 }
 
+/// The security log's id for turning Main Hub or GBots on through this route: Main Hub gives
+/// Chief of Staff control of every agent here, so it reaches the bell and the phones however it was
+/// done (audit/notify.rs `OPENING_ACTIONS`), and a token-file misuse is seen.
+pub(crate) const AGENT_POWERS_ON_ACTION: &str = "machineExtensions.mainHubOrGBotsOn";
+
 fn audit(id: &str, on: bool, outcome: crate::audit::Outcome) {
     let title = built_in_extensions::title(id);
+    let kind = if on && matches!(id, built_in_extensions::CHIEF | built_in_extensions::GBOTS) {
+        AGENT_POWERS_ON_ACTION
+    } else {
+        "settings.machineExtension"
+    };
     crate::audit::record(
         crate::audit::Action::new(
-            "settings.machineExtension",
-            format!("Turn {} {title}", if on { "on" } else { "off" }),
+            kind,
+            format!(
+                "Turn {} {title} on {}",
+                if on { "on" } else { "off" },
+                crate::connected_computers::this_computer_name()
+            ),
         )
         .target(title),
         crate::audit::Actor::current(),
         outcome,
         None,
     );
+}
+
+/// Why gxserver left the save to an app that isn't running, in words for whoever picked this
+/// computer: its settings file was changed outside Ghostex since gxserver saved it (a headless
+/// computer someone edited by hand), or it is the desktop app's file.
+fn not_saved_here(state: &AppState, patch: &Map<String, Value>) -> (&'static str, String) {
+    let computer = crate::connected_computers::this_computer_name();
+    let file = crate::headless_settings::settings_file_path(&state.paths);
+    let by_hand = patch
+        .iter()
+        .map(|(key, value)| format!("\"{key}\": {value}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    match crate::headless_settings::left_to_the_app(&state.paths) {
+        crate::headless_settings::LeftToTheApp::ChangedSince => (
+            "conflict",
+            format!(
+                "{computer}'s settings file was changed outside Ghostex, so Ghostex there no longer saves it. On {computer}, set {by_hand} in {} by hand, or open the Ghostex app there if it has one.",
+                file.display()
+            ),
+        ),
+        crate::headless_settings::LeftToTheApp::AppsFile => (
+            "dependencyUnavailable",
+            format!(
+                "Ghostex on {computer} saves its settings through its desktop app, which isn't running. Open Ghostex on {computer}, or if it has no app, set {by_hand} in {} by hand.",
+                file.display()
+            ),
+        ),
+    }
 }
 
 async fn set(
@@ -140,9 +183,8 @@ async fn set(
     payload.insert("source".into(), json!(SETTINGS_SOURCE));
     if let Err(failure) = crate::server::save_settings_patch(state, payload, SAVE_TIMEOUT_MS).await
     {
-        let computer = crate::connected_computers::this_computer_name();
         let (code, message) = if failure.code == "dependencyUnavailable" {
-            ("dependencyUnavailable", format!("Ghostex on {computer} saves its settings through its desktop app, which isn't running. Open Ghostex on {computer}, then try again."))
+            not_saved_here(state, &patch)
         } else {
             ("internalError", failure.message)
         };
