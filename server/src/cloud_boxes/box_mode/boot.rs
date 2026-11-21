@@ -209,18 +209,22 @@ fn start_relay(bin: &Path, gxserver_port: u16) -> Result<(), String> {
 /// sidecar a remote computer runs) for the user's devices only, and waits for its address.
 ///
 /// CDXC:CloudBoxes 2026-11-02 DECISION: the user chose private access only (Q1021 "private
-/// only"): a box publishes no port and answers only the user's own devices. tailcat with an empty
-/// allow-list admits every client that has the address, so a boot that asks for tailcat without
-/// device keys is refused instead of serving an open box.
+/// only"): a box publishes no port and answers only the user's own devices. A boot that asks for
+/// tailcat without device keys is refused: a box reachable by none of the user's devices is no use
+/// (an empty allow-list starts the helper closed, `--allow=none`, since 2026-11-08).
 ///
 /// CDXC:CloudBoxes 2026-11-21 FIX:
 /// GitHub #698: since 11.7.0 (7be3fc18d) no key can be added while Easy Connect is off, and the
 /// boot sent the devices first and turned Easy Connect on second, so every Instabox box failed its
-/// boot. Turning it on first would start the helper on the list the disk already had (a snapshot's
-/// or the last boot's devices) until the new one landed. The boot now sends one
-/// `enableForBoxDevices` update: gxserver reads the devices from this box's ticket and saves them
-/// with Easy Connect on in one write, so the helper only ever starts on the ticket's devices. That
-/// update is refused on a computer that isn't a box, so the off rule holds for every other caller.
+/// boot. Turning it on first would have run the helper on the list already saved (a snapshot's or
+/// the last boot's devices) until the new one landed. The boot now sends one `enableForBoxDevices`
+/// update: gxserver reads the devices from this box's ticket and saves them with Easy Connect on in
+/// one write, so this update never serves anyone the ticket doesn't name. That update is refused on
+/// a computer that isn't a box, so the off rule holds for every other caller. A box whose saved
+/// state already has Easy Connect on (a woken box, one made from a snapshot) starts its helper when
+/// gxserver starts, before this update: gxserver first drops the saved devices the ticket no longer
+/// names (`start_tailcat_from_persisted_state`), so that start too serves only devices the ticket
+/// names, and this update then sets exactly the ticket's list.
 fn start_tailcat(ticket: &BoxBootTicket) -> Result<String, String> {
     if ticket.allow_device_keys.is_empty() {
         return Err(
@@ -268,12 +272,7 @@ pub(crate) fn ticket_device_keys() -> Result<Vec<String>, String> {
     if !ticket.tailcat {
         return Err("This Cloud Box's boot ticket doesn't ask for Easy Connect.".to_string());
     }
-    let keys: Vec<String> = ticket
-        .allow_device_keys
-        .into_iter()
-        .map(|key| key.trim().to_string())
-        .filter(|key| !key.is_empty() && key != crate::tailcat::TAILCAT_ALLOW_NONE)
-        .collect();
+    let keys = named_device_keys(ticket);
     if keys.is_empty() {
         return Err(
             "This Cloud Box's boot ticket names no device allowed to reach it, so Easy Connect stays off."
@@ -281,6 +280,26 @@ pub(crate) fn ticket_device_keys() -> Result<Vec<String>, String> {
         );
     }
     Ok(keys)
+}
+
+/// The ticket's device keys, trimmed, without blanks or the `none` placeholder; none for a ticket
+/// that doesn't ask for tailcat.
+fn named_device_keys(ticket: BoxBootTicket) -> Vec<String> {
+    if !ticket.tailcat {
+        return Vec::new();
+    }
+    ticket
+        .allow_device_keys
+        .into_iter()
+        .map(|key| key.trim().to_string())
+        .filter(|key| !key.is_empty() && key != crate::tailcat::TAILCAT_ALLOW_NONE)
+        .collect()
+}
+
+/// On a box, the devices its ticket names (possibly none); `None` on a computer that isn't a box.
+/// For gxserver's start, which only ever takes saved devices off with it.
+pub(crate) fn devices_ticket_names() -> Option<Vec<String>> {
+    state::read_ticket().map(named_device_keys)
 }
 
 pub(crate) fn run_boot(ticket: &BoxBootTicket) -> Result<BoxBootResult, String> {
