@@ -150,6 +150,12 @@ fn log_default_on(state: &AppState, decision: super::default_on::Decision, error
         super::default_on::Decision::KeepOff(reason) => Some(reason),
         _ => None,
     };
+    // A save that failed changed nothing: it says so, and the pass tries again.
+    let word = if error.is_some() {
+        "turnOnNotSavedYet"
+    } else {
+        decision.word()
+    };
     let _ = crate::logging::GxserverLogger::new(state.paths.clone()).log(
         crate::logging::GxserverLogInput {
             level: if error.is_some() {
@@ -163,7 +169,7 @@ fn log_default_on(state: &AppState, decision: super::default_on::Decision, error
             client: None,
             duration_ms: None,
             error,
-            details: Some(json!({ "decision": decision.word(), "reason": reason })),
+            details: Some(json!({ "decision": word, "reason": reason })),
         },
     );
 }

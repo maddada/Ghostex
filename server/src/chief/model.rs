@@ -42,9 +42,14 @@ fn is_legacy(row: &Value) -> bool {
     text(row, "group") == Some("legacy")
 }
 
-/// The newest row whose name has every word of `words` in its family (by
-/// `family_and_version`); the first in the lineup's order among equals.
+/// The newest row whose family (by `family_and_version`) is exactly `words`, so a "Sol Mini" never
+/// beats plain Sol; when no row's is exactly that, the newest whose family has every word. The
+/// first in the lineup's order among equals.
 fn newest_of<'a>(rows: &'a [Value], words: &[&str]) -> Option<&'a Value> {
+    newest_matching(rows, words, true).or_else(|| newest_matching(rows, words, false))
+}
+
+fn newest_matching<'a>(rows: &'a [Value], words: &[&str], exact: bool) -> Option<&'a Value> {
     let mut best: Option<(&Value, Vec<u32>)> = None;
     for row in rows {
         let Some(label) = text(row, "label").or_else(|| text(row, "value")) else {
@@ -56,7 +61,9 @@ fn newest_of<'a>(rows: &'a [Value], words: &[&str]) -> Option<&'a Value> {
             continue;
         };
         let family_words: Vec<&str> = family.split_whitespace().collect();
-        if !words.iter().all(|word| family_words.contains(word)) {
+        if !words.iter().all(|word| family_words.contains(word))
+            || (exact && family_words.len() != words.len())
+        {
             continue;
         }
         if best.as_ref().is_none_or(|(_, newest)| version > *newest) {

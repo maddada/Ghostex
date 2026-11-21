@@ -451,6 +451,20 @@ pub(crate) fn switch_draft_agent(
     commandless agent id too, but by then the old CLI has already been
     interrupted and a typo would leave the user staring at a bare login shell.
     */
+    // Chief of Staff's chat switches only to an agent that can run it, so its New Chat and Change
+    // Agent keep working (review of efced63b5).
+    if crate::chief::read_record(db).is_some_and(|record| {
+        record.project_id == lifecycle.project_id && record.session_id == lifecycle.session_id
+    }) && !crate::chief::chief_agent_rows(&repository.list_projects()?)
+        .iter()
+        .any(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id.as_str()))
+    {
+        return Err(DomainStateError::bad_request(format!(
+            "Chief of Staff can't run on {agent_id}: pick one of {}.",
+            crate::coordinators::coordinator_agent_families_text()
+        ))
+        .into());
+    }
     let agent_config = resolve_project_agent_config(&project, &agent_id, None);
     if read_text_from_map(&agent_config, "command").is_none()
         && default_agent_command(&agent_id).is_none()
