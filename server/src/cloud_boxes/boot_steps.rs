@@ -27,18 +27,20 @@ pub(super) fn idle_stop_minutes(state: &AppState) -> u64 {
         .unwrap_or(DEFAULT_IDLE_STOP_MINUTES)
 }
 
-/// Tailcat client keys allowed to reach a box (Q1021 private only): every paired phone's key.
-///
-/// CDXC:CloudBoxes 2026-11-02 SEE-ALSO: the computer's own client key joins this list with the box connection work (W3), which owns how the desktop dials a box over tailcat.
+/// Tailcat client keys allowed to reach a box (Q1021 private only): every paired device's key, and
+/// this computer's own keys for its boxes (CDXC:CloudBoxes 2026-11-21 in home_keys.rs).
 pub(super) fn allowed_device_keys(state: &AppState) -> Vec<String> {
-    let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
-        return Vec::new();
-    };
-    let mut keys: Vec<String> = crate::remote_access::RemotePairingRepository::new(&db)
-        .list_devices()
+    let mut keys: Vec<String> = crate::storage::open_gxserver_database(&state.paths)
+        .ok()
+        .map(|db| {
+            crate::remote_access::RemotePairingRepository::new(&db)
+                .list_devices()
+                .unwrap_or_default()
+        })
         .unwrap_or_default()
         .into_iter()
         .filter_map(|device| device.tailcat_client_key)
+        .chain(super::home_keys::public_keys(&state.paths))
         .filter(|key| !key.trim().is_empty())
         .collect();
     keys.sort();

@@ -79,6 +79,7 @@ pub(super) fn delete(
         let row = registry::update(&state.paths, box_id, |stored| {
             stored.row.state = CloudBoxState::Deleted;
         })?;
+        super::home_keys::forget_when_no_box_is_left(&state.paths);
         events::broadcast_box(state, &row);
         return Ok(row);
     }
@@ -125,6 +126,7 @@ pub(super) fn delete(
         stored.row.delete_after = None;
         stored.token_sealed = None;
     })?;
+    super::home_keys::forget_when_no_box_is_left(&state.paths);
     events::broadcast_box(state, &row);
     Ok(row)
 }

@@ -73,13 +73,13 @@ pub(crate) fn attach(
                 .and_then(|listener| listener.local_addr())
                 .map(|address| address.port())?;
             let plan = TailcatForwardPlan {
-                address_blob: address,
+                address_blob: address.clone(),
                 base_url: format!("http://{GXSERVER_LOCAL_API_HOST}:{local_port}"),
                 local_port,
                 remote_port: u16::try_from(info.gxserver_port).map_err(|_| {
                     CliError::Other("The box's gxserver port is invalid.".to_string())
                 })?,
-                client_key: None,
+                client_key: own_box_key(&address),
             };
             tunnel = Some(start_tailcat_tunnel(&binary, &plan)?);
             plan.base_url
@@ -100,6 +100,24 @@ pub(crate) fn attach(
         tunnel.stop();
     }
     result
+}
+
+/// This computer's own key for its box at `address`, which this computer's gxserver names only for
+/// a box in its own registry (CDXC:CloudBoxes 2026-11-21 in cloud_boxes/home_keys.rs); `None`
+/// dials with `client-default` as before. Always asked of this computer's own gxserver (default
+/// flags), whichever gxserver answered `connectInfo`, since the key file is on this computer.
+fn own_box_key(address: &str) -> Option<std::path::PathBuf> {
+    let answer = call_gxserver_rpc(
+        crate::remote_access::computer_link_keys::EASY_CONNECT_LINK_KEY_ENDPOINT,
+        &json!({
+            "address": address,
+            "purpose": crate::remote_access::computer_link_keys::LINK_KEY_PURPOSE_SERVER,
+        }),
+        &Flags::default(),
+    )
+    .ok()?;
+    let path = std::path::PathBuf::from(answer.get("keyPath")?.as_str()?);
+    path.is_file().then_some(path)
 }
 
 async fn pump(base_url: &str, token: &str, project_id: &str, session_id: &str) -> CliResult<()> {
