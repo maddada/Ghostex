@@ -95,6 +95,7 @@ fn settings() -> UnifiedSettings {
         enable_session_parking: true,
         pinned_session_order: crate::sidebar_view::PinnedSessionOrder::Manual,
         session_order: crate::sidebar_view::UnifiedSessionOrder::Recent,
+        show_hidden: false,
     }
 }
 

@@ -737,6 +737,7 @@ fn unified_settings(list_inputs: &SidebarInputs) -> UnifiedSettings {
         enable_session_parking: list_inputs.settings.enable_session_parking,
         pinned_session_order: list_inputs.settings.pinned_session_order,
         session_order: list_inputs.settings.unified_session_order,
+        show_hidden: list_inputs.ui.show_hidden,
     }
 }
 
