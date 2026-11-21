@@ -111,6 +111,7 @@ pub async fn capture_session_chat_terminal_draft(
             replacement: None,
             state_dir: state_dir.to_path_buf(),
             prompt_editor_input: session_chat_prompt_editor_input(agent).to_string(),
+            skip_when_empty: None,
         }],
         Some(completion_tx),
         Some(draft_tx),
