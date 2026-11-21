@@ -928,11 +928,16 @@ fi
 # CDXC:CodeEditor 2026-06-08-12:17: code-server owns the bundled Node runtime in the macOS app. Build code-server with its pinned Node version and stage that runtime inside Web/code-server/lib/node; explicit TypeScript gxserver packages reuse that runtime instead of shipping a duplicate Node.
 CODE_SERVER_NODE_BIN="$(prepare_code_server_app_node_runtime)"
 CODE_SERVER_NODE_DIR="$(cd "$(dirname "$CODE_SERVER_NODE_BIN")" && pwd)"
-CODE_SERVER_NPM_BIN="$CODE_SERVER_NODE_DIR/npm"
-if [[ ! -x "$CODE_SERVER_NPM_BIN" ]]; then
-	echo "npm is required in the cached code-server Node distribution: $CODE_SERVER_NPM_BIN" >&2
+# CDXC:CodeEditor 2026-11-21 WHY: code-server 4.146.0 and VS Code 1.146.0 build with pnpm only (packageManager pnpm@12.16.0; npm is no longer supported). The cached Node 24 distribution ships corepack, which installs a pnpm shim next to its node and fetches the exact pnpm the checkout's packageManager names, so the build needs no global pnpm and nested `pnpm` calls (VS Code's postinstall, code-server's scripts) resolve to the same version through PATH.
+if [[ ! -x "$CODE_SERVER_NODE_DIR/pnpm" ]]; then
+	"$CODE_SERVER_NODE_DIR/corepack" enable --install-directory "$CODE_SERVER_NODE_DIR" pnpm
+fi
+CODE_SERVER_PNPM_BIN="$CODE_SERVER_NODE_DIR/pnpm"
+if [[ ! -x "$CODE_SERVER_PNPM_BIN" ]]; then
+	echo "pnpm (through corepack) is required in the cached code-server Node distribution: $CODE_SERVER_PNPM_BIN" >&2
 	exit 1
 fi
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 CODE_SERVER_ROOT="$(resolve_code_server_root || true)"
 if [[ -z "$CODE_SERVER_ROOT" ]]; then
 	# CDXC:RepoStructure 2026-08-25: An explicitly configured root that does
@@ -962,7 +967,6 @@ fi
 
 GXSERVER_NODE_BIN="$CODE_SERVER_NODE_BIN"
 GXSERVER_NODE_DIR="$CODE_SERVER_NODE_DIR"
-GXSERVER_NPM_BIN="$CODE_SERVER_NPM_BIN"
 GXSERVER_NODE_VERSION="$("$GXSERVER_NODE_BIN" -p 'process.version')"
 GXSERVER_NODE_MAJOR="$("$GXSERVER_NODE_BIN" -p 'process.versions.node.split(".")[0]')"
 if [[ "$GXSERVER_NODE_MAJOR" != "$CODE_SERVER_APP_NODE_MAJOR" ]]; then

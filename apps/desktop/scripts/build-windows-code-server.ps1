@@ -145,7 +145,7 @@ function Export-EditorComponent {
 # either tree, this script, the pinned Node version, and the architecture.
 $Revision = (& git -C $CodeRoot rev-parse HEAD).Trim()
 $VscodeRevision = (& git -C $CodeRoot rev-parse "HEAD:lib/vscode").Trim()
-$SourceDiff = (& git -C $CodeRoot diff --binary HEAD -- src ci patches package.json package-lock.json) -join "\n"
+$SourceDiff = (& git -C $CodeRoot diff --binary HEAD -- src ci patches package.json pnpm-lock.yaml pnpm-workspace.yaml) -join "\n"
 $VscodeDiff = if (Test-Path (Join-Path $VscodeRoot ".git")) { (& git -C $VscodeRoot diff --binary HEAD) -join "\n" } else { "" }
 $ScriptHash = (Get-FileHash $PSCommandPath -Algorithm SHA256).Hash
 $Inputs = "$Revision|$VscodeRevision|$SourceDiff|$VscodeDiff|$ScriptHash|$RequiredNode|$Arch"
@@ -229,13 +229,56 @@ if (!(Test-Path (Join-Path $VscodeRoot "package.json"))) {
 # stays identical across releases.
 $env:VERSION = (Get-Content (Join-Path $CodeRoot "package.json") -Raw | ConvertFrom-Json).version
 
+# CDXC:CodeEditor 2026-11-21 WHY: code-server 4.146.0 and VS Code 1.146.0 build with pnpm only
+# (packageManager pnpm@12.16.0). Resolve pnpm as an application (pnpm.exe or pnpm.cmd), never a
+# pnpm.ps1 shim the execution policy could refuse. VS Code's root install also installs its build,
+# remote and extensions roots; pnpm_config_frozen_lockfile keeps those frozen outside CI too, and
+# pnpm_config_ignore_scripts=false runs the native modules' build scripts even when the user's own
+# pnpm config turns scripts off. The staged payload carries pnpm-workspace.yaml so its production
+# install is its own workspace root, not part of the code-server checkout around it.
+$Pnpm = (Get-Command pnpm -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+
+# A checkout built before code-server 4.146.0 has npm's node_modules trees. pnpm's hoisted install
+# writes over them but leaves npm's nested copies, which broke the Copilot extension build with a
+# stale nested package. npm writes .package-lock.json into every node_modules it manages and pnpm
+# never does, so remove those trees first (without walking into node_modules or build outputs).
+function Remove-NpmNodeModules {
+    param([string]$Root)
+    $Pending = [System.Collections.Generic.Stack[string]]::new()
+    $Pending.Push($Root)
+    while ($Pending.Count -gt 0) {
+        $Dir = $Pending.Pop()
+        foreach ($Child in Get-ChildItem -LiteralPath $Dir -Directory -Force -ErrorAction SilentlyContinue) {
+            if ($Child.Name -eq "node_modules") {
+                if (Test-Path -LiteralPath (Join-Path $Child.FullName ".package-lock.json")) {
+                    Write-Host "Removing npm-installed $($Child.FullName) before the pnpm install"
+                    Remove-Item -LiteralPath $Child.FullName -Recurse -Force
+                }
+            }
+            elseif ($Child.Name -ne ".git" -and $Child.Name -notlike "vscode-reh-web-*" -and $Child.Name -ne "release") {
+                $Pending.Push($Child.FullName)
+            }
+        }
+    }
+}
+
 Push-Location $CodeRoot
 try {
     if (!$SkipDependencies) {
-        Invoke-Checked "npm.cmd" @("ci", "--ignore-scripts", "--no-audit", "--no-fund")
+        Remove-NpmNodeModules $CodeRoot
+        Invoke-Checked $Pnpm @("install", "--frozen-lockfile", "--ignore-scripts")
         Push-Location $VscodeRoot
-        try { Invoke-Checked "npm.cmd" @("ci", "--no-audit", "--no-fund") }
-        finally { Pop-Location }
+        $env:pnpm_config_frozen_lockfile = "true"
+        $env:pnpm_config_ignore_scripts = "false"
+        # A checkout from before VS Code 1.146 has npm's node_modules, which pnpm would otherwise refuse to replace without a TTY.
+        $env:pnpm_config_confirm_modules_purge = "false"
+        try { Invoke-Checked $Pnpm @("install", "--frozen-lockfile") }
+        finally {
+            Remove-Item Env:pnpm_config_frozen_lockfile -ErrorAction SilentlyContinue
+            Remove-Item Env:pnpm_config_ignore_scripts -ErrorAction SilentlyContinue
+            Remove-Item Env:pnpm_config_confirm_modules_purge -ErrorAction SilentlyContinue
+            Pop-Location
+        }
     }
     if (!$SkipCompile) {
         Invoke-Checked "node.exe" @("node_modules/typescript/bin/tsc")
@@ -270,13 +313,13 @@ try {
     Copy-Item (Join-Path $VscodeOutput "node.exe") (Join-Path $OutputRoot "lib/node.exe") -Force
     New-Item -ItemType Directory -Force (Join-Path $OutputRoot "src/browser") | Out-Null
     Copy-Item (Join-Path $CodeRoot "src/browser/*") (Join-Path $OutputRoot "src/browser") -Recurse -Force
-    foreach ($name in @("LICENSE", "package.json", "package-lock.json")) {
+    foreach ($name in @("LICENSE", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml")) {
         Copy-Item (Join-Path $CodeRoot $name) $OutputRoot -Force
     }
     Copy-Item (Join-Path $VscodeRoot "ThirdPartyNotices.txt") $OutputRoot -Force
     Push-Location $OutputRoot
     try {
-        Invoke-Checked "npm.cmd" @("ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund")
+        Invoke-Checked $Pnpm @("install", "--prod", "--frozen-lockfile", "--ignore-scripts")
     }
     finally { Pop-Location }
     Write-Stamp

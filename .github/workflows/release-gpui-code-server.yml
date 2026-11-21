@@ -181,31 +181,42 @@ jobs:
           PATCH="$PWD/tooling/release-gpui/patches/code-server-ripgrep-target-validation.patch"
           git -C .dependencies/code-server apply --check "$PATCH"
           git -C .dependencies/code-server apply "$PATCH"
+      # code-server 4.146.0 and VS Code 1.146.0 build with pnpm only (packageManager in
+      # .dependencies/code-server/package.json; the Ghostex root names bun). pnpm comes first so
+      # setup-node can cache its store, keyed on every code-server and VS Code lockfile.
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        if: ${{ steps.probe.outputs.action == 'build' }}
+        with:
+          package_json_file: .dependencies/code-server/package.json
       - uses: actions/setup-node@v7
         if: ${{ steps.probe.outputs.action == 'build' }}
         with:
           node-version-file: .dependencies/code-server/.node-version
-          cache: npm
+          cache: pnpm
           cache-dependency-path: |
-            .dependencies/code-server/package-lock.json
-            .dependencies/code-server/lib/vscode/package-lock.json
+            .dependencies/code-server/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/build/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/remote/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/extensions/pnpm-lock.yaml
       - name: Build the code-server runtime
         if: ${{ steps.probe.outputs.action == 'build' }}
         run: |
-          tooling/release-gpui/retry.sh 3 5 -- npm --prefix .dependencies/code-server ci
+          # CI=true makes code-server's postinstall and VS Code's install every root frozen.
+          tooling/release-gpui/retry.sh 3 5 -- pnpm --dir .dependencies/code-server install --frozen-lockfile
           (
             cd .dependencies/code-server
-            npm run build
+            pnpm run build
             OS=linux \
               ARCH="${{ inputs.arch == 'arm64' && 'arm64' || 'amd64' }}" \
               VSCODE_TARGET="linux-${{ inputs.arch }}" \
               VERSION="$(node -p 'require("./package.json").version')" \
-              npm run build:vscode
+              pnpm run build:vscode
             KEEP_MODULES=1 \
               OS=linux \
               ARCH="${{ inputs.arch == 'arm64' && 'arm64' || 'amd64' }}" \
               VSCODE_TARGET="linux-${{ inputs.arch }}" \
-              npm run release
+              pnpm run release
           )
           require_file() {
             if [[ ! -f "$1" ]]; then
