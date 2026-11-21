@@ -1017,6 +1017,7 @@ pub(super) fn union_documents(
     mut collections: CollectionsState,
 ) -> (Option<SpacesState>, CollectionsState) {
     let mut spaces = spaces;
+    let elsewhere = local_spaces_in_other_workspaces(store, inputs);
     for guest in guests(store, inputs) {
         let Some(side) = store
             .machine(&guest.machine)
@@ -1046,10 +1047,12 @@ pub(super) fn union_documents(
                 }
             }
             if let (Some(ours), Some(theirs)) = (spaces.as_mut(), side.spaces.as_ref()) {
-                union_spaces(ours, &SpacesState::from_wire(theirs), &renamed);
+                let theirs = elsewhere.leave_out(SpacesState::from_wire(theirs), ours);
+                union_spaces(ours, &theirs, &renamed);
             }
         } else if let (Some(ours), Some(theirs)) = (spaces.as_mut(), side.spaces.as_ref()) {
-            union_spaces(ours, &SpacesState::from_wire(theirs), &BTreeMap::new());
+            let theirs = elsewhere.leave_out(SpacesState::from_wire(theirs), ours);
+            union_spaces(ours, &theirs, &BTreeMap::new());
         }
     }
     (spaces, collections)
@@ -1069,6 +1072,69 @@ pub(crate) fn union_spaces_of(
     union_documents(store, inputs, Some(spaces.clone()), collections)
         .0
         .unwrap_or(spaces)
+}
+
+/// This computer's Spaces that belong to a workspace other than the window's, by id and by name.
+///
+/// CDXC:Workspaces 2026-11-21 WHY:
+/// Settings sync gives every computer the same Spaces but not their workspace (workspace ids are each computer's own), so another computer holds a Work Space of this one in its own default workspace. The one list added every other computer's Spaces after the window's workspace filter had run, and a Space made in Work showed (empty) in Personal too. Another computer's Space that this computer files in another workspace, matched the way [`union_spaces`] matches (by id, else by name), stays out; one this computer does not have still joins.
+#[derive(Default)]
+struct OtherWorkspaceSpaces {
+    ids: BTreeSet<String>,
+    names: BTreeSet<String>,
+}
+
+fn local_spaces_in_other_workspaces(
+    store: &PresentationStore,
+    inputs: &SidebarInputs,
+) -> OtherWorkspaceSpaces {
+    let mut found = OtherWorkspaceSpaces::default();
+    let Some(workspace) = super::workspaces::window_workspace(store, inputs, &MachineId::Local)
+    else {
+        return found;
+    };
+    let Some(local) = store
+        .machine(&MachineId::Local)
+        .and_then(|entry| entry.side_state().spaces.as_ref())
+    else {
+        return found;
+    };
+    for space in local.spaces.values() {
+        if !workspace.shows_space(space.workspace_id.as_deref()) {
+            found.ids.insert(space.space_id.clone());
+            found.names.insert(space.name.trim().to_lowercase());
+        }
+    }
+    found
+}
+
+impl OtherWorkspaceSpaces {
+    /// `theirs` without the Spaces this computer files in another workspace. A name this window's
+    /// own Spaces also use still joins, as [`union_spaces`] would have merged it there.
+    fn leave_out(&self, mut theirs: SpacesState, ours: &SpacesState) -> SpacesState {
+        if self.ids.is_empty() {
+            return theirs;
+        }
+        let shown_names: BTreeSet<String> = ours
+            .spaces
+            .values()
+            .map(|space| space.name.trim().to_lowercase())
+            .collect();
+        theirs.spaces.retain(|space_id, space| {
+            if ours.spaces.contains_key(space_id) {
+                return true;
+            }
+            if self.ids.contains(space_id) {
+                return false;
+            }
+            let name = space.name.trim().to_lowercase();
+            shown_names.contains(&name) || !self.names.contains(&name)
+        });
+        theirs
+            .order
+            .retain(|space_id| theirs.spaces.contains_key(space_id));
+        theirs
+    }
 }
 
 /// `theirs` folded into `ours`, its group ids read through `renamed` (their id → ours).
