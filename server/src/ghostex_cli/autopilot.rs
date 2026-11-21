@@ -7,7 +7,7 @@ use super::args::Flags;
 use super::rpc::{call_gxserver_rpc, CliError, CliResult};
 
 const HELP: &str =
-    "Usage: ghostex autopilot [status|on|off|log|project|session|read-only-plan|checkup] [--json]
+    "Usage: ghostex autopilot [status|on|off|log|project|session|read-only-plan|limit-resets|checkup] [--json]
 
 Autopilot keeps sessions going while you are away: it carries on a session that stopped while its
 background job finished or mid-task, interrupts and carries on one stuck on a hung command, reloads
@@ -24,6 +24,10 @@ terminal ended. Every decision is logged. Settings > Autopilot has every choice.
   ghostex autopilot read-only-plan on|off  Let read-only threads leave plan mode (off by
                                            default): approve their plan and their edits like
                                            any session's, instead of keeping them planning
+  ghostex autopilot limit-resets on|off    Use a Claude limit reset when an account hits its
+                                           limit (off by default). Only you can turn it on:
+                                           an agent's call is refused. Each use is in the
+                                           security log and the bell
   ghostex autopilot checkup off|10|20|30|60
                                            Supervisor check-up: every so many minutes Ghostex
                                            looks for sessions that seem stuck in ways its rules
@@ -107,6 +111,11 @@ pub(crate) fn autopilot_command(args: &[String]) -> CliResult<()> {
             "patch": { "readOnlyLeavePlan": on_off(words.get(1).copied())? },
             "limit": 5,
         }))?,
+        Some("limit-resets") => call(json!({
+            "op": "set",
+            "patch": { "useLimitResets": on_off(words.get(1).copied())? },
+            "limit": 5,
+        }))?,
         Some("project") => {
             let project_id = words
                 .get(1)
@@ -165,6 +174,9 @@ pub(crate) fn autopilot_command(args: &[String]) -> CliResult<()> {
         );
         if config["readOnlyLeavePlan"].as_bool() == Some(true) {
             println!("Read-only threads may leave plan mode.");
+        }
+        if config["useLimitResets"].as_bool() == Some(true) {
+            println!("A Claude account at its limit uses one of its limit resets.");
         }
         if on {
             println!("{}", checkup_words(config));

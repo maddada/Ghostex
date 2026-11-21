@@ -407,6 +407,19 @@ impl AutopilotTab {
                 cx,
             ));
         }
+        // CDXC:Autopilot 2026-11-21 in server/src/autopilot/config.rs (`use_limit_resets`): off by
+        // default, and only this page, your terminal or your phone turns it on.
+        rows.push(toggle_field_with(
+            p,
+            "autopilotUseLimitResets",
+            RowSpec::new("Use a limit reset when an account hits its limit").description(
+                "When a Claude account reaches a usage limit and Anthropic offers it a limit reset that clears that limit, Autopilot uses it right away (the soonest-expiring one first). It waits if the limit lifts on its own within 30 minutes. Each use is in the security log and the bell. Off by default; agents can't turn it on.",
+            ),
+            config["useLimitResets"].as_bool() == Some(true),
+            None,
+            |page: &mut Self, checked, _, cx| page.set(json!({ "useLimitResets": checked }), cx),
+            cx,
+        ));
         settings_section(p, "What it does", None, None, rows)
     }
 

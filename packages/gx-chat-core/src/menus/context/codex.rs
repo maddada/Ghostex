@@ -58,7 +58,7 @@ fn value_cache_ratio(input: &RowInput) -> Option<String> {
 /// CDXC:AgentProviders 2026-09-08 DECISION:
 /// User: show how many usage resets remain from the saved Codex account in context details and
 /// the configurable status line.
-fn value_account_resets(input: &RowInput) -> Option<String> {
+pub(crate) fn value_account_resets(input: &RowInput) -> Option<String> {
     let resets = input
         .status
         .account

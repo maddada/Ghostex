@@ -168,9 +168,18 @@ pub(crate) fn usage_percent(window: &AccountUsageWindow) -> String {
 /// and reset credits, joined with ` · `.
 pub fn account_usage_detail(account: &AgentAccount, provider: &str) -> String {
     let parts: Vec<String> = if provider == "claude" {
+        // A Claude account names its limit resets once it has any (CDXC:AgentProviders 2026-11-21 in
+        // apps/desktop/src/app/titlebar/account_usage.rs); Codex always names its count.
+        let resets = match &account.reset_credits {
+            Some(ResetCredits::Number(number)) if *number > 0.0 => {
+                Some(format!("{}rs", js_number_text(*number)))
+            }
+            _ => None,
+        };
         account_headline_windows(account)
             .into_iter()
             .map(|index| usage_percent(&account.usage[index]))
+            .chain(resets)
             .collect()
     } else {
         let weekly = account

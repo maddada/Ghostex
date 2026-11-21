@@ -437,6 +437,14 @@ fn parse(block: &Value, now: chrono::DateTime<chrono::Utc>) -> Status {
         }
         let paused = grant["paused"] == true;
         let requires_limit = grant["use_requires_limit"] == true;
+        let clears: Vec<String> = grant["clears"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter(|limit| limit.len() <= 64)
+            .map(str::to_string)
+            .collect();
         let note = if paused {
             Some("Paused by Anthropic for now.".to_string())
         } else if requires_limit {
@@ -451,6 +459,7 @@ fn parse(block: &Value, now: chrono::DateTime<chrono::Utc>) -> Status {
                 note: note.clone(),
                 paused,
                 requires_limit,
+                clears: Some(clears.clone()),
             });
         }
     }

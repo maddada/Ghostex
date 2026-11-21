@@ -933,6 +933,19 @@ pub fn claude_rows() -> Vec<RowDefinition> {
         },
     ]);
     rows.extend_from_slice(SHARED_ROWS);
+    // CDXC:AgentProviders 2026-11-21 DECISION:
+    // User: "why can't u see that they have resets btw? please add to sessions in ghostex the ability to see the resets for my claude accounts". Claude accounts carry Anthropic's limit-reset grants (claude_resets.rs) as `resetCredits` like Codex accounts do, so a Claude session's Plan limits card shows how many are left. Codex keeps its own wording of the row from CODEX_ROWS (`codex_keeps` drops this one).
+    rows.push(RowDefinition {
+        id: "accountResets",
+        group: GroupId::Usage,
+        label: "Account resets",
+        description: "Limit resets left on the saved Claude account assigned to this session",
+        // Shown unless the user hid it in Choose details: a row a saved record does not name
+        // follows this flag (preferences.rs `is_shown`).
+        recommended: true,
+        value: crate::menus::context::codex::value_account_resets,
+        copy: None,
+    });
     rows
 }
 

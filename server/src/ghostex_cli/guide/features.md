@@ -3588,8 +3588,9 @@ instead of waiting at starting. A message you sent waits in the chat and goes ou
 once the agent is up.
 The same works from the command line, for you or an agent: `ghostex accounts`
 lists every Claude and Codex account with its state (ready, limit reached, needs
-sign-in), its usage per window with reset times, the default for new sessions
-and the sessions on it; `ghostex agents switch-account <session> --account
+sign-in), its usage per window with reset times, how many limit resets it has
+left and when the soonest expires (`resetCredits` and `resetCreditDetails` in
+`--json`), the default for new sessions and the sessions on it; `ghostex agents switch-account <session> --account
 <number or email>` moves a session to another account and resumes its
 conversation there, also when it could not start, and refuses an account that
 needs signing in (and a session in the middle of a turn, unless `--force` ends
@@ -4862,6 +4863,13 @@ all of them every 2 minutes (1 to 10 minutes under **Advanced**). It then:
   the plan with **Yes, manually approve edits** (or auto-accept edits on **All
   but limits** when Claude offers it, never auto mode) and judges the thread's
   edits and commands like any other session's.
+- **Use a limit reset when an account hits its limit** (off by default): when a
+  Claude account reaches a usage limit and Anthropic offers it a limit reset
+  that clears that limit, Autopilot uses it right away, the soonest-expiring one
+  first, so a Fable-only reset is never spent on the weekly limit. It waits when
+  the limit lifts on its own within 30 minutes. Each use is in the security log
+  and the bell. Only you turn it on (here, on the phone or in your own
+  terminal); an agent that tries is refused.
 
 **Hard limits it may cross** show with **All but limits** only, each a switch
 off until you turn it on: push a branch, finish a release you asked for, push
@@ -4924,7 +4932,8 @@ CLI: `ghostex autopilot` (status and summary), `ghostex autopilot on|off`,
 `ghostex autopilot log [--last <n>]`, `ghostex autopilot project <project-id>
 on|off`, `ghostex autopilot session <project-id> <session-id> on|off`,
 `ghostex autopilot read-only-plan on|off` (Let read-only threads leave plan
-mode), `ghostex autopilot checkup off|10|20|30|60` (Supervisor check-up), and
+mode), `ghostex autopilot limit-resets on|off` (Use a limit reset when an
+account hits its limit), `ghostex autopilot checkup off|10|20|30|60` (Supervisor check-up), and
 `ghostex autopilot decide <project-id> <session-id> --answer <pick> | --message
 <text> | --reload | --leave <note>` (what the supervisor runs).
 

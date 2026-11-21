@@ -10130,6 +10130,17 @@
       "agentWritable": false
     },
     {
+      "key": "autopilotUseLimitResets",
+      "title": "Use a limit reset when an account hits its limit",
+      "subtitle": "Off by default. When on, a Claude account that reaches a usage limit uses one of its banked limit resets right away, the soonest-expiring one that clears that limit, unless the limit lifts on its own within 30 minutes. Each use is in the security log and the bell. Only you can turn it on (agents are refused). Also ghostex autopilot limit-resets on|off.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "allowed",
+      "sectionTitle": "What it does",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "autopilotHardLimits",
       "title": "Hard limits it may cross",
       "subtitle": "With All but limits only. Each off until you turn it on: push a branch, finish a release you asked for, push main, merge pull requests, delete outside the project, post publicly. Sign-ins, 2FA, identity checks and payments are never done.",

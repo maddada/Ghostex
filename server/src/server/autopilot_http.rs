@@ -4,8 +4,9 @@
 //! - `op: "read"` (default): the choices, the projects and the sessions set one by one, the
 //!   summary since the switch went on, and the newest log lines (`limit`, 200 by default).
 //! - `op: "set"`: `patch` holds the choices to change (`enabled`, `scope`, `tier`, `limits`,
-//!   `answerQuestions`, `answerAfterMinutes`, `answerApprovals`, `readOnlyLeavePlan`, `supervisor`,
-//!   `sweepSeconds`, `checkupMinutes`).
+//!   `answerQuestions`, `answerAfterMinutes`, `answerApprovals`, `readOnlyLeavePlan`,
+//!   `useLimitResets`, `supervisor`, `sweepSeconds`, `checkupMinutes`). Only the user's own
+//!   computer or phone may turn `useLimitResets` on; an agent's call is refused.
 //! - `op: "setProject"`: `projectId` and `on`; a worktree's main project is changed instead.
 //! - `op: "setSession"`: `projectId`, `sessionId` and `on` (`toggle: true` flips it).
 //! - `op: "decide"`: the supervisor's decision for one session (`ghostex autopilot decide`):
@@ -25,6 +26,7 @@ pub(crate) const AUTOPILOT_ENDPOINTS: &[&str] = &["/api/autopilot"];
 
 pub(crate) async fn handle_autopilot_http(
     state: &Arc<AppState>,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -42,7 +44,7 @@ pub(crate) async fn handle_autopilot_http(
     let result = if params.get("op").and_then(Value::as_str) == Some("decide") {
         decide(state, &params).await
     } else {
-        handle(state, &params)
+        handle(state, caller, &params)
     };
     match result {
         Ok(result) => routed_json(
@@ -54,6 +56,8 @@ pub(crate) async fn handle_autopilot_http(
             Some(endpoint_path),
             if error.code == "badRequest" {
                 StatusCode::BAD_REQUEST
+            } else if error.code == "forbidden" {
+                StatusCode::FORBIDDEN
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             },
@@ -78,7 +82,25 @@ fn saved(result: std::io::Result<AutopilotConfig>) -> Result<AutopilotConfig, Do
     })
 }
 
-fn handle(state: &AppState, params: &Map<String, Value>) -> Result<Value, DomainStateError> {
+/// CDXC:Autopilot 2026-11-21 DECISION:
+/// "Use a limit reset when an account hits its limit" spends the user's banked limit resets, so only the user turns it on: the desktop app's owner session, the token file their own terminal uses, or a paired phone. An agent's session token, another computer, an extension or a Collab guest is refused and the refusal is kept in the security log. Turning it off is open to everyone. As on every owner route, an agent that reads the token file itself instead of using its session token is the one way around this.
+const LIMIT_RESETS_ONLY_YOU: &str = "Only the user can turn on \"Use a limit reset when an account hits its limit\", in Settings > Autopilot or with ghostex autopilot limit-resets on in their own terminal. Tell the user; never turn it on for them.";
+
+/// Whether this patch turns on "Use a limit reset when an account hits its limit" for a caller
+/// that is not the user.
+fn refuses_limit_resets(
+    before: &AutopilotConfig,
+    patch: &Value,
+    caller: &crate::security::Principal,
+) -> bool {
+    patch["useLimitResets"] == true && !before.use_limit_resets && !caller.is_owner_device()
+}
+
+fn handle(
+    state: &AppState,
+    caller: &crate::security::Principal,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
     let op = text(params, "op").unwrap_or_else(|| "read".to_string());
     let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
         code: "internalError",
@@ -93,6 +115,21 @@ fn handle(state: &AppState, params: &Map<String, Value>) -> Result<Value, Domain
                 .get("patch")
                 .cloned()
                 .ok_or_else(|| DomainStateError::bad_request("patch is required."))?;
+            if refuses_limit_resets(&before, &patch, caller) {
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "autopilot.widen",
+                        "Turn on Autopilot's \"Use a limit reset when an account hits its limit\"",
+                    ),
+                    crate::audit::Actor::from(caller),
+                    crate::audit::Outcome::Refused(LIMIT_RESETS_ONLY_YOU.to_string()),
+                    None,
+                );
+                return Err(DomainStateError {
+                    code: "forbidden",
+                    message: LIMIT_RESETS_ONLY_YOU.to_string(),
+                });
+            }
             Some(saved(autopilot::update_config(&state.paths, |config| {
                 autopilot::apply_patch(config, &patch)
             }))?)
@@ -177,6 +214,11 @@ fn autopilot_widening(before: &AutopilotConfig, after: &AutopilotConfig) -> Opti
     }
     if after.tier != before.tier {
         changes.push(format!("Autopilot's level set to {:?}", after.tier));
+    }
+    if after.use_limit_resets && !before.use_limit_resets {
+        changes.push(
+            "Autopilot may use a Claude limit reset when an account hits its limit".to_string(),
+        );
     }
     if after.read_only_leave_plan && !before.read_only_leave_plan {
         changes.push("Autopilot may take read-only threads out of plan mode".to_string());
@@ -422,4 +464,63 @@ async fn decide(
     );
     super::autopilot_judge::forget_session(&key);
     Ok(json!({ "did": did }))
+}
+
+#[cfg(test)]
+mod limit_resets_tests {
+    use super::*;
+    use crate::security::Principal;
+
+    #[test]
+    fn only_the_user_turns_on_limit_resets() {
+        let off = AutopilotConfig::default();
+        let on_patch = json!({ "useLimitResets": true });
+        let agent = Principal::Session {
+            project_id: "P1".into(),
+            session_id: "G1".into(),
+            role: crate::security::SessionRole::Agent,
+        };
+        assert!(refuses_limit_resets(&off, &on_patch, &agent));
+        assert!(refuses_limit_resets(
+            &off,
+            &on_patch,
+            &Principal::Extension {
+                extension_id: "x".into()
+            }
+        ));
+        for user in [
+            Principal::Owner {
+                device_id: "mac".into(),
+            },
+            Principal::Device {
+                device_id: "phone".into(),
+            },
+            Principal::LocalAgent,
+        ] {
+            assert!(!refuses_limit_resets(&off, &on_patch, &user));
+        }
+        // Anyone may turn it off, and a patch that leaves it alone is not refused.
+        let mut on = AutopilotConfig::default();
+        on.use_limit_resets = true;
+        assert!(!refuses_limit_resets(
+            &on,
+            &json!({ "useLimitResets": false }),
+            &agent
+        ));
+        assert!(!refuses_limit_resets(
+            &off,
+            &json!({ "enabled": true }),
+            &agent
+        ));
+    }
+
+    #[test]
+    fn turning_on_limit_resets_is_a_widening_for_the_security_log() {
+        let before = AutopilotConfig::default();
+        let mut after = before.clone();
+        autopilot::apply_patch(&mut after, &json!({ "useLimitResets": true }));
+        assert!(after.use_limit_resets);
+        assert!(autopilot_widening(&before, &after)
+            .is_some_and(|summary| summary.contains("limit reset")));
+    }
 }
