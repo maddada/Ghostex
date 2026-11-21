@@ -94,10 +94,10 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.22.1
+          node-version: 24.22.3
       - name: Restore pinned React Native sources
         env:
           GH_TOKEN: ${{ github.token }}
@@ -142,11 +142,11 @@ jobs:
           path: |
             apps/mobile/app/modules/ghostex-native/android/libs/tailcatbridge.jar
             apps/mobile/app/modules/ghostex-native/android/src/main/jniLibs
-          key: tailcat-bridge-android-${{ runner.os }}-go1.27.1-ndk${{ env.ANDROID_NDK_VERSION }}-gomobile-${{ env.GOMOBILE_PIN }}-${{ hashFiles('apps/mobile/tailcat-bridge/*.go', 'apps/mobile/tailcat-bridge/go.mod', 'apps/mobile/tailcat-bridge/go.sum', 'apps/mobile/tailcat-bridge/build.sh') }}
+          key: tailcat-bridge-android-${{ runner.os }}-go1.27.4-ndk${{ env.ANDROID_NDK_VERSION }}-gomobile-${{ env.GOMOBILE_PIN }}-${{ hashFiles('apps/mobile/tailcat-bridge/*.go', 'apps/mobile/tailcat-bridge/go.mod', 'apps/mobile/tailcat-bridge/go.sum', 'apps/mobile/tailcat-bridge/build.sh') }}
       - uses: actions/setup-go@v6
         if: steps.tailcat_bridge_cache.outputs.cache-hit != 'true'
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.4'
           cache-dependency-path: apps/mobile/tailcat-bridge/go.sum
       - name: Build the tailcat gomobile bridge
         if: steps.tailcat_bridge_cache.outputs.cache-hit != 'true'

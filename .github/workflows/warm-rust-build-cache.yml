@@ -145,7 +145,7 @@ jobs:
       # macos.sh requires `bun` on PATH in its prologue.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       - name: Resolve dependency cache keys
         id: cache_keys
         run: |
@@ -283,7 +283,7 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       - name: Resolve dependency cache keys
         id: cache_keys
         shell: bash
@@ -386,7 +386,7 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       - name: Resolve dependency cache keys
         id: cache_keys
         shell: bash
@@ -486,7 +486,7 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
       - name: Restore the kache store
         uses: actions/cache/restore@v6
@@ -637,7 +637,7 @@ jobs:
           restore-keys: zig-gxserver-${{ runner.os }}-x64-
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
       - name: Restore the kache store
         uses: actions/cache/restore@v6
@@ -662,7 +662,7 @@ jobs:
       # Cloud Boxes: the Linux package's tailcat is cross-compiled with Go (package-remote-linux.mjs).
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.4'
           cache: false
       - name: Install pinned Zig toolchain
         run: |
@@ -752,7 +752,7 @@ jobs:
           restore-keys: zig-gxserver-${{ runner.os }}-arm64-
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
       - name: Restore the kache store
         uses: actions/cache/restore@v6
@@ -777,7 +777,7 @@ jobs:
       # Cloud Boxes: the Linux package's tailcat is cross-compiled with Go (package-remote-linux.mjs).
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.4'
           cache: false
       - name: Install pinned Zig toolchain
         run: |

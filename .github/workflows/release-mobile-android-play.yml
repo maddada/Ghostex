@@ -109,7 +109,7 @@ jobs:
           sparse-checkout: tooling/release-mobile
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.22.1
+          node-version: 24.22.3
       - uses: actions/download-artifact@v8
         with:
           name: release-android-play

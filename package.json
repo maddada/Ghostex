@@ -4,7 +4,7 @@
   "private": true,
   "description": "Ghostex cross-platform GPUI workarea and sessions UI.",
   "type": "module",
-  "packageManager": "bun@1.4.4",
+  "packageManager": "bun@1.4.5",
   "scripts": {
     "start": "cargo xtask start",
     "release:actions": "node tooling/release-gpui-actions.mjs start",

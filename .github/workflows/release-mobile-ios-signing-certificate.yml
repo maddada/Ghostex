@@ -37,9 +37,9 @@ jobs:
         with:
           fetch-depth: 1
           submodules: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.22.1
+          node-version: 24.22.3
       - name: Install App Store Connect API key
         env:
           ASC_ISSUER_ID: ${{ secrets.APPLE_ASC_ISSUER_ID }}
