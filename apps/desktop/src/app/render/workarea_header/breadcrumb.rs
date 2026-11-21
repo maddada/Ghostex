@@ -104,7 +104,14 @@ impl GhostexGpuiApp {
             // the window x `sidebar_toggle_leading_x` gives.
             // The rail stays left of the card when the sidebar hides (app/sidebar_rail/), and the
             // card starts at its edge with no gutter (`work_area_frame_left_gutter`).
+            // With the rail on, the macOS lights sit the rail's width further right, over this
+            // header while they show (`window_lights_rail_shift`), so it starts past them.
             (sidebar_toggle_leading_x(self.window_controls_reserved())
+                + if self.window_controls_reserved() {
+                    self.window_lights_rail_shift()
+                } else {
+                    0.0
+                }
                 - self.sidebar_rail_width()
                 - self.work_area_frame_left_gutter(false)
                 - WORK_AREA_FRAME_BORDER)
@@ -122,21 +129,23 @@ impl GhostexGpuiApp {
             // While docked, the sidebar's Search row draws the toggle (native_sidebar/navigation.rs).
             // The docked Search row puts the button's top at 5pt, while this 36pt row centres the
             // 27pt button at 4.5pt; the half point keeps it from jumping when the sidebar collapses.
-            // With the rail on, the bell follows it, so it stays in reach while the sidebar is
-            // hidden (the rail has no bell by default; CDXC:Sidebar 2026-11-20 in
-            // native_sidebar/navigation.rs).
+            // With the rail on, the bell is here, so it stays in reach while the sidebar is hidden
+            // (the rail has no bell by default; CDXC:Sidebar 2026-11-20 in
+            // native_sidebar/navigation.rs), and Toggle sidebar is the rail's top button instead
+            // (CDXC:Sidebar 2026-11-21 in app/sidebar_rail/render.rs).
             .when(self.sidebar_collapsed, |this| {
-                let toggle = self
-                    .render_sidebar_collapse_button(None, cx)
-                    .into_any_element();
-                let bell = self
-                    .sidebar_rail_shown()
+                let rail = self.sidebar_rail_shown();
+                let toggle = (!rail).then(|| {
+                    self.render_sidebar_collapse_button(None, cx)
+                        .into_any_element()
+                });
+                let bell = rail
                     .then(|| self.workarea_header_rail_bell(window, cx))
                     .flatten();
                 // The window's traffic lights show here through the floating sidebar, so the
                 // toggles under them draw nothing meanwhile (`window_lights_over_header`).
                 let under_lights = self.window_lights_over_header();
-                this.children(std::iter::once(toggle).chain(bell).map(|button| {
+                this.children(toggle.into_iter().chain(bell).map(|button| {
                     div()
                         .relative()
                         .top(px(0.5))

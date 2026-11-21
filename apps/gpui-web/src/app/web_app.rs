@@ -224,6 +224,13 @@ impl GhostexGpuiApp {
         div().into_any_element()
     }
 
+    /// Toggle sidebar at the rail's top (app/sidebar_rail/render.rs): the page has no Claude to
+    /// leave, so it only shows or hides the sidebar, as the page header's own toggle does.
+    pub(crate) fn toggle_sidebar_from_user(&mut self, cx: &mut Context<Self>) {
+        self.sidebar_collapsed = !self.sidebar_collapsed;
+        cx.notify();
+    }
+
     pub(crate) fn render_sidebar_collapse_button(
         &self,
         _in_sidebar: Option<&SidebarAppearance>,

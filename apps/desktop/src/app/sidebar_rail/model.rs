@@ -154,6 +154,10 @@ pub(crate) struct SidebarRailState {
     /// The rail armed the reveal, so leaving it disarms what it armed.
     #[cfg(not(ghostex_web))]
     pub(crate) reveal_armed: bool,
+    /// The x the window's traffic lights were last moved by for the rail
+    /// (`sync_window_lights_rail_shift` in render.rs); None before the first move.
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
+    pub(crate) lights_shift: Option<f32>,
 }
 
 impl SidebarRailState {

@@ -83,19 +83,22 @@ impl GhostexGpuiApp {
             .items_center()
             .border_b_1()
             .border_color(titlebar_popup_menu_border_color())
-            .child(
-                div()
-                    .id("web-sidebar-toggle")
-                    .p(px(4.0))
-                    .rounded(px(6.0))
-                    .cursor_pointer()
-                    .hover(|button| button.bg(titlebar_popup_menu_hover_color()))
-                    .child(titlebar_svg_icon(TITLEBAR_ICON_LAYOUT_SIDEBAR, 16.0, text))
-                    .on_click(cx.listener(|app, _, _, cx| {
-                        app.sidebar_collapsed = !app.sidebar_collapsed;
-                        cx.notify();
-                    })),
-            )
+            // With the rail on, Toggle sidebar is the rail's top button (app/sidebar_rail/render.rs).
+            .when(!self.sidebar_rail_shown(), |header| {
+                header.child(
+                    div()
+                        .id("web-sidebar-toggle")
+                        .p(px(4.0))
+                        .rounded(px(6.0))
+                        .cursor_pointer()
+                        .hover(|button| button.bg(titlebar_popup_menu_hover_color()))
+                        .child(titlebar_svg_icon(TITLEBAR_ICON_LAYOUT_SIDEBAR, 16.0, text))
+                        .on_click(cx.listener(|app, _, _, cx| {
+                            app.sidebar_collapsed = !app.sidebar_collapsed;
+                            cx.notify();
+                        })),
+                )
+            })
             .when_some(titles, |header, (project, session)| {
                 header.child(
                     h_flex()

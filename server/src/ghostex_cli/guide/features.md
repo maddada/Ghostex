@@ -761,11 +761,14 @@ of the sidebar, and pointing at it shows them there while they are not pinned
 (they stay while you move onto them, and hide again when the pointer leaves).
 With the rail on, the pinned tiles have no hide chevron above them; use the
 rail's switch or right-click them for Hide account usage. With the rail on,
-Toggle sidebar stays at the top left of the sidebar's top bar (right after the
-window buttons on macOS) and the bell sits on that bar's right, as in Classic;
-while the sidebar is hidden the work area header shows Toggle sidebar with the
-bell beside it. The rail has no border of its own: with the sidebar hidden the
-work area starts right at the rail's edge. While the sidebar is hidden, resting
+Toggle sidebar is the rail's top button, above Search, whether the sidebar is
+shown, hidden or sliding out (on macOS, Windows and Linux), and the sidebar's
+top bar and the work area header have none. On macOS the window buttons sit at
+the top left of the sidebar itself, not above the rail. The bell sits on the
+right of the sidebar's top bar, as in Classic, and in the work area header while
+the sidebar is hidden. The Spaces row sits a little lower than in Classic. A
+thin line parts the rail from the docked sidebar, from under the top row down;
+with the sidebar hidden the work area starts right at the rail's edge. While the sidebar is hidden, resting
 the pointer on the rail for a moment slides out what hovering the window's left
 edge does: the sidebar from the rail's top half, and the Agents Panel (your
 chats) from its bottom half while an expanded view has folded it away; with the

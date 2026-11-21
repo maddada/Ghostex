@@ -283,6 +283,9 @@ impl Render for GhostexGpuiApp {
         self.main_window_fullscreen = window.is_fullscreen();
         #[cfg(target_os = "macos")]
         self.sync_window_controls_visibility();
+        // With the rail on, the lights sit at the sidebar's top left (app/sidebar_rail/render.rs).
+        #[cfg(target_os = "macos")]
+        self.sync_window_lights_rail_shift(window);
         let titlebar_popup_dismissal_active =
             self.titlebar_popup_menu.is_some() || self.titlebar_extension_popup.is_some();
 

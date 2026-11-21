@@ -72,7 +72,7 @@ impl GhostexGpuiApp {
                 .child(gap(super::selectors::SIDEBAR_TOP_ROW_GAP))
                 .child(self.render_native_unified_header(unified, &appearance, window, cx))
                 .when(snapshot.spaces_enabled, |header| {
-                    header.child(gap(super::selectors::SIDEBAR_TOP_ROW_GAP))
+                    header.child(gap(self.native_sidebar_space_row_gap()))
                 })
                 .children(self.render_native_sidebar_space_row(
                     &snapshot,

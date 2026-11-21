@@ -161,7 +161,7 @@ pub(crate) fn sidebar_corner_row_height(scale: f32) -> f32 {
     corner_row_top_padding(scale) + TITLEBAR_CONTROL_HEIGHT * scale + 3.0 * scale
 }
 
-fn corner_row_top_padding(scale: f32) -> f32 {
+pub(crate) fn corner_row_top_padding(scale: f32) -> f32 {
     (WINDOW_CORNER_CENTER_Y - TITLEBAR_CONTROL_HEIGHT * scale / 2.0).max(0.0)
 }
 
@@ -290,8 +290,8 @@ impl GhostexGpuiApp {
         still read one value, `sidebar_toggle_leading_x`.
         */
         // With Spaces on, the Hermes button is the Space row's last slot instead.
-        // With the rail on, Hermes and Search are the rail's (app/sidebar_rail/); the bell and
-        // Toggle sidebar stay here, as in Classic.
+        // With the rail on, Hermes, Search and Toggle sidebar are the rail's (app/sidebar_rail/);
+        // the bell stays here, as in Classic.
         let rail_on = self.sidebar_rail_shown();
         let bots_toggle = (snapshot.bots_enabled && !snapshot.spaces_enabled && !rail_on)
             .then_some(snapshot.bots_mode);
@@ -314,9 +314,26 @@ impl GhostexGpuiApp {
         // top bar, after the macOS traffic lights), and the bell moves to the right side of the top
         // bar. Same when the sidebar is hidden (the header's copy)." So with the rail on too, Toggle
         // sidebar holds the corner and the bell sits before the menu, as in Classic. This supersedes
-        // the same day's Q4318 B (the bell in the corner, Toggle sidebar at the rail's foot).
+        // the same day's Q4318 B (the bell in the corner, Toggle sidebar at the rail's foot). The
+        // bell keeps that place; Toggle sidebar went to the rail's top on 2026-11-21 (below).
+        //
+        // CDXC:Sidebar 2026-11-21 DECISION:
+        // User (rail): "please shift the traffic lights to the right so they're top left of the
+        // actual sidebar not the rail. also please move the toggle sidebar button to the top of the
+        // rail". With the rail on, the macOS lights sit the rail's width further right
+        // (`window_lights_rail_shift`), at the sidebar's top left as in Classic, and Toggle sidebar
+        // is the rail's (app/sidebar_rail/render.rs). So this row, docked or floating, draws no
+        // toggle: it starts where Classic's toggle starts, past the lights, and right-aligns its
+        // buttons after the spacer; with no lights to clear (full screen, Windows, Linux) it starts
+        // at the row's own padding.
+        let reserved = self.window_controls_reserved();
         let corner_toggle_x = owns_window_corner.then(|| {
-            (crate::app::helpers::sidebar_toggle_leading_x(self.window_controls_reserved())
+            (crate::app::helpers::sidebar_toggle_leading_x(reserved)
+                + if reserved {
+                    self.window_lights_rail_shift()
+                } else {
+                    0.0
+                }
                 - self.sidebar_rail_width())
             .max(5.0 * scale)
         });
@@ -342,12 +359,22 @@ impl GhostexGpuiApp {
         // (`floating_reveal_left_inset`, the rail's width included). A panel under the header leaves
         // the header's toggle in view and keeps none. Supersedes the 2026-11-06 row that only kept
         // the lights clear.
+        // With the rail on, the lights the panel carries sit the rail's width further right too
+        // (`window_lights_rail_shift`), and the row keeps no toggle (the decision above).
         let floating_toggle_x = floating_row.then(|| {
             (crate::app::helpers::sidebar_toggle_leading_x(lights_row.is_some())
+                + if lights_row.is_some() {
+                    self.window_lights_rail_shift()
+                } else {
+                    0.0
+                }
                 - self.floating_reveal_left_inset())
             .max(5.0 * scale)
         });
+        // The row starts at the left with a spacer before its right-aligned buttons; Toggle sidebar
+        // leads it unless the rail has it.
         let toggle_here = owns_window_corner || floating_toggle_x.is_some();
+        let toggle_button = toggle_here && !rail;
         let (row_height, top_padding, bottom_padding) =
             if owns_window_corner || lights_row.is_some() || floating_row {
                 let top_padding = match lights_row {
@@ -377,7 +404,7 @@ impl GhostexGpuiApp {
             let leading = corner_toggle_x
                 .or(floating_toggle_x)
                 .unwrap_or(5.0 * scale);
-            let toggle = if toggle_here {
+            let toggle = if toggle_button {
                 (TITLEBAR_SIDEBAR_COLLAPSE_ICON_SIZE + 2.0 * TITLEBAR_BUTTON_HORIZONTAL_PADDING)
                     * scale
             } else {
@@ -396,7 +423,7 @@ impl GhostexGpuiApp {
             top_row_fit(
                 width - leading - toggle,
                 buttons,
-                toggle_here,
+                toggle_button,
                 trailing,
                 scale,
             )
@@ -458,13 +485,16 @@ impl GhostexGpuiApp {
                     && self.window_lights_over_header();
                 // The row's unscaled leading padding puts the button on the header's x, whatever
                 // the zoom; from there it scales like the rest of the row (GitHub #375). The spacer
-                // keeps it left of the row's other buttons, which align right.
-                row.child(
-                    div()
-                        .flex_shrink_0()
-                        .when(under_lights, |button| button.invisible())
-                        .child(self.render_sidebar_collapse_button(Some(appearance), cx)),
-                )
+                // keeps it left of the row's other buttons, which align right. With the rail on the
+                // rail has the button, and the spacer alone holds the row's start.
+                row.when(toggle_button, |row| {
+                    row.child(
+                        div()
+                            .flex_shrink_0()
+                            .when(under_lights, |button| button.invisible())
+                            .child(self.render_sidebar_collapse_button(Some(appearance), cx)),
+                    )
+                })
                 // The negative margin cancels the row gap this zero-width spacer adds, so the
                 // buttons right of it keep their even slots.
                 .child(div().flex_1().mr(px(-gap)))

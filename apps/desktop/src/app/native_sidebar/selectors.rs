@@ -46,8 +46,22 @@ pub(crate) const SIDEBAR_TOP_ROW_GAP: f32 = 8.0;
 pub(crate) const SIDEBAR_TOP_LIST_GAP: f32 = 10.0;
 /// How narrow a computer tile or a Space tile may get while the two share the row, before the zoom.
 pub(crate) const SHARED_ROW_TILE_MIN: f32 = 24.0;
+/// How much lower the Spaces row sits with the rail on, before the zoom.
+///
+/// CDXC:Sidebar 2026-11-21 DECISION:
+/// User (rail): "pls shift the spaces by 4px down". With the rail on, the room above the Spaces row (the computers and the Spaces) is `SIDEBAR_TOP_ROW_GAP` and 4 more, in the Project sidebar and the Unified header alike, and what is under the row moves down with it, so its room to the list stays even. Classic keeps the even 8.
+const RAIL_SPACE_ROW_DROP: f32 = 4.0;
 
 impl GhostexGpuiApp {
+    /// The room above the Spaces row, before the zoom (`RAIL_SPACE_ROW_DROP`).
+    pub(crate) fn native_sidebar_space_row_gap(&self) -> f32 {
+        if self.sidebar_rail_shown() {
+            SIDEBAR_TOP_ROW_GAP + RAIL_SPACE_ROW_DROP
+        } else {
+            SIDEBAR_TOP_ROW_GAP
+        }
+    }
+
     pub(crate) fn render_native_sidebar_selectors(
         &self,
         snapshot: &NativeSidebarSnapshot,
@@ -61,6 +75,7 @@ impl GhostexGpuiApp {
         // starts `SIDEBAR_TOP_LIST_GAP` below the last.
         let switch_row = self.render_native_sidebar_space_row(snapshot, appearance, true, true, cx);
         let gap = |height: f32| div().h(px(height * scale)).flex_shrink_0();
+        let row_gap = self.native_sidebar_space_row_gap();
         v_flex()
             .w_full()
             .flex_shrink_0()
@@ -68,7 +83,7 @@ impl GhostexGpuiApp {
             .children(
                 switch_row
                     .into_iter()
-                    .flat_map(|row| [gap(SIDEBAR_TOP_ROW_GAP).into_any_element(), row]),
+                    .flat_map(|row| [gap(row_gap).into_any_element(), row]),
             )
             .child(gap(SIDEBAR_TOP_LIST_GAP))
             .children(self.render_native_sidebar_chief(snapshot, appearance, false, cx))

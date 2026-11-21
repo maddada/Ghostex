@@ -1,7 +1,6 @@
-//! Drawing the rail: a 40pt column at the window's left, the room under the window buttons at its
-//! top, the pinned icons, an unpinned item while its view shows (under a dashed line), ⋯, and at
-//! its foot the workspace and the account usage toggle (Toggle sidebar is the sidebar's top row's,
-//! as in Classic: CDXC:Sidebar 2026-11-20 in native_sidebar/navigation.rs).
+//! Drawing the rail: a 40pt column at the window's left, Toggle sidebar in the slot at its top
+//! (the sidebar's top row's height), the pinned icons, an unpinned item while its view shows
+//! (under a dashed line), ⋯, and at its foot the workspace and the account usage toggle.
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -56,6 +55,34 @@ impl GhostexGpuiApp {
         } else {
             0.0
         }
+    }
+
+    /// How far right of their Classic place the window's traffic lights sit: the rail's width on
+    /// macOS while the rail shows, so they are at the sidebar's top left, not over the rail; 0
+    /// elsewhere (Windows and Linux draw no lights on the left).
+    ///
+    /// CDXC:Sidebar 2026-11-21 DECISION:
+    /// User (rail): "please shift the traffic lights to the right so they're top left of the actual sidebar not the rail". The lights keep Classic's inset from the sidebar's left edge, so every row that clears them (the docked and floating sidebar's top row, the hidden sidebar's header) adds this to its reserve while they show (native_sidebar/navigation.rs, render/workarea_header/breadcrumb.rs), and the rail's top slot, which they leave, holds Toggle sidebar. In full screen GPUI puts the lights back at AppKit's place in the title bar that slides down. The floating sidebar's holes follow the buttons' real frames (native/macos/GpuiSidebarReveal.m).
+    pub(crate) fn window_lights_rail_shift(&self) -> f32 {
+        if cfg!(target_os = "macos") {
+            self.sidebar_rail_width()
+        } else {
+            0.0
+        }
+    }
+
+    /// Moves the window's traffic lights by `window_lights_rail_shift` when it changes (the rail
+    /// shown or hidden; `workspace_traffic_light_position` is their Classic place).
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
+    pub(crate) fn sync_window_lights_rail_shift(&mut self, window: &Window) {
+        let shift = self.window_lights_rail_shift();
+        if self.sidebar_rail.lights_shift == Some(shift) {
+            return;
+        }
+        self.sidebar_rail.lights_shift = Some(shift);
+        let mut position = crate::app::helpers::workspace_traffic_light_position();
+        position.x += px(shift);
+        window.set_traffic_light_position(position);
     }
 
     /// The work area frame's gutter left of the card: none beside the rail while the sidebar is
@@ -193,12 +220,21 @@ impl GhostexGpuiApp {
                         .bg(sidebar_divider_line_color()),
                 )
             })
+            // The top slot, the sidebar's top row's height: Toggle sidebar on that row's line, in
+            // a drag band (`render_sidebar_rail_sidebar_toggle`). The divider starts under it.
             .child(crate::app::render::window_drag_region::window_drag_region(
-                div()
+                v_flex()
                     .id("ghostex-gpui-sidebar-rail-top")
                     .w_full()
                     .h(px(top_inset))
-                    .flex_shrink_0(),
+                    .flex_shrink_0()
+                    .items_center()
+                    .pt(px(
+                        crate::app::native_sidebar::navigation::corner_row_top_padding(
+                            appearance.scale,
+                        ),
+                    ))
+                    .child(self.render_sidebar_rail_sidebar_toggle(&appearance, cx)),
             ))
             .child(
                 v_flex()
@@ -586,6 +622,54 @@ impl GhostexGpuiApp {
                 app.set_sidebar_rail_usage_hovered(*hovered, cx);
             }))
             .child(button)
+            .into_any_element()
+    }
+}
+
+impl GhostexGpuiApp {
+    /// Toggle sidebar, in the rail's top slot, above Search.
+    ///
+    /// CDXC:Sidebar 2026-11-21 DECISION:
+    /// User (rail): "please move the toggle sidebar button to the top of the rail. on windows we need to move the toggle sidebar buttons to the rail in this case." With the rail on, Toggle sidebar is the rail's first button on every OS and in every state (sidebar docked, hidden or floating), in the slot the sidebar's top row's height leaves at the rail's top, centred on that row's line (the macOS lights' line); the lights moved to the sidebar's top left (`window_lights_rail_shift`), so the slot is free. The sidebar's top row, docked or floating, Claude's copy of it and the hidden sidebar's header draw no toggle then (native_sidebar/navigation.rs, render/workarea_header/breadcrumb.rs; the web page's header neither). The button is a rail button (the rail's width, the top row's height, the rail's icon size, ink and hover) with the same action, Toggle Sidebar hotkey and tooltip as the header's (`render_sidebar_collapse_button`). This supersedes the 2026-11-20 decision that put it back in the sidebar's top bar (native_sidebar/navigation.rs); Classic is unchanged.
+    fn render_sidebar_rail_sidebar_toggle(
+        &self,
+        appearance: &SidebarAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let hover = appearance.hover;
+        let tooltip = titlebar_tooltip_label("Toggle sidebar", "toggleSidebarCollapsed");
+        div()
+            .id("ghostex-gpui-sidebar-rail-sidebar-toggle")
+            .role(gpui::Role::Button)
+            .aria_label("Toggle sidebar")
+            .flex_shrink_0()
+            .w(px(RAIL_BUTTON))
+            .h(px(
+                crate::app::consts::TITLEBAR_CONTROL_HEIGHT * appearance.scale
+            ))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(RAIL_BUTTON_RADIUS))
+            .cursor_default()
+            .hover(move |button| button.bg(hover))
+            .child(titlebar_svg_icon(
+                crate::app::consts::TITLEBAR_ICON_LAYOUT_SIDEBAR,
+                RAIL_ICON,
+                appearance.chrome_icon,
+            ))
+            .on_click(cx.listener(|app, _, _, cx| {
+                cx.stop_propagation();
+                // With Claude on, showing the sidebar leaves Claude (app/claude_web/takeover.rs).
+                app.toggle_sidebar_from_user(cx);
+            }))
+            .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
+                crate::app::native_sidebar::link_chips::sidebar_style_tooltip(
+                    tooltip.to_string(),
+                    window,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 }

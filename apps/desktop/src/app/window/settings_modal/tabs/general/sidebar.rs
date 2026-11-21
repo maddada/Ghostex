@@ -117,7 +117,7 @@ fn sidebar_section(
     // Rail or Classic (CDXC:Sidebar 2026-11-20 on SIDEBAR_LAYOUT_OPTIONS).
     if g.visible(s, "sidebarLayout") {
         let spec = RowSpec::new("Sidebar layout")
-            .description("Rail adds a narrow column of icons at the window's left edge for Search, Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot, with everything else under its ⋯ menu, where you pin, unpin and drag icons into your own order, and the account usage switch at its foot. It stays when the sidebar is hidden. Classic is the sidebar without the rail, with Search and the bell in its top row.")
+            .description("Rail adds a narrow column of icons at the window's left edge for Search, Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot, with everything else under its ⋯ menu, where you pin, unpin and drag icons into your own order, Toggle sidebar at its top and the account usage switch at its foot. It stays when the sidebar is hidden. Classic is the sidebar without the rail, with Toggle sidebar, Search and the bell in its top row.")
             .modified(g.values.is_modified("sidebarLayout"));
         rows.extend(page.segmented(
             g,
