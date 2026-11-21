@@ -831,6 +831,13 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/cancelRepositoryCloneJob"
         | "/api/browseProjectDirectories"
         /*
+        CDXC:AddProject 2026-11-21:
+        The picker's sidebar places are remote-allowed like browsing: a remote computer's picker
+        shows that computer's disks and folders. `pin` / `unpin` only change the list of pinned
+        folders kept in gxserver's own state folder.
+        */
+        | "/api/projectPickerPlaces"
+        /*
         CDXC:AddProject 2026-08-18:
         Creating the destination folder is remote-allowed for the same reason
         browsing is: the Add Project dialog runs against a chosen machine and

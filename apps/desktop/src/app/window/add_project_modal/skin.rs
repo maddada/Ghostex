@@ -1,15 +1,10 @@
-//! The Add Project dialog's colours and small chrome pieces. The dialog is a command palette,
-//! not a `.gx-app-modal` form, so its tokens are the shadcn ones the React `CommandDialog`
+//! The Add Project picker's colours and small chrome pieces. Its tokens are the shadcn ones the React `CommandDialog`
 //! resolves (`--border`, `--input`, `--muted`) plus the `.add-project-modal` overrides in
 //! packages/core-ui/styles/modals.css (deleted 2026-11-06) and modals-light.css (deleted 2026-11-06), measured from the Storybook story.
 use super::super::native_modal_kit::*;
 use gpui::prelude::FluentBuilder as _;
-use gpui::{
-    AnyElement, Div, FontWeight, IntoElement, Keystroke, ParentElement as _, Rgba, SharedString,
-    Styled, div, point, px, rgb,
-};
+use gpui::{AnyElement, Div, IntoElement, ParentElement as _, Rgba, Styled, div, point, px, rgb};
 use gpui_component::h_flex;
-use gpui_component::kbd::Kbd;
 
 #[derive(Clone, Copy)]
 pub(super) struct AddProjectSkin {
@@ -195,49 +190,6 @@ pub(super) fn over(top: Rgba, bottom: Rgba) -> Rgba {
     css_mix(Rgba { a: 1.0, ..top }, top.a, Rgba { a: 1.0, ..bottom })
 }
 
-/// The dialog's `text-sm` line: 14px on a 20px line.
-pub(super) fn text_sm(element: Div) -> Div {
-    element.text_size(px(14.0)).line_height(px(20.0))
-}
-
-/// `AddProjectFooterHint`: key caps then the label, 6px apart; each space-separated key is its own cap.
-pub(super) fn footer_hint(
-    skin: &AddProjectSkin,
-    keys: &str,
-    label: impl Into<SharedString>,
-) -> AnyElement {
-    let caps = keys.split(' ').filter(|key| !key.is_empty()).map(|key| {
-        Kbd::new(Keystroke {
-            modifiers: Default::default(),
-            key: key.to_string(),
-            key_char: None,
-        })
-        .flex()
-        .items_center()
-        .justify_center()
-        .h(px(20.0))
-        .min_w(px(20.0))
-        .px(px(6.0))
-        .py(px(0.0))
-        .rounded(px(6.0))
-        .border_1()
-        .border_color(hsla(skin.border_at(0.7)))
-        .bg(hsla(skin.muted_fill_at(0.6)))
-        .text_color(hsla(skin.muted()))
-        .text_size(px(14.0))
-        .line_height(px(14.0))
-        .font_family(crate::ui_fonts::UI_FONT)
-    });
-    h_flex()
-        .flex_shrink_0()
-        .items_center()
-        .gap(px(6.0))
-        .whitespace_nowrap()
-        .child(h_flex().items_center().gap(px(4.0)).children(caps))
-        .child(label.into())
-        .into_any_element()
-}
-
 /// The persistent error region: `border-destructive/40 bg-destructive/10`, 8px radius, a 14px
 /// alert icon and the message.
 pub(super) fn error_region(skin: &AddProjectSkin, message: &str) -> Div {
@@ -259,34 +211,6 @@ pub(super) fn error_region(skin: &AddProjectSkin, message: &str) -> Div {
             skin.destructive,
         )))
         .child(div().flex_1().min_w_0().child(message.to_string()))
-}
-
-/// `MiddleEllipsisText`: the tail (the last path segment when it is at most 24 characters, else
-/// the last 24) stays whole and the head truncates.
-pub(super) fn middle_ellipsis(value: &str) -> Div {
-    const MAX_PRESERVED_END: usize = 24;
-    let characters: Vec<char> = value.chars().collect();
-    let separator = characters
-        .iter()
-        .rposition(|character| matches!(character, '/' | '\\'));
-    let split = match separator {
-        Some(index) if characters.len() - (index + 1) <= MAX_PRESERVED_END => index + 1,
-        _ => characters.len().saturating_sub(MAX_PRESERVED_END).max(1),
-    }
-    .min(characters.len());
-    let head: String = characters[..split].iter().collect();
-    let tail: String = characters[split..].iter().collect();
-    h_flex()
-        .min_w_0()
-        .whitespace_nowrap()
-        .child(
-            div()
-                .min_w_0()
-                .overflow_hidden()
-                .text_ellipsis()
-                .child(head),
-        )
-        .child(div().flex_shrink_0().child(tail))
 }
 
 /// The dialog's square shadcn checkbox (`rounded-none`): 16px, `--input` border, the primary
@@ -312,12 +236,4 @@ pub(super) fn square_checkbox(skin: &AddProjectSkin, checked: bool, focused: boo
             ))
         });
     skin.focus_ring(base, focused).into_any_element()
-}
-
-/// Section label copy: 14px/500 muted.
-pub(super) fn label_medium(skin: &AddProjectSkin, text: impl Into<SharedString>) -> Div {
-    text_sm(div())
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(hsla(skin.muted()))
-        .child(text.into())
 }

@@ -41,7 +41,7 @@ impl ProjectsTab {
                 &SharedString::from("default-projects-folder"),
                 "Default projects folder",
                 Some(
-                    "Add Project's New project folder makes new projects here, and Local folder starts here. Left blank, Add Project suggests the folder that holds the selected project (else ~/dev) and saves the folder your first new project is made in.",
+                    "Add Project opens here, and its New project makes new projects here. Left blank, Add Project suggests the folder that holds the selected project (else ~/dev) and saves the folder your first new project is made in.",
                 ),
                 None,
                 true,

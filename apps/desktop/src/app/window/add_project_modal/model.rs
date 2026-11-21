@@ -102,10 +102,16 @@ pub(crate) fn parse_add_project_machine_options(value: &Value) -> Vec<AddProject
         .unwrap_or_default()
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct AddProjectBrowseEntry {
     pub(crate) full_path: String,
     pub(crate) name: String,
+    /// What the folder is, when the machine was asked (`details`) and had time to look.
+    pub(crate) git: bool,
+    pub(crate) branch: Option<String>,
+    pub(crate) language: Option<String>,
+    /// Already a Ghostex project on that machine.
+    pub(crate) project_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -122,6 +128,10 @@ pub(crate) struct AddProjectPathInspection {
     pub(crate) project_path: Option<String>,
     pub(crate) project_id: Option<String>,
     pub(crate) git_root: Option<String>,
+    /// The repository a folder sits inside (never the folder itself); older machines omit it.
+    pub(crate) repo_root: Option<String>,
+    pub(crate) branch: Option<String>,
+    pub(crate) language: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -166,6 +176,10 @@ pub(crate) fn read_add_project_browse_result(
             Some(AddProjectBrowseEntry {
                 full_path: entry.get("fullPath")?.as_str()?.to_string(),
                 name: entry.get("name")?.as_str()?.to_string(),
+                git: entry.get("git").and_then(Value::as_bool) == Some(true),
+                branch: non_empty(text(entry, "branch")),
+                language: non_empty(text(entry, "language")),
+                project_id: non_empty(text(entry, "projectId")),
             })
         })
         .collect::<Option<Vec<_>>>()
@@ -183,12 +197,104 @@ pub(crate) fn read_add_project_browse_result(
             project_path: non_empty(text(inspection, "projectPath")),
             project_id: non_empty(text(inspection, "projectId")),
             git_root: non_empty(text(inspection, "gitRoot")),
+            repo_root: non_empty(text(inspection, "repoRoot")),
+            branch: non_empty(text(inspection, "branch")),
+            language: non_empty(text(inspection, "language")),
         });
     Ok(AddProjectBrowseResult {
         entries,
         is_drive_list: value.get("isDriveList").and_then(Value::as_bool) == Some(true),
         parent_path: parent_path.to_string(),
         inspection,
+    })
+}
+
+/// A place in the picker's sidebar: a disk, a folder, a recent or pinned folder.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AddProjectPlace {
+    pub(crate) name: String,
+    pub(crate) path: String,
+    /// For a disk: `startup`, `external`, `network`, `drive` or `wsl`.
+    pub(crate) kind: Option<String>,
+}
+
+/// A Git repository the picker suggests adding.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AddProjectSuggestion {
+    pub(crate) name: String,
+    pub(crate) path: String,
+    pub(crate) branch: Option<String>,
+    pub(crate) language: Option<String>,
+    /// `otherApps` (another coding app opened it) or `projectFolder` (it sits in `from`).
+    pub(crate) source: String,
+    pub(crate) from: Option<String>,
+}
+
+/// What a machine answers for the picker's sidebar (`/api/projectPickerPlaces`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AddProjectPlaces {
+    pub(crate) home: String,
+    pub(crate) platform: String,
+    pub(crate) volumes: Vec<AddProjectPlace>,
+    pub(crate) standard: Vec<AddProjectPlace>,
+    pub(crate) project_folders: Vec<AddProjectPlace>,
+    pub(crate) other_apps: Vec<AddProjectPlace>,
+    pub(crate) recent: Vec<AddProjectPlace>,
+    pub(crate) pinned: Vec<AddProjectPlace>,
+    pub(crate) suggested: Vec<AddProjectSuggestion>,
+}
+
+fn read_places_list(value: &Value, key: &str) -> Vec<AddProjectPlace> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|places| {
+            places
+                .iter()
+                .filter_map(|place| {
+                    Some(AddProjectPlace {
+                        name: required_text(place, "name")?,
+                        path: required_text(place, "path")?,
+                        kind: non_empty(text(place, "kind")),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `/api/projectPickerPlaces`'s answer; every list is optional so an older shape still reads.
+pub(crate) fn read_add_project_places(value: &Value) -> Result<AddProjectPlaces, String> {
+    let home = required(value, "home")?;
+    let suggested = value
+        .get("suggested")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    Some(AddProjectSuggestion {
+                        name: required_text(item, "name")?,
+                        path: required_text(item, "path")?,
+                        branch: non_empty(text(item, "branch")),
+                        language: non_empty(text(item, "language")),
+                        source: text(item, "source").unwrap_or_default(),
+                        from: non_empty(text(item, "from")),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(AddProjectPlaces {
+        home,
+        platform: text(value, "platform").unwrap_or_default(),
+        volumes: read_places_list(value, "volumes"),
+        standard: read_places_list(value, "standard"),
+        project_folders: read_places_list(value, "projectFolders"),
+        other_apps: read_places_list(value, "otherApps"),
+        recent: read_places_list(value, "recent"),
+        pinned: read_places_list(value, "pinned"),
+        suggested,
     })
 }
 

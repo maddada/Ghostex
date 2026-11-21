@@ -1,6 +1,6 @@
-//! The Add Project dialog's operations: moving between steps, browsing, naming a new folder,
-//! looking up and reviewing a repository, cloning, adding, and closing.
-use super::copy::*;
+//! The picker's operations: going to a folder (sidebar, columns, path field, Back, Forward, Up),
+//! switching computers, adding, making a folder, Clone a repo (lookup, destination check, clone),
+//! pinning a folder, and closing.
 use super::input::*;
 use super::model::*;
 use super::paths::*;
@@ -25,38 +25,96 @@ fn gitlab_project_path(remote_url: &str) -> String {
 impl GpuiAddProjectModalWindow {
     // -- navigation -----------------------------------------------------------------------------
 
-    pub(super) fn push_view(&mut self, view: AddProjectView) {
-        self.query = match &view {
-            AddProjectView::Browse { initial_query, .. } => initial_query.clone(),
-            _ => String::new(),
-        };
-        self.view_stack.push(view);
+    fn history_entry(&self) -> Option<HistoryEntry> {
+        Some(HistoryEntry {
+            machine_id: self.machine_id.clone()?,
+            query: self.query.clone(),
+            column_root: self.column_root.clone(),
+        })
+    }
+
+    /// Opens `folder` (any spelling: `~/dev`, `/Users/me/dev`, `C:\dev`), remembering where the
+    /// picker was for Back. `column_root` starts the columns there (a sidebar place).
+    pub(super) fn go_to_folder(&mut self, folder: &str, column_root: Option<String>) {
+        let query = ensure_browse_directory_path(&self.tildify(&trim_folder(folder)));
+        if query == self.query && !self.suggested_mode {
+            return;
+        }
+        if let Some(entry) = self.history_entry().filter(|_| !self.suggested_mode) {
+            self.history_back.push(entry);
+        }
+        self.history_forward.clear();
+        self.suggested_mode = false;
+        self.root_at_start = false;
+        self.column_root = column_root.map(|root| trim_folder(&root));
+        self.set_query(query);
+    }
+
+    /// A click in a column: the folder opens beside it and the columns keep their start.
+    pub(super) fn open_column_entry(&mut self, full_path: &str) {
+        let root = self.column_root.clone();
+        self.go_to_folder(full_path, root);
+    }
+
+    fn set_query(&mut self, query: String) {
+        self.query = query;
         self.highlight = None;
-        self.browse_result = None;
+        self.new_folder_name = None;
         self.error = None;
+        self.clone_preview = None;
+        self.machine_menu_open = false;
         self.browse_generation += 1;
     }
 
-    pub(super) fn pop_view(&mut self) {
-        self.new_folder_name = None;
-        // Leaving the form drops it; leaving the folder browse it opened returns to it.
-        match self.current_view() {
-            Some(AddProjectView::NewProject { .. }) => self.new_project = None,
-            Some(AddProjectView::Browse { .. }) => self.picking_new_project_parent = false,
-            _ => {}
+    pub(super) fn go_back(&mut self) {
+        self.step_history(true);
+    }
+
+    pub(super) fn go_forward(&mut self) {
+        self.step_history(false);
+    }
+
+    fn step_history(&mut self, back: bool) {
+        let entry = if back {
+            self.history_back.pop()
+        } else {
+            self.history_forward.pop()
+        };
+        let Some(entry) = entry else {
+            return;
+        };
+        if let Some(current) = self.history_entry() {
+            if back {
+                self.history_forward.push(current);
+            } else {
+                self.history_back.push(current);
+            }
         }
-        self.clone_flow = None;
-        self.clone_options = CloneOptions::default();
-        self.clone_preview = None;
-        self.clone_destination_path.clear();
-        if self.view_stack.len() > 1 {
-            self.view_stack.pop();
+        if self.machine_id.as_deref() != Some(entry.machine_id.as_str()) {
+            self.machine_id = Some(entry.machine_id);
+            self.reset_for_machine();
         }
-        self.highlight = None;
-        self.query.clear();
-        self.browse_result = None;
-        self.error = None;
-        self.browse_generation += 1;
+        self.suggested_mode = false;
+        self.column_root = entry.column_root;
+        self.set_query(entry.query);
+    }
+
+    /// Up: the folder above the selected one.
+    pub(super) fn go_up(&mut self, d: &Derived) {
+        let current = d
+            .selected_folder
+            .clone()
+            .unwrap_or_else(|| trim_folder(&d.browse_directory_path));
+        let Some(parent) = self.parent_folder(&current, &d.platform) else {
+            return;
+        };
+        let root = self
+            .column_root
+            .clone()
+            .filter(|root| folder_contains(root, &parent));
+        let highlight = current.clone();
+        self.go_to_folder(&parent, root);
+        self.highlight = Some(highlight);
     }
 
     pub(super) fn on_path_input_changed(
@@ -65,239 +123,67 @@ impl GpuiAddProjectModalWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.new_folder_name.is_some() {
-            if self.new_folder_name.as_deref() != Some(value.as_str()) {
-                self.error = None;
-                self.new_folder_name = Some(value);
-                cx.notify();
-            }
-            return;
-        }
-        if self.is_new_project_view() {
-            if self.set_new_project_name(value) {
-                self.settle(window, cx);
-            }
-            return;
-        }
         if value == self.query {
             return;
         }
         self.highlight = None;
         self.query = value;
         self.error = None;
-        let pops = self.query.is_empty()
-            && self.view_stack.len() > 1
-            && matches!(
-                self.current_view(),
-                Some(AddProjectView::Browse { initial_query, .. }) if !initial_query.is_empty()
-            );
-        if pops {
-            self.pop_view();
+        self.clone_preview = None;
+        self.suggested_mode = false;
+        // A path typed outside the columns' start shows its own two levels.
+        if let Some(root) = self.column_root.clone() {
+            let home = self.current_home();
+            let typed = expand_home(&get_browse_directory_path(&self.query), home.as_deref());
+            if !folder_contains(&root, &typed) {
+                self.column_root = None;
+            }
         }
         self.settle(window, cx);
     }
 
-    pub(super) fn browse_to(&mut self, full_path: &str) {
-        self.highlight = None;
-        self.query = ensure_browse_directory_path(full_path);
-        self.browse_generation += 1;
-    }
-
-    pub(super) fn browse_up(&mut self, d: &Derived) {
-        let parent = if d.is_windows_drive_root {
-            Some(ADD_PROJECT_ROOT_BROWSE_PATH.to_string())
-        } else {
-            get_browse_parent_path(&self.query)
-        };
-        let Some(parent) = parent else {
+    /// Another computer: its places and its starting folder.
+    pub(super) fn choose_machine(&mut self, machine_id: String) {
+        self.machine_menu_open = false;
+        if self.machine_id.as_deref() == Some(machine_id.as_str()) {
             return;
-        };
-        self.highlight = None;
-        self.query = parent;
-        self.browse_generation += 1;
+        }
+        if let Some(entry) = self.history_entry() {
+            self.history_back.push(entry);
+        }
+        self.history_forward.clear();
+        self.machine_id = Some(machine_id.clone());
+        self.reset_for_machine();
+        self.suggested_mode = false;
+        self.column_root = None;
+        self.root_at_start = true;
+        let start = self.start_query();
+        self.set_query(start);
+        if self.new_project.is_some() {
+            self.open_new_project_form(machine_id);
+        }
     }
 
-    pub(super) fn start_local_browse(&mut self, machine_id: String, start: Option<String>) {
-        let target = self
-            .machines
-            .iter()
-            .find(|machine| machine.machine_id == machine_id)
-            .cloned();
-        self.clone_flow = None;
-        self.clone_options = CloneOptions::default();
-        self.clone_preview = None;
-        self.clone_destination_path.clear();
-        let start = start.unwrap_or_else(|| initial_browse_query(target.as_ref()));
-        self.push_view(AddProjectView::Browse {
-            machine_id,
-            initial_query: ensure_browse_directory_path(&start),
-        });
-    }
-
-    pub(super) fn start_clone_flow(&mut self, machine_id: String, source: AddProjectSourceId) {
-        self.clone_options = CloneOptions::default();
-        self.clone_preview = None;
-        self.clone_destination_path.clear();
-        self.clone_flow = Some(CloneFlow {
-            remote_url: String::new(),
-            repository: None,
-            repository_input: String::new(),
-            source,
-            step: CloneStep::Repository,
-        });
-        self.push_view(AddProjectView::Clone { machine_id });
-    }
-
-    pub(super) fn enter_clone_destination_step(
-        &mut self,
-        remote_url: String,
-        repository: Option<AddProjectRepositoryInfo>,
-        repository_input: String,
-        source: AddProjectSourceId,
-        destination: Option<String>,
-    ) {
-        self.clone_flow = Some(CloneFlow {
-            remote_url,
-            repository,
-            repository_input,
-            source,
-            step: CloneStep::Destination,
-        });
-        self.highlight = None;
+    /// What belongs to the previous machine is dropped when another one is browsed.
+    fn reset_for_machine(&mut self) {
         self.browse_result = None;
-        let d_machine = self.derive().machine;
-        self.query = match destination.filter(|destination| !destination.is_empty()) {
-            Some(destination) => self.resolve_input_destination(
-                &destination,
-                d_machine.as_ref(),
-                d_machine
-                    .as_ref()
-                    .map(|machine| machine.machine_id.as_str()),
-            ),
-            None => {
-                ensure_browse_directory_path(&initial_clone_destination_query(d_machine.as_ref()))
-            }
-        };
-        self.browse_generation += 1;
+        self.last_selected_folder = None;
+        self.clone_preview = None;
+        self.clone_flow = None;
+        self.tool_install = None;
+        self.new_folder_name = None;
+        if matches!(self.sheet, Some(Sheet::NewProjectPick(_))) {
+            self.sheet = Some(Sheet::NewProject);
+        }
     }
 
-    pub(super) fn select_row(
-        &mut self,
-        action: RowAction,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match action {
-            RowAction::BrowseInputFolder { machine_id, path } => {
-                self.push_view(AddProjectView::Browse {
-                    machine_id,
-                    initial_query: path,
-                });
-            }
-            RowAction::ChooseDetectedClone { machine_id, clone } => {
-                self.start_clone_flow(machine_id, clone.source);
-                self.clone_options = CloneOptions::from_detected(&clone);
-                self.query = clone.query;
-            }
-            RowAction::AddSuggested(path) => self.submit_add_project(&path, cx),
-            RowAction::BrowseUp => {
-                let d = self.derive();
-                self.browse_up(&d);
-            }
-            RowAction::BrowseTo(path) => self.browse_to(&path),
-            RowAction::ChooseMachine(machine_id) => {
-                self.clone_flow = None;
-                self.push_view(AddProjectView::Sources { machine_id });
-            }
-            RowAction::StartLocalBrowse { machine_id, start } => {
-                self.start_local_browse(machine_id, start)
-            }
-            RowAction::NewProjectFolder { machine_id } => self.open_new_project_form(machine_id),
-            RowAction::NewProjectChangeFolder => self.start_new_project_folder_pick(),
-            RowAction::NewProjectPick(field) => self.open_new_project_pick(field),
-            RowAction::NewProjectChoose { field, value } => {
-                self.choose_new_project_value(field, value)
-            }
-            RowAction::StartClone { machine_id, source } => {
-                self.start_clone_flow(machine_id, source)
-            }
-        }
-        self.focus_path_input(window, cx);
-        self.settle(window, cx);
+    pub(super) fn open_suggested(&mut self) {
+        self.suggested_mode = true;
+        self.new_folder_name = None;
+        self.highlight = None;
     }
 
-    // -- steps ----------------------------------------------------------------------------------
-
-    pub(super) fn submit_repository_step(&mut self, cx: &mut Context<Self>) {
-        let repository_input = self.query.trim().to_string();
-        let Some(flow) = self
-            .clone_flow
-            .clone()
-            .filter(|flow| flow.step == CloneStep::Repository)
-        else {
-            return;
-        };
-        let Some(machine_id) = self.derive().machine_id else {
-            return;
-        };
-        if repository_input.is_empty() || self.busy.is_some() {
-            return;
-        }
-        let parsed = match parse_add_project_clone_input(&repository_input, flow.source) {
-            Some(ParsedCloneInput::Error(message)) => {
-                self.error = Some(message);
-                return;
-            }
-            Some(ParsedCloneInput::Clone(parsed)) => Some(parsed),
-            None => None,
-        };
-        if let Some(parsed) = &parsed {
-            self.clone_options = CloneOptions::from_detected(parsed);
-            if flow.source == AddProjectSourceId::Url
-                || !matches!(
-                    parsed.source,
-                    AddProjectSourceId::Github | AddProjectSourceId::Gitlab
-                )
-            {
-                self.enter_clone_destination_step(
-                    parsed.remote_url.clone(),
-                    None,
-                    repository_input,
-                    parsed.source,
-                    Some(parsed.destination.clone()),
-                );
-                return;
-            }
-        }
-        if parsed.is_none() && flow.source == AddProjectSourceId::Url {
-            self.error = Some("Enter a Git repository URL or clone command.".to_string());
-            return;
-        }
-        self.set_busy(Some(Busy::Lookup), cx);
-        self.error = None;
-        let provider = parsed
-            .as_ref()
-            .map(|parsed| parsed.source)
-            .unwrap_or(flow.source);
-        let repository = match &parsed {
-            Some(parsed) if parsed.source == AddProjectSourceId::Gitlab => {
-                gitlab_project_path(&parsed.remote_url)
-            }
-            Some(parsed) => parsed.remote_url.clone(),
-            None => repository_input.clone(),
-        };
-        self.request(
-            "lookupRepository",
-            &machine_id,
-            serde_json::json!({ "provider": provider.wire(), "repository": repository }),
-            Pending::Lookup {
-                repository_input,
-                parsed,
-                source: flow.source,
-            },
-            cx,
-        );
-    }
+    // -- adding ---------------------------------------------------------------------------------
 
     pub(super) fn validate_project_path(&mut self, raw: &str, platform: &str) -> Option<String> {
         let trimmed = raw.trim();
@@ -325,7 +211,7 @@ impl GpuiAddProjectModalWindow {
         after_clone: bool,
         cx: &mut Context<Self>,
     ) {
-        let Some(machine_id) = self.derive().machine_id else {
+        let Some(machine_id) = self.machine_id.clone() else {
             return;
         };
         self.request(
@@ -337,7 +223,13 @@ impl GpuiAddProjectModalWindow {
         );
     }
 
-    pub(super) fn submit_add_project(&mut self, raw: &str, cx: &mut Context<Self>) {
+    /// Adds `raw` as a project; `create_if_missing` makes the folder first (Create & Add).
+    pub(super) fn submit_add_path(
+        &mut self,
+        raw: &str,
+        create_if_missing: bool,
+        cx: &mut Context<Self>,
+    ) {
         let d = self.derive();
         if self.busy.is_some() || d.machine_id.is_none() {
             return;
@@ -347,27 +239,292 @@ impl GpuiAddProjectModalWindow {
         };
         self.set_busy(Some(Busy::Add), cx);
         self.error = None;
-        self.register_project(path, d.will_create_project_path, false, cx);
+        self.register_project(path, create_if_missing, false, cx);
     }
 
-    pub(super) fn open_clone_review(&mut self, raw: &str, cx: &mut Context<Self>) {
+    /// The footer's Add project (or Open project, Create & Add, Add repository root).
+    pub(super) fn submit_resolved_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let d = self.derive();
-        let Some(flow) = self
+        if !d.can_submit_browse_path {
+            return;
+        }
+        self.submit_add_path(&d.resolved_add_project_path, d.will_create_project_path, cx);
+        self.settle(window, cx);
+    }
+
+    // -- new folder -----------------------------------------------------------------------------
+
+    pub(super) fn start_new_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.derive().can_create_new_folder || self.busy.is_some() {
+            return;
+        }
+        self.error = None;
+        self.highlight = None;
+        self.suggested_mode = false;
+        self.new_folder_name = Some(String::new());
+        self.folder_name_input.update(cx, |input, cx| {
+            input.set_value(String::new(), window, cx);
+            input.focus(window, cx);
+        });
+        self.settle(window, cx);
+    }
+
+    pub(super) fn cancel_new_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.new_folder_name = None;
+        self.error = None;
+        self.focus_path_input(window, cx);
+        self.settle(window, cx);
+    }
+
+    pub(super) fn submit_new_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let name = self
+            .new_folder_name
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let d = self.derive();
+        let Some(machine_id) = d.machine_id.clone() else {
+            return;
+        };
+        if self.busy.is_some() || d.new_folder_parent_path.is_empty() {
+            return;
+        }
+        if name.is_empty() {
+            self.cancel_new_folder(window, cx);
+            return;
+        }
+        if name.contains(['/', '\\']) {
+            self.error = Some("A folder name cannot contain a path separator.".to_string());
+            self.settle(window, cx);
+            return;
+        }
+        self.set_busy(Some(Busy::CreateFolder), cx);
+        self.error = None;
+        let parent = d.new_folder_parent_path.clone();
+        self.request(
+            "createDirectory",
+            &machine_id,
+            serde_json::json!({ "name": name, "parentPath": parent }),
+            Pending::CreateFolder { parent },
+            cx,
+        );
+        self.settle(window, cx);
+    }
+
+    // -- clone a repo ---------------------------------------------------------------------------
+
+    /// Opens Clone a repo, filled in with `prefill` (a pasted repository) when given.
+    pub(super) fn open_clone_sheet(
+        &mut self,
+        prefill: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.sheet = Some(Sheet::Clone);
+        self.new_folder_name = None;
+        self.clone_preview = None;
+        self.clone_flow = None;
+        self.error = None;
+        if let Some(text) = prefill {
+            if let Some(ParsedCloneInput::Clone(parsed)) =
+                parse_add_project_clone_input(&text, AddProjectSourceId::Github)
+            {
+                self.clone_options = CloneOptions::from_detected(&parsed);
+                let branch = self.clone_options.branch_name.clone();
+                self.branch_input.update(cx, |input, cx| {
+                    input.set_value(branch, window, cx);
+                });
+                self.clone_source = parsed.source;
+            }
+            self.clone_repo_text = text.clone();
+            self.repo_input.update(cx, |input, cx| {
+                input.set_value(text, window, cx);
+            });
+        }
+        self.repo_input
+            .update(cx, |input, cx| input.focus(window, cx));
+        self.settle(window, cx);
+    }
+
+    pub(super) fn close_sheet(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.sheet {
+            Some(Sheet::NewProjectPick(_)) => self.sheet = Some(Sheet::NewProject),
+            Some(_) => {
+                if self.busy == Some(Busy::Clone) {
+                    return;
+                }
+                self.sheet = None;
+                self.new_project = None;
+                self.clone_preview = None;
+                self.error = None;
+                self.focus_path_input(window, cx);
+            }
+            None => {}
+        }
+        self.settle(window, cx);
+    }
+
+    pub(super) fn choose_clone_source(&mut self, source: AddProjectSourceId) {
+        self.clone_source = source;
+        self.clone_preview = None;
+        self.clone_flow = None;
+        self.error = None;
+    }
+
+    pub(super) fn on_repo_input_changed(
+        &mut self,
+        value: String,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if value == self.clone_repo_text {
+            return;
+        }
+        // A pasted URL or command picks its source; a bare `owner/repo` keeps the chosen one.
+        if let Some(ParsedCloneInput::Clone(parsed)) =
+            parse_add_project_clone_input(&value, self.clone_source)
+        {
+            self.clone_source = parsed.source;
+        }
+        self.clone_repo_text = value;
+        self.clone_preview = None;
+        self.clone_flow = None;
+        self.error = None;
+        cx.notify();
+    }
+
+    /// The folder Clone & Add clones into: the folder on screen plus the repository's name.
+    pub(super) fn clone_destination(&self, d: &Derived) -> Option<String> {
+        let destination = self
             .clone_flow
-            .clone()
-            .filter(|flow| flow.step == CloneStep::Destination)
-        else {
+            .as_ref()
+            .map(|flow| flow.destination.clone())
+            .or_else(|| {
+                match parse_add_project_clone_input(&self.clone_repo_text, self.clone_source) {
+                    Some(ParsedCloneInput::Clone(parsed)) => Some(parsed.destination),
+                    _ => Some(repository_folder_name(self.clone_repo_text.trim()))
+                        .filter(|name| !name.is_empty()),
+                }
+            })?;
+        if let Some(explicit) = normalize_pasted_project_path(&destination)
+            && !is_explicit_relative_project_path(&explicit)
+            && (explicit.starts_with('/') || explicit.starts_with('~') || explicit.contains(':'))
+        {
+            return Some(explicit);
+        }
+        let folder = d.selected_folder.clone().filter(|_| !d.is_drive_list)?;
+        Some(format!(
+            "{}{}",
+            ensure_browse_directory_path(&folder),
+            destination.strip_prefix("./").unwrap_or(&destination)
+        ))
+    }
+
+    /// Clone & Add: a provider lookup when the repository needs one, then the destination check,
+    /// then the clone (`preview_clone` and its answer chain the steps).
+    pub(super) fn submit_clone_sheet(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.busy.is_some() || self.machine_id.is_none() {
+            return;
+        }
+        let d = self.derive();
+        let source = self.clone_source;
+        if !d.readiness[source.index()].ready {
+            return;
+        }
+        let input = self.clone_repo_text.trim().to_string();
+        if input.is_empty() {
+            self.error = Some("Enter a repository, URL, or clone command.".to_string());
+            self.settle(window, cx);
+            return;
+        }
+        if self.clone_flow.is_some() {
+            self.preview_clone(cx);
+            self.settle(window, cx);
+            return;
+        }
+        let parsed = match parse_add_project_clone_input(&input, source) {
+            Some(ParsedCloneInput::Error(message)) => {
+                self.error = Some(message);
+                self.settle(window, cx);
+                return;
+            }
+            Some(ParsedCloneInput::Clone(parsed)) => Some(parsed),
+            None => None,
+        };
+        if let Some(parsed) = &parsed {
+            if !parsed.branch_name.is_empty() {
+                self.clone_options.branch_name = parsed.branch_name.clone();
+            }
+            self.clone_options.clone_main_only |= parsed.clone_main_only;
+            self.clone_options.shallow_clone |= parsed.shallow_clone;
+            if source == AddProjectSourceId::Url
+                || !matches!(
+                    parsed.source,
+                    AddProjectSourceId::Github | AddProjectSourceId::Gitlab
+                )
+            {
+                self.clone_flow = Some(CloneFlow {
+                    remote_url: parsed.remote_url.clone(),
+                    repository: None,
+                    destination: parsed.destination.clone(),
+                });
+                self.preview_clone(cx);
+                self.settle(window, cx);
+                return;
+            }
+        }
+        if parsed.is_none() && source == AddProjectSourceId::Url {
+            self.error = Some("Enter a Git repository URL or clone command.".to_string());
+            self.settle(window, cx);
+            return;
+        }
+        let Some(machine_id) = self.machine_id.clone() else {
+            return;
+        };
+        self.set_busy(Some(Busy::Lookup), cx);
+        self.error = None;
+        let provider = parsed
+            .as_ref()
+            .map(|parsed| parsed.source)
+            .unwrap_or(source);
+        let repository = match &parsed {
+            Some(parsed) if parsed.source == AddProjectSourceId::Gitlab => {
+                gitlab_project_path(&parsed.remote_url)
+            }
+            Some(parsed) => parsed.remote_url.clone(),
+            None => input.clone(),
+        };
+        self.request(
+            "lookupRepository",
+            &machine_id,
+            serde_json::json!({ "provider": provider.wire(), "repository": repository }),
+            Pending::Lookup { parsed },
+            cx,
+        );
+        self.settle(window, cx);
+    }
+
+    /// Asks the machine whether the destination is free; a free one clones right away.
+    pub(super) fn preview_clone(&mut self, cx: &mut Context<Self>) {
+        let d = self.derive();
+        let Some(flow) = self.clone_flow.clone() else {
             return;
         };
         let Some(machine_id) = d.machine_id.clone() else {
             return;
         };
-        if self.busy.is_some() {
-            return;
-        }
-        let Some(destination_path) = self.validate_project_path(raw, &d.platform) else {
+        let Some(destination) = self.clone_destination(&d) else {
+            self.error = Some("Pick the folder to clone into on the left.".to_string());
             return;
         };
+        let Some(destination_path) = self.validate_project_path(&destination, &d.platform) else {
+            return;
+        };
+        if !is_repository_clone_branch_name_input_valid(&self.clone_options.branch_name) {
+            self.error = Some("Enter a valid Git branch name.".to_string());
+            return;
+        }
         self.set_busy(Some(Busy::Preview), cx);
         self.error = None;
         let options = self.clone_options.clone();
@@ -396,14 +553,10 @@ impl GpuiAddProjectModalWindow {
     }
 
     pub(super) fn submit_clone(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(flow) = self
-            .clone_flow
-            .clone()
-            .filter(|flow| flow.step == CloneStep::Review)
-        else {
+        let Some(flow) = self.clone_flow.clone() else {
             return;
         };
-        let Some(machine_id) = self.derive().machine_id else {
+        let Some(machine_id) = self.machine_id.clone() else {
             return;
         };
         if !self.can_clone() {
@@ -443,93 +596,9 @@ impl GpuiAddProjectModalWindow {
             return;
         }
         self.set_busy(Some(Busy::Clone), cx);
+        // The progress line sits under the options.
+        self.sheet_scroll.scroll_to_bottom();
         self.request("startClone", &machine_id, params, Pending::StartClone, cx);
-        self.settle(window, cx);
-    }
-
-    pub(super) fn start_new_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.derive().can_create_new_folder || self.busy.is_some() {
-            return;
-        }
-        self.error = None;
-        self.highlight = None;
-        self.new_folder_name = Some(String::new());
-        self.focus_path_input(window, cx);
-        self.settle(window, cx);
-    }
-
-    pub(super) fn cancel_new_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.new_folder_name = None;
-        self.error = None;
-        self.focus_path_input(window, cx);
-        self.settle(window, cx);
-    }
-
-    pub(super) fn submit_new_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let name = self
-            .new_folder_name
-            .as_deref()
-            .unwrap_or("")
-            .trim()
-            .to_string();
-        let d = self.derive();
-        let Some(machine_id) = d.machine_id.clone() else {
-            return;
-        };
-        if self.busy.is_some() || name.is_empty() || d.new_folder_parent_path.is_empty() {
-            return;
-        }
-        self.set_busy(Some(Busy::CreateFolder), cx);
-        self.error = None;
-        self.request(
-            "createDirectory",
-            &machine_id,
-            serde_json::json!({ "name": name, "parentPath": d.new_folder_parent_path }),
-            Pending::CreateFolder,
-            cx,
-        );
-        self.settle(window, cx);
-    }
-
-    pub(super) fn submit_resolved_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let d = self.derive();
-        if self.picking_new_project_parent {
-            self.take_new_project_folder(&d);
-        } else if d.is_clone_destination_step {
-            self.open_clone_review(&d.resolved_add_project_path, cx);
-        } else {
-            self.submit_add_project(&d.resolved_add_project_path, cx);
-        }
-        self.settle(window, cx);
-    }
-
-    pub(super) fn submit_repository(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.submit_repository_step(cx);
-        self.settle(window, cx);
-    }
-
-    pub(super) fn return_to_clone_destination(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.busy.is_some() {
-            return;
-        }
-        let Some(flow) = self
-            .clone_flow
-            .as_mut()
-            .filter(|flow| flow.step == CloneStep::Review)
-        else {
-            return;
-        };
-        flow.step = CloneStep::Destination;
-        self.clone_preview = None;
-        self.clone_destination_path.clear();
-        self.error = None;
-        self.highlight = None;
-        self.browse_generation += 1;
-        self.focus_path_input(window, cx);
         self.settle(window, cx);
     }
 
@@ -537,7 +606,7 @@ impl GpuiAddProjectModalWindow {
         let Some(job_id) = self.clone_job_id.clone() else {
             return;
         };
-        let Some(machine_id) = self.derive().machine_id else {
+        let Some(machine_id) = self.machine_id.clone() else {
             return;
         };
         self.request(
@@ -563,7 +632,29 @@ impl GpuiAddProjectModalWindow {
         } else {
             self.clone_options.shallow_clone = !self.clone_options.shallow_clone;
         }
+        self.clone_preview = None;
         self.settle(window, cx);
+    }
+
+    // -- places ---------------------------------------------------------------------------------
+
+    /// Pins (or unpins) a folder in the sidebar of the machine being browsed.
+    pub(super) fn set_pinned(&mut self, path: &str, pinned: bool, cx: &mut Context<Self>) {
+        let Some(machine_id) = self.machine_id.clone() else {
+            return;
+        };
+        self.request(
+            "places",
+            &machine_id,
+            serde_json::json!({
+                "pin": pinned.then_some(path),
+                "unpin": (!pinned).then_some(path),
+            }),
+            Pending::Places {
+                machine_id: machine_id.clone(),
+            },
+            cx,
+        );
     }
 
     pub(super) fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -576,19 +667,24 @@ impl GpuiAddProjectModalWindow {
             .update(cx, |input, cx| input.focus(window, cx));
     }
 
-    /// Preview hook for the standalone demo binary: one scripted user step (`type:<text>`,
-    /// `key:down|up|enter|mod-enter|backspace|tab`, `click:<row value>`, `new-folder`,
-    /// `folder-name:<name>`, `branch:<name>`, `clone`).
+    /// Preview hook for the standalone demo binary: one scripted step. `type:<text>` (the path
+    /// field), `key:down|up|enter|mod-enter|escape|tab`, `place:<path>` (a sidebar place),
+    /// `open:<path>` (a column entry), `machine:<id>`, `suggested`, `back`, `up`, `new-folder`,
+    /// `folder-name:<name>`, `new-project`, `project-name:<name>`, `clone`, `repo:<text>`,
+    /// `source:<wire>`, `branch:<name>`, `clone-submit`, `create`, `add`, `pin`.
     #[allow(dead_code)] // used by src/bin/native_modal_demo/add_project.rs only
     pub(crate) fn preview_step(&mut self, step: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(text) = step
-            .strip_prefix("type:")
-            .or_else(|| step.strip_prefix("folder-name:"))
-        {
-            self.path_input.update(cx, |input, cx| {
+        let set = |input: &gpui::Entity<gpui_component::input::InputState>,
+                   text: &str,
+                   window: &mut Window,
+                   cx: &mut Context<Self>| {
+            input.update(cx, |input, cx| {
                 input.set_value(text.to_string(), window, cx);
                 input.set_selected_range(text.len()..text.len(), cx);
             });
+        };
+        if let Some(text) = step.strip_prefix("type:") {
+            set(&self.path_input.clone(), text, window, cx);
             self.on_path_input_changed(text.to_string(), window, cx);
         } else if let Some(key) = step.strip_prefix("key:") {
             match key {
@@ -596,34 +692,80 @@ impl GpuiAddProjectModalWindow {
                 "up" => self.move_highlight(-1, cx),
                 "enter" => self.press_enter(false, window, cx),
                 "mod-enter" => self.press_enter(true, window, cx),
-                "backspace" => {
-                    self.press_backspace(window, cx);
-                }
-                "tab" => self.cycle_focus(1, window, cx),
+                "escape" => self.press_escape(window, cx),
+                "tab" => self.complete_path(window, cx),
                 _ => {}
             }
-        } else if let Some(value) = step.strip_prefix("click:") {
-            let action = self
-                .derive()
-                .rows
-                .into_iter()
-                .find(|row| row.value == value && !row.disabled)
-                .map(|row| row.action);
-            if let Some(action) = action {
-                self.select_row(action, window, cx);
+        } else if let Some(path) = step.strip_prefix("place:") {
+            self.go_to_folder(path, Some(path.to_string()));
+            self.settle(window, cx);
+        } else if let Some(path) = step.strip_prefix("open:") {
+            self.open_column_entry(path);
+            self.settle(window, cx);
+        } else if let Some(machine_id) = step.strip_prefix("machine:") {
+            self.choose_machine(machine_id.to_string());
+            self.settle(window, cx);
+        } else if step == "machine-menu" {
+            self.machine_menu_open = true;
+            cx.notify();
+        } else if let Some(field) = step.strip_prefix("pick:") {
+            let field = match field {
+                "space" => Some(super::new_project::NewProjectField::Space),
+                "group" => Some(super::new_project::NewProjectField::Group),
+                "start" => Some(super::new_project::NewProjectField::Start),
+                _ => None,
+            };
+            if let Some(field) = field {
+                self.open_new_project_pick(field);
+                self.settle(window, cx);
             }
+        } else if step == "suggested" {
+            self.open_suggested();
+            self.settle(window, cx);
+        } else if step == "back" {
+            self.go_back();
+            self.settle(window, cx);
+        } else if step == "up" {
+            let d = self.derive();
+            self.go_up(&d);
+            self.settle(window, cx);
         } else if step == "new-folder" {
             self.start_new_folder(window, cx);
+        } else if let Some(name) = step.strip_prefix("folder-name:") {
+            set(&self.folder_name_input.clone(), name, window, cx);
+            self.new_folder_name = Some(name.to_string());
+            cx.notify();
+        } else if step == "new-project" {
+            self.open_new_project_sheet(window, cx);
+        } else if let Some(name) = step.strip_prefix("project-name:") {
+            set(&self.project_name_input.clone(), name, window, cx);
+            if self.set_new_project_name(name.to_string()) {
+                self.settle(window, cx);
+            }
+        } else if step == "clone" {
+            self.open_clone_sheet(None, window, cx);
+        } else if let Some(text) = step.strip_prefix("repo:") {
+            set(&self.repo_input.clone(), text, window, cx);
+            self.on_repo_input_changed(text.to_string(), window, cx);
+        } else if let Some(source) = step.strip_prefix("source:") {
+            if let Some(source) = AddProjectSourceId::from_wire(source) {
+                self.choose_clone_source(source);
+                self.settle(window, cx);
+            }
         } else if let Some(branch) = step.strip_prefix("branch:") {
-            self.branch_input.update(cx, |input, cx| {
-                input.set_value(branch.to_string(), window, cx);
-            });
+            set(&self.branch_input.clone(), branch, window, cx);
             self.clone_options.branch_name = branch.to_string();
             cx.notify();
-        } else if step == "clone" {
-            self.submit_clone(window, cx);
+        } else if step == "clone-submit" {
+            self.submit_clone_sheet(window, cx);
         } else if step == "create" {
             self.submit_new_project(window, cx);
+        } else if step == "add" {
+            self.submit_resolved_path(window, cx);
+        } else if step == "pin" {
+            if let Some(folder) = self.derive().selected_folder {
+                self.set_pinned(&folder, true, cx);
+            }
         }
     }
 
@@ -632,19 +774,34 @@ impl GpuiAddProjectModalWindow {
     pub(crate) fn preview_summary(&self) -> String {
         let d = self.derive();
         format!(
-            "view={:?} step={:?} query={:?} folder={:?} form={:?} highlight={:?} error={:?} busy={:?} slow={} rows={} submit={:?} shortcut={:?}",
-            self.current_view(),
-            self.clone_step(),
+            "machine={:?} query={:?} selected={:?} columns={:?} sheet={:?} folder={:?} highlight={:?} error={:?} busy={:?} submit={:?}",
+            self.machine_id,
             self.query,
+            d.selected_folder,
+            self.column_folders(&d),
+            self.sheet,
             self.new_folder_name,
-            self.new_project,
             self.highlight,
             self.error,
             self.busy,
-            self.is_slow,
-            d.rows.len(),
             d.submit_action_label,
-            d.add_shortcut_label,
         )
     }
+}
+
+/// True when `child` is `root` or inside it (`~/dev` holds `~/dev/a`, not `~/devtools`).
+pub(super) fn folder_contains(root: &str, child: &str) -> bool {
+    let root = trim_folder(root);
+    let child = trim_folder(child);
+    if child == root {
+        return true;
+    }
+    let root = if root.ends_with(['/', '\\']) {
+        root
+    } else {
+        format!("{root}/")
+    };
+    child
+        .replace('\\', "/")
+        .starts_with(&root.replace('\\', "/"))
 }

@@ -160,6 +160,7 @@ pub mod presentation_delta;
 mod previous_session_restore_http;
 mod project_docs_http;
 pub mod project_paths;
+mod project_picker;
 mod route_http;
 mod security_gates;
 mod security_http;
@@ -219,6 +220,10 @@ pub(crate) use http_infra::*;
 pub(crate) use memory_guard_runtime::resume_after_memory_stop;
 pub(crate) use presentation_delta::*;
 pub(crate) use project_paths::*;
+pub(crate) use project_picker::{
+    add_entry_details, enclosing_repository_root, folder_details,
+    handle_project_picker_places_http, note_recent_location,
+};
 use route_http::*;
 pub(crate) use session_remove::remove_session_row;
 pub(crate) use session_repair_gate::run_due_repair_passes;

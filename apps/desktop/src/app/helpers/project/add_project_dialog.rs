@@ -27,6 +27,19 @@ pub(crate) fn gpui_add_project_dialog_params(
             if let Some(cwd) = gpui_remote_path_like_string_from_command(params, "cwd", false) {
                 forwarded.insert("cwd".to_string(), serde_json::json!(cwd));
             }
+            if params.get("details").and_then(serde_json::Value::as_bool) == Some(true) {
+                forwarded.insert("details".to_string(), serde_json::json!(true));
+            }
+        }
+        GpuiAddProjectDialogOperation::Places => {
+            for key in ["pin", "unpin"] {
+                if let Some(path) = gpui_remote_path_like_string_from_command(params, key, false) {
+                    forwarded.insert(key.to_string(), serde_json::json!(path));
+                }
+            }
+            if params.get("refresh").and_then(serde_json::Value::as_bool) == Some(true) {
+                forwarded.insert("refresh".to_string(), serde_json::json!(true));
+            }
         }
         GpuiAddProjectDialogOperation::Add => {
             /*
@@ -139,6 +152,7 @@ pub(crate) fn gpui_add_project_dialog_translate_local_windows_paths(
             &["destinationPath"]
         }
         GpuiAddProjectDialogOperation::CreateDirectory => &["parentPath"],
+        GpuiAddProjectDialogOperation::Places => &["pin", "unpin"],
         GpuiAddProjectDialogOperation::CancelCloneJob
         | GpuiAddProjectDialogOperation::DiscoverSourceControl
         | GpuiAddProjectDialogOperation::InstallSourceControlTool

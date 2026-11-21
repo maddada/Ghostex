@@ -1,361 +1,199 @@
-//! Drawing of the Add Project dialog's path steps (machines, sources, browse, new folder,
-//! repository, clone destination) and the window root with its keyboard model. The review step
-//! is `review.rs`.
+//! Drawing of the Add Project picker: the toolbar with its one path field, the sidebar of places
+//! and computers, the folder columns with the preview of the selected folder, Suggested, the
+//! notices and the footer, plus the window root with its keyboard routing. The side panels
+//! (Clone a repo, New project) are `sheets.rs`.
 use super::super::native_modal_kit::*;
-use super::copy::*;
-use super::new_project::*;
+use super::keyboard::Field;
+use super::model::*;
+use super::paths::*;
 use super::skin::*;
+use super::steps::folder_contains;
 use super::window::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, ClickEvent, Context, FontWeight, InteractiveElement as _, IntoElement,
-    KeyDownEvent, MouseButton, MouseMoveEvent, ParentElement as _, Render, SharedString,
+    KeyDownEvent, MouseButton, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
-use gpui_component::input::{
-    Backspace, Enter, Escape, IndentInline, Input, MoveDown, MoveUp, OutdentInline,
-};
-use gpui_component::tooltip::Tooltip;
+use gpui_component::input::{Enter, Escape, IndentInline, Input, MoveDown, MoveUp};
 use gpui_component::{Sizable as _, Size as ComponentSize, h_flex, v_flex};
 
-/// `edge-fade`: the list fades out over 16px at an edge it can still scroll past.
-const EDGE_FADE: f32 = 16.0;
+pub(super) const SIDEBAR_WIDTH: f32 = 212.0;
+pub(super) const PREVIEW_WIDTH: f32 = 250.0;
+pub(super) const SHEET_WIDTH: f32 = 300.0;
+const ROW_HEIGHT: f32 = 28.0;
+
+pub(super) type Action = std::rc::Rc<
+    dyn Fn(&mut GpuiAddProjectModalWindow, &mut Window, &mut Context<GpuiAddProjectModalWindow>),
+>;
+
+pub(super) fn action(
+    f: impl Fn(&mut GpuiAddProjectModalWindow, &mut Window, &mut Context<GpuiAddProjectModalWindow>)
+    + 'static,
+) -> Action {
+    std::rc::Rc::new(f)
+}
+
+/// A sidebar row: what it shows and what a click does.
+struct SidebarItem {
+    icon: &'static str,
+    label: String,
+    note: Option<String>,
+    active: bool,
+    on_click: Action,
+    /// A pinned folder's path, which gets an unpin button.
+    unpin: Option<String>,
+}
+
+fn platform_word(platform: Option<&str>) -> &'static str {
+    match platform.unwrap_or_default() {
+        p if p.starts_with("Win") => "Windows",
+        p if p.starts_with("Mac") || p == "darwin" => "macOS",
+        "" => "",
+        _ => "Linux",
+    }
+}
+
+fn last_segment(path: &str) -> String {
+    let trimmed = trim_folder(path);
+    trimmed
+        .rsplit(['/', '\\'])
+        .find(|part| !part.is_empty())
+        .unwrap_or(&trimmed)
+        .to_string()
+}
 
 impl GpuiAddProjectModalWindow {
-    fn on_move_up(&mut self, _: &MoveUp, _window: &mut Window, cx: &mut Context<Self>) {
-        cx.stop_propagation();
-        if self.new_folder_name.is_none() && self.clone_step() != Some(CloneStep::Review) {
+    // -- keyboard routing -----------------------------------------------------------------------
+
+    fn on_move_up(&mut self, _: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
+        if matches!(self.focused_field(window, cx), Some(Field::Path) | None) {
+            cx.stop_propagation();
             self.move_highlight(-1, cx);
         }
     }
 
-    fn on_move_down(&mut self, _: &MoveDown, _window: &mut Window, cx: &mut Context<Self>) {
-        cx.stop_propagation();
-        if self.new_folder_name.is_none() && self.clone_step() != Some(CloneStep::Review) {
+    fn on_move_down(&mut self, _: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
+        if matches!(self.focused_field(window, cx), Some(Field::Path) | None) {
+            cx.stop_propagation();
             self.move_highlight(1, cx);
         }
     }
 
     fn on_enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
-        if self.clone_step() == Some(CloneStep::Review) {
-            return;
-        }
-        self.press_enter(action.secondary, window, cx);
-    }
-
-    fn on_backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
-        if self.clone_step() == Some(CloneStep::Review) {
-            return;
-        }
-        if self.press_backspace(window, cx) {
-            cx.stop_propagation();
+        match self.focused_field(window, cx) {
+            Some(Field::FolderName) => self.submit_new_folder(window, cx),
+            Some(Field::Repository | Field::Branch) => self.submit_clone_sheet(window, cx),
+            Some(Field::ProjectName) => self.submit_new_project(window, cx),
+            Some(Field::Path) | None => self.press_enter(action.secondary, window, cx),
         }
     }
 
     fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
-        self.close(window, cx);
+        self.press_escape(window, cx);
     }
 
     fn on_tab(&mut self, _: &IndentInline, window: &mut Window, cx: &mut Context<Self>) {
-        cx.stop_propagation();
-        self.cycle_focus(1, window, cx);
+        if self.focused_field(window, cx) == Some(Field::Path) {
+            cx.stop_propagation();
+            self.complete_path(window, cx);
+        }
     }
 
-    fn on_shift_tab(&mut self, _: &OutdentInline, window: &mut Window, cx: &mut Context<Self>) {
-        cx.stop_propagation();
-        self.cycle_focus(-1, window, cx);
-    }
-
-    /// Keys that reach the dialog while a chrome button (not a text field) has focus.
+    /// The picker's shortcuts: New folder, Back, Forward and Up.
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let key = event.keystroke.key.as_str();
-        match key {
-            "escape" => self.close(window, cx),
-            "tab" => {
-                let direction = if event.keystroke.modifiers.shift {
-                    -1
-                } else {
-                    1
-                };
-                self.cycle_focus(direction, window, cx);
-            }
-            "enter" | "space" => {
-                let Some(slot) = self
-                    .chrome_focus
-                    .iter()
-                    .find(|(_, handle)| handle.is_focused(window))
-                    .map(|(slot, _)| *slot)
-                else {
-                    return;
-                };
-                self.activate_slot(slot, window, cx);
-            }
-            _ => return,
-        }
-        cx.stop_propagation();
-    }
-
-    /// Enter or Space on a focused chrome button: the same action as its click.
-    fn activate_slot(&mut self, slot: FocusSlot, window: &mut Window, cx: &mut Context<Self>) {
-        match slot {
-            FocusSlot::PathBack => {
-                if self.new_folder_name.is_some() {
-                    self.cancel_new_folder(window, cx);
-                } else {
-                    self.pop_view();
-                    self.focus_path_input(window, cx);
-                    self.settle(window, cx);
-                }
-            }
-            FocusSlot::ReviewBack | FocusSlot::FooterBack => {
-                self.return_to_clone_destination(window, cx)
-            }
-            FocusSlot::CloneMainOnly => self.set_clone_option(true, window, cx),
-            FocusSlot::ShallowClone => self.set_clone_option(false, window, cx),
-            FocusSlot::FooterClone => self.submit_clone(window, cx),
-            // An Install button installs the provider's CLI; the host never wired
-            // `onOpenSourceControlSettings`, so Setup Required only explains itself.
-            FocusSlot::SetupRequired(index) => {
-                let install = self
-                    .derive()
-                    .rows
-                    .get(index)
-                    .and_then(|row| row.setup_required.clone())
-                    .and_then(|(source, _, tool)| tool.map(|tool| (source, tool)));
-                if let Some((source, tool)) = install {
-                    self.start_tool_install(source, tool, cx);
-                }
-            }
-            FocusSlot::PathInput | FocusSlot::BranchInput => {}
-        }
-    }
-
-    fn render_path_bar(
-        &mut self,
-        skin: &AddProjectSkin,
-        d: &Derived,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let focused =
-            gpui::Focusable::focus_handle(self.path_input.read(cx), cx).is_focused(window);
-        let show_back = d.is_new_folder_step || d.can_pop_view;
-        let leading = if show_back {
-            let handle = self.chrome_focus_handle(FocusSlot::PathBack, cx);
-            let back_focused = handle.is_focused(window);
-            let muted_fill = skin.muted_fill;
-            div()
-                .id("add-project-back")
-                .group("add-project-back")
-                .track_focus(&handle)
-                .flex_shrink_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .w(px(40.0))
-                .h_full()
-                .border_r_1()
-                .border_color(hsla(skin.border_at(0.7)))
-                .when(back_focused, |this| this.bg(hsla(muted_fill)))
-                .hover(move |this| this.bg(hsla(muted_fill)))
-                .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
-                .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                    this.activate_slot(FocusSlot::PathBack, window, cx);
-                }))
-                .child(
-                    modal_icon(
-                        ICON_ARROW_LEFT,
-                        16.0,
-                        if back_focused {
-                            skin.fg()
-                        } else {
-                            skin.muted()
-                        },
-                    )
-                    .group_hover("add-project-back", {
-                        let fg = hsla(skin.fg());
-                        move |style| style.text_color(fg)
-                    }),
-                )
-                .into_any_element()
+        let keystroke = &event.keystroke;
+        let modifiers = keystroke.modifiers;
+        let key = keystroke.key.as_str();
+        let alt_nav = cfg!(not(target_os = "macos")) && modifiers.alt;
+        let handled = if modifiers.secondary(cx) && modifiers.shift && key == "n" {
+            self.start_new_folder(window, cx);
+            true
+        } else if (modifiers.secondary(cx) && key == "[") || (alt_nav && key == "left") {
+            self.go_back();
+            self.settle(window, cx);
+            true
+        } else if (modifiers.secondary(cx) && key == "]") || (alt_nav && key == "right") {
+            self.go_forward();
+            self.settle(window, cx);
+            true
+        } else if ((cfg!(target_os = "macos") && modifiers.platform) || alt_nav) && key == "up" {
+            let d = self.derive();
+            self.go_up(&d);
+            self.settle(window, cx);
+            true
         } else {
-            let (icon, color) = if d.is_browsing {
-                (ICON_FOLDER_PLUS, skin.muted())
-            } else {
-                (ICON_SEARCH, skin.muted_at(0.5))
-            };
-            div()
-                .flex_shrink_0()
-                .pl(px(12.0))
-                .flex()
-                .items_center()
-                .child(modal_icon(icon, 16.0, color))
-                .into_any_element()
+            false
         };
-        let mut actions: Vec<AnyElement> = Vec::new();
-        if self.is_new_project_view() {
-            let refused = self
-                .new_project
-                .as_ref()
-                .is_none_or(|form| form.name_problem().is_some());
-            let label = match self.busy {
-                Some(_) => "Creating",
-                None => "Create",
-            };
-            actions.push(self.bar_button(
-                skin,
-                "add-project-new-project-create",
-                label,
-                Some(ICON_FOLDER_CHECK),
-                refused || self.busy.is_some(),
-                |this, window, cx| this.submit_new_project(window, cx),
-                cx,
-            ));
-        } else if d.is_new_folder_step {
-            let empty = self
-                .new_folder_name
-                .as_deref()
-                .unwrap_or("")
-                .trim()
-                .is_empty();
-            let label = match self.busy {
-                Some(Busy::CreateFolder) => "Creating",
-                _ => "Create Folder",
-            };
-            actions.push(self.bar_button(
-                skin,
-                "add-project-new-folder-submit",
-                label,
-                None,
-                empty || self.busy.is_some(),
-                |this, window, cx| this.submit_new_folder(window, cx),
-                cx,
-            ));
-        } else if d.is_repository_step {
-            let source = self.clone_flow.as_ref().map(|flow| flow.source);
-            let label = if self.busy == Some(Busy::Lookup) {
-                "Working"
-            } else {
-                source.map(repository_action_label).unwrap_or("Continue")
-            };
-            actions.push(self.bar_button(
-                skin,
-                "add-project-repository-action",
-                label,
-                None,
-                self.query.trim().is_empty() || self.busy.is_some(),
-                |this, window, cx| this.submit_repository(window, cx),
-                cx,
-            ));
-        } else if d.is_browsing {
-            actions.push(self.bar_button(
-                skin,
-                "add-project-new-folder",
-                "New Folder",
-                Some(ICON_FOLDER_PLUS),
-                !d.can_create_new_folder || self.busy.is_some(),
-                |this, window, cx| this.start_new_folder(window, cx),
-                cx,
-            ));
-            let label = match self.busy {
-                Some(Busy::Add) => "Adding",
-                Some(Busy::Clone) => "Cloning",
-                Some(Busy::Preview) => "Reviewing",
-                Some(Busy::CreateFolder) => "Creating",
-                Some(Busy::Lookup) => "Working",
-                None => d.submit_action_label,
-            };
-            actions.push(self.bar_button(
-                skin,
-                "add-project-submit",
-                label,
-                (label == "Create & Add").then_some(ICON_FOLDER_CHECK),
-                !d.can_submit_browse_path || self.busy.is_some(),
-                |this, window, cx| this.submit_resolved_path(window, cx),
-                cx,
-            ));
+        if handled {
+            cx.stop_propagation();
         }
-        let has_actions = !actions.is_empty();
-        let p = skin.p;
-        h_flex()
-            .w_full()
-            .h(px(40.0))
-            .items_center()
-            .rounded(px(8.0))
-            .border_1()
-            .border_color(hsla(if focused {
-                skin.bar_focus_border
-            } else {
-                skin.bar_border
-            }))
-            .bg(hsla(skin.bar_background))
-            .overflow_hidden()
-            .child(leading)
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .flex()
-                    .items_center()
-                    .pl(px(6.0))
-                    .pr(px(if has_actions { 6.0 } else { 12.0 }))
-                    .child(
-                        Input::new(&self.path_input)
-                            .with_size(ComponentSize::Small)
-                            .appearance(false)
-                            .bordered(false)
-                            .focus_bordered(false)
-                            .w_full()
-                            .px(px(0.0))
-                            .py(px(0.0))
-                            .text_size(px(13.0))
-                            .text_color(hsla(p.foreground)),
-                    ),
-            )
-            .when(has_actions, |this| {
-                this.child(
-                    h_flex()
-                        .flex_shrink_0()
-                        .items_center()
-                        .gap(px(6.0))
-                        .pr(px(6.0))
-                        .children(actions),
-                )
-            })
-            .into_any_element()
     }
 
-    /// A path-bar action: a filled pill inset in the bar in the dialog's button fill
-    /// (`AddProjectSkin::button_fills`, CDXC:AddProject 2026-10-14), lighter on hover and press. Every action in the bar shares this one look (the 2026-10-02 rule that New
-    /// Folder matches the Add button and both read as clickable).
-    #[allow(clippy::too_many_arguments)]
-    fn bar_button(
+    // -- small pieces -----------------------------------------------------------------------------
+
+    /// A 28px icon button (Back, Forward, Up, a panel's close).
+    pub(super) fn icon_button(
         &self,
         skin: &AddProjectSkin,
         id: &'static str,
-        label: &'static str,
-        icon: Option<&'static str>,
+        icon: &'static str,
         disabled: bool,
-        on_click: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+        on_click: Action,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let hover = skin.muted_fill_at(0.7);
+        let color = if disabled {
+            skin.muted_at(0.4)
+        } else {
+            skin.muted()
+        };
+        div()
+            .id(id)
+            .flex_shrink_0()
+            .size(px(28.0))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(6.0))
+            .when(!disabled, |this| {
+                this.hover(move |this| this.bg(hsla(hover)))
+                    .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+                    .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                        on_click(this, window, cx);
+                    }))
+            })
+            .child(modal_icon(icon, 16.0, color))
+            .into_any_element()
+    }
+
+    /// A filled button in the dialog's one button fill (CDXC:AddProject 2026-10-14).
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn filled_button(
+        &self,
+        skin: &AddProjectSkin,
+        id: impl Into<gpui::ElementId>,
+        label: impl Into<SharedString>,
+        icon: Option<&'static str>,
+        small: bool,
+        disabled: bool,
+        on_click: Action,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let fills = skin.button_fills();
         let text = skin.button_text();
         h_flex()
-            .id(id)
+            .id(id.into())
             .flex_shrink_0()
-            .h(px(28.0))
+            .h(px(if small { 26.0 } else { 30.0 }))
             .items_center()
             .gap(px(6.0))
-            .pl(px(if icon.is_some() { 8.0 } else { 10.0 }))
-            .pr(px(10.0))
-            .rounded(px(6.0))
+            .px(px(if small { 9.0 } else { 12.0 }))
+            .rounded(px(7.0))
             .bg(hsla(fills.rest))
-            .text_size(px(14.0))
-            .line_height(px(20.0))
+            .text_size(px(if small { 12.5 } else { 13.0 }))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(hsla(text))
             .whitespace_nowrap()
@@ -369,97 +207,618 @@ impl GpuiAddProjectModalWindow {
                         on_click(this, window, cx);
                     }))
             })
-            .children(icon.map(|icon| modal_icon(icon, 12.0, text)))
+            .children(icon.map(|icon| modal_icon(icon, 13.0, text)))
+            .child(label.into())
+            .into_any_element()
+    }
+
+    /// A toolbar command (New folder, New project, Clone a repo): icon and label, a fill while its
+    /// panel is open.
+    #[allow(clippy::too_many_arguments)]
+    fn command_button(
+        &self,
+        skin: &AddProjectSkin,
+        id: &'static str,
+        icon: &'static str,
+        label: &'static str,
+        pressed: bool,
+        disabled: bool,
+        on_click: Action,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let hover = skin.muted_fill_at(0.7);
+        let pressed_fill = skin.muted_fill;
+        h_flex()
+            .id(id)
+            .flex_shrink_0()
+            .h(px(30.0))
+            .items_center()
+            .gap(px(6.0))
+            .px(px(9.0))
+            .rounded(px(6.0))
+            .text_size(px(13.0))
+            .text_color(hsla(skin.fg()))
+            .whitespace_nowrap()
+            .when(pressed, |this| this.bg(hsla(pressed_fill)))
+            .when(disabled, |this| this.opacity(0.4))
+            .when(!disabled, |this| {
+                this.hover(move |this| this.bg(hsla(hover)))
+                    .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+                    .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                        on_click(this, window, cx);
+                    }))
+            })
+            .child(modal_icon(icon, 15.0, skin.muted()))
             .child(label)
             .into_any_element()
     }
 
-    fn render_repository_card(&self, skin: &AddProjectSkin) -> Option<AnyElement> {
-        let flow = self
-            .clone_flow
-            .as_ref()
-            .filter(|flow| flow.step == CloneStep::Destination)?;
-        let name = flow
-            .repository
-            .as_ref()
-            .map(|repository| repository.name_with_owner.clone())
-            .unwrap_or_else(|| flow.repository_input.clone());
-        let url = flow
-            .repository
-            .as_ref()
-            .map(|repository| repository.url.clone())
-            .unwrap_or_else(|| flow.remote_url.clone());
-        Some(
-            v_flex()
-                .flex_shrink_0()
-                .min_w_0()
-                .mx(px(12.0))
-                .mt(px(8.0))
-                .gap(px(4.0))
-                .px(px(12.0))
-                .py(px(8.0))
-                .rounded(px(8.0))
-                .border_1()
-                .border_color(hsla(skin.border_at(0.6)))
-                .child(label_medium(skin, "Repository"))
-                .child(
-                    h_flex()
-                        .min_w_0()
-                        .items_center()
-                        .gap(px(8.0))
-                        .child(div().flex_shrink_0().child(modal_icon(
-                            source_icon(flow.source),
-                            16.0,
-                            skin.muted_at(0.8),
-                        )))
-                        .child(
-                            v_flex()
-                                .min_w_0()
-                                .child(
-                                    text_sm(div())
-                                        .min_w_0()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(hsla(skin.fg()))
-                                        .child(name),
-                                )
-                                .child(
-                                    text_sm(div())
-                                        .min_w_0()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .text_color(hsla(skin.muted_at(0.85)))
-                                        .child(url),
-                                ),
-                        ),
-                )
-                .into_any_element(),
-        )
-    }
-
-    /// The "still working" notice, with the clone's cancel link while a clone runs.
-    pub(super) fn render_slow_notice(
+    /// A one-line notice over the folders, with buttons at its end.
+    fn notice(
         &self,
         skin: &AddProjectSkin,
-        text: impl Into<gpui::SharedString>,
-        cx: &mut Context<Self>,
-    ) -> gpui::Div {
-        let cloning = self.busy == Some(Busy::Clone);
-        let fg = skin.fg();
+        icon: &'static str,
+        text: impl Into<SharedString>,
+        buttons: Vec<AnyElement>,
+    ) -> AnyElement {
         h_flex()
+            .flex_shrink_0()
+            .min_w_0()
             .items_center()
             .gap(px(8.0))
-            .px(px(12.0))
-            .py(px(8.0))
+            .px(px(10.0))
+            .py(px(6.0))
             .rounded(px(8.0))
             .border_1()
             .border_color(hsla(skin.border_at(0.6)))
-            .text_size(px(14.0))
-            .line_height(px(20.0))
-            .text_color(hsla(skin.muted()))
+            .bg(hsla(skin.p.panel))
+            .text_size(px(13.0))
+            .line_height(px(18.0))
+            .text_color(hsla(skin.fg()))
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .child(modal_icon(icon, 14.0, skin.muted())),
+            )
+            .child(div().flex_1().min_w_0().child(text.into()))
+            .children(buttons)
+            .into_any_element()
+    }
+
+    // -- toolbar ----------------------------------------------------------------------------------
+
+    fn render_toolbar(
+        &mut self,
+        skin: &AddProjectSkin,
+        d: &Derived,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let focused =
+            gpui::Focusable::focus_handle(self.path_input.read(cx), cx).is_focused(window);
+        let can_go_up = !self.suggested_mode
+            && d.selected_folder
+                .as_deref()
+                .and_then(|folder| self.parent_folder(folder, &d.platform))
+                .is_some();
+        let busy = self.busy.is_some();
+        let p = skin.p;
+        let path_field = h_flex()
+            .flex_1()
+            .min_w_0()
+            .h(px(32.0))
+            .items_center()
+            .gap(px(8.0))
+            .pl(px(10.0))
+            .pr(px(10.0))
+            .rounded(px(8.0))
+            .border_1()
+            .border_color(hsla(if focused {
+                skin.bar_focus_border
+            } else {
+                skin.bar_border
+            }))
+            .bg(hsla(skin.bar_background))
+            .child(div().flex_shrink_0().child(modal_icon(
+                if d.clone_detected.is_some() {
+                    ICON_GIT_BRANCH
+                } else {
+                    ICON_FOLDER
+                },
+                15.0,
+                skin.muted(),
+            )))
+            .child(
+                div().flex_1().min_w_0().child(
+                    Input::new(&self.path_input)
+                        .with_size(ComponentSize::Small)
+                        .appearance(false)
+                        .bordered(false)
+                        .focus_bordered(false)
+                        .w_full()
+                        .px(px(0.0))
+                        .py(px(0.0))
+                        .text_size(px(13.0))
+                        .text_color(hsla(p.foreground)),
+                ),
+            );
+        h_flex()
+            .flex_shrink_0()
+            .h(px(52.0))
+            .items_center()
+            .gap(px(4.0))
+            .px(px(10.0))
+            .border_b_1()
+            .border_color(hsla(skin.border_at(0.7)))
+            .child(self.icon_button(
+                skin,
+                "add-project-back",
+                ICON_ARROW_LEFT,
+                self.history_back.is_empty(),
+                action(|this, window, cx| {
+                    this.go_back();
+                    this.settle(window, cx);
+                }),
+                cx,
+            ))
+            .child(self.icon_button(
+                skin,
+                "add-project-forward",
+                ICON_ARROW_RIGHT,
+                self.history_forward.is_empty(),
+                action(|this, window, cx| {
+                    this.go_forward();
+                    this.settle(window, cx);
+                }),
+                cx,
+            ))
+            .child(self.icon_button(
+                skin,
+                "add-project-up",
+                ICON_ARROW_UP,
+                !can_go_up,
+                action(|this, window, cx| {
+                    let d = this.derive();
+                    this.go_up(&d);
+                    this.settle(window, cx);
+                }),
+                cx,
+            ))
+            .child(div().w(px(4.0)))
+            .child(path_field)
+            .child(div().w(px(6.0)))
+            .child(self.command_button(
+                skin,
+                "add-project-new-folder",
+                ICON_FOLDER_PLUS,
+                "New folder",
+                self.new_folder_name.is_some(),
+                !d.can_create_new_folder || busy || self.suggested_mode,
+                action(|this, window, cx| this.start_new_folder(window, cx)),
+                cx,
+            ))
+            .child(self.command_button(
+                skin,
+                "add-project-new-project",
+                ICON_PLUS,
+                "New project",
+                matches!(
+                    self.sheet,
+                    Some(Sheet::NewProject | Sheet::NewProjectPick(_))
+                ),
+                d.machine_id.is_none() || busy,
+                action(|this, window, cx| {
+                    if matches!(
+                        this.sheet,
+                        Some(Sheet::NewProject | Sheet::NewProjectPick(_))
+                    ) {
+                        this.sheet = Some(Sheet::NewProject);
+                        this.close_sheet(window, cx);
+                    } else {
+                        this.open_new_project_sheet(window, cx);
+                    }
+                }),
+                cx,
+            ))
+            .child(self.command_button(
+                skin,
+                "add-project-clone",
+                ICON_GIT_BRANCH,
+                "Clone a repo",
+                self.sheet == Some(Sheet::Clone),
+                d.machine_id.is_none() || busy,
+                action(|this, window, cx| {
+                    if this.sheet == Some(Sheet::Clone) {
+                        this.close_sheet(window, cx);
+                    } else {
+                        this.open_clone_sheet(None, window, cx);
+                    }
+                }),
+                cx,
+            ))
+            .into_any_element()
+    }
+
+    // -- sidebar ----------------------------------------------------------------------------------
+
+    fn sidebar_items(&self, d: &Derived) -> Vec<(Option<&'static str>, Vec<SidebarItem>)> {
+        let mut sections: Vec<(Option<&'static str>, Vec<SidebarItem>)> = Vec::new();
+        let places = self.current_places().cloned();
+        let active_folder = if self.suggested_mode {
+            None
+        } else {
+            d.selected_folder.clone()
+        };
+        let is_active = |path: &str| active_folder.as_deref() == Some(trim_folder(path).as_str());
+        let place = |icon: &'static str, label: String, path: String, note: Option<String>| {
+            let active = is_active(&path);
+            let target = path.clone();
+            SidebarItem {
+                icon,
+                label,
+                note,
+                active,
+                on_click: action(move |this, window, cx| {
+                    this.go_to_folder(&target, Some(target.clone()));
+                    this.settle(window, cx);
+                }),
+                unpin: None,
+            }
+        };
+        let mut top = Vec::new();
+        if let Some(places) = &places {
+            let count = places.suggested.len();
+            top.push(SidebarItem {
+                icon: ICON_SPARKLES,
+                label: "Suggested".to_string(),
+                note: (count > 0).then(|| count.to_string()),
+                active: self.suggested_mode,
+                on_click: action(|this, window, cx| {
+                    this.open_suggested();
+                    this.settle(window, cx);
+                }),
+                unpin: None,
+            });
+            top.push(place(
+                ICON_HOME,
+                "Home".to_string(),
+                places.home.clone(),
+                None,
+            ));
+        } else {
+            // An older machine, or one still answering: home and the disk's root.
+            let home = place(ICON_HOME, "Home".to_string(), "~".to_string(), None);
+            top.push(SidebarItem {
+                active: !self.suggested_mode && self.query == "~/",
+                ..home
+            });
+        }
+        sections.push((None, top));
+        let windows = d.platform.starts_with("Win");
+        match &places {
+            Some(places) => {
+                if !places.volumes.is_empty() {
+                    let items = places
+                        .volumes
+                        .iter()
+                        .map(|volume| {
+                            let icon = if volume.kind.as_deref() == Some("wsl") {
+                                ICON_TERMINAL
+                            } else {
+                                ICON_DISK
+                            };
+                            let note = match volume.kind.as_deref() {
+                                Some("external") => Some("External".to_string()),
+                                Some("network") => Some("Network".to_string()),
+                                _ => None,
+                            };
+                            place(icon, volume.name.clone(), volume.path.clone(), note)
+                        })
+                        .collect();
+                    sections.push((Some(if windows { "Drives" } else { "Locations" }), items));
+                }
+                if !places.standard.is_empty() {
+                    sections.push((
+                        Some("Folders"),
+                        places
+                            .standard
+                            .iter()
+                            .map(|folder| {
+                                place(ICON_FOLDER, folder.name.clone(), folder.path.clone(), None)
+                            })
+                            .collect(),
+                    ));
+                }
+            }
+            None if windows => {
+                let root = "/".to_string();
+                sections.push((
+                    Some("Drives"),
+                    vec![place(ICON_DISK, "All drives".to_string(), root, None)],
+                ));
+            }
+            None => {
+                sections.push((
+                    Some("Locations"),
+                    vec![place(ICON_DISK, "/".to_string(), "/".to_string(), None)],
+                ));
+            }
+        }
+        // Project folders: the Default projects folder first, then the usual ones.
+        let mut project = Vec::new();
+        let default = d
+            .machine
+            .as_ref()
+            .and_then(|machine| machine.add_project_base_directory.as_deref())
+            .map(str::trim)
+            .filter(|folder| !folder.is_empty())
+            .map(|folder| {
+                expand_home(
+                    &trim_folder(folder),
+                    places.as_ref().map(|places| places.home.as_str()),
+                )
+            });
+        if let Some(default) = &default {
+            project.push(place(
+                ICON_FOLDER,
+                last_segment(default),
+                default.clone(),
+                Some("Default".to_string()),
+            ));
+        }
+        if let Some(places) = &places {
+            for folder in &places.project_folders {
+                if default.as_deref().map(trim_folder) == Some(trim_folder(&folder.path)) {
+                    continue;
+                }
+                project.push(place(
+                    ICON_FOLDER,
+                    folder.name.clone(),
+                    folder.path.clone(),
+                    None,
+                ));
+            }
+        }
+        if !project.is_empty() {
+            sections.push((Some("Project folders"), project));
+        }
+        if let Some(places) = &places {
+            if !places.pinned.is_empty() {
+                sections.push((
+                    Some("Pinned"),
+                    places
+                        .pinned
+                        .iter()
+                        .map(|folder| SidebarItem {
+                            unpin: Some(folder.path.clone()),
+                            ..place(ICON_PIN, folder.name.clone(), folder.path.clone(), None)
+                        })
+                        .collect(),
+                ));
+            }
+            if !places.other_apps.is_empty() {
+                sections.push((
+                    Some("Found in other apps"),
+                    places
+                        .other_apps
+                        .iter()
+                        .map(|folder| {
+                            let parent = std::path::Path::new(&folder.path)
+                                .parent()
+                                .map(|parent| last_segment(&parent.to_string_lossy()));
+                            place(
+                                ICON_GIT_BRANCH,
+                                folder.name.clone(),
+                                folder.path.clone(),
+                                parent,
+                            )
+                        })
+                        .collect(),
+                ));
+            }
+            if !places.recent.is_empty() {
+                sections.push((
+                    Some("Recent"),
+                    places
+                        .recent
+                        .iter()
+                        .map(|folder| {
+                            place(ICON_HISTORY, folder.name.clone(), folder.path.clone(), None)
+                        })
+                        .collect(),
+                ));
+            }
+        }
+        let computers = self
+            .machines
+            .iter()
+            .map(|machine| {
+                let id = machine.machine_id.clone();
+                SidebarItem {
+                    icon: if machine.machine_id == LOCAL_MACHINE_ID {
+                        ICON_DEVICE_DESKTOP
+                    } else {
+                        ICON_SERVER
+                    },
+                    label: machine.label.clone(),
+                    note: Some(platform_word(machine.platform.as_deref()).to_string())
+                        .filter(|word| !word.is_empty()),
+                    active: self.machine_id.as_deref() == Some(machine.machine_id.as_str()),
+                    on_click: action(move |this, window, cx| {
+                        this.choose_machine(id.clone());
+                        this.settle(window, cx);
+                    }),
+                    unpin: None,
+                }
+            })
+            .collect();
+        sections.push((Some("Computers"), computers));
+        sections
+    }
+
+    fn render_sidebar(
+        &mut self,
+        skin: &AddProjectSkin,
+        d: &Derived,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let hover = skin.muted_fill_at(0.6);
+        let active_fill = skin.muted_fill;
+        let mut children: Vec<AnyElement> = Vec::new();
+        let mut index = 0usize;
+        for (title, items) in self.sidebar_items(d) {
+            if let Some(title) = title {
+                children.push(
+                    div()
+                        .flex_shrink_0()
+                        .px(px(8.0))
+                        .pt(px(12.0))
+                        .pb(px(4.0))
+                        .text_size(px(11.5))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(hsla(skin.muted()))
+                        .child(title)
+                        .into_any_element(),
+                );
+            }
+            for item in items {
+                index += 1;
+                let on_click = item.on_click.clone();
+                let unpin = item.unpin.clone().map(|path| {
+                    div()
+                        .id(("add-project-unpin", index))
+                        .flex_shrink_0()
+                        .size(px(18.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(4.0))
+                        .hover(move |this| this.bg(hsla(hover)))
+                        .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                            window.prevent_default();
+                            cx.stop_propagation();
+                        })
+                        .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
+                            cx.stop_propagation();
+                            this.set_pinned(&path, false, cx);
+                        }))
+                        .child(modal_icon(ICON_X, 12.0, skin.muted()))
+                });
+                children.push(
+                    h_flex()
+                        .id(("add-project-place", index))
+                        .flex_shrink_0()
+                        .w_full()
+                        .h(px(ROW_HEIGHT))
+                        .items_center()
+                        .gap(px(8.0))
+                        .px(px(8.0))
+                        .rounded(px(6.0))
+                        .text_size(px(13.0))
+                        .text_color(hsla(skin.fg()))
+                        .when(item.active, |this| this.bg(hsla(active_fill)))
+                        .when(!item.active, |this| {
+                            this.hover(move |this| this.bg(hsla(hover)))
+                        })
+                        .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+                        .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                            on_click(this, window, cx);
+                        }))
+                        .child(div().flex_shrink_0().child(modal_icon(
+                            item.icon,
+                            15.0,
+                            if item.active { skin.fg() } else { skin.muted() },
+                        )))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(item.label),
+                        )
+                        .children(item.note.map(|note| {
+                            div()
+                                .flex_shrink_0()
+                                .max_w(px(90.0))
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(px(11.5))
+                                .text_color(hsla(skin.muted()))
+                                .child(note)
+                        }))
+                        .children(unpin)
+                        .into_any_element(),
+                );
+            }
+        }
+        div()
+            .id("add-project-sidebar")
+            .flex_shrink_0()
+            .w(px(SIDEBAR_WIDTH))
+            .h_full()
+            .overflow_y_scroll()
+            .track_scroll(&self.sidebar_scroll)
+            .bg(hsla(skin.p.panel))
+            .border_r_1()
+            .border_color(hsla(skin.border_at(0.7)))
+            .px(px(6.0))
+            .pt(px(6.0))
+            .pb(px(10.0))
+            .child(v_flex().children(children))
+            .into_any_element()
+    }
+
+    // -- columns ----------------------------------------------------------------------------------
+
+    /// One folder row in a column.
+    #[allow(clippy::too_many_arguments)]
+    fn column_row(
+        &self,
+        skin: &AddProjectSkin,
+        id: (SharedString, usize),
+        entry: &AddProjectBrowseEntry,
+        state: RowState,
+        is_disk: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let hover = skin.muted_fill_at(0.6);
+        let fill = match state {
+            RowState::Selected => Some(skin.muted_fill),
+            RowState::OnPath => Some(skin.muted_fill_at(0.55)),
+            RowState::Highlighted => Some(skin.muted_fill_at(0.8)),
+            RowState::Plain => None,
+        };
+        let path = entry.full_path.clone();
+        let strong = matches!(state, RowState::Selected | RowState::Highlighted);
+        h_flex()
+            .id(id)
+            .flex_shrink_0()
+            .w_full()
+            .h(px(ROW_HEIGHT))
+            .items_center()
+            .gap(px(7.0))
+            .pl(px(8.0))
+            .pr(px(6.0))
+            .rounded(px(6.0))
+            .text_size(px(13.0))
+            .text_color(hsla(skin.fg()))
+            .when_some(fill, |this, fill| this.bg(hsla(fill)))
+            .when(fill.is_none(), |this| {
+                this.hover(move |this| this.bg(hsla(hover)))
+            })
+            .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+            .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                this.open_column_entry(&path);
+                this.settle(window, cx);
+            }))
+            .child(div().flex_shrink_0().child(modal_icon(
+                if is_disk { ICON_DISK } else { ICON_FOLDER },
+                15.0,
+                if strong { skin.fg() } else { skin.muted() },
+            )))
             .child(
                 div()
                     .flex_1()
@@ -467,476 +826,1049 @@ impl GpuiAddProjectModalWindow {
                     .overflow_hidden()
                     .whitespace_nowrap()
                     .text_ellipsis()
-                    .child(text.into()),
+                    .child(entry.name.clone()),
             )
-            .when(cloning && self.clone_job_id.is_some(), |this| {
+            .when(entry.git, |this| {
+                this.child(div().flex_shrink_0().child(modal_icon(
+                    ICON_GIT_BRANCH,
+                    12.0,
+                    skin.muted(),
+                )))
+            })
+            .when(entry.project_id.is_some(), |this| {
                 this.child(
                     div()
-                        .id("add-project-cancel-clone")
                         .flex_shrink_0()
-                        .underline()
-                        .cursor_pointer()
-                        .hover(move |this| this.text_color(hsla(fg)))
-                        .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
-                            this.cancel_clone(cx);
-                        }))
-                        .child("Cancel clone"),
+                        .size(px(6.0))
+                        .rounded_full()
+                        .bg(hsla(skin.muted())),
                 )
             })
-    }
-
-    fn render_row(
-        &mut self,
-        skin: &AddProjectSkin,
-        index: usize,
-        row: &AddProjectRow,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let highlighted = self.highlight.as_deref() == Some(row.value.as_str());
-        let disabled = row.disabled;
-        let installing_source = self
-            .tool_install
-            .as_ref()
-            .filter(|install| install.running)
-            .map(|install| install.source);
-        let trailing = row
-            .setup_required
-            .as_ref()
-            .map(|(source, hint, install_tool)| {
-                let handle = self.chrome_focus_handle(FocusSlot::SetupRequired(index), cx);
-                let focused = handle.is_focused(window);
-                // The dialog's button fill (CDXC:AddProject 2026-10-14).
-                let fills = skin.button_fills();
-                let hint: SharedString = hint.clone().into();
-                let installing = installing_source == Some(*source);
-                let label: SharedString = match install_tool {
-                    Some(_) if installing => "Installing…".into(),
-                    Some(tool) => {
-                        format!("Install {}", super::tool_install::tool_label(tool)).into()
-                    }
-                    None => "Setup Required".into(),
-                };
-                let install = install_tool
-                    .clone()
-                    .filter(|_| installing_source.is_none())
-                    .map(|tool| (*source, tool));
-                let button = div()
-                    .id(SharedString::from(format!(
-                        "add-project-setup-{}",
-                        source.wire()
-                    )))
-                    .track_focus(&handle)
-                    .ml_auto()
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .h(px(24.0))
-                    .px(px(8.0))
-                    .rounded(px(6.0))
-                    .border_1()
-                    .border_color(transparent())
-                    .bg(hsla(fills.rest))
-                    .text_size(px(14.0))
-                    .line_height(px(20.0))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(hsla(skin.button_text()))
-                    .whitespace_nowrap()
-                    .hover(move |this| this.bg(hsla(fills.hover)))
-                    .active(move |this| this.bg(hsla(fills.pressed)))
-                    .tooltip(move |window, cx| Tooltip::new(hint.clone()).build(window, cx))
-                    .on_mouse_down(MouseButton::Left, |_, window, cx| {
-                        window.prevent_default();
-                        cx.stop_propagation();
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        if let Some((source, tool)) = install.clone() {
-                            this.start_tool_install(source, tool, cx);
-                        }
-                    }))
-                    .child(label);
-                skin.focus_ring(button, focused).into_any_element()
-            });
-        let value = row.value.clone();
-        let action = row.action.clone();
-        h_flex()
-            .id(("add-project-row", index))
-            .w_full()
-            .flex_shrink_0()
-            .min_h(px(36.0))
-            .px(px(8.0))
-            .py(px(6.0))
-            .gap(px(10.0))
-            .items_center()
-            .rounded(px(6.0))
-            .cursor_default()
-            .when(disabled, |this| this.opacity(0.6))
-            .when(highlighted, |this| this.bg(hsla(skin.muted_fill)))
-            .when(!disabled, |this| {
-                this.on_mouse_move(cx.listener(move |this, _: &MouseMoveEvent, _window, cx| {
-                    this.hover_row(&value, cx);
-                }))
-                .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
-                .on_click(cx.listener(
-                    move |this, _: &ClickEvent, window, cx| {
-                        this.select_row(action.clone(), window, cx);
-                    },
-                ))
-            })
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .child(modal_icon(row.icon, 16.0, skin.muted_at(0.8))),
-            )
-            .child(
-                v_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .child(
-                        text_sm(div())
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .text_color(hsla(skin.fg()))
-                            .child(row.title.clone()),
-                    )
-                    .children(row.description.clone().map(|description| {
-                        text_sm(div())
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .text_color(hsla(skin.muted_at(0.85)))
-                            .child(description)
-                    })),
-            )
-            .children(trailing)
             .into_any_element()
     }
 
-    fn empty_state_message(&self, d: &Derived) -> String {
-        if d.path_inspection.as_ref().is_some_and(|inspection| {
-            inspection.kind == Some(super::model::AddProjectInspectionKind::File)
-        }) && d.suggested_project_path.is_none()
+    fn column_shell(&self, skin: &AddProjectSkin, id: usize, rows: Vec<AnyElement>) -> AnyElement {
+        div()
+            .id(("add-project-column", id))
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .overflow_y_scroll()
+            .border_r_1()
+            .border_color(hsla(skin.border_at(0.7)))
+            .p(px(4.0))
+            .child(v_flex().children(rows))
+            .into_any_element()
+    }
+
+    fn column_message(&self, skin: &AddProjectSkin, text: impl Into<SharedString>) -> AnyElement {
+        div()
+            .px(px(8.0))
+            .py(px(10.0))
+            .text_size(px(12.5))
+            .line_height(px(18.0))
+            .text_color(hsla(skin.muted()))
+            .child(text.into())
+            .into_any_element()
+    }
+
+    /// What the open folder's column says when it has no folders to list.
+    fn last_column_message(&self, d: &Derived) -> Option<String> {
+        if d.machine_id.is_none() {
+            return Some("No machine is available.".to_string());
+        }
+        if d.unsupported_windows_path {
+            return Some("Windows-style paths are only supported on Windows machines.".to_string());
+        }
+        if d.relative_path_needs_active_project {
+            return Some("Relative paths require an active project.".to_string());
+        }
+        if !d.is_browsing {
+            return Some(if d.clone_detected.is_some() {
+                "Press Enter to clone this repository.".to_string()
+            } else if d.ambiguous.is_some() {
+                "Choose above whether this is a folder or a repository.".to_string()
+            } else {
+                "Type a folder path, or pick a place on the left.".to_string()
+            });
+        }
+        if self.is_browse_pending && self.browse_result.is_none() {
+            return Some("Loading…".to_string());
+        }
+        if d.filtered
+            .filtered
+            .iter()
+            .all(|entry| entry.name.starts_with('.'))
+            && self.new_folder_name.is_none()
         {
-            return "This is a file outside a Git repository. Choose a project folder.".to_string();
-        }
-        if let Some(name) = &self.new_folder_name {
-            // The listing's directory names the parent until gxserver's answer resolves it.
-            let parent = if d.new_folder_parent_path.is_empty() {
-                &d.browse_directory_path
+            return Some(if has_trailing_path_separator(&self.query) {
+                "No folders here.".to_string()
             } else {
-                &d.new_folder_parent_path
-            };
-            return new_folder_message(name, parent);
+                "No matching folders.".to_string()
+            });
         }
-        if self.picking_new_project_parent && d.will_create_project_path {
-            return "Press Enter to use this folder. It is made with the project.".to_string();
-        }
-        let clone_step = self.clone_step().map(|step| match step {
-            CloneStep::Repository => AddProjectEmptyCloneStep::Repository,
-            CloneStep::Destination | CloneStep::Review => AddProjectEmptyCloneStep::Destination,
-        });
-        empty_state_message(&AddProjectEmptyStateInput {
-            clone_step,
-            clone_source: self.clone_flow.as_ref().map(|flow| flow.source),
-            is_loading_machines: self.is_loading_machines,
-            has_machines: !self.machines.is_empty(),
-            relative_path_needs_active_project: d.relative_path_needs_active_project,
-            unsupported_windows_path: d.unsupported_windows_path,
-            will_create_project_path: d.will_create_project_path,
-        })
-        .to_string()
+        None
     }
 
-    fn group_label(&self, d: &Derived) -> &'static str {
-        if self.is_new_project_view() || self.new_project_pick_field().is_some() {
-            return new_project_group_label(self.new_project_pick_field());
-        }
-        if d.ambiguous.is_some() {
-            "Choose how to open this"
-        } else if d.is_browsing {
-            if d.is_clone_destination_step {
-                "Select where to clone"
-            } else if self
-                .browse_result
-                .as_ref()
-                .is_some_and(|result| result.is_drive_list)
-            {
-                "Drives"
-            } else {
-                "Directories"
-            }
-        } else if matches!(self.current_view(), Some(AddProjectView::Machines)) {
-            "Machines"
-        } else {
-            "Sources"
-        }
-    }
-
-    fn render_list(
+    fn render_columns(
         &mut self,
         skin: &AddProjectSkin,
         d: &Derived,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let pending = self.pending_discovery_machine_id.is_some()
-            && matches!(self.current_view(), Some(AddProjectView::Sources { .. }));
-        let pending_line = pending.then(|| {
-            text_sm(div())
-                .flex_shrink_0()
-                .px(px(8.0))
-                .py(px(8.0))
-                .text_color(hsla(skin.muted()))
-                .child("Checking source control providers...")
-                .into_any_element()
+        let machine_id = d.machine_id.clone().unwrap_or_default();
+        let ancestors = self.column_folders(d);
+        let mut chain: Vec<String> = ancestors.clone();
+        if let Some(selected) = &d.selected_folder {
+            chain.push(selected.clone());
+        }
+        let mut columns: Vec<AnyElement> = Vec::new();
+        for (index, folder) in ancestors.iter().enumerate() {
+            let next = chain.get(index + 1).cloned();
+            let key = listing_key(&machine_id, folder);
+            let rows: Vec<AnyElement> = match self.listings.get(&key) {
+                Some(listing) => {
+                    let is_disks = listing.is_drive_list;
+                    let visible: Vec<AddProjectBrowseEntry> = listing
+                        .entries
+                        .iter()
+                        .filter(|entry| !entry.name.starts_with('.'))
+                        .cloned()
+                        .collect();
+                    if visible.is_empty() {
+                        vec![self.column_message(skin, "No folders here.")]
+                    } else {
+                        visible
+                            .iter()
+                            .enumerate()
+                            .map(|(row, entry)| {
+                                let on_path =
+                                    next.as_deref() == Some(trim_folder(&entry.full_path).as_str());
+                                let state = if on_path && index + 1 == ancestors.len() {
+                                    RowState::Selected
+                                } else if on_path {
+                                    RowState::OnPath
+                                } else {
+                                    RowState::Plain
+                                };
+                                self.column_row(
+                                    skin,
+                                    (SharedString::from(format!("col-{index}")), row),
+                                    entry,
+                                    state,
+                                    is_disks,
+                                    cx,
+                                )
+                            })
+                            .collect()
+                    }
+                }
+                None => vec![self.column_message(skin, "Loading…")],
+            };
+            columns.push(self.column_shell(skin, index, rows));
+        }
+        // The open folder's own contents, with the new folder being named at the top.
+        let mut rows: Vec<AnyElement> = Vec::new();
+        if self.new_folder_name.is_some() {
+            let focused = gpui::Focusable::focus_handle(self.folder_name_input.read(cx), cx)
+                .is_focused(window);
+            let creating = self.busy == Some(Busy::CreateFolder);
+            rows.push(
+                h_flex()
+                    .flex_shrink_0()
+                    .w_full()
+                    .h(px(ROW_HEIGHT))
+                    .items_center()
+                    .gap(px(7.0))
+                    .pl(px(8.0))
+                    .pr(px(4.0))
+                    .rounded(px(6.0))
+                    .bg(hsla(skin.muted_fill))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .child(modal_icon(ICON_FOLDER, 15.0, skin.fg())),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .h(px(22.0))
+                            .px(px(5.0))
+                            .flex()
+                            .items_center()
+                            .rounded(px(4.0))
+                            .border_1()
+                            .border_color(hsla(if focused {
+                                skin.bar_focus_border
+                            } else {
+                                skin.bar_border
+                            }))
+                            .bg(hsla(skin.bar_background))
+                            .child(
+                                Input::new(&self.folder_name_input)
+                                    .with_size(ComponentSize::XSmall)
+                                    .appearance(false)
+                                    .bordered(false)
+                                    .focus_bordered(false)
+                                    .disabled(creating)
+                                    .w_full()
+                                    .px(px(0.0))
+                                    .py(px(0.0))
+                                    .text_size(px(13.0))
+                                    .text_color(hsla(skin.fg())),
+                            ),
+                    )
+                    .into_any_element(),
+            );
+        }
+        let is_disks = d.is_drive_list;
+        let entries: Vec<AddProjectBrowseEntry> = d
+            .filtered
+            .filtered
+            .iter()
+            .filter(|entry| {
+                !entry.name.starts_with('.')
+                    || get_browse_leaf_path_segment(&self.query).starts_with('.')
+            })
+            .cloned()
+            .collect();
+        for (row, entry) in entries.iter().enumerate() {
+            let highlighted = self.highlight.as_deref() == Some(entry.full_path.as_str())
+                || (!has_trailing_path_separator(&self.query)
+                    && d.filtered.exact.as_ref().map(|exact| &exact.full_path)
+                        == Some(&entry.full_path));
+            let created =
+                self.created_folder.as_deref() == Some(trim_folder(&entry.full_path).as_str());
+            rows.push(self.column_row(
+                skin,
+                (SharedString::from("col-open"), row),
+                entry,
+                if highlighted || created {
+                    RowState::Highlighted
+                } else {
+                    RowState::Plain
+                },
+                is_disks,
+                cx,
+            ));
+        }
+        if let Some(message) = self.last_column_message(d).filter(|_| rows.is_empty()) {
+            rows.push(self.column_message(skin, message));
+        }
+        columns.push(self.column_shell(skin, 99, rows));
+        // Three columns always share the width; they fill from the left.
+        while columns.len() < 3 {
+            columns.insert(
+                columns.len(),
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .border_r_1()
+                    .border_color(hsla(skin.border_at(0.7)))
+                    .into_any_element(),
+            );
+        }
+        h_flex()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .children(columns)
+            .into_any_element()
+    }
+
+    // -- preview ----------------------------------------------------------------------------------
+
+    /// The selected folder's entry in its parent's listing, for what it is.
+    fn selected_entry(&self, d: &Derived) -> Option<AddProjectBrowseEntry> {
+        let machine_id = d.machine_id.as_deref()?;
+        let selected = d.selected_folder.clone()?;
+        let parent = self.parent_folder(&selected, &d.platform)?;
+        self.listings
+            .get(&listing_key(machine_id, &parent))?
+            .entries
+            .iter()
+            .find(|entry| trim_folder(&entry.full_path) == selected)
+            .cloned()
+    }
+
+    fn render_preview(
+        &mut self,
+        skin: &AddProjectSkin,
+        d: &Derived,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let typed_entry = (!has_trailing_path_separator(&self.query))
+            .then(|| d.filtered.exact.clone())
+            .flatten();
+        let inspection = d.path_inspection.clone().unwrap_or_default_inspection();
+        let entry = typed_entry.clone().or_else(|| self.selected_entry(d));
+        let (name, path) = if d.will_create_project_path {
+            let path = d.resolved_add_project_path.clone();
+            (last_segment(&path), path)
+        } else if let Some(entry) = &typed_entry {
+            (entry.name.clone(), entry.full_path.clone())
+        } else if d.is_drive_list {
+            (
+                d.machine
+                    .as_ref()
+                    .map(|machine| machine.label.clone())
+                    .unwrap_or_default(),
+                String::new(),
+            )
+        } else if let Some(selected) = &d.selected_folder {
+            (last_segment(selected), selected.clone())
+        } else {
+            (String::new(), String::new())
+        };
+        let git = entry.as_ref().is_some_and(|entry| entry.git) || inspection.branch.is_some();
+        let branch = inspection
+            .branch
+            .clone()
+            .or_else(|| entry.as_ref().and_then(|entry| entry.branch.clone()));
+        let language = inspection
+            .language
+            .clone()
+            .or_else(|| entry.as_ref().and_then(|entry| entry.language.clone()));
+        let in_ghostex = inspection.project_id.is_some()
+            || entry
+                .as_ref()
+                .is_some_and(|entry| entry.project_id.is_some());
+        let mut facts: Vec<(&'static str, String)> = Vec::new();
+        if d.will_create_project_path {
+            facts.push(("Kind", "New folder".to_string()));
+        } else if !d.is_drive_list && !path.is_empty() {
+            let kind = if git { "Git repository" } else { "Folder" };
+            facts.push((
+                "Kind",
+                match &language {
+                    Some(language) => format!("{kind} · {language}"),
+                    None => kind.to_string(),
+                },
+            ));
+            if let Some(branch) = &branch {
+                facts.push(("Branch", branch.clone()));
+            }
+            if let Some(root) = &inspection.repo_root {
+                facts.push(("Repository", last_segment(root)));
+            }
+            facts.push((
+                "In Ghostex",
+                if in_ghostex { "Yes" } else { "No" }.to_string(),
+            ));
+        }
+        let pinned = self.current_places().is_some_and(|places| {
+            places
+                .pinned
+                .iter()
+                .any(|pin| trim_folder(&pin.path) == trim_folder(&path))
         });
-        if d.rows.is_empty() {
-            return v_flex()
-                .flex_1()
-                .min_h_0()
-                .px(px(8.0))
-                .pb(px(8.0))
-                .child(
+        let can_pin = !path.is_empty()
+            && !d.will_create_project_path
+            && !d.is_drive_list
+            && self.current_places().is_some();
+        let pin_path = path.clone();
+        let icon = if d.is_drive_list {
+            ICON_DISK
+        } else if git {
+            ICON_GIT_BRANCH
+        } else if d.will_create_project_path {
+            ICON_FOLDER_PLUS
+        } else {
+            ICON_FOLDER
+        };
+        v_flex()
+            .flex_shrink_0()
+            .w(px(PREVIEW_WIDTH))
+            .h_full()
+            .gap(px(12.0))
+            .px(px(16.0))
+            .py(px(16.0))
+            .when(!name.is_empty(), |this| {
+                this.child(
                     div()
-                        .flex_1()
-                        .min_h(px(96.0))
+                        .size(px(40.0))
                         .flex()
                         .items_center()
                         .justify_center()
-                        .px(px(24.0))
-                        .text_center()
-                        .text_size(px(14.0))
-                        .line_height(px(20.0))
+                        .rounded(px(10.0))
+                        .bg(hsla(skin.p.raised))
+                        .child(modal_icon(icon, 20.0, skin.fg())),
+                )
+                .child(
+                    v_flex()
+                        .gap(px(2.0))
+                        .child(
+                            div()
+                                .text_size(px(15.0))
+                                .line_height(px(20.0))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(hsla(skin.fg()))
+                                .child(name.clone()),
+                        )
+                        .when(!path.is_empty(), |this| {
+                            this.child(
+                                div()
+                                    .text_size(px(12.0))
+                                    .line_height(px(16.0))
+                                    .text_color(hsla(skin.muted()))
+                                    .child(self.tildify(&path)),
+                            )
+                        }),
+                )
+            })
+            .children(facts.into_iter().map(|(label, value)| {
+                h_flex()
+                    .gap(px(8.0))
+                    .text_size(px(12.5))
+                    .line_height(px(17.0))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .w(px(78.0))
+                            .text_color(hsla(skin.muted()))
+                            .child(label),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_color(hsla(skin.fg()))
+                            .child(value),
+                    )
+            }))
+            .when(d.will_create_project_path, |this| {
+                this.child(
+                    div()
+                        .text_size(px(12.5))
+                        .line_height(px(17.0))
                         .text_color(hsla(skin.muted()))
-                        .child(self.empty_state_message(d)),
+                        .child("Create & Add makes this folder and adds it."),
                 )
-                .children(pending_line)
-                .into_any_element();
-        }
-        let mut children = vec![
-            label_medium(skin, self.group_label(d))
-                .flex_shrink_0()
-                .px(px(8.0))
-                .pt(px(12.0))
-                .pb(px(6.0))
-                .into_any_element(),
-        ];
-        for (index, row) in d.rows.iter().enumerate() {
-            children.push(self.render_row(skin, index, row, window, cx));
-        }
-        children.extend(pending_line);
-        let offset = self.list_scroll.offset().y;
-        let max_offset = self.list_scroll.max_offset().y;
-        let show_top = f32::from(offset) < -0.5;
-        let show_bottom =
-            f32::from(max_offset) > 0.5 && f32::from(offset) > -f32::from(max_offset) + 0.5;
-        let surface = skin.p.surface;
-        let fade = |top: bool| {
-            let ramp = div().absolute().left_0().right_0().h(px(EDGE_FADE));
-            let ramp = if top { ramp.top_0() } else { ramp.bottom_0() };
-            ramp.bg(gpui::linear_gradient(
-                if top { 0.0 } else { 180.0 },
-                gpui::linear_color_stop(hsla(surface).opacity(0.0), 0.0),
-                gpui::linear_color_stop(hsla(surface), 1.0),
-            ))
-        };
-        div()
-            .relative()
-            .flex_1()
-            .min_h_0()
-            .child(
-                v_flex()
-                    .id("add-project-list")
-                    .size_full()
-                    .overflow_y_scroll()
-                    .track_scroll(&self.list_scroll)
-                    .px(px(8.0))
-                    .pb(px(8.0))
-                    .children(children),
-            )
-            // A ramp can only fade into a solid colour; under window glass the list ends cleanly.
-            .when(!skin.p.glass && show_top, |this| this.child(fade(true)))
-            .when(!skin.p.glass && show_bottom, |this| this.child(fade(false)))
+            })
+            .when(can_pin, |this| {
+                this.child(h_flex().child(self.filled_button(
+                    skin,
+                    "add-project-pin",
+                    if pinned {
+                        "Unpin from sidebar"
+                    } else {
+                        "Pin to sidebar"
+                    },
+                    Some(ICON_PIN),
+                    true,
+                    false,
+                    action(move |this, _window, cx| {
+                        this.set_pinned(&pin_path, !pinned, cx);
+                    }),
+                    cx,
+                )))
+            })
             .into_any_element()
     }
 
-    fn render_footer(&self, skin: &AddProjectSkin, d: &Derived) -> AnyElement {
-        let mut hints: Vec<AnyElement> = Vec::new();
-        if self.is_new_project_view() {
-            hints.push(footer_hint(skin, "↑ ↓", "Choose"));
-            hints.push(footer_hint(skin, "Enter", "Create"));
-            hints.push(footer_hint(skin, "Backspace", "Back"));
-            hints.push(footer_hint(skin, "Esc", "Close"));
-            return h_flex()
-                .flex_shrink_0()
-                .items_center()
-                .gap(px(16.0))
-                .border_t_1()
-                .border_color(hsla(skin.border_at(0.7)))
-                .px(px(16.0))
-                .py(px(10.0))
-                .text_size(px(14.0))
-                .line_height(px(20.0))
-                .text_color(hsla(skin.muted()))
-                .children(hints)
-                .children(
-                    d.machine
-                        .as_ref()
-                        .map(|machine| machine_label(skin, &machine.label)),
-                )
-                .into_any_element();
-        }
-        if !d.is_new_folder_step {
-            hints.push(footer_hint(skin, "↑ ↓", "Navigate"));
-        }
-        if d.is_new_folder_step {
-            hints.push(footer_hint(skin, "Enter", "Create folder"));
-        } else if d.is_repository_step {
-            let label = self
-                .clone_flow
-                .as_ref()
-                .map(|flow| repository_action_label(flow.source))
-                .unwrap_or("");
-            hints.push(footer_hint(skin, "Enter", label));
-        } else if d.is_browsing {
-            hints.push(footer_hint(
-                skin,
-                &d.add_shortcut_label,
-                d.submit_action_label,
-            ));
-        } else {
-            hints.push(footer_hint(skin, "Enter", "Select"));
-        }
-        if d.is_new_folder_step {
-            hints.push(footer_hint(skin, "Backspace", "Cancel"));
-        } else if d.can_pop_view {
-            hints.push(footer_hint(skin, "Backspace", "Back"));
-        }
-        hints.push(footer_hint(skin, "Esc", "Close"));
-        h_flex()
-            .flex_shrink_0()
-            .items_center()
-            .gap(px(16.0))
-            .border_t_1()
-            .border_color(hsla(skin.border_at(0.7)))
-            .px(px(16.0))
-            .py(px(10.0))
-            .text_size(px(14.0))
-            .line_height(px(20.0))
-            .text_color(hsla(skin.muted()))
-            .children(hints)
-            .children(
-                d.machine
-                    .as_ref()
-                    .map(|machine| machine_label(skin, &machine.label)),
-            )
-            .into_any_element()
-    }
+    // -- suggested ------------------------------------------------------------------------------
 
-    fn render_path_step(
+    fn render_suggested(
         &mut self,
         skin: &AddProjectSkin,
         d: &Derived,
-        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let path_bar = self.render_path_bar(skin, d, window, cx);
-        let list = self.render_list(skin, d, window, cx);
-        v_flex()
-            .size_full()
+        let label = d
+            .machine
+            .as_ref()
+            .map(|machine| machine.label.clone())
+            .unwrap_or_default();
+        let suggestions = self
+            .current_places()
+            .map(|places| places.suggested.clone())
+            .unwrap_or_default();
+        let busy = self.busy.is_some();
+        let cards: Vec<AnyElement> = suggestions
+            .iter()
+            .enumerate()
+            .map(|(index, suggestion)| {
+                let from = match suggestion.source.as_str() {
+                    "otherApps" => "Found in other apps".to_string(),
+                    _ => suggestion
+                        .from
+                        .as_ref()
+                        .map(|folder| format!("In {folder}"))
+                        .unwrap_or_default(),
+                };
+                let details = [
+                    Some(from).filter(|text| !text.is_empty()),
+                    suggestion.branch.clone(),
+                    suggestion.language.clone(),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" · ");
+                let add_path = suggestion.path.clone();
+                let show_path = suggestion.path.clone();
+                v_flex()
+                    .flex_shrink_0()
+                    .w(px(220.0))
+                    .gap(px(5.0))
+                    .p(px(12.0))
+                    .rounded(px(10.0))
+                    .border_1()
+                    .border_color(hsla(skin.border_at(0.7)))
+                    .bg(hsla(skin.p.panel))
+                    .child(
+                        h_flex()
+                            .min_w_0()
+                            .gap(px(8.0))
+                            .items_center()
+                            .child(modal_icon(ICON_GIT_BRANCH, 15.0, skin.fg()))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(px(13.0))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(hsla(skin.fg()))
+                                    .child(suggestion.name.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_size(px(12.0))
+                            .text_color(hsla(skin.muted()))
+                            .child(self.tildify(&suggestion.path)),
+                    )
+                    .child(
+                        div()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_size(px(12.0))
+                            .text_color(hsla(skin.muted()))
+                            .child(details),
+                    )
+                    .child(
+                        h_flex()
+                            .mt(px(4.0))
+                            .gap(px(6.0))
+                            .child(self.filled_button(
+                                skin,
+                                ("add-project-suggested-add", index),
+                                "Add project",
+                                None,
+                                true,
+                                busy,
+                                action(move |this, window, cx| {
+                                    this.submit_add_path(&add_path, false, cx);
+                                    this.settle(window, cx);
+                                }),
+                                cx,
+                            ))
+                            .child(self.filled_button(
+                                skin,
+                                ("add-project-suggested-show", index),
+                                "Show",
+                                None,
+                                true,
+                                false,
+                                action(move |this, window, cx| {
+                                    let parent = std::path::Path::new(&show_path)
+                                        .parent()
+                                        .map(|parent| parent.to_string_lossy().to_string());
+                                    this.go_to_folder(&show_path, parent);
+                                    this.settle(window, cx);
+                                }),
+                                cx,
+                            )),
+                    )
+                    .into_any_element()
+            })
+            .collect();
+        let empty = cards.is_empty();
+        div()
+            .id("add-project-suggested")
+            .flex_1()
             .min_w_0()
+            .h_full()
+            .overflow_y_scroll()
+            .p(px(14.0))
+            .child(
+                v_flex()
+                    .gap(px(10.0))
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .text_color(hsla(skin.muted()))
+                            .child(if self.current_places().is_none() {
+                                "Looking for repositories…".to_string()
+                            } else if empty {
+                                format!("Every repository found on {label} is already in Ghostex.")
+                            } else {
+                                format!("Git repositories on {label} that are not in Ghostex yet")
+                            }),
+                    )
+                    .child(h_flex().flex_wrap().gap(px(10.0)).children(cards)),
+            )
+            .into_any_element()
+    }
+
+    // -- notices ----------------------------------------------------------------------------------
+
+    fn render_notices(
+        &mut self,
+        skin: &AddProjectSkin,
+        d: &Derived,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let mut out = Vec::new();
+        if let Some(error) = self.error.clone().or_else(|| d.detected_error.clone()) {
+            out.push(
+                error_region(skin, &error)
+                    .flex_shrink_0()
+                    .into_any_element(),
+            );
+        }
+        if self.sheet != Some(Sheet::Clone)
+            && let Some(clone) = &d.clone_detected
+        {
+            let text = clone.query.clone();
+            out.push(self.notice(
+                skin,
+                ICON_GIT_BRANCH,
+                "This is a repository. Clone it into a folder you pick on the left.",
+                vec![self.filled_button(
+                    skin,
+                    "add-project-notice-clone",
+                    "Clone a repo",
+                    None,
+                    true,
+                    false,
+                    action(move |this, window, cx| {
+                        this.open_clone_sheet(Some(text.clone()), window, cx)
+                    }),
+                    cx,
+                )],
+            ));
+        }
+        if let Some((query, _)) = &d.ambiguous {
+            let folder_query = query.clone();
+            let repo_query = query.clone();
+            out.push(self.notice(
+                skin,
+                ICON_ALERT,
+                format!("Choose how to open {query}"),
+                vec![
+                    self.filled_button(
+                        skin,
+                        "add-project-ambiguous-folder",
+                        "Local folder",
+                        Some(ICON_FOLDER),
+                        true,
+                        false,
+                        action(move |this, window, cx| {
+                            let base = this
+                                .derive()
+                                .selected_folder
+                                .unwrap_or_else(|| this.start_query());
+                            let folder = format!(
+                                "{}{}",
+                                ensure_browse_directory_path(&base),
+                                folder_query.trim_end_matches('/')
+                            );
+                            this.go_to_folder(&folder, None);
+                            this.settle(window, cx);
+                        }),
+                        cx,
+                    ),
+                    self.filled_button(
+                        skin,
+                        "add-project-ambiguous-github",
+                        "GitHub repository",
+                        Some(source_icon(AddProjectSourceId::Github)),
+                        true,
+                        false,
+                        action(move |this, window, cx| {
+                            this.open_clone_sheet(Some(repo_query.clone()), window, cx);
+                            this.choose_clone_source(AddProjectSourceId::Github);
+                        }),
+                        cx,
+                    ),
+                ],
+            ));
+        }
+        if d.will_create_project_path
+            && self.sheet.is_none()
+            && !d.resolved_add_project_path.is_empty()
+        {
+            out.push(self.notice(
+                skin,
+                ICON_FOLDER_PLUS,
+                format!(
+                    "There is no {} here yet. Create & Add makes the folder and adds it.",
+                    last_segment(&d.resolved_add_project_path)
+                ),
+                Vec::new(),
+            ));
+        }
+        if let Some(inspection) = &d.path_inspection {
+            if inspection.kind == Some(AddProjectInspectionKind::File)
+                && d.suggested_project_path.is_none()
+            {
+                out.push(self.notice(
+                    skin,
+                    ICON_ALERT,
+                    "This is a file outside a Git repository. Choose a project folder.",
+                    Vec::new(),
+                ));
+            }
+            if let Some(root) = inspection
+                .repo_root
+                .clone()
+                .filter(|_| inspection.project_id.is_none())
+            {
+                let root_name = last_segment(&root);
+                let folder_name = last_segment(
+                    &inspection
+                        .project_path
+                        .clone()
+                        .unwrap_or_else(|| d.resolved_add_project_path.clone()),
+                );
+                let busy = self.busy.is_some();
+                out.push(self.notice(
+                    skin,
+                    ICON_GIT_BRANCH,
+                    format!("{folder_name} is inside the Git repository {root_name}."),
+                    vec![self.filled_button(
+                        skin,
+                        "add-project-add-root",
+                        format!("Add {root_name} instead"),
+                        None,
+                        true,
+                        busy,
+                        action(move |this, window, cx| {
+                            this.submit_add_path(&root, false, cx);
+                            this.settle(window, cx);
+                        }),
+                        cx,
+                    )],
+                ));
+            }
+        }
+        if let Some(text) = folder_access_notice(d, self.current_home().as_deref()) {
+            out.push(self.notice(skin, ICON_ALERT, text, Vec::new()));
+        }
+        if self.is_slow && self.busy.is_some() && self.sheet != Some(Sheet::Clone) {
+            out.push(self.notice(
+                skin,
+                ICON_ALERT,
+                "Still working. The machine may be reconnecting.",
+                Vec::new(),
+            ));
+        }
+        out
+    }
+
+    // -- footer -----------------------------------------------------------------------------------
+
+    fn render_footer(
+        &mut self,
+        skin: &AddProjectSkin,
+        d: &Derived,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let label = d
+            .machine
+            .as_ref()
+            .map(|machine| machine.label.clone())
+            .unwrap_or_default();
+        let local = d.machine_id.as_deref() == Some(LOCAL_MACHINE_ID);
+        let hover = skin.muted_fill_at(0.6);
+        let submit_label = match self.busy {
+            Some(Busy::Add) if self.sheet.is_none() => "Adding",
+            _ => d.submit_action_label,
+        };
+        // A side panel has its own Cancel and its own action.
+        let panel_open = self.sheet.is_some();
+        let can_submit = d.can_submit_browse_path && self.busy.is_none() && !self.suggested_mode;
+        h_flex()
+            .flex_shrink_0()
+            .h(px(54.0))
+            .items_center()
+            .gap(px(10.0))
+            .px(px(12.0))
+            .border_t_1()
+            .border_color(hsla(skin.border_at(0.7)))
+            .child(
+                h_flex()
+                    .id("add-project-computer")
+                    .flex_shrink_0()
+                    .h(px(30.0))
+                    .items_center()
+                    .gap(px(7.0))
+                    .px(px(9.0))
+                    .rounded(px(7.0))
+                    .text_size(px(13.0))
+                    .text_color(hsla(skin.fg()))
+                    .hover(move |this| this.bg(hsla(hover)))
+                    .when(self.machine_menu_open, |this| {
+                        this.bg(hsla(skin.muted_fill))
+                    })
+                    .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+                    .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
+                        this.machine_menu_open = !this.machine_menu_open;
+                        cx.notify();
+                    }))
+                    .child(modal_icon(
+                        if local {
+                            ICON_DEVICE_DESKTOP
+                        } else {
+                            ICON_SERVER
+                        },
+                        15.0,
+                        skin.muted(),
+                    ))
+                    .child(label)
+                    .child(modal_icon(ICON_CHEVRON_DOWN, 12.0, skin.muted())),
+            )
+            .child(div().flex_1())
+            .when(!panel_open, |this| {
+                this.child(self.filled_button(
+                    skin,
+                    "add-project-cancel",
+                    "Cancel",
+                    None,
+                    false,
+                    false,
+                    action(|this, window, cx| this.close(window, cx)),
+                    cx,
+                ))
+            })
+            .when(!panel_open, |this| {
+                this.child(self.filled_button(
+                    skin,
+                    "add-project-submit",
+                    submit_label,
+                    (submit_label == "Create & Add").then_some(ICON_FOLDER_CHECK),
+                    false,
+                    !can_submit,
+                    action(|this, window, cx| this.submit_resolved_path(window, cx)),
+                    cx,
+                ))
+            })
+            .into_any_element()
+    }
+
+    fn render_machine_menu(&mut self, skin: &AddProjectSkin, cx: &mut Context<Self>) -> AnyElement {
+        let hover = skin.muted_fill_at(0.6);
+        let rows: Vec<AnyElement> = self
+            .machines
+            .iter()
+            .enumerate()
+            .map(|(index, machine)| {
+                let id = machine.machine_id.clone();
+                let current = self.machine_id.as_deref() == Some(machine.machine_id.as_str());
+                h_flex()
+                    .id(("add-project-machine", index))
+                    .h(px(34.0))
+                    .items_center()
+                    .gap(px(9.0))
+                    .px(px(8.0))
+                    .rounded(px(6.0))
+                    .text_size(px(13.0))
+                    .text_color(hsla(skin.fg()))
+                    .hover(move |this| this.bg(hsla(hover)))
+                    .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+                    .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                        this.choose_machine(id.clone());
+                        this.settle(window, cx);
+                    }))
+                    .child(modal_icon(
+                        if machine.machine_id == LOCAL_MACHINE_ID {
+                            ICON_DEVICE_DESKTOP
+                        } else {
+                            ICON_SERVER
+                        },
+                        15.0,
+                        skin.muted(),
+                    ))
+                    .child(div().flex_1().min_w_0().child(machine.label.clone()))
+                    .child(
+                        div()
+                            .text_size(px(11.5))
+                            .text_color(hsla(skin.muted()))
+                            .child(platform_word(machine.platform.as_deref())),
+                    )
+                    .when(current, |this| {
+                        this.child(modal_icon(ICON_CHECK, 14.0, skin.fg()))
+                    })
+                    .into_any_element()
+            })
+            .collect();
+        v_flex()
+            .absolute()
+            .left(px(12.0))
+            .bottom(px(50.0))
+            .w(px(260.0))
+            .p(px(4.0))
+            .rounded(px(10.0))
+            .border_1()
+            .border_color(hsla(skin.p.menu_border))
+            .bg(hsla(skin.p.menu_background))
+            .shadow_lg()
             .child(
                 div()
-                    .flex_shrink_0()
-                    .px(px(12.0))
-                    .pt(px(12.0))
-                    .child(path_bar),
+                    .px(px(8.0))
+                    .pt(px(6.0))
+                    .pb(px(4.0))
+                    .text_size(px(11.5))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(hsla(skin.muted()))
+                    .child("Add the project on"),
             )
-            .children(self.render_repository_card(skin))
-            .children(self.error.as_ref().map(|error| {
-                error_region(skin, error)
-                    .flex_shrink_0()
-                    .mx(px(12.0))
-                    .mt(px(8.0))
-                    .into_any_element()
-            }))
-            .children(folder_access_notice(d).map(|text| {
-                self.render_slow_notice(skin, text, cx)
-                    .flex_shrink_0()
-                    .mx(px(12.0))
-                    .mt(px(8.0))
-                    .into_any_element()
-            }))
-            .children((self.is_slow && self.busy.is_some()).then(|| {
-                self.render_slow_notice(skin, "Still working. The machine may be reconnecting.", cx)
-                    .flex_shrink_0()
-                    .mx(px(12.0))
-                    .mt(px(8.0))
-                    .into_any_element()
-            }))
-            .child(list)
-            .child(self.render_footer(skin, d))
+            .children(rows)
             .into_any_element()
     }
 }
 
-/// The footer's machine label: a 12px folder-plus icon and the machine name, pushed right.
-pub(super) fn machine_label(skin: &AddProjectSkin, label: &str) -> AnyElement {
-    h_flex()
-        .ml_auto()
-        .min_w_0()
-        .items_center()
-        .gap(px(6.0))
-        .child(
-            div()
-                .flex_shrink_0()
-                .child(modal_icon(ICON_FOLDER_PLUS, 12.0, skin.muted())),
-        )
-        .child(
-            div()
-                .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .child(label.to_string()),
-        )
-        .into_any_element()
+/// How a column row is drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RowState {
+    /// The selected folder, in its parent's column.
+    Selected,
+    /// A folder on the way to the selected one.
+    OnPath,
+    /// The keyboard's (or the typed name's) row in the open folder.
+    Highlighted,
+    Plain,
+}
+
+trait InspectionDefault {
+    fn unwrap_or_default_inspection(self) -> AddProjectPathInspection;
+}
+
+impl InspectionDefault for Option<AddProjectPathInspection> {
+    fn unwrap_or_default_inspection(self) -> AddProjectPathInspection {
+        self.unwrap_or(AddProjectPathInspection {
+            kind: None,
+            project_path: None,
+            project_id: None,
+            git_root: None,
+            repo_root: None,
+            branch: None,
+            language: None,
+        })
+    }
 }
 
 impl Render for GpuiAddProjectModalWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let skin = AddProjectSkin::resolve(self.palette);
         let d = self.derive();
-        let review = self.clone_step() == Some(CloneStep::Review) && self.clone_preview.is_some();
-        let body = if review {
-            self.render_review(&skin, &d, window, cx)
+        let toolbar = self.render_toolbar(&skin, &d, window, cx);
+        let notices = self.render_notices(&skin, &d, cx);
+        let sidebar = self.render_sidebar(&skin, &d, cx);
+        let folders = if self.suggested_mode {
+            self.render_suggested(&skin, &d, cx)
         } else {
-            self.render_path_step(&skin, &d, window, cx)
+            self.render_columns(&skin, &d, window, cx)
         };
+        let side_panel = match self.sheet {
+            Some(_) => Some(self.render_sheet(&skin, &d, window, cx)),
+            None if !self.suggested_mode => Some(self.render_preview(&skin, &d, cx)),
+            None => None,
+        };
+        let footer = self.render_footer(&skin, &d, cx);
+        let menu = self
+            .machine_menu_open
+            .then(|| self.render_machine_menu(&skin, cx));
+        let remote = d
+            .machine
+            .as_ref()
+            .filter(|machine| machine.machine_id != LOCAL_MACHINE_ID)
+            .map(|machine| format!("on {}", machine.label));
         let focus_handle = self.focus_handle.clone();
         div()
             .id("add-project-modal")
+            .relative()
             .size_full()
             .overflow_hidden()
             .bg(hsla(skin.p.surface))
             .font_family(MODAL_UI_FONT)
-            .text_size(px(14.0))
-            .line_height(px(20.0))
+            .text_size(px(13.0))
+            .line_height(px(18.0))
             .text_color(hsla(skin.fg()))
-            // Only the review step has no text field to hold focus; the path steps keep the
-            // caret in the path input the way the React rows' `preventDefault` does.
-            .when(review, |this| this.track_focus(&focus_handle))
+            .track_focus(&focus_handle)
             .capture_action(cx.listener(Self::on_move_up))
             .capture_action(cx.listener(Self::on_move_down))
             .capture_action(cx.listener(Self::on_enter))
-            .capture_action(cx.listener(Self::on_backspace))
             .capture_action(cx.listener(Self::on_escape))
             .capture_action(cx.listener(Self::on_tab))
-            .capture_action(cx.listener(Self::on_shift_tab))
-            .on_key_down(cx.listener(Self::on_key_down))
-            .child(body)
+            .capture_key_down(cx.listener(Self::on_key_down))
+            .child(
+                v_flex()
+                    .size_full()
+                    .child(
+                        h_flex()
+                            .flex_shrink_0()
+                            .h(px(40.0))
+                            .items_center()
+                            .gap(px(8.0))
+                            .px(px(16.0))
+                            .border_b_1()
+                            .border_color(hsla(skin.border_at(0.7)))
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(hsla(skin.fg()))
+                                    .child("Add Project"),
+                            )
+                            .children(
+                                remote.map(|remote| {
+                                    div().text_color(hsla(skin.muted())).child(remote)
+                                }),
+                            ),
+                    )
+                    .child(toolbar)
+                    .when(!notices.is_empty(), |this| {
+                        this.child(
+                            v_flex()
+                                .flex_shrink_0()
+                                .gap(px(6.0))
+                                .px(px(12.0))
+                                .pt(px(8.0))
+                                .pb(px(8.0))
+                                .border_b_1()
+                                .border_color(hsla(skin.border_at(0.7)))
+                                .children(notices),
+                        )
+                    })
+                    .child(
+                        h_flex()
+                            .flex_1()
+                            .min_h_0()
+                            .child(sidebar)
+                            .child(folders)
+                            .children(side_panel.map(|panel| {
+                                div()
+                                    .flex_shrink_0()
+                                    .h_full()
+                                    .border_l_1()
+                                    .border_color(hsla(skin.border_at(0.7)))
+                                    .child(panel)
+                            })),
+                    )
+                    .child(footer),
+            )
+            .children(menu)
     }
 }
 
@@ -944,27 +1876,26 @@ impl Render for GpuiAddProjectModalWindow {
 /// on this Mac makes macOS ask to let "Ghostex Server" (Ghostex's background service, which reads
 /// and watches the project) open that folder, a name the user has never seen.
 ///
-/// CDXC:Onboarding 2026-11-11 DECISION: User, on the first-run page (step 12), picked "Local folder first, and explain the folder prompt" (the order is in derive.rs).
-fn folder_access_notice(d: &Derived) -> Option<&'static str> {
+/// CDXC:Onboarding 2026-11-11 DECISION: User, on the first-run page (step 12), picked "Local folder first, and explain the folder prompt"; the picker opens on the folders (CDXC:AddProject 2026-11-21) and keeps this line.
+fn folder_access_notice(d: &Derived, home: Option<&str>) -> Option<&'static str> {
     if !cfg!(target_os = "macos")
         || !d.is_browsing
         || d.machine_id.as_deref() != Some(LOCAL_MACHINE_ID)
     {
         return None;
     }
-    let home = std::env::var("HOME").ok()?;
-    let path = d.browse_directory_path.trim();
-    let path = path
-        .strip_prefix("~/")
-        .map(|rest| format!("{}/{rest}", home.trim_end_matches('/')))
-        .unwrap_or_else(|| path.to_string());
-    // macOS folders are case-insensitive, so `~/documents` is the same folder.
-    let path = path.to_lowercase();
+    let env_home = std::env::var("HOME").ok();
+    let home = home.map(str::to_string).or(env_home)?;
+    let folder = d
+        .selected_folder
+        .clone()
+        .unwrap_or_else(|| expand_home(d.browse_directory_path.trim(), Some(&home)));
     ["Documents", "Desktop", "Downloads"]
         .iter()
-        .any(|folder| {
-            let protected = format!("{}/{folder}", home.trim_end_matches('/')).to_lowercase();
-            path == protected || path.starts_with(&format!("{protected}/"))
+        .any(|name| {
+            let protected = format!("{}/{name}", home.trim_end_matches('/'));
+            // macOS folders are case-insensitive, so `~/documents` is the same folder.
+            folder_contains(&protected.to_lowercase(), &folder.to_lowercase())
         })
         .then_some("macOS will ask to let \"Ghostex Server\", Ghostex\u{2019}s own service, read this folder: allow it.")
 }

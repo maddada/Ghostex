@@ -1,13 +1,13 @@
-//! Add Project's form for a brand-new project: a name, the folder it makes, the Space and project
-//! group it joins and what it starts. The name is typed in the dialog's one input; the four
-//! choices are rows under it, each opening a short list (or, for the folder, a folder browse).
+//! Add Project's New project panel: a name, the folder it makes, then the Space and project group
+//! it joins and what it starts. The name has its own field; the three choices are rows, each
+//! opening a short list in the panel. The folder is the one open in the picker (see
+//! `open_new_project_sheet` for where it starts).
 //!
 //! CDXC:AddProject 2026-11-05 DECISION:
 //! User (Q1306, "keep it called Add Project"): Add Project offers a small form for a brand-new project instead of a folder name alone: the name, the folder it makes, then Space, Group and Start filled in from where you are, each changeable before it is made. The doors stay the same (Q1307).
 //! User (Q1310): with no Default projects folder the folder starts in the folder that holds the selected project's folder, else ~/dev; any folder can be picked, and the first project made saves it as the Default projects folder.
 //! User (Q1308): Start shows the agent that starts and switches to another agent, Terminal or Nothing; the last pick is remembered.
 //! SEE-ALSO: apps/desktop/src/app/add_project_modal_lifecycle.rs (what the form starts from), apps/desktop/src/app/gx_store/added_project.rs (where the made project goes and what it starts), packages/gx-core/src/sidebar_drag/added_project.rs (`plan_new_project_placement`).
-use super::copy::*;
 use super::model::*;
 use super::paths::*;
 use super::window::*;
@@ -95,6 +95,27 @@ pub(crate) struct AddProjectNewProjectConfig {
     pub(crate) agents: Vec<AddProjectStartAgent>,
     /// The remembered pick, else the default agent.
     pub(crate) start: Option<AddProjectStart>,
+}
+
+/// A row of the New project form or of one of its lists.
+#[derive(Clone, Debug)]
+pub(super) struct FormRow {
+    pub(super) icon: &'static str,
+    pub(super) title: String,
+    pub(super) description: Option<String>,
+    /// `None` for the Folder row, which only shows where the project goes.
+    pub(super) action: Option<FormAction>,
+}
+
+#[derive(Clone, Debug)]
+pub(super) enum FormAction {
+    /// Opens a field's list.
+    Pick(NewProjectField),
+    /// A choice in a list (`None` is the list's None).
+    Choose {
+        field: NewProjectField,
+        value: Option<String>,
+    },
 }
 
 /// A form row that opens a list.
@@ -228,16 +249,46 @@ impl GpuiAddProjectModalWindow {
             existing: None,
         });
         self.new_project_inspect_key = None;
-        self.push_view(AddProjectView::NewProject { machine_id });
+    }
+
+    /// New project: the form opens beside the folders. It makes the project in the Default projects
+    /// folder (or the suggested one, user Q1310) while the picker shows home or a drive list, else
+    /// in the folder on screen; once the user opens another folder it follows the picker.
+    pub(super) fn open_new_project_sheet(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(machine_id) = self.machine_id.clone() else {
+            return;
+        };
+        let d = self.derive();
+        self.open_new_project_form(machine_id);
+        let at_start = d.is_drive_list
+            || d.selected_folder.is_none()
+            || d.selected_folder.as_deref().map(trim_folder)
+                == self.current_home().map(|home| trim_folder(&home));
+        if !at_start
+            && let (Some(selected), Some(form)) =
+                (d.selected_folder.clone(), self.new_project.as_mut())
+        {
+            form.parent = selected;
+        }
+        self.new_project_opened_folder = d.selected_folder.clone();
+        self.new_project_follows_browse = !at_start;
+        self.sheet = Some(Sheet::NewProject);
+        self.new_folder_name = None;
+        self.error = None;
+        self.project_name_input.update(cx, |input, cx| {
+            input.set_value(String::new(), window, cx);
+            input.focus(window, cx);
+        });
+        self.settle(window, cx);
     }
 
     pub(super) fn is_new_project_view(&self) -> bool {
-        matches!(self.current_view(), Some(AddProjectView::NewProject { .. }))
+        self.sheet == Some(Sheet::NewProject)
     }
 
     pub(super) fn new_project_pick_field(&self) -> Option<NewProjectField> {
-        match self.current_view() {
-            Some(AddProjectView::NewProjectPick { field, .. }) => Some(*field),
+        match self.sheet {
+            Some(Sheet::NewProjectPick(field)) => Some(field),
             _ => None,
         }
     }
@@ -281,7 +332,7 @@ impl GpuiAddProjectModalWindow {
     }
 
     /// The form's rows: Folder, Space (when Spaces are on), Group (when there is one) and Start.
-    pub(super) fn build_new_project_rows(&self) -> Vec<AddProjectRow> {
+    pub(super) fn build_new_project_rows(&self) -> Vec<FormRow> {
         let Some(form) = self.new_project.as_ref() else {
             return Vec::new();
         };
@@ -298,14 +349,11 @@ impl GpuiAddProjectModalWindow {
             _ if form.save_parent_as_default => " · becomes your projects folder",
             _ => "",
         };
-        rows.push(AddProjectRow {
-            value: "new-project:folder".to_string(),
+        rows.push(FormRow {
             icon: ICON_FOLDER,
             title: "Folder".to_string(),
             description: Some(format!("{folder}{note}")),
-            disabled: false,
-            setup_required: None,
-            action: RowAction::NewProjectChangeFolder,
+            action: None,
         });
         let group = form
             .group_id
@@ -326,19 +374,15 @@ impl GpuiAddProjectModalWindow {
                 (None, Some(space_id)) => self.space_label(&placement, space_id),
                 (None, None) => "None".to_string(),
             };
-            rows.push(AddProjectRow {
-                value: "new-project:space".to_string(),
+            rows.push(FormRow {
                 icon: ICON_SPACE,
                 title: "Space".to_string(),
                 description: Some(description),
-                disabled: false,
-                setup_required: None,
-                action: RowAction::NewProjectPick(NewProjectField::Space),
+                action: Some(FormAction::Pick(NewProjectField::Space)),
             });
         }
         if !placement.groups.is_empty() {
-            rows.push(AddProjectRow {
-                value: "new-project:group".to_string(),
+            rows.push(FormRow {
                 icon: ICON_GROUP,
                 title: "Group".to_string(),
                 description: Some(
@@ -346,44 +390,32 @@ impl GpuiAddProjectModalWindow {
                         .map(|group| group.label.clone())
                         .unwrap_or_else(|| "None".to_string()),
                 ),
-                disabled: false,
-                setup_required: None,
-                action: RowAction::NewProjectPick(NewProjectField::Group),
+                action: Some(FormAction::Pick(NewProjectField::Group)),
             });
         }
-        rows.push(AddProjectRow {
-            value: "new-project:start".to_string(),
+        rows.push(FormRow {
             icon: start_icon(&form.start),
             title: "Start".to_string(),
             description: Some(self.start_label(&form.start)),
-            disabled: false,
-            setup_required: None,
-            action: RowAction::NewProjectPick(NewProjectField::Start),
+            action: Some(FormAction::Pick(NewProjectField::Start)),
         });
         rows
     }
 
     /// One field's choices, filtered by the input, the current one ticked.
-    pub(super) fn build_new_project_pick_rows(&self, field: NewProjectField) -> Vec<AddProjectRow> {
+    pub(super) fn build_new_project_pick_rows(&self, field: NewProjectField) -> Vec<FormRow> {
         let Some(form) = self.new_project.as_ref() else {
             return Vec::new();
         };
         let placement = self.new_project_placement(&form.machine_id);
-        let choice = |value: Option<String>, label: String, icon: &'static str, current: bool| {
-            AddProjectRow {
-                value: format!(
-                    "new-project-pick:{}",
-                    value.clone().unwrap_or_else(|| "none".to_string())
-                ),
+        let choice =
+            |value: Option<String>, label: String, icon: &'static str, current: bool| FormRow {
                 icon: if current { ICON_CHECK } else { icon },
                 title: label,
                 description: None,
-                disabled: false,
-                setup_required: None,
-                action: RowAction::NewProjectChoose { field, value },
-            }
-        };
-        let rows: Vec<AddProjectRow> = match field {
+                action: Some(FormAction::Choose { field, value }),
+            };
+        let rows: Vec<FormRow> = match field {
             NewProjectField::Space => std::iter::once(choice(
                 None,
                 "None".to_string(),
@@ -430,26 +462,13 @@ impl GpuiAddProjectModalWindow {
                 })
                 .collect(),
         };
-        rows.into_iter()
-            .filter(|row| matches_filter(&self.query, &row.title, &[]))
-            .collect()
+        rows
     }
 
     pub(super) fn open_new_project_pick(&mut self, field: NewProjectField) {
-        let Some(machine_id) = self
-            .new_project
-            .as_ref()
-            .map(|form| form.machine_id.clone())
-        else {
-            return;
-        };
-        self.push_view(AddProjectView::NewProjectPick { machine_id, field });
-        // The current choice is highlighted, so Enter right away keeps it.
-        self.highlight = self
-            .build_new_project_pick_rows(field)
-            .into_iter()
-            .find(|row| row.icon == ICON_CHECK)
-            .map(|row| row.value);
+        if self.new_project.is_some() {
+            self.sheet = Some(Sheet::NewProjectPick(field));
+        }
     }
 
     pub(super) fn choose_new_project_value(
@@ -499,48 +518,8 @@ impl GpuiAddProjectModalWindow {
                 }
             }
         }
-        // Back on the form with nothing highlighted, so the next Enter makes the project.
-        self.pop_view();
-    }
-
-    /// The Folder row: browse from the current folder; the folder on screen is taken with
-    /// Use Folder.
-    pub(super) fn start_new_project_folder_pick(&mut self) {
-        let Some(form) = self.new_project.as_ref() else {
-            return;
-        };
-        let machine_id = form.machine_id.clone();
-        let start = ensure_browse_directory_path(&form.parent);
-        self.push_view(AddProjectView::Browse {
-            machine_id,
-            initial_query: start,
-        });
-        self.picking_new_project_parent = true;
-    }
-
-    /// Use Folder while picking: the directory on screen becomes the parent, back on the form.
-    pub(super) fn take_new_project_folder(&mut self, d: &Derived) {
-        let picked = if has_trailing_path_separator(&self.query) {
-            self.browse_result
-                .as_ref()
-                .map(|result| result.parent_path.clone())
-                .unwrap_or_else(|| self.query.trim().to_string())
-        } else {
-            d.filtered
-                .exact
-                .as_ref()
-                .map(|entry| entry.full_path.clone())
-                .unwrap_or_else(|| self.query.trim().to_string())
-        };
-        let picked = normalize_project_path_for_dispatch(&picked);
-        if picked.is_empty() {
-            return;
-        }
-        if let Some(form) = self.new_project.as_mut() {
-            form.parent = picked;
-            form.existing = None;
-        }
-        self.pop_view();
+        // Back on the form, so the next Enter makes the project.
+        self.sheet = Some(Sheet::NewProject);
     }
 
     /// The machine's answer about the folder the form would make.
@@ -579,7 +558,7 @@ impl GpuiAddProjectModalWindow {
         else {
             return;
         };
-        if !self.is_new_project_view() {
+        if self.new_project_pick_field().is_none() && !self.is_new_project_view() {
             return;
         }
         let machine_id = form.machine_id.clone();
@@ -646,22 +625,6 @@ impl GpuiAddProjectModalWindow {
         );
         self.settle(window, cx);
     }
-
-    /// The Sources row that opens the form, offered on every machine.
-    pub(super) fn new_project_source_row(&self, machine_id: &str) -> AddProjectRow {
-        let (parent, _) = self.new_project_parent(machine_id);
-        AddProjectRow {
-            value: "source:new-project-folder".to_string(),
-            icon: ICON_FOLDER_PLUS,
-            title: "New project folder".to_string(),
-            description: Some(format!("Make a new project in {parent}")),
-            disabled: false,
-            setup_required: None,
-            action: RowAction::NewProjectFolder {
-                machine_id: machine_id.to_string(),
-            },
-        }
-    }
 }
 
 pub(super) fn start_icon(start: &AddProjectStart) -> &'static str {
@@ -679,15 +642,5 @@ pub(super) fn new_project_group_label(field: Option<NewProjectField>) -> &'stati
         Some(NewProjectField::Space) => "Space",
         Some(NewProjectField::Group) => "Project group",
         Some(NewProjectField::Start) => "Start",
-    }
-}
-
-/// The input's placeholder over the form or one of its lists.
-pub(super) fn new_project_placeholder(field: Option<NewProjectField>) -> &'static str {
-    match field {
-        None => "Project name",
-        Some(NewProjectField::Space) => "Filter Spaces",
-        Some(NewProjectField::Group) => "Filter project groups",
-        Some(NewProjectField::Start) => "Filter",
     }
 }

@@ -200,6 +200,9 @@ pub(super) async fn route_projects_http(
                 let project = repository.add_project_path(params)?;
                 let project =
                     crate::workspaces::place_added_project(repository, db, project, params)?;
+                if let Some(path) = project.get("path").and_then(Value::as_str) {
+                    note_recent_location(&state.paths, path);
+                }
                 let project_id = value_text(&project, "projectId")?;
                 schedule_presentation_project_delta(
                     &state,
@@ -460,6 +463,10 @@ pub(super) async fn route_projects_http(
         }
         "/api/browseProjectDirectories" => {
             handle_browse_project_directories_http(&state, endpoint.path, request_id, &body_json)
+                .await
+        }
+        "/api/projectPickerPlaces" => {
+            handle_project_picker_places_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/createProjectDirectory" => {
             handle_create_project_directory_http(&state, endpoint.path, request_id, &body_json)

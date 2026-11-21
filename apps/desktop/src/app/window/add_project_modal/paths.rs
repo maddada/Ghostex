@@ -227,10 +227,6 @@ pub(crate) fn get_browse_parent_path(current: &str) -> Option<String> {
     Some(trimmed[..index + 1].to_string())
 }
 
-pub(crate) fn can_navigate_up(current: &str) -> bool {
-    get_browse_parent_path(current).is_some()
-}
-
 /// `/^[a-z]:[/\\]$/iu`: the browse directory is a Windows drive root.
 pub(crate) fn is_windows_drive_root(value: &str) -> bool {
     let bytes = value.as_bytes();

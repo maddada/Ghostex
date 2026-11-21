@@ -1240,7 +1240,7 @@ button, from the "Add Project"
 button that an empty project list or empty Space shows, or by right-clicking
 the empty sidebar area) joins the Space that is open at the time and appears at
 the top of it; add a project while Other is selected to leave it out of every
-Space. A project made with New project folder goes where its form says (see
+Space. A project made with New project goes where its form says (see
 below).
 Grouping never moves a project out of its Space: a group made with Organise >
 Project Group > New Group joins the Space its project is in, and a project taken out
@@ -1249,18 +1249,36 @@ group's Space. Adding a project to an existing group in another Space moves it
 to that group's Space, and the sidebar switches there with the project focused.
 A sessions group made with a session's Move to New Group shows in the
 project's Space.
-In Add Project, select the computer whose folders you want to browse. Local
-folder starts in your home folder, and External drives and other folders shows
-that computer's filesystem root. On a computer running native Windows
-(PowerShell), the two are a single Local folder row that opens the list of
-drives, with your home folder at the top. You can paste a Windows drive or UNC
-path when the selected computer runs native Windows, even from a Linux or macOS
-client. Local folder is the first row. On a Mac, a folder in Documents, Desktop
-or Downloads makes macOS ask once to let "Ghostex Server" read it: that is
-Ghostex's own background service, and Add Project says so before macOS asks.
-Allow it, or your agents can't work in that folder (System Settings > Privacy
-& Security > Files and Folders changes it later).
-To start a brand-new project, open Add Project and choose New project folder.
+Add Project is a folder picker. The sidebar on the left lists Suggested (Git
+repositories on that computer that are not in Ghostex yet), Home, the computer's
+disks (drive letters and WSL distros on Windows, the startup disk and connected
+volumes on a Mac, `/` and what is mounted under `/mnt`, `/media` and
+`/run/media` on Linux), Desktop, Documents and Downloads, Project folders (your
+Default projects folder, the usual folders like `~/dev`, `~/code` or
+`~/Developer` that exist, and folders holding several Git repositories), Pinned
+folders, projects other coding apps on that computer opened (Found in other
+apps), Recent folders and your Computers. Pick a computer there (or with the
+computer button at the bottom left) to browse its folders. The folders open in
+columns: click a folder to open it beside the last one; the panel on the right
+shows the folder you picked (its Git branch and language, and whether it is
+already in Ghostex) with Pin to sidebar. The path field at the top is the one
+place the picked folder is shown: type or paste a path there (Tab completes a
+folder name, Up and Down move through the folders, Enter opens one), or paste a
+repository to clone it. Add project adds the picked folder (Open project when it
+is already a project; Create & Add when the typed folder does not exist yet).
+New folder makes a folder in the open folder and picks it. A folder inside a Git
+repository offers to add the repository instead. Back, Forward and Up (Cmd+[,
+Cmd+] and Cmd+Up on a Mac, Alt+Left, Alt+Right and Alt+Up elsewhere) move
+around, and Cmd+Shift+N (Ctrl+Shift+N) makes a folder. Without a Default
+projects folder the picker opens in your home folder (on a computer running
+native Windows (PowerShell) at its list of drives). You can paste a Windows
+drive or UNC path when the selected computer runs native Windows, even from a
+Linux or macOS client. On a Mac, a folder in Documents, Desktop or Downloads
+makes macOS ask once to let "Ghostex Server" read it: that is Ghostex's own
+background service, and Add Project says so before macOS asks. Allow it, or
+your agents can't work in that folder (System Settings > Privacy & Security >
+Files and Folders changes it later).
+To start a brand-new project, open Add Project and press New project.
 Type the project's name; the rows under it show what happens, and each can be
 changed before you press Enter (or Create): Folder is where the project's
 folder is made, Space and Group are where it goes in the sidebar, and Start is
@@ -1268,15 +1286,16 @@ what opens in it (your default agent, another agent, Terminal or Nothing).
 Space and Group start where you are: the Space open in the sidebar and the
 project group of the selected project. A project put in a group joins that
 group's Spaces. Start remembers what you picked last. If the name is already a
-project there, Create opens that project instead.
+project there, Create opens that project instead. Open another folder on the
+left to make the project there.
 The folder is made in Settings > Projects > Global settings > Default projects folder
 (`defaultProjectsFolder`, for example `~/dev`). With that setting blank, Add
 Project suggests the folder that holds the selected project's folder (else
 `~/dev`), lets you pick any other, and saves the folder your first new project
-is made in as the setting. Local folder and a clone's destination on this
-computer start in that folder too. A sessions group (Move to New
+is made in as the setting. The picker on this computer starts in that folder
+too. A sessions group (Move to New
 Group) only sorts sessions inside a project and never makes a folder; use New
-project folder when the work needs its own folder, and Organise > Project Group >
+project when the work needs its own folder, and Organise > Project Group >
 New Group to group projects together.
 Right-click a Space icon for its menu: Manage (Edit Space, New Space, Hide
 Space) and Sleep. Hide Space takes a Space off the Spaces row (its projects stay
@@ -7210,20 +7229,22 @@ Related settings: `ghostexCaptureEnabled`, `ghostexCaptureSwitchToSession`.
 
 ## Git and worktrees
 
-In New Project, paste a folder path, `cd ~/dev/my-app`, a quoted path, or a
-path with shell-escaped spaces to browse it on the local machine. A selected
-machine stays selected; `saved-machine:/path` selects a saved machine by name
-or ID. GitHub, GitLab, Bitbucket, Azure DevOps, and other Git URLs open the
-clone flow. Bare `owner/repo` offers Local folder and GitHub repository;
-the folder path is relative to the current project or the machine's Add
-project starts in folder. Copied `git clone`, `gh repo clone`, and
-`glab repo clone` commands prefill the repository, destination, branch
-(`-b` or `--branch`), and supported options (`--single-branch`, `--depth 1`).
-Repository file links identify the repository; unambiguous branch links
-also prefill the branch. Registered paths offer Open existing project, and
-files inside a Git repository offer its root. Press Enter to continue,
-choose a destination (on a Windows PowerShell machine the folder list starts at
-your drives), and review before Clone & Add. Clone & Add closes the dialog and
+In Add Project's path field, paste a folder path, `cd ~/dev/my-app`, a quoted
+path, or a path with shell-escaped spaces to browse it; `saved-machine:/path`
+selects a saved machine by name or ID. GitHub, GitLab, Bitbucket, Azure DevOps,
+and other Git URLs offer Clone a repo. Bare `owner/repo` offers Local folder and
+GitHub repository. Clone a repo (its button at the top of Add Project) opens a
+panel beside the folders: pick where it comes from (Git URL, GitHub, GitLab,
+Bitbucket, Azure DevOps; a missing GitHub or GitLab CLI installs from there),
+type or paste the repository, and it is cloned into the folder you have open
+(click folders on the left to choose another; a folder that is already there is
+refused). Copied `git clone`, `gh repo clone`, and `glab repo clone` commands
+prefill the repository, destination folder name, branch (`-b` or `--branch`),
+and supported options (`--single-branch`, `--depth 1`); the panel also has
+Branch, Clone branch only and Shallow clone. Repository file links identify the
+repository; unambiguous branch links also prefill the branch. Registered paths
+offer Open project, and files inside a Git repository offer its root. Clone &
+Add closes the dialog and
 the clone carries on in the background: a button left of the voice button in
 the work area header shows it ("Cloning 14%", the full line on hover), and a
 click opens the list of running jobs with each one's progress and Cancel. The

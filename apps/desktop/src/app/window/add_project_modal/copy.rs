@@ -1,5 +1,4 @@
-//! The Add Project dialog's labels, provider readiness, source order, placeholders and
-//! empty-state copy: the Rust twin of packages/core-ui/add-project-modal/add-project-modal-logic.ts (deleted 2026-10-01).
+//! The Add Project picker's labels, provider readiness, source order and placeholders: the Rust twin of packages/core-ui/add-project-modal/add-project-modal-logic.ts (deleted 2026-10-01).
 use super::model::{
     AddProjectMachineOption, AddProjectProviderAuthStatus, AddProjectSourceControlDiscovery,
     AddProjectSourceId,
@@ -37,24 +36,6 @@ fn source_path_hint(source: AddProjectSourceId) -> &'static str {
         AddProjectSourceId::Github => "owner/repo",
         AddProjectSourceId::Gitlab => "group/project",
         AddProjectSourceId::Url => "URL",
-    }
-}
-
-pub(crate) fn source_row_title(source: AddProjectSourceId) -> String {
-    match source {
-        AddProjectSourceId::Url => "Git URL".to_string(),
-        _ => format!("{} repository", source_label(source)),
-    }
-}
-
-pub(crate) fn source_row_description(source: AddProjectSourceId) -> String {
-    match source {
-        AddProjectSourceId::Url => "Clone from a remote URL".to_string(),
-        _ => format!(
-            "Clone {} {}",
-            source_label(source),
-            source_path_hint(source)
-        ),
     }
 }
 
@@ -170,21 +151,6 @@ pub(crate) fn repository_placeholder(source: AddProjectSourceId) -> String {
     }
 }
 
-pub(crate) fn repository_action_label(source: AddProjectSourceId) -> &'static str {
-    match source {
-        AddProjectSourceId::Github | AddProjectSourceId::Gitlab => "Lookup",
-        _ => "Continue",
-    }
-}
-
-pub(crate) fn path_placeholder(is_submenu: bool) -> &'static str {
-    if is_submenu {
-        "Enter path (e.g. ~/projects/my-app)"
-    } else {
-        "Enter project path, GitHub repository, or clone URL"
-    }
-}
-
 pub(crate) fn initial_browse_query(machine: Option<&AddProjectMachineOption>) -> String {
     machine
         .and_then(|machine| machine.add_project_base_directory.as_deref())
@@ -205,89 +171,4 @@ pub(crate) fn initial_clone_destination_query(machine: Option<&AddProjectMachine
         return ADD_PROJECT_ROOT_BROWSE_PATH.to_string();
     }
     initial_browse_query(machine)
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum AddProjectEmptyCloneStep {
-    Repository,
-    Destination,
-}
-
-pub(crate) struct AddProjectEmptyStateInput {
-    pub(crate) clone_step: Option<AddProjectEmptyCloneStep>,
-    pub(crate) clone_source: Option<AddProjectSourceId>,
-    pub(crate) is_loading_machines: bool,
-    pub(crate) has_machines: bool,
-    pub(crate) relative_path_needs_active_project: bool,
-    pub(crate) unsupported_windows_path: bool,
-    pub(crate) will_create_project_path: bool,
-}
-
-/// `addProjectEmptyStateMessage`.
-pub(crate) fn empty_state_message(input: &AddProjectEmptyStateInput) -> &'static str {
-    if input.is_loading_machines {
-        return "Loading machines...";
-    }
-    if !input.has_machines {
-        return "No machine is available.";
-    }
-    if input.clone_step == Some(AddProjectEmptyCloneStep::Repository) {
-        return match input.clone_source {
-            Some(
-                AddProjectSourceId::Url
-                | AddProjectSourceId::Bitbucket
-                | AddProjectSourceId::AzureDevops,
-            ) => "Enter a repository, URL, or clone command and press Enter to continue.",
-            Some(AddProjectSourceId::Github) => {
-                "Enter owner/repo, a GitHub URL, or a clone command and press Enter to continue."
-            }
-            _ => "Enter a repository path and press Enter to look it up.",
-        };
-    }
-    if input.clone_step == Some(AddProjectEmptyCloneStep::Destination) {
-        return if input.will_create_project_path {
-            "Press Enter to review this new clone destination."
-        } else {
-            "Choose a destination path and press Enter to review the clone."
-        };
-    }
-    if input.unsupported_windows_path {
-        return "Windows-style paths are only supported on Windows machines.";
-    }
-    if input.relative_path_needs_active_project {
-        return "Relative paths require an active project.";
-    }
-    if input.will_create_project_path {
-        return "Press Enter to create this folder and add it as a project.";
-    }
-    "No matching directories."
-}
-
-/*
-CDXC:AddProject 2026-08-18:
-The new-folder step reuses the dialog's single input, so the list area is where the pending
-folder is spelled out in full. It names the parent the folder lands in, because the typed name
-alone never shows that.
-*/
-pub(crate) fn new_folder_message(name: &str, parent_path: &str) -> String {
-    let name = name.trim();
-    if name.is_empty() {
-        return format!("Name the new folder to create in {parent_path}.");
-    }
-    if name.contains(['/', '\\']) {
-        return "A folder name cannot contain a path separator.".to_string();
-    }
-    let path = format!("{}/{name}", parent_path.trim_end_matches(['/', '\\']));
-    format!("Press Enter to create {path}.")
-}
-
-/// `matchesAddProjectFilter`: a case-insensitive substring match over a row's title and terms.
-pub(crate) fn matches_filter(query: &str, title: &str, terms: &[&str]) -> bool {
-    let normalized = query.trim().to_lowercase();
-    if normalized.is_empty() {
-        return true;
-    }
-    std::iter::once(title)
-        .chain(terms.iter().copied())
-        .any(|term| term.to_lowercase().contains(&normalized))
 }

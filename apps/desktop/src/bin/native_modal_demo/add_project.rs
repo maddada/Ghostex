@@ -1,15 +1,17 @@
-//! Add Project preview. The host answers every gxserver round trip from the fixture tree of
-//! packages/core-ui/add-project-modal/add-project-modal-mocks.ts (deleted 2026-10-01), after `latency`.
-//! States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): default (Sources, one machine), `machines`,
-//! `remote` (preselected remote machine), `noproviders`, `browse`, `highlight` (two rows down),
-//! `create` (an unknown leaf: Create & Add), `newfolder`, `repository` (GitHub), `destination`,
-//! `review`, `blocked` (review with a refused destination and a bad branch), `error` (the add
-//! fails), `slow` (the still-working notice), `cloning` (a running clone past the notice),
-//! `lookupfail`, `drives` (a PowerShell machine's drive list), `ambiguous` (owner/repo typed on
-//! the Sources step), `projectsfolder` (Sources with a Default projects folder of ~/dev),
-//! `projectsfolder-add` (New project folder's form named `widgets`, then Create), `newproject`
-//! (the form named `billing-api`: Work Space, Client apps group, Claude), `newproject-start` (its
-//! Start list) and `newproject-folder` (picking the folder it is made in).
+//! Add Project preview. The host answers every gxserver round trip from a fixture tree of three
+//! computers (this Mac, a Linux box and a Windows PC with its drive list), with each folder's Git
+//! details and each computer's sidebar places, after `latency`.
+//! States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): default (the picker on ~/), `single` (one machine),
+//! `browse` (~/dev open), `highlight` (two rows down), `create` (an unknown leaf: Create & Add),
+//! `newfolder` (naming a new folder), `newfolder-made` (it made and selected), `inside-repo` (a
+//! folder inside a repository), `repository` (Clone a repo on GitHub), `clone` (a URL typed),
+//! `lookupfail`, `blocked` (a refused destination and a bad branch), `cloning` (a running clone),
+//! `error` (the add fails), `slow` (the still-working notice), `remote` (the Linux box),
+//! `windows` (the Windows PC's drive list), `windows-folder` (a folder on it), `suggested`,
+//! `machines` (the computer menu), `noproviders`, `oldserver` (a machine without places),
+//! `projectsfolder` (a Default projects folder of ~/dev), `projectsfolder-add` (New project named
+//! `widgets`, then Create), `newproject`, `newproject-start` (its Start list), `ambiguous`
+//! (owner/repo typed) and `pasted-url`. `script:<step>;<step>` runs any `preview_step` steps.
 use super::add_project_modal::*;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
 use gpui_component::Root;
@@ -20,38 +22,172 @@ use std::rc::Rc;
 use std::time::Duration;
 
 const HOME: &str = "/Users/story";
-const REMOTE_HOME: &str = "/srv";
+const REMOTE_HOME: &str = "/home/story";
+const WINDOWS_HOME: &str = "C:\\Users\\story";
 
-fn tree() -> HashMap<&'static str, Vec<&'static str>> {
+/// One fixture folder: its name and what it is (`git` branch, language, already a project).
+#[derive(Clone, Copy)]
+struct Folder {
+    name: &'static str,
+    branch: Option<&'static str>,
+    language: Option<&'static str>,
+    project: bool,
+}
+
+const fn folder(name: &'static str) -> Folder {
+    Folder {
+        name,
+        branch: None,
+        language: None,
+        project: false,
+    }
+}
+
+const fn repo(name: &'static str, branch: &'static str, language: &'static str) -> Folder {
+    Folder {
+        name,
+        branch: Some(branch),
+        language: Some(language),
+        project: false,
+    }
+}
+
+const fn project(name: &'static str, branch: &'static str, language: &'static str) -> Folder {
+    Folder {
+        name,
+        branch: Some(branch),
+        language: Some(language),
+        project: true,
+    }
+}
+
+fn tree() -> HashMap<&'static str, Vec<Folder>> {
     HashMap::from([
         (
             "/",
             vec![
-                "Applications",
-                "Library",
-                "Users",
-                "Volumes",
-                "opt",
-                "srv",
-                "tmp",
+                folder("Applications"),
+                folder("Library"),
+                folder("Users"),
+                folder("Volumes"),
+                folder("opt"),
+                folder("home"),
+                folder("srv"),
             ],
         ),
-        ("/Volumes/", vec!["Backup SSD", "Macintosh HD", "Scratch"]),
+        ("/Users/", vec![folder("Shared"), folder("story")]),
+        ("/Volumes/", vec![folder("Backup SSD"), folder("Scratch")]),
+        (
+            "/Volumes/Scratch/",
+            vec![folder("archive"), folder("old-projects")],
+        ),
+        (
+            "/Volumes/Scratch/old-projects/",
+            vec![
+                repo("game-jam", "main", "C#"),
+                repo("ray-tracer", "main", "C++"),
+            ],
+        ),
         (
             "/Users/story/",
-            vec![".config", "Desktop", "dev", "Documents", "Downloads"],
+            vec![
+                folder(".config"),
+                folder("Desktop"),
+                folder("Documents"),
+                folder("Downloads"),
+                folder("code"),
+                folder("dev"),
+                folder("work"),
+            ],
+        ),
+        (
+            "/Users/story/Documents/",
+            vec![folder("experiments"), folder("invoices")],
+        ),
+        (
+            "/Users/story/Documents/experiments/",
+            vec![repo("llm-eval", "eval-v2", "Python")],
         ),
         (
             "/Users/story/dev/",
-            vec![".cache", "ghostex", "ghostex-web", "playground", "scratch"],
+            vec![
+                folder(".cache"),
+                project("ghostex", "main", "Rust"),
+                repo("ghostex-web", "feat/hero", "TypeScript"),
+                folder("playground"),
+                repo("rust-notes", "main", "Rust"),
+                folder("scratch"),
+            ],
         ),
         (
             "/Users/story/dev/ghostex/",
-            vec!["gpui", "sidebar", "shared"],
+            vec![folder("gpui"), folder("shared"), folder("sidebar")],
         ),
-        ("/Users/story/dev/playground/", vec!["alpha", "beta"]),
-        ("/srv/", vec!["deploy", "projects"]),
-        ("/srv/projects/", vec!["api", "worker"]),
+        (
+            "/Users/story/dev/playground/",
+            vec![folder("alpha"), folder("beta")],
+        ),
+        (
+            "/Users/story/code/",
+            vec![
+                repo("dotfiles", "main", "Shell"),
+                repo("tinyhttp", "main", "Rust"),
+            ],
+        ),
+        (
+            "/Users/story/work/",
+            vec![
+                project("client-portal", "release/2.4", "TypeScript"),
+                repo("infra", "main", "HCL"),
+                folder("handbook"),
+            ],
+        ),
+        ("/home/", vec![folder("story")]),
+        (
+            "/home/story/",
+            vec![folder("projects"), folder("src"), folder("Downloads")],
+        ),
+        (
+            "/home/story/projects/",
+            vec![
+                project("api", "main", "Go"),
+                repo("worker", "main", "Go"),
+                folder("deploy-scripts"),
+            ],
+        ),
+        ("/srv/", vec![folder("deploy"), folder("projects")]),
+        (
+            "C:\\",
+            vec![
+                folder("dev"),
+                folder("Program Files"),
+                folder("Users"),
+                folder("Windows"),
+            ],
+        ),
+        ("C:\\Users\\", vec![folder("Public"), folder("story")]),
+        (
+            "C:\\Users\\story\\",
+            vec![
+                folder("Desktop"),
+                folder("Documents"),
+                folder("Downloads"),
+                folder("source"),
+            ],
+        ),
+        ("C:\\Users\\story\\source\\", vec![folder("repos")]),
+        (
+            "C:\\Users\\story\\source\\repos\\",
+            vec![
+                project("StoreApp", "main", "C#"),
+                repo("pdf-export", "dev", "C#"),
+            ],
+        ),
+        (
+            "D:\\",
+            vec![folder("code"), folder("work"), folder("Media")],
+        ),
+        ("D:\\work\\", vec![repo("portal", "main", "TypeScript")]),
     ])
 }
 
@@ -61,6 +197,7 @@ struct Mock {
     polls: HashMap<String, u32>,
     destinations: HashMap<String, String>,
     canceled: Vec<String>,
+    pinned: Vec<String>,
 }
 
 struct Options {
@@ -69,79 +206,245 @@ struct Options {
     discovery_unavailable: bool,
     running_polls: u32,
     blocked: bool,
-    drives: bool,
+    /// Answers `places` like a gxserver from before the picker: unknown endpoint.
+    old_server: bool,
+}
+
+fn home_of(machine_id: &str) -> &'static str {
+    match machine_id {
+        "machine-bigbox" => REMOTE_HOME,
+        "machine-studio" => WINDOWS_HOME,
+        _ => HOME,
+    }
+}
+
+fn separator_of(path: &str) -> char {
+    if path.contains('\\') { '\\' } else { '/' }
 }
 
 fn expand(value: &str, home: &str) -> String {
-    if value == "~" {
-        return format!("{home}/");
+    let separator = separator_of(home);
+    if value == "~" || value == "~/" || value == "~\\" {
+        return format!("{home}{separator}");
     }
-    match value.strip_prefix("~/") {
-        Some(rest) => format!("{home}/{rest}"),
+    match value
+        .strip_prefix("~/")
+        .or_else(|| value.strip_prefix("~\\"))
+    {
+        Some(rest) => format!("{home}{separator}{rest}"),
         None => value.to_string(),
     }
 }
 
 fn trim_separator(value: &str) -> String {
-    if value.len() > 1 && value.ends_with('/') {
-        value[..value.len() - 1].to_string()
-    } else {
-        value.to_string()
+    let trimmed = value.trim_end_matches(['/', '\\']);
+    if trimmed.is_empty() || trimmed.ends_with(':') {
+        return value.to_string();
     }
+    trimmed.to_string()
 }
 
 impl Mock {
-    fn browse(&self, machine_id: &str, partial: &str, options: &Options) -> Value {
-        if options.drives && partial == "/" {
+    fn folders(&self, parent: &str) -> Vec<Folder> {
+        let mut folders = tree().get(parent).cloned().unwrap_or_default();
+        let key = trim_separator(parent);
+        // Created folders are layered over the fixture and the listing re-sorted.
+        if let Some(created) = self.created.get(&key) {
+            for name in created {
+                if !folders.iter().any(|folder| folder.name == name) {
+                    folders.push(folder(Box::leak(name.clone().into_boxed_str())));
+                }
+            }
+        }
+        folders.sort_by_key(|folder| (folder.name.starts_with('.'), folder.name.to_lowercase()));
+        folders
+    }
+
+    fn find(&self, path: &str) -> Option<Folder> {
+        let trimmed = trim_separator(path);
+        let index = trimmed.rfind(['/', '\\'])?;
+        let parent = &trimmed[..=index];
+        let name = &trimmed[index + 1..];
+        self.folders(parent)
+            .into_iter()
+            .find(|folder| folder.name == name)
+    }
+
+    fn exists(&self, path: &str) -> bool {
+        let directory = format!("{}{}", trim_separator(path), separator_of(path));
+        tree().contains_key(directory.as_str())
+            || self.created.contains_key(&trim_separator(path))
+            || self.find(path).is_some()
+    }
+
+    fn browse(&self, machine_id: &str, partial: &str, inspect: Option<&str>) -> Value {
+        if machine_id == "machine-studio" && (partial == "/" || partial == "\\") {
             return json!({
                 "entries": [
-                    { "fullPath": "C:\\Users\\story", "name": "story (home)" },
-                    { "fullPath": "C:\\", "name": "C:" },
-                    { "fullPath": "D:\\", "name": "D: (Data)" },
+                    { "fullPath": "C:\\Users\\story", "name": "Home (C:\\Users\\story)" },
+                    { "fullPath": "C:\\", "name": "C:/" },
+                    { "fullPath": "D:\\", "name": "D:/" },
                 ],
                 "isDriveList": true,
                 "parentPath": "/",
             });
         }
-        let home = if machine_id == "machine-bigbox" {
-            REMOTE_HOME
-        } else {
-            HOME
-        };
+        let home = home_of(machine_id);
         let expanded = expand(partial, home);
-        let parent = if expanded.ends_with('/') {
+        let parent = if expanded.ends_with(['/', '\\']) {
             expanded.clone()
         } else {
-            expanded[..expanded.rfind('/').map(|index| index + 1).unwrap_or(0)].to_string()
+            expanded[..expanded
+                .rfind(['/', '\\'])
+                .map(|index| index + 1)
+                .unwrap_or(0)]
+                .to_string()
         };
-        let prefix = if expanded.ends_with('/') {
-            String::new()
-        } else {
-            expanded[expanded.rfind('/').map(|index| index + 1).unwrap_or(0)..].to_string()
-        };
-        let show_hidden = expanded.ends_with('/') || prefix.starts_with('.');
-        let tree = tree();
-        let mut names: Vec<String> = tree
-            .get(parent.as_str())
-            .map(|names| names.iter().map(|name| name.to_string()).collect())
-            .unwrap_or_default();
+        let separator = separator_of(&parent);
+        let entries: Vec<Value> = self
+            .folders(&parent)
+            .iter()
+            .map(|folder| {
+                let mut entry =
+                    json!({ "fullPath": format!("{parent}{}", folder.name), "name": folder.name });
+                if let Some(branch) = folder.branch {
+                    entry["git"] = json!(true);
+                    entry["branch"] = json!(branch);
+                }
+                if let Some(language) = folder.language {
+                    entry["language"] = json!(language);
+                }
+                if folder.project {
+                    entry["projectId"] = json!(format!("project-{}", folder.name));
+                }
+                entry
+            })
+            .collect();
         let parent_path = trim_separator(&parent);
-        // Created folders are layered over the fixture and the listing re-sorted, as in the story mock.
-        if let Some(created) = self.created.get(&parent_path) {
-            for name in created {
-                if !names.contains(name) {
-                    names.push(name.clone());
+        let mut result = json!({ "entries": entries, "parentPath": parent_path });
+        if let Some(inspect) = inspect {
+            let path = trim_separator(&expand(inspect, home));
+            let exists = self.exists(&path);
+            let mut inspection =
+                json!({ "path": path, "kind": if exists { "directory" } else { "missing" } });
+            if let Some(found) = self.find(&path) {
+                if found.project {
+                    inspection["projectId"] = json!(format!("project-{}", found.name));
+                    inspection["projectPath"] = json!(path);
+                }
+                if let Some(branch) = found.branch {
+                    inspection["branch"] = json!(branch);
+                }
+                if let Some(language) = found.language {
+                    inspection["language"] = json!(language);
                 }
             }
-            names.sort();
+            // The nearest folder above with a branch is the repository this one sits inside.
+            let mut current = path.clone();
+            while let Some(index) = current.rfind(['/', '\\']) {
+                current.truncate(index);
+                if current.is_empty() {
+                    break;
+                }
+                if self
+                    .find(&current)
+                    .is_some_and(|folder| folder.branch.is_some())
+                {
+                    inspection["repoRoot"] = json!(current);
+                    break;
+                }
+            }
+            result["inspection"] = inspection;
         }
-        let entries: Vec<Value> = names
+        let _ = separator;
+        result
+    }
+
+    fn places(&self, machine_id: &str) -> Value {
+        let pinned: Vec<Value> = self
+            .pinned
             .iter()
-            .filter(|name| name.to_lowercase().starts_with(&prefix.to_lowercase()))
-            .filter(|name| show_hidden || !name.starts_with('.'))
-            .map(|name| json!({ "fullPath": format!("{parent}{name}"), "name": name }))
+            .map(|path| json!({ "name": path.rsplit(['/', '\\']).next().unwrap_or(path), "path": path }))
             .collect();
-        json!({ "entries": entries, "parentPath": parent_path })
+        match machine_id {
+            "machine-bigbox" => json!({
+                "home": REMOTE_HOME,
+                "platform": "linux",
+                "volumes": [
+                    { "name": "/", "path": "/", "kind": "startup" },
+                    { "name": "data", "path": "/mnt/data", "kind": "external" },
+                ],
+                "standard": [{ "name": "Downloads", "path": "/home/story/Downloads" }],
+                "projectFolders": [
+                    { "name": "projects", "path": "/home/story/projects" },
+                    { "name": "src", "path": "/home/story/src" },
+                ],
+                "otherApps": [],
+                "recent": [],
+                "pinned": pinned,
+                "suggested": [
+                    { "name": "worker", "path": "/home/story/projects/worker", "branch": "main", "language": "Go", "source": "projectFolder", "from": "projects" },
+                ],
+            }),
+            "machine-studio" => json!({
+                "home": WINDOWS_HOME,
+                "platform": "win32",
+                "volumes": [
+                    { "name": "Local Disk (C:)", "path": "C:/", "kind": "drive" },
+                    { "name": "Data (D:)", "path": "D:/", "kind": "drive" },
+                    { "name": "Ubuntu (WSL)", "path": "\\\\wsl.localhost\\Ubuntu\\home", "kind": "wsl" },
+                ],
+                "standard": [
+                    { "name": "Desktop", "path": "C:\\Users\\story\\Desktop" },
+                    { "name": "Documents", "path": "C:\\Users\\story\\Documents" },
+                    { "name": "Downloads", "path": "C:\\Users\\story\\Downloads" },
+                ],
+                "projectFolders": [
+                    { "name": "repos", "path": "C:\\Users\\story\\source\\repos" },
+                    { "name": "dev", "path": "C:\\dev" },
+                ],
+                "otherApps": [{ "name": "portal", "path": "D:\\work\\portal" }],
+                "recent": [{ "name": "work", "path": "D:\\work" }],
+                "pinned": pinned,
+                "suggested": [
+                    { "name": "portal", "path": "D:\\work\\portal", "branch": "main", "language": "TypeScript", "source": "otherApps" },
+                    { "name": "pdf-export", "path": "C:\\Users\\story\\source\\repos\\pdf-export", "branch": "dev", "language": "C#", "source": "projectFolder", "from": "repos" },
+                ],
+            }),
+            _ => json!({
+                "home": HOME,
+                "platform": "darwin",
+                "volumes": [
+                    { "name": "Macintosh HD", "path": "/", "kind": "startup" },
+                    { "name": "Backup SSD", "path": "/Volumes/Backup SSD", "kind": "external" },
+                    { "name": "Scratch", "path": "/Volumes/Scratch", "kind": "external" },
+                ],
+                "standard": [
+                    { "name": "Desktop", "path": "/Users/story/Desktop" },
+                    { "name": "Documents", "path": "/Users/story/Documents" },
+                    { "name": "Downloads", "path": "/Users/story/Downloads" },
+                ],
+                "projectFolders": [
+                    { "name": "dev", "path": "/Users/story/dev" },
+                    { "name": "code", "path": "/Users/story/code" },
+                    { "name": "work", "path": "/Users/story/work" },
+                ],
+                "otherApps": [
+                    { "name": "llm-eval", "path": "/Users/story/Documents/experiments/llm-eval" },
+                    { "name": "game-jam", "path": "/Volumes/Scratch/old-projects/game-jam" },
+                ],
+                "recent": [{ "name": "playground", "path": "/Users/story/dev/playground" }],
+                "pinned": pinned,
+                "suggested": [
+                    { "name": "llm-eval", "path": "/Users/story/Documents/experiments/llm-eval", "branch": "eval-v2", "language": "Python", "source": "otherApps" },
+                    { "name": "game-jam", "path": "/Volumes/Scratch/old-projects/game-jam", "branch": "main", "language": "C#", "source": "otherApps" },
+                    { "name": "ghostex-web", "path": "/Users/story/dev/ghostex-web", "branch": "feat/hero", "language": "TypeScript", "source": "projectFolder", "from": "dev" },
+                    { "name": "rust-notes", "path": "/Users/story/dev/rust-notes", "branch": "main", "language": "Rust", "source": "projectFolder", "from": "dev" },
+                    { "name": "tinyhttp", "path": "/Users/story/code/tinyhttp", "branch": "main", "language": "Rust", "source": "projectFolder", "from": "code" },
+                    { "name": "infra", "path": "/Users/story/work/infra", "branch": "main", "language": "HCL", "source": "projectFolder", "from": "work" },
+                ],
+            }),
+        }
     }
 
     fn answer(
@@ -159,7 +462,24 @@ impl Mock {
                 .to_string()
         };
         match operation {
-            "browse" => Ok(self.browse(machine_id, &text("partialPath"), options)),
+            "browse" => Ok(self.browse(
+                machine_id,
+                &text("partialPath"),
+                params.get("inspectPath").and_then(Value::as_str),
+            )),
+            "places" => {
+                if options.old_server {
+                    return Err("Unknown endpoint.".to_string());
+                }
+                if let Some(pin) = params.get("pin").and_then(Value::as_str) {
+                    self.pinned.retain(|existing| existing != pin);
+                    self.pinned.push(pin.to_string());
+                }
+                if let Some(unpin) = params.get("unpin").and_then(Value::as_str) {
+                    self.pinned.retain(|existing| existing != unpin);
+                }
+                Ok(self.places(machine_id))
+            }
             "add" => match options.add_error {
                 Some(error) => Err(error.to_string()),
                 None => {
@@ -172,7 +492,7 @@ impl Mock {
                 }
                 Ok(json!({ "discovery": { "providers": [
                     { "auth": { "detail": null, "status": "authenticated" }, "installHint": null, "provider": "github", "status": "available", "version": "2.62.0" },
-                    { "auth": { "detail": "GitLab CLI is not authenticated. Run glab auth login.", "status": "unauthenticated" }, "installHint": null, "provider": "gitlab", "status": "available", "version": "1.48.0" },
+                    { "installHint": "GitLab support needs the glab CLI.", "installTool": "glab", "provider": "gitlab", "status": "missing" },
                     { "installHint": "Bitbucket support needs a CLI Ghostex does not ship yet.", "provider": "bitbucket", "status": "missing" },
                     { "installHint": "Azure DevOps support needs a CLI Ghostex does not ship yet.", "provider": "azure-devops", "status": "missing" },
                 ] } }))
@@ -192,19 +512,24 @@ impl Mock {
             },
             "previewClone" => {
                 let destination = trim_separator(&text("destinationPath"));
-                let folder = destination.rsplit('/').next().unwrap_or("").to_string();
+                let folder = destination
+                    .rsplit(['/', '\\'])
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                let blocked = options.blocked || self.exists(&destination);
                 let mut preview = json!({
                     "cloneMainOnly": false,
                     "cloneUrl": text("remoteUrl"),
-                    "destinationBlocked": options.blocked,
-                    "destinationExists": options.blocked,
+                    "destinationBlocked": blocked,
+                    "destinationExists": blocked,
                     "destinationFolderName": folder,
                     "destinationPath": destination,
                     "parentPath": "/Users/story/dev",
                     "repositoryName": folder,
                     "shallowClone": false,
                 });
-                if options.blocked {
+                if blocked {
                     preview["destinationExistsKind"] = json!("directory");
                     preview["warning"] =
                         json!("The destination folder already exists and is not empty.");
@@ -246,7 +571,12 @@ impl Mock {
             "createDirectory" => {
                 let parent = trim_separator(&text("parentPath"));
                 let name = text("name");
-                let path = format!("{parent}/{name}");
+                let separator = separator_of(&parent);
+                let path = if parent.ends_with(['/', '\\']) {
+                    format!("{parent}{name}")
+                } else {
+                    format!("{parent}{separator}{name}")
+                };
                 self.created
                     .entry(parent.clone())
                     .or_default()
@@ -319,7 +649,7 @@ fn local_machine() -> AddProjectMachineOption {
             .ok()
             .filter(|folder| !folder.trim().is_empty()),
         description: Some("This computer".to_string()),
-        label: "Local".to_string(),
+        label: "This Mac".to_string(),
         machine_id: "local".to_string(),
         platform: Some("MacIntel".to_string()),
         ..Default::default()
@@ -330,9 +660,21 @@ fn remote_machine() -> AddProjectMachineOption {
     AddProjectMachineOption {
         add_project_base_directory: Some("~/projects/".to_string()),
         description: Some("Connected remote machine".to_string()),
-        label: "Bigbox".to_string(),
+        label: "build-box".to_string(),
         machine_id: "machine-bigbox".to_string(),
         platform: Some("Linux".to_string()),
+        ..Default::default()
+    }
+}
+
+/// A native Windows (PowerShell) computer: it opens at its drive list.
+fn windows_machine() -> AddProjectMachineOption {
+    AddProjectMachineOption {
+        description: Some("Connected remote machine".to_string()),
+        label: "Studio PC".to_string(),
+        machine_id: "machine-studio".to_string(),
+        platform: Some("Win32".to_string()),
+        starts_at_drive_list: true,
         ..Default::default()
     }
 }
@@ -364,6 +706,7 @@ impl LiveGxserver {
             "createDirectory" => "/api/createProjectDirectory",
             "discoverSourceControl" => "/api/discoverSourceControl",
             "lookupRepository" => "/api/lookupRepository",
+            "places" => "/api/projectPickerPlaces",
             "previewClone" => "/api/previewRepositoryClone",
             "readCloneJob" => "/api/readRepositoryCloneJob",
             "startClone" => "/api/startRepositoryClone",
@@ -443,29 +786,23 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         discovery_unavailable: state == "noproviders",
         running_polls: if state == "cloning" { 1000 } else { 2 },
         blocked: state == "blocked",
-        drives: state == "drives",
+        old_server: state == "oldserver",
     });
     let latency = Duration::from_millis(match state {
         "slow" => 60_000,
         _ => 30,
     });
     let machines = match state {
-        "machines" | "remote" => vec![local_machine(), remote_machine()],
-        _ if state.starts_with("script:") && state.contains("machine:") => {
-            vec![local_machine(), remote_machine()]
-        }
-        "projectsfolder" | "projectsfolder-add" => vec![AddProjectMachineOption {
-            add_project_base_directory: Some("~/dev".to_string()),
-            ..local_machine()
-        }],
-        "drives" => vec![AddProjectMachineOption {
-            label: "This PC".to_string(),
-            machine_id: "local".to_string(),
-            platform: Some("Win32".to_string()),
-            starts_at_drive_list: true,
-            ..Default::default()
-        }],
-        _ => vec![local_machine()],
+        "single" => vec![local_machine()],
+        "projectsfolder" | "projectsfolder-add" => vec![
+            AddProjectMachineOption {
+                add_project_base_directory: Some("~/dev".to_string()),
+                ..local_machine()
+            },
+            remote_machine(),
+            windows_machine(),
+        ],
+        _ => vec![local_machine(), remote_machine(), windows_machine()],
     };
     let target: Target = Rc::new(RefCell::new(None));
     let mock = Rc::new(RefCell::new(Mock::default()));
@@ -553,7 +890,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     });
     let config = AddProjectModalConfig {
         machines,
-        initial_machine_id: (state == "remote").then(|| "machine-bigbox".to_string()),
+        initial_machine_id: None,
         active_project_cwd: None,
         client_platform: "MacIntel".to_string(),
         // GHOSTEX_ADD_PROJECT_DEMO_GLASS=1 previews the frosted palette the app uses under window glass.
@@ -586,48 +923,56 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         cx,
     );
     *target.borrow_mut() = Some((window, view));
-    let to_review = vec![
-        "click:source:url",
-        "type:https://github.com/acme/widgets.git",
-        "key:enter",
-        "type:~/dev/widgets",
-        "key:enter",
-    ];
+    let clone_steps = vec!["clone", "repo:https://github.com/acme/widgets.git"];
     let steps: Vec<&'static str> = match state {
-        "browse" => vec!["click:source:local"],
-        "highlight" => vec!["click:source:local", "key:down", "key:down"],
-        "create" => vec!["click:source:local", "type:~/dev/brand-new"],
-        "newfolder" => vec!["click:source:local", "new-folder", "folder-name:my-app"],
-        "repository" => vec!["click:source:github"],
-        "lookupfail" => vec!["click:source:github", "type:acme/missing", "key:enter"],
-        "destination" => to_review[..4].to_vec(),
-        "review" => to_review,
-        "blocked" => [to_review, vec!["branch:feature..bad"]].concat(),
-        "cloning" => [to_review, vec!["clone"]].concat(),
-        "error" => vec!["click:source:local", "type:~/dev/ghostex/", "key:enter"],
-        "slow" => vec!["click:source:local", "key:enter"],
-        "drives" => vec!["click:source:local"],
-        "projectsfolder-add" => vec![
-            "click:source:new-project-folder",
-            "type:widgets",
-            "key:enter",
+        "browse" => vec!["open:/Users/story/dev"],
+        "highlight" => vec!["key:down", "key:down"],
+        "create" => vec!["type:~/dev/brand-new"],
+        "newfolder" => vec!["new-folder", "folder-name:my-app"],
+        "newfolder-made" => vec!["new-folder", "folder-name:my-app", "key:enter"],
+        "inside-repo" => vec![
+            "open:/Users/story/dev/ghostex",
+            "open:/Users/story/dev/ghostex/sidebar",
         ],
-        "newproject" => vec!["click:source:new-project-folder", "type:billing-api"],
-        "newproject-start" => vec![
-            "click:source:new-project-folder",
-            "type:billing-api",
-            "click:new-project:start",
+        "repository" => vec!["clone", "source:github"],
+        "lookupfail" => vec![
+            "clone",
+            "source:github",
+            "repo:acme/missing",
+            "clone-submit",
         ],
-        "newproject-folder" => vec![
-            "click:source:new-project-folder",
-            "type:billing-api",
-            "click:new-project:folder",
+        "clone" => clone_steps.clone(),
+        "blocked" => vec![
+            "place:/Users/story/code",
+            "clone",
+            "repo:https://github.com/acme/tinyhttp.git",
+            "clone-submit",
         ],
+        "badbranch" => [clone_steps.clone(), vec!["branch:feature..bad"]].concat(),
+        "cloning" => [clone_steps, vec!["clone-submit"]].concat(),
+        "error" => vec!["type:~/dev/ghostex/", "add"],
+        "slow" => vec!["add"],
+        "remote" => vec!["machine:machine-bigbox"],
+        "windows" => vec!["machine:machine-studio"],
+        "windows-folder" => vec![
+            "machine:machine-studio",
+            "open:C:\\Users\\story",
+            "open:C:\\Users\\story\\source",
+        ],
+        "suggested" => vec!["suggested"],
+        "machines" => vec!["machine-menu"],
+        "projectsfolder-add" => vec!["new-project", "project-name:widgets", "create"],
+        "newproject" => vec!["new-project", "project-name:billing-api"],
+        "newproject-start" => vec!["new-project", "project-name:billing-api", "pick:start"],
         "ambiguous" => vec!["type:acme/widgets"],
+        "pasted-url" => vec!["type:https://github.com/acme/widgets"],
         _ => Vec::new(),
     };
     // `script:<step>;<step>...` runs any sequence of `preview_step` steps.
+    // GHOSTEX_ADD_PROJECT_DEMO_STEPS=<step>;<step>: the same, kept as typed (the state is lowercased).
+    let raw_steps = std::env::var("GHOSTEX_ADD_PROJECT_DEMO_STEPS").unwrap_or_default();
     let steps: Vec<String> = match state.strip_prefix("script:") {
+        _ if !raw_steps.trim().is_empty() => raw_steps.split(';').map(str::to_string).collect(),
         Some(script) => script.split(';').map(str::to_string).collect(),
         None => steps.into_iter().map(str::to_string).collect(),
     };

@@ -706,7 +706,7 @@ How to use this file:
 
 ### New projects
 
-- **Default projects folder** `defaultProjectsFolder` (text, default (empty)): Folder that holds your projects, like ~/dev. Add Project's New project folder makes new projects here, and Local folder starts here. Left blank, Add Project suggests the folder that holds the selected project (else ~/dev) and saves the folder your first new project is made in.
+- **Default projects folder** `defaultProjectsFolder` (text, default (empty)): Folder that holds your projects, like ~/dev. Add Project opens here, and its New project makes new projects here. Left blank, Add Project suggests the folder that holds the selected project (else ~/dev) and saves the folder your first new project is made in.
 ### Files
 
 - **Docs folders** `docsFolders` (Settings UI row without a settings key; use `ghostex settings open`): Comma-separated project-relative folders to scan recursively in the Files view.

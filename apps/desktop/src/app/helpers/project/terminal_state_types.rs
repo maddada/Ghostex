@@ -306,6 +306,8 @@ pub(crate) enum GpuiAddProjectDialogOperation {
     InstallSourceControlTool,
     ListMachines,
     LookupRepository,
+    /// The picker's sidebar places on that computer (and pinning a folder there).
+    Places,
     PreviewClone,
     ReadCloneJob,
     /// Reads that install's progress.
@@ -325,6 +327,7 @@ impl GpuiAddProjectDialogOperation {
             "readSourceControlTool" => Some(Self::ReadSourceControlTool),
             "listMachines" => Some(Self::ListMachines),
             "lookupRepository" => Some(Self::LookupRepository),
+            "places" => Some(Self::Places),
             "previewClone" => Some(Self::PreviewClone),
             "readCloneJob" => Some(Self::ReadCloneJob),
             "startClone" => Some(Self::StartClone),
@@ -343,6 +346,7 @@ impl GpuiAddProjectDialogOperation {
             Self::ReadSourceControlTool => "readSourceControlTool",
             Self::ListMachines => "listMachines",
             Self::LookupRepository => "lookupRepository",
+            Self::Places => "places",
             Self::PreviewClone => "previewClone",
             Self::ReadCloneJob => "readCloneJob",
             Self::StartClone => "startClone",
@@ -361,6 +365,7 @@ impl GpuiAddProjectDialogOperation {
             }
             Self::ListMachines => None,
             Self::LookupRepository => Some("/api/lookupRepository"),
+            Self::Places => Some("/api/projectPickerPlaces"),
             Self::PreviewClone => Some("/api/previewRepositoryClone"),
             Self::ReadCloneJob => Some("/api/readRepositoryCloneJob"),
             Self::StartClone => Some("/api/startRepositoryClone"),
@@ -371,7 +376,7 @@ impl GpuiAddProjectDialogOperation {
         match self {
             Self::Add | Self::StartClone => GPUI_ADD_PROJECT_DIALOG_ADD_TIMEOUT,
             Self::Browse => GPUI_ADD_PROJECT_DIALOG_BROWSE_TIMEOUT,
-            Self::DiscoverSourceControl => GPUI_ADD_PROJECT_DIALOG_DISCOVERY_TIMEOUT,
+            Self::DiscoverSourceControl | Self::Places => GPUI_ADD_PROJECT_DIALOG_DISCOVERY_TIMEOUT,
             Self::LookupRepository | Self::PreviewClone => GPUI_ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT,
             Self::CancelCloneJob
             | Self::CreateDirectory

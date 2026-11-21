@@ -29,7 +29,9 @@ as TypeScript gxserver before domain-specific worktree deletion parity lands.
 Remote project picking may browse directory names through `/api/browseProjectDirectories`;
 the broader filesystem/admin endpoints remain cataloged but unimplemented.
 */
-pub(crate) fn handle_browse_project_directories_http(
+/// CDXC:AddProject 2026-11-21 WHY: the picker's `details` read each listed folder, so the browse
+/// runs off the async runtime.
+pub(crate) async fn handle_browse_project_directories_http(
     state: &AppState,
     endpoint_path: String,
     request_id: String,
@@ -39,7 +41,17 @@ pub(crate) fn handle_browse_project_directories_http(
         Ok(params) => params,
         Err(error) => return project_path_error_response(endpoint_path, request_id, error),
     };
-    match browse_project_directories_with_inspection(&params, state) {
+    let state = state.clone();
+    let answer = tokio::task::spawn_blocking(move || {
+        browse_project_directories_with_inspection(&params, &state)
+    })
+    .await
+    .unwrap_or_else(|error| {
+        Err(ProjectPathHttpError::bad_request(format!(
+            "Unable to browse: {error}"
+        )))
+    });
+    match answer {
         Ok(result) => routed_json(
             Some(endpoint_path),
             StatusCode::OK,
@@ -59,6 +71,16 @@ fn browse_project_directories_with_inspection(
     let mut result = browse_project_directories(params, &state.paths.home_dir)?;
     if result.get("isDriveList").and_then(Value::as_bool) == Some(true) {
         return Ok(result);
+    }
+    // The picker asks what each listed folder is (project_picker.rs); older clients never send it.
+    let parent = result
+        .get("parentPath")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
+    if let Some(parent) =
+        parent.filter(|_| params.get("details").and_then(Value::as_bool) == Some(true))
+    {
+        add_entry_details(&mut result, &parent, state);
     }
     let Some(input) = params.get("inspectPath") else {
         return Ok(result);
@@ -99,6 +121,24 @@ fn browse_project_directories_with_inspection(
     };
     if let Some(root) = &git_root {
         inspection["gitRoot"] = json!(root);
+    }
+    /*
+    CDXC:AddProject 2026-11-21:
+    A folder inside a repository says which repository (`repoRoot`), so the picker can offer to
+    add the repository instead; unlike a file's `gitRoot` it never changes what Add adds. A folder
+    also says its own branch and language for the picker's preview.
+    */
+    if kind == "directory" {
+        if let Some(root) = enclosing_repository_root(&path, &state.paths.home_dir) {
+            inspection["repoRoot"] = json!(path_to_string(&root));
+        }
+        let details = folder_details(&path);
+        if let Some(branch) = details.branch {
+            inspection["branch"] = json!(branch);
+        }
+        if let Some(language) = details.language {
+            inspection["language"] = json!(language);
+        }
     }
     let project_path = git_root.as_deref().map(Path::new).unwrap_or(&path);
     if kind != "missing" {
