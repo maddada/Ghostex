@@ -378,14 +378,14 @@ pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
     effects
 }
 
-/// `markPagesSeen {ids}`: the dock's Mark all seen. Each page that waits only to be looked at
+/// `markPagesSeen {ids}`: the dock's Mark all read. Each page that waits only to be looked at
 /// ("not seen yet") is removed as `remove` does, so it leaves the dock, the counts and the
 /// sidebar's dot on every client and gxserver keeps it across restarts. Nothing reaches the agent:
-/// a page's own Mark as seen tells it, but one message per page would bury it.
+/// a page's own Mark as read tells it, but one message per page would bury it.
 ///
 /// CDXC:Coordinators 2026-11-16 DECISION:
 /// User picked "reply and build" on issue #626 (a dock with 16 page cards "not seen yet", most of
-/// them already read): the dock gets Mark all seen, on the desktop and the phone. A page cleared
+/// them already read): the dock gets Mark all read, on the desktop and the phone. A page cleared
 /// this way reads Seen on its card, as one marked seen on the page does.
 ///
 /// Only a page still waiting to be seen is cleared: one that asks questions keeps waiting for its
@@ -424,14 +424,14 @@ pub fn page_opened(state: &ChatState, id: &str) -> bool {
 /// Opening a page that waits only to be looked at marks it opened (`pageOpened`, kept by gxserver
 /// for every client): the dock, the Work panel, a Q-tag link, a chat link to it or its card, on the
 /// desktop or the phone. It keeps its dock row and card until the reader dismisses it or marks it
-/// seen (the page's own Mark as seen, the dock's Mark all seen), but leaves every unseen count.
+/// seen (the page's own Mark as read, the dock's Mark all read), but leaves every unseen count.
 /// Nothing reaches the agent, and a call that fails is dropped without a word: the reader only
 /// opened a page. `target` is the page's id or any address that names it.
 ///
 /// CDXC:Coordinators 2026-11-19 DECISION:
 /// User, of a dock row "ClickHouse demo notes: what we record and ask (not seen yet)": "i see
 /// "(not seen)" here but i actually opened and went thro this, just want to keep it here. we
-/// shouldn't show "(not seen)" like this". Only the page's own Mark as seen (at its very end)
+/// shouldn't show "(not seen)" like this". Only the page's own Mark as read (at its very end)
 /// counted, so a page read but not pressed at its end kept counting as not seen on the bell and
 /// badges. Opening it now counts as seen for the counts, and the row stays where he kept it.
 pub fn seen_on_open(state: &mut ChatState, target: &str) -> Vec<Effect> {

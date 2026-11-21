@@ -101,7 +101,7 @@ pub(super) const KIT_STYLE: &str = r#"<style id="ghostex-kit">
 gx-page,gx-questions{display:grid;grid-template-columns:minmax(var(--gx-gutter),1fr) minmax(0,var(--gx-text-width)) minmax(var(--gx-gutter),1fr);row-gap:20px;align-content:start;padding:56px 0 88px;font-size:15px;line-height:1.65;color:var(--gx-text);overflow-wrap:break-word}
 gx-page{display:grid}
 gx-page>*,gx-questions>*{grid-column:2;min-width:0}
-/* The Mark as seen footer (SEEN_FOOTER) inside a page's own layout takes the page's width, not gutters of its own. */
+/* The Mark as read footer (SEEN_FOOTER) inside a page's own layout takes the page's width, not gutters of its own. */
 gx-page gx-questions[data-gx-seen]{grid-template-columns:0 minmax(0,1fr) 0;padding:36px 0 0}
 gx-page>gx-wide,gx-questions>gx-wide{grid-column:1/-1;justify-self:center;box-sizing:border-box;width:min(100% - 2*var(--gx-gutter),var(--gx-wide-width));display:flex;flex-direction:column;align-items:center;gap:20px}
 gx-page>gx-wide[size=full],gx-questions>gx-wide[size=full]{width:100%}
@@ -928,7 +928,7 @@ function tidyCards(questions,ties){
   return cards;
 }
 function setup(root){
-  /* A page that asks nothing and waits to be seen (SEEN_FOOTER below): the same footer with no questions, a reply box and Mark as seen. */
+  /* A page that asks nothing and waits to be seen (SEEN_FOOTER below): the same footer with no questions, a reply box and Mark as read. */
   var seen=root.hasAttribute("data-gx-seen");
   var used={},questions=[],options=[];
   function collect(){var out={};questions.forEach(function(q){q.collect(out);});if(seen)out.seen=true;var t=notes&&notes.value.trim();if(t)out[notesKey]=t;return out;}
@@ -984,7 +984,7 @@ function setup(root){
   var infoText=seen?"The agent is told you saw the page, with your reply if you write one.":"Questions you leave blank are sent as skipped.";info.type="button";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);info.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/></svg>';status.append(info);
   var mac=/Mac|iPhone|iPad/.test(navigator.platform||"");
   /* The shortcuts show in the kit's tooltip as key caps, the keys this platform uses, not on the buttons. */
-  button.setAttribute("data-gx-tip",seen?"Mark as seen":"Send answers");button.setAttribute("data-gx-tip-keys",mac?"⌘ Enter":"Ctrl Enter");
+  button.setAttribute("data-gx-tip",seen?"Mark as read":"Send answers");button.setAttribute("data-gx-tip-keys",mac?"⌘ Enter":"Ctrl Enter");
   /* Skip all: sends at once with every question as skipped and no notes, whatever is picked or typed (see the SessionChat DECISION on SKIPPED in packages/gx-visual/src/questions.rs). */
   var skipAll=el("button","gx-skip-all");skipAll.type="button";skipAll.append(el("span",null,"Skip all"));skipAll.setAttribute("data-gx-tip","Skip all");skipAll.setAttribute("data-gx-tip-keys",mac?"⌘ ⇧ Enter":"Ctrl Shift Enter");
   button.type="button";button.append(label);if(seen)bar.append(status,button);else bar.append(status,skipAll,button);if(notesCard)root.append(notesCard);root.append(bar);
@@ -1177,8 +1177,8 @@ function setupTabs(){
     var start=0;panes.forEach(function(p,i){if(p.hasAttribute("data-tab-default"))start=i;});show(start);
   });
 }
-/* SEEN_FOOTER: a page that asks nothing, published to wait until the reader has looked at it (`awaitsSeen`, server/src/visual_pages/publish.rs), ends with a reply box and Mark as seen, which send `{"seen": true, "reply": …}` as its answers. It goes at the very end of the page, so the reader reaches the end to press it. */
-function seenFooter(){var r=document.createElement("gx-questions");r.setAttribute("data-gx-seen","");r.setAttribute("submit","Mark as seen");(document.querySelector("gx-page")||document.body).append(r);setup(r);}
+/* SEEN_FOOTER: a page that asks nothing, published to wait until the reader has looked at it (`awaitsSeen`, server/src/visual_pages/publish.rs), ends with a reply box and Mark as read, which send `{"seen": true, "reply": …}` as its answers. It goes at the very end of the page, so the reader reaches the end to press it. */
+function seenFooter(){var r=document.createElement("gx-questions");r.setAttribute("data-gx-seen","");r.setAttribute("submit","Mark as read");(document.querySelector("gx-page")||document.body).append(r);setup(r);}
 function init(){followPaint();addThemeSwitch();setupTabs();var root=document.querySelector("gx-questions");if(root)setup(root);else if(window.ghostex&&ghostex.awaitsSeen)seenFooter();}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 addEventListener("load",followPaint);

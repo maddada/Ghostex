@@ -404,7 +404,7 @@ impl NativeChatView {
             .filter(|_| !answered)
             .and_then(|page_id| self.question_section_of(page_id))
             .is_some_and(|section| section == "canceled");
-        // A page that waited only to be looked at and was cleared from the dock (Mark all seen,
+        // A page that waited only to be looked at and was cleared from the dock (Mark all read,
         // Dismiss) reads Seen, as one marked seen on the page does (gx-chat-core
         // questions/later.rs `mark_seen`).
         let seen_only = page.awaits_seen && page.questions.is_none();

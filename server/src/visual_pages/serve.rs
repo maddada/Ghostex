@@ -234,7 +234,7 @@ pub(super) fn with_page_state(
             "draftEditedAt": record.as_ref().and_then(|record| record.get("draftEditedAt")).cloned(),
         }),
     };
-    // A page that asks nothing and waits to be marked seen ends with the kit's Mark as seen
+    // A page that asks nothing and waits to be marked seen ends with the kit's Mark as read
     // footer (publish.rs), answered or not.
     if record
         .as_ref()
