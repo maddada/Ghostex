@@ -80,23 +80,25 @@ pub(crate) fn gpui_copy_picture_to_clipboard(picture: &gpui::Image, cx: &mut gpu
 /// feedback.
 pub(crate) fn gpui_copy_failed_feedback(_message: &'static str, _cx: &mut gpui::App) {}
 
-/// Window glass blurs the desktop behind a native window; a canvas has nothing behind it to blur, so glass is never on here.
 /// A link the app opens outside itself (`gpui_open_external_url` in the desktop's os_cli/open_target.rs):
 /// the browser opens it in a new tab, so there is no Wayland display to restore.
 pub(crate) fn gpui_open_external_url(url: &str, cx: &gpui::App) {
     cx.open_url(url);
 }
 
+/// Window glass blurs the desktop behind a native window; a canvas has nothing behind it to blur,
+/// so the only "glass" here is an art theme's artwork, which the page paints itself
+/// (helpers/window_art.rs): the surfaces over it sit on it the way the desktop's sit on glass.
 pub(crate) fn window_glass_active() -> bool {
-    false
+    crate::app::helpers::window_art_active()
 }
 
 pub(crate) fn window_glass_active_in(_window: &gpui::Window) -> bool {
-    false
+    window_glass_active()
 }
 
 pub(crate) fn window_glass_active_for(_window: Option<gpui::AnyWindowHandle>) -> bool {
-    false
+    window_glass_active()
 }
 
 pub(crate) const WINDOW_GLASS_MENU_ALPHA: f32 = 0.78;
@@ -107,9 +109,20 @@ pub(crate) fn apply_frosted_menu_blur(_window: &gpui::Window) {}
 /// A page has no window glass, so a tooltip bubble has no blur to set.
 pub(crate) fn apply_frosted_tooltip_blur(_window: &gpui::Window) {}
 
-/// Never reached with glass off; the sidebar's glass tint has no meaning without glass.
+/// The sidebar's tint over an art theme's artwork (the desktop's `sidebar_glass_tint`).
 pub(crate) fn sidebar_glass_tint() -> gpui::Hsla {
-    gpui::transparent_black()
+    crate::app::helpers::titlebar_background()
+        .opacity(crate::app::helpers::window_art_sidebar_alpha())
+}
+
+/// The work area's tint over an art theme's artwork (the desktop's `workspace_column_background`).
+pub(crate) fn workspace_column_background() -> gpui::Hsla {
+    let workspace = crate::app::helpers::workspace_background_color();
+    if window_glass_active() {
+        workspace.opacity(crate::app::helpers::window_art_work_area_alpha())
+    } else {
+        workspace
+    }
 }
 
 pub(crate) fn sync_overlay_window_glass(
@@ -118,9 +131,14 @@ pub(crate) fn sync_overlay_window_glass(
 ) {
 }
 
-/// The sidebar's opaque fill, which is what the desktop draws with glass off.
-pub(crate) fn sidebar_chrome_fill(_glass: bool, angle: f32) -> gpui::Background {
-    crate::app::helpers::sidebar_chrome_gradient_fill(angle)
+/// The sidebar's fill: its tint over an art theme's artwork, else the opaque fill the desktop
+/// draws with glass off.
+pub(crate) fn sidebar_chrome_fill(glass: bool, angle: f32) -> gpui::Background {
+    if glass {
+        sidebar_glass_tint().into()
+    } else {
+        crate::app::helpers::sidebar_chrome_gradient_fill(angle)
+    }
 }
 
 /// A page has no window glass, so an in-window surface keeps its colour (the desktop's
@@ -273,6 +291,7 @@ pub(crate) fn apply_settings_theme_colours() {
         u64::from(work_area_background_for_variant(object, light)),
         Ordering::Relaxed,
     );
+    crate::app::helpers::refresh_window_art(object);
 }
 /// The browser has no remote machine settings to name in a hook-install toast.
 pub(crate) fn gpui_remote_machine_name_from_settings(_machine_id: &str) -> Option<String> {
@@ -287,3 +306,12 @@ pub(crate) fn sidebar_toggle_leading_x(_lights_reserved: bool) -> f32 {
 /// The desktop frame's gutter (helpers/work_area_frame.rs). The browser draws no frame, so the
 /// sidebar never reads it there (`native_sidebar_right_gutter`).
 pub(crate) const WORK_AREA_FRAME_MARGIN: f32 = 6.0;
+
+/// The work area's colour (the desktop's `workspace_background_color` in helpers/project/colors.rs).
+pub(crate) fn workspace_background_color() -> gpui::Hsla {
+    gpui::rgb(
+        crate::app::consts::GPUI_WORKSPACE_BACKGROUND_RGB.load(std::sync::atomic::Ordering::Relaxed)
+            as u32,
+    )
+    .into()
+}

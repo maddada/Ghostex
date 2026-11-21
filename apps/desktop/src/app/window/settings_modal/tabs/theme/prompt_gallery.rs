@@ -1,6 +1,6 @@
-//! The agent-made looks of the Themes page's Themes group and the way to ask an agent for one. The
-//! six example themes (`THEME_GALLERY` in packages/settings-catalog/src/data/theme_gallery.rs) lead
-//! the themes row as tiles of the presets' own kind (`theme_tile` in presets.rs): a press applies
+//! The looks of the Themes page's Themes group and the way to ask an agent for one: Default, the six
+//! art themes and the six agent-made looks (`theme_gallery` in
+//! packages/settings-catalog/src/data/theme_gallery.rs) lead the themes row as tiles of the presets' own kind (`theme_tile` in presets.rs): a press applies
 //! one, and its hover button, Make it your own, opens a Help chat with its prompt as the draft.
 //! Under the row, the applied look's line (Undo, Change them) and Describe a look, whose Ask an
 //! agent opens a Help chat with a starter prompt as its draft.
@@ -39,7 +39,8 @@ const PICTURE_ASPECT: f32 = 960.0 / 660.0;
 const PICTURE_WIDTH: f32 = 92.0;
 const PICTURE_LEFT: f32 = -6.7;
 const PICTURE_TOP: f32 = -7.5;
-/// The caption over the first look in the themes row.
+/// The captions over the first art theme and the first agent-made look in the themes row.
+const ART_CAPTION: &str = "Art";
 const LOOKS_CAPTION: &str = "Agent-made";
 const THEME_ENDPOINT: &str = "/api/theme";
 /// `/api/theme` waits up to 15s for the app to save, then 3s for the file to show it.
@@ -51,6 +52,10 @@ pub(super) struct GalleryTheme {
     pub(super) id: String,
     pub(super) name: String,
     pub(super) prompt: String,
+    /// The word under its tile, when it is not the name's first word.
+    pub(super) label: Option<String>,
+    /// An art theme: its artwork behind an opaque window (`windowArt`).
+    pub(super) art: bool,
     pub(super) changes: Map<String, Value>,
 }
 
@@ -73,6 +78,11 @@ pub(super) fn gallery_themes() -> Vec<GalleryTheme> {
                     id: text(entry, "id"),
                     name: text(entry, "name"),
                     prompt: text(entry, "prompt"),
+                    label: entry
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    art: entry.get("art").and_then(Value::as_bool) == Some(true),
                     changes: entry
                         .get("changes")
                         .and_then(Value::as_object)
@@ -103,6 +113,15 @@ fn picture_bytes(id: &str) -> Option<&'static [u8]> {
         "polar-night" => picture!("polar-night"),
         "inkstone" => picture!("inkstone"),
         "orchid-dusk" => picture!("orchid-dusk"),
+        // Default is the shipped look, which is Inkstone's.
+        "default" => picture!("inkstone"),
+        // The art themes' tiles show their artwork (helpers/window_art.rs paints the full size).
+        "moonwater" => picture!("moonwater"),
+        "glasshouse" => picture!("glasshouse"),
+        "red-earth" => picture!("red-earth"),
+        "deep-current" => picture!("deep-current"),
+        "night-garden" => picture!("night-garden"),
+        "nocturne-canyon" => picture!("nocturne-canyon"),
         _ => return None,
     })
 }
@@ -133,8 +152,18 @@ fn short_reason(message: &str) -> String {
 /// the value it gave, with how many it sets and whether Your messages is one.
 fn applied_theme<'a>(
     themes: &'a [GalleryTheme],
-    roles: &Value,
+    values: &SettingsValues,
 ) -> Option<(&'a GalleryTheme, usize, bool)> {
+    let roles = values.value("themeRoles");
+    let roles = &roles;
+    // The artwork is part of a look: an art theme is applied only while its artwork shows, and
+    // every other look only while none does.
+    let art = values.string("windowArt");
+    let art = if art.is_empty() {
+        "none".to_string()
+    } else {
+        art
+    };
     use ghostex_settings_catalog::theme_roles::{format_role_value, parse_role_value};
     let same = |a: &str, b: &str| match (parse_role_value(a), parse_role_value(b)) {
         (Ok(a), Ok(b)) => format_role_value(a) == format_role_value(b),
@@ -153,7 +182,13 @@ fn applied_theme<'a>(
                 ))
             })
             .collect();
-        let all_kept = !colours.is_empty()
+        let same_art = theme
+            .changes
+            .get("windowArt")
+            .and_then(Value::as_str)
+            .is_none_or(|wanted| wanted == art);
+        let all_kept = same_art
+            && !colours.is_empty()
             && colours.iter().all(|(appearance, role, value)| {
                 roles
                     .get(*appearance)
@@ -174,11 +209,11 @@ fn applied_theme<'a>(
 fn applied_line(
     p: &SettingsPalette,
     themes: &[GalleryTheme],
-    roles: &Value,
+    values: &SettingsValues,
     gallery: &PromptGallery,
     cx: &mut Context<ThemeTab>,
 ) -> Option<AnyElement> {
-    let (theme, count, mine) = applied_theme(themes, roles)?;
+    let (theme, count, mine) = applied_theme(themes, values)?;
     let undo = gallery
         .applied
         .as_ref()
@@ -384,14 +419,28 @@ impl ThemeTab {
         cx: &mut Context<Self>,
     ) -> Vec<(bool, AnyElement)> {
         let themes = gallery_themes();
-        let roles = values.value("themeRoles");
-        let applied = applied_theme(&themes, &roles).map(|(theme, _, _)| theme.id.clone());
+        let applied = applied_theme(&themes, values).map(|(theme, _, _)| theme.id.clone());
         themes
             .iter()
             .enumerate()
             .map(|(index, theme)| {
                 let selected = applied.as_deref() == Some(theme.id.as_str());
-                let caption = (index == 0).then(|| LOOKS_CAPTION.to_string());
+                // Default leads the row on its own; the art themes and the agent-made looks each
+                // get a caption over their first tile.
+                let previous = index.checked_sub(1).map(|previous| &themes[previous]);
+                let first_of_kind = theme.id != ghostex_settings_catalog::DEFAULT_LOOK_ID
+                    && previous.is_none_or(|previous| {
+                        previous.art != theme.art
+                            || previous.id == ghostex_settings_catalog::DEFAULT_LOOK_ID
+                    });
+                let caption = first_of_kind.then(|| {
+                    if theme.art {
+                        ART_CAPTION
+                    } else {
+                        LOOKS_CAPTION
+                    }
+                    .to_string()
+                });
                 let tile = self.look_tile(p, theme, caption, selected, cut & (1 << index) != 0, cx);
                 (selected, tile)
             })
@@ -410,30 +459,15 @@ impl ThemeTab {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let busy = self.prompt_gallery.busy.as_deref() == Some(theme.id.as_str());
-        let preview = self
-            .gallery_picture(&theme.id)
-            .map(|picture| {
-                // The picture frames the window in a margin; it is drawn larger so the window
-                // alone fills the preview.
-                div()
-                    .relative()
-                    .size_full()
-                    .overflow_hidden()
-                    .rounded(px(7.0))
-                    .when(busy, |this| this.opacity(0.5))
-                    .child(
-                        img(picture)
-                            .absolute()
-                            .left(px(PICTURE_LEFT))
-                            .top(px(PICTURE_TOP))
-                            .w(px(PICTURE_WIDTH))
-                            .h(px(PICTURE_WIDTH / PICTURE_ASPECT))
-                            .object_fit(ObjectFit::Fill),
-                    )
-                    .into_any_element()
-            })
-            .into_iter()
-            .collect();
+        let picture = self.gallery_picture(&theme.id);
+        let preview = if theme.art {
+            picture
+                .map(|picture| art_tile_preview(theme, picture, busy))
+                .into_iter()
+                .collect()
+        } else {
+            self.look_preview(picture, busy)
+        };
         let draft = format!("{} Then change this: ", theme.prompt);
         // It floats over the picture, so it sits on the popups' own surface to stay readable on a
         // dark picture in light mode.
@@ -458,11 +492,16 @@ impl ThemeTab {
                 id: SharedString::from(format!("theme-look-{}", theme.id)),
                 name: theme.name.clone().into(),
                 label: theme
-                    .name
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or_default()
-                    .to_string()
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| {
+                        theme
+                            .name
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or_default()
+                            .to_string()
+                    })
                     .into(),
                 dark: true,
                 caption,
@@ -470,7 +509,8 @@ impl ThemeTab {
                 cut,
             },
             preview,
-            Some(own),
+            // Default is Ghostex's own look; there is nothing of it to make your own.
+            (theme.id != ghostex_settings_catalog::DEFAULT_LOOK_ID).then_some(own),
             move |page, _window, cx| {
                 if !selected {
                     page.apply_gallery_theme(&id, cx);
@@ -480,6 +520,34 @@ impl ThemeTab {
         )
     }
 
+    /// An agent-made look's tile picture: a framed window, drawn larger so the window alone fills
+    /// the preview.
+    fn look_preview(&self, picture: Option<Arc<Image>>, busy: bool) -> Vec<AnyElement> {
+        picture
+            .map(|picture| {
+                // The picture frames the window in a margin; it is drawn larger so the window
+                // alone fills the preview.
+                div()
+                    .relative()
+                    .size_full()
+                    .overflow_hidden()
+                    .rounded(px(7.0))
+                    .when(busy, |this| this.opacity(0.5))
+                    .child(
+                        img(picture)
+                            .absolute()
+                            .left(px(PICTURE_LEFT))
+                            .top(px(PICTURE_TOP))
+                            .w(px(PICTURE_WIDTH))
+                            .h(px(PICTURE_WIDTH / PICTURE_ASPECT))
+                            .object_fit(ObjectFit::Fill),
+                    )
+                    .into_any_element()
+            })
+            .into_iter()
+            .collect()
+    }
+
     /// The applied look's line, under the themes row.
     pub(super) fn look_applied_row(
         &mut self,
@@ -487,13 +555,7 @@ impl ThemeTab {
         values: &SettingsValues,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        applied_line(
-            p,
-            &gallery_themes(),
-            &values.value("themeRoles"),
-            &self.prompt_gallery,
-            cx,
-        )
+        applied_line(p, &gallery_themes(), values, &self.prompt_gallery, cx)
     }
 
     /// Describe a look: what an agent can do, and Ask an agent.
@@ -543,4 +605,52 @@ impl ThemeTab {
             ))
             .into_any_element()
     }
+}
+
+/// An art theme's tile picture: its artwork filling the preview, the theme's own colour as a
+/// sidebar strip down its left side, and a dot of its accent.
+fn art_tile_preview(theme: &GalleryTheme, picture: Arc<Image>, busy: bool) -> AnyElement {
+    let colour = |key: &str| {
+        theme
+            .changes
+            .get(key)
+            .and_then(Value::as_str)
+            .and_then(|hex| hex.trim_start_matches('#').get(..6))
+            .and_then(|hex| u32::from_str_radix(hex, 16).ok())
+            .map(|rgb| gpui::Hsla::from(gpui::rgb(rgb)))
+    };
+    let base = colour("dark.chatBox").unwrap_or_else(gpui::black);
+    let accent = colour("dark.accent").unwrap_or_else(gpui::white);
+    div()
+        .relative()
+        .size_full()
+        .overflow_hidden()
+        .rounded(px(7.0))
+        .when(busy, |this| this.opacity(0.5))
+        .child(
+            img(picture)
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .object_fit(ObjectFit::Cover),
+        )
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .h_full()
+                .w(px(22.0))
+                .bg(base.opacity(0.88))
+                .child(
+                    div()
+                        .mt(px(7.0))
+                        .ml(px(6.0))
+                        .size(px(5.0))
+                        .rounded_full()
+                        .bg(accent),
+                ),
+        )
+        .into_any_element()
 }

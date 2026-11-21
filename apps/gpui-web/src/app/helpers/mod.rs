@@ -39,6 +39,7 @@ pub(crate) mod ids {
     include!(concat!(env!("OUT_DIR"), "/ids.rs"));
 }
 pub(crate) mod web;
+pub(crate) mod window_art;
 
 /// The data URL decoders the desktop's `helpers/browser.rs` re-exports (data_url_image.rs).
 #[allow(unused_imports)]
@@ -48,12 +49,13 @@ pub(crate) use crate::data_url_image::{
 };
 pub(crate) use agents_hub::*;
 pub(crate) use chrome_palette::*;
-pub(crate) use theme_roles::*;
 pub(crate) use clipboard_read::*;
 pub(crate) use drag_ghost::*;
 pub(crate) use ids::*;
 pub(crate) use indicator_animation::*;
 pub(crate) use project::*;
 pub(crate) use sidebar::*;
+pub(crate) use theme_roles::*;
 pub(crate) use titlebar::*;
 pub(crate) use web::*;
+pub(crate) use window_art::*;

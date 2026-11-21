@@ -74,11 +74,13 @@ fn group_of(key: &str) -> &'static str {
         .iter()
         .find(|(_, _, keys)| keys.contains(&key))
         .map(|(id, ..)| *id)
-        .unwrap_or(if key.starts_with("windowGlass") {
-            "glass"
-        } else {
-            "window"
-        })
+        .unwrap_or(
+            if key.starts_with("windowGlass") || key.starts_with("windowArt") {
+                "glass"
+            } else {
+                "window"
+            },
+        )
 }
 
 /// The look settings this computer shows, in catalog order.

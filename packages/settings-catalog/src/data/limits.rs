@@ -94,3 +94,10 @@ pub const TERMINAL_VIEW_WIDTH_PERCENT_STEP: f64 = 5.0;
 /// The Agents view zoom range (`agentManagerZoomPercent`).
 pub const MIN_AGENT_MANAGER_ZOOM_PERCENT: f64 = 50.0;
 pub const MAX_AGENT_MANAGER_ZOOM_PERCENT: f64 = 200.0;
+
+/// `windowArtDim`: percent black over the artwork of an art theme.
+pub const MIN_WINDOW_ART_DIM: f64 = 0.0;
+pub const MAX_WINDOW_ART_DIM: f64 = 90.0;
+/// `windowArtBlur`: how soft the artwork is, in points.
+pub const MIN_WINDOW_ART_BLUR: f64 = 0.0;
+pub const MAX_WINDOW_ART_BLUR: f64 = 40.0;

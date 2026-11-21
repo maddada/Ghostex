@@ -299,7 +299,7 @@ impl GhostexGpuiApp {
                 .child("This project has no board.")
                 .into_any_element()
         });
-        div()
+        let column = div()
             .size_full()
             .min_w_0()
             .min_h_0()
@@ -308,8 +308,18 @@ impl GhostexGpuiApp {
             // The workspace column's tint over the glass, the board's own background in the panel.
             .bg(workspace_column_background())
             .children(self.render_native_kanban_window_header())
-            .child(div().flex_1().min_h_0().min_w_0().child(body))
-            .into_any_element()
+            .child(div().flex_1().min_h_0().min_w_0().child(body));
+        // Under an art theme the board's window paints the artwork under its column, as a
+        // workspace window does (helpers/window_art.rs).
+        match crate::app::helpers::window_art_backdrop(cx) {
+            Some(art) => div()
+                .relative()
+                .size_full()
+                .child(art)
+                .child(column)
+                .into_any_element(),
+            None => column.into_any_element(),
+        }
     }
 
     /// The row the window's transparent titlebar leaves to the app on macOS: the traffic lights'

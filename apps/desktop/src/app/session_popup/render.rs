@@ -231,8 +231,13 @@ impl Render for SessionPopupRoot {
             app.render_session_popup_window(id, window, cx)
         });
         let drop_app = self.app.clone();
+        // Under an art theme the pop-up paints the artwork under its body, as a workspace window
+        // does (helpers/window_art.rs).
+        let art = crate::app::helpers::window_art_backdrop(cx);
         div()
+            .relative()
             .size_full()
+            .children(art)
             .track_focus(&self.focus)
             .on_action(cx.listener(Self::run_hotkey))
             .on_action(cx.listener(

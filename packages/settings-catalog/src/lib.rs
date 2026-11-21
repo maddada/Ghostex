@@ -40,6 +40,9 @@ pub mod theme_roles;
 pub mod update_checks;
 pub use search_keywords::{search_keywords, section_search_keywords};
 
+pub use data::{
+    theme_gallery, DEFAULT_LOOK_ID, DEFAULT_LOOK_NAME, MAX_WINDOW_ART_BLUR, MAX_WINDOW_ART_DIM,
+};
 pub use hotkey_chords::{
     customized_normal_hotkey, hotkey_keystroke, platform_hotkey, terminal_hotkey,
 };

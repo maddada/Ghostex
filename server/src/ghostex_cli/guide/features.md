@@ -8376,10 +8376,20 @@ step through the last 20 changes, kept across restarts, and `ghostex theme histo
 with when they were made, by which agent or by you, and what changed; Undo is refused once a
 setting it would put back was changed again.
 Settings > Themes shows this in the Themes group, under Appearance. The themes row starts with
-six **Agent-made** looks (Firefly, Ember, Synthwave, Polar, Inkstone and Orchid: Firefly Forest,
-Ember Forge, Synthwave '84, Polar Night, Inkstone and Orchid Dusk), drawn like the presets with a
-picture of the look. Clicking one sets the whole look as one theme change, the same as
-`ghostex theme set`; the line under the row then names it, with **Undo** (`ghostex theme undo`
+**Default**, Ghostex's own look (it puts the shipped colours, glass and Live background back),
+then the six **Art** themes, Ghostex's main themes: Moonwater (a quiet mountain night in ink and
+silver), Glasshouse (a secret garden after dark), Red Earth (sculpted dunes in warm embers), Deep
+Current (luminous ocean currents), Night Garden (wildflowers in a plum dusk) and Nocturne Canyon
+(a desert under a hazy moon). An art theme paints its artwork behind the sidebar and the work
+area and keeps the window solid, so your desktop never shows through; its colours, text, grey
+text and accent come from the artwork. The artwork ships with Ghostex (nothing is downloaded), is
+drawn once and costs nothing while it sits still, and shows in dark mode, on the computer and in
+the web app. In Settings > Themes, **Glass** has **Art behind the window** (pick an artwork, or
+None to go back to the glass), **Art dimming** and **Art blur**, and Strength sets how much of the
+artwork shows through the sidebar and the work area. Then come six **Agent-made** looks (Firefly,
+Ember, Synthwave, Polar, Inkstone and Orchid: Firefly Forest, Ember Forge, Synthwave '84, Polar
+Night, Inkstone and Orchid Dusk), drawn like the presets with a picture of the look. Clicking one sets the whole look as one theme change, the same as
+`ghostex theme apply <theme>` (`ghostex theme list` lists them in the row's order); the line under the row then names it, with **Undo** (`ghostex theme undo`
 works too) and Change them. Hovering a look shows **Make it your own**, which opens a Help chat
 with the prompt that describes it as the draft, to change and send. **Describe a look**, under
 the row, has **Ask an agent**, which opens a Help chat with a starter prompt as its draft. The
@@ -8407,12 +8417,12 @@ line under the themes row says which one and how many colours it set, and Change
 computer's own window and the web app; the phone keeps its own look. When a colour makes text hard
 to read (under 4.5:1 for text, 3:1 for grey text, the accent, links and status colours, the text
 on a fill) or a border or divider all but vanish, the change is saved and the card says so.
-Commands: `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`. Settings: `themeRoles`.
+Commands: `ghostex theme list`, `ghostex theme apply <theme>`, `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`. Settings: `themeRoles`, `windowArt`, `windowArtDim`, `windowArtBlur`.
 
 Settings has an **Interface** group in its sidebar, right under Experience, with four pages
 (`ghostex settings open --tab interface` lists their settings):
-**Themes** (`--tab theme`): Themes (Appearance, the agent-made looks and presets, Describe a look), Colours,
-Glass, Chat colours (with Chat theme), Fine-tune colours and Terminal colours (Terminal theme,
+**Themes** (`--tab theme`): Themes (Appearance, Default, the art themes, the agent-made looks and presets, Describe a look), Colours,
+Glass (with Art behind the window), Chat colours (with Chat theme), Fine-tune colours and Terminal colours (Terminal theme,
 the palettes, Terminal background and its colour, Terminal background opacity, and the
 background image); **Text & Fonts** (`--tab textFonts`): Fonts, Terminal text (the terminal's
 font weight, bold text, line height and letter spacing) and Text; **Size & Zoom** (`--tab

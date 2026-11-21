@@ -829,6 +829,18 @@ pub const WINDOW_GLASS_OPTIONS: &[Opt] = &[
     opt("Off", "opaque"),
 ];
 
+/// `windowArt`: the artwork an art theme paints behind the sidebar and the work area
+/// (apps/desktop/assets/themes/art/<value>.webp), or none.
+pub const WINDOW_ART_OPTIONS: &[Opt] = &[
+    opt("None", "none"),
+    opt("Moonwater", "moonwater"),
+    opt("Glasshouse", "glasshouse"),
+    opt("Red Earth", "red-earth"),
+    opt("Deep Current", "deep-current"),
+    opt("Night Garden", "night-garden"),
+    opt("Nocturne Canyon", "nocturne-canyon"),
+];
+
 pub const WINDOW_GLASS_SOURCE_OPTIONS: &[Opt] = &[
     opt("Desktop and windows", "desktopAndWindows"),
     opt("Wallpaper only", "wallpaper"),

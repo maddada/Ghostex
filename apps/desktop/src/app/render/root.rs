@@ -284,6 +284,8 @@ impl Render for GhostexGpuiApp {
         let titlebar_popup_dismissal_active =
             self.titlebar_popup_menu.is_some() || self.titlebar_extension_popup.is_some();
 
+        // An art theme's artwork, under everything else in the window (helpers/window_art.rs).
+        let art_backdrop = window_art_backdrop(cx);
         let content = v_flex()
             .on_action(cx.listener(|this, action: &crate::app::terminal_sync::gpui_engine_terminal_attachment::PickTerminalAttachmentKind, _, cx| {
                 this.request_gpui_engine_terminal_attachment_paths_for_kind(action.target.clone(), action.runtime_session_id, Some(action.directories_only), cx);
@@ -310,6 +312,7 @@ impl Render for GhostexGpuiApp {
             .relative()
             .size_full()
             .bg(window_shell_background())
+            .children(art_backdrop)
             .when(
                 self.titlebar_popup_menu.as_ref().is_some_and(|state| {
                     matches!(state.kind, GpuiTitlebarPopupKind::AccountUsage(_))
