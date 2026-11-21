@@ -165,22 +165,18 @@ impl GhostexGpuiApp {
                         .truncate()
                         .child(home_title.clone().unwrap_or_else(|| group.title.clone())),
                 )
-                .children(
-                    group
-                        .machine_names
-                        .iter()
-                        .filter(|_| home.is_none())
-                        .map(|chip| {
-                            self.project_machine_toggle(
-                                &id,
-                                chip,
-                                group.machine_names.len() > 1,
-                                tooltip_span,
-                                appearance,
-                                cx,
-                            )
-                        }),
-                )
+                // CDXC:RemoteMachines 2026-11-21 DECISION:
+                // User, of Main Hub's header: "why dont i see the machine icons here so i can click to toggle each machine pls". Main Hub's header draws the same per-computer icons as a project's (the homes are one merged entry since Q1993, so gx-core fills its chips and hides a computer's chats there, its Chief of Staff included), with the same rules: shown while another computer is in the list, clickable only when more than one computer has a Main Hub. Main Hub's title keeps no tooltip of its own; its card opens on hover.
+                .children(group.machine_names.iter().map(|chip| {
+                    self.project_machine_toggle(
+                        &id,
+                        chip,
+                        group.machine_names.len() > 1,
+                        tooltip_span,
+                        appearance,
+                        cx,
+                    )
+                }))
                 // The slashed computer of a project whose folder is missing (folder_mark.rs).
                 .when(home.is_none(), |title| {
                     title.children(self.render_project_folder_mark(
