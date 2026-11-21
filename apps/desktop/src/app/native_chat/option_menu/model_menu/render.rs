@@ -7,37 +7,18 @@ use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::native_chat::appearance::ChatAppearance;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, Pixels,
-    StatefulInteractiveElement as _, Styled as _, Window, div, px, rems, svg, uniform_list,
+    AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, div, px, svg, uniform_list,
 };
 use gpui_component::input::Input;
 use serde_json::{Value, json};
 
 /// A long tooltip (a model's description, a footer button's note from the core, a "Not applied"
-/// reason) wraps at this width, inside the picker's small window.
+/// reason) wraps at this width; a shorter one sizes to its text. It is a constant, never read from
+/// the window: with glass on the bubble is drawn again in the frosted tooltip window, which is only
+/// as wide as the bubble itself, so a cap taken from that width came out short of the text and
+/// wrapped it. The overlay still narrows the bubble to the picker's own room.
 const HINT_TOOLTIP_WIDTH: f32 = 220.0;
-
-/// The room a tooltip takes on each side of its text besides the bubble's rem-sized margin:
-/// gpui-component's bubble draws a 1px border and 11px of padding around custom content
-/// (`Tooltip::render`), and its overlay keeps the bubble 4px inside the window (`WINDOW_MARGIN`).
-const HINT_TOOLTIP_INSET: f32 = 1.0 + 11.0 + 4.0;
-
-/// The text width of a long tooltip: `HINT_TOOLTIP_WIDTH` at the menu's scale, but never wider than
-/// the window it draws in leaves room for. The picker is its own window, it narrows when the room
-/// beside its trigger is short, and a tooltip cannot draw past it, so the text wraps inside it.
-fn hint_tooltip_width(scale: f32, window: &Window) -> Pixels {
-    let widest = px(HINT_TOOLTIP_WIDTH * scale);
-    // The bubble's own margin is `mx_3`, 0.75rem on each side.
-    let chrome = px(2.0 * HINT_TOOLTIP_INSET) + rems(1.5).to_pixels(window.rem_size());
-    let available = window.viewport_size().width - chrome;
-    if available > px(0.0) {
-        available.min(widest)
-    } else {
-        // A window no wider than the bubble's own chrome leaves no room for any text: the text
-        // keeps its usual width and the bubble is cut off at the window's edge, never drawn empty.
-        widest
-    }
-}
 
 /// An agent's logo in its brand tone; a white mark turns dark on the light surface.
 fn agent_logo(icon: &str, appearance: &ChatAppearance) -> gpui::Svg {
@@ -213,9 +194,9 @@ impl ChatOptionMenuPanel {
                 // at a width that fits inside that window instead of running off its edge on one line.
                 .tooltip(move |window, cx| {
                     let description = description.clone();
-                    gpui_component::tooltip::Tooltip::element(move |window, _| {
+                    gpui_component::tooltip::Tooltip::element(move |_, _| {
                         div()
-                            .w(hint_tooltip_width(scale, window))
+                            .max_w(px(HINT_TOOLTIP_WIDTH * scale))
                             .whitespace_normal()
                             .child(description.clone())
                     })
@@ -449,9 +430,9 @@ impl ChatOptionMenuPanel {
                             if wraps {
                                 // The picker is its own small window, so a long note wraps inside it.
                                 let tooltip = tooltip.clone();
-                                gpui_component::tooltip::Tooltip::element(move |window, _| {
+                                gpui_component::tooltip::Tooltip::element(move |_, _| {
                                     div()
-                                        .w(hint_tooltip_width(scale, window))
+                                        .max_w(px(HINT_TOOLTIP_WIDTH * scale))
                                         .whitespace_normal()
                                         .child(tooltip.clone())
                                 })
@@ -881,9 +862,9 @@ impl ChatOptionMenuPanel {
                                 .text_color(palette.text)
                                 .tooltip(move |window, cx| {
                                     let reason = reason.clone();
-                                    gpui_component::tooltip::Tooltip::element(move |window, _| {
+                                    gpui_component::tooltip::Tooltip::element(move |_, _| {
                                         div()
-                                            .w(hint_tooltip_width(scale, window))
+                                            .max_w(px(HINT_TOOLTIP_WIDTH * scale))
                                             .whitespace_normal()
                                             .child(reason.clone())
                                     })
