@@ -297,9 +297,13 @@ fn named_device_keys(ticket: BoxBootTicket) -> Vec<String> {
 }
 
 /// On a box, the devices its ticket names (possibly none); `None` on a computer that isn't a box.
-/// For gxserver's start, which only ever takes saved devices off with it.
+/// A ticket file that can't be read names nobody, so the helper starts closed rather than on the
+/// old list. For gxserver's start, which only ever takes saved devices off with it.
 pub(crate) fn devices_ticket_names() -> Option<Vec<String>> {
-    state::read_ticket().map(named_device_keys)
+    if !state::ticket_file().is_file() {
+        return None;
+    }
+    Some(state::read_ticket().map(named_device_keys).unwrap_or_default())
 }
 
 pub(crate) fn run_boot(ticket: &BoxBootTicket) -> Result<BoxBootResult, String> {
