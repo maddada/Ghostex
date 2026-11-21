@@ -951,6 +951,8 @@ impl ThemeTab {
             let p = t.p;
             rows.extend(self.presets_strip(&p, &t.values, cx));
             rows.extend(self.look_applied_row(&p, &t.values, cx));
+            rows.extend(self.background_row(&p, &t.values, cx));
+            rows.push(self.artworks_row(&p, &t.values, cx));
             rows.push(self.describe_look_row(&p, cx));
         }
         settings_section(&t.p, "Themes", None, None, rows).map(IntoElement::into_any_element)

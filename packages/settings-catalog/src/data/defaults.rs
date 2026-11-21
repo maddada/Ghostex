@@ -1065,6 +1065,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // User (through the coordinator): six dark art themes (Moonwater, Glasshouse, Red Earth, Deep Current, Night Garden, Nocturne Canyon) are Ghostex's main themes. Each paints its own artwork behind the sidebar and the work area of an opaque window: no desktop shows through. `windowArt` names the artwork (None, the default, keeps the glass as it is), `windowArtDim` darkens it (percent black over it) and `windowArtBlur` softens it (points). The surfaces over it take the glass tints (`windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`).
     // SEE-ALSO: apps/desktop/src/app/helpers/window_art.rs, data/theme_gallery.rs.
     ("windowArt", J::Str("none")),
+    ("windowArtLight", J::Str("none")),
     ("windowArtDim", J::Num(30.0)),
     ("windowArtBlur", J::Num(0.0)),
     ("windowGlass", J::Str("auto")),

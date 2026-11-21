@@ -4019,7 +4019,7 @@
     {
       "key": "windowArt",
       "title": "Art behind the window",
-      "subtitle": "The artwork an art theme paints behind the sidebar and the work area, with the window solid so your desktop never shows through. Pick an art theme in Themes; None goes back to Transparency.",
+      "subtitle": "The artwork painted behind the sidebar and the work area in dark mode, with the window solid so your desktop never shows through: a theme's own Art background, or any artwork from Backgrounds in Themes. It downloads the first time it shows. None goes back to Transparency.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4056,6 +4056,258 @@
         {
           "label": "Nocturne Canyon",
           "value": "nocturne-canyon"
+        },
+        {
+          "label": "Inkstone",
+          "value": "inkstone"
+        },
+        {
+          "label": "Firefly Forest",
+          "value": "firefly-forest"
+        },
+        {
+          "label": "Ember Forge",
+          "value": "ember-forge"
+        },
+        {
+          "label": "Synthwave '84",
+          "value": "synthwave-84"
+        },
+        {
+          "label": "Polar Night",
+          "value": "polar-night"
+        },
+        {
+          "label": "Orchid Dusk",
+          "value": "orchid-dusk"
+        },
+        {
+          "label": "Catppuccin Mocha",
+          "value": "mocha"
+        },
+        {
+          "label": "Catppuccin Macchiato",
+          "value": "macchiato"
+        },
+        {
+          "label": "Catppuccin Frappé",
+          "value": "frappe"
+        },
+        {
+          "label": "Catppuccin Latte",
+          "value": "latte"
+        },
+        {
+          "label": "Dracula",
+          "value": "dracula"
+        },
+        {
+          "label": "Alucard",
+          "value": "alucard"
+        },
+        {
+          "label": "Solarized Dark",
+          "value": "sol-dark"
+        },
+        {
+          "label": "Solarized Light",
+          "value": "sol-light"
+        },
+        {
+          "label": "Tokyo Night",
+          "value": "tn-night"
+        },
+        {
+          "label": "Tokyo Night Storm",
+          "value": "tn-storm"
+        },
+        {
+          "label": "Tokyo Night Moon",
+          "value": "tn-moon"
+        },
+        {
+          "label": "Tokyo Night Day",
+          "value": "tn-day"
+        },
+        {
+          "label": "Nord",
+          "value": "nord"
+        },
+        {
+          "label": "Kanagawa Wave",
+          "value": "kg-wave"
+        },
+        {
+          "label": "Kanagawa Dragon",
+          "value": "kg-dragon"
+        },
+        {
+          "label": "Kanagawa Lotus",
+          "value": "kg-lotus"
+        },
+        {
+          "label": "Everforest Dark",
+          "value": "ef-dark"
+        },
+        {
+          "label": "Everforest Light",
+          "value": "ef-light"
+        },
+        {
+          "label": "Gruvbox Material Dark",
+          "value": "gm-dark"
+        },
+        {
+          "label": "Gruvbox Material Light",
+          "value": "gm-light"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "windowArtLight",
+      "title": "Art behind the window in light mode",
+      "subtitle": "The artwork a light theme paints behind the sidebar and the work area in light mode, with the window solid. None keeps light mode as Transparency sets it.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "enum",
+      "default": "none",
+      "options": [
+        {
+          "label": "None",
+          "value": "none"
+        },
+        {
+          "label": "Moonwater",
+          "value": "moonwater"
+        },
+        {
+          "label": "Glasshouse",
+          "value": "glasshouse"
+        },
+        {
+          "label": "Red Earth",
+          "value": "red-earth"
+        },
+        {
+          "label": "Deep Current",
+          "value": "deep-current"
+        },
+        {
+          "label": "Night Garden",
+          "value": "night-garden"
+        },
+        {
+          "label": "Nocturne Canyon",
+          "value": "nocturne-canyon"
+        },
+        {
+          "label": "Inkstone",
+          "value": "inkstone"
+        },
+        {
+          "label": "Firefly Forest",
+          "value": "firefly-forest"
+        },
+        {
+          "label": "Ember Forge",
+          "value": "ember-forge"
+        },
+        {
+          "label": "Synthwave '84",
+          "value": "synthwave-84"
+        },
+        {
+          "label": "Polar Night",
+          "value": "polar-night"
+        },
+        {
+          "label": "Orchid Dusk",
+          "value": "orchid-dusk"
+        },
+        {
+          "label": "Catppuccin Mocha",
+          "value": "mocha"
+        },
+        {
+          "label": "Catppuccin Macchiato",
+          "value": "macchiato"
+        },
+        {
+          "label": "Catppuccin Frappé",
+          "value": "frappe"
+        },
+        {
+          "label": "Catppuccin Latte",
+          "value": "latte"
+        },
+        {
+          "label": "Dracula",
+          "value": "dracula"
+        },
+        {
+          "label": "Alucard",
+          "value": "alucard"
+        },
+        {
+          "label": "Solarized Dark",
+          "value": "sol-dark"
+        },
+        {
+          "label": "Solarized Light",
+          "value": "sol-light"
+        },
+        {
+          "label": "Tokyo Night",
+          "value": "tn-night"
+        },
+        {
+          "label": "Tokyo Night Storm",
+          "value": "tn-storm"
+        },
+        {
+          "label": "Tokyo Night Moon",
+          "value": "tn-moon"
+        },
+        {
+          "label": "Tokyo Night Day",
+          "value": "tn-day"
+        },
+        {
+          "label": "Nord",
+          "value": "nord"
+        },
+        {
+          "label": "Kanagawa Wave",
+          "value": "kg-wave"
+        },
+        {
+          "label": "Kanagawa Dragon",
+          "value": "kg-dragon"
+        },
+        {
+          "label": "Kanagawa Lotus",
+          "value": "kg-lotus"
+        },
+        {
+          "label": "Everforest Dark",
+          "value": "ef-dark"
+        },
+        {
+          "label": "Everforest Light",
+          "value": "ef-light"
+        },
+        {
+          "label": "Gruvbox Material Dark",
+          "value": "gm-dark"
+        },
+        {
+          "label": "Gruvbox Material Light",
+          "value": "gm-light"
         }
       ],
       "agentWritable": true

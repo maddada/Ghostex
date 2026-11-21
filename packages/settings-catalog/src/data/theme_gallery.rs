@@ -15,7 +15,7 @@ use crate::json::J;
 /// User: "non of the themes should change the fonts at all pls. keep fonts as they are", and of the other looks next to their own (Inkstone, their Windows look and since then the default dark look): "adjust the others so the colors lean the same way this does". No look names a font (a font key here would change the user's fonts), and every look follows Inkstone's way: a muted colour at depth 92 to 96 with no extra contrast, paper-white text, grey text, a muted accent, borders 8% and dividers 6%, near-neutral cards, controls, menus and chat box in the look's own hue, selection 9% and hover 5%, muted success, warning and danger, Inkstone's glass tints (82 in the sidebar, 88 in the work area) and a slow, dim Live background (speed 0.3 to 0.5, brightness 25 to 35). Each keeps its own hue, accent, Live style and terminal palette, so it stays the look it was named for. Supersedes the 2026-11-18 neon accents, tinted borders, -4 contrast and the fonts named as installed on Windows.
 ///
 /// CDXC:Theming 2026-11-21 DECISION:
-/// User (through the coordinator, after picking six dark art themes from the concept page): "They are the main themes: first in the theme gallery and in `ghostex theme`", and "Ghostex's current default look shows as Default, first". The row is Default (`theme_gallery`, the shipped defaults of every key a look sets, so it always matches the catalog), then the six art looks (`art: true`, each its artwork behind an opaque window through `windowArt`, its palette from the concept page as the theme colours, Colourfulness Full with the page's background as the colour, the way a preset paints its own), then the agent-made looks. Every other look sets `windowArt` to none, so applying one takes the artwork away.
+/// User (through the coordinator, after picking six dark art themes from the concept page): "They are the main themes: first in the theme gallery and in `ghostex theme`", and "Ghostex's current default look shows as Default, first". The row is Default (`theme_gallery` in themes.rs, the shipped defaults of every key a look sets, so it always matches the catalog), then the six art looks (`art: true`, each its artwork behind an opaque window through `windowArt`, its palette from the concept page as the theme colours, Colourfulness Full with the page's background as the colour, the way a preset paints its own), then the agent-made looks. The background settings a look names (artwork, glass, Live) are set apart as its backgrounds by `theme_gallery` in themes.rs, so a background can be switched after the look (CDXC:Theming 2026-11-21 DECISION there).
 ///
 /// CDXC:Theming 2026-11-18 WHY:
 /// Each theme sets the custom colour's depth (`customSidebarTitlebarBackgroundDarknessPercent`)
@@ -580,67 +580,6 @@ pub const THEME_GALLERY: J = J::Arr(&[
         ),
     ]),
 ]);
-
-/// The id and name of the look that puts Ghostex's shipped look back.
-pub const DEFAULT_LOOK_ID: &str = "default";
-pub const DEFAULT_LOOK_NAME: &str = "Default";
-
-/// A setting's catalog default for `platform`, written the way `ghostex theme set` takes it.
-fn default_text(platform: crate::Platform, key: &str) -> Option<String> {
-    if let Some((appearance, role)) = key.split_once('.') {
-        let roles = crate::default_value(crate::theme_roles::THEME_ROLES_SETTING)?;
-        return Some(
-            roles
-                .get(appearance)
-                .and_then(|roles| roles.get(role))
-                .and_then(J::as_str)
-                .unwrap_or("default")
-                .to_string(),
-        );
-    }
-    Some(
-        match crate::availability::default_value_on(platform, key)? {
-            J::Str(text) => text.to_string(),
-            J::Bool(flag) => flag.to_string(),
-            J::Num(number) => crate::json::Json::Num(*number).to_pretty_string(),
-            _ => return None,
-        },
-    )
-}
-
-/// The themes row as Settings and `ghostex theme` show it: Default first, then `THEME_GALLERY`.
-/// Default sets every key any look sets back to `platform`'s shipped value (a theme colour with no
-/// shipped value to `default`), so applying it puts Ghostex's own look back.
-pub fn theme_gallery(platform: crate::Platform) -> crate::json::Json {
-    use crate::json::{Json, ToJson};
-    let mut keys: Vec<&'static str> = Vec::new();
-    for look in THEME_GALLERY.as_array() {
-        for (key, _) in look.get("changes").map(J::entries).unwrap_or_default() {
-            if !keys.contains(key) {
-                keys.push(key);
-            }
-        }
-    }
-    let changes = keys
-        .into_iter()
-        .filter_map(|key| default_text(platform, key).map(|value| (key, Json::Str(value))));
-    let default = Json::obj([
-        ("id", Json::str(DEFAULT_LOOK_ID)),
-        ("name", Json::str(DEFAULT_LOOK_NAME)),
-        (
-            "prompt",
-            Json::str(
-                "Put Ghostex's own look back: its default colours, glass and Live background.",
-            ),
-        ),
-        ("changes", Json::obj(changes)),
-    ]);
-    let mut looks = vec![default];
-    if let Json::Arr(rest) = THEME_GALLERY.to_json() {
-        looks.extend(rest);
-    }
-    Json::Arr(looks)
-}
 
 #[cfg(test)]
 mod tests {

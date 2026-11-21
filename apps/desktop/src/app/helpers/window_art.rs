@@ -8,64 +8,50 @@
 //! The picture backdrop Glass already has (Behind the glass > Picture) is drawn by each platform's window backend behind a see-through window, so it needs window glass, never reaches the web build, and lets the desktop show through wherever a surface is clear. Art is painted by GPUI itself as the window's bottom layer instead: one decoded bitmap per artwork, drawn as a single image quad and a dimming quad each frame, the same on macOS, Windows, Linux and in the browser.
 //!
 //! CDXC:Theming 2026-11-21 WHY:
-//! The artwork is decoded (and blurred, when `windowArtBlur` asks for it) once, off the main thread, and only the artwork in use is kept: switching artwork frees the previous bitmap. Until the first decode finishes the window shows the theme's own colour. Art is dark mode only (the art themes are dark themes); light mode keeps its own look.
-//! SEE-ALSO: app/helpers/window_glass.rs (`refresh_window_glass`, `window_glass_background_appearance`), packages/settings-catalog/src/data/theme_gallery.rs (the art looks), apps/gpui-web/src/app/helpers/web.rs.
+//! No artwork ships inside the app (CDXC:Theming 2026-11-21 DECISION on `ARTWORKS` in packages/settings-catalog/src/data/themes.rs). gxserver downloads and keeps it (server/src/theme/art.rs); the desktop reads the file gxserver names, the web build gets its bytes in the answer. It is decoded (and blurred, when `windowArtBlur` asks) once, off the main thread, and only the artwork in use is kept: switching artwork frees the previous bitmap. Until it is here the window shows the theme's own colour, solid, and the artwork fades in when it arrives (at once with Reduce Motion); when it can't be downloaded (offline) the window stays solid and the next change of artwork or appearance tries again. Dark mode paints `windowArt`, light mode `windowArtLight`.
+//! SEE-ALSO: app/helpers/window_glass.rs (`refresh_window_glass`, `window_glass_background_appearance`), packages/settings-catalog/src/data/themes.rs (the artworks and the themes' Art backgrounds), apps/gpui-web/src/app/helpers/web.rs.
 
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use gpui::{
-    AnyElement, App, IntoElement, ObjectFit, ParentElement as _, RenderImage, Styled as _,
-    StyledImage as _, div, img,
+    Animation, AnimationExt as _, AnyElement, App, IntoElement, ObjectFit, ParentElement as _,
+    RenderImage, Styled as _, StyledImage as _, div, img,
 };
 
-macro_rules! artwork {
-    ($name:literal) => {
-        include_bytes!(concat!(
-            "../../../../desktop/assets/themes/art/",
-            $name,
-            ".webp"
-        ))
-    };
-}
+/// How long a newly arrived artwork takes to fade in.
+const ART_FADE_IN: Duration = Duration::from_millis(450);
 
-/// The artworks the art themes paint, by `windowArt` value (`WINDOW_ART_OPTIONS`).
-fn artwork_bytes(id: &str) -> Option<(&'static str, &'static [u8])> {
-    Some(match id {
-        "moonwater" => ("moonwater", artwork!("moonwater")),
-        "glasshouse" => ("glasshouse", artwork!("glasshouse")),
-        "red-earth" => ("red-earth", artwork!("red-earth")),
-        "deep-current" => ("deep-current", artwork!("deep-current")),
-        "night-garden" => ("night-garden", artwork!("night-garden")),
-        "nocturne-canyon" => ("nocturne-canyon", artwork!("nocturne-canyon")),
-        _ => return None,
-    })
-}
-
-/// The artwork the settings ask for, whatever the appearance: its id, dim and blur.
+/// The artwork the settings ask for in the current appearance: its id, dim and blur, and whether
+/// it is painted under light mode (the dimming is then a white wash).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct ArtChoice {
     id: &'static str,
     dim: u8,
     blur: u8,
+    light: bool,
 }
 
 static WINDOW_ART: Mutex<Option<ArtChoice>> = Mutex::new(None);
-/// An artwork is chosen and the app shows dark mode.
+/// An artwork is chosen for the appearance the app shows.
 static WINDOW_ART_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// The sidebar's and the work area's tint over the artwork, percent (the dark glass tints).
 static ART_SIDEBAR_PERCENT: AtomicU8 = AtomicU8::new(88);
 static ART_WORK_AREA_PERCENT: AtomicU8 = AtomicU8::new(88);
 
-/// The decoded artwork in use (by id and blur), and the one being decoded.
+/// The decoded artwork in use (by id and blur), the one being fetched and decoded, and the last
+/// one that could not be had (not tried again until another is asked for).
 struct Decoded {
     ready: Option<((&'static str, u8), Arc<RenderImage>)>,
     pending: Option<(&'static str, u8)>,
+    failed: Option<(&'static str, u8)>,
 }
 
 static DECODED: Mutex<Decoded> = Mutex::new(Decoded {
     ready: None,
     pending: None,
+    failed: None,
 });
 
 fn read_number(object: &serde_json::Map<String, serde_json::Value>, key: &str) -> Option<f64> {
@@ -88,39 +74,56 @@ fn catalog_number(key: &str) -> f64 {
 /// Reads the art settings. Call after the appearance is known (`CHROME_LIGHT_APPEARANCE`).
 /// Returns whether art turned on or off.
 pub(crate) fn refresh_window_art(object: &serde_json::Map<String, serde_json::Value>) -> bool {
-    let choice = object
-        .get("windowArt")
-        .and_then(serde_json::Value::as_str)
-        .and_then(artwork_bytes)
-        .map(|(id, _)| {
-            let percent = |key: &str, max: f64| {
-                read_number(object, key)
-                    .unwrap_or_else(|| catalog_number(key))
-                    .clamp(0.0, max)
-                    .round() as u8
-            };
-            ArtChoice {
-                id,
-                dim: percent("windowArtDim", ghostex_settings_catalog::MAX_WINDOW_ART_DIM),
-                blur: percent(
-                    "windowArtBlur",
-                    ghostex_settings_catalog::MAX_WINDOW_ART_BLUR,
-                ),
-            }
-        });
-    let tint = |key: &str| {
+    let light = crate::CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed);
+    let art_key = if light { "windowArtLight" } else { "windowArt" };
+    let percent = |key: &str, max: f64| {
         read_number(object, key)
             .unwrap_or_else(|| catalog_number(key))
-            .clamp(0.0, 100.0)
+            .clamp(0.0, max)
             .round() as u8
     };
-    ART_SIDEBAR_PERCENT.store(tint("windowGlassSidebarOpacityDark"), Ordering::Relaxed);
-    ART_WORK_AREA_PERCENT.store(tint("windowGlassWorkAreaTintDark"), Ordering::Relaxed);
-    if let Ok(mut art) = WINDOW_ART.lock() {
+    let choice = object
+        .get(art_key)
+        .and_then(serde_json::Value::as_str)
+        .and_then(ghostex_settings_catalog::artwork_by_id)
+        .map(|artwork| ArtChoice {
+            id: artwork.id,
+            dim: percent("windowArtDim", ghostex_settings_catalog::MAX_WINDOW_ART_DIM),
+            blur: percent(
+                "windowArtBlur",
+                ghostex_settings_catalog::MAX_WINDOW_ART_BLUR,
+            ),
+            light,
+        });
+    let (sidebar, work_area) = if light {
+        (
+            ghostex_settings_catalog::window_glass_light_key(
+                object,
+                "windowGlassSidebarOpacityLight",
+            ),
+            ghostex_settings_catalog::window_glass_light_key(
+                object,
+                "windowGlassWorkAreaTintLight",
+            ),
+        )
+    } else {
+        (
+            "windowGlassSidebarOpacityDark",
+            "windowGlassWorkAreaTintDark",
+        )
+    };
+    ART_SIDEBAR_PERCENT.store(percent(sidebar, 100.0), Ordering::Relaxed);
+    ART_WORK_AREA_PERCENT.store(percent(work_area, 100.0), Ordering::Relaxed);
+    if let Ok(mut art) = WINDOW_ART.lock()
+        && *art != choice
+    {
         *art = choice;
+        // A change of artwork or appearance tries an artwork that could not be had again.
+        if let Ok(mut decoded) = DECODED.lock() {
+            decoded.failed = None;
+        }
     }
-    let light = crate::CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed);
-    let active = choice.is_some() && !light;
+    let active = choice.is_some();
     WINDOW_ART_ACTIVE.swap(active, Ordering::Relaxed) != active
 }
 
@@ -157,7 +160,7 @@ pub(crate) fn window_art_redraw_key() -> u64 {
 }
 
 /// Decodes `bytes` into the BGRA bitmap GPUI draws, blurred by `blur` points first.
-fn decode_artwork(bytes: &'static [u8], blur: u8) -> Option<Arc<RenderImage>> {
+fn decode_artwork(bytes: &[u8], blur: u8) -> Option<Arc<RenderImage>> {
     let decoded = image::load_from_memory_with_format(bytes, image::ImageFormat::WebP).ok()?;
     let mut rgba = decoded.into_rgba8();
     if blur > 0 {
@@ -171,8 +174,34 @@ fn decode_artwork(bytes: &'static [u8], blur: u8) -> Option<Arc<RenderImage>> {
     Some(Arc::new(RenderImage::new(vec![image::Frame::new(rgba)])))
 }
 
-/// The decoded artwork for `choice`, or `None` while it is being decoded (the decode starts here
-/// the first time it is asked for, and every window redraws when it is ready).
+/// The artwork's bytes from gxserver, which downloads it the first time (server/src/theme/art.rs):
+/// on the desktop the file it keeps, in the browser the bytes in its answer.
+async fn fetch_artwork(id: &'static str) -> Option<Vec<u8>> {
+    let inline = cfg!(ghostex_web);
+    let answer = crate::app::gx_store::gx_rpc(
+        None,
+        "/api/theme",
+        serde_json::json!({ "op": "art", "id": id, "inline": inline }),
+    )
+    .await
+    .ok()?;
+    if inline {
+        use base64::Engine as _;
+        return base64::engine::general_purpose::STANDARD
+            .decode(answer.get("bytesBase64")?.as_str()?)
+            .ok();
+    }
+    #[cfg(not(ghostex_web))]
+    {
+        return std::fs::read(answer.get("path")?.as_str()?).ok();
+    }
+    #[allow(unreachable_code)]
+    None
+}
+
+/// The decoded artwork for `choice`, or `None` while it is being fetched and decoded (that starts
+/// here the first time it is asked for, and every window redraws when it is ready) or when it
+/// could not be had.
 fn artwork_image(choice: ArtChoice, cx: &mut App) -> Option<Arc<RenderImage>> {
     let key = (choice.id, choice.blur);
     let mut decoded = DECODED.lock().ok()?;
@@ -181,32 +210,37 @@ fn artwork_image(choice: ArtChoice, cx: &mut App) -> Option<Arc<RenderImage>> {
     {
         return Some(image.clone());
     }
-    if decoded.pending == Some(key) {
+    if decoded.pending == Some(key) || decoded.failed == Some(key) {
         return None;
     }
     decoded.pending = Some(key);
+    decoded.failed = None;
     drop(decoded);
-    let (_, bytes) = artwork_bytes(choice.id)?;
-    let task = cx
-        .background_executor()
-        .spawn(async move { decode_artwork(bytes, choice.blur) });
+    let background = cx.background_executor().clone();
     cx.spawn(async move |cx| {
-        let image = task.await;
+        let image = match fetch_artwork(choice.id).await {
+            Some(bytes) => {
+                background
+                    .spawn(async move { decode_artwork(&bytes, choice.blur) })
+                    .await
+            }
+            None => None,
+        };
         let _ = cx.update(|cx| {
             let previous = {
                 let Ok(mut decoded) = DECODED.lock() else {
                     return;
                 };
                 if decoded.pending != Some(key) {
-                    // Another artwork was asked for meanwhile; its own decode will land.
+                    // Another artwork was asked for meanwhile; its own fetch will land.
                     return;
                 }
-                // A bundled artwork that fails to decode stays pending, so it is not tried again
-                // every frame; the window keeps the theme's own colour.
+                decoded.pending = None;
                 let Some(image) = image else {
+                    // Offline or refused: the window stays solid in the theme's colour.
+                    decoded.failed = Some(key);
                     return;
                 };
-                decoded.pending = None;
                 decoded.ready.replace((key, image))
             };
             if let Some((_, previous)) = previous {
@@ -219,9 +253,10 @@ fn artwork_image(choice: ArtChoice, cx: &mut App) -> Option<Arc<RenderImage>> {
     None
 }
 
-/// The window's bottom layer while an art theme is on: the theme's own colour, the artwork
-/// covering the window (centred, cropped to fill), and the dimming over it. Put it first in a
-/// window's root (`relative`), under everything else.
+/// The window's bottom layer while an artwork shows: the theme's own colour, the artwork covering
+/// the window (centred, cropped to fill) fading in the first time it is drawn, and the dimming over
+/// it (black in dark mode, white in light mode). Put it first in a window's root (`relative`),
+/// under everything else.
 pub(crate) fn window_art_backdrop(cx: &mut App) -> Option<AnyElement> {
     if !window_art_active() {
         return None;
@@ -229,6 +264,50 @@ pub(crate) fn window_art_backdrop(cx: &mut App) -> Option<AnyElement> {
     let choice = (*WINDOW_ART.lock().ok()?)?;
     let image = artwork_image(choice, cx);
     let base = crate::app::helpers::workspace_background_color().opacity(1.0);
+    let wash = if choice.light {
+        gpui::white()
+    } else {
+        gpui::black()
+    };
+    let still = crate::app::helpers::gpui_macos_reduce_motion_enabled();
+    let dim = f32::from(choice.dim) / 100.0;
+    let picture = image.map(|image| {
+        let picture = div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .child(
+                img(image)
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .object_fit(ObjectFit::Cover),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .bg(wash.opacity(dim)),
+            );
+        if still {
+            picture.into_any_element()
+        } else {
+            // Keyed by the artwork, so it fades in once when it arrives, not on every redraw.
+            picture
+                .with_animation(
+                    gpui::ElementId::Name(
+                        format!("window-art-{}-{}", choice.id, choice.blur).into(),
+                    ),
+                    Animation::new(ART_FADE_IN),
+                    |picture, delta| picture.opacity(delta),
+                )
+                .into_any_element()
+        }
+    });
     Some(
         div()
             .absolute()
@@ -237,22 +316,7 @@ pub(crate) fn window_art_backdrop(cx: &mut App) -> Option<AnyElement> {
             .size_full()
             .overflow_hidden()
             .bg(base)
-            .children(image.map(|image| {
-                img(image)
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .object_fit(ObjectFit::Cover)
-            }))
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .bg(gpui::black().opacity(f32::from(choice.dim) / 100.0)),
-            )
+            .children(picture)
             .into_any_element(),
     )
 }
