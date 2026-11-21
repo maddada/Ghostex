@@ -733,12 +733,10 @@ impl NativeChatView {
                                 .child(if all {
                                     "Show fewer".to_string()
                                 } else {
-                                    // "1 more needs you", "3 more need you".
-                                    if hidden == 1 {
-                                        "1 more needs you".to_string()
-                                    } else {
-                                        format!("{hidden} more need you")
-                                    }
+                                    // "3 more done", "2 more need you \u{b7} 1 more done": by what is hidden.
+                                    ghostex_gx_chat_core::extras::work_cards::dock_more_label(
+                                        &rows[limit.min(rows.len())..],
+                                    )
                                 })
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if !this.expanded.remove(DOCK_ALL_ROWS) {
