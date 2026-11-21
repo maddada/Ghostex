@@ -281,15 +281,16 @@ pub fn close(state: &mut ChatState) -> Vec<Effect> {
 /// `offerCompactBeforeSending` globally via a host action.
 pub fn dismiss(state: &mut ChatState, scope: &str) -> Vec<Effect> {
     state.composer.compact_prompt_open = false;
+    state.composer.compact_prompt_dismissed_session = true;
     state.core.request_publish();
     if scope == "always" {
+        state.core.offer_compact_before_sending_from_host = true;
         state.core.offer_compact_before_sending = Some(false);
         vec![Effect::HostAction {
             action: DISABLE_OFFER_HOST_ACTION.to_string(),
             params: Box::new(json!({})),
         }]
     } else {
-        state.composer.compact_prompt_dismissed_session = true;
         Vec::new()
     }
 }

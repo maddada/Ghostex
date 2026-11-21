@@ -648,6 +648,13 @@ fn edit_draft(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         state.composer.history.reset_index();
     }
     state.composer.text = text.to_string();
+    let closed_compact_prompt = state.composer.compact_prompt_open
+        && text.trim().is_empty()
+        && state.composer.pending_attachments == 0;
+    if closed_compact_prompt {
+        state.composer.compact_prompt_open = false;
+        state.core.request_publish();
+    }
     let record = crate::composer::storage::StoredDraftRecord {
         text: text.to_string(),
         updated_at: Some(context.now_millis() as f64),
@@ -661,7 +668,7 @@ fn edit_draft(state: &mut ChatState, action: &UserAction, context: &ChatContext)
     state.composer.stored_draft = Some(record.clone());
     // `if (!clearedError && !historyChanged) return;`: every keystroke writes the draft, and the
     // write answering is not on its own a reason to ship a snapshot.
-    if !state.core.cleared_error && !history_changed {
+    if !state.core.cleared_error && !history_changed && !closed_compact_prompt {
         state.core.skip_closing_publish = true;
     }
     // Anything that could be part of a key is stored masked, so a long message survives a restart

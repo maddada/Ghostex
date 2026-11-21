@@ -191,7 +191,7 @@ impl NativeChatView {
                 "compact-prompt-dismiss-always",
                 "Always",
                 "always",
-                "Turn off in Settings > Agents > Claude Code",
+                "Never ask again (re-enable in Settings > Agents > Claude Code)",
             ))
             .into_any_element();
 
@@ -207,6 +207,10 @@ impl NativeChatView {
             )
             .on_click(cx.listener(|this, _, window, cx| {
                 this.compact_prompt.opened_at = None;
+                if this.draft.trim().is_empty() && !this.attachments_on_their_way() {
+                    this.dismiss_compact_prompt(cx);
+                    return;
+                }
                 this.submit("send", window, cx);
             }))
             .into_any_element();
@@ -223,6 +227,10 @@ impl NativeChatView {
             )
             .on_click(cx.listener(|this, _, window, cx| {
                 this.compact_prompt.opened_at = None;
+                if this.draft.trim().is_empty() && !this.attachments_on_their_way() {
+                    this.dismiss_compact_prompt(cx);
+                    return;
+                }
                 this.submit("compact", window, cx);
             }))
             .into_any_element();

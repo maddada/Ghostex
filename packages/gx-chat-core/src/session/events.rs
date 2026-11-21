@@ -182,9 +182,11 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
                 state.core.composer_row = row;
             }
             if let Some(offer) = settings.offer_compact_before_sending {
+                state.core.offer_compact_before_sending_from_host = true;
                 state.core.offer_compact_before_sending = Some(offer);
             }
             if let Some(above) = settings.compact_chats_above {
+                state.core.compact_chats_above_from_host = true;
                 state.core.compact_chats_above = Some(above);
             }
             state.core.request_publish();
@@ -316,9 +318,11 @@ pub fn boot_read(
             state.core.composer_row = row;
         }
         if let Some(offer) = settings.offer_compact_before_sending {
+            state.core.offer_compact_before_sending_from_host = true;
             state.core.offer_compact_before_sending = Some(offer);
         }
         if let Some(above) = settings.compact_chats_above {
+            state.core.compact_chats_above_from_host = true;
             state.core.compact_chats_above = Some(above);
         }
     }

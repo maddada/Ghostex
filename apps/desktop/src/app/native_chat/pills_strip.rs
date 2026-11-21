@@ -13,7 +13,7 @@
 //! while the pills scroll (gx-chat-core extras/chat_pills.rs `view_chips` has the user's words).
 //! Before it, while a draft saved elsewhere is offered, the Saved draft pill (saved_draft_pill.rs),
 //! which alone is enough to show the strip, also on a chat with no rows yet.
-//! After the view chips, on a Codex chat idle for over a day, the "Option + Enter to compact then
+//! After the view chips, on a Codex chat idle for over 30 minutes, the "Option + Enter to compact then
 //! send" hint (`compact_hint_chip`).
 //!
 //! First of all, at the strip's left end, the where pill of a running session (where_pill.rs),

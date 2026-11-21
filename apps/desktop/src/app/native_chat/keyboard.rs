@@ -364,6 +364,13 @@ impl NativeChatView {
             if this.chat_text_field_focused(window, cx) {
                 return;
             }
+            if key.key == "escape" && !key.modifiers.shift && this.dismiss_compact_prompt(cx) {
+                // Escape closes an open compact-before-sending prompt even when triggered by
+                // clicking Send or after focus moved to the card or chat background.
+                cx.stop_propagation();
+                window.prevent_default();
+                return;
+            }
             /*
             CDXC:SessionChat 2026-09-18 DECISION:
             User (2026-09-06 and 2026-09-07, React composer): arrows and text-editing chords act on

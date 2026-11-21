@@ -509,11 +509,15 @@ pub fn apply_draft_agent_carriage(state: &mut ChatState, result: &ReadSessionCha
     if let Some(pins) = &result.status_line_pins {
         state.pickers.context.computer.records = Some(pins.clone());
     }
-    if let Some(offer) = result.offer_compact_before_sending {
-        state.core.offer_compact_before_sending = Some(offer);
+    if !state.core.offer_compact_before_sending_from_host {
+        if let Some(offer) = result.offer_compact_before_sending {
+            state.core.offer_compact_before_sending = Some(offer);
+        }
     }
-    if let Some(above) = result.compact_chats_above {
-        state.core.compact_chats_above = Some(above);
+    if !state.core.compact_chats_above_from_host {
+        if let Some(above) = result.compact_chats_above {
+            state.core.compact_chats_above = Some(above);
+        }
     }
 }
 

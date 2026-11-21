@@ -296,6 +296,21 @@ impl GhostexGpuiApp {
                 settings.insert("offerCompactBeforeSending".into(), false.into());
                 crate::shared_settings::install(settings);
                 cx.refresh_windows();
+                cx.spawn(async move |_, _| {
+                    let _ = crate::app::gx_store::gx_rpc(
+                        None,
+                        "/api/dispatchRendererCommand",
+                        json!({
+                            "action": "updateSettingsPatch",
+                            "payload": {
+                                "patch": { "offerCompactBeforeSending": false },
+                                "source": "chat:compactBeforeSend",
+                            },
+                        }),
+                    )
+                    .await;
+                })
+                .detach();
             }
             // A chat's zoom chords. The page cannot save Settings, so the zoom changes every chat
             // on this page until it reloads.
