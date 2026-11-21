@@ -9,20 +9,6 @@ impl GhostexGpuiApp {
         message: GpuiSidebarCreateProjectAgentMessage,
         cx: &mut gpui::Context<Self>,
     ) {
-        let retry_payload = (!message.allow_missing_cli).then(|| {
-            let mut retry = serde_json::json!({
-                "agentId": message.agent_id,
-                "allowMissingCli": true,
-                "preferredInterface": message.preferred_interface.as_str(),
-                "projectId": message.project_id,
-                "type": "ghostex.gpui.sidebar.createProjectAgent",
-                "version": 1,
-            });
-            if let Some(account_id) = message.account_id.as_deref() {
-                retry["accountId"] = serde_json::json!(account_id);
-            }
-            retry.to_string()
-        });
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let request_id = message.request_id;
@@ -31,7 +17,6 @@ impl GhostexGpuiApp {
                     &message.project_id,
                     &message.agent_id,
                     message.account_id.as_deref(),
-                    message.allow_missing_cli,
                 )
             }).await;
             let mut attach_key = None;
@@ -83,10 +68,7 @@ impl GhostexGpuiApp {
                     Err(error) => Err(error),
                 };
                 if let Err(error) = &outcome {
-                    let start_anyway = retry_payload.map(|payload| {
-                        crate::app::window::RetryAgentLaunch::WindowsProjectAgent { payload }
-                    });
-                    this.show_agent_launch_failure(error, start_anyway, cx);
+                    this.show_agent_launch_failure(error, cx);
                 }
                 if let Some(request_id) = request_id.as_deref() {
                     this.dispatch_gpui_first_launch_create_project_session_result(request_id, outcome.is_ok(), outcome.as_ref().err().map(String::as_str), cx);

@@ -29,7 +29,6 @@ pub(crate) fn gpui_create_local_project_workspace_agent(
     project_id: &str,
     agent_id: &str,
     account_id: Option<&str>,
-    allow_missing_cli: bool,
 ) -> Result<
     (
         GpuiLocalWorkspaceSessionKey,
@@ -37,12 +36,7 @@ pub(crate) fn gpui_create_local_project_workspace_agent(
     ),
     String,
 > {
-    let key = gpui_create_local_project_workspace_agent_record(
-        project_id,
-        agent_id,
-        account_id,
-        allow_missing_cli,
-    )?;
+    let key = gpui_create_local_project_workspace_agent_record(project_id, agent_id, account_id)?;
     match gpui_prepare_local_workspace_attach_terminal_plan(
         &key,
         GpuiLocalWorkspaceAttachIntent::Attach,
@@ -60,14 +54,13 @@ pub(crate) fn gpui_create_local_project_workspace_agent_record(
     project_id: &str,
     agent_id: &str,
     account_id: Option<&str>,
-    allow_missing_cli: bool,
 ) -> Result<GpuiLocalWorkspaceSessionKey, String> {
     if !gpui_remote_sidebar_project_id_allowed(project_id)
         || !gpui_remote_sidebar_agent_id_allowed(agent_id)
     {
         return Err("The selected project agent is unavailable.".to_string());
     }
-    let mut create_params = ghostex_gx_core::replacing_empty_sessions(serde_json::json!({
+    let create_params = ghostex_gx_core::replacing_empty_sessions(serde_json::json!({
         "agentId": agent_id,
         "runtimeSettings": account_id.map(|id| serde_json::json!({"accountId": id})).unwrap_or_else(|| serde_json::json!({})),
         /*
@@ -83,9 +76,6 @@ pub(crate) fn gpui_create_local_project_workspace_agent_record(
         "requireLaunchCommand": true,
         "surface": "workspace",
     }));
-    if allow_missing_cli {
-        create_params["allowMissingCli"] = serde_json::json!(true);
-    }
     let result = gpui_gxserver_rpc_result(
         "/api/createAgentSession",
         &create_params,

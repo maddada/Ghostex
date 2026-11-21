@@ -571,8 +571,6 @@ impl GhostexGpuiApp {
         } else {
             self.gx_store_preferred_interface(&agent.agent_id)
         };
-        let mut retry_params = params.clone();
-        retry_params["allowMissingCli"] = json!(true);
         cx.spawn(async move |this, cx| {
             let result = gx_rpc(None, "/api/createAgentSession", params).await;
             let failure = result.as_ref().err().and_then(|error| {
@@ -602,16 +600,7 @@ impl GhostexGpuiApp {
                         agent_not_installed_name(error.code.as_deref(), &error.message)
                     {
                         let name = name.to_string();
-                        this.show_agent_not_installed_notice(
-                            &name,
-                            &error.message,
-                            Some(crate::app::window::RetryAgentLaunch::LocalRpc {
-                                project_id: project_id.clone(),
-                                params: retry_params,
-                                preferred_interface: preferred_interface.clone(),
-                            }),
-                            cx,
-                        );
+                        this.show_agent_not_installed_notice(&name, &error.message, cx);
                     }
                 }
             });
@@ -829,13 +818,12 @@ pub(crate) fn agent_not_installed_name<'a>(
 impl GhostexGpuiApp {
     /// CDXC:AgentLauncher 2026-11-21 DECISION:
     /// User (Q4370 "check first"): a launch gxserver refused because the agent's CLI isn't
-    /// installed shows a notice naming the agent, with "Install or pick another agent" to Settings
-    /// > Agents and "Start anyway" to retry with `allowMissingCli: true` in the terminal.
+    /// installed shows a notice naming the agent, with a button to Settings > Agents, where it is
+    /// installed or another agent is picked, instead of a chat that fails in the terminal.
     pub(crate) fn show_agent_not_installed_notice(
         &mut self,
         agent_name: &str,
         message: &str,
-        start_anyway: Option<crate::app::window::RetryAgentLaunch>,
         cx: &mut gpui::Context<Self>,
     ) {
         use crate::app::window::{
@@ -848,9 +836,7 @@ impl GhostexGpuiApp {
                 title: format!("{agent_name} isn't installed"),
                 description: Some(message.to_string()),
                 copy_text: None,
-                action: Some(GpuiAppToastAction::OpenAgentSettings {
-                    start_anyway: start_anyway.map(Box::new),
-                }),
+                action: Some(GpuiAppToastAction::OpenAgentSettings),
                 loading: false,
                 persistent: false,
                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS * 2,
@@ -860,70 +846,18 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// Re-runs a refused agent launch with `allowMissingCli: true` ("Start anyway").
-    pub(crate) fn gx_store_start_agent_anyway(
-        &mut self,
-        retry: crate::app::window::RetryAgentLaunch,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        match retry {
-            crate::app::window::RetryAgentLaunch::LocalRpc {
-                project_id,
-                params,
-                preferred_interface,
-            } => {
-                cx.spawn(async move |this, cx| {
-                    let result = gx_rpc(None, "/api/createAgentSession", params).await;
-                    let _ = this.update(cx, |this, cx| match result {
-                        Ok(response) => {
-                            let Some((created_project, session_id)) =
-                                created_session(&response, Some(&project_id))
-                            else {
-                                return;
-                            };
-                            this.gx_store_focus_created_session(
-                                created_project.as_deref().unwrap_or(&project_id),
-                                &session_id,
-                                true,
-                                Some(&preferred_interface),
-                                cx,
-                            );
-                        }
-                        Err(error) => {
-                            if error.code.as_deref() == Some("projectPathUnavailable") {
-                                this.gx_store_answer_project_path_unavailable(&project_id, cx);
-                            } else {
-                                this.dispatch_gpui_app_modal_toast(
-                                    "warning",
-                                    "Agent unavailable",
-                                    &error.message,
-                                    cx,
-                                );
-                            }
-                        }
-                    });
-                })
-                .detach();
-            }
-            crate::app::window::RetryAgentLaunch::WindowsProjectAgent { payload } => {
-                self.receive_sidebar_create_project_agent_payload(&payload, cx);
-            }
-        }
-    }
-
     /// A launch that failed: the not-installed notice when that is why, else the warning toast
     /// launches have always shown.
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     pub(crate) fn show_agent_launch_failure(
         &mut self,
         message: &str,
-        start_anyway: Option<crate::app::window::RetryAgentLaunch>,
         cx: &mut gpui::Context<Self>,
     ) {
         match agent_not_installed_name(None, message) {
             Some(name) => {
                 let name = name.to_string();
-                self.show_agent_not_installed_notice(&name, message, start_anyway, cx);
+                self.show_agent_not_installed_notice(&name, message, cx);
             }
             None => self.dispatch_gpui_app_modal_toast("warning", "Agent unavailable", message, cx),
         }

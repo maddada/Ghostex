@@ -582,7 +582,7 @@ pub(crate) fn switch_draft_agent(
     );
     // CDXC:SessionChat 2026-09-22 DECISION:
     // User: picking another agent's model in the chat picker "switches the CLI and also sets the right effort and model on the CLI that we switched to". A draft rebuilt without them started the new CLI on its own saved default, so the pick rides the rebuilt launch line the way `createAgentSession` carries `agentModel` and `agentEffort`.
-    for key in ["agentModel", "agentEffort", super::ALLOW_MISSING_CLI_PARAM] {
+    for key in ["agentModel", "agentEffort"] {
         if let Some(value) = params.get(key).filter(|value| !value.is_null()) {
             create_params.insert(key.to_string(), value.clone());
         }

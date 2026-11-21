@@ -152,14 +152,12 @@ impl GhostexGpuiApp {
                 "Views are turned on in the Ghostex app's Settings > Extensions.",
                 cx,
             ),
-            GpuiAppToastAction::OpenAgentSettings { .. } => {
-                self.dispatch_gpui_workspace_action_toast(
-                    "info",
-                    "Not in the browser",
-                    "Agents are installed in the Ghostex app's Settings > Agents.",
-                    cx,
-                )
-            }
+            GpuiAppToastAction::OpenAgentSettings => self.dispatch_gpui_workspace_action_toast(
+                "info",
+                "Not in the browser",
+                "Agents are installed in the Ghostex app's Settings > Agents.",
+                cx,
+            ),
             GpuiAppToastAction::NativeProjectPathAction { payload, .. } => {
                 self.receive_sidebar_native_project_path_action_payload(&payload.to_string(), cx);
             }

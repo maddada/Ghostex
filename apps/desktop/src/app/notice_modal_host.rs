@@ -96,7 +96,6 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
                     .map(|name| vec![("It says it is".to_string(), name)])
                     .unwrap_or_default(),
                 action_label: Some("Approve".to_string()),
-                secondary_action_label: None,
                 copy_text: None,
                 hint: Some("Approve only if that is the computer you expect.".to_string()),
                 pairing: None,
@@ -111,7 +110,6 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
                 message: ask.body,
                 source: Vec::new(),
                 action_label: Some("Approve".to_string()),
-                secondary_action_label: None,
                 copy_text: None,
                 hint: None,
                 pairing: (!ask.words.is_empty()).then(|| NoticeModalPairing {
@@ -150,7 +148,6 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
                 ("Computer".to_string(), capitalized_place(&place)),
             ],
             action_label: Some("Approve".to_string()),
-            secondary_action_label: None,
             copy_text: None,
             hint,
             pairing: None,
@@ -171,11 +168,6 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
             .action
             .as_ref()
             .map(|action| action.label().to_string()),
-        secondary_action_label: toast
-            .action
-            .as_ref()
-            .and_then(GpuiAppToastAction::secondary_label)
-            .map(str::to_string),
         copy_text: toast.copy_text.clone(),
         hint: None,
         pairing: None,
@@ -211,9 +203,13 @@ impl GhostexGpuiApp {
 
     /// Adds `toast` to the notices, or updates the one with its id. The repeat rule of toasts
     /// (CDXC:AppModal 2026-10-24 in window/toast.rs) holds here too, so a refusal raised again
-    /// and again never stacks notices; approvals are told apart by their request id instead.
+    /// and again never stacks notices; approvals (tracked by request id) and explicit user-launched
+    /// missing-agent notices bypass the 10-second repeat cooldown so retrying immediately shows the
+    /// notice again.
     pub(crate) fn app_notice_push(&mut self, toast: GpuiAppToast, cx: &mut gpui::Context<Self>) {
-        let toast = if toast.is_approval() {
+        let bypass_repeat = toast.is_approval()
+            || matches!(toast.action, Some(GpuiAppToastAction::OpenAgentSettings));
+        let toast = if bypass_repeat {
             toast
         } else {
             match gpui_app_toast_without_repeats(&self.app_notices.queue, toast) {
@@ -290,22 +286,15 @@ impl GhostexGpuiApp {
     }
 
     fn answer_app_notice(&mut self, command: NoticeModalCommand, cx: &mut gpui::Context<Self>) {
-        enum NoticeAnswer {
-            Act,
-            SecondaryAct,
-            Deny,
-            Close,
-        }
-        let (id, answer) = match &command {
-            NoticeModalCommand::Act { id } => (id.clone(), NoticeAnswer::Act),
-            NoticeModalCommand::SecondaryAct { id } => (id.clone(), NoticeAnswer::SecondaryAct),
-            NoticeModalCommand::Deny { id } => (id.clone(), NoticeAnswer::Deny),
-            NoticeModalCommand::Close { id } => (id.clone(), NoticeAnswer::Close),
+        let (id, deny, close) = match &command {
+            NoticeModalCommand::Act { id } => (id.clone(), false, false),
+            NoticeModalCommand::Deny { id } => (id.clone(), true, false),
+            NoticeModalCommand::Close { id } => (id.clone(), false, true),
         };
         let Some(index) = self.app_notices.queue.iter().position(|n| n.id == id) else {
             return;
         };
-        if matches!(answer, NoticeAnswer::Close) {
+        if close {
             // Closed without an answer: an approval keeps waiting, anything else is done.
             if self.app_notices.queue[index].is_approval() {
                 self.app_notices.set_aside.push(id);
@@ -320,34 +309,12 @@ impl GhostexGpuiApp {
         let Some(mut action) = notice.action else {
             return;
         };
-        match answer {
-            NoticeAnswer::SecondaryAct => {
-                self.run_gpui_app_toast_secondary_action(&action, cx);
-            }
-            NoticeAnswer::Act | NoticeAnswer::Deny => {
-                let deny = matches!(answer, NoticeAnswer::Deny);
-                if let GpuiAppToastAction::SecurityApproval { deny: denied, .. } = &mut action {
-                    *denied = deny;
-                } else if deny {
-                    return;
-                }
-                self.run_gpui_app_toast_action(&action, cx);
-            }
-            NoticeAnswer::Close => {}
+        if let GpuiAppToastAction::SecurityApproval { deny: denied, .. } = &mut action {
+            *denied = deny;
+        } else if deny {
+            return;
         }
-    }
-
-    fn run_gpui_app_toast_secondary_action(
-        &mut self,
-        action: &GpuiAppToastAction,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if let GpuiAppToastAction::OpenAgentSettings {
-            start_anyway: Some(retry),
-        } = action
-        {
-            self.gx_store_start_agent_anyway((**retry).clone(), cx);
-        }
+        self.run_gpui_app_toast_action(&action, cx);
     }
 
     /// The approvals put aside with Escape, Close or the corner X that still wait.

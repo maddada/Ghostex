@@ -19,17 +19,15 @@ use std::path::Path;
 
 use serde_json::Value;
 
-#[cfg(not(windows))]
-use crate::agent_hooks::probing::login_shell_path_patient;
-use crate::agent_hooks::probing::{agent_cli_presence, refresh_cli_environment, CliPresence};
+use crate::agent_hooks::probing::{
+    agent_cli_presence, cached_shell_command_found, probe_command_in_user_shell,
+    refresh_cli_environment, CliPresence, ShellCommandProbe,
+};
 use crate::domain::DomainStateError;
 
 /// The error code a launch refused for a missing CLI carries; clients show their Install / pick
 /// another agent notice on it.
 pub(crate) const AGENT_NOT_INSTALLED_CODE: &str = "agentNotInstalled";
-
-/// Optional create/switch param set when the user chooses "Start anyway" on the missing-CLI notice.
-pub(crate) const ALLOW_MISSING_CLI_PARAM: &str = "allowMissingCli";
 
 #[cfg(test)]
 thread_local! {
@@ -92,29 +90,35 @@ pub(crate) fn launch_cli_missing_cached(
         return false;
     };
     agent_cli_presence(family, binary, home_dir, false) == CliPresence::Missing
+        && !cached_shell_command_found(binary, home_dir)
 }
 
 /// Whether a launch of agent family `family` running `command` (the agent's own command when
 /// `None`) would find no CLI on this computer.
 ///
-/// Before refusing (or moving an unstarted Ghostex AI chat off its agent), a cached `Missing`
-/// re-checks fresh: invalidates the cached login-shell PATH, runs the patient login-shell probe
-/// (off Windows, an empty probe refuses nothing; on Windows the login-shell probe returns nothing
-/// by design so Windows re-checks the live registry + process PATH), and only returns `true` on a
-/// fresh `Missing`.
+/// Self-heals before ever refusing (or moving an unstarted Ghostex AI chat off its agent):
+/// 1. Fast cached check (PATH, install dirs, or recent positive shell probe).
+/// 2. Refresh CLI environment (login-shell PATH + live registry PATH) and run fresh PATH/installDirs check.
+/// 3. Probe the user's real shell (seeing PATH, aliases, functions, and PowerShell `$PROFILE`).
+///    Only returns `true` when the shell cleanly completes and confirms the command is missing;
+///    timeouts, spawn failures, and inconclusive results fail open so working agents always launch.
 pub(crate) fn launch_cli_missing(family: &str, command: Option<&str>, home_dir: &Path) -> bool {
     let Some(binary) = builtin_launch_binary(family, command) else {
         return false;
     };
-    if agent_cli_presence(family, binary, home_dir, false) != CliPresence::Missing {
+    if agent_cli_presence(family, binary, home_dir, false) != CliPresence::Missing
+        || cached_shell_command_found(binary, home_dir)
+    {
         return false;
     }
     refresh_cli_environment(home_dir);
-    #[cfg(not(windows))]
-    if login_shell_path_patient(home_dir).is_empty() {
+    if agent_cli_presence(family, binary, home_dir, true) != CliPresence::Missing {
         return false;
     }
-    agent_cli_presence(family, binary, home_dir, true) == CliPresence::Missing
+    match probe_command_in_user_shell(binary, home_dir) {
+        ShellCommandProbe::Found | ShellCommandProbe::Inconclusive => false,
+        ShellCommandProbe::Missing => true,
+    }
 }
 
 fn launcher_row_target<'a>(row: &'a Value) -> Option<(&'static str, Option<&'a str>)> {

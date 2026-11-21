@@ -34,6 +34,10 @@ so installing hooks right after installing a CLI never sees a stale miss.
 */
 const COMMAND_PATH_CACHE_TTL: Duration = Duration::from_secs(60);
 
+/// Positive-only cache TTL for `probe_command_in_user_shell`: keeps repeat launches of a
+/// shell-aliased or shell-function agent instant without poisoning the cache if removed later.
+const SHELL_FOUND_CACHE_TTL: Duration = Duration::from_secs(30);
+
 /// The quick login-shell probe's limit: it runs before agent launches.
 const LOGIN_SHELL_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -63,6 +67,7 @@ static LOGIN_SHELL_PATH_ENTRIES_CACHE: OnceLock<
 > = OnceLock::new();
 static COMMAND_PATH_CACHE: OnceLock<Mutex<HashMap<CommandPathCacheKey, CachedCommandPath>>> =
     OnceLock::new();
+static SHELL_FOUND_CACHE: OnceLock<Mutex<HashMap<CommandPathCacheKey, Instant>>> = OnceLock::new();
 
 /// Login-shell PATH entries for `home_dir`, probed at most once per process
 /// while the probe succeeds. An empty (failed) probe is retried after
@@ -178,11 +183,47 @@ fn probe_and_store_command_path(
     resolved
 }
 
+/// Whether `probe_command_in_user_shell` recently confirmed `command` resolves in `home_dir`'s shell.
+pub(super) fn cached_shell_command_found(command: &str, home_dir: &Path) -> bool {
+    let Some(cache) = SHELL_FOUND_CACHE.get() else {
+        return false;
+    };
+    let key = CommandPathCacheKey {
+        command: command.to_string(),
+        home_dir: home_dir.to_path_buf(),
+    };
+    if let Ok(mut guard) = cache.lock() {
+        guard.retain(|_, at| at.elapsed() < SHELL_FOUND_CACHE_TTL);
+        return guard.contains_key(&key);
+    }
+    false
+}
+
+/// Records a positive `probe_command_in_user_shell` match for `SHELL_FOUND_CACHE_TTL`.
+pub(super) fn record_shell_command_found(command: &str, home_dir: &Path) {
+    let cache = SHELL_FOUND_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(mut guard) = cache.lock() {
+        guard.retain(|_, at| at.elapsed() < SHELL_FOUND_CACHE_TTL);
+        guard.insert(
+            CommandPathCacheKey {
+                command: command.to_string(),
+                home_dir: home_dir.to_path_buf(),
+            },
+            Instant::now(),
+        );
+    }
+}
+
 /// Installers can add PATH entries to shell profiles while gxserver stays running.
 pub(super) fn invalidate_login_shell_path(home_dir: &Path) {
     if let Some(cache) = LOGIN_SHELL_PATH_ENTRIES_CACHE.get() {
         if let Ok(mut entries) = cache.lock() {
             entries.remove(home_dir);
+        }
+    }
+    if let Some(cache) = SHELL_FOUND_CACHE.get() {
+        if let Ok(mut entries) = cache.lock() {
+            entries.retain(|key, _| key.home_dir != home_dir);
         }
     }
 }

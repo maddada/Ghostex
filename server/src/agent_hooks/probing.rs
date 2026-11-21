@@ -238,6 +238,242 @@ pub(crate) fn refresh_cli_environment(home_dir: &Path) {
     crate::platform::live_path::clear_cache();
 }
 
+/// Result of asking the user's real shell whether a command resolves (including PATH entries,
+/// shell aliases, shell functions, and profile/rc scripts).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ShellCommandProbe {
+    /// The user's shell confirmed the command resolves.
+    Found,
+    /// The user's shell finished loading cleanly and confirmed the command is absent.
+    Missing,
+    /// The probe timed out, failed to spawn, hit an unsupported shell, or the profile exited
+    /// before the check ran; callers must fail open and allow the launch.
+    Inconclusive,
+}
+
+const SHELL_CLI_PROBE_FOUND_SENTINEL: &str = "__GHOSTEX_CLI_PROBE__:FOUND";
+const SHELL_CLI_PROBE_MISSING_SENTINEL: &str = "__GHOSTEX_CLI_PROBE__:MISSING";
+
+/// Whether a recent [`probe_command_in_user_shell`] call confirmed `command` is runnable in
+/// `home_dir`'s shell (non-blocking cache lookup only).
+pub(crate) fn cached_shell_command_found(command: &str, home_dir: &Path) -> bool {
+    super::probe_cache::cached_shell_command_found(command, home_dir)
+}
+
+/// Strict validation so a binary name passed to the shell probe via env can never look like an
+/// option flag or shell metacharacter.
+fn is_safe_probe_binary(binary: &str) -> bool {
+    let mut chars = binary.chars();
+    chars.next().is_some_and(|ch| ch.is_ascii_alphanumeric())
+        && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+}
+
+fn parse_shell_probe_sentinel(stdout: &str) -> Option<ShellCommandProbe> {
+    stdout.lines().rev().find_map(|line| {
+        let trimmed = line.trim();
+        if trimmed == SHELL_CLI_PROBE_FOUND_SENTINEL {
+            Some(ShellCommandProbe::Found)
+        } else if trimmed == SHELL_CLI_PROBE_MISSING_SENTINEL {
+            Some(ShellCommandProbe::Missing)
+        } else {
+            None
+        }
+    })
+}
+
+/// Self-healing final check run only after cached and fresh PATH/installDirs lookups report
+/// `Missing`. Probes the user's real shell (seeing PATH, aliases, functions, and profile/rc
+/// scripts) with a bounded timeout and fails open (`Inconclusive`) on any timeout or error.
+pub(crate) fn probe_command_in_user_shell(binary: &str, home_dir: &Path) -> ShellCommandProbe {
+    if !is_safe_probe_binary(binary) {
+        return ShellCommandProbe::Inconclusive;
+    }
+    #[cfg(windows)]
+    let outcome = probe_command_in_windows_shell(binary);
+    #[cfg(not(windows))]
+    let outcome = probe_command_in_unix_shell(binary, home_dir);
+    if outcome == ShellCommandProbe::Found {
+        super::probe_cache::record_shell_command_found(binary, home_dir);
+    }
+    outcome
+}
+
+#[cfg(not(windows))]
+fn probe_command_in_unix_shell(binary: &str, home_dir: &Path) -> ShellCommandProbe {
+    use std::{
+        io::Read,
+        os::unix::process::CommandExt,
+        process::Stdio,
+        sync::{Arc, Mutex, PoisonError},
+        time::Instant,
+    };
+
+    const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+    // Static scripts only: the binary name travels via GHOSTEX_CLI_PROBE_BIN, never interpolated.
+    const POSIX_SCRIPT: &str = "if command -v \"$GHOSTEX_CLI_PROBE_BIN\" >/dev/null 2>&1; then printf '\\n__GHOSTEX_CLI_PROBE__:FOUND\\n'; else printf '\\n__GHOSTEX_CLI_PROBE__:MISSING\\n'; fi";
+    const FISH_SCRIPT: &str = "if type -q -- $GHOSTEX_CLI_PROBE_BIN; printf '\\n__GHOSTEX_CLI_PROBE__:FOUND\\n'; else; printf '\\n__GHOSTEX_CLI_PROBE__:MISSING\\n'; end";
+
+    let shell_path = crate::platform::shell::user_login_shell_path();
+    let shell_name = Path::new(&shell_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+
+    let mut command = Command::new(&shell_path);
+    match shell_name {
+        "zsh" | "bash" => {
+            command.args(["-lic", POSIX_SCRIPT]);
+        }
+        "fish" => {
+            command.args(["-l", "-i", "-c", FISH_SCRIPT]);
+        }
+        "sh" | "dash" | "ash" | "ksh" => {
+            command.args(["-l", "-i", "-c", POSIX_SCRIPT]);
+        }
+        // Unknown or exotic shells (nu, csh, tcsh, elvish, ...): fail open rather than guessing.
+        _ => return ShellCommandProbe::Inconclusive,
+    }
+
+    command
+        .env("HOME", home_dir)
+        .env(
+            "PATH",
+            crate::managed_tools::paths::process_path_without_tools(),
+        )
+        .env("GHOSTEX_CLI_PROBE_BIN", binary)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    // When probing an isolated home (e.g. GHOSTEX_HOME), don't let the host's ZDOTDIR redirect
+    // zsh away from home_dir/.zshrc.
+    if env::var_os("HOME").as_deref() != Some(home_dir.as_os_str()) {
+        command.env_remove("ZDOTDIR");
+    }
+    for key in GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS {
+        command.env_remove(key);
+    }
+
+    // Start a new session with no controlling terminal so interactive shells never stop on
+    // SIGTTIN/SIGTTOU or hang reading /dev/tty, while leading their own process group so timeout
+    // cleanup kills the shell and any child processes it spawned.
+    // SAFETY: `setsid` is async-signal-safe and touches no Rust state.
+    unsafe {
+        command.pre_exec(|| {
+            let _ = libc::setsid();
+            Ok(())
+        });
+    }
+
+    let deadline = Instant::now() + PROBE_TIMEOUT;
+    let Ok(mut child) = command.spawn() else {
+        return ShellCommandProbe::Inconclusive;
+    };
+    let pgid = libc::pid_t::try_from(child.id())
+        .ok()
+        .filter(|pid| *pid > 0);
+    let kill_group = |child: &mut std::process::Child| {
+        if let Some(group) = pgid {
+            // SAFETY: `group` is the positive pid/pgid created by `setsid()` in the child.
+            unsafe {
+                libc::kill(-group, libc::SIGKILL);
+            }
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    };
+
+    let buffer = Arc::new(Mutex::new(Vec::<u8>::new()));
+    let reader = child.stdout.take().map(|mut pipe| {
+        let buffer = Arc::clone(&buffer);
+        std::thread::spawn(move || {
+            let mut chunk = [0u8; 4096];
+            // Keep the tail so a noisy profile banner cannot evict the final sentinel line.
+            const MAX_BYTES: usize = 256 * 1024;
+            while let Ok(read) = pipe.read(&mut chunk) {
+                if read == 0 {
+                    break;
+                }
+                let mut guard = buffer.lock().unwrap_or_else(PoisonError::into_inner);
+                if guard.len() + read > MAX_BYTES {
+                    let keep = MAX_BYTES.saturating_sub(read);
+                    let drop_len = guard.len().saturating_sub(keep);
+                    guard.drain(..drop_len);
+                }
+                guard.extend_from_slice(&chunk[..read]);
+            }
+        })
+    });
+
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(15));
+            }
+            _ => {
+                kill_group(&mut child);
+                return ShellCommandProbe::Inconclusive;
+            }
+        }
+    };
+    if !status.success() {
+        return ShellCommandProbe::Inconclusive;
+    }
+
+    let read_output = || {
+        String::from_utf8_lossy(&buffer.lock().unwrap_or_else(PoisonError::into_inner)).into_owned()
+    };
+    // Do not wait for pipe EOF if a background child spawned by the user's profile inherited
+    // stdout: return as soon as the sentinel line arrives or the reader finishes.
+    let read_deadline = deadline.min(Instant::now() + Duration::from_millis(500));
+    loop {
+        if let Some(outcome) = parse_shell_probe_sentinel(&read_output()) {
+            return outcome;
+        }
+        if reader.as_ref().is_none_or(|reader| reader.is_finished())
+            || Instant::now() >= read_deadline
+        {
+            return parse_shell_probe_sentinel(&read_output())
+                .unwrap_or(ShellCommandProbe::Inconclusive);
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(windows)]
+fn probe_command_in_windows_shell(binary: &str) -> ShellCommandProbe {
+    const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
+    // Static script only: the binary name travels via GHOSTEX_CLI_PROBE_BIN, never interpolated.
+    // Loads the user's PowerShell $PROFILE (no -NoProfile) so fnm/volta/nvm-windows PATH entries,
+    // aliases, and functions are visible.
+    const SCRIPT: &str = "if (Get-Command -Name $env:GHOSTEX_CLI_PROBE_BIN -ErrorAction SilentlyContinue) { [Console]::WriteLine('__GHOSTEX_CLI_PROBE__:FOUND'); exit 0 } else { [Console]::WriteLine('__GHOSTEX_CLI_PROBE__:MISSING'); exit 0 }";
+
+    let powershell = crate::platform::shell::powershell_executable();
+    let mut command = Command::new(&powershell);
+    command
+        .args(["-NoLogo", "-NonInteractive", "-Command", SCRIPT])
+        .env("PATH", crate::platform::live_path::value())
+        .env("GHOSTEX_CLI_PROBE_BIN", binary);
+    for key in GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS {
+        command.env_remove(key);
+    }
+
+    let limits = crate::platform::process::RunLimits {
+        timeout: PROBE_TIMEOUT,
+        stdin: None,
+        stdout: crate::platform::process::Keep::Tail(256 * 1024),
+        stderr: crate::platform::process::Keep::Head(16 * 1024),
+    };
+    let Ok(output) = crate::platform::process::run_bounded(command, limits) else {
+        return ShellCommandProbe::Inconclusive;
+    };
+    if !output.status.success() {
+        return ShellCommandProbe::Inconclusive;
+    }
+    parse_shell_probe_sentinel(&String::from_utf8_lossy(&output.stdout))
+        .unwrap_or(ShellCommandProbe::Inconclusive)
+}
+
 pub(crate) fn command_exists_uncached(command: &str, home_dir: &Path) -> bool {
     refresh_resolved_command_path(command, home_dir).is_some()
 }

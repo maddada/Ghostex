@@ -26,7 +26,6 @@ fn item(
         message: Some(message.to_string()),
         source: Vec::new(),
         action_label: action.map(str::to_string),
-        secondary_action_label: None,
         copy_text: copy.map(str::to_string),
         hint: None,
         pairing: None,
@@ -127,17 +126,14 @@ fn case(state: &str) -> NoticeModalItem {
             Some("Open Accounts"),
             None,
         ),
-        "agent-not-installed" => NoticeModalItem {
-            secondary_action_label: Some("Start anyway".to_string()),
-            ..item(
-                "agent-not-installed",
-                Warning,
-                "Codex isn't installed",
-                "Codex isn't installed on this computer. Install it in Settings > Agents, or pick another agent.",
-                Some("Install or pick another agent"),
-                None,
-            )
-        },
+        "agent-not-installed" => item(
+            "agent-not-installed",
+            Warning,
+            "Codex isn't installed",
+            "Codex isn't installed on this computer. Install it in Settings > Agents, or pick another agent.",
+            Some("Install or pick another agent"),
+            None,
+        ),
         "views-off" => item(
             "views-off",
             Info,

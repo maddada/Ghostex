@@ -323,9 +323,6 @@ pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> C
             json!(true),
         );
     }
-    if flags.truthy("allowMissingCli") {
-        params.insert(crate::agents::ALLOW_MISSING_CLI_PARAM.to_string(), json!(true));
-    }
     /*
     CDXC:Drafts 2026-08-20:
     `--first-input-draft` is the opposite of a first user message: gxserver

@@ -108,7 +108,6 @@ pub(crate) fn gpui_sidebar_create_project_agent_from_json(
             "projectId",
             "agentId",
             "accountId",
-            "allowMissingCli",
             "preferredInterface",
             "requestId",
         ],
@@ -153,16 +152,9 @@ pub(crate) fn gpui_sidebar_create_project_agent_from_json(
                 .to_string(),
         ),
     };
-    let allow_missing_cli = match object.get("allowMissingCli") {
-        None => false,
-        Some(value) => value
-            .as_bool()
-            .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedField)?,
-    };
     Ok(GpuiSidebarCreateProjectAgentMessage {
         account_id,
         agent_id,
-        allow_missing_cli,
         preferred_interface,
         project_id,
         request_id: gpui_remote_request_id_from_command(object),
