@@ -962,6 +962,23 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
                     return;
                 }
                 Ok(Ok(crate::accounts::autopilot::AutopilotSwitch::NoRoom)) => {
+                    // "Use a limit reset when an account hits its limit": this is the moment a
+                    // reset is worth spending (accounts/autopilot_reset.rs `check_session`).
+                    let (checking, (project_id, session_id)) = (state.clone(), key.clone());
+                    let used = tokio::task::spawn_blocking(move || {
+                        crate::accounts::autopilot_reset::check_session(
+                            &checking,
+                            &project_id,
+                            &session_id,
+                        )
+                    })
+                    .await
+                    .unwrap_or(false);
+                    if used {
+                        log(&state, &plan, "Used one of its account's limit resets: no other account had room. It carries on by itself.", Outcome::Done);
+                        finish(&memory, &key, None, now, |pilot| pilot.limit_parked = true);
+                        return;
+                    }
                     log(&state, &plan, "Left it for you: no other account is signed in with room. It continues when its limit resets.", Outcome::Parked);
                     finish(&memory, &key, None, now, |pilot| pilot.limit_parked = true);
                     return;
