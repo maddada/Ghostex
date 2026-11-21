@@ -17,7 +17,10 @@ pub fn migrate_sidebar_rail_bell_once() {
     edit_rail_pins_once(
         ghostex_storage_paths().sidebar_rail_bell_marker_file(),
         ghostex_settings_catalog::unpin_bell_from_saved_rail_pins,
-        ("saved rail pins, notifications unpinned", "no saved rail pins with notifications"),
+        (
+            "saved rail pins, notifications unpinned",
+            "no saved rail pins with notifications",
+        ),
         "unpin the bell from the rail",
     );
 }
@@ -30,7 +33,10 @@ pub fn migrate_sidebar_rail_views_once() {
     edit_rail_pins_once(
         ghostex_storage_paths().sidebar_rail_views_marker_file(),
         ghostex_settings_catalog::drop_retired_rail_pins,
-        ("saved rail pins, views unpinned", "no saved rail pins with views"),
+        (
+            "saved rail pins, views unpinned",
+            "no saved rail pins with views",
+        ),
         "unpin the views from the rail",
     );
 }

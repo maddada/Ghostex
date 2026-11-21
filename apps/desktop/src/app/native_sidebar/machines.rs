@@ -238,24 +238,17 @@ impl GhostexGpuiApp {
                     })
             })
             .hover(|tile| tile.bg(appearance.hover))
-            .child(self.native_machine_icon(
-                    machine,
-                    systems,
-                    appearance,
-                    15.0 * scale,
-                ))
+            .child(self.native_machine_icon(machine, systems, appearance, 15.0 * scale))
             /*
             CDXC:Sidebar 2026-09-25 DECISION:
             User: stop showing the status on the machine we're on and show it on the other machines as dots, not numbers, exactly like the Spaces. The picked computer's sessions are already listed below.
             Since 2026-11-21 one 4pt dot in the tile's top-right corner (status.rs `tile_status_dot`).
             */
-            .children(
-                super::status::tile_status_dot(
-                    tile_counts,
-                    scale,
-                    super::status::DotBackdrop::new(appearance, None, dot_group.clone()),
-                ),
-            )
+            .children(super::status::tile_status_dot(
+                tile_counts,
+                scale,
+                super::status::DotBackdrop::new(appearance, None, dot_group.clone()),
+            ))
             .children(update.map(|glyph| {
                 div()
                     .absolute()
@@ -401,19 +394,12 @@ impl GhostexGpuiApp {
             .border_color(appearance.foreground.opacity(0.08))
             .cursor_pointer()
             .hover(|tile| tile.bg(appearance.hover))
-            .child(self.native_machine_icon(
-                    picked,
-                    systems,
-                    appearance,
-                    15.0 * scale,
-                ))
-            .children(
-                super::status::tile_status_dot(
-                    tile_counts,
-                    scale,
-                    super::status::DotBackdrop::new(appearance, None, dot_group.to_string()),
-                ),
-            )
+            .child(self.native_machine_icon(picked, systems, appearance, 15.0 * scale))
+            .children(super::status::tile_status_dot(
+                tile_counts,
+                scale,
+                super::status::DotBackdrop::new(appearance, None, dot_group.to_string()),
+            ))
             .when(
                 self.native_sidebar.pointer_inside
                     && self.native_sidebar.menu.is_none()

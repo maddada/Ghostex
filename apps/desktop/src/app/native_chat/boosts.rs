@@ -477,9 +477,7 @@ impl NativeChatView {
                                     .opacity(0.0)
                                     .group_hover(group.clone(), |button| button.opacity(1.0))
                                     .hover(|style| {
-                                        style
-                                            .text_color(p.foreground)
-                                            .bg(p.foreground.opacity(0.1))
+                                        style.text_color(p.foreground).bg(p.foreground.opacity(0.1))
                                     })
                                     .child(
                                         svg()

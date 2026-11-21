@@ -96,7 +96,11 @@ pub(crate) async fn handle_tailcat_http(
                 apply_tailcat_state_update(&paths, &db, &runtime, update).map_err(|error| {
                     // A refusal is the caller's to fix: said as it is, answered as a bad request.
                     if let Some(refusal) = error.downcast_ref::<TailcatRefusal>() {
-                        return (TailcatLogErrorCode::StateUpdateFailed, refusal.0.clone(), true);
+                        return (
+                            TailcatLogErrorCode::StateUpdateFailed,
+                            refusal.0.clone(),
+                            true,
+                        );
                     }
                     let refused = error.to_string().contains(super::EASY_CONNECT_OFF_REFUSAL);
                     (
@@ -203,13 +207,13 @@ fn easy_connect_audit_action(
         TailcatStateUpdate::EnableForBoxDevices {} => Action::new(
             "easyConnect.enable",
             match devices_let_in {
-                Some(1) => "Turned on Easy Connect for this Cloud Box and let 1 device connect"
-                    .to_string(),
+                Some(1) => {
+                    "Turned on Easy Connect for this Cloud Box and let 1 device connect".to_string()
+                }
                 Some(count) => format!(
                     "Turned on Easy Connect for this Cloud Box and let {count} devices connect"
                 ),
-                None => "Turn on Easy Connect for this Cloud Box's devices"
-                    .to_string(),
+                None => "Turn on Easy Connect for this Cloud Box's devices".to_string(),
             },
         ),
         TailcatStateUpdate::SetPorts { ports } => Action::new(

@@ -303,7 +303,11 @@ pub(crate) fn devices_ticket_names() -> Option<Vec<String>> {
     if !state::ticket_file().is_file() {
         return None;
     }
-    Some(state::read_ticket().map(named_device_keys).unwrap_or_default())
+    Some(
+        state::read_ticket()
+            .map(named_device_keys)
+            .unwrap_or_default(),
+    )
 }
 
 pub(crate) fn run_boot(ticket: &BoxBootTicket) -> Result<BoxBootResult, String> {

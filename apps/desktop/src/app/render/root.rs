@@ -277,8 +277,8 @@ impl Render for GhostexGpuiApp {
         let rail = self
             .sidebar_rail_shown()
             .then(|| self.render_sidebar_rail(window, cx));
-        let card_left_gutter = self
-            .work_area_frame_left_gutter(sidebar_frame.animating || sidebar_chrome_visible);
+        let card_left_gutter =
+            self.work_area_frame_left_gutter(sidebar_frame.animating || sidebar_chrome_visible);
         // Read before the header and the floating sidebar lay out from `window_controls_shown`.
         self.main_window_fullscreen = window.is_fullscreen();
         #[cfg(target_os = "macos")]
