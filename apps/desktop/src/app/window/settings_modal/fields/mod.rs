@@ -35,6 +35,7 @@ pub(crate) mod select;
 pub(crate) mod sized_button;
 pub(crate) mod slider;
 pub(crate) mod stock_segmented;
+pub(crate) mod strip_wheel;
 pub(crate) mod tag_list;
 pub(crate) mod text;
 pub(crate) mod textarea;

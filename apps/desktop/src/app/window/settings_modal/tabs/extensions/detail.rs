@@ -6,6 +6,7 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::SettingOption;
 use super::super::super::fields::RowControl;
+use super::super::super::fields::strip_wheel::strip_wheel_layer;
 use super::super::super::fields::{
     FieldStates, SizedButtonSize, SizedButtonVariant, settings_icon, settings_select,
     settings_sized_button, settings_square_button, settings_text_input, small_switch_control,
@@ -909,18 +910,27 @@ impl ExtensionsTab {
                     );
                 }
             }
+            let scroll = self.browser.screenshots_scroll.clone();
             main.push(
-                h_flex()
-                    .id("extension-screenshots")
+                div()
+                    .relative()
                     .w_full()
-                    .gap(px(12.0))
-                    .p(px(12.0))
-                    .overflow_x_scroll()
-                    .rounded(px(MODAL_RADIUS_SECTION))
-                    .border_1()
-                    .border_color(hsla(p.modal.hairline))
-                    .bg(hsla(p.modal.panel))
-                    .children(shots)
+                    .child(
+                        h_flex()
+                            .id("extension-screenshots")
+                            .w_full()
+                            .gap(px(12.0))
+                            .p(px(12.0))
+                            .overflow_x_scroll()
+                            .restrict_scroll_to_axis()
+                            .track_scroll(&scroll)
+                            .rounded(px(MODAL_RADIUS_SECTION))
+                            .border_1()
+                            .border_color(hsla(p.modal.hairline))
+                            .bg(hsla(p.modal.panel))
+                            .children(shots),
+                    )
+                    .child(strip_wheel_layer(&scroll, &self.browser.screenshots_wheel))
                     .into_any_element(),
             );
         }

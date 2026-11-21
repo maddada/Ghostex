@@ -14,6 +14,7 @@ use super::super::super::fields::{
     ButtonVariant, SizedButtonSize, SizedButtonVariant, settings_icon, settings_icon_button,
     settings_sized_button,
 };
+use super::super::super::fields::strip_wheel::{StripWheelLock, strip_wheel_layer};
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{SettingsValues, post_store_message, store_gxserver_rpc};
 use super::ThemeTab;
@@ -199,6 +200,8 @@ pub(super) struct PromptGallery {
     applied: Option<(String, String)>,
     /// The Backgrounds gallery's sideways scroll.
     artworks_scroll: gpui::ScrollHandle,
+    /// The axis the gallery's current swipe is locked to.
+    artworks_wheel: StripWheelLock,
 }
 
 /// One short line of a failed theme call for its notice: the first sentence of the answer's first
@@ -785,6 +788,7 @@ impl ThemeTab {
             ));
         }
         let scroll = self.prompt_gallery.artworks_scroll.clone();
+        let wheel = strip_wheel_layer(&scroll, &self.prompt_gallery.artworks_wheel);
         v_flex()
             .w_full()
             .min_w_0()
@@ -814,17 +818,25 @@ impl ThemeTab {
             )
             .child(
                 div()
-                    .id("theme-artworks-row")
+                    .relative()
                     .w_full()
-                    .flex()
-                    .items_start()
-                    .overflow_x_scroll()
-                    .track_scroll(&scroll)
-                    .px(px(16.0))
-                    .pt(px(6.0))
-                    .pb(px(12.0))
-                    .gap(px(8.0))
-                    .children(tiles),
+                    .min_w_0()
+                    .child(
+                        div()
+                            .id("theme-artworks-row")
+                            .w_full()
+                            .flex()
+                            .items_start()
+                            .overflow_x_scroll()
+                            .restrict_scroll_to_axis()
+                            .track_scroll(&scroll)
+                            .px(px(16.0))
+                            .pt(px(6.0))
+                            .pb(px(12.0))
+                            .gap(px(8.0))
+                            .children(tiles),
+                    )
+                    .child(wheel),
             )
             .into_any_element()
     }

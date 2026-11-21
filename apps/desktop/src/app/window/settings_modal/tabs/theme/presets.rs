@@ -15,6 +15,7 @@
 //! packages/settings-catalog/src/data/theme_presets.rs.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::{module, settings_catalog};
+use super::super::super::fields::strip_wheel::{StripWheelLock, strip_wheel};
 use super::super::super::fields::{settings_icon, tooltip_text};
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsValues;
@@ -24,8 +25,8 @@ use super::controls::{CARD_INSET_X, CARD_INSET_Y};
 use super::controls::{ICON_DARK, ICON_LIGHT};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, DispatchPhase, InteractiveElement as _, IntoElement, KeyDownEvent,
-    ParentElement as _, ScrollEvent, ScrollHandle, SharedString, StatefulInteractiveElement as _,
+    AnyElement, Context, InteractiveElement as _, IntoElement, KeyDownEvent,
+    ParentElement as _, ScrollHandle, SharedString, StatefulInteractiveElement as _,
     Styled as _, canvas, div, point, px,
 };
 use gpui_component::{h_flex, v_flex};
@@ -274,6 +275,7 @@ impl ThemeTab {
         let cut_cell = self.presets_row.cut.clone();
         let measure = scroll.clone();
         let wheel = scroll.clone();
+        let wheel_lock = self.presets_row.wheel_lock.clone();
         let edge = hsla(p.raised);
         let body = div()
             .relative()
@@ -337,28 +339,8 @@ impl ThemeTab {
                         if cut_cell.replace(next_cut) != next_cut || fades_changed {
                             cx.notify(page);
                         }
-                        let handle = wheel.clone();
-                        window.on_mouse_event(move |event: &ScrollEvent, phase, window, cx| {
-                            if phase != DispatchPhase::Capture
-                                || !hitbox.should_handle_scroll(window)
-                            {
-                                return;
-                            }
-                            // Only a sideways swipe (or Shift and the wheel, which the system
-                            // turns sideways) moves the row; it never reaches the page, which
-                            // would scroll down by it.
-                            let delta = event.delta.pixel_delta(window.line_height());
-                            if delta.x.abs() <= delta.y.abs() {
-                                return;
-                            }
-                            cx.stop_propagation();
-                            let offset = handle.offset();
-                            let next = (offset.x + delta.x).clamp(-handle.max_offset().x, px(0.0));
-                            if next != offset.x {
-                                handle.set_offset(point(next, offset.y));
-                                window.refresh();
-                            }
-                        });
+                        // A sideways swipe moves only the row, a vertical one only the page.
+                        strip_wheel(window, &hitbox, &wheel, &wheel_lock);
                     },
                 )
                 .absolute()
@@ -375,6 +357,8 @@ impl ThemeTab {
 #[derive(Default)]
 pub(super) struct PresetsRow {
     scroll: ScrollHandle,
+    /// The axis the row's current swipe is locked to.
+    wheel_lock: StripWheelLock,
     /// An edge hides more cards: (left, right).
     fades: Rc<Cell<(bool, bool)>>,
     /// Which tiles (bit per tile, looks then presets) an edge cuts.
