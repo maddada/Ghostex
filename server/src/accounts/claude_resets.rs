@@ -378,6 +378,11 @@ fn request<B>(
 type Status = Option<Vec<ResetCredit>>;
 
 fn fetch(home: &Path, slot: &ClaudeSlot) -> Result<Status, String> {
+    fetch_block(home, slot).map(|block| parse(&block, chrono::Utc::now()))
+}
+
+/// Anthropic's `cedar_ember` block for the account, read now.
+fn fetch_block(home: &Path, slot: &ClaudeSlot) -> Result<Value, String> {
     let tokens = slot.tokens(home);
     if tokens.is_empty() {
         return Err(
@@ -394,9 +399,9 @@ fn fetch(home: &Path, slot: &ClaudeSlot) -> Result<Status, String> {
         .call()
         {
             Ok(response) => {
-                let body: Value = crate::http_agent::read_json(response)
+                let mut body: Value = crate::http_agent::read_json(response)
                     .map_err(|_| "Anthropic returned an unreadable reset status.")?;
-                return Ok(parse(&body["cedar_ember"], chrono::Utc::now()));
+                return Ok(body["cedar_ember"].take());
             }
             Err(ureq::Error::StatusCode(401 | 403)) => continue,
             Err(ureq::Error::StatusCode(429)) => {
@@ -509,6 +514,61 @@ pub(crate) fn cached(home: &Path, slot: &str) -> Result<Status, String> {
         .get_or_insert_with(HashMap::new)
         .insert(key, (Instant::now(), ttl, result.clone()));
     result
+}
+
+/// One grant as Anthropic reports it right now, with the account's limit state, for Autopilot's
+/// last check before it spends a reset (autopilot_reset.rs).
+pub(crate) struct FreshGrant {
+    /// Anthropic says the account is at a usage limit now.
+    pub at_limit: bool,
+    /// The limits Anthropic says are used up, in its own names (`five_hour`, `seven_day`, ...).
+    pub exhausted: Vec<String>,
+    /// Anthropic would honour a claim of this grant now.
+    pub usable_now: bool,
+    pub paused: bool,
+    pub resets_left: u64,
+    /// The limits a claim of this grant clears.
+    pub clears: Vec<String>,
+}
+
+/// CDXC:Security 2026-11-21 DECISION:
+/// Fable's security review of the Claude limit resets (finding 2): the claim decision rode on Claude Swap's usage reading (up to 10 minutes old) and this module's 15-minute reset cache, so after a claim whose reply was lost, a usage read that failed, or a reset used on another computer, a second reset could be spent on the reading from before the first. Autopilot's claim now reads Anthropic's own reset status first, past the cache, and spends only when that answer says the account is at a limit and the grant is usable now; the cached list is dropped so displays read the new count. `None` when Anthropic no longer lists the grant.
+pub(crate) fn fresh_grant(
+    home: &Path,
+    slot: &ClaudeSlot,
+    grant_id: &str,
+) -> Result<Option<FreshGrant>, String> {
+    forget(slot);
+    let block = fetch_block(home, slot)?;
+    let names = |value: &Value| -> Vec<String> {
+        value
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter(|name| name.len() <= 64)
+            .map(str::to_string)
+            .collect()
+    };
+    if block["eligible"] != true {
+        return Ok(None);
+    }
+    let Some(grant) = block["grants"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|grant| grant["id"].as_str() == Some(grant_id))
+    else {
+        return Ok(None);
+    };
+    Ok(Some(FreshGrant {
+        at_limit: block["at_limit"] == true,
+        exhausted: names(&block["exhausted"]),
+        usable_now: grant["usable_now"] == true,
+        paused: grant["paused"] == true,
+        resets_left: grant["resets_left"].as_u64().unwrap_or(0),
+        clears: names(&grant["clears"]),
+    }))
 }
 
 fn forget(slot: &ClaudeSlot) {

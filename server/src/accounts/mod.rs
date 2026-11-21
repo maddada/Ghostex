@@ -33,6 +33,7 @@ pub(crate) use process_login::process_launch;
 pub(crate) mod recovery;
 mod recovery_conversation;
 mod reset_claim;
+mod autopilot_reset;
 mod reset_credits;
 pub(crate) mod reset_used;
 pub(crate) mod reset_watch;

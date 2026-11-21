@@ -109,6 +109,22 @@ impl Caller {
     }
 }
 
+/// Whether the request being served came with the token file and named a session it runs in (the
+/// CLI inside a Ghostex session pane that does not use its own session token). `false` outside a
+/// request.
+pub(crate) fn token_file_names_session() -> bool {
+    CALLER
+        .try_with(|caller| {
+            matches!(
+                caller,
+                Caller::SharedToken {
+                    claimed_session: Some(_)
+                }
+            )
+        })
+        .unwrap_or(false)
+}
+
 pub(super) fn current_actor() -> Actor {
     let Ok(caller) = CALLER.try_with(Clone::clone) else {
         return Actor::Ghostex;

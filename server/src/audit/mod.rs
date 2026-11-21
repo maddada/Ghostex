@@ -38,7 +38,7 @@ mod notify;
 mod types;
 
 pub use caller::CALLER_SESSION_HEADER;
-pub(crate) use caller::{note_approval, with_caller, Caller};
+pub(crate) use caller::{note_approval, token_file_names_session, with_caller, Caller};
 pub use chain::{AuditLog, ChainCheck, ChainProblem, StoredEntry};
 pub(crate) use http::{handle_security_log_http, SECURITY_LOG_ENDPOINT};
 pub(crate) use notify::install_notifier;

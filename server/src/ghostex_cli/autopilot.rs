@@ -24,10 +24,12 @@ terminal ended. Every decision is logged. Settings > Autopilot has every choice.
   ghostex autopilot read-only-plan on|off  Let read-only threads leave plan mode (off by
                                            default): approve their plan and their edits like
                                            any session's, instead of keeping them planning
-  ghostex autopilot limit-resets on|off    Use a Claude limit reset when an account hits its
-                                           limit (off by default). Only you can turn it on:
-                                           an agent's call is refused. Each use is in the
-                                           security log and the bell
+  ghostex autopilot limit-resets on|off    Use a Claude limit reset when a session Autopilot
+                                           covers waits on its account's limit and no other
+                                           account has room (off by default). Only you can
+                                           turn it on, outside a Ghostex session: an agent's
+                                           call is refused. Each use is in the security log
+                                           and the bell
   ghostex autopilot checkup off|10|20|30|60
                                            Supervisor check-up: every so many minutes Ghostex
                                            looks for sessions that seem stuck in ways its rules
@@ -98,6 +100,22 @@ pub(crate) fn autopilot_command(args: &[String]) -> CliResult<()> {
         .into_iter()
         .filter(|word| word.parse::<u64>().map_or(true, |n| n != last))
         .collect();
+    // CDXC:Security 2026-11-21 (server/src/server/autopilot_http.rs `is_user`): without its
+    // session's `gxs_` token the CLI uses the token file, which gxserver takes as you. Under a
+    // Ghostex session pane that is an agent that dropped its token, so turning on the reset switch,
+    // or Autopilot itself, is refused here as clear-command refuses it (clear_command.rs).
+    let turns_on = matches!(
+        (
+            words.first().map(|word| word.as_str()),
+            words.get(1).map(|word| word.as_str())
+        ),
+        (Some("on"), _) | (Some("limit-resets"), Some("on"))
+    );
+    let holds_session_token = std::env::var(crate::security::SESSION_TOKEN_ENV)
+        .is_ok_and(|token| token.starts_with(crate::security::SESSION_TOKEN_PREFIX));
+    if turns_on && !holds_session_token && crate::agent_hooks::caller_ancestry().in_session_pane {
+        return Err(CliError::Other("This runs inside a Ghostex session but without its session token (GHOSTEX_SESSION_TOKEN), so it would run as the user. Only the user turns this on: in Settings > Autopilot, on their phone, or in their own terminal outside Ghostex.".into()));
+    }
     let answer = match words.first().map(|word| word.as_str()) {
         None | Some("status") => call(json!({ "op": "read", "limit": 5 }))?,
         Some("on") | Some("off") => call(json!({

@@ -61,8 +61,6 @@ impl Threshold {
 pub(crate) enum RedeemReason {
     AtLimit,
     LastCall,
-    /// Autopilot's "Use a limit reset when an account hits its limit" (autopilot/config.rs `use_limit_resets`).
-    Autopilot,
 }
 
 impl RedeemReason {
@@ -70,30 +68,8 @@ impl RedeemReason {
         match self {
             Self::AtLimit => "atLimit",
             Self::LastCall => "lastCall",
-            Self::Autopilot => "autopilot",
         }
     }
-}
-
-/// Whether a reset clears every used-up limit: each limit by Anthropic's name for it, a model's
-/// weekly limit (Fable) by any `seven_day_…` limit the grant names. A reset that does not say what
-/// it clears (Codex) counts; a limit Ghostex cannot name counts as not cleared, so it is never spent
-/// on a limit it may not lift.
-fn frees(credit: &ResetCredit, limited: &[&super::model::UsageWindow]) -> bool {
-    let Some(clears) = &credit.clears else {
-        return true;
-    };
-    limited.iter().all(|window| {
-        if window.model.is_some() {
-            return clears.iter().any(|limit| limit.starts_with("seven_day_"));
-        }
-        let name = match window.id.as_str() {
-            "fiveHour" => "five_hour",
-            "sevenDay" => "seven_day",
-            _ => return false,
-        };
-        clears.iter().any(|limit| limit == name)
-    })
 }
 
 /// What the watcher makes of one account's soonest-expiring reset.
@@ -115,24 +91,18 @@ pub(crate) struct Decision {
 /// Looking only at the soonest-expiring reset that can be claimed (Anthropic serves Claude grants in order; paused grants cannot be claimed):
 /// 1. Auto-redeem expiring resets: in the reset's last 5 minutes (`LAST_CALL_MINUTES`, the number the Settings and Help copy name), use it. It is lost minutes later anyway, so this needs no fresh usage reading and spends nothing worth keeping; only a Claude grant that works only at a limit is skipped while a fresh reading shows no limit, since Anthropic would refuse it.
 /// 2. Only with its own switch (`at_limit`, off by default): at a usage limit in the reset's last 24 hours, use it at once, since at a limit a reset gives back the whole window. It waits while the limit resets on its own within 30 minutes (that costs a short wait, not the reset). This one needs a usage reading under 10 minutes old without an error.
-///
-/// 3. Autopilot's "Use a limit reset when an account hits its limit" (`autopilot`, off by default, CDXC:Autopilot 2026-11-21 in autopilot/config.rs): at a usage limit, with the same fresh reading, use the soonest-expiring reset that clears every used-up limit (`frees`), however long it has left, unless the limit lifts on its own within 30 minutes.
 pub(crate) fn decide(
     account: &DiscoveredAccount,
     now: DateTime<Utc>,
     at_limit: bool,
-    autopilot: bool,
 ) -> Option<Decision> {
     let credits = account.reset_credit_details.as_ref()?;
-    let expiry = |credit: &ResetCredit| {
-        credit
+    let (first, expires_at) = credits.iter().filter(|c| !c.paused).find_map(|credit| {
+        let expires = credit
             .expires_at
             .as_deref()
-            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-            .map(|t| t.with_timezone(&Utc))
-    };
-    let (first, expires_at) = credits.iter().filter(|c| !c.paused).find_map(|credit| {
-        let expires = expiry(credit)?;
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())?
+            .with_timezone(&Utc);
         (expires > now).then_some((credit, expires))
     })?;
     let count = credits
@@ -156,55 +126,21 @@ pub(crate) fn decide(
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
             .is_some_and(|t| now - t.with_timezone(&Utc) < Span::minutes(10));
     let limits: Vec<_> = account.usage.iter().filter(|w| w.id != "spend").collect();
-    let limited: Vec<_> = limits
-        .iter()
-        .copied()
-        .filter(|w| w.used_percent >= 100.)
-        .collect();
-    // The moment the account could work again without the reset: the last of its full windows to reset.
-    let natural = limited
-        .iter()
-        .map(|w| {
-            w.resets_at
-                .as_deref()
-                .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-                .map(|t| t.with_timezone(&Utc))
-        })
-        .collect::<Option<Vec<_>>>()
-        .and_then(|times| times.into_iter().max());
-    if autopilot && fresh && !limited.is_empty() {
-        let pick = credits
-            .iter()
-            .filter(|c| !c.paused)
-            .filter_map(|c| expiry(c).filter(|t| *t > now).map(|t| (c, t)))
-            .find(|(c, _)| frees(c, &limited));
-        if let Some((credit, expires)) = pick {
-            if !natural.is_some_and(|t| t <= now + Span::minutes(30) && t < expires) {
-                let left = expires - now;
-                return Some(Decision {
-                    credit_id: credit.id.clone(),
-                    expires_at: expires,
-                    count: credits
-                        .iter()
-                        .filter(|c| c.id == credit.id && c.expires_at == credit.expires_at)
-                        .count(),
-                    requires_limit: credit.requires_limit,
-                    warning: if left <= Span::hours(24) {
-                        Some(Threshold::OneDay)
-                    } else if left <= Span::days(3) {
-                        Some(Threshold::ThreeDays)
-                    } else {
-                        None
-                    },
-                    redeem: Some(RedeemReason::Autopilot),
-                    wait: None,
-                });
-            }
-        }
-    }
+    let limited: Vec<_> = limits.iter().filter(|w| w.used_percent >= 100.).collect();
     let mut redeem = None;
     let mut wait = None;
     if at_limit && fresh && remaining <= Span::hours(24) && !limited.is_empty() {
+        // The moment the account could work again without the reset: the last of its full windows to reset.
+        let natural = limited
+            .iter()
+            .map(|w| {
+                w.resets_at
+                    .as_deref()
+                    .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                    .map(|t| t.with_timezone(&Utc))
+            })
+            .collect::<Option<Vec<_>>>()
+            .and_then(|times| times.into_iter().max());
         if natural.is_some_and(|t| t <= now + Span::minutes(30) && t < expires_at) {
             wait = Some("The limit resets on its own within 30 minutes.");
         } else {
@@ -405,13 +341,6 @@ fn pass(
         Provider::Claude => enabled(CLAUDE_AT_LIMIT_SETTING),
         Provider::Codex => enabled(CODEX_AT_LIMIT_SETTING),
     };
-    // Autopilot's own switch, which only the user turns on (server/src/server/autopilot_http.rs).
-    let autopilot_config = crate::autopilot::read_config(&state.paths);
-    let autopilot = |provider: Provider| {
-        provider == Provider::Claude
-            && autopilot_config.enabled
-            && autopilot_config.use_limit_resets
-    };
     let snapshot = state.accounts.refresh(&state.paths.home_dir, false);
     let now = Utc::now();
     let db = crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
@@ -424,6 +353,7 @@ fn pass(
     let mut changed_shown = shown.len() != shown_before;
     let mut feed_changed = false;
     let mut report = Vec::new();
+    let mut autopilot_report: Vec<Value> = Vec::new();
     let mut next_wake: Option<Span> = None;
     let mut wake_in = |span: Span| {
         next_wake = Some(next_wake.map_or(span, |n: Span| n.min(span)));
@@ -440,6 +370,26 @@ fn pass(
         let mut account = found.clone();
         if let Some(simulation) = simulated {
             simulate(&mut account, simulation, now);
+        }
+        // Autopilot's "Use a limit reset when an account hits its limit" (autopilot_reset.rs). It
+        // runs before the decisions below and, when it used a reset, skips them for this pass:
+        // this account's reading is from before the claim. When it can't use one, the rest runs
+        // as usual, so an expiring reset still gets its last-minutes redeem.
+        if simulated.is_none() {
+            match super::autopilot_reset::check(
+                state, &registry, &snapshot, saved, &account, dry_run,
+            ) {
+                super::autopilot_reset::Check::Off => {}
+                super::autopilot_reset::Check::Used => {
+                    feed_changed = true;
+                    autopilot_report.push(json!({ "accountId": saved.id, "result": "used" }));
+                    continue;
+                }
+                super::autopilot_reset::Check::NotNow { reason, posted } => {
+                    feed_changed |= posted;
+                    autopilot_report.push(json!({ "accountId": saved.id, "result": reason }));
+                }
+            }
         }
         let auto_redeem = auto(saved.provider);
         let auto_at_limit = at_limit(saved.provider);
@@ -468,7 +418,7 @@ fn pass(
                 }
             }
         }
-        let Some(decision) = decide(&account, now, auto_at_limit, autopilot(saved.provider)) else {
+        let Some(decision) = decide(&account, now, auto_at_limit) else {
             continue;
         };
         let until_last_call = decision.expires_at - Span::minutes(LAST_CALL_MINUTES) - now;
@@ -520,15 +470,14 @@ fn pass(
                 }
             }
         }
-        // Autopilot's limit resets run whether or not Settings > Accounts' Auto-redeem is on.
-        let may_redeem = auto_redeem || decision.redeem == Some(RedeemReason::Autopilot);
-        let mut action = match (decision.redeem, may_redeem) {
+        let mut action = match (decision.redeem, auto_redeem) {
             (Some(_), true) => "wouldRedeem",
             (Some(_), false) => "autoRedeemOff",
             (None, _) => "none",
         };
         let mut outcome = Value::Null;
-        if let (Some(reason), true, false, None) = (decision.redeem, may_redeem, dry_run, simulated)
+        if let (Some(reason), true, false, None) =
+            (decision.redeem, auto_redeem, dry_run, simulated)
         {
             match auto_redeem_now(state, saved, &decision, reason) {
                 Claim::Ran {
@@ -573,7 +522,6 @@ fn pass(
             "wait": decision.wait,
             "autoRedeem": auto_redeem,
             "autoRedeemAtLimit": auto_at_limit,
-            "autopilotLimitResets": autopilot(saved.provider),
             "action": action,
             "result": outcome,
         }));
@@ -586,6 +534,7 @@ fn pass(
     }
     Ok(json!({
         "accounts": report,
+        "autopilotLimitResets": autopilot_report,
         "dryRun": dry_run,
         "nextWakeInSeconds": next_wake.map(|span| span.num_seconds()),
     }))
@@ -677,25 +626,6 @@ fn auto_redeem_now(
             "expiresAt": decision.expires_at.to_rfc3339(),
         }),
     );
-    if reason == RedeemReason::Autopilot {
-        crate::audit::record(
-            crate::audit::Action::new(
-                "autopilot.useLimitReset",
-                format!(
-                    "Autopilot used a {} limit reset: {} was at its usage limit",
-                    provider_name(saved.provider),
-                    saved.name
-                ),
-            )
-            .target(saved.id.clone()),
-            crate::audit::Actor::Autopilot,
-            match kind {
-                "success" => crate::audit::Outcome::Done,
-                _ => crate::audit::Outcome::Failed(message.clone()),
-            },
-            None,
-        );
-    }
     if kind == "failed" {
         if let Some(attempt) = ATTEMPTS
             .lock()
@@ -798,11 +728,7 @@ fn notify_redeem(
     let (feed_kind, title, body) = match kind {
         "success" => (
             NOTIFICATION_FEED_KIND_RESET_REDEEMED,
-            if reason == RedeemReason::Autopilot {
-                format!("Autopilot used a {provider} limit reset")
-            } else {
-                format!("Used an expiring {provider} reset")
-            },
+            format!("Used an expiring {provider} reset"),
             match reason {
                 RedeemReason::AtLimit => format!(
                     "You were at a usage limit and the reset expired {}. Your limits are fresh again.",
@@ -812,19 +738,11 @@ fn notify_redeem(
                     "It would have expired unused {}. Your limits are fresh again.",
                     local_time(decision.expires_at)
                 ),
-                RedeemReason::Autopilot => format!(
-                    "{} was at its usage limit, so Autopilot used one of its limit resets. Your limits are fresh again.",
-                    saved.name
-                ),
             },
         ),
         "failed" => (
             NOTIFICATION_FEED_KIND_RESET_EXPIRING,
-            if reason == RedeemReason::Autopilot {
-                format!("Autopilot couldn't use a {provider} limit reset")
-            } else {
-                format!("Couldn't use an expiring {provider} reset")
-            },
+            format!("Couldn't use an expiring {provider} reset"),
             format!(
                 "{message} It expires {}.",
                 local_time(decision.expires_at)
@@ -859,131 +777,4 @@ fn log(state: &AppState, level: LogLevel, event: &str, error: Option<String>, de
         error,
         details: Some(details),
     });
-}
-
-#[cfg(test)]
-mod autopilot_reset_tests {
-    use super::*;
-    use crate::accounts::model::UsageWindow;
-
-    fn window(
-        id: &str,
-        used: f64,
-        resets_in: Span,
-        model: Option<&str>,
-        now: DateTime<Utc>,
-    ) -> UsageWindow {
-        UsageWindow {
-            id: id.into(),
-            label: id.into(),
-            used_percent: used,
-            limit_window_seconds: None,
-            resets_at: Some((now + resets_in).to_rfc3339()),
-            model: model.map(str::to_string),
-        }
-    }
-
-    fn credit(id: &str, expires_in: Span, clears: &[&str], now: DateTime<Utc>) -> ResetCredit {
-        ResetCredit {
-            id: id.into(),
-            expires_at: Some((now + expires_in).to_rfc3339()),
-            note: None,
-            paused: false,
-            requires_limit: false,
-            clears: Some(clears.iter().map(|s| s.to_string()).collect()),
-        }
-    }
-
-    /// Claude account #4 as Anthropic reported it on 2026-11-21, but with its resets still unused:
-    /// at the weekly limit, a full reset (clears the weekly limit) and a Fable reset (does not).
-    fn weekly_limited(now: DateTime<Utc>) -> DiscoveredAccount {
-        DiscoveredAccount {
-            provider: Provider::Claude,
-            selector: "4".into(),
-            identity: "test".into(),
-            name: "Test".into(),
-            email: "test@example.com".into(),
-            status: "ready".into(),
-            shared_history: false,
-            usage: vec![
-                window("sevenDay", 100., Span::hours(30), None, now),
-                window("Fable", 23., Span::hours(30), Some("Fable"), now),
-            ],
-            reset_credits: Some(2),
-            reset_credit_details: Some(vec![
-                credit(
-                    "launch-2610-fable",
-                    Span::days(10),
-                    &["five_hour", "seven_day_overage_included"],
-                    now,
-                ),
-                credit(
-                    "full-reset-2611",
-                    Span::days(19),
-                    &["seven_day", "seven_day_overage_included"],
-                    now,
-                ),
-            ]),
-            reset_credits_error: None,
-            usage_updated_at: Some((now - Span::minutes(2)).to_rfc3339()),
-            usage_error: None,
-            usage_stale: false,
-            plan: None,
-        }
-    }
-
-    #[test]
-    fn autopilot_uses_the_reset_that_clears_the_used_up_limit() {
-        let now = Utc::now();
-        let account = weekly_limited(now);
-        let decision = decide(&account, now, false, true).unwrap();
-        assert_eq!(decision.redeem, Some(RedeemReason::Autopilot));
-        // The Fable reset expires sooner but leaves the weekly limit in place.
-        assert_eq!(decision.credit_id, "full-reset-2611");
-    }
-
-    #[test]
-    fn without_the_switch_a_far_off_reset_is_kept() {
-        let now = Utc::now();
-        let decision = decide(&weekly_limited(now), now, true, false).unwrap();
-        assert_eq!(decision.redeem, None);
-    }
-
-    #[test]
-    fn no_reset_is_used_when_none_clears_the_limit() {
-        let now = Utc::now();
-        let mut account = weekly_limited(now);
-        account.reset_credit_details.as_mut().unwrap().remove(1);
-        assert_eq!(decide(&account, now, false, true).unwrap().redeem, None);
-    }
-
-    #[test]
-    fn no_reset_is_used_below_the_limit_or_on_an_old_reading() {
-        let now = Utc::now();
-        let mut below = weekly_limited(now);
-        below.usage[0].used_percent = 99.;
-        assert_eq!(decide(&below, now, false, true).unwrap().redeem, None);
-        let mut old = weekly_limited(now);
-        old.usage_updated_at = Some((now - Span::minutes(20)).to_rfc3339());
-        assert_eq!(decide(&old, now, false, true).unwrap().redeem, None);
-    }
-
-    #[test]
-    fn a_limit_that_lifts_within_half_an_hour_is_waited_for() {
-        let now = Utc::now();
-        let mut account = weekly_limited(now);
-        account.usage[0] = window("sevenDay", 100., Span::minutes(20), None, now);
-        assert_eq!(decide(&account, now, false, true).unwrap().redeem, None);
-    }
-
-    #[test]
-    fn a_fable_limit_takes_a_reset_that_clears_a_model_weekly_limit() {
-        let now = Utc::now();
-        let mut account = weekly_limited(now);
-        account.usage[0].used_percent = 40.;
-        account.usage[1].used_percent = 100.;
-        let decision = decide(&account, now, false, true).unwrap();
-        assert_eq!(decision.redeem, Some(RedeemReason::Autopilot));
-        assert_eq!(decision.credit_id, "launch-2610-fable");
-    }
 }
