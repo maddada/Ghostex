@@ -291,6 +291,33 @@ fn spawn_watch(state: &AppState, project_id: &str, session_id: &str) {
     });
 }
 
+/// Chief of Staff's own chat at the home folder whose box is not up yet: reads its screen the way a
+/// viewer's chat does, so the trust question its agent asks there (agy asks every time) is answered
+/// for it (CDXC:Chief 2026-11-08 in server/src/chief/presentation.rs) and the message gets typed.
+///
+/// WHY: that answer runs from the screen detection, which only an open chat drives; nobody watches a
+/// Chief of Staff that was just started, so on Antigravity it sat on "Do you trust the contents of
+/// this project?" until its chat was opened (review of efced63b5).
+async fn answer_chief_home_trust(state: &AppState, target: &SessionChatSendTarget) {
+    let key = (target.project_id.clone(), target.session_id.clone());
+    let chief = open_gxserver_database(&state.paths)
+        .ok()
+        .and_then(|db| crate::chief::read_record(&db))
+        .is_some_and(|record| record.owns(&key));
+    if !chief {
+        return;
+    }
+    let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session);
+    let _ = crate::session_chat_options::SessionChatOptionDetector::new(state)
+        .detect(
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
+            false,
+        )
+        .await;
+}
+
 /// Types the message into the box once the agent shows it, then waits for it to leave: Start (the
 /// record is gone) or Enter in the terminal (the box no longer holds it and the agent works).
 async fn watch(state: &AppState, project_id: &str, session_id: &str) {
@@ -359,7 +386,7 @@ async fn watch(state: &AppState, project_id: &str, session_id: &str) {
                     }
                 }
                 BoxCheck::HoldsText => terminal_turn.box_held_text(&target.session),
-                BoxCheck::NotReady => {}
+                BoxCheck::NotReady => answer_chief_home_trust(state, &target).await,
             },
             TYPED => match box_reading(&target, &message.text).await {
                 BoxReading::HoldsIt | BoxReading::Unreadable => {}
