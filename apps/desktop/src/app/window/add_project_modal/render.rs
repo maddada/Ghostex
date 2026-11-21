@@ -12,8 +12,8 @@ use super::window::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, ClickEvent, Context, FontWeight, InteractiveElement as _, IntoElement,
-    KeyDownEvent, MouseButton, ParentElement as _, Render, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    KeyDownEvent, MouseButton, MouseDownEvent, ParentElement as _, Render, ScrollHandle,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Window, canvas, div, px,
 };
 use gpui_component::input::{Enter, Escape, IndentInline, Input, MoveDown, MoveUp};
 use gpui_component::{Sizable as _, Size as ComponentSize, h_flex, v_flex};
@@ -354,7 +354,7 @@ impl GpuiAddProjectModalWindow {
                 skin,
                 "add-project-back",
                 ICON_ARROW_LEFT,
-                self.history_back.is_empty(),
+                self.history_back.is_empty() || busy,
                 action(|this, window, cx| {
                     this.go_back();
                     this.settle(window, cx);
@@ -365,7 +365,7 @@ impl GpuiAddProjectModalWindow {
                 skin,
                 "add-project-forward",
                 ICON_ARROW_RIGHT,
-                self.history_forward.is_empty(),
+                self.history_forward.is_empty() || busy,
                 action(|this, window, cx| {
                     this.go_forward();
                     this.settle(window, cx);
@@ -376,7 +376,7 @@ impl GpuiAddProjectModalWindow {
                 skin,
                 "add-project-up",
                 ICON_ARROW_UP,
-                !can_go_up,
+                !can_go_up || busy,
                 action(|this, window, cx| {
                     let d = this.derive();
                     this.go_up(&d);
@@ -603,9 +603,9 @@ impl GpuiAddProjectModalWindow {
                         .other_apps
                         .iter()
                         .map(|folder| {
-                            let parent = std::path::Path::new(&folder.path)
-                                .parent()
-                                .map(|parent| last_segment(&parent.to_string_lossy()));
+                            let parent = self
+                                .parent_folder(&folder.path, &d.platform)
+                                .map(|parent| last_segment(&parent));
                             place(
                                 ICON_GIT_BRANCH,
                                 folder.name.clone(),
@@ -681,6 +681,7 @@ impl GpuiAddProjectModalWindow {
                         .into_any_element(),
                 );
             }
+            let busy = self.busy.is_some();
             for item in items {
                 index += 1;
                 let on_click = item.on_click.clone();
@@ -693,15 +694,17 @@ impl GpuiAddProjectModalWindow {
                         .items_center()
                         .justify_center()
                         .rounded(px(4.0))
-                        .hover(move |this| this.bg(hsla(hover)))
-                        .on_mouse_down(MouseButton::Left, |_, window, cx| {
-                            window.prevent_default();
-                            cx.stop_propagation();
+                        .when(!busy, |this| {
+                            this.hover(move |this| this.bg(hsla(hover)))
+                                .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                                    window.prevent_default();
+                                    cx.stop_propagation();
+                                })
+                                .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
+                                    cx.stop_propagation();
+                                    this.set_pinned(&path, false, cx);
+                                }))
                         })
-                        .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
-                            cx.stop_propagation();
-                            this.set_pinned(&path, false, cx);
-                        }))
                         .child(modal_icon(ICON_X, 12.0, skin.muted()))
                 });
                 children.push(
@@ -717,13 +720,19 @@ impl GpuiAddProjectModalWindow {
                         .text_size(px(13.0))
                         .text_color(hsla(skin.fg()))
                         .when(item.active, |this| this.bg(hsla(active_fill)))
-                        .when(!item.active, |this| {
+                        .when(!item.active && !busy, |this| {
                             this.hover(move |this| this.bg(hsla(hover)))
                         })
-                        .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
-                        .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-                            on_click(this, window, cx);
-                        }))
+                        .when(!busy, |this| {
+                            this.on_mouse_down(MouseButton::Left, |_, window, _| {
+                                window.prevent_default()
+                            })
+                            .on_click(cx.listener(
+                                move |this, _: &ClickEvent, window, cx| {
+                                    on_click(this, window, cx);
+                                },
+                            ))
+                        })
                         .child(div().flex_shrink_0().child(modal_icon(
                             item.icon,
                             15.0,
@@ -793,6 +802,7 @@ impl GpuiAddProjectModalWindow {
         };
         let path = entry.full_path.clone();
         let strong = matches!(state, RowState::Selected | RowState::Highlighted);
+        let busy = self.busy.is_some();
         h_flex()
             .id(id)
             .flex_shrink_0()
@@ -806,14 +816,16 @@ impl GpuiAddProjectModalWindow {
             .text_size(px(13.0))
             .text_color(hsla(skin.fg()))
             .when_some(fill, |this, fill| this.bg(hsla(fill)))
-            .when(fill.is_none(), |this| {
+            .when(fill.is_none() && !busy, |this| {
                 this.hover(move |this| this.bg(hsla(hover)))
             })
-            .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
-            .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-                this.open_column_entry(&path);
-                this.settle(window, cx);
-            }))
+            .when(!busy, |this| {
+                this.on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+                    .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                        this.open_column_entry(&path);
+                        this.settle(window, cx);
+                    }))
+            })
             .child(div().flex_shrink_0().child(modal_icon(
                 if is_disk { ICON_DISK } else { ICON_FOLDER },
                 15.0,
@@ -847,17 +859,24 @@ impl GpuiAddProjectModalWindow {
             .into_any_element()
     }
 
-    fn column_shell(&self, skin: &AddProjectSkin, id: usize, rows: Vec<AnyElement>) -> AnyElement {
-        div()
+    fn column_shell(
+        &self,
+        skin: &AddProjectSkin,
+        id: usize,
+        scroll: Option<&ScrollHandle>,
+        rows: Vec<AnyElement>,
+    ) -> AnyElement {
+        v_flex()
             .id(("add-project-column", id))
             .flex_1()
             .min_w_0()
             .h_full()
             .overflow_y_scroll()
+            .when_some(scroll, |this, handle| this.track_scroll(handle))
             .border_r_1()
             .border_color(hsla(skin.border_at(0.7)))
             .p(px(4.0))
-            .child(v_flex().children(rows))
+            .children(rows)
             .into_any_element()
     }
 
@@ -895,12 +914,7 @@ impl GpuiAddProjectModalWindow {
         if self.is_browse_pending && self.browse_result.is_none() {
             return Some("Loading…".to_string());
         }
-        if d.filtered
-            .filtered
-            .iter()
-            .all(|entry| entry.name.starts_with('.'))
-            && self.new_folder_name.is_none()
-        {
+        if d.filtered.filtered.is_empty() && self.new_folder_name.is_none() {
             return Some(if has_trailing_path_separator(&self.query) {
                 "No folders here.".to_string()
             } else {
@@ -964,9 +978,12 @@ impl GpuiAddProjectModalWindow {
                             .collect()
                     }
                 }
+                None if self.failed_columns.contains(&key) => {
+                    vec![self.column_message(skin, "Unable to open this folder.")]
+                }
                 None => vec![self.column_message(skin, "Loading…")],
             };
-            columns.push(self.column_shell(skin, index, rows));
+            columns.push(self.column_shell(skin, index, None, rows));
         }
         // The open folder's own contents, with the new folder being named at the top.
         let mut rows: Vec<AnyElement> = Vec::new();
@@ -1024,17 +1041,7 @@ impl GpuiAddProjectModalWindow {
             );
         }
         let is_disks = d.is_drive_list;
-        let entries: Vec<AddProjectBrowseEntry> = d
-            .filtered
-            .filtered
-            .iter()
-            .filter(|entry| {
-                !entry.name.starts_with('.')
-                    || get_browse_leaf_path_segment(&self.query).starts_with('.')
-            })
-            .cloned()
-            .collect();
-        for (row, entry) in entries.iter().enumerate() {
+        for (row, entry) in d.filtered.filtered.iter().enumerate() {
             let highlighted = self.highlight.as_deref() == Some(entry.full_path.as_str())
                 || (!has_trailing_path_separator(&self.query)
                     && d.filtered.exact.as_ref().map(|exact| &exact.full_path)
@@ -1057,7 +1064,7 @@ impl GpuiAddProjectModalWindow {
         if let Some(message) = self.last_column_message(d).filter(|_| rows.is_empty()) {
             rows.push(self.column_message(skin, message));
         }
-        columns.push(self.column_shell(skin, 99, rows));
+        columns.push(self.column_shell(skin, 99, Some(&self.open_column_scroll), rows));
         // Three columns always share the width; they fill from the left.
         while columns.len() < 3 {
             columns.insert(
@@ -1381,9 +1388,8 @@ impl GpuiAddProjectModalWindow {
                                 true,
                                 false,
                                 action(move |this, window, cx| {
-                                    let parent = std::path::Path::new(&show_path)
-                                        .parent()
-                                        .map(|parent| parent.to_string_lossy().to_string());
+                                    let platform = this.derive().platform;
+                                    let parent = this.parent_folder(&show_path, &platform);
                                     this.go_to_folder(&show_path, parent);
                                     this.settle(window, cx);
                                 }),
@@ -1499,6 +1505,7 @@ impl GpuiAddProjectModalWindow {
                         action(move |this, window, cx| {
                             this.open_clone_sheet(Some(repo_query.clone()), window, cx);
                             this.choose_clone_source(AddProjectSourceId::Github);
+                            this.settle(window, cx);
                         }),
                         cx,
                     ),
@@ -1598,7 +1605,9 @@ impl GpuiAddProjectModalWindow {
         };
         // A side panel has its own Cancel and its own action.
         let panel_open = self.sheet.is_some();
-        let can_submit = d.can_submit_browse_path && self.busy.is_none() && !self.suggested_mode;
+        let busy = self.busy.is_some();
+        let can_submit = d.can_submit_browse_path && !busy && !self.suggested_mode;
+        let button_bounds = self.machine_button_bounds.clone();
         h_flex()
             .flex_shrink_0()
             .h(px(54.0))
@@ -1610,6 +1619,7 @@ impl GpuiAddProjectModalWindow {
             .child(
                 h_flex()
                     .id("add-project-computer")
+                    .relative()
                     .flex_shrink_0()
                     .h(px(30.0))
                     .items_center()
@@ -1618,15 +1628,30 @@ impl GpuiAddProjectModalWindow {
                     .rounded(px(7.0))
                     .text_size(px(13.0))
                     .text_color(hsla(skin.fg()))
-                    .hover(move |this| this.bg(hsla(hover)))
-                    .when(self.machine_menu_open, |this| {
-                        this.bg(hsla(skin.muted_fill))
+                    .when(busy, |this| this.opacity(0.5))
+                    .when(!busy, |this| {
+                        this.hover(move |this| this.bg(hsla(hover)))
+                            .when(self.machine_menu_open, |this| {
+                                this.bg(hsla(skin.muted_fill))
+                            })
+                            .on_mouse_down(MouseButton::Left, |_, window, _| {
+                                window.prevent_default()
+                            })
+                            .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
+                                this.machine_menu_open = !this.machine_menu_open;
+                                cx.notify();
+                            }))
                     })
-                    .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
-                    .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
-                        this.machine_menu_open = !this.machine_menu_open;
-                        cx.notify();
-                    }))
+                    .child(
+                        canvas(
+                            move |bounds, _window, _cx| {
+                                button_bounds.set(Some(bounds));
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .size_full(),
+                    )
                     .child(modal_icon(
                         if local {
                             ICON_DEVICE_DESKTOP
@@ -1669,6 +1694,8 @@ impl GpuiAddProjectModalWindow {
 
     fn render_machine_menu(&mut self, skin: &AddProjectSkin, cx: &mut Context<Self>) -> AnyElement {
         let hover = skin.muted_fill_at(0.6);
+        let busy = self.busy.is_some();
+        let button_bounds = self.machine_button_bounds.clone();
         let rows: Vec<AnyElement> = self
             .machines
             .iter()
@@ -1685,12 +1712,16 @@ impl GpuiAddProjectModalWindow {
                     .rounded(px(6.0))
                     .text_size(px(13.0))
                     .text_color(hsla(skin.fg()))
-                    .hover(move |this| this.bg(hsla(hover)))
-                    .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
-                    .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-                        this.choose_machine(id.clone());
-                        this.settle(window, cx);
-                    }))
+                    .when(!busy, |this| {
+                        this.hover(move |this| this.bg(hsla(hover)))
+                            .on_mouse_down(MouseButton::Left, |_, window, _| {
+                                window.prevent_default()
+                            })
+                            .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                                this.choose_machine(id.clone());
+                                this.settle(window, cx);
+                            }))
+                    })
                     .child(modal_icon(
                         if machine.machine_id == LOCAL_MACHINE_ID {
                             ICON_DEVICE_DESKTOP
@@ -1714,6 +1745,8 @@ impl GpuiAddProjectModalWindow {
             })
             .collect();
         v_flex()
+            .id("add-project-machine-menu")
+            .occlude()
             .absolute()
             .left(px(12.0))
             .bottom(px(50.0))
@@ -1722,8 +1755,24 @@ impl GpuiAddProjectModalWindow {
             .rounded(px(10.0))
             .border_1()
             .border_color(hsla(skin.p.menu_border))
-            .bg(hsla(skin.p.menu_background))
+            .bg(hsla(if skin.p.glass {
+                skin.p.lifted_menu_fill()
+            } else {
+                skin.p.menu_background
+            }))
             .shadow_lg()
+            .on_mouse_down_out(
+                cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
+                    if button_bounds
+                        .get()
+                        .is_some_and(|bounds| bounds.contains(&event.position))
+                    {
+                        return;
+                    }
+                    this.machine_menu_open = false;
+                    cx.notify();
+                }),
+            )
             .child(
                 div()
                     .px(px(8.0))

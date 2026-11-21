@@ -36,6 +36,9 @@ impl GpuiAddProjectModalWindow {
     /// Opens `folder` (any spelling: `~/dev`, `/Users/me/dev`, `C:\dev`), remembering where the
     /// picker was for Back. `column_root` starts the columns there (a sidebar place).
     pub(super) fn go_to_folder(&mut self, folder: &str, column_root: Option<String>) {
+        if self.busy.is_some() {
+            return;
+        }
         let query = ensure_browse_directory_path(&self.tildify(&trim_folder(folder)));
         if query == self.query && !self.suggested_mode {
             return;
@@ -63,6 +66,8 @@ impl GpuiAddProjectModalWindow {
         self.error = None;
         self.clone_preview = None;
         self.machine_menu_open = false;
+        self.failed_columns.clear();
+        self.clone_generation += 1;
         self.browse_generation += 1;
     }
 
@@ -75,6 +80,9 @@ impl GpuiAddProjectModalWindow {
     }
 
     fn step_history(&mut self, back: bool) {
+        if self.busy.is_some() {
+            return;
+        }
         let entry = if back {
             self.history_back.pop()
         } else {
@@ -101,6 +109,9 @@ impl GpuiAddProjectModalWindow {
 
     /// Up: the folder above the selected one.
     pub(super) fn go_up(&mut self, d: &Derived) {
+        if self.busy.is_some() {
+            return;
+        }
         let current = d
             .selected_folder
             .clone()
@@ -131,6 +142,8 @@ impl GpuiAddProjectModalWindow {
         self.error = None;
         self.clone_preview = None;
         self.suggested_mode = false;
+        self.failed_columns.clear();
+        self.clone_generation += 1;
         // A path typed outside the columns' start shows its own two levels.
         if let Some(root) = self.column_root.clone() {
             let home = self.current_home();
@@ -145,6 +158,9 @@ impl GpuiAddProjectModalWindow {
     /// Another computer: its places and its starting folder.
     pub(super) fn choose_machine(&mut self, machine_id: String) {
         self.machine_menu_open = false;
+        if self.busy.is_some() {
+            return;
+        }
         if self.machine_id.as_deref() == Some(machine_id.as_str()) {
             return;
         }
@@ -165,13 +181,17 @@ impl GpuiAddProjectModalWindow {
     }
 
     /// What belongs to the previous machine is dropped when another one is browsed.
-    fn reset_for_machine(&mut self) {
+    pub(super) fn reset_for_machine(&mut self) {
         self.browse_result = None;
         self.last_selected_folder = None;
         self.clone_preview = None;
         self.clone_flow = None;
         self.tool_install = None;
         self.new_folder_name = None;
+        self.pending_discovery_machine_id = None;
+        self.failed_columns.clear();
+        self.machine_generation += 1;
+        self.clone_generation += 1;
         if matches!(self.sheet, Some(Sheet::NewProjectPick(_))) {
             self.sheet = Some(Sheet::NewProject);
         }
@@ -204,6 +224,28 @@ impl GpuiAddProjectModalWindow {
         (!resolved.is_empty()).then_some(resolved)
     }
 
+    pub(super) fn register_project_on(
+        &mut self,
+        machine_id: String,
+        path: String,
+        create_if_missing: bool,
+        after_clone: bool,
+        generation: u64,
+        cx: &mut Context<Self>,
+    ) {
+        self.request(
+            "add",
+            &machine_id,
+            serde_json::json!({ "createIfMissing": create_if_missing, "path": path }),
+            Pending::Add {
+                machine_id: machine_id.clone(),
+                after_clone,
+                generation,
+            },
+            cx,
+        );
+    }
+
     pub(super) fn register_project(
         &mut self,
         path: String,
@@ -214,11 +256,17 @@ impl GpuiAddProjectModalWindow {
         let Some(machine_id) = self.machine_id.clone() else {
             return;
         };
-        self.request(
-            "add",
-            &machine_id,
-            serde_json::json!({ "createIfMissing": create_if_missing, "path": path }),
-            Pending::Add { after_clone },
+        let generation = if after_clone {
+            self.clone_generation
+        } else {
+            self.machine_generation
+        };
+        self.register_project_on(
+            machine_id,
+            path,
+            create_if_missing,
+            after_clone,
+            generation,
             cx,
         );
     }
@@ -244,6 +292,9 @@ impl GpuiAddProjectModalWindow {
 
     /// The footer's Add project (or Open project, Create & Add, Add repository root).
     pub(super) fn submit_resolved_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.suggested_mode || self.sheet.is_some() {
+            return;
+        }
         let d = self.derive();
         if !d.can_submit_browse_path {
             return;
@@ -302,11 +353,16 @@ impl GpuiAddProjectModalWindow {
         self.set_busy(Some(Busy::CreateFolder), cx);
         self.error = None;
         let parent = d.new_folder_parent_path.clone();
+        let generation = self.machine_generation;
         self.request(
             "createDirectory",
             &machine_id,
             serde_json::json!({ "name": name, "parentPath": parent }),
-            Pending::CreateFolder { parent },
+            Pending::CreateFolder {
+                machine_id: machine_id.clone(),
+                parent,
+                generation,
+            },
             cx,
         );
         self.settle(window, cx);
@@ -325,6 +381,7 @@ impl GpuiAddProjectModalWindow {
         self.new_folder_name = None;
         self.clone_preview = None;
         self.clone_flow = None;
+        self.clone_generation += 1;
         self.error = None;
         if let Some(text) = prefill {
             if let Some(ParsedCloneInput::Clone(parsed)) =
@@ -354,9 +411,14 @@ impl GpuiAddProjectModalWindow {
                 if self.busy == Some(Busy::Clone) {
                     return;
                 }
+                if matches!(self.busy, Some(Busy::Lookup | Busy::Preview)) {
+                    self.set_busy(None, cx);
+                }
                 self.sheet = None;
                 self.new_project = None;
                 self.clone_preview = None;
+                self.clone_flow = None;
+                self.clone_generation += 1;
                 self.error = None;
                 self.focus_path_input(window, cx);
             }
@@ -369,13 +431,14 @@ impl GpuiAddProjectModalWindow {
         self.clone_source = source;
         self.clone_preview = None;
         self.clone_flow = None;
+        self.clone_generation += 1;
         self.error = None;
     }
 
     pub(super) fn on_repo_input_changed(
         &mut self,
         value: String,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if value == self.clone_repo_text {
@@ -386,10 +449,20 @@ impl GpuiAddProjectModalWindow {
             parse_add_project_clone_input(&value, self.clone_source)
         {
             self.clone_source = parsed.source;
+            if !parsed.branch_name.is_empty() {
+                self.clone_options.branch_name = parsed.branch_name.clone();
+                let branch = self.clone_options.branch_name.clone();
+                self.branch_input.update(cx, |input, cx| {
+                    input.set_value(branch, window, cx);
+                });
+            }
+            self.clone_options.clone_main_only |= parsed.clone_main_only;
+            self.clone_options.shallow_clone |= parsed.shallow_clone;
         }
         self.clone_repo_text = value;
         self.clone_preview = None;
         self.clone_flow = None;
+        self.clone_generation += 1;
         self.error = None;
         cx.notify();
     }
@@ -455,6 +528,10 @@ impl GpuiAddProjectModalWindow {
         if let Some(parsed) = &parsed {
             if !parsed.branch_name.is_empty() {
                 self.clone_options.branch_name = parsed.branch_name.clone();
+                let branch = self.clone_options.branch_name.clone();
+                self.branch_input.update(cx, |input, cx| {
+                    input.set_value(branch, window, cx);
+                });
             }
             self.clone_options.clone_main_only |= parsed.clone_main_only;
             self.clone_options.shallow_clone |= parsed.shallow_clone;
@@ -495,11 +572,16 @@ impl GpuiAddProjectModalWindow {
             Some(parsed) => parsed.remote_url.clone(),
             None => input.clone(),
         };
+        let generation = self.clone_generation;
         self.request(
             "lookupRepository",
             &machine_id,
             serde_json::json!({ "provider": provider.wire(), "repository": repository }),
-            Pending::Lookup { parsed },
+            Pending::Lookup {
+                machine_id: machine_id.clone(),
+                generation,
+                parsed,
+            },
             cx,
         );
         self.settle(window, cx);
@@ -528,6 +610,7 @@ impl GpuiAddProjectModalWindow {
         self.set_busy(Some(Busy::Preview), cx);
         self.error = None;
         let options = self.clone_options.clone();
+        let generation = self.clone_generation;
         self.request(
             "previewClone",
             &machine_id,
@@ -538,7 +621,11 @@ impl GpuiAddProjectModalWindow {
                 "remoteUrl": flow.remote_url,
                 "shallowClone": options.shallow_clone,
             }),
-            Pending::Preview { destination_path },
+            Pending::Preview {
+                machine_id: machine_id.clone(),
+                generation,
+                destination_path,
+            },
             cx,
         );
     }
@@ -598,7 +685,17 @@ impl GpuiAddProjectModalWindow {
         self.set_busy(Some(Busy::Clone), cx);
         // The progress line sits under the options.
         self.sheet_scroll.scroll_to_bottom();
-        self.request("startClone", &machine_id, params, Pending::StartClone, cx);
+        let generation = self.clone_generation;
+        self.request(
+            "startClone",
+            &machine_id,
+            params,
+            Pending::StartClone {
+                machine_id: machine_id.clone(),
+                generation,
+            },
+            cx,
+        );
         self.settle(window, cx);
     }
 
@@ -609,11 +706,15 @@ impl GpuiAddProjectModalWindow {
         let Some(machine_id) = self.machine_id.clone() else {
             return;
         };
+        let generation = self.clone_generation;
         self.request(
             "cancelCloneJob",
             &machine_id,
             serde_json::json!({ "jobId": job_id }),
-            Pending::CancelCloneJob,
+            Pending::CancelCloneJob {
+                machine_id: machine_id.clone(),
+                generation,
+            },
             cx,
         );
     }
@@ -633,6 +734,7 @@ impl GpuiAddProjectModalWindow {
             self.clone_options.shallow_clone = !self.clone_options.shallow_clone;
         }
         self.clone_preview = None;
+        self.clone_generation += 1;
         self.settle(window, cx);
     }
 
@@ -643,6 +745,11 @@ impl GpuiAddProjectModalWindow {
         let Some(machine_id) = self.machine_id.clone() else {
             return;
         };
+        let seq = {
+            let entry = self.places_seq.entry(machine_id.clone()).or_insert(0);
+            *entry += 1;
+            *entry
+        };
         self.request(
             "places",
             &machine_id,
@@ -652,6 +759,8 @@ impl GpuiAddProjectModalWindow {
             }),
             Pending::Places {
                 machine_id: machine_id.clone(),
+                seq,
+                is_pin_change: true,
             },
             cx,
         );

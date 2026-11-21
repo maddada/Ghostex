@@ -3,7 +3,7 @@ use super::*;
 #[derive(Debug)]
 pub(crate) struct ProjectPathHttpError {
     code: &'static str,
-    message: String,
+    pub(crate) message: String,
 }
 
 impl ProjectPathHttpError {
@@ -128,7 +128,7 @@ fn browse_project_directories_with_inspection(
     add the repository instead; unlike a file's `gitRoot` it never changes what Add adds. A folder
     also says its own branch and language for the picker's preview.
     */
-    if kind == "directory" {
+    if kind == "directory" && !is_network_filesystem(&path) {
         if let Some(root) = enclosing_repository_root(&path, &state.paths.home_dir) {
             inspection["repoRoot"] = json!(path_to_string(&root));
         }

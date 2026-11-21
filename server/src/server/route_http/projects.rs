@@ -32,6 +32,7 @@ pub(super) async fn route_projects_http(
                 let project = repository.create_project(params)?;
                 let project =
                     crate::workspaces::place_added_project(repository, db, project, params)?;
+                invalidate_places_cache(&state.paths);
                 let project_id = value_text(&project, "projectId")?;
                 schedule_presentation_project_delta(
                     &state,
@@ -82,6 +83,7 @@ pub(super) async fn route_projects_http(
                 // (`relocate_project_moving_sessions`).
                 let owner_app = matches!(caller, crate::security::Principal::Owner { .. });
                 let relocated = repository.relocate_project_moving_sessions(params, owner_app)?;
+                invalidate_places_cache(&state.paths);
                 let project_id = value_text(&relocated.project, "projectId")?;
                 schedule_presentation_project_delta(
                     &state,
@@ -134,6 +136,7 @@ pub(super) async fn route_projects_http(
                 */
                 let project_id = read_project_id(params)?;
                 let project = repository.close_project_to_recent(&project_id)?;
+                invalidate_places_cache(&state.paths);
                 schedule_presentation_project_delta(
                     &state,
                     db,
@@ -161,6 +164,7 @@ pub(super) async fn route_projects_http(
                 */
                 let project_id = read_project_id(params)?;
                 let project = repository.restore_recent_project(&project_id)?;
+                invalidate_places_cache(&state.paths);
                 schedule_presentation_project_delta(
                     &state,
                     db,
@@ -180,6 +184,7 @@ pub(super) async fn route_projects_http(
             |repository, db, params, _| {
                 let project_id = read_project_id(params)?;
                 let project = repository.remove_recent_project(&project_id)?;
+                invalidate_places_cache(&state.paths);
                 schedule_presentation_project_delta(
                     &state,
                     db,
@@ -289,6 +294,7 @@ pub(super) async fn route_projects_http(
                     crate::work_mode::place_projects_after(&state.paths, repository, db, || {
                         repository.remove_project(&project_id)
                     })?;
+                invalidate_places_cache(&state.paths);
                 crate::session_chat_queue::forget_session_chat_queue(db, &project_id, None)?;
                 crate::chat_message_numbers::forget(db, &project_id, None);
                 crate::session_chat_queue_attachments::sweep(&state.paths, db);
@@ -400,6 +406,9 @@ pub(super) async fn route_projects_http(
                                 },
                             )?
                         };
+                        if !flag("dryRun") {
+                            invalidate_places_cache(&worker_state.paths);
+                        }
                         for touched_id in &touched {
                             schedule_presentation_project_delta(
                                 &worker_state,

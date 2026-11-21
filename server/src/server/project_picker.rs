@@ -50,12 +50,20 @@ fn details_cache() -> &'static Mutex<HashMap<PathBuf, CachedDetails>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn read_small_file(path: &Path) -> Option<String> {
+    let metadata = fs::metadata(path).ok()?;
+    if !metadata.is_file() || metadata.len() > 4096 {
+        return None;
+    }
+    fs::read_to_string(path).ok()
+}
+
 /// The branch a repository's HEAD names, or the short commit of a detached HEAD. A `.git` file
 /// (a worktree or a submodule) points at the real git folder.
 fn read_git_branch(folder: &Path) -> Option<String> {
     let dot_git = folder.join(".git");
     let git_dir = if dot_git.is_file() {
-        let text = fs::read_to_string(&dot_git).ok()?;
+        let text = read_small_file(&dot_git)?;
         let target = text.trim().strip_prefix("gitdir:")?.trim().to_string();
         let target = PathBuf::from(target);
         if target.is_absolute() {
@@ -66,7 +74,7 @@ fn read_git_branch(folder: &Path) -> Option<String> {
     } else {
         dot_git
     };
-    let head = fs::read_to_string(git_dir.join("HEAD")).ok()?;
+    let head = read_small_file(&git_dir.join("HEAD"))?;
     let head = head.trim();
     match head.strip_prefix("ref:") {
         Some(reference) => Some(
@@ -76,7 +84,12 @@ fn read_git_branch(folder: &Path) -> Option<String> {
                 .unwrap_or(reference.trim())
                 .to_string(),
         ),
-        None if head.len() >= 7 => Some(head[..7].to_string()),
+        None if head.len() >= 7
+            && head.is_ascii()
+            && head.bytes().all(|byte| byte.is_ascii_hexdigit()) =>
+        {
+            head.get(..7).map(str::to_string)
+        }
         None => None,
     }
 }
@@ -150,6 +163,9 @@ fn read_folder_details(folder: &Path) -> FolderDetails {
 
 /// A folder's details, from the cache while the folder is unchanged and the entry is fresh.
 pub(crate) fn folder_details(folder: &Path) -> FolderDetails {
+    if is_network_filesystem(folder) {
+        return FolderDetails::default();
+    }
     let modified = fs::metadata(folder)
         .and_then(|metadata| metadata.modified())
         .ok();
@@ -345,16 +361,33 @@ fn store_file(paths: &GxserverPaths) -> PathBuf {
     paths.root_dir.join("project-picker.json")
 }
 
-fn read_store(paths: &GxserverPaths) -> PickerStore {
+fn read_store_locked(paths: &GxserverPaths) -> PickerStore {
     fs::read_to_string(store_file(paths))
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default()
 }
 
-fn write_store(paths: &GxserverPaths, store: &PickerStore) {
-    if let Ok(text) = serde_json::to_string_pretty(store) {
-        let _ = fs::write(store_file(paths), text);
+fn read_store(paths: &GxserverPaths) -> PickerStore {
+    let _guard = store_lock().lock();
+    read_store_locked(paths)
+}
+
+fn write_store_locked(paths: &GxserverPaths, store: &PickerStore) {
+    static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let Ok(text) = serde_json::to_string_pretty(store) else {
+        return;
+    };
+    let target = store_file(paths);
+    let seq = TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let temp = paths.root_dir.join(format!(
+        "project-picker.json.tmp.{}.{seq}",
+        std::process::id()
+    ));
+    if fs::write(&temp, text).is_ok() {
+        if fs::rename(&temp, &target).is_err() {
+            let _ = fs::remove_file(&temp);
+        }
     }
 }
 
@@ -365,9 +398,7 @@ fn store_lock() -> &'static Mutex<()> {
 
 /// A project was added from this folder: it leads the picker's Recent list.
 pub(crate) fn note_recent_location(paths: &GxserverPaths, project_path: &str) {
-    if let Ok(mut cache) = places_cache().lock() {
-        *cache = None;
-    }
+    invalidate_places_cache(paths);
     let Some(parent) = Path::new(project_path).parent() else {
         return;
     };
@@ -376,11 +407,11 @@ pub(crate) fn note_recent_location(paths: &GxserverPaths, project_path: &str) {
         return;
     }
     let _guard = store_lock().lock();
-    let mut store = read_store(paths);
+    let mut store = read_store_locked(paths);
     store.recent.retain(|existing| existing != &parent);
     store.recent.insert(0, parent);
     store.recent.truncate(RECENT_MAX);
-    write_store(paths, &store);
+    write_store_locked(paths, &store);
 }
 
 fn place(name: impl Into<String>, path: &Path) -> Value {
@@ -411,7 +442,7 @@ fn volumes(_home: &Path) -> Vec<Value> {
             if name.starts_with('.') {
                 continue;
             }
-            if fs::canonicalize(&path).ok().as_deref() == Some(Path::new("/")) {
+            if fs::read_link(&path).ok().as_deref() == Some(Path::new("/")) {
                 root_name = Some(name);
                 continue;
             }
@@ -496,23 +527,28 @@ fn volumes(_home: &Path) -> Vec<Value> {
         let root = format!("{letter}:\\");
         let wide: Vec<u16> = root.encode_utf16().chain(std::iter::once(0)).collect();
         let drive_type = unsafe { GetDriveTypeW(wide.as_ptr()) };
-        let mut label = [0u16; 261];
-        let read = unsafe {
-            GetVolumeInformationW(
-                wide.as_ptr(),
-                label.as_mut_ptr(),
-                label.len() as u32,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                0,
-            )
-        } != 0;
-        let label = if read {
-            String::from_utf16_lossy(&label[..label.iter().position(|c| *c == 0).unwrap_or(0)])
-        } else {
+        // Querying a disconnected network share or empty optical drive can block for 15-30s.
+        let label = if matches!(drive_type, 4 | 5) {
             String::new()
+        } else {
+            let mut label = [0u16; 261];
+            let read = unsafe {
+                GetVolumeInformationW(
+                    wide.as_ptr(),
+                    label.as_mut_ptr(),
+                    label.len() as u32,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    0,
+                )
+            } != 0;
+            if read {
+                String::from_utf16_lossy(&label[..label.iter().position(|c| *c == 0).unwrap_or(0)])
+            } else {
+                String::new()
+            }
         };
         let (fallback, kind) = match drive_type {
             2 => ("USB Drive", "external"),
@@ -600,12 +636,15 @@ fn is_skipped_home_folder(name: &str) -> bool {
 }
 
 fn count_repositories(folder: &Path, started: Instant) -> usize {
+    if is_network_filesystem(folder) {
+        return 0;
+    }
     let Ok(dirents) = fs::read_dir(folder) else {
         return 0;
     };
     let mut count = 0;
     for dirent in dirents.flatten().take(300) {
-        if started.elapsed() > PLACES_SCAN_BUDGET {
+        if count >= REPO_PARENT_MIN || started.elapsed() > PLACES_SCAN_BUDGET {
             break;
         }
         if dirent.path().join(".git").exists() {
@@ -627,6 +666,7 @@ fn repository_parents(home: &Path, known: &HashSet<PathBuf>) -> Vec<Value> {
         .filter(|dirent| dirent.file_type().is_ok_and(|kind| kind.is_dir()))
         .filter(|dirent| !is_skipped_home_folder(&dirent.file_name().to_string_lossy()))
         .map(|dirent| dirent.path())
+        .filter(|path| !is_network_filesystem(path))
         .collect();
     first_level.sort();
     let mut candidates = first_level.clone();
@@ -635,22 +675,32 @@ fn repository_parents(home: &Path, known: &HashSet<PathBuf>) -> Vec<Value> {
             break;
         }
         if let Ok(children) = fs::read_dir(folder) {
-            candidates.extend(
-                children
-                    .flatten()
-                    .take(60)
-                    .filter(|dirent| dirent.file_type().is_ok_and(|kind| kind.is_dir()))
-                    .filter(|dirent| !dirent.file_name().to_string_lossy().starts_with('.'))
-                    .filter(|dirent| !dirent.path().join(".git").exists())
-                    .map(|dirent| dirent.path()),
-            );
+            for dirent in children.flatten().take(60) {
+                if started.elapsed() > PLACES_SCAN_BUDGET {
+                    break;
+                }
+                if !dirent.file_type().is_ok_and(|kind| kind.is_dir()) {
+                    continue;
+                }
+                if dirent.file_name().to_string_lossy().starts_with('.') {
+                    continue;
+                }
+                let path = dirent.path();
+                if is_network_filesystem(&path) || path.join(".git").exists() {
+                    continue;
+                }
+                candidates.push(path);
+            }
         }
     }
     for candidate in candidates {
         if out.len() >= REPO_PARENTS_MAX || started.elapsed() > PLACES_SCAN_BUDGET {
             break;
         }
-        if known.contains(&candidate) || candidate.join(".git").exists() {
+        if known.contains(&candidate)
+            || is_network_filesystem(&candidate)
+            || candidate.join(".git").exists()
+        {
             continue;
         }
         if count_repositories(&candidate, started) >= REPO_PARENT_MIN {
@@ -743,7 +793,7 @@ fn is_app_storage(path: &Path, home: &Path) -> bool {
 
 /// Folders other coding apps on this computer opened recently, read from their own recent lists:
 /// agent CLIs' per-folder settings and code editors' recent folders. Read only.
-fn other_app_folders(home: &Path) -> Vec<PathBuf> {
+fn other_app_folders(home: &Path, started: Instant) -> Vec<PathBuf> {
     let mut candidates: Vec<String> = Vec::new();
     let agent_settings = read_capped(&home.join(".claude.json"))
         .and_then(|text| serde_json::from_str::<Value>(&text).ok());
@@ -804,28 +854,39 @@ fn other_app_folders(home: &Path) -> Vec<PathBuf> {
         }
     }
     let mut seen = HashSet::new();
-    candidates
-        .into_iter()
-        .map(|candidate| PathBuf::from(trim_path_text(&candidate)))
-        .filter(|path| path.is_absolute() && path != home)
-        .filter(|path| {
-            // Temporary folders and the agent apps' own worktree folders are not projects.
-            !path.components().any(|part| {
-                let part = part.as_os_str().to_string_lossy();
-                part.starts_with('.') || part == "tmp" || part == "T"
-            })
-        })
-        .filter(|path| seen.insert(path.clone()))
-        .filter(|path| !is_app_storage(path, home))
-        .take(400)
-        .filter(|path| path.is_dir())
+    let mut out = Vec::new();
+    for candidate in candidates {
+        if started.elapsed() > PLACES_SCAN_BUDGET {
+            break;
+        }
+        let path = PathBuf::from(trim_path_text(&candidate));
+        if !path.is_absolute() || path == home {
+            continue;
+        }
+        // Temporary folders and the agent apps' own worktree folders are not projects.
+        if path.components().any(|part| {
+            let part = part.as_os_str().to_string_lossy();
+            part.starts_with('.') || part == "tmp" || part == "T"
+        }) {
+            continue;
+        }
+        if !seen.insert(path.clone()) || is_app_storage(&path, home) {
+            continue;
+        }
+        if seen.len() > 400 {
+            break;
+        }
+        if is_network_filesystem(&path) || !path.is_dir() {
+            continue;
+        }
         // Only folders that look like a project: a repository or a folder with a manifest, not
         // the folders that hold projects or an app's own storage.
-        .filter(|path| {
-            let details = folder_details(path);
-            !details.linked && (details.git || details.language.is_some())
-        })
-        .collect()
+        let details = folder_details(&path);
+        if !details.linked && (details.git || details.language.is_some()) {
+            out.push(path);
+        }
+    }
+    out
 }
 
 #[derive(Clone)]
@@ -834,9 +895,15 @@ struct CachedPlaces {
     value: Value,
 }
 
-fn places_cache() -> &'static Mutex<Option<CachedPlaces>> {
-    static CACHE: OnceLock<Mutex<Option<CachedPlaces>>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(None))
+fn places_cache() -> &'static Mutex<HashMap<PathBuf, CachedPlaces>> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, CachedPlaces>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub(crate) fn invalidate_places_cache(paths: &GxserverPaths) {
+    if let Ok(mut cache) = places_cache().lock() {
+        cache.remove(&paths.root_dir);
+    }
 }
 
 fn modified_desc(paths: &mut [PathBuf]) {
@@ -850,10 +917,11 @@ fn modified_desc(paths: &mut [PathBuf]) {
 }
 
 /// The scanned places (disks, folders, other apps, suggestions), cached for a short while.
-fn scanned_places(home: &Path, registered: &HashMap<String, String>) -> Value {
+fn scanned_places(paths: &GxserverPaths, registered: &HashMap<String, String>) -> Value {
+    let home = &paths.home_dir;
     if let Ok(cache) = places_cache().lock() {
         if let Some(cached) = cache
-            .as_ref()
+            .get(&paths.root_dir)
             .filter(|cached| cached.read_at.elapsed() < PLACES_TTL)
         {
             return cached.value.clone();
@@ -890,7 +958,8 @@ fn scanned_places(home: &Path, registered: &HashMap<String, String>) -> Value {
         }
         project_folders.push(parent);
     }
-    let mut others: Vec<PathBuf> = other_app_folders(home)
+    let other_apps_started = Instant::now();
+    let mut others: Vec<PathBuf> = other_app_folders(home, other_apps_started)
         .into_iter()
         .filter(|path| !registered.contains_key(&path_to_string(path)))
         .collect();
@@ -903,7 +972,11 @@ fn scanned_places(home: &Path, registered: &HashMap<String, String>) -> Value {
     let started = Instant::now();
     let mut suggested: Vec<Value> = Vec::new();
     let mut suggested_paths = HashSet::new();
-    let mut push_suggestion = |path: &Path, source: &str, from: Option<&str>| {
+    let push_suggestion = |suggested: &mut Vec<Value>,
+                           suggested_paths: &mut HashSet<PathBuf>,
+                           path: &Path,
+                           source: &str,
+                           from: Option<&str>| {
         if suggested.len() >= SUGGESTED_MAX
             || started.elapsed() > PLACES_SCAN_BUDGET
             || registered.contains_key(&path_to_string(path))
@@ -926,12 +999,24 @@ fn scanned_places(home: &Path, registered: &HashMap<String, String>) -> Value {
         }));
     };
     for path in &others {
-        push_suggestion(path, "otherApps", None);
+        push_suggestion(
+            &mut suggested,
+            &mut suggested_paths,
+            path,
+            "otherApps",
+            None,
+        );
     }
     for folder in &project_folders {
+        if suggested.len() >= SUGGESTED_MAX || started.elapsed() > PLACES_SCAN_BUDGET {
+            break;
+        }
         let Some(folder_path) = folder["path"].as_str().map(PathBuf::from) else {
             continue;
         };
+        if is_network_filesystem(&folder_path) {
+            continue;
+        }
         let folder_label = folder_name(&folder_path);
         let Ok(dirents) = fs::read_dir(&folder_path) else {
             continue;
@@ -944,7 +1029,16 @@ fn scanned_places(home: &Path, registered: &HashMap<String, String>) -> Value {
             .collect();
         modified_desc(&mut children);
         for child in children {
-            push_suggestion(&child, "projectFolder", Some(&folder_label));
+            if suggested.len() >= SUGGESTED_MAX || started.elapsed() > PLACES_SCAN_BUDGET {
+                break;
+            }
+            push_suggestion(
+                &mut suggested,
+                &mut suggested_paths,
+                &child,
+                "projectFolder",
+                Some(&folder_label),
+            );
         }
     }
     let value = json!({
@@ -955,10 +1049,13 @@ fn scanned_places(home: &Path, registered: &HashMap<String, String>) -> Value {
         "suggested": suggested,
     });
     if let Ok(mut cache) = places_cache().lock() {
-        *cache = Some(CachedPlaces {
-            read_at: Instant::now(),
-            value: value.clone(),
-        });
+        cache.insert(
+            paths.root_dir.clone(),
+            CachedPlaces {
+                read_at: Instant::now(),
+                value: value.clone(),
+            },
+        );
     }
     value
 }
@@ -979,37 +1076,41 @@ fn project_picker_places(
     params: &Map<String, Value>,
 ) -> std::result::Result<Value, String> {
     let home = paths.home_dir.clone();
-    if let Some(pin) = params.get("pin").and_then(Value::as_str) {
-        let path = PathBuf::from(expand_user_path(pin.trim(), &home));
-        if !path.is_absolute() || !path.is_dir() {
-            return Err("Only an existing folder can be pinned.".to_string());
-        }
-        let text = path_to_string(&path);
+    if let Some(pin) = params.get("pin").filter(|value| !value.is_null()) {
+        let checked =
+            normalize_browse_path_input(Some(pin), "pin").map_err(|error| error.message)?;
+        let normalized = normalize_existing_directory_path(Some(&json!(checked)), "pin", &home)
+            .map_err(|error| error.message)?;
+        let text = trim_path_text(&normalized);
         let _guard = store_lock().lock();
-        let mut store = read_store(paths);
-        store.pinned.retain(|existing| existing != &text);
+        let mut store = read_store_locked(paths);
+        store
+            .pinned
+            .retain(|existing| trim_path_text(existing) != text);
         store.pinned.push(text);
         if store.pinned.len() > PINNED_MAX {
             store.pinned.remove(0);
         }
-        write_store(paths, &store);
+        write_store_locked(paths, &store);
     }
-    if let Some(unpin) = params.get("unpin").and_then(Value::as_str) {
-        let text = trim_path_text(unpin.trim());
+    if let Some(unpin) = params.get("unpin").filter(|value| !value.is_null()) {
+        let checked =
+            normalize_browse_path_input(Some(unpin), "unpin").map_err(|error| error.message)?;
+        let normalized = normalize_absolute_path(Some(&json!(checked)), "unpin", &home)
+            .map_err(|error| error.message)?;
+        let text = trim_path_text(&normalized);
         let _guard = store_lock().lock();
-        let mut store = read_store(paths);
+        let mut store = read_store_locked(paths);
         store
             .pinned
             .retain(|existing| trim_path_text(existing) != text);
-        write_store(paths, &store);
+        write_store_locked(paths, &store);
     }
     if params.get("refresh").and_then(Value::as_bool) == Some(true) {
-        if let Ok(mut cache) = places_cache().lock() {
-            *cache = None;
-        }
+        invalidate_places_cache(paths);
     }
     let registered = registered_project_paths_for(paths, server_id);
-    let mut value = scanned_places(&home, &registered);
+    let mut value = scanned_places(paths, &registered);
     let store = read_store(paths);
     let platform = if cfg!(target_os = "macos") {
         "darwin"

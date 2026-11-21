@@ -10,9 +10,11 @@ use super::model::*;
 use super::new_project::*;
 use super::paths::*;
 use gpui::{
-    App, AppContext as _, Context, Entity, FocusHandle, ScrollHandle, Subscription, Window,
+    App, AppContext as _, Bounds, Context, Entity, FocusHandle, Pixels, ScrollHandle, Subscription,
+    Window,
 };
 use gpui_component::input::{InputEvent, InputState};
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
@@ -195,27 +197,45 @@ pub(super) enum Pending {
     },
     Places {
         machine_id: String,
+        seq: u64,
+        is_pin_change: bool,
     },
     Discovery {
         machine_id: String,
         generation: u64,
     },
     Lookup {
+        machine_id: String,
+        generation: u64,
         parsed: Option<DetectedCloneInput>,
     },
     Preview {
+        machine_id: String,
+        generation: u64,
         destination_path: String,
     },
-    StartClone,
+    StartClone {
+        machine_id: String,
+        generation: u64,
+    },
     ReadCloneJob {
+        machine_id: String,
+        generation: u64,
         job_id: String,
     },
-    CancelCloneJob,
+    CancelCloneJob {
+        machine_id: String,
+        generation: u64,
+    },
     Add {
+        machine_id: String,
         after_clone: bool,
+        generation: u64,
     },
     CreateFolder {
+        machine_id: String,
         parent: String,
+        generation: u64,
     },
     /// `installSourceControlTool` / `readSourceControlTool` (tool_install.rs).
     ToolInstall {
@@ -256,9 +276,12 @@ pub(crate) struct GpuiAddProjectModalWindow {
     /// Folder listings by `machine\nfolder`, for the columns.
     pub(super) listings: HashMap<String, AddProjectBrowseResult>,
     pending_columns: HashSet<String>,
+    /// Columns whose listing failed transiently; cleared when the user navigates.
+    pub(super) failed_columns: HashSet<String>,
     /// The sidebar's places by machine (`None`: the machine could not say, an older gxserver).
     pub(super) places: HashMap<String, Option<AddProjectPlaces>>,
     pending_places: HashSet<String>,
+    pub(super) places_seq: HashMap<String, u64>,
     /// The last folder the machine resolved, kept while the next listing loads.
     pub(super) last_selected_folder: Option<String>,
     pub(super) clone_source: AddProjectSourceId,
@@ -301,7 +324,9 @@ pub(crate) struct GpuiAddProjectModalWindow {
     pub(super) repo_input: Entity<InputState>,
     pub(super) project_name_input: Entity<InputState>,
     pub(super) sidebar_scroll: ScrollHandle,
+    pub(super) open_column_scroll: ScrollHandle,
     pub(super) sheet_scroll: ScrollHandle,
+    pub(super) machine_button_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     pub(super) focus_handle: FocusHandle,
     pub(super) clone_job_poll_interval: Duration,
     pub(super) background_clone: bool,
@@ -313,6 +338,8 @@ pub(crate) struct GpuiAddProjectModalWindow {
     discovery_key: Option<String>,
     discovery_generation: u64,
     busy_generation: u64,
+    pub(super) clone_generation: u64,
+    pub(super) machine_generation: u64,
     branch_input_disabled: bool,
     repo_placeholder: String,
     _subscriptions: Vec<Subscription>,
@@ -388,6 +415,7 @@ impl GpuiAddProjectModalWindow {
             on_change(&branch_input, window, cx, |this, value, _window, cx| {
                 this.clone_options.branch_name = value;
                 this.clone_preview = None;
+                this.clone_generation += 1;
                 this.error = None;
                 cx.notify();
             }),
@@ -452,8 +480,10 @@ impl GpuiAddProjectModalWindow {
             root_at_start: true,
             listings: HashMap::new(),
             pending_columns: HashSet::new(),
+            failed_columns: HashSet::new(),
             places: HashMap::new(),
             pending_places: HashSet::new(),
+            places_seq: HashMap::new(),
             last_selected_folder: None,
             clone_source: AddProjectSourceId::Url,
             clone_repo_text: String::new(),
@@ -487,7 +517,9 @@ impl GpuiAddProjectModalWindow {
             repo_input,
             project_name_input,
             sidebar_scroll: ScrollHandle::new(),
+            open_column_scroll: ScrollHandle::new(),
             sheet_scroll: ScrollHandle::new(),
+            machine_button_bounds: Rc::new(Cell::new(None)),
             focus_handle: cx.focus_handle(),
             clone_job_poll_interval: config.clone_job_poll_interval,
             background_clone: config.background_clone,
@@ -499,6 +531,8 @@ impl GpuiAddProjectModalWindow {
             discovery_key: None,
             discovery_generation: 0,
             busy_generation: 0,
+            clone_generation: 0,
+            machine_generation: 0,
             branch_input_disabled: false,
             repo_placeholder: String::new(),
             _subscriptions: subscriptions,
@@ -567,12 +601,19 @@ impl GpuiAddProjectModalWindow {
         // The sidebar's places, once per machine.
         if !self.places.contains_key(&machine_id) && !self.pending_places.contains(&machine_id) {
             self.pending_places.insert(machine_id.clone());
+            let seq = {
+                let entry = self.places_seq.entry(machine_id.clone()).or_insert(0);
+                *entry += 1;
+                *entry
+            };
             self.request(
                 "places",
                 &machine_id,
                 serde_json::json!({}),
                 Pending::Places {
                     machine_id: machine_id.clone(),
+                    seq,
+                    is_pin_change: false,
                 },
                 cx,
             );
@@ -600,6 +641,8 @@ impl GpuiAddProjectModalWindow {
                     },
                     cx,
                 );
+            } else {
+                self.pending_discovery_machine_id = None;
             }
         }
 
@@ -658,7 +701,10 @@ impl GpuiAddProjectModalWindow {
         // The columns' ancestor folders.
         for folder in self.column_folders(&d) {
             let key = listing_key(&machine_id, &folder);
-            if self.listings.contains_key(&key) || self.pending_columns.contains(&key) {
+            if self.listings.contains_key(&key)
+                || self.pending_columns.contains(&key)
+                || self.failed_columns.contains(&key)
+            {
                 continue;
             }
             self.pending_columns.insert(key.clone());
@@ -704,12 +750,18 @@ impl GpuiAddProjectModalWindow {
                     machine_id: target,
                 }) => {
                     if let Some(target) = target.filter(|target| target != &machine_id) {
+                        if self.busy.is_some() {
+                            return false;
+                        }
                         self.machine_id = Some(target);
+                        self.reset_for_machine();
                         self.column_root = None;
                     }
                     if query != self.query {
                         self.query = query;
                         self.highlight = None;
+                        self.failed_columns.clear();
+                        self.clone_generation += 1;
                         return true;
                     }
                 }
@@ -842,23 +894,40 @@ impl GpuiAddProjectModalWindow {
             }
             Pending::Column { key } => {
                 self.pending_columns.remove(&key);
-                // A folder that cannot be listed shows as an empty column.
-                let listing = result
-                    .and_then(|value| read_add_project_browse_result(&value))
-                    .unwrap_or(AddProjectBrowseResult {
-                        entries: Vec::new(),
-                        is_drive_list: false,
-                        parent_path: String::new(),
-                        inspection: None,
-                    });
-                self.listings.insert(key, listing);
+                match result.and_then(|value| read_add_project_browse_result(&value)) {
+                    Ok(listing) => {
+                        self.failed_columns.remove(&key);
+                        self.listings.insert(key, listing);
+                    }
+                    Err(_) => {
+                        self.failed_columns.insert(key);
+                    }
+                }
             }
-            Pending::Places { machine_id } => {
+            Pending::Places {
+                machine_id,
+                seq,
+                is_pin_change,
+            } => {
+                if self.places_seq.get(&machine_id).copied() != Some(seq) {
+                    return;
+                }
                 self.pending_places.remove(&machine_id);
-                let places = result
-                    .ok()
-                    .and_then(|value| read_add_project_places(&value).ok());
-                self.places.insert(machine_id, places);
+                match result.and_then(|value| read_add_project_places(&value)) {
+                    Ok(places) => {
+                        self.places.insert(machine_id, Some(places));
+                    }
+                    Err(error) => {
+                        if is_pin_change {
+                            self.error = Some(describe_add_project_error(
+                                &error,
+                                "Unable to update pinned folders.",
+                            ));
+                        } else if !self.places.contains_key(&machine_id) {
+                            self.places.insert(machine_id, None);
+                        }
+                    }
+                }
             }
             Pending::Discovery {
                 machine_id,
@@ -873,7 +942,17 @@ impl GpuiAddProjectModalWindow {
                 self.discovery.insert(machine_id, discovery);
                 self.pending_discovery_machine_id = None;
             }
-            Pending::Lookup { parsed } => {
+            Pending::Lookup {
+                machine_id,
+                generation,
+                parsed,
+            } => {
+                if self.sheet != Some(Sheet::Clone)
+                    || self.machine_id.as_deref() != Some(machine_id.as_str())
+                    || generation != self.clone_generation
+                {
+                    return;
+                }
                 self.set_busy(None, cx);
                 match result.and_then(|value| read_add_project_repository(&value)) {
                     Ok(repository) => {
@@ -901,7 +980,17 @@ impl GpuiAddProjectModalWindow {
                     }
                 }
             }
-            Pending::Preview { destination_path } => {
+            Pending::Preview {
+                machine_id,
+                generation,
+                destination_path,
+            } => {
+                if self.sheet != Some(Sheet::Clone)
+                    || self.machine_id.as_deref() != Some(machine_id.as_str())
+                    || generation != self.clone_generation
+                {
+                    return;
+                }
                 self.set_busy(None, cx);
                 match result.and_then(|value| read_add_project_clone_preview(&value)) {
                     Ok(preview) => {
@@ -922,11 +1011,19 @@ impl GpuiAddProjectModalWindow {
                     }
                 }
             }
-            Pending::StartClone => {
+            Pending::StartClone {
+                machine_id,
+                generation,
+            } => {
+                if self.machine_id.as_deref() != Some(machine_id.as_str())
+                    || generation != self.clone_generation
+                {
+                    return;
+                }
                 match result.and_then(|value| read_add_project_clone_handle(&value)) {
                     Ok(job_id) => {
                         self.clone_job_id = Some(job_id.clone());
-                        self.read_clone_job(job_id, cx);
+                        self.read_clone_job(machine_id, generation, job_id, cx);
                     }
                     Err(error) => self.finish_clone(
                         Some(describe_add_project_error(&error, "Clone failed.")),
@@ -934,16 +1031,33 @@ impl GpuiAddProjectModalWindow {
                     ),
                 }
             }
-            Pending::ReadCloneJob { job_id } => {
+            Pending::ReadCloneJob {
+                machine_id,
+                generation,
+                job_id,
+            } => {
+                if self.machine_id.as_deref() != Some(machine_id.as_str())
+                    || generation != self.clone_generation
+                {
+                    return;
+                }
                 match result.and_then(|value| read_add_project_clone_job(&value)) {
-                    Ok(job) => self.receive_clone_job(job_id, job, cx),
+                    Ok(job) => self.receive_clone_job(machine_id, generation, job_id, job, cx),
                     Err(error) => self.finish_clone(
                         Some(describe_add_project_error(&error, "Clone failed.")),
                         cx,
                     ),
                 }
             }
-            Pending::CancelCloneJob => {
+            Pending::CancelCloneJob {
+                machine_id,
+                generation,
+            } => {
+                if self.machine_id.as_deref() != Some(machine_id.as_str())
+                    || generation != self.clone_generation
+                {
+                    return;
+                }
                 if let Err(error) = result {
                     self.error = Some(describe_add_project_error(
                         &error,
@@ -951,7 +1065,20 @@ impl GpuiAddProjectModalWindow {
                     ));
                 }
             }
-            Pending::Add { after_clone } => {
+            Pending::Add {
+                machine_id,
+                after_clone,
+                generation,
+            } => {
+                let expected = if after_clone {
+                    self.clone_generation
+                } else {
+                    self.machine_generation
+                };
+                if self.machine_id.as_deref() != Some(machine_id.as_str()) || generation != expected
+                {
+                    return;
+                }
                 match result.and_then(|value| read_add_project_add_result(&value)) {
                     Ok(()) => {
                         // The app activates the new project.
@@ -978,7 +1105,19 @@ impl GpuiAddProjectModalWindow {
             Pending::NewProjectInspect { key } => {
                 self.receive_new_project_inspection(key, result);
             }
-            Pending::CreateFolder { parent } => {
+            Pending::CreateFolder {
+                machine_id,
+                parent,
+                generation,
+            } => {
+                if result.is_ok() {
+                    self.listings.remove(&listing_key(&machine_id, &parent));
+                }
+                if self.machine_id.as_deref() != Some(machine_id.as_str())
+                    || generation != self.machine_generation
+                {
+                    return;
+                }
                 self.set_busy(None, cx);
                 match result.and_then(|value| read_add_project_created_directory(&value)) {
                     Ok(path) => {
@@ -988,9 +1127,6 @@ impl GpuiAddProjectModalWindow {
                         Add project, New project and Clone a repo all act on it next. Its parent's
                         listing is read again so the column has it.
                         */
-                        if let Some(machine_id) = self.machine_id.clone() {
-                            self.listings.remove(&listing_key(&machine_id, &parent));
-                        }
                         self.new_folder_name = None;
                         self.created_folder = Some(trim_folder(&path));
                         self.highlight = None;
@@ -1011,21 +1147,30 @@ impl GpuiAddProjectModalWindow {
         self.settle(window, cx);
     }
 
-    fn read_clone_job(&mut self, job_id: String, cx: &mut Context<Self>) {
-        let Some(machine_id) = self.machine_id.clone() else {
-            return;
-        };
+    fn read_clone_job(
+        &mut self,
+        machine_id: String,
+        generation: u64,
+        job_id: String,
+        cx: &mut Context<Self>,
+    ) {
         self.request(
             "readCloneJob",
             &machine_id,
             serde_json::json!({ "jobId": job_id }),
-            Pending::ReadCloneJob { job_id },
+            Pending::ReadCloneJob {
+                machine_id: machine_id.clone(),
+                generation,
+                job_id,
+            },
             cx,
         );
     }
 
     fn receive_clone_job(
         &mut self,
+        machine_id: String,
+        generation: u64,
         job_id: String,
         job: AddProjectCloneJob,
         cx: &mut Context<Self>,
@@ -1041,8 +1186,11 @@ impl GpuiAddProjectModalWindow {
                 cx.spawn(async move |this, cx| {
                     cx.background_executor().timer(delay).await;
                     let _ = this.update(cx, |this, cx| {
-                        if this.clone_job_id.as_deref() == Some(job_id.as_str()) {
-                            this.read_clone_job(job_id, cx);
+                        if this.clone_job_id.as_deref() == Some(job_id.as_str())
+                            && this.machine_id.as_deref() == Some(machine_id.as_str())
+                            && this.clone_generation == generation
+                        {
+                            this.read_clone_job(machine_id, generation, job_id, cx);
                         }
                     });
                 })
@@ -1075,7 +1223,7 @@ impl GpuiAddProjectModalWindow {
                     );
                     return;
                 }
-                self.register_project(cloned, false, true, cx);
+                self.register_project_on(machine_id, cloned, false, true, generation, cx);
             }
         }
     }

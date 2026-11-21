@@ -16,7 +16,6 @@ impl GpuiAddProjectModalWindow {
             .filtered
             .filtered
             .iter()
-            .filter(|entry| !entry.name.starts_with('.'))
             .map(|entry| entry.full_path.clone())
             .collect();
         if entries.is_empty() {
@@ -34,6 +33,7 @@ impl GpuiAddProjectModalWindow {
             }
         };
         self.highlight = Some(entries[next].clone());
+        self.open_column_scroll.scroll_to_item(next);
         cx.notify();
     }
 
@@ -50,8 +50,14 @@ impl GpuiAddProjectModalWindow {
             self.submit_new_folder(window, cx);
             return;
         }
+        if self.suggested_mode {
+            return;
+        }
         let d = self.derive();
         if primary {
+            if self.sheet.is_some() {
+                return;
+            }
             self.submit_resolved_path(window, cx);
             return;
         }
@@ -78,6 +84,9 @@ impl GpuiAddProjectModalWindow {
         {
             self.open_column_entry(&path);
             self.settle(window, cx);
+            return;
+        }
+        if self.sheet.is_some() {
             return;
         }
         self.submit_resolved_path(window, cx);

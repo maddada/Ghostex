@@ -607,6 +607,7 @@ impl GpuiAddProjectModalWindow {
         };
         self.error = None;
         self.set_busy(Some(Busy::Add), cx);
+        let generation = self.machine_generation;
         self.request(
             "add",
             &form.machine_id,
@@ -620,7 +621,11 @@ impl GpuiAddProjectModalWindow {
                     "start": form.start.wire(),
                 },
             }),
-            Pending::Add { after_clone: false },
+            Pending::Add {
+                machine_id: form.machine_id.clone(),
+                after_clone: false,
+                generation,
+            },
             cx,
         );
         self.settle(window, cx);

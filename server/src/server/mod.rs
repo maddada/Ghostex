@@ -222,7 +222,8 @@ pub(crate) use presentation_delta::*;
 pub(crate) use project_paths::*;
 pub(crate) use project_picker::{
     add_entry_details, enclosing_repository_root, folder_details,
-    handle_project_picker_places_http, note_recent_location,
+    handle_project_picker_places_http, invalidate_places_cache, is_network_filesystem,
+    note_recent_location,
 };
 use route_http::*;
 pub(crate) use session_remove::remove_session_row;
