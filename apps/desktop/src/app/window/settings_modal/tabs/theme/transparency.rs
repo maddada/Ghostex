@@ -83,7 +83,10 @@ const SOURCE_CARDS: [(&str, &str, &str); 4] = [
 ];
 
 /// The keys the Transparency card shows outside its More row.
-const MAIN_KEYS: [&str; 10] = [
+const MAIN_KEYS: [&str; 13] = [
+    "windowArt",
+    "windowArtDim",
+    "windowArtBlur",
     "windowGlass",
     "windowGlassBlurRadius",
     "windowGlassWindowsBlur",
@@ -262,6 +265,9 @@ impl ThemeTab {
         let single = dark_only || same;
         let note = status_note(t.glass_blocked);
         let mut rows: Vec<AnyElement> = Vec::new();
+        let art = values.string("windowArt");
+        let art_on = !art.is_empty() && art != "none";
+        rows.extend(self.art_rows(t, art_on, window, cx));
         // A search hit on a glass row while transparency is Off shows the control that turns it on.
         if visible("windowGlass") || (t.searching && !glass_on) {
             let options = transparency_choices();
@@ -284,7 +290,9 @@ impl ThemeTab {
                 cx,
             ));
         }
-        if glass_on && visible("windowGlass") {
+        // Under an art theme Strength sets how much of the artwork shows through the sidebar and
+        // the work area (helpers/window_art.rs), whatever Transparency says.
+        if (glass_on || art_on) && visible("windowGlass") {
             let (exact, nearest) = strength_from_settings(&values);
             let saver: SliderSaver = Rc::new(
                 |store: &Entity<SettingsStore>, value, _commit, cx: &mut App| {
@@ -395,6 +403,74 @@ impl ThemeTab {
         }
         super::super::super::fields::settings_section(&p, "Glass", None, None, rows)
             .map(IntoElement::into_any_element)
+    }
+
+    /// Art behind the window, and while an art theme's artwork shows, its dimming and blur.
+    fn art_rows(
+        &mut self,
+        t: &ThemeCx,
+        art_on: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let p = t.p;
+        let values = t.values.clone();
+        let mut rows: Vec<AnyElement> = Vec::new();
+        if t.visible("windowArt") {
+            let options = settings_catalog().options(module::SETTINGS, "WINDOW_ART_OPTIONS");
+            let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
+            rows.push(select_field(
+                self,
+                &p,
+                "windowArt",
+                t.spec_plain(
+                    "windowArt",
+                    "Art behind the window",
+                    "An art theme's artwork behind the sidebar and the work area, in dark mode. The window stays solid, so your desktop never shows through. None goes back to the glass below.",
+                )
+                .icon(ICON_BEHIND_GLASS),
+                Some(reset_key::<Self>("windowArt")),
+                &options,
+                &values.choice("windowArt", &allowed),
+                None,
+                |page: &mut Self, next, _window, cx| page.save("windowArt", json!(next), cx),
+                window,
+                cx,
+            ));
+        }
+        for (key, title, subtitle) in [
+            (
+                "windowArtDim",
+                "Art dimming",
+                "How much the artwork is darkened, so text over it stays easy to read.",
+            ),
+            (
+                "windowArtBlur",
+                "Art blur",
+                "How soft the artwork looks, in points. 0 keeps it sharp.",
+            ),
+        ] {
+            if !art_on || !t.visible(key) {
+                continue;
+            }
+            let upper = if key == "windowArtDim" { "DIM" } else { "BLUR" };
+            rows.push(slider_number_field(
+                self,
+                &p,
+                t.spec(key, title, subtitle).dependent(),
+                Some(reset_key::<Self>(key)),
+                SliderBinding {
+                    key,
+                    min: number(&format!("MIN_WINDOW_ART_{upper}")),
+                    max: number(&format!("MAX_WINDOW_ART_{upper}")),
+                    step: 1.0,
+                },
+                values.f64(key),
+                window,
+                cx,
+            ));
+        }
+        rows
     }
 
     /// Behind the glass: the four picture cards, the Same for light and dark switch (`same`, absent

@@ -12,14 +12,23 @@ pub(crate) const THEME_HELP: &str =
     "Ghostex Theme - restyle Ghostex: read the look settings, change them, undo
 
 Usage:
+  gx theme list [--json]
+  gx theme apply <theme> [--json]
   gx theme [read] [--json]
   gx theme set <key>=<value> [<key>=<value> ...] [--dark|--light] [--json]
   gx theme undo [<change-id>] [--json]
   gx theme redo [<change-id>] [--json]
   gx theme history [--json]
 
-read     Every look setting on the Settings > Interface pages, grouped, with its current
-         value and what it does, and anything the current look makes hard to read.
+list     The themes of Settings > Themes, in its order: Default (Ghostex's own look),
+         the art themes (Moonwater, Glasshouse, Red Earth, Deep Current, Night
+         Garden, Nocturne Canyon: an artwork behind the sidebar and work area of
+         a solid window), then the agent-made looks. The applied one is marked.
+apply    Applies one theme by its id or name, as one change Undo puts back. The
+         themes are dark themes: an app set to Light switches to Dark.
+read     The themes, then every look setting on the Settings > Interface
+         pages, grouped, with its current value and what it does, and
+         anything the current look makes hard to read.
 set      Changes one or more look settings or theme colours as one change, saved
          at once in the running app. Values are read as `ghostex settings set`
          reads them.
@@ -46,7 +55,16 @@ Limits:
   result: make small changes and ask the user how it looks. A theme keeps
   the user's fonts: change a font only when the user asks for one.
 
+Art themes:
+  windowArt picks the artwork (none turns it off), windowArtDim darkens it
+  (0-90%) and windowArtBlur softens it (0-40 points). The glass tints
+  (windowGlassSidebarOpacityDark, windowGlassWorkAreaTintDark) set how much
+  of it shows through the sidebar and the work area. Art shows in dark mode.
+
 Examples:
+  gx theme apply moonwater
+  gx theme set windowArtDim=40
+  gx theme apply default
   gx theme set darkThemePreset=blue themeSidebarContrast=-6
   gx theme set --dark border=4% divider=3%
   gx theme set light.mutedText=#6b7280 accent=default
@@ -97,11 +115,50 @@ fn print_items(change: &Value, undone: bool) {
     }
 }
 
+/// The themes of Settings > Themes, one per line, the applied one marked.
+fn print_themes(themes: &Value) {
+    println!("Themes (apply one with `ghostex theme apply <id>`)");
+    let mut kind = "";
+    for theme in themes.as_array().into_iter().flatten() {
+        let this = if text(theme, "id") == ghostex_settings_catalog::DEFAULT_LOOK_ID {
+            ""
+        } else if theme["art"] == true {
+            "Art themes: an artwork behind a solid window"
+        } else {
+            "Agent-made looks"
+        };
+        if this != kind && !this.is_empty() {
+            println!("  {this}");
+            kind = this;
+        }
+        let mark = if theme["applied"] == true {
+            "  (applied)"
+        } else {
+            ""
+        };
+        println!("  {:<18} {}{mark}", text(theme, "id"), text(theme, "name"));
+    }
+    println!();
+}
+
+fn list(flags: &Flags) -> CliResult<()> {
+    let answer = theme(json!({ "op": "read" }), flags)?;
+    if flags.truthy("json") {
+        print_json(&json!({ "themes": answer["themes"] }));
+        return Ok(());
+    }
+    print_themes(&answer["themes"]);
+    Ok(())
+}
+
 fn read(flags: &Flags) -> CliResult<()> {
     let answer = theme(json!({ "op": "read" }), flags)?;
     if flags.truthy("json") {
         print_json(&answer);
         return Ok(());
+    }
+    if answer["themes"].is_array() {
+        print_themes(&answer["themes"]);
     }
     for group in answer["groups"].as_array().into_iter().flatten() {
         println!("{}", text(group, "title"));
@@ -180,6 +237,22 @@ fn appearance_flag(args: &[String]) -> (Option<&'static str>, Vec<String>) {
     (appearance, rest)
 }
 
+fn apply(rest: &[String], flags: &Flags) -> CliResult<()> {
+    // A two-word name ("Red Earth") may arrive as two arguments.
+    let wanted = rest.join(" ");
+    if wanted.trim().is_empty() {
+        return Err(CliError::Other(
+            "ghostex theme apply needs a theme: `ghostex theme list` shows them.".to_string(),
+        ));
+    }
+    let answer = theme(
+        with_caller(json!({ "op": "apply", "theme": wanted })),
+        flags,
+    )?;
+    let headline = format!("{} applied", text(&answer, "theme"));
+    print_change(answer, flags, &headline)
+}
+
 fn set(rest: &[String], flags: &Flags, appearance: Option<&str>) -> CliResult<()> {
     let mut changes = Map::new();
     for pair in rest {
@@ -209,6 +282,12 @@ fn set(rest: &[String], flags: &Flags, appearance: Option<&str>) -> CliResult<()
         with_caller(json!({ "op": "set", "changes": changes })),
         flags,
     )?;
+    print_change(answer, flags, "Theme changed")
+}
+
+/// What `set` and `apply` print: the change under `headline`, what it made hard to read, and in
+/// an agent's session the Theme changed card line.
+fn print_change(answer: Value, flags: &Flags, headline: &str) -> CliResult<()> {
     // The card is drawn in the chat of the agent that changed the look; your own terminal has none.
     let in_session = caller_session_from_env().is_some();
     if flags.truthy("json") {
@@ -226,7 +305,7 @@ fn set(rest: &[String], flags: &Flags, appearance: Option<&str>) -> CliResult<()
         return Ok(());
     }
     let change = &answer["change"];
-    println!("Theme changed ({}):", text(change, "changeId"));
+    println!("{headline} ({}):", text(change, "changeId"));
     print_items(change, false);
     print_warnings(
         "Saved, but hard to read (tell the user, or change it back):",
@@ -304,6 +383,8 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     let tail = rest.get(1..).unwrap_or_default();
     match verb {
         "read" | "show" | "get" => read(&flags),
+        "list" | "themes" => list(&flags),
+        "apply" | "use" => apply(tail, &flags),
         "set" => set(tail, &flags, appearance),
         "undo" => undo_or_redo("undo", tail, &flags),
         "redo" => undo_or_redo("redo", tail, &flags),

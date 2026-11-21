@@ -18,6 +18,7 @@ use axum::http::StatusCode;
 use ghostex_gx_protocol::chat_card::THEME_CHANGED;
 use serde_json::{json, Map, Value};
 
+use super::gallery;
 use super::journal::{self, Item, ThemeChange, Who};
 use super::look;
 use super::readability;
@@ -434,6 +435,7 @@ async fn undo_or_redo(
 fn read(state: &AppState) -> Result<Value, DomainStateError> {
     let settings = read_settings(state)?;
     Ok(json!({
+        "themes": gallery::themes(&settings),
         "groups": look::grouped(&settings),
         "warnings": readability::warnings(&settings)
             .into_iter()
@@ -441,6 +443,22 @@ fn read(state: &AppState) -> Result<Value, DomainStateError> {
             .collect::<Vec<_>>(),
         "kept": journal::KEPT_CHANGES,
     }))
+}
+
+/// `apply`: one theme of Settings' themes row (`theme`, its id or name), as one `set` of its changes.
+async fn apply(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let settings = read_settings(state)?;
+    let (name, changes) = gallery::changes_for(text(params, "theme"), &settings)
+        .map_err(|message| error("badRequest", message))?;
+    let mut params = params.clone();
+    params.insert("changes".into(), Value::Object(changes));
+    let mut answer = set(state, caller, &params).await?;
+    answer["theme"] = json!(name);
+    Ok(answer)
 }
 
 fn history(state: &AppState) -> Result<Value, DomainStateError> {
@@ -481,6 +499,7 @@ pub(crate) async fn handle_theme_http(
         "history" => history(&state),
         "change" => one_change(&state, &params),
         "set" => set(&state, &caller, &params).await,
+        "apply" => apply(&state, &caller, &params).await,
         "undo" => undo_or_redo(&state, &caller, &params, true).await,
         "redo" => undo_or_redo(&state, &caller, &params, false).await,
         other => Err(error(

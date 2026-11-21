@@ -53,6 +53,8 @@ they ask for one.
    & Layout), several at once as one change the user can undo:
 
    ```bash
+   ghostex theme list                          # the themes: Default, the art themes, the agent-made looks
+   ghostex theme apply moonwater               # one of them, as one change (default puts Ghostex's own look back)
    ghostex theme read                          # every look setting, grouped, with what it does
    ghostex theme set darkThemePreset=blue themeSidebarContrast=-6
    ghostex theme set --dark border=4% divider=3%   # a theme colour, here for dark mode

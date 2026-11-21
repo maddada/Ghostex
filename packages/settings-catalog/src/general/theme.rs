@@ -18,6 +18,9 @@ pub(crate) fn theming() -> Section {
             row("customSidebarTitlebarLightBackgroundTintColor", "Custom light mode tint", "The custom light mode colour, chosen in the colour picker the + square opens."),
             row("themeSidebarContrast", "Sidebar colourfulness", "How much of the theme colour shows in the sidebar, from Subtle (deeper, nearly neutral) through Vivid (lighter, more colourful) to Full, which shows the colour you picked itself. Colourfulness sets the sidebar and work area together, and how deep a custom colour is."),
             row("themeWorkAreaContrast", "Work area colourfulness", "How much of the theme colour shows in the work area (chat, terminals and views), from Subtle to Full. Colourfulness sets the sidebar and work area together."),
+            row("windowArt", "Art behind the window", "The artwork an art theme paints behind the sidebar and the work area, with the window solid so your desktop never shows through. Pick an art theme in Themes; None goes back to Transparency.").options(WINDOW_ART_OPTIONS),
+            row("windowArtDim", "Art dimming", "How much the artwork is darkened, in percent, so text over it stays easy to read."),
+            row("windowArtBlur", "Art blur", "How soft the artwork looks, in points. 0 keeps it sharp."),
             row("windowGlass", "Transparency", "Let your desktop show through the window: Off, Dark only (light mode stays solid) or Always.").options(WINDOW_GLASS_OPTIONS),
             row("windowGlassSource", "Behind the glass", "Desktop and windows, your wallpaper, a picture you choose, or Live: a calm animation in your theme colours or your own video.").options(WINDOW_GLASS_SOURCE_OPTIONS),
             // CDXC:Settings 2026-10-29 DECISION (cleanup Q19): one switch keeps the light-mode picture, video, Live

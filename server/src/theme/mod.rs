@@ -2,6 +2,7 @@
 //! Undo and redo walk and a "Theme changed" card in the chat of the agent that changed it.
 
 mod endpoint;
+mod gallery;
 mod journal;
 mod look;
 mod readability;

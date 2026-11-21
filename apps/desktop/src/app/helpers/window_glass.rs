@@ -423,24 +423,30 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
             != Some(false);
     }
     window_glass_live::refresh_window_glass_live(object);
+    // An art theme's artwork is painted by Ghostex in an opaque window (window_art.rs); its
+    // surfaces take the glass tints, so the glass counts as on while the artwork shows.
+    let art_changed = window_art::refresh_window_art(object);
+    let art = window_art::window_art_active();
     terminal_glass::refresh_terminal_glass(object);
     // A picture, video or Live backdrop is drawn by Ghostex itself; only the desktop behind the
     // window needs the compositor's blur.
     let shows_desktop = !matches!(source, Some("wallpaper" | "customImage" | "video" | "live"));
     let blur_withheld = shows_desktop && desktop_withholds_blur();
-    let active = cfg!(any(
-        target_os = "macos",
-        target_os = "windows",
-        target_os = "linux"
-    )) && wanted
-        && !system_reduces_transparency()
-        && !blur_withheld;
+    let active = art
+        || (cfg!(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux"
+        )) && wanted
+            && !system_reduces_transparency()
+            && !blur_withheld);
     WINDOW_GLASS_SYSTEM_BLOCKED.store(
-        (cfg!(any(target_os = "macos", target_os = "windows")) && system_reduces_transparency())
-            || blur_withheld,
+        !art && ((cfg!(any(target_os = "macos", target_os = "windows"))
+            && system_reduces_transparency())
+            || blur_withheld),
         Ordering::Relaxed,
     );
-    WINDOW_GLASS_ACTIVE.swap(active, Ordering::Relaxed) != active
+    (WINDOW_GLASS_ACTIVE.swap(active, Ordering::Relaxed) != active) || art_changed
 }
 
 /// The system switch that turns transparency off, as of the last `refresh_window_glass`.
@@ -647,7 +653,8 @@ pub(crate) fn set_floating_reveal_glass_window(window: Option<gpui::AnyWindowHan
 /// CDXC:Sidebar 2026-09-23 WHY:
 /// A blurred window blurs everything behind it on screen, and behind the floating panel is the main window itself: its tint (or an opaque web page when the view panel is maximised) was blurred and then tinted a second time, so the floating sidebar and sessions column came out as a near-solid slab instead of the glass they have docked. The panel therefore never uses the live blur. It shows the blurred picture the main window's glass is made of, placed exactly where the main window has it: the custom image or the desktop picture held against the screen, or the same picture covering the main window's rectangle when that picture moves with the window. With Glass shows set to Desktop and windows (or Custom image with no picture for this appearance) it shows the desktop picture held against the screen, which is what the main window's glass shows wherever no other window is behind it. A desktop picture that cannot be read leaves the live blur.
 pub(crate) fn sync_overlay_window_glass(window: &Window, main_origin: gpui::Point<gpui::Pixels>) {
-    if !window_glass_active() {
+    // Under an art theme the panel paints the artwork itself (floating_reveal/window.rs).
+    if !window_glass_active() || window_art::window_art_active() {
         window.set_background_wallpaper(false);
         return;
     }
@@ -700,7 +707,8 @@ pub(crate) fn main_window_handle(cx: &gpui::App) -> Option<gpui::AnyWindowHandle
 }
 
 pub(crate) fn window_glass_background_appearance() -> WindowBackgroundAppearance {
-    if window_glass_active() {
+    // An art theme paints its artwork in an opaque window: nothing behind it shows through.
+    if window_glass_active() && !window_art::window_art_active() {
         WindowBackgroundAppearance::Blurred
     } else {
         WindowBackgroundAppearance::Opaque
@@ -742,9 +750,13 @@ impl GhostexGpuiApp {
 /// changed.
 fn apply_workspace_window_glass(window: &Window) -> Option<(u8, u8)> {
     let wanted = window_glass_background_appearance();
-    let image = window_glass_custom_image();
+    // Under an art theme the window is opaque, so no picture, video or Live animation plays
+    // behind it.
+    let art = window_art::window_art_active();
+    let image = window_glass_custom_image().filter(|_| !art);
     let video = window_glass_video();
-    let live = window_glass_live::window_glass_live();
+    let video = if art { (None, video.1) } else { video };
+    let live = window_glass_live::window_glass_live().filter(|_| !art);
     // Custom image or Live with nothing chosen for this appearance is the live blur.
     let backdrop = window_glass_uses_backdrop(&image, &video.0, &live);
     // In native fullscreen the live blur has only black behind it: show the desktop picture.
@@ -833,6 +845,7 @@ pub(crate) fn window_glass_redraw_key() -> u64 {
     window_glass_custom_image().hash(&mut hasher);
     window_glass_video().hash(&mut hasher);
     window_glass_live::window_glass_live_mode().hash(&mut hasher);
+    window_art::window_art_redraw_key().hash(&mut hasher);
     hasher.finish()
 }
 

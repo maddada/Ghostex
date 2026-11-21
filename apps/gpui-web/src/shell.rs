@@ -531,12 +531,16 @@ impl Render for GhostexGpuiApp {
         let side_chat = self.render_web_side_chat_panel(cx);
         let terminal_bar =
             (shows_terminal && surface.is_some()).then(|| self.render_terminal_action_bar(cx));
+        // An art theme's artwork, under everything else on the page (helpers/window_art.rs).
+        let art_backdrop = crate::app::helpers::window_art_backdrop(cx);
+        let art = art_backdrop.is_some();
         div()
             .id("ghostex-web-shell")
             .size_full()
             .relative()
             .flex()
             .bg(titlebar_background())
+            .children(art_backdrop)
             // Zero-size and never hovered, so a click on it can't take focus from a field (the
             // desktop's handle, render/root.rs).
             .child(
@@ -560,13 +564,11 @@ impl Render for GhostexGpuiApp {
                             .flex_none()
                             .child(sidebar),
                     )
-                    .child(
-                        div()
-                            .h_full()
-                            .w(px(1.0))
-                            .flex_none()
-                            .bg(titlebar_popup_menu_border_color()),
-                    )
+                    .child(div().h_full().w(px(1.0)).flex_none().bg(if art {
+                        crate::app::helpers::sidebar_glass_tint()
+                    } else {
+                        titlebar_popup_menu_border_color()
+                    }))
             })
             .child(
                 div()
@@ -575,6 +577,11 @@ impl Render for GhostexGpuiApp {
                     .min_w_0()
                     .flex()
                     .flex_col()
+                    // Over an art theme's artwork the work area takes its tint, as the desktop's
+                    // workspace column does; otherwise each surface paints its own fill.
+                    .when(art, |column| {
+                        column.bg(crate::app::helpers::workspace_column_background())
+                    })
                     .border_t_1()
                     .border_color(if let Some(border_rgb) = border_rgb.filter(|_| attention) {
                         rgb(border_rgb).into()

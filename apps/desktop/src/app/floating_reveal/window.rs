@@ -63,6 +63,8 @@ impl Render for FloatingRevealWindow {
                 .size_full()
                 .overflow_hidden()
                 .bg(window_shell_background())
+                // Under an art theme the panel paints the artwork as the main window does.
+                .children(crate::app::helpers::window_art_backdrop(cx))
                 .on_action(cx.listener(
                     |app,
                      action: &crate::app::native_sidebar::actions::NativeSidebarAction,

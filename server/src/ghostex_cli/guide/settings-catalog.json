@@ -4017,6 +4017,84 @@
       "agentWritable": true
     },
     {
+      "key": "windowArt",
+      "title": "Art behind the window",
+      "subtitle": "The artwork an art theme paints behind the sidebar and the work area, with the window solid so your desktop never shows through. Pick an art theme in Themes; None goes back to Transparency.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "enum",
+      "default": "none",
+      "options": [
+        {
+          "label": "None",
+          "value": "none"
+        },
+        {
+          "label": "Moonwater",
+          "value": "moonwater"
+        },
+        {
+          "label": "Glasshouse",
+          "value": "glasshouse"
+        },
+        {
+          "label": "Red Earth",
+          "value": "red-earth"
+        },
+        {
+          "label": "Deep Current",
+          "value": "deep-current"
+        },
+        {
+          "label": "Night Garden",
+          "value": "night-garden"
+        },
+        {
+          "label": "Nocturne Canyon",
+          "value": "nocturne-canyon"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "windowArtDim",
+      "title": "Art dimming",
+      "subtitle": "How much the artwork is darkened, in percent, so text over it stays easy to read.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "number",
+      "default": 30,
+      "min": 0,
+      "max": 90,
+      "step": 1,
+      "agentWritable": true
+    },
+    {
+      "key": "windowArtBlur",
+      "title": "Art blur",
+      "subtitle": "How soft the artwork looks, in points. 0 keeps it sharp.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "agentWritable": true
+    },
+    {
       "key": "windowGlass",
       "title": "Transparency",
       "subtitle": "Let your desktop show through the window: Off, Dark only (light mode stays solid) or Always.",

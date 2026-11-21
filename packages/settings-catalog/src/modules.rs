@@ -311,6 +311,10 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 "MAX_WINDOW_GLASS_LIVE_BRIGHTNESS",
                 MAX_WINDOW_GLASS_LIVE_BRIGHTNESS.to_json(),
             ),
+            ("MAX_WINDOW_ART_DIM", MAX_WINDOW_ART_DIM.to_json()),
+            ("MAX_WINDOW_ART_BLUR", MAX_WINDOW_ART_BLUR.to_json()),
+            ("MIN_WINDOW_ART_DIM", MIN_WINDOW_ART_DIM.to_json()),
+            ("MIN_WINDOW_ART_BLUR", MIN_WINDOW_ART_BLUR.to_json()),
             (
                 "MAX_WINDOW_GLASS_LIVE_SPEED",
                 MAX_WINDOW_GLASS_LIVE_SPEED.to_json(),
@@ -505,7 +509,7 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 "TERMINAL_VIEW_WIDTH_PERCENT_STEP",
                 TERMINAL_VIEW_WIDTH_PERCENT_STEP.to_json(),
             ),
-            ("THEME_GALLERY", THEME_GALLERY.to_json()),
+            ("THEME_GALLERY", theme_gallery(platform)),
             ("THEME_PRESETS", THEME_PRESETS.to_json()),
             (
                 "MARKED_HANDOVERS_OPTIONS",
@@ -576,6 +580,7 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 "WINDOW_GLASS_SOURCE_OPTIONS",
                 WINDOW_GLASS_SOURCE_OPTIONS.to_json(),
             ),
+            ("WINDOW_ART_OPTIONS", WINDOW_ART_OPTIONS.to_json()),
         ],
         module::SETTINGS_TYPES => vec![
             (
