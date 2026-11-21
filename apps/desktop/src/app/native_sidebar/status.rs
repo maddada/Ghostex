@@ -138,8 +138,8 @@ impl DotBackdrop {
 /// "blocker is higher than needs you": red (an approval, or a failed, blocked or stuck session)
 /// outranks pink (a question) and blue (an unseen finished turn), which outrank amber (working)
 /// and grey (a shell still running). gx-core counts each session once under that order
-/// (`TileStatus`), so the hover counts add up. The dot keeps the 2026-10-20 size and its 1px ring
-/// in the colour behind it. This supersedes the 2026-10-20 overlapping stack on these tiles; a
+/// (`TileStatus`), so the hover counts add up. The dot keeps its 1px ring in the colour behind it;
+/// its size and place since 2026-11-21 are at [`tile_status_dot`]. This supersedes the 2026-10-20 overlapping stack on these tiles; a
 /// folded coordinator row and the chat's pills keep theirs (`folded_status_indicator`,
 /// `sized_overlapped_dots`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -205,20 +205,41 @@ impl TileCounts {
     }
 }
 
-/// A Space or computer tile's one status dot ([`TileCounts`]), with the 1px ring of what it sits
-/// on; `None` while nothing in it has a state.
+/// How wide a Space or computer tile's status dot is, and how far it sits in from the tile's top
+/// and right edges (outer edges, the 1pt hairline included), before the zoom.
+pub(crate) const TILE_DOT_SIZE: f32 = 4.0;
+pub(crate) const TILE_DOT_INSET: f32 = 3.0;
+
+/// A Space or computer tile's one status dot ([`TileCounts`]), placed in the tile's top-right
+/// corner, with the 1px ring of what it sits on; `None` while nothing in it has a state. The tile
+/// must be `relative()`.
+///
+/// CDXC:Spaces 2026-11-21 DECISION:
+/// User, of the 8pt dot hanging over the bottom edge of the Space tiles: "i wanna make these dots
+/// smaller and fit inside the cards i think top right?". From the options page they picked A, the
+/// top-right corner, at the size of C: a 4pt dot inside the tile, 3pt in from its top and right
+/// edges (Q4353). The computer tiles and the folded computers button draw the same dot in the same
+/// place, so this computer's tile no longer lifts its icon over it, and another computer's update
+/// arrow moves to the top-left corner while the dot is shown. Still one dot, the most urgent
+/// colour (Q4264). Supersedes the 2026-11-11 bottom-centre place (machines.rs) and the
+/// 2026-09-22 place under a Space's icon (selectors.rs).
 pub(crate) fn tile_status_dot(
     counts: TileCounts,
     scale: f32,
     backdrop: DotBackdrop,
 ) -> Option<gpui::Div> {
     let color = counts.color()?;
-    Some(overlapped_dots(
-        vec![color],
-        scale,
-        backdrop.rest,
-        Some((backdrop.hover, backdrop.group)),
-    ))
+    // Absolute insets count from the tile's outer edge, and the ring adds 1pt round the dot.
+    let offset = (TILE_DOT_INSET - 1.0) * scale;
+    Some(
+        div().absolute().top(px(offset)).right(px(offset)).child(sized_overlapped_dots(
+            vec![color],
+            TILE_DOT_SIZE,
+            scale,
+            backdrop.rest,
+            Some((backdrop.hover, backdrop.group)),
+        )),
+    )
 }
 
 /// The colours of a folded coordinator's overlapping stack, back to front, least urgent first: grey

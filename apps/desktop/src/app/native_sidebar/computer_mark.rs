@@ -33,9 +33,9 @@ const DOT_OPACITY: f32 = 0.55;
 /// build: the sidebar's computer tiles and the folded computers button, session rows and Unified
 /// cards, a project header's computer icons, the chat's where pill and its card, Session details
 /// and Settings > Remote's row for this computer. With one computer nothing is marked, and the
-/// phone marks nothing (it is not one of the computers, so none is the one you're on). On a tile
-/// the status dots sit at the bottom centre too, so this computer's tile lifts its icon and the dot
-/// clear of them while it shows status dots (machines.rs). This supersedes the corner pip (Q4241)
+/// phone marks nothing (it is not one of the computers, so none is the one you're on). A tile's
+/// status dot sits in its top-right corner (status.rs `tile_status_dot`), clear of this mark, so
+/// the icon no longer lifts over it (until 2026-11-21 it did). This supersedes the corner pip (Q4241)
 /// and the line (Q4248) of the same day.
 ///
 /// CDXC:RemoteMachines 2026-11-20 DECISION:

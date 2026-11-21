@@ -2,7 +2,7 @@
 //! lists them when the row is short of room.
 //!
 //! CDXC:RemoteMachines 2026-11-11 DECISION:
-//! User: "I told u to make the machines show as icons next to the spaces but i still dont see that??". The computers and the Spaces share one row: the computers first, as icon tiles without words (this computer's monitor, a remote computer's Windows, Apple or Ubuntu mark where the app knows its system, else the cloud), then a hairline, then the Spaces sharing the rest. The picked computer is filled like a picked Space; each tile's tooltip names it and its state ("Windows · connected"), its right-click menu is the one the tab had, and a remote computer's status dots sit at its tile's bottom centre. With only this computer there are no computer tiles. When the row cannot hold every computer and every Space at their narrowest, the computers fold into one button showing the picked computer, which lists them all (each row keeps its menu); after that the Spaces fold into their More tile as before. This supersedes the joined Local | Windows control of the same day and the machine tabs before it.
+//! User: "I told u to make the machines show as icons next to the spaces but i still dont see that??". The computers and the Spaces share one row: the computers first, as icon tiles without words (this computer's monitor, a remote computer's Windows, Apple or Ubuntu mark where the app knows its system, else the cloud), then a hairline, then the Spaces sharing the rest. The picked computer is filled like a picked Space; each tile's tooltip names it and its state ("Windows · connected"), its right-click menu is the one the tab had, and a remote computer's status dot sits in its tile's top-right corner (since 2026-11-21, status.rs `tile_status_dot`). With only this computer there are no computer tiles. When the row cannot hold every computer and every Space at their narrowest, the computers fold into one button showing the picked computer, which lists them all (each row keeps its menu); after that the Spaces fold into their More tile as before. This supersedes the joined Local | Windows control of the same day and the machine tabs before it.
 //! SEE-ALSO: native_sidebar/selectors.rs (the row and its room), remote_conn/app_update.rs (`remote_machine_systems`), unified/header.rs (`unified_filter_row_menu`, which opens a listed computer's menu).
 
 use super::{
@@ -32,20 +32,6 @@ pub(crate) fn machine_icons_room(shown: usize) -> f32 {
     shown as f32 * (MACHINE_ICON_SIZE + MACHINE_ICON_GAP) + MACHINE_DIVIDER_ROOM
 }
 
-/// How far this computer's tile lifts its icon while it shows status dots, and the dot's gap under
-/// the icon then, before the zoom, so the faint dot under the icon (computer_mark.rs
-/// `with_here_dot`) ends where the status dots' ring begins.
-const HERE_DOT_LIFT: f32 = 5.5;
-const HERE_DOT_LIFTED_GAP: f32 = 1.0;
-
-/// A computer's icon in its tile, lifted while `lift` (this computer's, over its status dots).
-fn tile_face(icon: AnyElement, lift: bool, scale: f32) -> gpui::Div {
-    div()
-        .flex()
-        .when(lift, |face| face.relative().top(px(-HERE_DOT_LIFT * scale)))
-        .child(icon)
-}
-
 /// A computer's state, in the words its tooltip uses.
 fn machine_state_words(machine: &NativeSidebarMachine) -> &'static str {
     if machine.id == ghostex_gx_core::LOCAL_MACHINE_ID {
@@ -57,22 +43,6 @@ fn machine_state_words(machine: &NativeSidebarMachine) -> &'static str {
         "disconnected" => "not connected",
         state => ghostex_gx_core::machine_state_copy(state).0,
     }
-}
-
-/// Where a computer tile's status dots sit: centred over its lower edge, where a Space tile puts
-/// its own (selectors.rs), whatever the tile shows.
-///
-/// CDXC:RemoteMachines 2026-11-11 DECISION:
-/// User: "why are the dots showing in different positions, should always be bottom center". A computer's status dots sit at the bottom centre of its tile, as a Space's do, on the folded computers button too, and they do not move when the tile is picked, hovered, or shows a spinner or an update arrow (which sits on the top-right corner). This supersedes the dots on the tile's top-right corner from earlier the same day.
-fn machine_dots(scale: f32) -> gpui::Div {
-    div()
-        .absolute()
-        .top(px(20.5 * scale))
-        .left_0()
-        .w_full()
-        .h(px(11.0 * scale))
-        .flex()
-        .justify_center()
 }
 
 impl GhostexGpuiApp {
@@ -133,7 +103,6 @@ impl GhostexGpuiApp {
         systems: &HashMap<String, &'static str>,
         appearance: &SidebarAppearance,
         size: f32,
-        lifted: bool,
     ) -> AnyElement {
         let busy = ghostex_gx_core::machine_state_is_busy(&machine.state);
         let local = machine.id == ghostex_gx_core::LOCAL_MACHINE_ID;
@@ -154,17 +123,12 @@ impl GhostexGpuiApp {
         if local {
             // The computer you're on has its dot; its tile only shows beside another computer's
             // (computer_mark.rs `with_here_dot`).
-            super::computer_mark::with_here_dot_at(
+            super::computer_mark::with_here_dot(
                 icon,
                 size,
                 appearance.scale,
                 crate::app::gx_chat::session_directory::mark_this_computer(),
                 appearance.muted,
-                if lifted {
-                    HERE_DOT_LIFTED_GAP
-                } else {
-                    super::computer_mark::DOT_GAP
-                },
             )
         } else if busy {
             icon.with_throttled_animation(
@@ -206,8 +170,6 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
-        // The computer you're on wears its dot (computer_mark.rs `with_here_dot`).
-        let here = crate::app::gx_chat::session_directory::mark_this_computer();
         let id = machine.id.clone();
         let reconnect = id.clone();
         let local = id == ghostex_gx_core::LOCAL_MACHINE_ID;
@@ -223,8 +185,8 @@ impl GhostexGpuiApp {
             super::selectors::space_tile_selected_colors(appearance);
         let tooltip = self.native_machine_tooltip(machine);
         let tooltip_span = self.native_sidebar_tooltip_span(scale);
-        // An update waiting there: the tab's arrow, small on the tile's top-right corner, clear of
-        // the dots at its bottom centre. Only another computer's tile shows one, so it never meets
+        // An update waiting there: the tab's arrow, small on the tile's top-right corner, or its
+        // top-left while the status dot holds the top-right (status.rs `tile_status_dot`). Only another computer's tile shows one, so it never meets
         // the dot under this computer's icon (computer_mark.rs `with_here_dot`).
         let update = (!local)
             .then(|| self.remote_app_update_tab_badge(&id))
@@ -276,34 +238,29 @@ impl GhostexGpuiApp {
                     })
             })
             .hover(|tile| tile.bg(appearance.hover))
-            .child(tile_face(
-                self.native_machine_icon(
+            .child(self.native_machine_icon(
                     machine,
                     systems,
                     appearance,
                     15.0 * scale,
-                    local && has_status && here,
-                ),
-                local && has_status && here,
-                scale,
-            ))
+                ))
             /*
             CDXC:Sidebar 2026-09-25 DECISION:
             User: stop showing the status on the machine we're on and show it on the other machines as dots, not numbers, exactly like the Spaces. The picked computer's sessions are already listed below.
-            Since 2026-11-11 they sit at the bottom centre of the computer's tile (`machine_dots`).
+            Since 2026-11-21 one 4pt dot in the tile's top-right corner (status.rs `tile_status_dot`).
             */
             .children(
                 super::status::tile_status_dot(
                     tile_counts,
                     scale,
                     super::status::DotBackdrop::new(appearance, None, dot_group.clone()),
-                )
-                .map(|dot| machine_dots(scale).child(dot)),
+                ),
             )
             .children(update.map(|glyph| {
                 div()
                     .absolute()
-                    .right(px(2.0 * scale))
+                    .when(has_status, |arrow| arrow.left(px(2.0 * scale)))
+                    .when(!has_status, |arrow| arrow.right(px(2.0 * scale)))
                     .top(px(2.0 * scale))
                     .child(glyph)
             }))
@@ -375,7 +332,6 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
-        let here = crate::app::gx_chat::session_directory::mark_this_computer();
         let picked = snapshot
             .machines
             .iter()
@@ -397,7 +353,6 @@ impl GhostexGpuiApp {
             working: sum(|machine| machine.working_count),
             background_work: sum(|machine| machine.background_work_count),
         };
-        let has_status = tile_counts.has_status();
         let items: Vec<_> = snapshot
             .machines
             .iter()
@@ -446,24 +401,18 @@ impl GhostexGpuiApp {
             .border_color(appearance.foreground.opacity(0.08))
             .cursor_pointer()
             .hover(|tile| tile.bg(appearance.hover))
-            .child(tile_face(
-                self.native_machine_icon(
+            .child(self.native_machine_icon(
                     picked,
                     systems,
                     appearance,
                     15.0 * scale,
-                    picked.id == ghostex_gx_core::LOCAL_MACHINE_ID && has_status && here,
-                ),
-                picked.id == ghostex_gx_core::LOCAL_MACHINE_ID && has_status && here,
-                scale,
-            ))
+                ))
             .children(
                 super::status::tile_status_dot(
                     tile_counts,
                     scale,
                     super::status::DotBackdrop::new(appearance, None, dot_group.to_string()),
-                )
-                .map(|dot| machine_dots(scale).child(dot)),
+                ),
             )
             .when(
                 self.native_sidebar.pointer_inside
