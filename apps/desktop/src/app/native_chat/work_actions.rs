@@ -30,6 +30,8 @@ pub(super) const CHOOSE_ANSWER: &str = "Choices";
 pub(super) const DETAILS_ICON: &str = "titlebar/file-text.svg";
 /// A Needs you row's Jump to context: the icon Show in chat has in the row's panel.
 pub(super) const CONTEXT_ICON: &str = "titlebar/focus-2.svg";
+/// A Needs you row's Mark as read: an open envelope (`dock_mark_read_icon`).
+pub(super) const MARK_READ_ICON: &str = "titlebar/mail-opened.svg";
 /// Its dropdown grows to its longest answer up to this (unscaled), and the window's edge.
 const ANSWERS_MENU_MAX: f32 = 560.0;
 
@@ -381,6 +383,45 @@ impl NativeChatView {
                 cx.stop_propagation();
                 this.close_board_card_menu(cx);
                 this.open_work_target(context.clone(), window, cx);
+            }))
+            .into_any_element(),
+        )
+    }
+
+    /// Mark as read as an icon button, left of a dock row's other buttons: runs the row's own
+    /// `dismiss`, the command its ⋯ and right-click menus' Dismiss / Mark as read run (a page's
+    /// `cancelQuestion`, an ask's cancel, a to-do's `coordinatorBoardAnswer` cancel, a terminal
+    /// notice's `dismissNotice`), so the agent is told exactly what it is told today: nothing at
+    /// the time, the dismissal with its next message. `None` for a row with no dismiss and for a
+    /// finished row, whose hover check in the age's place already is its Mark as read.
+    ///
+    /// CDXC:Coordinators 2026-11-21 DECISION:
+    /// User, of two Needs you rows (a page and an ask) with Details and Reply: "all these dont
+    /// have any questions. can we add the message open icon to mark as read to be to the left of
+    /// the current 2 buttons that are there?"
+    pub(super) fn dock_mark_read_icon(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        let dismiss = row["dismiss"].clone();
+        if !dismiss.is_object() || row["kind"] == "finished" {
+            return None;
+        }
+        Some(
+            self.tone_square_icon_button(
+                gpui::SharedString::from(format!("work-row-read:{key}")),
+                "Mark as read",
+                MARK_READ_ICON,
+                false,
+                p,
+            )
+            .on_click(cx.listener(move |this, _, _, cx| {
+                cx.stop_propagation();
+                this.close_board_card_menu(cx);
+                this.invoke(dismiss.clone(), cx);
             }))
             .into_any_element(),
         )
