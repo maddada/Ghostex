@@ -45,7 +45,7 @@ pub(crate) fn reset_in(text: &str) -> Option<Duration> {
 }
 
 /// A Go `time.Duration` string (`2h0m0s`, `45m30s`, `1.5s`, `300ms`), rounded up to whole seconds.
-fn go_duration(text: &str) -> Option<Duration> {
+pub(crate) fn go_duration(text: &str) -> Option<Duration> {
     let mut rest = text.trim();
     if rest.is_empty() {
         return None;

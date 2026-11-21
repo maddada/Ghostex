@@ -300,6 +300,9 @@ pub fn resolve_session_chat_terminal_notice(
     .map(|mut notice| {
         if notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT {
             notice.account_wait = crate::accounts::limit_wait::notice_wait(project_id, session_id);
+            if notice.account_wait.is_none() {
+                crate::accounts::quota_wait::attach_to_notice(project_id, session_id, &mut notice);
+            }
         }
         notice
     })

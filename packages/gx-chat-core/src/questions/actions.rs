@@ -464,6 +464,22 @@ fn dismiss_notice(
             &serde_json::json!({ "kind": "restartAgent", "actionId": "dismissSendFailure" }),
         ));
     }
+    // Dismissing a quota-blocked card (Q4461) dismisses the sidebar red dot on gxserver without
+    // arming auto-resume. While already in `quotaWaiting`, Dismiss only hides the card locally
+    // (Stop cancels the wait).
+    if notice.kind == "usageLimit"
+        && notice
+            .quota_wait
+            .as_ref()
+            .and_then(|w| w.get("mode"))
+            .and_then(Value::as_str)
+            == Some("quotaBlocked")
+    {
+        effects.extend(answer_prompt(
+            state,
+            &serde_json::json!({ "kind": "restartAgent", "actionId": "dismissUsageLimit" }),
+        ));
+    }
     effects
 }
 

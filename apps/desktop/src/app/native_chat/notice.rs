@@ -464,24 +464,44 @@ impl NativeChatView {
             })
             .flatten();
         if let Some(action) = lead.as_ref() {
-            let answer = json!({"type":"answer","answer":action["answer"].clone()});
-            actions.push(
-                self.tone_button(
-                    gpui::SharedString::from(format!("notice-action:{}", text(action, "id"))),
-                    &text(action, "label"),
-                    None,
-                    ToneButton::Primary,
-                    None,
-                    held,
-                    p,
-                )
-                .when(!held, |button| {
-                    button.on_click(
-                        cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)),
+            if action["kind"] == "openModelPicker" {
+                actions.push(
+                    self.tone_button(
+                        gpui::SharedString::from(format!("notice-action:{}", text(action, "id"))),
+                        &text(action, "label"),
+                        Some("titlebar/switch-horizontal.svg"),
+                        ToneButton::Primary,
+                        None,
+                        held,
+                        p,
                     )
-                })
-                .into_any_element(),
-            );
+                    .when(!held, |button| {
+                        button.on_click(cx.listener(|this, _, window, cx| {
+                            this.toggle_model_menu(None, window, cx)
+                        }))
+                    })
+                    .into_any_element(),
+                );
+            } else {
+                let answer = json!({"type":"answer","answer":action["answer"].clone()});
+                actions.push(
+                    self.tone_button(
+                        gpui::SharedString::from(format!("notice-action:{}", text(action, "id"))),
+                        &text(action, "label"),
+                        None,
+                        ToneButton::Primary,
+                        None,
+                        held,
+                        p,
+                    )
+                    .when(!held, |button| {
+                        button.on_click(
+                            cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)),
+                        )
+                    })
+                    .into_any_element(),
+                );
+            }
         }
         // CDXC:AgentProviders 2026-09-13 DECISION: User approved restricting Switch account to relevant notices after it appeared on a queued reply. Only sign-in and usage-limit notices offer the existing account picker beside Open terminal, superseding the September 12 rule for all terminal notices.
         if !collapsed
@@ -531,6 +551,24 @@ impl NativeChatView {
                     .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
                         this.perform_composer_action("terminalView", event.position(), window, cx)
                     }))
+                    .into_any_element(),
+                );
+            } else if action["kind"] == "openModelPicker" {
+                actions.push(
+                    self.tone_button(
+                        gpui::SharedString::from(format!("notice-action:{}", text(action, "id"))),
+                        &text(action, "label"),
+                        Some("titlebar/switch-horizontal.svg"),
+                        ToneButton::Secondary,
+                        None,
+                        held,
+                        p,
+                    )
+                    .when(!held, |button| {
+                        button.on_click(cx.listener(|this, _, window, cx| {
+                            this.toggle_model_menu(None, window, cx)
+                        }))
+                    })
                     .into_any_element(),
                 );
             } else {

@@ -2388,7 +2388,13 @@ switches Antigravity between Default, Accept edits, Auto (edits and safe
 commands run without asking) and Plan, and the button always shows the mode
 Antigravity is really in. The context meter shows how many tokens Antigravity's
 latest step filled; Antigravity does not report its window size, so the meter
-shows no percentage. Commands: `ghostex send-session-chat-message`,
+shows no percentage. When Antigravity hits a usage quota or rate limit, its chat
+shows a quota card with the reset countdown and **Wait for reset**, **Switch model**,
+**Terminal view**, and **Dismiss** buttons, while its sidebar row shows a red dot
+and countdown until you dismiss it or pick **Wait for reset** (which dismisses
+the red dot and automatically continues the session once right after reset); a
+coordinator hitting quota also sends one Grok Bot alert when Grok Bot is
+connected. Commands: `ghostex send-session-chat-message`,
 `ghostex answer-session-chat-prompt`,
 `ghostex select-session-chat-model <session> --mode default|accept-edits|auto|plan --defer`.
 Sending a message to a sleeping session wakes it. While the agent is still

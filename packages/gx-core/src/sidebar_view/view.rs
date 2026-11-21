@@ -830,6 +830,11 @@ pub struct SessionRow {
     /// the red dot until it moves again (CDXC:Coordinators 2026-11-05 in
     /// server/src/coordinators/stall.rs).
     pub stuck: bool,
+    /// gxserver's `quotaResetsAt`: RFC3339 timestamp when an active quota limit resets (Q4460/Q4461).
+    pub quota_resets_at: Option<String>,
+    /// gxserver's `quotaWaitState`: `"blocked"` (red dot + countdown) or `"waiting"` (calm amber
+    /// clock + countdown after clicking Wait for reset).
+    pub quota_wait_state: Option<String>,
     pub agent_icon: Option<String>,
     /// `terminal`, `browser`, or whatever else a newer daemon publishes.
     pub session_kind: Option<String>,
@@ -978,6 +983,7 @@ pub struct SessionTiming {
     pub last_interaction_ms: Option<i64>,
     pub working_started_ms: Option<i64>,
     pub snoozed_until_ms: Option<i64>,
+    pub quota_resets_at_ms: Option<i64>,
 }
 
 impl SessionRow {

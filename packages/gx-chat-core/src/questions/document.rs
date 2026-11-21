@@ -327,7 +327,9 @@ fn decorate_notice(raw: &Value, notice: &TerminalNotice, agent: Option<&str>) ->
                 .enumerate()
                 .filter_map(|(position, action)| {
                     let answer = terminal_notice_action_answer(notice, action);
-                    if action.kind != "switchToTerminal" && answer.is_none() {
+                    if !matches!(action.kind.as_str(), "switchToTerminal" | "openModelPicker")
+                        && answer.is_none()
+                    {
                         return None;
                     }
                     let mut row = raw_actions

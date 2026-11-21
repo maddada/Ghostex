@@ -282,6 +282,57 @@ fn notify(
     Ok(json!({ "queued": queued }))
 }
 
+/// Enqueues a note from gxserver itself (for example when a coordinator hits its Antigravity
+/// quota limit). Silent no-op when Grok Bot is not connected or turned off.
+pub(crate) fn notify_internal(
+    paths: &GxserverPaths,
+    kind: &str,
+    body: &str,
+    project: Option<&str>,
+    agent: Option<&str>,
+    reply_to: Option<&str>,
+) -> bool {
+    if !super::feature::on(paths)
+        || store::read_connection(paths).is_none()
+        || store::read_key(paths).is_none()
+    {
+        return false;
+    }
+    let body = clean(body, MAX_TEXT_CHARS, true);
+    if body.is_empty() {
+        return false;
+    }
+    let kind = if KINDS.contains(&kind) { kind } else { "info" };
+    let note = QueuedNote {
+        at: now_ms(),
+        kind: kind.to_string(),
+        text: body,
+        project: project
+            .map(|value| clean(value, MAX_FIELD_CHARS, false))
+            .filter(|value| !value.is_empty()),
+        agent: agent
+            .map(|value| clean(value, MAX_FIELD_CHARS, false))
+            .filter(|value| !value.is_empty()),
+        reply_to: reply_to
+            .filter(|value| is_global_ref(value))
+            .map(str::to_string),
+    };
+    let written = {
+        let _guard = files_lock();
+        let mut queue = store::read_queue(paths);
+        queue.push(note);
+        if queue.len() > MAX_QUEUE {
+            let extra = queue.len() - MAX_QUEUE;
+            queue.drain(..extra);
+        }
+        store::write_queue(paths, &queue).is_ok()
+    };
+    if written {
+        delivery::kick(paths);
+    }
+    written
+}
+
 fn disconnect(paths: &GxserverPaths) -> Result<Value, DomainStateError> {
     let _guard = files_lock();
     store::remove_all(paths).map_err(io_error)?;

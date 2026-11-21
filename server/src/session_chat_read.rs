@@ -246,6 +246,11 @@ pub(crate) fn resolve_session_chat_read_state(
                 .as_ref()
                 .map(Value::to_string)
                 .hash(&mut hasher);
+            notice
+                .quota_wait
+                .as_ref()
+                .map(Value::to_string)
+                .hash(&mut hasher);
         }
         None => 0u8.hash(&mut hasher),
     }

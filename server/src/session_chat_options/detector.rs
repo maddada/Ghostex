@@ -550,6 +550,18 @@ impl SessionChatOptionDetector {
         if detected.captured {
             self.recovery
                 .observe(project_id, session_id, detected.notice.as_ref());
+            let model_label = detected
+                .options
+                .as_ref()
+                .and_then(|o| o.selection.model.as_ref())
+                .map(|m| m.label.as_str());
+            crate::accounts::quota_wait::observe(
+                &self.app_state,
+                project_id,
+                session_id,
+                detected.notice.as_ref(),
+                model_label,
+            );
         }
         crate::agent_model_pins::observe_detection(
             &self.paths,

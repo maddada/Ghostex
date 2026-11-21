@@ -302,6 +302,10 @@ pub struct SessionChatTerminalNotice {
     pub auto_trust: bool,
     /// A usage-limit notice while account recovery waits with every account full: what the card says about it (accounts/limit_wait.rs). Attached by `resolve_session_chat_terminal_notice`, never classified from the screen.
     pub account_wait: Option<Value>,
+    /// A non-account-switched usage-limit notice (for example Antigravity CLI): quota-blocked or
+    /// waiting-for-reset state plus parsed `resetsAt` (`accounts/quota_wait.rs`). Additive so older
+    /// phones ignore it and still render the plain usage-limit notice cleanly.
+    pub quota_wait: Option<Value>,
     /// A checkbox the card draws above its buttons (`checkbox`: `label`, `checked`, `hint` for its
     /// (i) tooltip, and the `answer` a click sends), for a card Ghostex makes itself; never
     /// classified from the screen (CDXC:AgentProviders 2026-11-14 in server/src/carry_on_compaction.rs).
@@ -345,6 +349,7 @@ impl SessionChatTerminalNotice {
             conversation_lock: None,
             auto_trust: false,
             account_wait: None,
+            quota_wait: None,
             checkbox: None,
             checkboxes: None,
             checkboxes_detail: None,
@@ -467,6 +472,7 @@ impl SessionChatTerminalNotice {
         self.same_notice(other)
             && other.is_some_and(|other| {
                 self.account_wait == other.account_wait
+                    && self.quota_wait == other.quota_wait
                     && self.checkbox == other.checkbox
                     && self.checkboxes == other.checkboxes
                     && self.checkboxes_detail == other.checkboxes_detail
@@ -617,6 +623,9 @@ impl SessionChatTerminalNotice {
         map.insert("detectedAt".to_string(), json!(self.detected_at));
         if let Some(wait) = self.account_wait.as_ref() {
             map.insert("accountWait".to_string(), wait.clone());
+        }
+        if let Some(wait) = self.quota_wait.as_ref() {
+            map.insert("quotaWait".to_string(), wait.clone());
         }
         if let Some(checkbox) = self.checkbox.as_ref() {
             map.insert("checkbox".to_string(), checkbox.clone());

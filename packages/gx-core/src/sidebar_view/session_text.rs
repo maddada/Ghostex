@@ -530,6 +530,7 @@ pub(crate) fn next_label_deadline(
         row.close_after_done
             .as_ref()
             .and_then(|close| close.deadline_at.as_deref()),
+        row.quota_resets_at.as_deref(),
     ]
     .into_iter()
     .flatten()

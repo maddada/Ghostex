@@ -92,6 +92,7 @@ pub(crate) fn waits_at_usage_limit(state: &AppState, session: &Value) -> bool {
         .pointer("/runtimeSettings/accountRecovery")
         .unwrap_or(&Value::Null);
     on_screen
+        || super::quota_wait::is_quota_paused(session)
         || (recovery["trigger"] == crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT
             && matches!(
                 recovery["status"].as_str(),

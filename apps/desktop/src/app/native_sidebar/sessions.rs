@@ -258,7 +258,20 @@ impl GhostexGpuiApp {
         // What follows the computer's icon: the status dot or the last-active age, then a question,
         // approval or folded dots.
         let mut trailing: Vec<AnyElement> = Vec::new();
-        if !buttons_shown && folded_dots.is_none() && !question && !approval {
+        let quota_waiting = session.quota_wait_state.as_deref() == Some("waiting");
+        let quota_badge = (!buttons_shown && folded_dots.is_none() && !question && !approval)
+            .then(|| {
+                super::status::quota_countdown_badge(
+                    session.quota_resets_at.as_deref(),
+                    session.quota_wait_state.as_deref(),
+                    scale,
+                )
+            })
+            .flatten();
+        if let Some(badge) = quota_badge {
+            trailing.push(badge);
+        }
+        if !buttons_shown && folded_dots.is_none() && !question && !approval && !quota_waiting {
             trailing.extend(super::status::activity_indicator(
                 &session.activity,
                 session.has_background_work,
@@ -272,6 +285,7 @@ impl GhostexGpuiApp {
             && !question
             && !approval
             && !failed
+            && !quota_waiting
             && (timer.is_some()
                 || (show_time
                     && session.activity != "working"

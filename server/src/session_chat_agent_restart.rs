@@ -47,6 +47,12 @@ pub(crate) async fn restart(
         Some(crate::accounts::reset_used::ACTION_RESET_USED) => {
             return crate::accounts::reset_used::answer(state, params).await
         }
+        Some(crate::accounts::quota_wait::ACTION_WAIT_FOR_RESET) => {
+            return crate::accounts::quota_wait::answer_wait_for_reset(state, params).await
+        }
+        Some(crate::accounts::quota_wait::ACTION_DISMISS_USAGE_LIMIT) => {
+            return crate::accounts::quota_wait::answer_dismiss(state, params).await
+        }
         Some(crate::coordinators::CARRY_ON_STOPPED_THREADS) => {
             return crate::coordinators::answer_stopped_threads(state, params, true).await
         }

@@ -940,6 +940,21 @@ fn supervise(
             .ok()
             .flatten()
             .is_some_and(|session| {
+                // Probe running Antigravity coordinators through the 5s detector cache so a quota
+                // wall is detected (and Grok Bot alerted) even when nobody has its chat open.
+                if effective_lifecycle_state(&session) == "running" {
+                    let agent =
+                        crate::session_chat_composer::session_chat_composer_agent_id(&session);
+                    if agent.as_deref() == Some("antigravity") {
+                        crate::session_chat_options::SessionChatOptionDetector::new(state)
+                            .detect_blocking(
+                                &coordinator.0,
+                                &coordinator.1,
+                                agent.as_deref(),
+                                false,
+                            );
+                    }
+                }
                 crate::accounts::reset_used::waits_at_usage_limit(state, &session)
             })
         {
@@ -1923,8 +1938,11 @@ fn refresh_thread_screen_waits(
                 return false;
             };
             let agent = crate::session_chat_composer::session_chat_composer_agent_id(&session);
-            if crate::session_chat_options::session_chat_questions_only_on_screen(agent.as_deref())
-                && crate::presentation::presentation_activity(&session, &generated_at) == "working"
+            // Probe Antigravity threads (which surface permission pickers and quota banners only on
+            // screen) as well as screen-only agents, bounded by the detector's own 5s cache TTL.
+            if (crate::session_chat_options::session_chat_questions_only_on_screen(agent.as_deref())
+                && crate::presentation::presentation_activity(&session, &generated_at) == "working")
+                || agent.as_deref() == Some("antigravity")
             {
                 detector.detect_blocking(
                     &thread.project_id,

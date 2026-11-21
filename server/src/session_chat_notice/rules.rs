@@ -956,9 +956,11 @@ const ZCODE_RULES: &[NoticeRule] = &[NoticeRule {
 
 /// CDXC:AgentScreenDetection 2026-11-22 WHY:
 /// Antigravity CLI (`agy`) prints quota errors (`⚠ Individual quota reached. Please upgrade your
-/// subscription to increase your limits. Resets in ...`) only on its terminal screen and in its
-/// CLI log, never in `transcript_full.jsonl`. With no rules here, a session hitting 429s showed no
-/// notice in chat and its queued messages and nudges kept firing against the quota wall.
+/// subscription to increase your limits. Resets in ...`, `You have exhausted your quota on this
+/// model`, `Allocation Quota Reached`, `quota exceeded, try again later`, `rate limit active/exceeded
+/// ... retry in Ns`, `RESOURCE_EXHAUSTED`) only on its terminal screen and in its CLI log, never in
+/// `transcript_full.jsonl`. With no rules here, a session hitting 429s showed no notice in chat and
+/// its queued messages, quiet nudges, and Autopilot retries kept firing against the quota wall.
 const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
     kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
     severity: SessionChatTerminalNoticeSeverity::Warning,
@@ -986,6 +988,11 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
+            parts: &[NoticePart::Text("Individual quota reached")],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
             parts: &[
                 NoticePart::Text("Model quota reached"),
                 NoticePart::Gap(120),
@@ -1000,6 +1007,69 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
                 NoticePart::Gap(120),
                 NoticePart::Text("Resets in"),
             ],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[NoticePart::Text(
+                "You have exhausted your quota on this model",
+            )],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[NoticePart::Text("Allocation Quota Reached")],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[NoticePart::Text("quota exceeded, try again later")],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[NoticePart::Text("Quota exceeded, try again later")],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[
+                NoticePart::Text("rate limit active"),
+                NoticePart::Gap(80),
+                NoticePart::Text("retry in"),
+            ],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[
+                NoticePart::Text("Rate limit active"),
+                NoticePart::Gap(80),
+                NoticePart::Text("retry in"),
+            ],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[
+                NoticePart::Text("rate limit exceeded"),
+                NoticePart::Gap(80),
+                NoticePart::Text("retry in"),
+            ],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[
+                NoticePart::Text("Rate limit exceeded"),
+                NoticePart::Gap(80),
+                NoticePart::Text("retry in"),
+            ],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[NoticePart::Text("RESOURCE_EXHAUSTED")],
             corroborators: &[],
         },
     ],

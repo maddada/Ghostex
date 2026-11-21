@@ -1127,6 +1127,14 @@ pub struct PresentationSession {
     /// thread blocked on an error its coordinator handles. Absent otherwise and on older daemons.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_alerted_by: Option<String>,
+    /// When a non-account-switched usage quota resets (RFC3339, e.g. Antigravity CLI), for the
+    /// sidebar countdown badge (Q4460/Q4461). Absent otherwise and on older daemons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_resets_at: Option<String>,
+    /// Non-account-switched quota wait state (`"blocked"` while red dot shows, `"waiting"` after
+    /// Wait for reset). Absent otherwise and on older daemons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_wait_state: Option<String>,
     /// A running session holds a question card (an ask-user tool call) only the user can answer,
     /// also while its agent reads as working. Absent (false) otherwise and on daemons without
     /// [`PresentationCapabilities::awaiting_answer`]. Independent of `pending_question_count`.

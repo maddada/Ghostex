@@ -1,7 +1,7 @@
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString, Styled, div,
-    px, rgb,
+    px, rgb, svg,
 };
 
 use super::appearance::SidebarAppearance;
@@ -65,6 +65,65 @@ pub(crate) fn approval_indicator(scale: f32) -> AnyElement {
                 .bg(rgb(APPROVAL_COLOR)),
         )
         .into_any_element()
+}
+
+/// Compact muted-amber clock + countdown (`12m`, `3h 12m`, `45s`) for a session on a quota limit
+/// (Q4460/Q4461). Drawn beside the red dot while `blocked`, and alone while `waiting`.
+pub(crate) fn quota_countdown_badge(
+    quota_resets_at: Option<&str>,
+    quota_wait_state: Option<&str>,
+    scale: f32,
+) -> Option<AnyElement> {
+    if !matches!(quota_wait_state, Some("blocked" | "waiting")) {
+        return None;
+    }
+    let now_ms = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as i64)
+        .unwrap_or_default();
+    let label = quota_resets_at
+        .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| at.timestamp_millis() - now_ms)
+        .filter(|remaining| *remaining > 0)
+        .map(|remaining| {
+            let secs = (remaining + 999) / 1000;
+            if secs < 60 {
+                format!("{secs}s")
+            } else if secs < 3600 {
+                format!("{}m", (secs + 59) / 60)
+            } else {
+                let hours = secs / 3600;
+                let mins = (secs % 3600) / 60;
+                if mins == 0 {
+                    format!("{hours}h")
+                } else {
+                    format!("{hours}h {mins}m")
+                }
+            }
+        });
+    // When blocked with no known reset timer, the red dot alone already communicates blocked state.
+    if quota_wait_state == Some("blocked") && label.is_none() {
+        return None;
+    }
+    let amber = chrome_color(0xfbbf24, 0xb45309);
+    let mut row = div()
+        .flex()
+        .items_center()
+        .flex_shrink_0()
+        .gap(px(3.0 * scale))
+        .text_size(px(11.5 * scale))
+        .text_color(amber)
+        .child(
+            svg()
+                .path("titlebar/clock.svg")
+                .size(px(11.5 * scale))
+                .flex_shrink_0()
+                .text_color(amber),
+        );
+    if let Some(label) = label {
+        row = row.child(label);
+    }
+    Some(row.into_any_element())
 }
 
 pub(crate) fn activity_indicator(

@@ -187,6 +187,11 @@ pub(crate) fn blocked_state(session: &Value) -> Option<(String, String)> {
     if let Some(blocked) = crate::coordinators::blocked_by_restart(session) {
         return Some(blocked);
     }
+    // A session blocked on a non-account-switched quota limit (Antigravity CLI, Q4461): keeps its
+    // red dot until the user clicks Wait for reset or Dismiss, or a real reply clears it.
+    if let Some(blocked) = crate::accounts::quota_wait::blocked_state(session) {
+        return Some(blocked);
+    }
     let runtime = session.get("runtimeSettings")?;
     if runtime["accountRecoverySuppressed"] == true {
         return None;

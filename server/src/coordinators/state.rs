@@ -139,8 +139,14 @@ pub fn classify_thread_session(
     }
     // A Stop hook's attention is a finished turn; any other attention (a permission, a bell, an
     // "Action Required" title) is the agent waiting for someone.
+    // CDXC:Coordinators 2026-11-22 DECISION (Q4463):
+    // For Antigravity CLI, bare `attention` with no screen prompt (`applicable_screen_wait`) and
+    // no stored prompt (`thread_prompt`) comes from `🔔 agy` / startup bell noise, never from a
+    // real question or permission prompt. Real Antigravity prompts (`session_chat_antigravity_permission.rs`,
+    // folder trust, `ask_question`) are caught above before reaching this fallback.
     if activity == "attention"
         && attention_source(session).as_deref() != Some(TURN_COMPLETE_ATTENTION_SOURCE)
+        && !is_antigravity_session(session)
     {
         return ThreadState::Waiting;
     }
@@ -157,6 +163,15 @@ fn attention_source(session: &Value) -> Option<String> {
         .pointer("/runtimeSettings/agentActivity/attentionSource")
         .and_then(Value::as_str)
         .map(str::to_string)
+}
+
+fn is_antigravity_session(session: &Value) -> bool {
+    crate::session_chat_follower::session_chat_agent_for_session(session).as_deref()
+        == Some("antigravity")
+        || session
+            .pointer("/runtimeSettings/agentActivity/agentName")
+            .and_then(Value::as_str)
+            == Some("antigravity")
 }
 
 /// A waiting thread is blocked on something only the user can grant: an approval card, or attention
@@ -341,6 +356,16 @@ fn screen_fix(notice: &SessionChatTerminalNotice, thread_ref: &str) -> Option<St
         ));
     }
     if notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT {
+        if notice.quota_wait.is_some()
+            || notice
+                .detail
+                .as_deref()
+                .is_some_and(|detail| detail.starts_with("Antigravity"))
+        {
+            return Some(
+                "Wait for its quota to reset, or switch models in that thread.".to_string(),
+            );
+        }
         return Some(format!("To continue before the reset, {switch}."));
     }
     // A start that failed fails the same way on a reload; when its saved chat came back empty after a crash, nothing brings that conversation back.

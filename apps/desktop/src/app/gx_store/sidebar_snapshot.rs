@@ -1021,6 +1021,8 @@ fn build_session(
         program_status_failed: row.program_status_failed,
         awaiting_approval: row.awaiting_approval,
         stuck: row.stuck,
+        quota_resets_at: row.quota_resets_at.clone(),
+        quota_wait_state: row.quota_wait_state.clone(),
         agent_icon: row.agent_icon.clone(),
         kind: row.is_browser.then(|| "browser".to_string()),
         session_kind: row.session_kind.clone(),

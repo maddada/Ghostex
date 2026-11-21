@@ -743,17 +743,19 @@ fn decide(
     let running = lifecycle == "running";
     // A usage limit the session's own policy waits out.
     if running {
-        let at_limit =
-            crate::session_chat_options::cached_session_chat_terminal_notice(state, &key.0, &key.1)
-                .is_some_and(|notice| notice.kind == "usageLimit");
+        let at_limit = crate::accounts::reset_used::waits_at_usage_limit(state, session);
         if !at_limit {
             pilot.limit_parked = false;
-        } else if !pilot.limit_parked {
-            return plan(
-                "limit",
-                "It reached its account's usage limit.".to_string(),
-                Act::Switch,
-            );
+        } else {
+            if !pilot.limit_parked {
+                return plan(
+                    "limit",
+                    "It reached its account's usage limit.".to_string(),
+                    Act::Switch,
+                );
+            }
+            // Never fall through to hung / TurnCutOff retries while parked on a usage limit.
+            return None;
         }
     }
     // A CLI's own update prompt holds the agent before it can take anything: pick Skip.

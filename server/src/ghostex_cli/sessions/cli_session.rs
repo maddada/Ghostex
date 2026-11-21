@@ -170,6 +170,8 @@ pub(super) fn to_cli_session(
     // (CDXC:Notifications 2026-11-08 in packages/gx-core/src/alert_rule.rs); absent while not blocked.
     insert_js(&mut map, "blockedSince", &[p("blockedSince")]);
     insert_js(&mut map, "blockedReason", &[p("blockedReason")]);
+    insert_js(&mut map, "quotaResetsAt", &[p("quotaResetsAt")]);
+    insert_js(&mut map, "quotaWaitState", &[p("quotaWaitState")]);
     // A question card waits for the user (CDXC:SessionStatus 2026-10-31 in server/src/session_approval.rs); absent when false.
     insert_js(&mut map, "awaitingAnswer", &[p("awaitingAnswer")]);
     // CDXC:Sidebar 2026-10-30 SEE-ALSO: the phone's Unified list (apps/mobile/app/src/contract/unified/) reads what gx-core's Unified sidebar reads: when the working stint began (its "came back" moment and Working timer) and a failed model change (its Failed status).

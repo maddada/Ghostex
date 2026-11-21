@@ -41,7 +41,14 @@ fn notice_from_rule(
         rule.title,
     )
     .with_input_blocking(rule.blocks_input)
-    .with_detail(match evidence.as_deref().and_then(limit_reset) {
+    .with_detail(match evidence
+        .as_deref()
+        .and_then(limit_reset)
+        .or_else(|| {
+            (rule.detail == ANTIGRAVITY_USAGE_LIMIT_DETAIL)
+                .then(|| limit_reset(screen.window(NoticeScope::Banner)))
+                .flatten()
+        }) {
         Some(reset)
             if rule.detail == CLAUDE_USAGE_LIMIT_DETAIL
                 || rule.detail == ANTIGRAVITY_USAGE_LIMIT_DETAIL =>
@@ -66,25 +73,104 @@ fn notice_from_rule(
     )
 }
 
-/// "resets 4pm" from Claude's "You've hit your limit · resets 4pm (Europe/Berlin)", or
-/// "resets in 3h16m25s" from Antigravity's "… Resets in 3h16m25s.", without the time zone.
+/// "resets 4pm" from Claude's "You've hit your limit · resets 4pm (Europe/Berlin)",
+/// "resets in 3h16m25s" from Antigravity's "… Resets in 3h16m25s.", or
+/// "retry in 30s" from Antigravity's rate limit banner, without the time zone.
 fn limit_reset(line: &str) -> Option<String> {
     let lower = line.to_ascii_lowercase();
-    let start = lower.find("resets ")?;
-    let reset = &line[start..];
-    let reset = match reset.find(" (") {
-        Some(at) => &reset[..at],
-        None => reset,
-    };
-    let reset = reset.trim().trim_end_matches(['.', ',']);
-    if reset.len() <= "resets ".len() {
+    if let Some(start) = lower.find("resets in ") {
+        let rest = &line[start + "resets in ".len()..];
+        let token = rest
+            .split_whitespace()
+            .next()?
+            .trim_end_matches(['.', ',', ')', ';']);
+        if !token.is_empty() {
+            return Some(format!("resets in {token}"));
+        }
+    }
+    if let Some(start) = lower.find("resets ") {
+        let reset = &line[start..];
+        let reset = match reset.find(" (") {
+            Some(at) => &reset[..at],
+            None => reset,
+        };
+        let reset = reset.split("Error ID:").next().unwrap_or(reset);
+        let reset = reset.trim().trim_end_matches(['.', ',']);
+        if reset.len() > "resets ".len() {
+            let mut normalized = reset.to_string();
+            if normalized.starts_with('R') {
+                normalized.replace_range(0..1, "r");
+            }
+            return Some(normalized);
+        }
+    }
+    let start = lower.find("retry in ")?;
+    let rest = &line[start + "retry in ".len()..];
+    let token = rest
+        .split_whitespace()
+        .next()?
+        .trim_end_matches(['.', ',', ')', ';']);
+    if token.is_empty() {
         return None;
     }
-    let mut normalized = reset.to_string();
-    if normalized.starts_with('R') {
-        normalized.replace_range(0..1, "r");
+    Some(format!("retry in {token}"))
+}
+
+/// Parses a relative reset or retry duration from a usage-limit notice (`Resets in 3h16m25s`,
+/// `retry in 30s`, `retry in 2m30s`, etc.) using the shared Go duration parser.
+pub(crate) fn parse_notice_reset_duration(
+    notice: &SessionChatTerminalNotice,
+) -> Option<chrono::Duration> {
+    let tail = notice.screen_tail.as_deref().unwrap_or_default();
+    let texts = [
+        notice.details.clone().unwrap_or_default(),
+        notice.detail.clone().unwrap_or_default(),
+        tail.lines().map(str::trim).collect::<Vec<_>>().join(" "),
+    ];
+    texts.iter().find_map(|text| parse_reset_duration_text(text))
+}
+
+pub(crate) fn parse_reset_duration_text(text: &str) -> Option<chrono::Duration> {
+    let lower = text.to_ascii_lowercase();
+    for needle in ["resets in ", "retry in "] {
+        let mut offset = 0;
+        while let Some(found) = lower[offset..].find(needle) {
+            let start = offset + found + needle.len();
+            let rest = text[start..].trim_start();
+            // First try Go duration syntax (`3h16m25s`, `12m52s`, `45s`, `2h`).
+            let token_end = rest
+                .find(|c: char| {
+                    !(c.is_ascii_digit() || matches!(c, '.' | 'h' | 'm' | 's' | 'µ' | 'u' | 'n'))
+                })
+                .unwrap_or(rest.len());
+            let token = rest[..token_end].trim_end_matches('.');
+            if !token.is_empty() {
+                if let Some(duration) = crate::accounts::hub::cooldown::go_duration(token) {
+                    if duration > chrono::Duration::zero() {
+                        return Some(duration);
+                    }
+                }
+            }
+            // Fallback for spaced units like "30 seconds" or "5 minutes".
+            let mut parts = rest.split_whitespace();
+            if let (Some(num_str), Some(unit_raw)) = (parts.next(), parts.next()) {
+                if let Ok(value) = num_str.parse::<i64>() {
+                    let unit = unit_raw.trim_end_matches(['.', ',', ')', ';']).to_ascii_lowercase();
+                    let seconds = match unit.as_str() {
+                        "s" | "sec" | "secs" | "second" | "seconds" => Some(value),
+                        "m" | "min" | "mins" | "minute" | "minutes" => Some(value.saturating_mul(60)),
+                        "h" | "hr" | "hrs" | "hour" | "hours" => Some(value.saturating_mul(3600)),
+                        _ => None,
+                    };
+                    if let Some(secs) = seconds.filter(|s| *s > 0) {
+                        return Some(chrono::Duration::seconds(secs));
+                    }
+                }
+            }
+            offset = start;
+        }
     }
-    Some(normalized)
+    None
 }
 
 /*

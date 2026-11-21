@@ -397,6 +397,9 @@ fn enqueue_selection(
     crate::session_chat_model_selection_alert::clear_model_selection_failure(
         state, project, session_id,
     );
+    if replaces_model {
+        crate::accounts::quota_wait::clear_for_session(state, project, session_id);
+    }
     let pending = read_pending(&db, project, session_id);
     crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
         state, project, session_id,

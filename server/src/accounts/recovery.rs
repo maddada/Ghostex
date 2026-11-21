@@ -202,6 +202,23 @@ pub(crate) struct Plan {
     session: String,
     claim: String,
     prompt: Option<String>,
+    quota_wait: bool,
+}
+impl Plan {
+    pub(super) fn for_quota_wait(
+        project: String,
+        session: String,
+        claim: String,
+        prompt: Option<String>,
+    ) -> Self {
+        Self {
+            project,
+            session,
+            claim,
+            prompt,
+            quota_wait: true,
+        }
+    }
 }
 /// A disabled account counts: another account recovers it (disabled.rs), although retrying on the same one never does.
 pub(crate) fn retryable(notice: &SessionChatTerminalNotice) -> bool {
@@ -343,6 +360,25 @@ pub(crate) fn collect(
     for session in &targets {
         super::api_errors::settle_failure_notice(state, &repo, session);
     }
+    let mut plans = vec![];
+    // Non-account-switched usage-limit waits (Antigravity Wait for reset, quota_wait.rs) run even
+    // when no Claude/Codex accounts are saved.
+    for session in &targets {
+        match super::quota_wait::plan_due_resume(state, &db, &repo, session) {
+            Ok(Some(plan)) => plans.push(plan),
+            Ok(None) => {}
+            Err(error) => log(
+                state,
+                LogLevel::Warn,
+                "quotaWaitPlanFailed",
+                Some(error.message),
+                json!({
+                    "projectId": session["projectId"],
+                    "sessionId": session["sessionId"],
+                }),
+            ),
+        }
+    }
     // A provider with nothing saved follows `Policy::default`, which is on.
     if registry.accounts.is_empty()
         && [Provider::Claude, Provider::Codex]
@@ -365,11 +401,10 @@ pub(crate) fn collect(
             })
         })
     {
-        return Ok(vec![]);
+        return Ok(plans);
     }
     let snapshot = state.accounts.refresh(&state.paths.home_dir, false);
     let detector = SessionChatOptionDetector::new(state);
-    let mut plans = vec![];
     let mut settled = BTreeSet::new();
     for old in targets {
         let (Some(pid), Some(sid)) = (old["projectId"].as_str(), old["sessionId"].as_str()) else {
@@ -451,7 +486,8 @@ fn restore_candidates(
                     CASE WHEN json_type(runtimeSettingsJson, '$.accountRecovery.status') = 'text'
                          THEN json_extract(runtimeSettingsJson, '$.accountRecovery.status') END,
                     CASE WHEN json_type(runtimeSettingsJson, '$.accountSwitch.phase') = 'text'
-                         THEN json_extract(runtimeSettingsJson, '$.accountSwitch.phase') END
+                         THEN json_extract(runtimeSettingsJson, '$.accountSwitch.phase') END,
+                    json_type(runtimeSettingsJson, '$.quotaLimit') = 'object'
              FROM sessions
              ORDER BY updatedAt DESC, projectId ASC, sessionId ASC",
         )
@@ -487,6 +523,9 @@ fn restore_candidates(
             if let Some(phase) = row.get::<_, Option<String>>(9)? {
                 runtime.insert("accountSwitch".into(), json!({ "phase": phase }));
             }
+            if row.get::<_, Option<bool>>(10)? == Some(true) {
+                runtime.insert("quotaLimit".into(), json!({}));
+            }
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -519,6 +558,7 @@ fn restore_may_apply(registry: &Registry, session: &Value) -> bool {
         });
     stale_slot
         || runtime["accountRecovery"]["accountWait"].is_object()
+        || runtime["quotaLimit"].is_object()
         || runtime.get("accountSuppressedUsageNoticeAt").is_some()
         || runtime["accountRecovery"]["status"] == "retrying"
         || runtime["accountRecovery"]["status"] == "waiting"
@@ -558,6 +598,7 @@ fn restore_session(
         }
     }
     super::limit_wait::restore(&session);
+    super::quota_wait::restore(state, repo, &session);
     if let Some(since) = time(session.pointer("/runtimeSettings/accountSuppressedUsageNoticeAt")) {
         crate::session_chat_notice::suppress_account_usage_notice(pid, sid, since);
     }
@@ -1243,6 +1284,7 @@ pub(crate) fn plan_session(
         session: sid.into(),
         claim,
         prompt: queue.deliverable_head().map(|p| p.id.clone()),
+        quota_wait: false,
     }))
 }
 /// The compact command to send before this continuation, if any (`compactFirst` from the card, or
@@ -1480,17 +1522,23 @@ pub(super) async fn deliver(state: Arc<AppState>, plan: Plan) {
             };
             row
         };
-        if row
-            .pointer("/runtimeSettings/accountRecovery/claim")
-            .and_then(Value::as_str)
-            != Some(&plan.claim)
-        {
+        let active_claim = if plan.quota_wait {
+            row.pointer("/runtimeSettings/quotaLimit/claim")
+                .and_then(Value::as_str)
+        } else {
+            row.pointer("/runtimeSettings/accountRecovery/claim")
+                .and_then(Value::as_str)
+        };
+        if active_claim != Some(&plan.claim) {
             return;
         }
-        trigger = row
-            .pointer("/runtimeSettings/accountRecovery/trigger")
-            .and_then(Value::as_str)
-            .map(str::to_string);
+        trigger = if plan.quota_wait {
+            Some("usageLimit".to_string())
+        } else {
+            row.pointer("/runtimeSettings/accountRecovery/trigger")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        };
         let agent = crate::session_chat_composer::session_chat_composer_agent_id(&row);
         let detection = detector
             .detect(&plan.project, &plan.session, agent.as_deref(), true)
@@ -1588,6 +1636,10 @@ pub(super) async fn deliver(state: Arc<AppState>, plan: Plan) {
         .await
         .map(|_| ())
     };
+    if plan.quota_wait {
+        super::quota_wait::finish_delivery(&state, &plan.project, &plan.session, &plan.claim, result);
+        return;
+    }
     let _gate = state.accounts.mutation_gate();
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
@@ -1705,6 +1757,7 @@ pub(crate) fn retry_now(
         session: sid.into(),
         claim,
         prompt: queue.deliverable_head().map(|p| p.id.clone()),
+        quota_wait: false,
     };
     let state = Arc::new(state.clone());
     tokio::spawn(async move { deliver(state, plan).await });
@@ -1768,6 +1821,7 @@ pub(super) fn claim_after_reset(
         session: sid.into(),
         claim,
         prompt: queue.deliverable_head().map(|p| p.id.clone()),
+        quota_wait: false,
     }))
 }
 /// Whether a session without its own Customize settings is covered by an enabled provider default, so Stop and the next send still record the recovery suppression flag.
@@ -1791,6 +1845,7 @@ pub(crate) fn user_action(
     session: &str,
     stop: bool,
 ) -> Result<(), DomainStateError> {
+    super::quota_wait::clear_for_session(state, project, session);
     let _gate = state.accounts.mutation_gate();
     let db = open_gxserver_database(&state.paths).map_err(store::error)?;
     let repo = DomainRepository::new(&db, &state.metadata.server_id);

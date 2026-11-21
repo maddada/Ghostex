@@ -48,6 +48,11 @@ pub(super) fn folded_slot(
         .then(|| card.row.timing.working_started_ms)
         .flatten()
         .map(|started| super::cards::elapsed_label(now_ms() - started));
+    let quota_badge = status::quota_countdown_badge(
+        card.row.quota_resets_at.as_deref(),
+        card.row.quota_wait_state.as_deref(),
+        scale,
+    );
     Some(
         h_flex()
             .id("unified-card-folded-status")
@@ -55,6 +60,7 @@ pub(super) fn folded_slot(
             .gap(px(4.0 * scale))
             .text_size(px(12.5 * scale))
             .text_color(appearance.muted)
+            .children(quota_badge)
             .children(timer.map(|timer| div().opacity(0.85).child(timer)))
             .child(status::folded_status_indicator(
                 folded.working,

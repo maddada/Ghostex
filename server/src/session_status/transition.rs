@@ -104,11 +104,42 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
         return next;
     }
 
+    let effective_agent = title_signal
+        .as_ref()
+        .map(|signal| signal.agent_name.as_str())
+        .or_else(|| normalize_status_agent_name(input.agent_id.as_deref()).as_deref().and_then(|_| None));
+    let is_antigravity = title_signal
+        .as_ref()
+        .is_some_and(|signal| signal.agent_name == "antigravity")
+        || normalize_status_agent_name(input.agent_id.as_deref()).as_deref()
+            == Some("antigravity")
+        || previous.agent_name.as_deref() == Some("antigravity");
+    let _ = effective_agent;
+
+    // CDXC:SessionStatus 2026-11-22 DECISION (Q4463):
+    // Antigravity CLI emits `🔔 agy` titles and terminal BEL events at startup and between tool
+    // calls while hooks report `working`, with no prompt on screen. Those non-explicit signals must
+    // never override explicit hook-backed `working` state or trigger false startup attention.
+    if is_antigravity
+        && !has_explicit_activity
+        && matches!(input.event.as_deref(), Some("title" | "bell"))
+        && previous.activity == "working"
+        && previous.working_source.as_deref() == Some("explicit")
+    {
+        let mut next = previous.clone();
+        next.agent_name = Some("antigravity".to_string());
+        if next.last_changed_at.is_none() {
+            next.last_changed_at = Some(input.now_iso.clone());
+        }
+        return next;
+    }
+
     if input.event.as_deref() == Some("title")
         && !has_explicit_activity
         && previous.activity == "working"
         && previous.working_source.as_deref() == Some("explicit")
-        && title_signal.as_ref().map(|signal| signal.state.as_str()) != Some("attention")
+        && (title_signal.as_ref().map(|signal| signal.state.as_str()) != Some("attention")
+            || is_antigravity)
         && !is_trusted_spinner_stop_title(&input, &previous, title_signal.as_ref())
         && !is_trusted_settled_title_stop(&input, &previous, title_signal.as_ref())
     {
@@ -296,12 +327,15 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
             .working_started_at
             .as_deref()
             .and_then(parse_iso_ms);
+        // CDXC:SessionStatus 2026-11-22 DECISION (Q4463):
+        // Antigravity's `🔔 agy` title and terminal BEL must not bypass the startup grace window
+        // (`MIN_WORKING_DURATION_BEFORE_ATTENTION_MS`) or enter attention before the agent has
+        // actually been seen working. Real Antigravity permission prompts and `ask_question` cards
+        // surface via explicit hooks and `session_chat_antigravity_permission.rs`.
+        let bell_bypasses_grace = input.event.as_deref() == Some("bell") && !is_antigravity;
         let can_enter_attention = has_explicit_activity
-            || matches!(input.event.as_deref(), Some("bell" | "terminalError"))
-            || title_signal
-                .as_ref()
-                .map(|signal| signal.agent_name.as_str())
-                == Some("antigravity")
+            || input.event.as_deref() == Some("terminalError")
+            || bell_bypasses_grace
             || working_started_ms
                 .map(|started| input.now_ms - started >= MIN_WORKING_DURATION_BEFORE_ATTENTION_MS)
                 == Some(true);

@@ -14,7 +14,7 @@ const MONTHS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-/// Rewrites a usage-limit notice that carries `accountWait` into the every-account-full warning.
+/// Rewrites a usage-limit notice that carries `accountWait` or `quotaWait` into its calm wait card.
 pub fn decorate(
     object: &mut Map<String, Value>,
     hide_account_emails: bool,
@@ -23,6 +23,16 @@ pub fn decorate(
 ) {
     if object.get("kind").and_then(Value::as_str) != Some("usageLimit") {
         return;
+    }
+    if let Some(quota_wait) = object
+        .get("quotaWait")
+        .and_then(Value::as_object)
+        .cloned()
+    {
+        if object.get("accountWait").and_then(Value::as_object).is_none() {
+            decorate_quota_wait(object, &quota_wait, now_ms, utc_offset_minutes);
+            return;
+        }
     }
     let Some(wait) = object
         .get("accountWait")
@@ -98,6 +108,124 @@ pub fn decorate(
         "answer": { "kind": "stopRecovery" },
     }));
     object.insert("actions".to_string(), Value::Array(actions));
+}
+
+/// CDXC:AgentProviders 2026-11-22 DECISION (Q4460, Q4461, Q4462):
+/// Decorates an Antigravity (or other non-account-switched) `usageLimit` notice carrying
+/// `quotaWait` with plain wording, reset countdown, Wait for reset, Switch model, Terminal view,
+/// and Stop / Dismiss.
+fn decorate_quota_wait(
+    object: &mut Map<String, Value>,
+    wait: &Map<String, Value>,
+    now_ms: f64,
+    utc_offset_minutes: i32,
+) {
+    let text = |key: &str| {
+        wait.get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    };
+    let mode = text("mode").unwrap_or("quotaBlocked");
+    let resets_at = text("resetsAt")
+        .and_then(|at| parse_iso_millis(at, utc_offset_minutes))
+        .filter(|at| *at > now_ms);
+    let countdown = resets_at.map(|at| short_countdown_ms(at - now_ms));
+    let when = resets_at.map(|at| local_time(at, now_ms, utc_offset_minutes));
+    let (title, detail) = match mode {
+        "quotaWaiting" => {
+            let title = match countdown.as_deref() {
+                Some(cd) => format!("Waiting for reset · {cd}"),
+                None => "Waiting for quota reset".to_string(),
+            };
+            let detail = match when.as_deref() {
+                Some(when) => format!(
+                    "Ghostex will continue automatically {when} after the limit resets. Switch models now to keep going sooner."
+                ),
+                None => "Ghostex will continue automatically after the limit resets. Switch models now to keep going sooner.".to_string(),
+            };
+            (title, detail)
+        }
+        _ => {
+            let title = match countdown.as_deref() {
+                Some(cd) => format!("Antigravity quota reached · resets in {cd}"),
+                None => "Antigravity quota reached".to_string(),
+            };
+            let detail = match when.as_deref() {
+                Some(when) => format!(
+                    "Resets {when}. Choose Wait for reset to continue automatically, or switch models now."
+                ),
+                None => "This model reached its quota. Choose Wait for reset to continue automatically, or switch models now.".to_string(),
+            };
+            (title, detail)
+        }
+    };
+    object.insert("title".to_string(), json!(title));
+    object.insert("detail".to_string(), json!(detail));
+    object.insert("tone".to_string(), json!("wait"));
+    // Rebuild actions cleanly in the exact order:
+    // - quotaBlocked: Wait for reset (primary), Switch model, Terminal view (+ Dismiss in renderer)
+    // - quotaWaiting: Switch model (primary), Terminal view, Stop (+ Dismiss in renderer)
+    let mut actions = Vec::new();
+    if mode == "quotaWaiting" {
+        actions.push(json!({
+            "id": "switchModel",
+            "label": "Switch model",
+            "kind": "openModelPicker",
+            "primary": true,
+            "answer": Value::Null,
+        }));
+        actions.push(json!({
+            "id": "switchToTerminal",
+            "label": "Terminal view",
+            "kind": "switchToTerminal",
+            "answer": Value::Null,
+        }));
+        actions.push(json!({
+            "id": "dismissUsageLimit",
+            "label": "Stop",
+            "kind": "restartAgent",
+            "answer": { "kind": "restartAgent", "actionId": "dismissUsageLimit" },
+        }));
+    } else {
+        actions.push(json!({
+            "id": "waitForQuotaReset",
+            "label": "Wait for reset",
+            "kind": "restartAgent",
+            "primary": true,
+            "answer": { "kind": "restartAgent", "actionId": "waitForQuotaReset" },
+        }));
+        actions.push(json!({
+            "id": "switchModel",
+            "label": "Switch model",
+            "kind": "openModelPicker",
+            "answer": Value::Null,
+        }));
+        actions.push(json!({
+            "id": "switchToTerminal",
+            "label": "Terminal view",
+            "kind": "switchToTerminal",
+            "answer": Value::Null,
+        }));
+    }
+    object.insert("actions".to_string(), Value::Array(actions));
+}
+
+fn short_countdown_ms(ms: f64) -> String {
+    let secs = (ms / 1000.0).ceil().max(0.0) as i64;
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m", (secs + 59) / 60)
+    } else {
+        let hours = secs / 3600;
+        let mins = (secs % 3600) / 60;
+        if mins == 0 {
+            format!("{hours}h")
+        } else {
+            format!("{hours}h {mins}m")
+        }
+    }
 }
 
 /// What the card and the Accounts & limits panel's waiting box say while every account is full.

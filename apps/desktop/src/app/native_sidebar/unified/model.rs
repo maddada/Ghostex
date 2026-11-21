@@ -126,9 +126,11 @@ impl UnifiedSidebarSnapshot {
             }))
             .any(|card| {
                 card.status == Some(UnifiedStatus::Working)
+                    || card.row.timing.quota_resets_at_ms.is_some()
                     || card.lines.iter().any(|line| {
                         matches!(line, UnifiedCardLine::Thread { card, .. }
-                            if card.status == Some(UnifiedStatus::Working))
+                            if card.status == Some(UnifiedStatus::Working)
+                                || card.row.timing.quota_resets_at_ms.is_some())
                     })
             })
     }

@@ -85,6 +85,24 @@ pub(super) fn status_slot(
     User (Q1230): the Unified card shows the classic row's static status dots ("use the same icons we have for the non-unified sidebar pls"). The working icon used to spin, and each of its frames rebuilt and laid out the whole sidebar thirty times a second while any agent worked: most of the app's CPU in a profile (issues-1027/macos-perf). The live timer has its own once-a-second tick (list.rs).
     */
     let row = &card.row;
+    let quota_badge = status::quota_countdown_badge(
+        row.quota_resets_at.as_deref(),
+        row.quota_wait_state.as_deref(),
+        scale,
+    );
+    // Calm amber clock + countdown alone once the user clicked Wait for reset (red dot dismissed).
+    if status == UnifiedStatus::Waiting && row.quota_wait_state.as_deref() == Some("waiting") {
+        if let Some(badge) = quota_badge {
+            return Some(
+                h_flex()
+                    .id("unified-card-status")
+                    .aria_label("Waiting for quota reset")
+                    .flex_shrink_0()
+                    .child(badge)
+                    .into_any_element(),
+            );
+        }
+    }
     let glyph = match status {
         UnifiedStatus::Approval => status::approval_indicator(scale),
         UnifiedStatus::Question => status::question_indicator(
@@ -107,6 +125,7 @@ pub(super) fn status_slot(
             .gap(px(4.0 * scale))
             .text_size(px(12.5 * scale))
             .text_color(color)
+            .children(quota_badge.filter(|_| status == UnifiedStatus::Failed))
             .children(timer.map(|timer| div().opacity(0.85).child(timer)))
             .child(glyph)
             .into_any_element(),

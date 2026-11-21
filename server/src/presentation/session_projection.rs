@@ -283,6 +283,17 @@ pub(crate) fn project_presentation_session(
             );
         }
     }
+    // Additive quota wait fields for the sidebar countdown badge (Q4460/Q4461).
+    if let Some((resets_at, wait_state)) = crate::accounts::quota_wait::presentation_fields(session)
+    {
+        if let Some(resets_at) = resets_at {
+            output.insert("quotaResetsAt".to_string(), Value::String(resets_at));
+        }
+        output.insert(
+            "quotaWaitState".to_string(),
+            Value::String(wait_state.to_string()),
+        );
+    }
     // Present only while true (CDXC:SessionStatus 2026-10-31 in server/src/session_approval.rs).
     if crate::session_approval::session_awaits_answer(session) {
         output.insert("awaitingAnswer".to_string(), Value::Bool(true));

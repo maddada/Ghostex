@@ -179,6 +179,8 @@ pub fn unified_status(row: &SessionRow) -> Option<UnifiedStatus> {
         Some(UnifiedStatus::Question)
     } else if row.model_selection_failed || row.program_status_failed || row.stuck {
         Some(UnifiedStatus::Failed)
+    } else if row.quota_wait_state.as_deref() == Some("waiting") {
+        Some(UnifiedStatus::Waiting)
     } else if row.activity == "working" {
         Some(UnifiedStatus::Working)
     } else if row.activity == "attention" {
