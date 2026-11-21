@@ -196,6 +196,17 @@ pub(crate) fn hold(
     Ok(())
 }
 
+/// The coordinator's agent is being switched before Start (`/api/switchDraftAgent`, CDXC:Drafts
+/// 2026-11-21 in agents/no_conversation.rs): a message typed into the old agent's box, or taken out
+/// for a model change, goes into the new agent's box once it shows. One the user cleared from the
+/// box stays out, as before.
+pub(crate) fn retype_after_agent_switch(db: &Connection, project_id: &str, session_id: &str) {
+    let _ = db.execute(
+        "UPDATE session_chat_first_messages SET state = ?3, updatedAt = ?4 WHERE projectId = ?1 AND sessionId = ?2 AND state IN (?5, ?6)",
+        params![project_id, session_id, WAITING, now_iso(), TYPED, LIFTED],
+    );
+}
+
 /// Watches every waiting first message again after gxserver starts. One a model change had taken
 /// out of the box goes back in.
 pub(crate) fn resume_all(state: &AppState) {
@@ -282,6 +293,11 @@ async fn watch(state: &AppState, project_id: &str, session_id: &str) {
         let Some(message) = read_now(state, project_id, session_id) else {
             return;
         };
+        // While the agent is being switched the box belongs to the switch: the old agent's box
+        // empties as it exits, which is not the message leaving.
+        if crate::agents::draft_agent_switch_in_progress(project_id, session_id) {
+            continue;
+        }
         let target = match target(state, project_id, session_id) {
             Ok(target) => target,
             Err(error) if error.code == "notFound" => {

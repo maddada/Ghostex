@@ -154,7 +154,8 @@ through `/api/startSessionProvider`, and neither is a wake), and after Ghostex
 itself types an option command into a draft's terminal.
 
 Scoped to drafts on purpose: no non-draft session's activity changes because of
-this.
+this, except in an agent switch of a session with no conversation yet
+(`arm_launch_activity_suppression` below).
 */
 pub(crate) fn arm_draft_launch_activity_suppression(
     repository: &DomainRepository<'_>,
@@ -163,6 +164,15 @@ pub(crate) fn arm_draft_launch_activity_suppression(
     if !session_is_draft(session) {
         return Ok(session.clone());
     }
+    arm_launch_activity_suppression(repository, session)
+}
+
+/// The launch window of [`arm_draft_launch_activity_suppression`] for any session, which an agent
+/// switch in a live pane needs whether or not the session is a draft (a coordinator before Start).
+fn arm_launch_activity_suppression(
+    repository: &DomainRepository<'_>,
+    session: &Value,
+) -> Result<Value, DomainStateError> {
     let (Some(project_id), Some(session_id)) = (
         read_text_value(session, "projectId"),
         read_text_value(session, "sessionId"),
@@ -412,7 +422,10 @@ pub(crate) fn switch_draft_agent(
     let project = require_project(repository, &lifecycle.project_id)?;
     let session = require_session(repository, &lifecycle)?;
     crate::agentbox::refuse_for_agentbox_session(&session, "Switching the agent")?;
-    if !session_is_draft(&session) {
+    // Not only drafts: a coordinator before Start and an agent that has recorded no prompt switch
+    // in place too (CDXC:Drafts 2026-11-21 in agents/no_conversation.rs). Each keeps what it is:
+    // a draft stays a draft, the others stay off the Drafts shelf.
+    if !session_has_no_conversation(db, &session) {
         return Err(DomainStateError {
             code: "invalidState",
             message:
@@ -421,6 +434,7 @@ pub(crate) fn switch_draft_agent(
         }
         .into());
     }
+    let was_draft = session_is_draft(&session);
     let agent_id = read_required_text(params.get("agentId"), "agentId")?;
     let previous_agent_id = read_text_value(&session, "agentId");
     if previous_agent_id
@@ -473,6 +487,13 @@ pub(crate) fn switch_draft_agent(
     let session = require_session(repository, &lifecycle)?;
 
     let switch_guard = DraftAgentSwitch::begin(&lifecycle.project_id, &lifecycle.session_id)?;
+    // A coordinator's unsent first message leaves with the old agent's input box; the watch types
+    // it into the new one once the switch is done (session_chat_first_message.rs).
+    crate::session_chat_first_message::retype_after_agent_switch(
+        db,
+        &lifecycle.project_id,
+        &lifecycle.session_id,
+    );
 
     /*
     Everything the OLD agent owns has to go before the new plan is built, or
@@ -536,7 +557,7 @@ pub(crate) fn switch_draft_agent(
     // The row is STILL a draft after the switch — only its agent changed. The
     // create-time resolution strips the marker unless it is asked for, which is
     // what keeps a client from minting a draft by hand.
-    create_params.insert("draft".to_string(), json!(true));
+    create_params.insert("draft".to_string(), json!(was_draft));
     create_params.insert("launchSettings".to_string(), Value::Object(launch_settings));
     create_params.insert(
         "runtimeSettings".to_string(),
@@ -622,11 +643,19 @@ pub(crate) fn switch_draft_agent(
     terminal-observed one is theirs and survives the switch untouched. The
     draft-text display title is projection-level and is unaffected either way.
     */
+    // A coordinator keeps its title, the placeholder "Coordinator" included.
+    let is_coordinator =
+        crate::coordinators::read_coordinator(db, &lifecycle.project_id, &lifecycle.session_id)
+            .ok()
+            .flatten()
+            .is_some();
     if let Some(title) = next_draft_agent_title(
         &project,
         &session,
         resolved.get("title").and_then(Value::as_str),
-    ) {
+    )
+    .filter(|_| !is_coordinator)
+    {
         update.insert("title".to_string(), json!(title));
     }
     let updated = repository.update_session(&update)?;
@@ -643,7 +672,7 @@ pub(crate) fn switch_draft_agent(
         it. Re-arm here instead, or the new CLI's boot spinner is free to stamp
         `lastActiveAt` and promote the draft the user is still typing into.
         */
-        let updated = arm_draft_launch_activity_suppression(repository, &updated)?;
+        let updated = arm_launch_activity_suppression(repository, &updated)?;
         /*
         Cancel first so a send the user queued against the OLD agent cannot land
         between the interrupts and the new CLI, exactly as `interruptSessionChat`

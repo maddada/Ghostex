@@ -146,17 +146,18 @@ pub(crate) fn resolve_session_chat_read_state(
         &db, project_id, session_id,
     )
     .with_resource_index(&db, project_id, session_id);
-    let available_agents = if crate::agents::session_is_draft(&session) {
-        repository
-            .get_project(project_id)?
-            .as_ref()
-            .map(crate::agents::available_draft_agents)
-    } else {
-        None
-    };
+    // A session with no conversation yet (a draft, a coordinator before Start, an agent that has
+    // recorded no prompt) gets the agent list that makes every chat switch it in place rather than
+    // hand it over (CDXC:Drafts 2026-11-21 in agents/no_conversation.rs); the account rows below
+    // are for a conversation that resumes under another account.
+    let no_conversation = crate::agents::session_has_no_conversation(&db, &session);
     let project = repository.get_project(project_id)?;
+    let available_agents = no_conversation
+        .then(|| project.as_ref().map(crate::agents::available_draft_agents))
+        .flatten();
     let switchable_agents = project
         .as_ref()
+        .filter(|_| !no_conversation)
         .and_then(|project| crate::agents::switchable_session_agents_value(project, &session));
     let enabled_agent_icons = project
         .as_ref()
