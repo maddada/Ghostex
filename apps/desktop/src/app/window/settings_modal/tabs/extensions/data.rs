@@ -187,7 +187,7 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "changes" => "modals/settings/git-commit.svg",
         "extensionsButton" => "modals/settings/puzzle.svg",
         "connectors" => "modals/settings/plug-connected.svg",
-        "chief" => "titlebar/ghostex-flower.svg",
+        "chief" => crate::app::native_sidebar::chief_row_view::FLOWER_ICON,
         "osIntegration" => "modals/settings/device-desktop.svg",
         "debugging" => "modals/settings/bug.svg",
         "help" => "modals/settings/help-circle.svg",

@@ -22,8 +22,11 @@ use gpui_component::{h_flex, v_flex};
 pub(crate) const CHIEF_LABEL: &str = "Chief of Staff";
 /// The home project's name on its header and card: "Main Hub". The one place the desktop spells it.
 pub(crate) const HOME_LABEL: &str = "Main Hub";
-/// The Ghostex flower in one colour (Q1735).
-pub(crate) const FLOWER_ICON: &str = "titlebar/ghostex-flower.svg";
+/// The Ghostex flower in one colour (Q1735): the app icon's silhouette, filled.
+///
+/// CDXC:Chief 2026-11-21 DECISION:
+/// User: "please this flower doesn't look like ghostex' icon. pls fix make it match exactly ghostex icon silhouette (more rounded)". Main Hub and Chief of Staff (the rail, the sidebar's Main Hub header and Chief rows, the where pill, session details, Settings > Extensions) wear the filled seven-petal flower of titlebar/ghostex.svg, whose outline matches AppIcon.png's petals (checked by overlaying the two) with its seams between petals as thin cuts. Supersedes the outlined lemon-shaped petals of ghostex-flower.svg (2026-11-08), which is removed; the phone's `FlowerGlyph` draws the same paths.
+pub(crate) const FLOWER_ICON: &str = "titlebar/ghostex.svg";
 /// How much of the muted colour the chevron keeps while nothing can unfold under it.
 const DIMMED_CHEVRON: f32 = 0.35;
 /// The project header's fold chevron (`COMMAND_ICON_CHEVRON_RIGHT`).
