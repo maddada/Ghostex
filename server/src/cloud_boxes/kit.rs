@@ -125,7 +125,18 @@ pub(super) fn kit(state: &AppState) -> Result<CloudKit, DomainStateError> {
         issued_at: super::time::now_iso(),
         providers,
         accounts,
-        allow_device_keys: boot_steps::allowed_device_keys(state),
+        // CDXC:CloudBoxes 2026-11-21 FIX: review of c1d1a8a3a (finding 4): the list also names this
+        // computer's own box keys, so it was never empty and the phone's "no paired device can
+        // reach a box" check (phoneStart.ts) stopped firing: a phone without an Easy Connect key
+        // started a box it couldn't reach, billing until it idled out. With no paired device
+        // holding a key the kit names none, and the phone refuses as before.
+        allow_device_keys: if boot_steps::paired_device_keys(&state.paths)
+            .is_some_and(|keys| !keys.is_empty())
+        {
+            boot_steps::allowed_device_keys(state)
+        } else {
+            Vec::new()
+        },
         idle_stop_minutes: boot_steps::idle_stop_minutes(state),
         projects,
         spend: {
