@@ -172,6 +172,14 @@ pub(super) fn page_for_cover_link(
     // other (next, back, themselves) open one page per file, never a new one on every hop.
     let cover_id = linked_from(&cover).unwrap_or(cover_id).to_string();
     let cover_id = cover_id.as_str();
+    // A retired cover (`ghostex page retire`, or a newer `ghostex show` of its file) and its
+    // sections answer for nothing more: their links open read-only (the caller's fallback).
+    let retired = |record: &Value| record.get("retiredAt").is_some();
+    if retired(&cover)
+        || read_record(gxserver_state_dir, cover_id).is_none_or(|root| retired(&root))
+    {
+        return Ok(None);
+    }
     let Ok(canonical) = fs::canonicalize(file) else {
         return Ok(None);
     };
@@ -256,20 +264,35 @@ pub(super) fn page_for_cover_link(
 /// them without end.
 const LINKED_PAGES_PER_COVER: usize = 50;
 
-/// How many pages links made for the cover `cover_id` (`linkedFrom`).
+/// How many pages links made for the cover `cover_id` (`linkedFrom`), retired ones included.
 fn pages_linked_from(gxserver_state_dir: &Path, cover_id: &str) -> usize {
+    records_linked_from(gxserver_state_dir, cover_id).len()
+}
+
+/// The pages links made for the cover `cover_id` that are not retired yet: retire.rs retires them
+/// with their cover.
+pub(super) fn sections_of(gxserver_state_dir: &Path, cover_id: &str) -> Vec<String> {
+    records_linked_from(gxserver_state_dir, cover_id)
+        .into_iter()
+        .filter(|(_, record)| record.get("retiredAt").is_none())
+        .map(|(id, _)| id)
+        .collect()
+}
+
+/// The pages links made for the cover `cover_id`, with their records.
+fn records_linked_from(gxserver_state_dir: &Path, cover_id: &str) -> Vec<(String, Value)> {
     let Ok(entries) = fs::read_dir(visual_pages_dir(gxserver_state_dir)) else {
-        return 0;
+        return Vec::new();
     };
     entries
         .flatten()
         .filter_map(|entry| {
             let name = entry.file_name().to_string_lossy().into_owned();
-            name.strip_suffix(".json")
-                .and_then(|id| read_record(gxserver_state_dir, id))
+            let id = name.strip_suffix(".json")?.to_string();
+            read_record(gxserver_state_dir, &id).map(|record| (id, record))
         })
-        .filter(|record| linked_from(record) == Some(cover_id))
-        .count()
+        .filter(|(_, record)| linked_from(record) == Some(cover_id))
+        .collect()
 }
 
 /// The cover a page opened through a cover's link belongs to: the page itself when it is no
