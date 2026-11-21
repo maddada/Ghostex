@@ -305,6 +305,8 @@ mod tests {
         write_skill(&source.path().join("ghostex"), "ghostex");
         let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
         let home = paths.agent_config_home_dir().to_path_buf();
+        // An install naming no agents links only into agents that are present (#696).
+        fs::create_dir_all(home.join(".claude")).expect("claude home");
         install_skill_from(&paths, "ghostex", &source.path().to_string_lossy(), false)
             .await
             .expect("install");
