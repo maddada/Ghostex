@@ -51,6 +51,7 @@ pub(super) fn stop(state: &AppState, box_id: &str) -> Result<CloudBox, DomainSta
         let _ = boot_steps::write_back_logins(state, &ops, &target(&row)?);
     }
     ops.stop(&target(&row)?).map_err(params::provider_error)?;
+    super::box_link::drop_link(box_id);
     let row = registry::update(&state.paths, box_id, |stored| {
         stored.row.state = CloudBoxState::Stopped;
         stored.row.stopped_at = Some(super::time::now_iso());
@@ -119,6 +120,7 @@ pub(super) fn delete(
     let result = ops.delete(&target(&row)?);
     registry::set_transition(box_id, None);
     result.map_err(params::provider_error)?;
+    super::box_link::drop_link(box_id);
     registry::forget(box_id);
     let row = registry::update(&state.paths, box_id, |stored| {
         stored.row.state = CloudBoxState::Deleted;

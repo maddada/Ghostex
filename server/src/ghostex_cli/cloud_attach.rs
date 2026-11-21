@@ -59,31 +59,36 @@ pub(crate) fn attach(
             .base_url
             .clone()
             .ok_or_else(|| CliError::Other("The box has no address yet.".to_string()))?,
-        CLOUD_BOX_TRANSPORT_TAILCAT => {
-            let address = info.tailcat_address.clone().ok_or_else(|| {
-                CliError::Other("The box has no tailcat address yet.".to_string())
-            })?;
-            let binary = crate::tailcat::binary::resolve_client_tailcat_binary().ok_or_else(|| {
+        CLOUD_BOX_TRANSPORT_TAILCAT => match shared_link_port(box_id) {
+            // This computer's one link to its box, which every attach here rides (box_link.rs).
+            Some(port) => format!("http://{GXSERVER_LOCAL_API_HOST}:{port}"),
+            // A box another computer's gxserver answered for, or a gxserver without the link.
+            None => {
+                let address = info.tailcat_address.clone().ok_or_else(|| {
+                    CliError::Other("The box has no tailcat address yet.".to_string())
+                })?;
+                let binary = crate::tailcat::binary::resolve_client_tailcat_binary().ok_or_else(|| {
                 CliError::Other(format!(
                     "Easy Connect (tailcat {} or newer) is not installed on this computer. Install it in Settings › Remote › Easy Connect.",
                     ghostex_paths::tailcat::TAILCAT_MIN_VERSION
                 ))
             })?;
-            let local_port = std::net::TcpListener::bind((GXSERVER_LOCAL_API_HOST, 0))
-                .and_then(|listener| listener.local_addr())
-                .map(|address| address.port())?;
-            let plan = TailcatForwardPlan {
-                address_blob: address.clone(),
-                base_url: format!("http://{GXSERVER_LOCAL_API_HOST}:{local_port}"),
-                local_port,
-                remote_port: u16::try_from(info.gxserver_port).map_err(|_| {
-                    CliError::Other("The box's gxserver port is invalid.".to_string())
-                })?,
-                client_key: own_box_key(&address),
-            };
-            tunnel = Some(start_tailcat_tunnel(&binary, &plan)?);
-            plan.base_url
-        }
+                let local_port = std::net::TcpListener::bind((GXSERVER_LOCAL_API_HOST, 0))
+                    .and_then(|listener| listener.local_addr())
+                    .map(|address| address.port())?;
+                let plan = TailcatForwardPlan {
+                    address_blob: address.clone(),
+                    base_url: format!("http://{GXSERVER_LOCAL_API_HOST}:{local_port}"),
+                    local_port,
+                    remote_port: u16::try_from(info.gxserver_port).map_err(|_| {
+                        CliError::Other("The box's gxserver port is invalid.".to_string())
+                    })?,
+                    client_key: own_box_key(&address),
+                };
+                tunnel = Some(start_tailcat_tunnel(&binary, &plan)?);
+                plan.base_url
+            }
+        },
         other => return Err(CliError::Other(format!("Unknown box transport {other}."))),
     };
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -100,6 +105,18 @@ pub(crate) fn attach(
         tunnel.stop();
     }
     result
+}
+
+/// The loopback port of this computer's gxserver's one link to its box `box_id`, or `None` when
+/// that gxserver has no such box or no such route.
+fn shared_link_port(box_id: &str) -> Option<u16> {
+    let answer = call_gxserver_rpc(
+        crate::cloud_boxes::box_link::BOX_LINK_ENDPOINT,
+        &json!({ "boxId": box_id }),
+        &Flags::default(),
+    )
+    .ok()?;
+    u16::try_from(answer.get("port")?.as_u64()?).ok()
 }
 
 /// This computer's own key for its box at `address`, which this computer's gxserver names only for

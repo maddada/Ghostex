@@ -1227,6 +1227,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | crate::remote_access::EASY_CONNECT_CLIENT_KEY_ENDPOINT
         // CDXC:RemotePairing 2026-11-10 WHY: the desktop app asks its own gxserver for the key it dials a paired computer with; the answer is a key file on this computer, so only the local listener serves it.
         | crate::remote_access::computer_link_keys::EASY_CONNECT_LINK_KEY_ENDPOINT
+        // CDXC:CloudBoxes 2026-11-21 WHY: `ghostex cloud attach` asks this computer's gxserver for the loopback port of its one link to a box (cloud_boxes/box_link.rs); the port is on this computer, so only the local listener serves it.
+        | crate::cloud_boxes::box_link::BOX_LINK_ENDPOINT
         // CDXC:ServerLinks 2026-11-19 WHY: this computer's CLI and apps list, add and remove its
         // server links (remote_access/server_link_dialer.rs); adding one opens an Easy Connect
         // tunnel from here, so like `/api/pairComputer` only this computer's own clients reach it.
