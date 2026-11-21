@@ -1819,7 +1819,8 @@ when you open it.
   the destination for next time. A remembered destination opens showing where it
   goes; one that's gone, or is the project you're handing off from, goes back to
   this project. Picking another agent's model in the model picker always starts
-  from this project on that model's agent. Handing off a coordinator starts the
+  from this project on that model's agent, and only in a session that has a
+  conversation: one with none yet just switches to that agent. Handing off a coordinator starts the
   new session as a coordinator with the same Goal and Standing instructions, on
   whichever agent you pick.
   Include also holds History. At first the file keeps the last 20 turns, a turn
@@ -3238,9 +3239,13 @@ thread lists the ones its own folder can use. Click a row's star to keep that
 model on the Favorites tab; hover the info icon that appears on a row to read
 what that model is for. In a session that has started, another agent's tab
 shows a small handoff badge: picking one of its models hands the conversation
-off to that agent instead of changing this session's model. In a new thread
-you have not sent anything in yet, it switches the thread to that agent instead,
-and an OpenCode model becomes the thread's model as soon as OpenCode is up. With more than one signed-in Claude or Codex account, an Account
+off to that agent instead of changing this session's model. In a session with
+no conversation yet (a new thread you have not sent anything in, a coordinator
+before you click Start, or a session whose agent has not had a message) there is
+no badge and no handoff: the session itself switches to that agent and model,
+keeping its place, its title, what you typed in the chat box and a coordinator's
+waiting first message, and an OpenCode model becomes the session's model as soon
+as OpenCode is up. With more than one signed-in Claude or Codex account, an Account
 button beside Fast mode shows the account in use and opens the list to switch.
 
 The Model & Effort Picker shortcut (Option+P by default on macOS) opens the same
