@@ -384,8 +384,8 @@ pub(super) fn note_retired(gxserver_state_dir: &Path, id: &str) {
 }
 
 /// The pages `ghostex show` published earlier from the file at `source` that are not retired yet,
-/// leaving out `newest` (the page just published from it) and pages made by opening the file
-/// (`file_page.rs`), which no chat shows.
+/// leaving out `newest` (the page just published from it) and pages made by opening the file or
+/// for a cover's link (`file_page.rs`), which no chat shows as cards.
 pub(super) fn earlier_pages_from(
     gxserver_state_dir: &Path,
     source: &str,
@@ -407,9 +407,31 @@ pub(super) fn earlier_pages_from(
                 record.get("sourcePath").and_then(serde_json::Value::as_str) == Some(source)
                     && record.get("retiredAt").is_none()
                     && !super::file_page::opened_from_file(&record)
+                    && super::file_page::linked_from(&record).is_none()
             })
         })
         .collect()
+}
+
+/// Marks a page made for a cover's link (`file_page.rs` `page_for_cover_link`) with the cover's
+/// id, and, when it asks nothing, as waiting to be marked as read (`awaitsSeen`, publish.rs).
+pub(super) fn mark_linked_from(
+    gxserver_state_dir: &Path,
+    id: &str,
+    cover_id: &str,
+    awaits_seen: bool,
+) {
+    let _guard = RECORD_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(mut record) = read_record(gxserver_state_dir, id) else {
+        return;
+    };
+    record[super::file_page::LINKED_FROM_KEY] = json!(cover_id);
+    if awaits_seen {
+        record["awaitsSeen"] = json!(true);
+    }
+    let _ = write_record(gxserver_state_dir, id, &record);
 }
 
 /// Marks a page made by opening its file, which no session published (`file_page.rs`).

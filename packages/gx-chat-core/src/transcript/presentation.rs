@@ -829,6 +829,10 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         &mut found,
         state.session.resource_index.view(),
     );
+    crate::questions::resource_index::add_linked_pages(
+        &mut found,
+        state.session.resource_index.view(),
+    );
     crate::transcript::open_questions::share_answers(&mut found);
     crate::transcript::open_questions::mark_inherited(
         &mut found,

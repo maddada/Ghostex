@@ -1056,19 +1056,24 @@ pub(crate) fn page_url(state: &ChatState, id: &str) -> Option<String> {
                 })
                 .map(|item| item.message_id.clone())
         });
-    if let Some(message_id) = loaded {
+    // A section opened through a link on the cover is an asker of the cover's reply, whose blocks
+    // do not name it: its address is the index's (`resource_index::add_linked_pages`).
+    let found = loaded.and_then(|message_id| {
         let message = state
             .messages
             .composed
             .iter()
             .find(|message| message.id == message_id)?;
         let markdown = crate::transcript::prose::prose_markdown(&message.blocks);
-        return crate::transcript::question_forms::content_fences(&markdown)
+        crate::transcript::question_forms::content_fences(&markdown)
             .into_iter()
             .filter(|fence| fence.kind == crate::transcript::question_forms::ContentKind::Page)
             .filter_map(|fence| ghostex_gx_visual::page_reference(&fence.body))
             .find(|page| page.page_id().map_or(page.url.as_str(), |page_id| page_id) == id)
-            .map(|page| page.url.clone());
+            .map(|page| page.url.clone())
+    });
+    if found.is_some() {
+        return found;
     }
     let entry = indexed(state).into_iter().find(|entry| entry.id == id)?;
     if entry.kind != "page" {

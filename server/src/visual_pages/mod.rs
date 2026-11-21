@@ -34,7 +34,7 @@ pub(crate) use exported::{
     download as download_exported_page, handle_export_http as handle_export_visual_page_http,
     is_export_route, EXPORT_VISUAL_PAGE_ENDPOINT,
 };
-pub(crate) use file_page::page_for_file;
+pub(crate) use file_page::{linked_page_summary, page_for_file};
 pub(crate) use guest::{guest_file_page, guest_page, guest_page_answers_message};
 pub(crate) use images::{is_image_route, read as read_page_image, save as save_page_image};
 pub(crate) use import::{

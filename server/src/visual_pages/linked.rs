@@ -22,10 +22,18 @@
 //! works and nothing elsewhere on the disk is published by a link. The route sends no cross-origin
 //! headers (http_dispatch.rs), so only a navigation follows it: a page's own script cannot fetch it
 //! to read the linked page.
+//!
+//! CDXC:SessionChat 2026-11-21 DECISION:
+//! User (Q4352): a section a published cover links inside its own folder answers to the cover's
+//! agent (file_page.rs `page_for_cover_link`, where the decision lives), and the cover's session
+//! lists it from the first click until it is answered or marked as read
+//! (session_chat_open_questions.rs `note_linked_page`). The rule for a link out of the folder is
+//! unchanged.
 
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use axum::{
@@ -33,10 +41,10 @@ use axum::{
     response::IntoResponse,
 };
 
-use crate::server::RoutedResponse;
+use crate::server::{AppState, RoutedResponse};
 
 use super::{
-    file_page::{page_for_linked_file, page_show_published},
+    file_page::{page_for_cover_link, page_for_linked_file, page_show_published, LinkedSession},
     prepare::anchor_hrefs,
     serve::{PAGE_SCRIPT_QUERY, READ_ONLY_QUERY, VISUAL_PAGE_ROUTE_PREFIX},
     store::{is_page_id, page_source_path, read_page},
@@ -53,10 +61,11 @@ pub(crate) fn is_link_route(path: &str) -> bool {
 /// the page's own file. The reader's `gx-page-script` and `gx-readonly` flags carry over; the
 /// fragment the bootstrap added (the theme, the floating window) is kept by the browser.
 pub(crate) async fn follow(
-    gxserver_state_dir: PathBuf,
+    state: Arc<AppState>,
     path: String,
     query: Option<String>,
 ) -> RoutedResponse {
+    let gxserver_state_dir = state.paths.root_dir.clone();
     let Some(id) = page_of(&path) else {
         return not_found();
     };
@@ -71,10 +80,21 @@ pub(crate) async fn follow(
         .split('&')
         .filter(|pair| *pair == PAGE_SCRIPT_QUERY || *pair == READ_ONLY_QUERY)
         .collect();
-    let linked = tokio::task::spawn_blocking(move || linked_page(&gxserver_state_dir, &id, &href))
-        .await
-        .ok()
-        .flatten();
+    let linked = tokio::task::spawn_blocking(move || {
+        let (linked, made_for) = linked_page(&gxserver_state_dir, &id, &href)?;
+        if let Some(made_for) = made_for {
+            crate::session_chat_open_questions::note_linked_page(
+                &state,
+                &made_for.session_ref,
+                &linked,
+                made_for.awaits_seen,
+            );
+        }
+        Some(linked)
+    })
+    .await
+    .ok()
+    .flatten();
     let Some(linked) = linked else {
         return not_found();
     };
@@ -97,8 +117,13 @@ pub(crate) async fn follow(
 }
 
 /// The id of the page `href` (as page `id` writes it) opens, when the page links to it and the
-/// file is one a link may open.
-fn linked_page(gxserver_state_dir: &Path, id: &str, href: &str) -> Option<String> {
+/// file is one a link may open, with the session it was made to answer to when it is the cover's
+/// own page for the file.
+fn linked_page(
+    gxserver_state_dir: &Path,
+    id: &str,
+    href: &str,
+) -> Option<(String, Option<LinkedSession>)> {
     let relative = relative_html_path(href)?;
     let page = read_page(gxserver_state_dir, id)?;
     let href = href.trim();
@@ -112,14 +137,18 @@ fn linked_page(gxserver_state_dir: &Path, id: &str, href: &str) -> Option<String
     // Symlinks resolved on both sides, so a link inside the folder cannot lead out of it.
     let folder = fs::canonicalize(Path::new(&source).parent()?).ok()?;
     let file = fs::canonicalize(folder.join(relative)).ok()?;
-    let linked = if file.starts_with(&folder) {
-        page_for_linked_file(gxserver_state_dir, &file)
-            .ok()
-            .flatten()
-    } else {
-        page_show_published(gxserver_state_dir, &file)
-    };
-    linked.map(|page| page.id)
+    if !file.starts_with(&folder) {
+        return page_show_published(gxserver_state_dir, &file).map(|page| (page.id, None));
+    }
+    match page_for_cover_link(gxserver_state_dir, &file, id) {
+        Ok(Some(page)) => return Some((page.id, page.made_for)),
+        Ok(None) => {}
+        Err(_) => return None,
+    }
+    page_for_linked_file(gxserver_state_dir, &file)
+        .ok()
+        .flatten()
+        .map(|page| (page.id, None))
 }
 
 /// The file a relative link to an HTML file names, percent-decoded, without its query and

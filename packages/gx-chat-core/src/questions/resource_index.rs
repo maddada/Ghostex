@@ -70,6 +70,16 @@ pub struct ResourceEntry {
     /// page that ends there holds the whole turn (`questions/resource_modal.rs`, "Go to chat").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_end: Option<u64>,
+    /// Set on a page no reply holds: a section the reader opened through a link on this session's
+    /// published cover page, which answers to this session (the cover's page id;
+    /// server/src/visual_pages/file_page.rs `page_for_cover_link`). The chat lists it like the
+    /// cover's own card until it is answered or marked as read ([`add_linked_pages`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked_from: Option<String>,
+    /// A page that asks nothing and waits to be marked as read (`Asker::seen_only`), on a
+    /// [`linked_from`](Self::linked_from) entry, whose block the chat never reads.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub awaits_seen: bool,
 }
 
 /// The forms (`kind` `form`) or question pages (`page`) the index (the chat's `resourceIndex`)
@@ -276,6 +286,56 @@ pub fn settle_loaded_by(askers: &mut [Asker], view: &IndexView) {
             Some(&"withdrawn") if !asker.answered => asker.obsolete = true,
             _ => {}
         }
+    }
+}
+
+/// Adds the pages the index lists as opened through a link on this session's cover page
+/// ([`ResourceEntry::linked_from`]) and still waiting, which no reply in the transcript holds, as
+/// askers of the cover's reply (its Show in chat), so the dock, the counts and Mark as read list
+/// them like the cover's own card.
+///
+/// CDXC:SessionChat 2026-11-21 DECISION:
+/// User (Q4352, "A. Same publisher as the cover"): a section opened through a published cover's
+/// link answers to the cover's agent, and waits in Needs you once opened until it is answered or
+/// marked as read. gxserver lists it in the session's index from the first click (its session
+/// learns of it no other way: no reply holds its card).
+pub fn add_linked_pages(askers: &mut Vec<Asker>, view: &IndexView) {
+    for entry in view.records.iter() {
+        let Some(cover) = entry.linked_from.as_deref() else {
+            continue;
+        };
+        if entry.kind != "page"
+            || entry.status != "waiting"
+            || askers.iter().any(|asker| asker.id == entry.id)
+        {
+            continue;
+        }
+        let message_id = askers
+            .iter()
+            .find(|asker| asker.id == cover)
+            .map(|asker| asker.message_id.clone())
+            .unwrap_or_default();
+        askers.push(Asker {
+            id: entry.id.clone(),
+            kind: AskerKind::Page,
+            message_id,
+            tags: Vec::new(),
+            answered: false,
+            obsolete: false,
+            withdrawn: Vec::new(),
+            keys: Vec::new(),
+            skipped: Vec::new(),
+            superseded: Vec::new(),
+            inherited: false,
+            seen_only: entry.awaits_seen,
+            source: entry.source.clone(),
+            replaced: false,
+            said: Vec::new(),
+            title: entry.title.clone(),
+            at: entry.at_ms,
+            prints: Vec::new(),
+            rounds: Vec::new(),
+        });
     }
 }
 

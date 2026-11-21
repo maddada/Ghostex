@@ -98,6 +98,12 @@ const STARRED_LIMIT: usize = 500;
 const OPENED_KEY: &str = "sessionChatPagesOpened";
 /// How many opened pages a session keeps at most; the oldest are dropped first.
 const OPENED_LIMIT: usize = 500;
+/// Where the pages opened through a link on this session's published cover page are kept (page
+/// ids): they answer to this session and wait like the cover's own card until answered or marked
+/// as read, though no reply holds them (`note_linked_page`).
+const LINKED_KEY: &str = "sessionChatLinkedPages";
+/// How many linked pages a session keeps at most; the oldest are dropped first.
+const LINKED_LIMIT: usize = 200;
 /// How many For later marks a session keeps at most; answered ones are dropped as they settle.
 const LATER_LIMIT: usize = 500;
 /// The agent's last words reach its transcript a moment after the turn-end hook.
@@ -607,6 +613,122 @@ pub(crate) fn set_opened(
     Ok(())
 }
 
+/// A reader opened `page_id` through a link on a cover page `session_ref` published, and the page
+/// answers to that session (visual_pages/file_page.rs `page_for_cover_link`, where the decision
+/// lives): the session lists it from now on, as opened (a page that asks nothing leaves the count
+/// once opened, as any page does), until its answers or its Mark as read come back. Nothing reaches
+/// the agent. Blocking.
+pub(crate) fn note_linked_page(
+    state: &AppState,
+    session_ref: &str,
+    page_id: &str,
+    awaits_seen: bool,
+) {
+    let (Some(project_id), Some(session_id)) =
+        crate::agent_hooks::probing::parse_global_session_ref(session_ref)
+    else {
+        return;
+    };
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let mut changed = false;
+    let mut linked = read_id_list(&db, &project_id, &session_id, LINKED_KEY);
+    if !linked
+        .iter()
+        .any(|known| known.eq_ignore_ascii_case(page_id))
+    {
+        linked.push(page_id.to_string());
+        if linked.len() > LINKED_LIMIT {
+            linked.drain(..linked.len() - LINKED_LIMIT);
+        }
+        if write_id_list(state, &db, &project_id, &session_id, LINKED_KEY, &linked).is_err() {
+            return;
+        }
+        changed = true;
+    }
+    if awaits_seen {
+        let mut opened = read_opened_page_ids(&db, &project_id, &session_id);
+        if !opened
+            .iter()
+            .any(|known| known.eq_ignore_ascii_case(page_id))
+        {
+            opened.push(page_id.to_string());
+            if opened.len() > OPENED_LIMIT {
+                opened.drain(..opened.len() - OPENED_LIMIT);
+            }
+            let _ = write_id_list(state, &db, &project_id, &session_id, OPENED_KEY, &opened);
+            changed = true;
+        }
+    }
+    if changed {
+        refresh(state, &project_id, &session_id, None);
+    }
+}
+
+/// The pages opened through links on this session's cover pages (`note_linked_page`), as the
+/// open list's askers (those still waiting) and as resource index entries (all of them, so an
+/// answered one reads answered). A page's address is its cover's, with its own id.
+fn linked_pages(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+    read: &[ResourceEntry],
+) -> (Vec<OpenAsker>, Vec<ResourceEntry>) {
+    let ids = read_id_list(db, project_id, session_id, LINKED_KEY);
+    if ids.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    let mut open = Vec::new();
+    let mut entries = Vec::new();
+    for id in ids {
+        let summary = crate::visual_pages::linked_page_summary(
+            &state.paths.root_dir,
+            &id,
+            project_id,
+            session_id,
+        );
+        let Some(summary) = summary else {
+            continue;
+        };
+        let url = read
+            .iter()
+            .find(|entry| entry.id == summary.cover)
+            .and_then(|entry| entry.url.as_deref())
+            .and_then(|url| url.find("/visual/").map(|at| &url[..at]))
+            .map(|base| format!("{base}/visual/{id}"));
+        if !summary.answered {
+            open.push(OpenAsker {
+                id: id.clone(),
+                kind: AskerKind::Page,
+                form: None,
+                waiting: 1,
+                latest_turn: false,
+                tags: Vec::new(),
+                at: summary.created_ms,
+            });
+        }
+        entries.push(ResourceEntry {
+            id,
+            kind: "page".to_string(),
+            title: summary.title,
+            at_ms: summary.created_ms,
+            status: if summary.answered {
+                "answered"
+            } else {
+                "waiting"
+            }
+            .to_string(),
+            url,
+            linked_from: Some(summary.cover),
+            awaits_seen: summary.awaits_seen,
+            ..ResourceEntry::default()
+        });
+    }
+    (open, entries)
+}
+
 /// When this session was forked from another, in epoch ms: the time Ghostex created it. The chat
 /// carries it as `forkedAt`, and questions asked before it belong to the parent
 /// (gx-chat-core's `mark_inherited`). `None` when the session is no fork.
@@ -894,9 +1016,22 @@ fn read_open(
     };
     // The resource index: what the whole transcript holds, kept in its own table (survives a
     // restart, a compaction and a partly loaded chat).
-    let read = ledger.index(&queued, forked_at, |id| {
+    let mut read = ledger.index(&queued, forked_at, |id| {
         crate::visual_pages::page_answered(&state.paths.root_dir, id)
     });
+    // The sections opened through links on this session's cover pages, which no reply holds.
+    let (linked_open, linked_entries) = linked_pages(state, db, project_id, session_id, &read);
+    let mut open = open;
+    for asker in linked_open {
+        if !open.iter().any(|known| known.id == asker.id) {
+            open.push(asker);
+        }
+    }
+    for entry in linked_entries {
+        if !read.iter().any(|known| known.id == entry.id) {
+            read.push(entry);
+        }
+    }
     let newly: Vec<OpenAsker> = if notify_turn {
         open.iter()
             .filter(|asker| asker.latest_turn && ledger.notified.insert(asker.id.clone()))

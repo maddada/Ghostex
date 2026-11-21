@@ -597,9 +597,13 @@ works.
    A set of pages (a cover page and its decks) can link to each other by a
    path relative to the HTML file (`<a href="decks/sales.html">`): on
    Ghostex newer than 11.12.0 the reader goes to that file's own page in
-   place. Write each linked file as a Live page (the skeleton above) or
-   publish it with `ghostex show` too; on older versions such a link says
-   404, so give each page its own card there.
+   place. Write each linked file as a Live page (the skeleton above) in the
+   cover's folder or under it, and publish only the cover: a page opened
+   through its link answers to you like the cover, its answers and Mark as
+   read reach you, and it waits in the reader's Needs you once opened. A file
+   outside the cover's folder opens only if you publish it with
+   `ghostex show` yourself. On older versions such a link says 404, so give
+   each page its own card there.
 3. Publish it:
 
    ```bash
