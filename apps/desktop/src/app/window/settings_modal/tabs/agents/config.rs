@@ -366,7 +366,7 @@ impl AgentsTab {
                 LEAN_CODEX_WORKERS,
                 RowSpec::new("Lean Codex workers")
                     .description(
-                        "Codex threads a coordinator starts run without Codex's own computer use, browser use, image generation, apps and plugins, so each request is about 12% smaller and they start faster. Sessions you start yourself keep all of them. Applies to threads started or resumed after you change it.",
+                        "Codex threads a coordinator starts, and Codex sessions another session starts to report to it, run without Codex's own computer use, browser use, image generation, apps and plugins, so each request is about 12% smaller and they start faster. Sessions you start yourself keep all of them. Applies to sessions started or resumed after you change it.",
                     )
                     .keyed(&values, LEAN_CODEX_WORKERS),
                 values.bool(LEAN_CODEX_WORKERS),

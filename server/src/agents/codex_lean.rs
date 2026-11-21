@@ -7,7 +7,12 @@
 //! 1.7s faster to start, all of it from the feature flags): Ghostex's own background Codex calls
 //! (title generation, Catch me up, commit messages) always pass `--disable` for these features,
 //! and "Lean Codex workers" (Settings > Agents, off by default) gives Codex threads a coordinator
-//! starts the same flags; sessions the user starts never get them. `plugin_discovery_prefetch` is
+//! starts the same flags; sessions the user starts never get them.
+//! CDXC:AgentProviders 2026-11-21 DECISION: GitHub #700, item 3 (the user picked all three, Q4328
+//! A): Lean Codex workers also covers the Codex sessions a lead starts with `ghostex agents create
+//! --lead` (`LEAD_WORKER_KEY`), which work for another session the way a coordinator's threads do;
+//! a session later linked with `agents link` was started by the user and keeps everything, and an
+//! unlinked one loses the flags at its next start, as an unlinked thread does. `plugin_discovery_prefetch` is
 //! left out (removed upstream, so it does nothing) and so is the post's `-c 'mcp_servers={}'`:
 //! Codex merges `-c` tables key by key, so an empty table turns off no MCP server.
 //! WHY: Codex refuses to start on a feature name it does not know ("Unknown feature flag"), so only
@@ -45,6 +50,10 @@ pub(crate) const LEAN_CODEX_WORKERS_SETTING: &str = "leanCodexWorkers";
 /// The create param `coordinator start-thread` sends, and the runtime setting that keeps it on the
 /// session: this session was started as a coordinator's thread.
 pub(crate) const COORDINATOR_THREAD_KEY: &str = "coordinatorThread";
+
+/// The create param `agents create --lead` sends, and the runtime setting that keeps it on the
+/// session: a lead started this session to report to it (agents/lead_links).
+pub(crate) const LEAD_WORKER_KEY: &str = "leadLinkWorker";
 
 const VERSION_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
@@ -119,16 +128,19 @@ fn lean_codex_workers_enabled() -> bool {
         .unwrap_or(false)
 }
 
-/// Whether a session was started as a coordinator's thread (`COORDINATOR_THREAD_KEY`).
-pub(crate) fn is_coordinator_thread(runtime_settings: Option<&Map<String, Value>>) -> bool {
-    runtime_settings
-        .and_then(|settings| settings.get(COORDINATOR_THREAD_KEY))
-        .and_then(Value::as_bool)
-        == Some(true)
+/// Whether a session was started as a coordinator's thread (`COORDINATOR_THREAD_KEY`) or by a lead
+/// to report to it (`LEAD_WORKER_KEY`).
+pub(crate) fn is_lean_worker(runtime_settings: Option<&Map<String, Value>>) -> bool {
+    [COORDINATOR_THREAD_KEY, LEAD_WORKER_KEY].iter().any(|key| {
+        runtime_settings
+            .and_then(|settings| settings.get(*key))
+            .and_then(Value::as_bool)
+            == Some(true)
+    })
 }
 
-/// `command` with the lean flags when it starts Codex for a coordinator's thread while "Lean Codex
-/// workers" is on; every other command as it is.
+/// `command` with the lean flags when it starts Codex for a coordinator's thread or a lead's linked
+/// session while "Lean Codex workers" is on; every other command as it is.
 pub(crate) fn with_lean_codex_worker(
     family: Option<&str>,
     runtime_settings: Option<&Map<String, Value>>,
@@ -137,7 +149,7 @@ pub(crate) fn with_lean_codex_worker(
     if cfg!(test)
         || family != Some("codex")
         || command.trim().is_empty()
-        || !is_coordinator_thread(runtime_settings)
+        || !is_lean_worker(runtime_settings)
         || command.contains("--disable plugins")
         || !lean_codex_workers_enabled()
     {

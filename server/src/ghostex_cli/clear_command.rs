@@ -18,6 +18,24 @@ const ENDPOINT: &str = "/api/clearSessionConversation";
 /// How long to wait for the new conversation, and for a sleeping session to wake and take the clear.
 const WAIT_RUNNING: Duration = Duration::from_secs(30);
 const WAIT_SLEEPING: Duration = Duration::from_secs(120);
+/// How long to look for the new conversation of an agent that shows it late.
+const WAIT_LATE: Duration = Duration::from_secs(10);
+/// The exit code for a clear that was typed but whose new conversation the agent only shows with
+/// its next message (`shows_new_conversation_late`); 1 stays "not cleared".
+const EXIT_SENT_UNCONFIRMED: i32 = 2;
+
+/// Whether the session's agent only reports its new conversation id once it gets its next
+/// message, so a wait that runs out says nothing about the clear.
+///
+/// CDXC:Cli 2026-11-21 FIX:
+/// GitHub #700, item 1: Codex writes its new conversation only when the next message reaches it,
+/// and a Claude session clear-command had to wake does not report the new one until then either
+/// (the reporter's retest of 11.12.0), so both came back "not cleared", exit 1, although the clear
+/// worked. They answer "sent, not confirmed yet" with exit 2 now; a running Claude session that
+/// does not move on in time is still exit 1, as are the refusals.
+fn shows_new_conversation_late(agent: &str, woke: bool) -> bool {
+    agent == "codex" || woke
+}
 
 fn timeout(flags: &Flags) -> Option<Duration> {
     flags
@@ -35,7 +53,13 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
         return Ok(());
     }
     let parsed = parse_args(args);
-    let flags = &parsed.flags;
+    // `--timeout` is this command's wait in seconds; the gxserver calls read a `timeout` flag as
+    // their own limit in milliseconds, so `--timeout 60` gave the clear request 60 ms. They get
+    // the flags without it.
+    let wait_flags = &parsed.flags;
+    let mut rpc_flags = parsed.flags.clone();
+    rpc_flags.0.remove("timeout");
+    let flags = &rpc_flags;
     let selector_text = selector::session_selector_from_args(&parsed.rest, flags)
         .ok_or_else(|| CliError::Other(usage::clear_command_usage()))?;
     // CDXC:Security 2026-11-20 WHY: without its session's `gxs_` token the CLI uses the token
@@ -56,10 +80,11 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
     let session = selector::resolve_cli_session_selector(&selector_text, flags)?;
     let params = json!({ "projectId": session["projectId"], "sessionId": session["sessionId"] });
     let mut answer = call_gxserver_rpc(ENDPOINT, &params, flags)?;
-    if answer["delivery"] == "waking" {
+    let woke = answer["delivery"] == "waking";
+    if woke {
         // gxserver woke a sleeping session and typed nothing: ask again once it is up, so the
         // clear is typed into the running agent and the conversation change seen is its own.
-        let deadline = Instant::now() + timeout(flags).unwrap_or(WAIT_SLEEPING);
+        let deadline = Instant::now() + timeout(wait_flags).unwrap_or(WAIT_SLEEPING);
         loop {
             if Instant::now() >= deadline {
                 return Err(CliError::Other("The session was asleep and did not wake in time, so nothing was typed. Try again in a moment.".into()));
@@ -81,10 +106,13 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
     let previous = answer["previousAgentSessionId"]
         .as_str()
         .map(str::to_string);
+    let agent = answer["agent"].as_str().unwrap_or_default().to_string();
+    let late = shows_new_conversation_late(&agent, woke);
     let wait = if flags.truthy("noWait") {
         None
     } else {
-        let limit = timeout(flags).unwrap_or(WAIT_RUNNING);
+        // It may still show up sooner (a later Codex), but a long wait for it is mostly lost time.
+        let limit = timeout(wait_flags).unwrap_or(if late { WAIT_LATE } else { WAIT_RUNNING });
         Some(wait_for_new_conversation(
             &session,
             previous.as_deref(),
@@ -98,6 +126,7 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
         .unwrap_or_default()
         .to_string();
     let command = answer["command"].as_str().unwrap_or("/clear");
+    let agent = agent.as_str();
     let mut result = json!({
         "ok": true,
         "session": reference,
@@ -106,14 +135,24 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
         "previousAgentSessionId": previous,
     });
     match &wait {
-        None => result["cleared"] = Value::Null,
+        None => {
+            result["cleared"] = Value::Null;
+            result["status"] = json!("sent");
+        }
         Some(Some(id)) => {
             result["cleared"] = json!(true);
+            result["status"] = json!("cleared");
             result["agentSessionId"] = json!(id);
+        }
+        Some(None) if late => {
+            result["cleared"] = Value::Null;
+            result["status"] = json!("sentNotConfirmed");
+            result["note"] = json!(late_note(agent));
         }
         Some(None) => {
             result["ok"] = json!(false);
             result["cleared"] = json!(false);
+            result["status"] = json!("notCleared");
         }
     }
     if flags.truthy("json") {
@@ -122,6 +161,10 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
         match &wait {
             None => println!("Sent {command} to {reference}; not waiting for the new conversation."),
             Some(Some(id)) => println!("Cleared {reference} with {command}. New conversation: {id}"),
+            Some(None) if late => println!(
+                "Sent {command} to {reference}; not confirmed yet. {}",
+                late_note(agent)
+            ),
             Some(None) => eprintln!(
                 "Sent {command} to {reference}, but its conversation did not change in time{}. Check the session before sending it new work.",
                 previous
@@ -131,10 +174,20 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
             ),
         }
     }
-    if matches!(wait, Some(None)) {
-        crate::ghostex_cli::set_exit_code(1);
+    match wait {
+        Some(None) if late => crate::ghostex_cli::set_exit_code(EXIT_SENT_UNCONFIRMED),
+        Some(None) => crate::ghostex_cli::set_exit_code(1),
+        _ => {}
     }
     Ok(())
+}
+
+fn late_note(agent: &str) -> &'static str {
+    if agent == "codex" {
+        "Codex shows its new conversation only once it gets its next message."
+    } else {
+        "A session that had to wake shows its new conversation only once it gets its next message."
+    }
 }
 
 /// The session's new conversation id once it differs from `previous`, or `None` after `limit`.
