@@ -742,7 +742,24 @@ pub(super) async fn run_session_chat_send_worker(
                     state_dir,
                     prompt_editor_input,
                     replacement,
+                    skip_when_empty,
                 } => {
+                    if let Some(agent) = skip_when_empty.as_deref() {
+                        let empty = capture_session_terminal_text_vt(&zmx_name)
+                            .await
+                            .and_then(|screen| {
+                                crate::session_chat_composer::session_chat_composer_input(
+                                    agent, &screen,
+                                )
+                            })
+                            .is_some_and(|input| input.text_is_empty() && !input.text_unreadable());
+                        if empty {
+                            if let Some(sink) = captured_draft.take() {
+                                let _ = sink.send(CapturedTerminalDraft::default());
+                            }
+                            continue;
+                        }
+                    }
                     match preserve_terminal_draft(
                         &state_dir,
                         &project_id,

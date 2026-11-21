@@ -278,6 +278,7 @@ async fn place_session_chat_draft(
                 state_dir: state_dir.to_path_buf(),
                 prompt_editor_input: super::session_chat_prompt_editor_input(agent.as_deref())
                     .to_string(),
+                skip_when_empty: None,
             },
             super::SessionChatSendStep::Write(super::build_session_chat_paste_bytes(content)),
         ]
@@ -290,11 +291,15 @@ async fn place_session_chat_draft(
                 settle_ms: super::SESSION_CHAT_COMPOSER_WAIT_SETTLE_MS,
                 timeout_ms: super::SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS,
             },
+            // WHY: an empty box has nothing to save, and Codex at Full access refuses the editor
+            // the save opens ("Failed to open editor: editor directory must not be writable"), so
+            // a held first message never reached Chief of Staff's box (review of efced63b5).
             super::SessionChatSendStep::PreserveTerminalDraft {
                 replacement: Some(content.to_string()),
                 state_dir: state_dir.to_path_buf(),
                 prompt_editor_input: super::session_chat_prompt_editor_input(agent.as_deref())
                     .to_string(),
+                skip_when_empty: agent.clone(),
             },
             super::SessionChatSendStep::WaitForComposer {
                 agent: agent.clone(),

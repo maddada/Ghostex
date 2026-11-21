@@ -63,6 +63,9 @@ pub enum SessionChatSendStep {
         prompt_editor_input: String,
         /// A view transfer may replace its own copy, but must keep newer terminal typing.
         replacement: Option<String>,
+        /// The agent whose input box is read off the screen first: when it reads empty there is
+        /// nothing to save, and the prompt-editor handshake is skipped. `None` always runs it.
+        skip_when_empty: Option<String>,
     },
     /// One `zmx send` stdin burst.
     Write(String),
