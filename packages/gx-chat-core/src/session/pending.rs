@@ -69,7 +69,14 @@ pub(crate) fn message_is_after_pending_timestamp(
         .unwrap_or(pending.sent_at_ms);
     match pending.after_message_timestamp {
         // The local send time: no existing record, so the comparison is inclusive.
-        None => stamp >= boundary,
+        //
+        // CDXC:SessionChat 2026-11-21 WHY:
+        // Antigravity CLI records a turn's time in whole seconds (`created_at` "…T00:19:38Z"), so
+        // a prompt it took 0.5 s after the send reads as 38.000 while the send was 38.121. The
+        // first message a coordinator's Start delivered was recorded once, yet its echo never
+        // matched and sat under the work as a second copy with a spinner. A whole-second stamp is
+        // compared with the send's own second.
+        None => stamp >= boundary || (stamp % 1000 == 0 && stamp >= boundary - boundary % 1000),
         // A transcript-clock boundary describes an EXISTING message, so it is exclusive.
         Some(_) => stamp > boundary,
     }
