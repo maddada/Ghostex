@@ -350,8 +350,9 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// The "Pick an agent" row at the top of a home group whose computer has no Chief of Staff yet:
-    /// a click asks which agent runs it, then its real row takes this place.
+    /// The "Start here" row at the top of a home group whose computer has no Chief of Staff yet:
+    /// a click starts it on the default agent (an older computer asks which agent), then its real
+    /// row takes this place.
     pub(crate) fn render_native_sidebar_chief_placeholder(
         &self,
         group: &super::model::NativeSidebarGroup,
@@ -376,7 +377,7 @@ impl GhostexGpuiApp {
                 ))
                 .role(gpui::Role::Button)
                 .aria_label(format!(
-                    "{}: pick the agent it runs on",
+                    "{}: start here",
                     super::chief_row_view::CHIEF_LABEL
                 ))
                 .h(px(34.0 * scale))
@@ -407,7 +408,7 @@ impl GhostexGpuiApp {
                         .flex_shrink_0()
                         .text_size(px(12.0 * scale))
                         .text_color(appearance.muted)
-                        .child("Pick an agent"),
+                        .child("Start here"),
                 )
                 .on_click(cx.listener(move |app, _, window, cx| {
                     cx.stop_propagation();
@@ -873,6 +874,17 @@ impl GhostexGpuiApp {
                 ) {
                     let row_id = Self::native_sidebar_chief_row_id(&machine, project_id, session_id);
                     app.focus_native_sidebar_chief(&row_id, cx);
+                    return;
+                }
+                // CDXC:Chief 2026-11-21 DECISION (server/src/chief/model.rs): Chief of Staff starts
+                // on the user's default agent, with no question. A computer whose gxserver predates
+                // that names no `defaultAgentId`, and keeps the agent question.
+                if let Some(agent_id) = status["defaultAgentId"].as_str() {
+                    app.change_native_sidebar_chief(
+                        &machine,
+                        json!({ "op": "open", "agentId": agent_id }),
+                        cx,
+                    );
                     return;
                 }
                 let mut items = vec![json!({ "label": "Which agent runs Chief of Staff?", "disabled": true })];

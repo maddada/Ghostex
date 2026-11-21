@@ -38,7 +38,7 @@ pub const READ_ALOUD: &str = "readAloud";
 /// of it.
 pub const VOICE_AGENT: &str = "voiceAgent";
 /// Main Hub with Chief of Staff, the Ghostex-wide coordinator (its pinned row in Main Hub on the
-/// desktop and the phone, its agent session and its head role); a beta, off by default. gxserver
+/// desktop and the phone, its agent session and its head role); on by default. gxserver
 /// takes the head role away and puts its agent to sleep while it is off (server/src/chief/).
 pub const CHIEF: &str = "chief";
 /// GBots, Ghostex's own bots under Chief of Staff in Main Hub; off by default, and off while Main

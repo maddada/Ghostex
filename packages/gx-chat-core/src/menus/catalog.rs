@@ -403,8 +403,9 @@ pub fn older_versions<'a>(labels: impl Iterator<Item = &'a str>) -> Vec<bool> {
 }
 
 /// A model name's family (its other words, lower case) and its version number: the first word of
-/// digits and dots. `None` for a name without one.
-fn family_and_version(label: &str) -> Option<(String, Vec<u32>)> {
+/// digits and dots. `None` for a name without one. gxserver picks Chief of Staff's newest model
+/// with it (server/src/chief/model.rs).
+pub fn family_and_version(label: &str) -> Option<(String, Vec<u32>)> {
     let mut family = Vec::new();
     let mut version = None;
     for word in label.split([' ', '-']).filter(|word| !word.is_empty()) {

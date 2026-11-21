@@ -33,7 +33,7 @@ const CHIEF_GOAL: &str =
     "Answer the user about anything in Ghostex, and steer their agents and coordinators for them.";
 
 /// What follows the coordinator skill line in Chief's first message.
-pub(super) const CHIEF_FIRST_REQUEST: &str = "You are Chief of Staff, the Ghostex-wide coordinator on this computer: the user asks you about any session, agent, project or computer, or about Ghostex itself. Before your first reply, and again after any context compaction, run `ghostex chief guide` and follow it; where it differs from the coordinator guide, it wins. Then say in one short line that you're ready and wait for the user.";
+pub(super) const CHIEF_FIRST_REQUEST: &str = "You are Chief of Staff, the Ghostex-wide coordinator on this computer and the user's starting point in Ghostex: they ask you about any session, agent, project or computer, or about Ghostex itself, and you help them set it up. Before your first reply, and again after any context compaction, run `ghostex chief guide` and follow it; where it differs from the coordinator guide, it wins. Then greet the user as its \"Your first reply\" section says.";
 
 /// The launchers Chief can run on: set up to start, and an agent family a coordinator runs on.
 /// GBots run on the same list (server/src/gbots/session.rs).
@@ -87,17 +87,30 @@ pub(super) fn open_chief(
     if let Some(record) = read_record(&db).filter(|record| session_exists(&repository, record)) {
         return Ok(json!({ "status": "existing", "chief": record }));
     }
-    let Some(agent_id) = agent_id.map(str::trim).filter(|id| !id.is_empty()) else {
+    // No agent named: the user's default agent (model.rs, CDXC:Chief 2026-11-21).
+    let picked = match agent_id.map(str::trim).filter(|id| !id.is_empty()) {
+        Some(agent_id) => Some(agent_id.to_string()),
+        None => super::model::default_agent(
+            &state.paths,
+            &db,
+            &chief_agent_rows(&repository.list_projects()?),
+        ),
+    };
+    let Some(agent_id) = picked else {
         return Err(DomainStateError {
             code: "chiefNeedsAgent",
-            message: "Pick the agent Chief of Staff runs on first.".to_string(),
+            message: "No agent can run Chief of Staff yet. Set up Claude, Codex or Antigravity in Settings > Agents first.".to_string(),
         });
     };
+    let agent_id = agent_id.as_str();
     // A Chief whose session was removed keeps its earlier chats.
-    let earlier = read_record(&db)
+    let old = read_record(&db);
+    let hand_pick = old.as_ref().and_then(|record| record.model.clone());
+    let earlier = old
         .map(|record| live_earlier(&repository, record.earlier))
         .unwrap_or_default();
-    let (record, started) = create_chief_session(state, &db, &repository, agent_id, earlier)?;
+    let (record, started) =
+        create_chief_session(state, &db, &repository, agent_id, earlier, hand_pick)?;
     Ok(json!({ "status": "created", "chief": record, "providerStarted": started }))
 }
 
@@ -130,7 +143,14 @@ pub(super) fn replace_chief(
         });
     }
     earlier.extend(live_earlier(&repository, old.earlier.clone()));
-    let (record, started) = create_chief_session(state, &db, &repository, &agent_id, earlier)?;
+    let (record, started) = create_chief_session(
+        state,
+        &db,
+        &repository,
+        &agent_id,
+        earlier,
+        old.model.clone(),
+    )?;
     move_coordinator(&db, &old.key(), &record.key())?;
     if old_alive {
         retitle_earlier(state, &db, &repository, &old);
@@ -232,6 +252,7 @@ fn create_chief_session(
     repository: &DomainRepository<'_>,
     agent_id: &str,
     earlier: Vec<EarlierChat>,
+    hand_pick: Option<super::model::ChiefModel>,
 ) -> Result<(ChiefRecord, bool), DomainStateError> {
     let projects = repository.list_projects()?;
     let agent_rows = chief_agent_rows(&projects);
@@ -246,6 +267,11 @@ fn create_chief_session(
     }
     let project = super::home::home_project(state, db, repository)?;
     let project_id = text_of(&project, "projectId")?;
+    let family = agent_rows
+        .iter()
+        .find(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id))
+        .and_then(crate::coordinators::coordinator_launcher_family);
+    let model = family.and_then(|family| super::model::for_new_chat(family, hand_pick.as_ref()));
     let mut params = coordinator_create_params(CoordinatorLaunch {
         agent_rows: &agent_rows,
         project_id: &project_id,
@@ -253,23 +279,24 @@ fn create_chief_session(
         title: Some(super::CHIEF_TITLE.to_string()),
         goal: CHIEF_GOAL.to_string(),
         task: CHIEF_FIRST_REQUEST.to_string(),
-        model: None,
-        effort: None,
+        model: model.as_ref().map(|model| model.model.clone()),
+        effort: model.as_ref().and_then(|model| model.effort.clone()),
     })
     .as_object()
     .cloned()
     .unwrap_or_default();
+    // CDXC:Chief 2026-11-21 DECISION:
+    // User, via Chief of Staff: "pls dont send the prompt to the chief of staff instead put it in the chat box like we do for coordinator thread and wait for the user to hit send/start on it ok? so that we dont cost him tokens unnecessarily". Every Chief of Staff chat Ghostex starts (first open, New Chat, Change Agent) holds its first message on the chat's Start card, like New Coordinator (session_chat_first_message.rs); nothing reaches the agent until the user starts it. Until then it counts as a chat with no conversation (agents/no_conversation.rs), so its agent and model switch in place.
+    if let Some(coordinator) = params.get_mut("coordinator").and_then(Value::as_object_mut) {
+        coordinator.insert("holdFirstMessage".into(), json!(true));
+    }
     params.insert("surface".into(), json!("workspace"));
     params.insert("requireLaunchCommand".into(), json!(true));
     // CDXC:GBots 2026-11-09 DECISION: Codex's sandbox below Full blocks `ghostex` from reaching
     // gxserver (server/src/gbots/session.rs `default_approval`), so Chief of Staff on Codex starts
     // at Full. At the home folder that becomes "never ask" inside the `ghostex-home` profile, which
     // still denies the secret folders (server/src/agents/home_secret_folders.rs).
-    let codex = agent_rows
-        .iter()
-        .find(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id))
-        .and_then(crate::coordinators::coordinator_launcher_family)
-        == Some("codex");
+    let codex = family == Some("codex");
     if codex {
         if let Some(launch) = params
             .get_mut("launchSettings")
@@ -290,6 +317,8 @@ fn create_chief_session(
         agent_id: agent_id.to_string(),
         created_at: now_iso(),
         earlier,
+        // What this chat starts on; with none to pick, an earlier hand pick stays remembered.
+        model: model.or(hand_pick),
     };
     write_record(db, &state.paths, &record)?;
     if let Some(family) = crate::agents::session_agent_family_id(&project, &session) {

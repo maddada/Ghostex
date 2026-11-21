@@ -294,15 +294,16 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     ]),
     // CDXC:Chief 2026-11-08 DECISION:
     // User: "please disable chief of staff for now and make it an extension so ppl aren't confused by it until i finish working on it (call it beta in settings pls)", then "i mean the Main Hub thingy". One whole-feature entry, Main Hub, with a Beta badge, off by default (`mainHubHidden`, default true, user-only so no agent can switch it): off, the home project is an ordinary project (gxserver publishes no `isHome` or `isChief`, and hides Chief of Staff's chats), Chief of Staff's agent sleeps and loses its head role, the home folder's secret-folder list is not applied, and nothing says Main Hub or Chief of Staff; on, all of it comes back with its chat and memory. Supersedes Chief's own entry (Q1734-Q1750, on by default).
+    // CDXC:Chief 2026-11-21 DECISION:
+    // User: "let's please make the main hub project and the chief of staff always enabled for everyone who installs ghostex ... chief of staff is basically the entry point to ghostex". Supersedes the off-by-default part of the decision above: Main Hub is on by default and listed with the features, not the experiments; everything it does while off stays as above, the user can still turn it off here, and only the user can turn it on. Existing computers: server/src/chief/default_on.rs.
     // SEE-ALSO: server/src/chief/ (the session, the head role, `chief_on`), packages/settings-catalog/src/data/defaults.rs (`mainHubHidden`), packages/settings-catalog/src/help/supplemental.rs.
     J::Obj(&[
-        ("description", J::Str("The home for chats that don't belong to a project, with Chief of Staff, an agent that can see and steer all your other agents, pinned at the top.")),
-        ("category", J::Str("experimental")),
+        ("description", J::Str("The home for chats that don't belong to a project, with Chief of Staff, an agent that can see and steer all your other agents, pinned at the top. Chief of Staff is where to start: it helps you add projects, set up and theme Ghostex, and connect your phone.")),
+        ("category", J::Str("features")),
         ("id", J::Str("chief")),
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("mainHubHidden")),
         ("appWide", J::Bool(true)),
-        ("badge", J::Str("Beta")),
         ("title", J::Str("Main Hub")),
         ("settingKeys", J::Arr(&[J::Str("chiefShowOnAllSpaces"), J::Str("chiefConfirmNewChat"), J::Str("homeSecretFolders"), J::Str("gbotsChiefAddsOnItsOwn")])),
     ]),

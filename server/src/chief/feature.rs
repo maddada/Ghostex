@@ -1,11 +1,11 @@
-//! Whether the Chief built-in extension is on (`mainHubHidden`, Main Hub on Settings > Extensions, off by
-//! default). Read fresh from the settings file, which the desktop's Settings writes directly, so
+//! Whether the Chief built-in extension is on (`mainHubHidden`, Main Hub on Settings > Extensions, on by
+//! default since 2026-11-21: default_on.rs). Read fresh from the settings file, which the desktop's Settings writes directly, so
 //! turning it off takes the head role away on the very next request (head.rs) without a restart.
 
 use ghostex_settings_catalog::built_in_extensions::{self, CHIEF};
 use serde_json::Value;
 
-/// Whether Chief is on in `settings` (the defaults when there are none: off, Main Hub is a beta).
+/// Whether Chief is on in `settings` (the defaults when there are none: on).
 pub(crate) fn chief_on_in(settings: Option<&Value>) -> bool {
     built_in_extensions::on_with(CHIEF, |key| {
         settings
