@@ -108,6 +108,26 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// The docked Unified sidebar shows Main Hub's fixed Chief of Staff row above its list
+    /// (native_sidebar/chief.rs), so the rail leaves out its own Main Hub button then.
+    ///
+    /// CDXC:Sidebar 2026-11-21 DECISION:
+    /// User (main-hub-rail page): hide the rail's Main Hub button in the Unified sidebar only, where the fixed Chief of Staff row already shows above the list. The Project sidebar keeps it, and so does a hidden or floating sidebar: there it is the only one-click way to Chief of Staff and the only place its status dot shows. Only the rail button goes; the ⋯ menu still lists Main Hub with its pin.
+    fn sidebar_rail_main_hub_in_sidebar(&self) -> bool {
+        !self.sidebar_collapsed
+            && self.native_sidebar.unified.is_some()
+            && self
+                .native_sidebar
+                .snapshot
+                .as_ref()
+                .is_some_and(|snapshot| {
+                    crate::app::native_sidebar::chief_row_view::chief_row_shown(
+                        snapshot.chief_enabled,
+                        snapshot.bots_mode,
+                    )
+                })
+    }
+
     /// The rail column, left of the sidebar, from the window's top to its bottom.
     pub(crate) fn render_sidebar_rail(
         &mut self,
@@ -135,10 +155,12 @@ impl GhostexGpuiApp {
                 + crate::app::consts::TITLEBAR_CONTROL_HEIGHT * appearance.scale / 2.0;
         let icons_top = toggle_center + RAIL_BUTTON / 2.0 + RAIL_GAP;
         let pins = sidebar_rail_pins();
+        let main_hub_in_sidebar = self.sidebar_rail_main_hub_in_sidebar();
+        let on_rail = |key: &str| !(main_hub_in_sidebar && key == "mainHub");
         let mut buttons = Vec::new();
         for (index, key) in pins.iter().copied().enumerate() {
             let state = self.sidebar_rail_item_state(key, cx);
-            if !state.available {
+            if !state.available || !on_rail(key) {
                 continue;
             }
             let look = RailButtonLook {
@@ -158,7 +180,7 @@ impl GhostexGpuiApp {
         // views and the feed are no rail items (CDXC:Sidebar 2026-11-21 on gx-core's `RAIL_ITEMS`),
         // so an open view never shows here.
         let temporary = RAIL_ITEMS.iter().find(|item| {
-            !pins.contains(&item.key) && {
+            !pins.contains(&item.key) && on_rail(item.key) && {
                 let state = self.sidebar_rail_item_state(item.key, cx);
                 state.available && state.showing
             }
