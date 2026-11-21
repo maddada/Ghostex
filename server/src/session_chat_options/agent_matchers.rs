@@ -786,6 +786,7 @@ pub(super) fn grok_mode_choice(segments: &[String]) -> SessionChatDetectedChoice
 // ---------------------------------------------------------------------------
 // Antigravity CLI grammar
 //   ? for shortcuts                                    Gemini 3.8 Flash · high
+//   ? for shortcuts                auto · Orchestrator · Gemini 4 Neon · xhigh
 //   Gemini 3.8 Flash (High)                       (startup banner, same values)
 //
 // CDXC:AgentScreenDetection 2026-09-03: the footer's right edge is
@@ -814,21 +815,85 @@ const ANTIGRAVITY_MODES: &[(&str, &str)] = &[
     ("plan", "Plan"),
 ];
 
+/// Extracts the tier suffix from a Gemini model name (`Gemini 4 Neon` => `Neon`,
+/// `Gemini 3.8 Flash` => `Flash`).
+fn antigravity_gemini_tier(name: &str) -> Option<&str> {
+    let rest = name.strip_prefix("Gemini ")?;
+    let (version, tier) = rest.split_once(' ')?;
+    if !is_model_version_suffix(&format!(" {version}")) || tier.is_empty() {
+        return None;
+    }
+    Some(tier)
+}
+
+/// Fallback id for an Antigravity Orchestrator tier when only the bundled catalog is loaded
+/// (before `agy models` populates the live lineup).
+fn antigravity_orchestrator_fallback(tier: &str) -> Option<&'static str> {
+    match tier {
+        "Neon" => Some("gemini-pro-orchestrator-neon"),
+        "Argon" => Some("gemini-pro-orchestrator-g1-pro"),
+        "Carbon" => Some("gemini-pro-orchestrator"),
+        _ => None,
+    }
+}
+
 /// `Gemini 3.8 Flash` ⇒ `gemini-3.8-flash`; `Gemini 3.1 Pro` ⇒ `gemini-3.1-pro`.
 ///
 /// The live catalog answers first: `agy models` folds a fixed reasoning mode
 /// into some ids (`GPT-OSS 120B` ⇒ `gpt-oss-120b-medium`), so only a
-/// Gemini name not in it yet is derived.
+/// Gemini or Orchestrator name not in it yet is derived.
 fn antigravity_model_id(name: &str) -> Option<String> {
     if let Some(value) = crate::agent_model_catalog::model_value_for_label("antigravity", name) {
         return Some(value);
     }
-    let rest = name.strip_prefix("Gemini")?;
-    let (version, tier) = rest.trim_start().split_once(' ')?;
-    if !is_model_version_suffix(&format!(" {version}")) || !matches!(tier, "Flash" | "Pro") {
+    if let Some(tier) = name
+        .strip_prefix("Orchestrator (")
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        return antigravity_orchestrator_fallback(tier).map(str::to_string);
+    }
+    let tier = antigravity_gemini_tier(name)?;
+    if !matches!(
+        tier,
+        "Flash" | "Pro" | "Argon" | "Carbon" | "Hydrogen" | "Neon"
+    ) {
         return None;
     }
     Some(name.to_ascii_lowercase().replace(' ', "-"))
+}
+
+/// CDXC:AgentScreenDetection 2026-11-22 WHY:
+/// Antigravity CLI 1.5.14 prints `Orchestrator · <planner> · <effort>` in its footer (for example
+/// `auto · Orchestrator · Gemini 4 Neon · xhigh`) instead of `Orchestrator (Neon)` (GitHub #703).
+/// Without recognizing the `Orchestrator` segment, the footer was read as the underlying planner
+/// model and effort (and dropped the mode to Default), so Orchestrator model switches timed out
+/// and held queued messages. Resolve the planner against the live catalog's `Orchestrator (…)`
+/// rows first so each account's `agy models` id wins (`gemini-pro-orchestrator-g1-pro` vs
+/// `gemini-pro-orchestrator-argon`), falling back to known ids when only the bundled catalog is loaded.
+fn antigravity_orchestrator_model(planner: &str) -> Option<(String, String)> {
+    let planner = planner.trim();
+    if planner.is_empty() {
+        return None;
+    }
+    let exact_label = format!("Orchestrator ({planner})");
+    if let Some(value) =
+        crate::agent_model_catalog::model_value_for_label("antigravity", &exact_label)
+    {
+        return Some((value, exact_label));
+    }
+    let tier = antigravity_gemini_tier(planner)?;
+    let label = format!("Orchestrator ({tier})");
+    let value = crate::agent_model_catalog::model_value_for_label("antigravity", &label)
+        .or_else(|| antigravity_orchestrator_fallback(tier).map(str::to_string))?;
+    Some((value, label))
+}
+
+fn antigravity_mode(segment: &str) -> Option<(&'static str, &'static str)> {
+    let name = antigravity_trailing_name(segment);
+    ANTIGRAVITY_MODES
+        .iter()
+        .find(|(value, _)| *value == name)
+        .copied()
 }
 
 /// The model name is right-aligned after the shortcut hint, so it is the text
@@ -872,15 +937,56 @@ pub(super) fn match_antigravity_statusline(line: &str) -> Option<SessionChatDete
         _ => (None, segments.as_slice()),
     };
     let (model, before) = rest.split_last()?;
-    let mode = before
-        .last()
-        .map(|segment| antigravity_trailing_name(segment))
-        .and_then(|name| {
-            ANTIGRAVITY_MODES
-                .iter()
-                .find(|(value, _)| *value == name)
-                .copied()
+    if let Some((orchestrator, orchestrator_before)) = before
+        .split_last()
+        .filter(|(last, _)| antigravity_trailing_name(last) == "Orchestrator")
+    {
+        // When `orchestrator` carries the left-side shortcut hint (`? for shortcuts    Orchestrator`),
+        // it starts the right-aligned footer cluster, so there is no mode segment before it.
+        let mode = (orchestrator == "Orchestrator")
+            .then(|| {
+                orchestrator_before
+                    .last()
+                    .and_then(|segment| antigravity_mode(segment))
+            })
+            .flatten();
+        if effort.is_none()
+            && orchestrator == "Orchestrator"
+            && !orchestrator_before.is_empty()
+            && mode.is_none()
+        {
+            return None;
+        }
+        let (value, label) = antigravity_orchestrator_model(model)?;
+        let mode = mode.unwrap_or(ANTIGRAVITY_DEFAULT_MODE);
+        return Some(SessionChatDetectedSelection {
+            model: Some(SessionChatDetectedChoice {
+                value,
+                label,
+                source: SessionChatOptionEvidence::Terminal,
+            }),
+            effort: None,
+            mode: Some(SessionChatDetectedChoice {
+                value: mode.0.to_string(),
+                label: mode.1.to_string(),
+                source: SessionChatOptionEvidence::Terminal,
+            }),
+            permissions: None,
+            permissions_recorded_at: None,
+            context_window: None,
+            terminal_status_line: None,
+            fast: None,
+            context_usage: None,
+            claude_status: None,
+            codex_status: None,
+            cursor_status: None,
+            hermes_status: None,
+            pi_status: None,
+            checkout_status: None,
+            model_catalog: None,
         });
+    }
+    let mode = before.last().and_then(|segment| antigravity_mode(segment));
     if effort.is_none() && !before.is_empty() && mode.is_none() {
         return None;
     }
