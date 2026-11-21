@@ -232,7 +232,7 @@ impl GhostexGpuiApp {
     }
 
     /// The workspace at the rail's foot, where the sidebar's Spaces row drew it (Q4296 F, and the
-    /// rail build brief: "the workspace at the foot"): the same disc, one click switches to the
+    /// rail build brief: "the workspace at the foot"): its icon, plain, one click switches to the
     /// other workspace, a right click opens the workspace menu. Shown with two or more workspaces.
     fn render_sidebar_rail_workspace(
         &self,
@@ -252,10 +252,6 @@ impl GhostexGpuiApp {
             return None;
         }
         let tile = self.gx_store_workspace_tile()?;
-        let color = crate::app::native_sidebar::workspace_tile::workspace_color(
-            &tile.color,
-            appearance.muted,
-        );
         let tooltip = match &tile.switch_to {
             Some((_, name)) => match tile.switch_hotkey.as_deref() {
                 Some(hotkey) => format!("{}: click for {name} {hotkey}", tile.name),
@@ -299,9 +295,21 @@ impl GhostexGpuiApp {
                 .cursor_pointer()
                 .hover(move |button| button.bg(hover))
                 .on_prepaint(move |rect, _, _| bounds.set(Some(rect)))
-                .child(crate::app::native_sidebar::workspace_tile::workspace_badge(
-                    &tile.icon, color, RAIL_ICON,
-                ))
+                // CDXC:Workspaces 2026-11-21 DECISION:
+                // User: "Just make it like a person icon for personal and the bag icon for work...
+                // without the background and color and all of that, it should also be matching the
+                // size of the other icons, for example, the accounts icon right there next to it".
+                // The rail draws the workspace's glyph (gx-protocol `icon_id`: the person for
+                // Personal, the bag for Work, a custom workspace's picked icon or its kind's
+                // default) plain, at the rail's icon size in its icon ink, like the account usage
+                // switch below it; no disc and no workspace colour. The Classic tile and the menus
+                // keep the disc (`workspace_badge`).
+                .child(
+                    gpui::svg()
+                        .path(gpui_sidebar_command_icon_asset_path(Some(&tile.icon)))
+                        .size(px(RAIL_ICON))
+                        .text_color(appearance.chrome_icon),
+                )
                 .on_click(
                     cx.listener(move |app, event: &gpui::ClickEvent, window, cx| {
                         cx.stop_propagation();

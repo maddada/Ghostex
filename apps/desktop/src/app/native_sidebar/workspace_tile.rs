@@ -1,8 +1,8 @@
 //! The workspace tile: the first tile of the Spaces row, after the computer tiles. It shows the
 //! window's workspace as its icon on a disc in the workspace's colour. A click switches to the
 //! other workspace (gx-core `workspace_switch_target`) and a right click opens the workspace menu
-//! (gx-core `workspace_menu`). The mark itself is `workspace_badge`, which the menus' workspace rows and the icon
-//! rail draw too.
+//! (gx-core `workspace_menu`). The mark itself is `workspace_badge`, which the menus' workspace rows draw too;
+//! the icon rail draws the same icon plain (app/sidebar_rail/render.rs).
 //!
 //! CDXC:Workspaces 2026-10-10 DECISION:
 //! User picked option A of the one-click switch mockup (the switch rule is gx-core `workspace_switch_target`): "i want 1 click to switch workspaces between work and personal one in my case (but still have access to the dropdown we have now basically)".
@@ -36,7 +36,7 @@ const BADGE_SIZE: f32 = 18.0;
 
 /// A workspace's mark: its icon (an id of gx-protocol `WORKSPACE_ICONS`, drawn from
 /// `assets/titlebar/<id>.svg`) in white on a filled disc of its colour, `size` across (already
-/// scaled). The tile, the menus' workspace rows and the icon rail draw this one element
+/// scaled). The tile and the menus' workspace rows draw this one element
 /// (Settings > Workspaces, built into the native-modal demo too, draws its own copy).
 pub(crate) fn workspace_badge(icon: &str, color: gpui::Hsla, size: f32) -> AnyElement {
     div()

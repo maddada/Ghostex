@@ -178,12 +178,15 @@ impl SidebarWorkspace {
     }
 
     /// The icon to draw: the one picked when it is still one of [`WORKSPACE_ICONS`], else
-    /// `briefcase` for a work workspace and `home` for a personal one.
+    /// `briefcase` for a work workspace and `user` for a personal one.
+    ///
+    /// CDXC:Workspaces 2026-11-21 DECISION:
+    /// User: "I don't like this icon for the home, for personal and work. Just make it like a person icon for personal and the bag icon for work". A personal workspace's default is the person (`user`) instead of the house; a work one keeps the bag. A picked icon still wins.
     pub fn icon_id(&self) -> &str {
         match WORKSPACE_ICONS.iter().find(|icon| **icon == self.icon) {
             Some(icon) => icon,
             None if self.is_work() => "briefcase",
-            None => "home",
+            None => "user",
         }
     }
 }
