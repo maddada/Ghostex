@@ -59,7 +59,8 @@ commands; each step below says which one to run.
 - **Who:** one thread, started by the Main Coordinator. Not the coordinator
   itself.
 - **How long:** about 10 minutes after the build (the build adds about 1 to 6,
-  the typecheck before it about 1 to 3).
+  the typecheck before it about 1 to 3, the all-targets check not timed
+  yet).
 - **Windows and Linux** run a short GUI pass of their own in parallel (see
   "Windows pass" and "8. Linux GUI pass" below), and the phone gets its own
   step (7), on the Android emulator on m7-arch.
@@ -81,10 +82,15 @@ commands; each step below says which one to run.
    rebuild. It also fails on unformatted app-owned files and stale generated
    Help files, which the prepare step (SKILL.md step 3) would otherwise find
    only after the smoke passed (11.12.0: 10 unformatted files, a formatting
-   commit on top of the smoked build). If it fails, don't rebuild: report it to
-   the coordinator, who commits the fix (`cargo xtask format` for formatting)
-   and pushes; that commit is the new release point, and the smoke starts
-   again from step 1. Then rebuild and relaunch the app from it, in the
+   commit on top of the smoked build). Then, in `apps/desktop`, run `cargo
+   check --locked --all-targets`: the typecheck doesn't build the app's other
+   targets (the `native-modal-demo` bin, the CEF helper and bootstrap, the
+   smoke and demo bins, the tests), and the release's `cargo check
+   --all-targets` job does (11.13.0: a `native-modal-demo` compile error the
+   typecheck passed, found by CI, about 50 minutes lost). If either fails,
+   don't rebuild: report it to the coordinator, who commits the fix (`cargo
+   xtask format` for formatting) and pushes; that commit is the new release
+   point, and the smoke starts again from step 1. Then rebuild and relaunch the app from it, in the
    background:
    `cargo xtask rebuild` (committed code only, log under
    `~/.local/share/agent-work/Ghostex/rebuilds/`). It is a fast dev build
@@ -371,6 +377,10 @@ coordinator list`) and the reply comes within 120 seconds. **Warn** otherwise.
 
 **4.2 Browser: open it and search.**
 1. Open a browser pane: `ghostex browser open https://duckduckgo.com --project-id $P --reuse none`.
+   It can open on `about:blank` (11.13.0): the address bar empty and the page
+   white. Press the pane's Reload (by its `query` token) once, and it loads
+   the address. Say in the report that it needed the Reload; a pane that
+   stays blank after it is a **Warn**.
 2. Type `ghostex terminal` and press Return. A background click can't focus the
    address bar, but DuckDuckGo focuses its own search box, so the keys land
    there; say which box you typed in. Without SpaceO the box isn't focused
@@ -381,6 +391,15 @@ coordinator list`) and the reply comes within 120 seconds. **Warn** otherwise.
    the page doesn't load (network). The native window title stays "Ghostex",
    so `spaceo_wait_for window_title_contains` never fires; read the results
    from a screenshot (the tab title and address bar change).
+   When the network fails (an error page, or a screenshot that can't show
+   whether results came), read the page through DevTools instead of guessing:
+   find Ghostex's DevTools port as 5.3 does (`lsof -nP -iTCP -sTCP:LISTEN -p
+   <Ghostex pid>`, the one whose `/json/version` says Chrome), then
+   `curl -s http://127.0.0.1:<port>/json/list` gives the pane's `url` and
+   `title`, and `Runtime.evaluate` on its `webSocketDebuggerUrl` reads
+   `document.querySelector('input[name=q]').value` (the typed letters) and
+   `document.body.innerText` (results or the error). Report what it read:
+   letters there and an error page is a **Warn** (network), not a Stop.
 
 ### 5. Typing in fields (all Stop)
 
@@ -631,6 +650,19 @@ Written 2026-11-20 from the code; not run yet. Fix what the first run finds.
      apart), and its three words equal the phone's.
    Then press that card's `Approve` token. If any check fails, press `Not my
    phone` instead: the step is NOT RUN, and say why.
+   **When Linux accessibility can't reach the button** (the read shows the
+   card's text but no `Approve` token, or no tree at all), the same
+   permission covers a press by screen position, on the isolated test-server
+   app only (coordinator, 2026-11-21, from the 11.13.0 release). Every check
+   above still comes first, read from the card itself: from the tree if it
+   has the text, else from a full-size screenshot of that window (`zoom` on
+   the card): it must name the emulator, and its three words must equal the
+   phone's. Then take Approve's x,y from that same screenshot of the
+   isolated window (its pid and window_id from step 3), click there with
+   cua-driver, and screenshot again: the card is gone and the phone moves on.
+   Never a screen-position press on the user's real app or on any window
+   whose pid isn't step 3's; if the card can't be read, it is NOT RUN, not a
+   blind press.
 6. **7.2 Pass.** The phone opens the test server's sessions ("Connected to"
    on top). Open the step 2 session, send `Reply with exactly: smoke-ok-7.2`
    to an agent, or type `echo smoke-ok-7.2` and Enter in the terminal. Pass:
@@ -840,7 +872,7 @@ release report (step 9 of SKILL.md). One line per step, and a verdict first.
 ```text
 Smoke test for X.Y.Z: PASS | PASS WITH WARNINGS | STOP
 Release point: <commit>   App: rebuilt <time>, dev build / optimized   Run: N   Took: NN min
-Typecheck: PASS (before the rebuild)   Models: Claude <model>, Codex <model>
+Typecheck: PASS, all-targets check: PASS (before the rebuild)   Models: Claude <model>, Codex <model>
 2.1 PASS  smoke-ok-2.1 9 s after the send
 2.2 WARN  no smoke-ok-2.2 120 s after the send (account #2 at its limit)
 ...
