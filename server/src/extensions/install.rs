@@ -269,6 +269,12 @@ fn unpack_archive(archive_path: &Path, destination: &Path) -> ExtensionResult<()
             "Extension archive contains more than {MAX_ARCHIVE_ENTRIES} entries."
         )));
     }
+    // zip 9: a ZIP whose local headers disagree with its central directory reads as different files to different tools (RUSTSEC-2026-0548).
+    archive.validate_header_consistency().map_err(|error| {
+        ExtensionError::bad_request(format!(
+            "Extension archive has inconsistent ZIP headers: {error}"
+        ))
+    })?;
     let mut total_size = 0_u64;
     let mut extracted_paths = BTreeSet::new();
     for index in 0..archive.len() {
@@ -278,13 +284,13 @@ fn unpack_archive(archive_path: &Path, destination: &Path) -> ExtensionResult<()
         let relative_path = entry.enclosed_name().ok_or_else(|| {
             ExtensionError::bad_request(format!(
                 "Extension ZIP contains an unsafe path: {}",
-                entry.name()
+                String::from_utf8_lossy(entry.name_raw())
             ))
         })?;
         if relative_path.as_os_str().is_empty() || !extracted_paths.insert(relative_path.clone()) {
             return Err(ExtensionError::bad_request(format!(
                 "Extension ZIP contains an empty or duplicate path: {}",
-                entry.name()
+                String::from_utf8_lossy(entry.name_raw())
             )));
         }
         if entry
@@ -293,7 +299,7 @@ fn unpack_archive(archive_path: &Path, destination: &Path) -> ExtensionResult<()
         {
             return Err(ExtensionError::bad_request(format!(
                 "Extension ZIP may not contain symlinks: {}",
-                entry.name()
+                String::from_utf8_lossy(entry.name_raw())
             )));
         }
         total_size = total_size.saturating_add(entry.size());

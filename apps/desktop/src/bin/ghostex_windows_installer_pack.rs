@@ -96,16 +96,20 @@ mod windows {
             if let Some(modified) = entry.last_modified() {
                 options = options.last_modified_time(modified);
             }
-            let name = entry.name().to_string();
+            // zip 9: `name()` reports a name that is not valid UTF-8 as an error.
+            let name = entry
+                .name()
+                .map_err(|error| error.to_string())?
+                .into_owned();
             if entry.is_dir() {
-                writer.add_directory(name, options)
+                writer.add_directory(name.as_str(), options)
             } else {
-                writer.start_file(name, options)
+                writer.start_file(name.as_str(), options)
             }
-            .map_err(|error| format!("Writing {}: {error}", entry.name()))?;
+            .map_err(|error| format!("Writing {name}: {error}"))?;
             if !entry.is_dir() {
                 io::copy(&mut entry, &mut writer)
-                    .map_err(|error| format!("Copying {}: {error}", entry.name()))?;
+                    .map_err(|error| format!("Copying {name}: {error}"))?;
             }
         }
         let stored = writer
@@ -125,11 +129,14 @@ mod windows {
             let after = check
                 .by_index_raw(index)
                 .map_err(|error| error.to_string())?;
-            if before.name() != after.name()
+            if before.name_raw() != after.name_raw()
                 || before.crc32() != after.crc32()
                 || before.size() != after.size()
             {
-                return Err(format!("{} changed while being stored", before.name()));
+                return Err(format!(
+                    "{} changed while being stored",
+                    String::from_utf8_lossy(before.name_raw())
+                ));
             }
         }
         let mut rewritten = bytes[..offset].to_vec();
