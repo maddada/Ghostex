@@ -387,6 +387,51 @@ impl SecurityTab {
     }
 }
 
+/*
+CDXC:HelperNames 2026-11-21 DECISION:
+User: people meet Ghostex's helpers by name in macOS and Windows permission prompts and hesitate to
+approve something they can't tie to Ghostex ("Ghostex Sessions", or "zmx" from older builds). This
+section says what each name is, that rows named zmx or gxserver are left over from Ghostex before
+10.46 (when the helpers became the "Ghostex Server" and "Ghostex Sessions" apps), and that Keep
+Awake and Remote Login ask for the password in a dialog that names Ghostex. macOS and Windows
+only (`helperNames` in packages/settings-catalog/src/availability.rs); Linux asks nothing of them.
+SEE-ALSO: apps/desktop/scripts/package-macos-gxserver-bundles.sh, server/build_windows_version.rs.
+*/
+/// "Ghostex in permission prompts": what the helper names in system prompts are.
+fn helper_names_section(p: &SettingsPalette) -> Option<Div> {
+    let (server, sessions, closing) = if cfg!(target_os = "macos") {
+        (
+            "Ghostex's background service. It opens your project folders and serves your phone and other computers, so macOS may ask whether Ghostex Server can read Documents, Desktop or Downloads, or reach your local network.",
+            "Keeps your terminals and agents running, even while the app is closed. Anything run in a session (an agent, a script, a browser) asks through it, so macOS names Ghostex Sessions when that program wants a folder, the local network or another app.",
+            "Both show the Ghostex icon and are signed by Ghostex's developer. Rows named zmx or gxserver in System Settings > Privacy & Security are left over from Ghostex before 10.46 and can be removed. Keep Awake and Remote Login ask for your password in a dialog that names Ghostex.",
+        )
+    } else if cfg!(target_os = "windows") {
+        (
+            "Ghostex's background service (gxserver.exe). Windows Firewall may ask to let it accept connections from your phone and other computers.",
+            "Keeps your terminals and agents running (wmx.exe). Programs you run in a session ask Windows for their own permissions under their own names.",
+            "Both are signed by Ghostex's developer. Older Ghostex versions showed them as gxserver.exe and wmx.exe.",
+        )
+    } else {
+        return None;
+    };
+    let rows = vec![
+        settings_list_item_wrapped(
+            p,
+            "Ghostex Server",
+            div().child(server).into_any_element(),
+            None,
+        ),
+        settings_list_item_wrapped(
+            p,
+            "Ghostex Sessions",
+            div().child(sessions).into_any_element(),
+            None,
+        ),
+        settings_note_row(p, closing),
+    ];
+    settings_section(p, "Ghostex in permission prompts", None, None, rows)
+}
+
 impl Render for SecurityTab {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (p, search, matching) = {
@@ -419,6 +464,9 @@ impl Render for SecurityTab {
         }
         if let Some(section) = self.still_asks_section(&p) {
             blocks.push(PageBlock::section("stillAsks", section));
+        }
+        if let Some(section) = helper_names_section(&p) {
+            blocks.push(PageBlock::section("helperNames", section));
         }
         let switch_row = self.log_switch_row(&p, cx);
         if self.logs_on {

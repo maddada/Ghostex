@@ -780,12 +780,14 @@ package_gxserver_if_needed() {
 	fi
 	package_version="$(gxserver_rust_package_version)"
 	package_digest="$(fingerprint_inputs \
-		--value "gxserver-package-v10-app-bundles" \
+		--value "gxserver-package-v11-app-bundle-icons" \
 		--value "arch=$GHOSTEX_MACOS_ARCH" \
 		--value "version=$package_version" \
 		--value "rust=$(path_identity "$rust_bin")" \
 		--path "$SCRIPT_DIR/prepare-macos-runtime.sh" \
 		--path "$SCRIPT_DIR/package-macos-gxserver-bundles.sh" \
+		--path "$SCRIPT_DIR/write-macos-icns.py" \
+		--path "$REPO_ROOT/apps/desktop/resources/AppIcon.appiconset" \
 		--path "$GXSERVER_RS_ROOT/src" \
 		--path "$GXSERVER_RS_ROOT/Cargo.toml" \
 		--path "$GXSERVER_RS_ROOT/Cargo.lock" \

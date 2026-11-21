@@ -130,6 +130,12 @@ const ROWS: &[RowAvailability] = &[
         only_on: AGENTBOX_PLATFORMS,
         hidden_while: None,
     },
+    // CDXC:HelperNames 2026-11-21: Settings > Security's "Ghostex in permission prompts" explains the names macOS and Windows show for Ghostex's helpers; Linux asks nothing of them.
+    RowAvailability {
+        key: "helperNames",
+        only_on: &[Platform::MacOs, Platform::Windows],
+        hidden_while: None,
+    },
 ];
 
 const AGENTBOX_PLATFORMS: &[Platform] = &[Platform::MacOs, Platform::Linux];

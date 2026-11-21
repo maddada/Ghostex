@@ -6,7 +6,7 @@ pub(crate) fn page() -> Page {
     Page {
         id: "security",
         title: "Security",
-        sections: vec![approvals(), still_asks(), log()],
+        sections: vec![approvals(), still_asks(), helper_names(), log()],
     }
 }
 
@@ -30,6 +30,16 @@ fn still_asks() -> Section {
         "stillAsks",
         "What still asks",
         vec![row("stillAsks", "What still asks", "What asks for an Approve on this computer: a phone or computer asking to pair, a Collab guest's message in Approve mode, and, when an agent asks, turning on Easy Connect, letting a device connect through it, sharing a chat or turning on Send mode. Everything else works without asking, and your own clicks never ask.")],
+    )
+}
+
+/// "Ghostex in permission prompts" (CDXC:HelperNames 2026-11-21 in
+/// apps/desktop/src/app/window/settings_modal/tabs/security.rs): macOS and Windows only.
+fn helper_names() -> Section {
+    section(
+        "helperNames",
+        "Ghostex in permission prompts",
+        vec![row("helperNames", "Ghostex Server and Ghostex Sessions", "The names macOS and Windows show when Ghostex's helpers ask for a permission. Ghostex Server is Ghostex's background service (your projects, phone and other computers). Ghostex Sessions keeps your terminals and agents running, and anything run in a session asks through it. Rows named zmx or gxserver in Privacy & Security are from Ghostex before 10.46 and can be removed. Keep Awake and Remote Login ask for your password in a dialog that names Ghostex.")],
     )
 }
 

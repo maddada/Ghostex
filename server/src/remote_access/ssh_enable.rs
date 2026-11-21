@@ -75,13 +75,36 @@ pub fn enable_ssh_access(port: u16, install: bool) -> SshEnableResult {
 // skipped when `launchctl print` already finds the job, so the command is
 // idempotent. `do shell script … with administrator privileges` shows the
 // standard macOS administrator prompt.
+// CDXC:HelperNames 2026-11-21: gxserver asks for the password itself so the dialog names Ghostex
+// (WHY in macos_administrator.rs); osascript, with the same sentence as its prompt, is only the
+// fallback for a macOS that no longer has the in-process call.
+#[cfg(target_os = "macos")]
+const MACOS_REMOTE_LOGIN_SCRIPT: &str = "/bin/launchctl enable system/com.openssh.sshd && (/bin/launchctl print system/com.openssh.sshd >/dev/null 2>&1 || /bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist)";
+#[cfg(target_os = "macos")]
+const MACOS_REMOTE_LOGIN_PROMPT: &str =
+    "Ghostex needs your password to turn on Remote Login, so your other devices can connect to this Mac over SSH.";
+
 #[cfg(target_os = "macos")]
 fn run_privileged_enable(_install: bool) -> SshEnableResult {
-    const SCRIPT: &str = "/bin/launchctl enable system/com.openssh.sshd && (/bin/launchctl print system/com.openssh.sshd >/dev/null 2>&1 || /bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist)";
+    use super::macos_administrator::{run_as_administrator, AdministratorRun};
+    match run_as_administrator(MACOS_REMOTE_LOGIN_SCRIPT, MACOS_REMOTE_LOGIN_PROMPT, true) {
+        AdministratorRun::Succeeded => return enabled(),
+        AdministratorRun::Cancelled => return cancelled(),
+        AdministratorRun::Failed => return failed(
+            "Turning on SSH access failed: macOS did not allow it or the command did not finish."
+                .to_string(),
+        ),
+        AdministratorRun::Unavailable => {}
+    }
+    run_privileged_enable_with_osascript()
+}
+
+#[cfg(target_os = "macos")]
+fn run_privileged_enable_with_osascript() -> SshEnableResult {
     let output = Command::new("/usr/bin/osascript")
         .arg("-e")
         .arg(format!(
-            "do shell script \"{SCRIPT}\" with administrator privileges"
+            "do shell script \"{MACOS_REMOTE_LOGIN_SCRIPT}\" with prompt \"{MACOS_REMOTE_LOGIN_PROMPT}\" with administrator privileges"
         ))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

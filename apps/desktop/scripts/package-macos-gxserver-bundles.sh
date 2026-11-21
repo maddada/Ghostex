@@ -26,6 +26,12 @@ set -euo pipefail
 # session may reach any of them, so both carry the same set a terminal app declares.
 # SEE-ALSO: sign_gxserver_bundles in codesign-gpui-app.sh, `sign_package` in
 # tooling/xtask/src/start_server.rs, `remove_leftover_releases` in server/src/setup.rs.
+#
+# CDXC:HelperNames 2026-11-21 WHY: both bundles carry the Ghostex icon (Contents/Resources/AppIcon.icns,
+# up to 256 px from the app's own icon set), so a privacy prompt or a Privacy & Security row for
+# "Ghostex Server" or "Ghostex Sessions" shows Ghostex's icon instead of a blank app. People hesitated
+# to approve a helper they could not tie to Ghostex. The icon and the name are not part of the
+# signature's designated requirement (bundle id + Team ID), so existing approvals carry over.
 
 if [[ "$#" -ne 4 ]]; then
 	echo "Usage: $0 <package-dir> <gxserver-binary> <zmx-binary> <version>" >&2
@@ -38,6 +44,9 @@ VERSION="$4"
 
 GXSERVER_BUNDLE="GhostexServer.app"
 ZMX_BUNDLE="GhostexSessions.app"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ICON_SOURCE_SET="$SCRIPT_DIR/../resources/AppIcon.appiconset"
+ICNS_WRITER="$SCRIPT_DIR/write-macos-icns.py"
 
 xml_escape() {
 	local value="$1"
@@ -83,6 +92,8 @@ write_bundle() {
 	mkdir -p "$bundle_dir/Contents/MacOS"
 	cp "$source_binary" "$bundle_dir/Contents/MacOS/$executable"
 	chmod 755 "$bundle_dir/Contents/MacOS/$executable"
+	mkdir -p "$bundle_dir/Contents/Resources"
+	python3 "$ICNS_WRITER" --max-size 256 "$APP_ICON_SOURCE_SET" "$bundle_dir/Contents/Resources/AppIcon.icns"
 	cat >"$bundle_dir/Contents/Info.plist" <<EOF_PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -92,6 +103,8 @@ write_bundle() {
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>$executable</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>$bundle_id</string>
 	<key>CFBundleInfoDictionaryVersion</key>

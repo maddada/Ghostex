@@ -49,9 +49,11 @@ def read_png(path: Path, expected_width: int) -> bytes:
     return data
 
 
-def write_icns(source_dir: Path, dest: Path) -> None:
+def write_icns(source_dir: Path, dest: Path, max_size: int | None = None) -> None:
     chunks: list[bytes] = []
     for ostype, filename, expected_width in ICON_ENTRIES:
+        if max_size is not None and expected_width > max_size:
+            continue
         path = source_dir / filename
         if not path.is_file():
             raise FileNotFoundError(f"missing app icon asset: {path}")
@@ -62,9 +64,20 @@ def write_icns(source_dir: Path, dest: Path) -> None:
     dest.write_bytes(b"icns" + struct.pack(">I", 8 + len(body)) + body)
 
 
+# CDXC:HelperNames 2026-11-21 WHY: the Ghostex Server and Ghostex Sessions helper bundles carry
+# the Ghostex icon so macOS privacy prompts and System Settings show it beside their names. Prompts
+# draw at most 128 pt, so `--max-size 256` keeps the 16 to 256 pixel images (about 125 KB) and
+# leaves out the 512 and 1024 pixel ones that make the app's own icon about 900 KB.
 def main(argv: list[str]) -> int:
+    max_size: int | None = None
+    if len(argv) == 5 and argv[1] == "--max-size" and argv[2].isdigit():
+        max_size = int(argv[2])
+        argv = [argv[0], *argv[3:]]
     if len(argv) != 3:
-        print("usage: write-macos-icns.py <AppIcon.appiconset> <AppIcon.icns>", file=sys.stderr)
+        print(
+            "usage: write-macos-icns.py [--max-size <pixels>] <AppIcon.appiconset> <AppIcon.icns>",
+            file=sys.stderr,
+        )
         return 2
     source_dir = Path(argv[1])
     dest = Path(argv[2])
@@ -72,7 +85,7 @@ def main(argv: list[str]) -> int:
         print(f"missing app icon asset set: {source_dir}", file=sys.stderr)
         return 1
     try:
-        write_icns(source_dir, dest)
+        write_icns(source_dir, dest, max_size)
     except (OSError, ValueError) as error:
         print(error, file=sys.stderr)
         return 1
