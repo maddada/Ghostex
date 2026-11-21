@@ -125,8 +125,24 @@ pub(crate) fn current_launch_note_text(
     paths: &GxserverPaths,
     with_extensions: bool,
 ) -> Option<String> {
+    note_text_with(
+        paths,
+        super::marked_handovers_enabled(paths),
+        with_extensions,
+    )
+}
+
+/// [`current_launch_note_text`] with the Marked handovers note decided by the caller: the text a
+/// SessionStart hook hands an agent whose launch cannot carry it (activity.rs
+/// `session_start_note_context`), where a thread always marks its handovers and a coordinator
+/// follows its own setting.
+pub(crate) fn note_text_with(
+    paths: &GxserverPaths,
+    marked_handovers: bool,
+    with_extensions: bool,
+) -> Option<String> {
     let note = ghostex_note_enabled(paths).then(|| ghostex_note_text(agent_preview_browser(paths)));
-    let text = launch_note_text(note.as_deref(), super::marked_handovers_enabled(paths));
+    let text = launch_note_text(note.as_deref(), marked_handovers);
     // Unit tests assert exact commands, which must not depend on the user's extensions.
     if cfg!(test) {
         return text;

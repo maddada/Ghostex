@@ -91,7 +91,7 @@ pub(crate) fn coordinator_marks_replies(paths: &GxserverPaths) -> bool {
 /// CDXC:MarkedHandovers 2026-10-11 WHY:
 /// For a session the setting covers, the note is added when the launch or resume command is resolved instead of being saved in the session's base command: the command is resolved again on every start, resume, fork and account switch, so turning the setting on or off reaches each session the next time it starts or resumes, while a running agent keeps the instructions it started with. Orchestrators made before 2026-10-17 carry it in their role (role.rs) unless Marked handovers is Off; newer ones read it from `ghostex orchestrator guide`, which their `ghostex-coordinator` skill sends them to (role.rs `coordinator_guide`), and threads have it saved in their base command at creation (`with_thread_marked_handovers`), so both keep it whatever the setting says. Claude keeps only the last `--append-system-prompt-file` (tested 2026-10-11 on Claude Code 2.1.296) and Codex reads one `developer_instructions`, so a command that already names its own is left alone rather than lose it, except a Codex orchestrator's guide pointer, which the note joins. ZCode has no such flag and gets the note as SessionStart hook context (activity.rs); Empryo ignores hook context and other agents have no channel Ghostex can use, so they do not get the note outside an Empryo orchestrator's profile.
 /// CDXC:AgentGuide 2026-11-02 WHY:
-/// The Ghostex note (agents/ghostex_note.rs) rides the same flag, joined with this note into one file or value, so neither replaces the other. Pi (`--append-system-prompt`, which takes a file) and Droid (`--append-system-prompt-file`) get the joined text through their own flags; OpenCode, Cursor, Copilot, Amp and the rest have no flag Ghostex can use and get the note as the `ghostex-agent-guide` skill instead.
+/// The Ghostex note (agents/ghostex_note.rs) rides the same flag, joined with this note into one file or value, so neither replaces the other. Pi (`--append-system-prompt`, which takes a file), Droid (`--append-system-prompt-file`), Grok Build (`--rules`) and OMP (`--append-system-prompt`) get the joined text through their own flags; ZCode and Antigravity get it from their SessionStart hook (activity.rs `SESSION_START_NOTE_AGENTS`); the `ghostex` skill does not stand in for it, since it never loads on its own.
 /// SEE-ALSO: server/src/agents/launch_plan.rs (`resolve_agent_launch_command` calls this), server/src/coordinators/role.rs (`coordinator_role_file` and `GUIDE_POINTER_COORDINATOR_INSTRUCTIONS`, the older orchestrators' role flags this combines with), server/src/agents/ghostex_note.rs.
 ///
 /// CDXC:Extensions 2026-11-16 WHY:
@@ -174,6 +174,20 @@ fn with_note_at(family: &str, command: &str, text: &str, path: &std::path::Path)
         "pi" if !command.contains("--append-system-prompt") => "--append-system-prompt",
         "codex" if !command.contains("developer_instructions=") => {
             return format!("{} {}", command.trim_end(), codex_note_arg(text));
+        }
+        // CDXC:AgentGuide 2026-11-21 WHY: Grok Build (1.0.93) and OMP (19.0.0) had no note though
+        // each has a flag that appends to the system prompt. Grok's `--rules` takes text only (a
+        // path reached the model as a path, tested live), so both get the text itself; OMP's takes
+        // text or a file like Pi's.
+        "grok" if !command.contains("--rules") => {
+            return format!("{} --rules {}", command.trim_end(), quote_shell_arg(text));
+        }
+        "omp" if !command.contains("--append-system-prompt") => {
+            return format!(
+                "{} --append-system-prompt {}",
+                command.trim_end(),
+                quote_shell_arg(text)
+            );
         }
         _ => return command.to_string(),
     };
