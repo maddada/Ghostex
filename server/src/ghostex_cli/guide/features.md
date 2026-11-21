@@ -2949,7 +2949,7 @@ VS Code/Files preferences as transcript links. Double-click a composer pill to e
 its reference text. Every file the chat shows has Copy Path and the location row:
 right-click a file reference, a file edit row, a tool row that names a file, a
 picture or an attachment for Open in VS Code, Open in Files (every file except
-folders and media), Copy Path, or the location row, and each file in Files and Links has
+folders and media), Copy Path, or the location row, and each file in Files & Links has
 copy and location buttons. The location row is left out for a remote session's
 files (they are on the other computer) and in Ghostex web; on the phone, hold the
 file for Copy Path.
@@ -3143,7 +3143,7 @@ Cache card shows the cache length, when the chat will be compacted if it stays i
 note saying it happened while idle. Settings: `claudeIdleCompaction`, `claudeIdleCompactAbove`,
 `claudeOneHourPromptCache`.
 
-Files and Links: More actions > Files and Links (or its shortcut, Option+Ctrl+L
+Files & Links: More actions > Files & Links (or its shortcut, Option+Ctrl+L
 on macOS and Ctrl+Alt+Shift+L on Windows and Linux, changeable in Settings >
 Hotkeys) opens a menu that floats above the chat box, without pushing the
 conversation up, listing everything the session mentioned, on the computer and

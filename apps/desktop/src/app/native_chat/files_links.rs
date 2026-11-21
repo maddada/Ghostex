@@ -384,7 +384,7 @@ impl NativeChatView {
         let caption = text(&files_links, "caption");
         let header = super::chat_pills::pill_menu_header(
             "titlebar/link.svg",
-            "Files and Links",
+            "Files & Links",
             if loading && caption.is_empty() {
                 "Reading the session…".to_string()
             } else {
@@ -396,7 +396,7 @@ impl NativeChatView {
         let mut column = div()
             .id("chat-files-links")
             .role(gpui::Role::Group)
-            .aria_label("Files and Links")
+            .aria_label("Files & Links")
             .size_full()
             .min_h_0()
             .flex()

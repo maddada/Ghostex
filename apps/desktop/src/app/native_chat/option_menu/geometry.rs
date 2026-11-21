@@ -261,7 +261,7 @@ const QUICK_TILE_HEIGHT: f32 = 54.0;
 const QUICK_TILE_LINE: f32 = 14.0;
 const QUICK_TILE_ROW_BOTTOM: f32 = 4.0;
 
-/// One line of labels, or two when any label is wider than its tile ("Files and Links").
+/// One line of labels, or two when any label is wider than its tile ("Files & Links").
 pub(super) fn quick_row_height(
     tiles: &[Value],
     inner_width: f32,

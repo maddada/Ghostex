@@ -185,7 +185,7 @@ pub const ENTRIES: &[SessionMenuEntry] = &[
         "voiceCallAboutSession",
     ),
     keyed(
-        row("filesLinks", "Files and Links", "link"),
+        row("filesLinks", "Files & Links", "link"),
         "toggleChatFilesLinks",
     ),
     row("sideChat", "Side Chat", "message-circle"),
