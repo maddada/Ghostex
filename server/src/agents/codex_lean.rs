@@ -10,7 +10,8 @@
 //! starts the same flags; sessions the user starts never get them.
 //! CDXC:AgentProviders 2026-11-21 DECISION: GitHub #700, item 3 (the user picked all three, Q4328
 //! A): Lean Codex workers also covers the Codex sessions a lead starts with `ghostex agents create
-//! --lead` (`LEAD_WORKER_KEY`), which work for another session the way a coordinator's threads do;
+//! --lead` (`LEAD_WORKER_KEY`, written by the link once it holds and read at the session's first
+//! start, zmx/session_glue.rs), which work for another session the way a coordinator's threads do;
 //! a session later linked with `agents link` was started by the user and keeps everything, and an
 //! unlinked one loses the flags at its next start, as an unlinked thread does. `plugin_discovery_prefetch` is
 //! left out (removed upstream, so it does nothing) and so is the post's `-c 'mcp_servers={}'`:
@@ -51,8 +52,8 @@ pub(crate) const LEAN_CODEX_WORKERS_SETTING: &str = "leanCodexWorkers";
 /// session: this session was started as a coordinator's thread.
 pub(crate) const COORDINATOR_THREAD_KEY: &str = "coordinatorThread";
 
-/// The create param `agents create --lead` sends, and the runtime setting that keeps it on the
-/// session: a lead started this session to report to it (agents/lead_links).
+/// The runtime setting a lead link writes on a session `agents create --lead` started for its lead
+/// (agents/lead_links `link` with `startedForLead`).
 pub(crate) const LEAD_WORKER_KEY: &str = "leadLinkWorker";
 
 const VERSION_CHECK_INTERVAL: Duration = Duration::from_secs(60);

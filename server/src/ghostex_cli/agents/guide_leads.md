@@ -27,13 +27,17 @@ reports to its coordinator, without the coordinator role:
 
 Links go at most two levels deep: a main lead, the sub-leads linked to it, and
 the sessions linked to each sub-lead. Ghostex refuses a third level and a loop.
-Each lead hears only the turns it started: the main lead hears its sub-lead's
-turns, the sub-lead hears its own sessions' turns, and a session's reports never
-skip a level. So a sub-lead whose sessions finish the work in later turns (not
-the one the main lead started) sends the main lead the result itself with
-`ghostex agents send <lead-ref> "..."`. A coordinator or a coordinator's thread
-can't take part (a coordinator has threads: `ghostex coordinator
-start-thread`). All the sessions are on this computer.
+A lead hears the turns it started in its own linked sessions: the main lead
+hears its sub-lead's turns, the sub-lead hears its own sessions' turns, and a
+session's reports never skip a level. A report that reaches a sub-lead while it
+is still on the main lead's turn is part of that turn, so the main lead gets the
+sub-lead's final answer. A sub-lead that ends its turn before its sessions
+finish sends the main lead the result itself later (`ghostex agents send
+<lead-ref> "..."`): the turns its sessions' reports start are its own. A message
+the main lead sends straight to one of its sub-lead's sessions is not reported
+to anyone, so send that work through the sub-lead. A coordinator or a
+coordinator's thread can't take part (a coordinator has threads: `ghostex
+coordinator start-thread`). All the sessions are on this computer.
 
 ## Commands
 

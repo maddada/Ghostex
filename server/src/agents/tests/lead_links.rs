@@ -172,7 +172,7 @@ fn a_long_lead_turn_is_found_and_notices_stop_once_the_user_types() {
     let mut rows = vec![row(true, lead_message, 10_000)];
     rows.extend((0..500).map(|step| row(false, format!("step {step}"), 11_000 + step)));
     assert_eq!(
-        lead_turn(&rows, lead_ref, 10_000),
+        lead_turn(&rows, lead_ref, &[], 10_000),
         Some(LeadTurn {
             reply: Some("step 499".to_string()),
             user_after: false,
@@ -181,7 +181,7 @@ fn a_long_lead_turn_is_found_and_notices_stop_once_the_user_types() {
     // The user types there afterwards: the lead's turn is over, so a waiting or quiet notice now
     // would be about the user's own turn and is not sent.
     rows.push(row(true, "Now something of mine.".to_string(), 20_000));
-    let turn = lead_turn(&rows, lead_ref, 10_000).unwrap();
+    let turn = lead_turn(&rows, lead_ref, &[], 10_000).unwrap();
     assert!(turn.user_after);
     assert_eq!(turn.reply.as_deref(), Some("step 499"));
 }

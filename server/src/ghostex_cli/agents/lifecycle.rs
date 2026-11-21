@@ -76,11 +76,12 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     if let Some(effort) = &args.effort {
         payload["agentEffort"] = json!(effort);
     }
-    // A session started for a lead is a lean Codex worker when that setting is on
-    // (agents/codex_lean.rs `LEAD_WORKER_KEY`); an older gxserver ignores the param.
-    if args.lead.is_some() {
-        payload[crate::agents::codex_lean::LEAD_WORKER_KEY] = json!(true);
-    }
+    // `--lead`: the link rules are checked before anything is created.
+    let lead = args
+        .lead
+        .as_deref()
+        .map(|lead| super::leads::lead_for_new_session(lead, &args.flags))
+        .transpose()?;
     let created = call_gxserver_rpc("/api/createAgentSession", &payload, &flags)?;
     let session = created.get("session").ok_or_else(|| {
         CliError::Other(
@@ -94,6 +95,19 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
                 .into(),
         ));
     }
+    // `--lead`: linked before its first start, so the link can make it a lean Codex worker
+    // (agents/codex_lean.rs) and the turn its task starts is the lead's.
+    let lead_link = lead.as_ref().map(|lead| {
+        super::leads::link_new_session(session, lead, body.is_some(), &args.flags).map_err(
+            |error| {
+                let error = error.to_string();
+                format!(
+                    "Created {reference}, but linking it to the lead failed: {}. Do not create another session.",
+                    error.trim_end_matches('.')
+                )
+            },
+        )
+    });
     // Retain the created identity if startup fails so a retry does not create a duplicate.
     let provider = call_gxserver_rpc("/api/startSessionProvider", &json!({
         "globalRef": reference, "projectId": session["projectId"], "sessionId": session["sessionId"],
@@ -105,21 +119,15 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     let mut result = json!({"ok": true, "status": "created", "globalRef": reference, "session": identity::summary(live_session)});
     // CDXC:Coordinators 2026-09-30 WHY: a coordinator that starts a worker the `$ghostex-agents` way still gets it as a tracked thread; for any other caller the link is a no-op.
     // CDXC:Coordinators 2026-10-15 DECISION: User: "a new thread ... that i just chat to about this ... maybe could be a thread not actually under you but separate in the sidebar, better." `--standalone` skips the link, so the session is a plain sidebar row that reports to nobody.
-    if let Some(lead) = &args.lead {
+    if let Some(lead_link) = lead_link {
         // `--lead`: a lead link instead of a coordinator thread (agents/lead_links in gxserver),
         // made before the task is queued so the turn the task starts is the lead's.
-        match super::leads::link_session(live_session, lead, body.is_some(), &args.flags) {
+        match lead_link {
             Ok(linked) => {
                 result["lead"] = linked["leadGlobalRef"].clone();
                 result["leadTitle"] = linked["leadTitle"].clone();
             }
-            Err(error) => {
-                let error = error.to_string();
-                let error = error.trim_end_matches('.');
-                result["leadLinkError"] = json!(format!(
-                    "Created {reference}, but linking it to the lead failed: {error}. Link it with ghostex agents link {reference} --lead {lead}; do not create another session."
-                ));
-            }
+            Err(error) => result["leadLinkError"] = json!(error),
         }
     } else if args.standalone {
         result["coordinatorThread"] = json!(false);
