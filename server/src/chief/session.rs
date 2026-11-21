@@ -271,6 +271,14 @@ fn create_chief_session(
         .iter()
         .find(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id))
         .and_then(crate::coordinators::coordinator_launcher_family);
+    if let Some(family) = family {
+        crate::agent_model_catalog::ensure_lineup(
+            family,
+            &state.paths,
+            &state.event_hub,
+            state.metadata.server_id.as_str(),
+        );
+    }
     let model = family.and_then(|family| super::model::for_new_chat(family, hand_pick.as_ref()));
     let mut params = coordinator_create_params(CoordinatorLaunch {
         agent_rows: &agent_rows,

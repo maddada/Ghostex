@@ -328,6 +328,31 @@ pub(crate) fn refresh_lineup_now(
     }))
 }
 
+/// Makes sure `agent`'s lineup was read from its CLI (this boot's read, or the cached copy adopted
+/// at boot), reading it now when it was not, after any read already under way.
+///
+/// WHY: Chief of Staff starts on the newest model of the user's default agent, read from this
+/// lineup (server/src/chief/model.rs). A new install has no cached copy, and a Chief of Staff opened
+/// before the boot read ends would otherwise pick from the bundled list (seen on a fresh test
+/// server: GPT 6.1 Sol while the CLI offered 6.2).
+pub(crate) fn ensure_lineup(
+    agent: &str,
+    paths: &GxserverPaths,
+    event_hub: &GxserverEventHub,
+    server_id: &str,
+) {
+    if !crate::agent_model_lineups::RUNTIME_AGENTS.contains(&agent) {
+        return;
+    }
+    let known = state()
+        .read()
+        .map(|state| state.lineups.contains_key(agent))
+        .unwrap_or(true);
+    if !known {
+        let _ = read_and_adopt_lineup(agent, false, paths, event_hub, server_id);
+    }
+}
+
 /// `/api/refreshAgentModelLineup {agent}`: [`refresh_lineup_now`], answered once the read ends.
 pub(crate) async fn handle_refresh_agent_model_lineup_http(
     state: &crate::server::AppState,

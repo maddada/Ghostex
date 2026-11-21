@@ -184,10 +184,17 @@ pub fn document_with_board(
         let agent_name = welcome_agent_name(state.session.agent.as_deref());
         NewSessionWelcome {
             // CDXC:Coordinators 2026-09-30 WHY: a new coordinator's first screen says what it is for; the generic "What should we build with Claude?" hides that this agent hands the work to threads.
-            title: if coordinator_threads::is_coordinator(
+            title: if coordinator_threads::is_chief(state.session.coordinator_threads.as_deref()) {
+                // CDXC:Chief 2026-11-21 DECISION: User: Chief of Staff gets its own empty-chat line instead of "What should this coordinator work on?" ("Press Start and Chief of Staff will help you set up Ghostex."), on the desktop, web and phone alike.
+                if crate::composer::first_message::waiting(state) {
+                    "Press Start and Chief of Staff will help you set up Ghostex.".to_string()
+                } else {
+                    "Ask Chief of Staff about Ghostex or any of your agents.".to_string()
+                }
+            } else if coordinator_threads::is_coordinator(
                 state.session.coordinator_threads.as_deref(),
             ) {
-"What should this coordinator work on?".to_string()
+                "What should this coordinator work on?".to_string()
             } else {
                 new_session_welcome_title(agent_name.as_deref())
             },
