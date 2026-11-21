@@ -256,6 +256,9 @@ printf '%s\r\n' \
 	"set \"CARGO_TARGET_DIR=$CARGO_OUTPUT_ROOT_WIN\"" \
 	"set \"GHOSTEX_ZIG=$WINDOWS_ZIG_WIN\"" \
 	"set \"ZIG_GLOBAL_CACHE_DIR=$ZIG_CACHE_WIN\"" \
+	"set \"WMX_FILE_DESCRIPTION=Ghostex Sessions\"" \
+	"set \"WMX_PRODUCT_NAME=Ghostex\"" \
+	"set \"WMX_PRODUCT_VERSION=$RELEASE_VERSION\"" \
 	"call \"$VS_DEV_CMD_WIN\" -arch=$VS_ARCH -host_arch=x64 >nul" \
 	'if errorlevel 1 exit /b %errorlevel%' \
 	"set \"PATH=$WINDOWS_CARGO_DIR_WIN;$WINDOWS_CMAKE_DIR_WIN;$WINDOWS_NINJA_DIR_WIN;%PATH%\"" \

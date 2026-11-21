@@ -151,6 +151,10 @@ if ($BuildRuntime) {
         if ($LASTEXITCODE -ne 0) { throw "Native Windows runtime build failed" }
     }
     finally { Pop-Location }
+    # CDXC:HelperNames 2026-11-21: wmx.exe's Windows version information names it "Ghostex Sessions" in Firewall and Defender dialogs and Task Manager (.dependencies/wmx/build.rs reads these).
+    $env:WMX_FILE_DESCRIPTION = "Ghostex Sessions"
+    $env:WMX_PRODUCT_NAME = "Ghostex"
+    $env:WMX_PRODUCT_VERSION = $ReleaseVersion
     Push-Location (Join-Path $RepoRoot ".dependencies/wmx")
     try {
         Invoke-CargoReleaseBuild @("--locked")

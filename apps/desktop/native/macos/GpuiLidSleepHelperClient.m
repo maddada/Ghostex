@@ -1,7 +1,12 @@
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 #import <dispatch/dispatch.h>
+#import <dlfcn.h>
+#import <errno.h>
 #import <stdint.h>
+#import <stdio.h>
+#import <string.h>
+#import <sys/wait.h>
 
 @protocol GhostexLidSleepHelperProtocol
 - (void)setLidSleepPreventionEnabled:(BOOL)enabled
@@ -122,6 +127,17 @@ static NSURL *GhostexGpuiLidSleepWriteInstallerScript(
    paths inside the installer boundary and return only generic success/failure
    to Rust.
    */
+  /*
+   CDXC:HelperNames 2026-11-21 WHY: a plist in /Library/LaunchDaemons without
+   AssociatedBundleIdentifiers is listed in System Settings > General > Login
+   Items & Extensions under the signing developer's name with a blank icon, so
+   people could not tell the Keep Awake helper belongs to Ghostex. Naming the
+   app's bundle id lists it under Ghostex; Background Task Management honours
+   the key because the helper and the app share Team ID KTKP595G3B (the same
+   rule as the gxserver LaunchAgents, packages/paths/src/macos_launch_agent.rs).
+   A helper installed by an older build keeps its old plist until Keep Awake
+   installs it again.
+   */
   NSString *script = [NSString
       stringWithFormat:
           @"#!/bin/sh\n"
@@ -154,6 +170,10 @@ static NSURL *GhostexGpuiLidSleepWriteInstallerScript(
            "<dict>\n"
            "  <key>Label</key>\n"
            "  <string>%@</string>\n"
+           "  <key>AssociatedBundleIdentifiers</key>\n"
+           "  <array>\n"
+           "    <string>%@</string>\n"
+           "  </array>\n"
            "  <key>MachServices</key>\n"
            "  <dict>\n"
            "    <key>%@</key>\n"
@@ -183,6 +203,7 @@ static NSURL *GhostexGpuiLidSleepWriteInstallerScript(
           GhostexGpuiLidSleepShellQuote(configDestination),
           GhostexGpuiLidSleepShellQuote(plistDestination),
           GhostexGpuiLidSleepEscapePlist(helperLabel),
+          GhostexGpuiLidSleepEscapePlist(appBundleIdentifier),
           GhostexGpuiLidSleepEscapePlist(helperLabel),
           GhostexGpuiLidSleepEscapePlist(helperDestination),
           GhostexGpuiLidSleepShellQuote(plistDestination),
@@ -207,6 +228,135 @@ static NSURL *GhostexGpuiLidSleepWriteInstallerScript(
     return nil;
   }
   return scriptURL;
+}
+
+/*
+ CDXC:HelperNames 2026-11-21 WHY: the administrator password dialog names the
+ process that asks. The installer used to run through /usr/bin/osascript, so the
+ dialog read "osascript wants to make changes" and people could not tell the
+ request came from Ghostex. Ghostex now asks Authorization Services itself, so
+ the dialog names Ghostex and carries Ghostex's own sentence, then runs the
+ installer as root through AuthorizationExecuteWithPrivileges. That function is
+ deprecated but still exported (macOS 27); it is looked up at run time so a
+ macOS without it falls back to osascript, with the same sentence as its prompt.
+ The installer's shell prints its own pid first (the tool runs in the pid of
+ this process's child, so it is reaped by that pid) and a marker after the
+ installer succeeds; the marker decides success.
+ */
+static const char *const GhostexGpuiKeepAwakeAdministratorPrompt =
+    "Ghostex needs your password to install its Keep Awake helper, which keeps "
+    "this Mac awake with the lid closed.";
+static const char *const GhostexGpuiAdministratorDoneMarker =
+    "ghostex-administrator-step-done";
+
+typedef NS_ENUM(int32_t, GhostexGpuiAdministratorRun) {
+  GhostexGpuiAdministratorRunUnavailable = -1,
+  GhostexGpuiAdministratorRunFailed = 0,
+  GhostexGpuiAdministratorRunSucceeded = 1,
+};
+
+typedef OSStatus (*GhostexGpuiAuthorizationExecuteFunction)(
+    AuthorizationRef, const char *, AuthorizationFlags, char *const *,
+    FILE **);
+
+static GhostexGpuiAdministratorRun
+GhostexGpuiRunScriptAsAdministrator(NSString *scriptPath) {
+  GhostexGpuiAuthorizationExecuteFunction execute =
+      (GhostexGpuiAuthorizationExecuteFunction)dlsym(
+          RTLD_DEFAULT, "AuthorizationExecuteWithPrivileges");
+  if (execute == NULL) {
+    return GhostexGpuiAdministratorRunUnavailable;
+  }
+  AuthorizationRef authorization = NULL;
+  if (AuthorizationCreate(NULL, kAuthorizationEmptyEnvironment,
+                          kAuthorizationFlagDefaults,
+                          &authorization) != errAuthorizationSuccess ||
+      authorization == NULL) {
+    return GhostexGpuiAdministratorRunUnavailable;
+  }
+  AuthorizationItem right = {kAuthorizationRightExecute, 0, NULL, 0};
+  AuthorizationRights rights = {1, &right};
+  AuthorizationItem prompt = {
+      kAuthorizationEnvironmentPrompt,
+      strlen(GhostexGpuiKeepAwakeAdministratorPrompt),
+      (void *)GhostexGpuiKeepAwakeAdministratorPrompt, 0};
+  AuthorizationEnvironment environment = {1, &prompt};
+  AuthorizationFlags flags =
+      kAuthorizationFlagDefaults | kAuthorizationFlagInteractionAllowed |
+      kAuthorizationFlagPreAuthorize | kAuthorizationFlagExtendRights;
+  if (AuthorizationCopyRights(authorization, &rights, &environment, flags,
+                              NULL) != errAuthorizationSuccess) {
+    // Cancelled or refused: no second dialog from the fallback.
+    AuthorizationFree(authorization, kAuthorizationFlagDestroyRights);
+    return GhostexGpuiAdministratorRunFailed;
+  }
+
+  NSString *command = [NSString
+      stringWithFormat:@"echo $$; /bin/sh \"$1\" </dev/null >/dev/null 2>&1 "
+                       @"&& echo %s",
+                       GhostexGpuiAdministratorDoneMarker];
+  const char *commandText = command.UTF8String;
+  const char *pathText = scriptPath.fileSystemRepresentation;
+  char *arguments[] = {"-c", (char *)commandText, "ghostex-keep-awake",
+                       (char *)pathText, NULL};
+  FILE *pipe = NULL;
+  OSStatus status = execute(authorization, "/bin/sh",
+                            kAuthorizationFlagDefaults, arguments, &pipe);
+  AuthorizationFree(authorization, kAuthorizationFlagDestroyRights);
+  if (status != errAuthorizationSuccess || pipe == NULL) {
+    if (pipe != NULL) {
+      fclose(pipe);
+    }
+    return GhostexGpuiAdministratorRunFailed;
+  }
+
+  NSMutableData *output = [NSMutableData data];
+  char buffer[512];
+  size_t count = 0;
+  while ((count = fread(buffer, 1, sizeof(buffer), pipe)) > 0) {
+    [output appendBytes:buffer length:count];
+  }
+  fclose(pipe);
+  NSString *text =
+      [[NSString alloc] initWithData:output encoding:NSUTF8StringEncoding] ?: @"";
+  NSArray<NSString *> *lines = [text
+      componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet];
+  pid_t pid = lines.count > 0 ? (pid_t)lines.firstObject.intValue : 0;
+  if (pid > 0) {
+    int waitStatus = 0;
+    while (waitpid(pid, &waitStatus, 0) == -1 && errno == EINTR) {
+    }
+  }
+  NSString *marker = @(GhostexGpuiAdministratorDoneMarker);
+  return [lines containsObject:marker] ? GhostexGpuiAdministratorRunSucceeded
+                                       : GhostexGpuiAdministratorRunFailed;
+}
+
+static BOOL GhostexGpuiRunScriptAsAdministratorWithOsascript(
+    NSString *scriptPath) {
+  NSTask *task = [[NSTask alloc] init];
+  task.executableURL = [NSURL fileURLWithPath:@"/usr/bin/osascript"];
+  NSString *scriptCommand = [NSString
+      stringWithFormat:@"/bin/sh %@", GhostexGpuiLidSleepShellQuote(scriptPath)];
+  task.arguments = @[
+    @"-e",
+    [NSString
+        stringWithFormat:
+            @"do shell script %@ with prompt %@ with administrator privileges",
+            GhostexGpuiLidSleepAppleScriptString(scriptCommand),
+            GhostexGpuiLidSleepAppleScriptString(
+                @(GhostexGpuiKeepAwakeAdministratorPrompt))]
+  ];
+  task.standardInput = NSFileHandle.fileHandleWithNullDevice;
+  task.standardOutput = NSFileHandle.fileHandleWithNullDevice;
+  task.standardError = NSFileHandle.fileHandleWithNullDevice;
+
+  NSError *error = nil;
+  BOOL launched = [task launchAndReturnError:&error];
+  if (launched) {
+    [task waitUntilExit];
+  }
+  return launched && task.terminationStatus == 0;
 }
 
 static BOOL GhostexGpuiLidSleepInstallHelper(void) {
@@ -237,28 +387,14 @@ static BOOL GhostexGpuiLidSleepInstallHelper(void) {
     return NO;
   }
 
-  NSTask *task = [[NSTask alloc] init];
-  task.executableURL = [NSURL fileURLWithPath:@"/usr/bin/osascript"];
-  NSString *scriptCommand =
-      [NSString stringWithFormat:@"/bin/sh %@",
-                                 GhostexGpuiLidSleepShellQuote(scriptURL.path)];
-  task.arguments = @[
-    @"-e",
-    [NSString
-        stringWithFormat:@"do shell script %@ with administrator privileges",
-                         GhostexGpuiLidSleepAppleScriptString(scriptCommand)]
-  ];
-  task.standardInput = NSFileHandle.fileHandleWithNullDevice;
-  task.standardOutput = NSFileHandle.fileHandleWithNullDevice;
-  task.standardError = NSFileHandle.fileHandleWithNullDevice;
-
-  NSError *error = nil;
-  BOOL launched = [task launchAndReturnError:&error];
-  if (launched) {
-    [task waitUntilExit];
+  GhostexGpuiAdministratorRun ran =
+      GhostexGpuiRunScriptAsAdministrator(scriptURL.path);
+  BOOL installed = ran == GhostexGpuiAdministratorRunSucceeded;
+  if (ran == GhostexGpuiAdministratorRunUnavailable) {
+    installed = GhostexGpuiRunScriptAsAdministratorWithOsascript(scriptURL.path);
   }
   [NSFileManager.defaultManager removeItemAtURL:scriptURL error:nil];
-  return launched && task.terminationStatus == 0;
+  return installed;
 }
 
 static NSXPCConnection *GhostexGpuiLidSleepConnection(void) {

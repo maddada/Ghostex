@@ -19,6 +19,9 @@ a version that differs from the release. Mirrors `apps/desktop/build.rs`.
 
 use std::{env, fs, path::PathBuf};
 
+#[path = "build_windows_version.rs"]
+mod windows_version;
+
 fn main() {
     println!("cargo:rerun-if-env-changed=GHOSTEX_GPUI_MARKETING_VERSION");
     let (marketing_version, stamped) = marketing_version();
@@ -27,6 +30,37 @@ fn main() {
         "cargo:rustc-env=GHOSTEX_BUILD_VERSION_STAMPED={}",
         u8::from(stamped)
     );
+    embed_windows_version_info(&marketing_version);
+}
+
+/// CDXC:HelperNames 2026-11-21: on Windows, gxserver.exe reads "Ghostex Server" and ghostex.exe
+/// "Ghostex CLI" in Firewall and Defender dialogs and Task Manager (WHY in build_windows_version.rs).
+/// The app installs ghostex.exe as a hard link to gxserver.exe (apps/desktop/src/windows_cli_link.rs),
+/// so on a PC both names show "Ghostex Server"; the separately built ghostex.exe the release
+/// uploads reads "Ghostex CLI".
+fn embed_windows_version_info(version: &str) {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows")
+        || env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("msvc")
+    {
+        return;
+    }
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
+    for (bin, description) in [("gxserver", "Ghostex Server"), ("ghostex", "Ghostex CLI")] {
+        let file_name = format!("{bin}.exe");
+        let info = windows_version::VersionInfo {
+            file_description: description,
+            product_name: "Ghostex",
+            company_name: "Ghostex",
+            internal_name: bin,
+            original_filename: &file_name,
+            version_text: version,
+            version: windows_version::numeric_version(version),
+        };
+        let path = out_dir.join(format!("{bin}-version.res"));
+        fs::write(&path, windows_version::version_resource_file(&info))
+            .unwrap_or_else(|error| panic!("write {}: {error}", path.display()));
+        println!("cargo:rustc-link-arg-bin={bin}={}", path.display());
+    }
 }
 
 fn marketing_version() -> (String, bool) {

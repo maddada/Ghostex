@@ -32,6 +32,18 @@ pub fn search_keywords(key: &str) -> &'static [&'static str] {
         | "linuxDisplayScale" => INTERFACE_SCALE,
         "secretReferenceCheck" => &["check a reference"],
         "agentboxBoxes" => &["your boxes"],
+        // CDXC:HelperNames 2026-11-21: what people see in a macOS or Windows prompt and search for.
+        "helperNames" => &[
+            "zmx",
+            "gxserver",
+            "wmx",
+            "permission",
+            "privacy",
+            "privacy & security",
+            "local network",
+            "app management",
+            "firewall",
+        ],
         // CDXC:RemoteMachines 2026-11-15: people say machine and offline as often as computer and
         // not connected.
         "sidebarHideDisconnectedMachines" => &["offline", "disconnected machines", "hide offline"],

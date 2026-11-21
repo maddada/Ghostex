@@ -88,6 +88,12 @@ describe.skipIf(!onMac)('the macOS gxserver package', () => {
       expect(plistValue(plist, 'CFBundlePackageType')).toBe('APPL');
       expect(plistValue(plist, 'CFBundleShortVersionString')).toBe('10.46.0');
       expect(plistValue(plist, 'LSUIElement')).toBe('true');
+      // CDXC:HelperNames 2026-11-21: privacy prompts show the Ghostex icon beside the helper's name.
+      expect(plistValue(plist, 'CFBundleIconFile')).toBe('AppIcon');
+      const icon = readFileSync(path.join(packageDir, bundle, 'Contents/Resources/AppIcon.icns'));
+      expect(icon.subarray(0, 4).toString('ascii')).toBe('icns');
+      expect(icon.length).toBeGreaterThan(50_000);
+      expect(icon.length).toBeLessThan(200_000);
       for (const key of [
         'NSLocalNetworkUsageDescription',
         'NSDocumentsFolderUsageDescription',

@@ -13937,6 +13937,18 @@
       "agentWritable": false
     },
     {
+      "key": "helperNames",
+      "title": "Ghostex Server and Ghostex Sessions",
+      "subtitle": "The names macOS and Windows show when Ghostex's helpers ask for a permission. Ghostex Server is Ghostex's background service (your projects, phone and other computers). Ghostex Sessions keeps your terminals and agents running, and anything run in a session asks through it. Rows named zmx or gxserver in Privacy & Security are from Ghostex before 10.46 and can be removed. Keep Awake and Remote Login ask for your password in a dialog that names Ghostex.",
+      "tab": "security",
+      "tabTitle": "Security",
+      "section": "helperNames",
+      "sectionTitle": "Ghostex in permission prompts",
+      "type": "ui",
+      "agentWritable": false,
+      "availability": "Only on macOS and Windows."
+    },
+    {
       "key": "securityLogCheck",
       "title": "Security log check",
       "subtitle": "Whether the security log is intact. Each entry is chained to the one before it, so an entry that was changed or removed after it was written shows here.",

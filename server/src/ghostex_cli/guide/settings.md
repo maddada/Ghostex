@@ -814,6 +814,9 @@ How to use this file:
 ### What still asks
 
 - **What still asks** `stillAsks` (Settings UI row without a settings key; use `ghostex settings open`): What asks for an Approve on this computer: a phone or computer asking to pair, a Collab guest's message in Approve mode, and, when an agent asks, turning on Easy Connect, letting a device connect through it, sharing a chat or turning on Send mode. Everything else works without asking, and your own clicks never ask.
+### Ghostex in permission prompts
+
+- **Ghostex Server and Ghostex Sessions** `helperNames` (Settings UI row without a settings key; use `ghostex settings open`): The names macOS and Windows show when Ghostex's helpers ask for a permission. Ghostex Server is Ghostex's background service (your projects, phone and other computers). Ghostex Sessions keeps your terminals and agents running, and anything run in a session asks through it. Rows named zmx or gxserver in Privacy & Security are from Ghostex before 10.46 and can be removed. Keep Awake and Remote Login ask for your password in a dialog that names Ghostex. Only on macOS and Windows.
 ### Log
 
 - **Security log check** `securityLogCheck` (Settings UI row without a settings key; use `ghostex settings open`): Whether the security log is intact. Each entry is chained to the one before it, so an entry that was changed or removed after it was written shows here.

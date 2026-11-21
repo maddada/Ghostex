@@ -6,6 +6,8 @@ pub mod connect_back;
 pub mod easy_connect_addresses;
 pub mod http;
 pub mod identity;
+#[cfg(target_os = "macos")]
+mod macos_administrator;
 pub mod pair_device;
 pub mod paired_devices;
 pub mod pairing_code;
