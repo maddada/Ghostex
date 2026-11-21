@@ -19,6 +19,7 @@ pub(crate) enum DictatePhase {
     Failed { kept: (), failure: DictateFailure },
     Unavailable { failure: DictateFailure },
     Notice { failure: DictateFailure },
+    Cancelled { restore: () },
 }
 
 /// The desktop's `voice_agent::dictation::WAVEFORM_BARS`.
@@ -52,7 +53,7 @@ pub(crate) enum DictateEvent {
     Failure { title: String, message: String },
 }
 
-/// `?dictatePreview=recording|transcribing|failed|unavailable` draws the Dictate button on the page, and
+/// `?dictatePreview=recording|transcribing|failed|unavailable|cancelled` draws the Dictate button on the page, and
 /// pressing it shows that state, so the chat box's Dictate pill can be looked at in a browser. No
 /// microphone is opened; ✕ (or pressing the button again) goes back to idle. `failed:<code>`
 /// shows the failure card for one of gxserver's codes (`failed:noKey`, `failed:providerUnavailable`,
@@ -79,6 +80,7 @@ fn preview_phase() -> Option<DictatePhase> {
     match value {
         "recording" | "quiet" => Some(DictatePhase::Recording),
         "transcribing" => Some(DictatePhase::Transcribing),
+        "cancelled" => Some(DictatePhase::Cancelled { restore: () }),
         "failed" => preview_failure("paymentRequired"),
         "unavailable" => preview_unavailable("hexNotInstalled"),
         _ => value
@@ -255,6 +257,14 @@ impl Dictate {
 
     pub(crate) fn transcribe_previous(&mut self, _cx: &mut Context<Self>) {}
 
+    /// Restore on the "Dictation cancelled" pill: the preview shows Transcribing.
+    pub(crate) fn restore(&mut self, cx: &mut Context<Self>) {
+        if matches!(self.phase, DictatePhase::Cancelled { .. }) {
+            self.phase = DictatePhase::Transcribing;
+            cx.notify();
+        }
+    }
+
     pub(crate) fn start(&mut self, cx: &mut Context<Self>) {
         if matches!(self.phase, DictatePhase::Idle) {
             self.toggle(cx);
@@ -281,6 +291,8 @@ pub(crate) fn previous_recording() -> Option<(String, u64, i64)> {
 }
 
 pub(crate) fn refresh_previous() {}
+
+pub(crate) fn hand_over_unsent() {}
 
 pub(crate) fn dictation_clock(duration: Duration) -> String {
     let seconds = duration.as_secs();

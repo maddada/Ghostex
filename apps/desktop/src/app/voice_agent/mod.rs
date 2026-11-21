@@ -57,6 +57,6 @@ pub(crate) mod typing;
 pub(crate) use conversation::{VoiceAgent, voice_agent_on};
 pub(crate) use dictation::{
     Dictate, DictateEvent, DictateFailure, DictatePhase, clock as dictation_clock, dictate_engine,
-    previous_recording, refresh_engine, refresh_previous,
+    hand_over_unsent, previous_recording, refresh_engine, refresh_previous,
 };
 pub(crate) use endpoint::set_local_voice_endpoint;

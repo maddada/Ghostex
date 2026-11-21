@@ -74,6 +74,10 @@ impl PageDictation {
                         };
                         match action.as_str() {
                             "cancel" => dictate.update(cx, |dictate, cx| dictate.cancel(cx)),
+                            // Restore after a cancel, from a page on screen like a start.
+                            "restore" if shown(cx) => {
+                                dictate.update(cx, |dictate, cx| dictate.restore(cx))
+                            }
                             // A start only from a page on screen (the DECISION at the top).
                             "toggle" if shown(cx) => {
                                 dictate.update(cx, |dictate, cx| dictate.toggle(cx))
@@ -117,17 +121,35 @@ impl PageDictation {
                 tell_page(&page, &detail, cx);
             }
         });
+        // The page hears of a phase only when it changes. Dictate notifies on every 50 ms level
+        // tick while it records (for the chat box's waveform), and the kit redraws its microphone
+        // on each phase it hears.
+        //
+        // CDXC:Dictate 2026-11-21 WHY: User: "pressing on this button to stop transcription often does nothing (until after few clicks)". Every tick went to the page as `{phase:"recording"}` and the kit rewrote the button's icon, so a press longer than 50 ms ended on a new icon and Chromium fired no click (a press under 50 ms got through, hence "after a few clicks").
+        let told = std::cell::Cell::new(("", false));
         let phase = cx.observe(&dictate, move |dictate, cx| {
-            let phase = match dictate.read(cx).phase() {
+            let phase = dictate.read(cx).phase();
+            let restorable = matches!(phase, DictatePhase::Cancelled { .. });
+            let phase = match phase {
                 DictatePhase::Starting => "starting",
                 DictatePhase::Recording => "recording",
                 DictatePhase::Transcribing => "transcribing",
                 DictatePhase::Idle
                 | DictatePhase::Failed { .. }
                 | DictatePhase::Unavailable { .. }
-                | DictatePhase::Notice { .. } => "idle",
+                | DictatePhase::Notice { .. }
+                | DictatePhase::Cancelled { .. } => "idle",
             };
-            tell_page(&page, &json!({ "phase": phase }), cx);
+            if told.replace((phase, restorable)) == (phase, restorable) {
+                return;
+            }
+            // `restorable`: a cancel kept the recording, and "restore" brings it back
+            // (CDXC:Dictate 2026-11-21 on `DictatePhase::Cancelled`). Older kits ignore it.
+            tell_page(
+                &page,
+                &json!({ "phase": phase, "restorable": restorable }),
+                cx,
+            );
         });
         Some(Self {
             dictate,

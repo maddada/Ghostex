@@ -287,13 +287,15 @@ html[data-gx-theme=light] .gx-ref{color:#5f9878}
 .gx-field>.gx-box{padding-right:38px}
 .gx-field>.gx-box.gx-empty::before{right:38px}
 .gx-mic{position:absolute;top:5px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:none;color:var(--gx-muted);cursor:pointer}
-.gx-mic svg{width:16px;height:16px}
+.gx-mic svg{width:16px;height:16px;pointer-events:none}
 .gx-mic:hover:not(:disabled){background:color-mix(in srgb,var(--gx-fg) 10%,transparent);color:var(--gx-fg)}
 .gx-mic:focus-visible{outline:none;box-shadow:0 0 0 2px color-mix(in srgb,var(--ring) 45%,transparent)}
 .gx-mic:disabled{opacity:.4;cursor:default}
 .gx-mic[hidden]{display:none}
 .gx-mic.gx-mic-on,.gx-mic.gx-mic-on:hover:not(:disabled){color:var(--destructive);background:color-mix(in srgb,var(--destructive) 14%,transparent)}
 .gx-mic.gx-mic-busy svg{animation:gx-mic-spin 1s linear infinite}
+.gx-dict-restore{margin:0 0 0 6px;padding:0 6px;border:0;border-radius:5px;background:color-mix(in srgb,var(--gx-fg) 8%,transparent);color:var(--gx-fg);font:inherit;font-weight:600;cursor:pointer}
+.gx-dict-restore:hover{background:color-mix(in srgb,var(--gx-fg) 14%,transparent)}
 @keyframes gx-mic-spin{to{transform:rotate(360deg)}}
 /* Picks on rows (CDXC:SessionChat 2026-11-20 DECISION on KIT_SCRIPT `bindRows`): a checkbox (a radio for pick one) leading every row, the row's own content beside it, a Note on every row, long rows folded. */
 gx-pick{display:block}
@@ -1095,9 +1097,10 @@ function setup(root){
       SPIN_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
     var dictPhase="idle",dictTarget=null,keyboard=!window.matchMedia||matchMedia("(pointer:fine)").matches;
     dictStop=function(){if(dictPhase!=="idle")dictateHost("cancel");};
+    /* Only a changed icon is redrawn, and the icon takes no pointer: a new icon under a press loses its click (CDXC:Dictate 2026-11-21 WHY in apps/desktop/src/app/page_dictation.rs). */
     var micLook=function(){boxes().forEach(function(a){var m=a.__gxMic;if(!m)return;
       var mine=!!dictTarget&&dictTarget.area===a,rec=mine&&(dictPhase==="recording"||dictPhase==="starting"),busy=mine&&dictPhase==="transcribing",tip=rec?"Stop and transcribe":busy?"Transcribing…":"Dictate";
-      m.classList.toggle("gx-mic-on",rec);m.classList.toggle("gx-mic-busy",busy);m.innerHTML=rec?STOP_ICON:busy?SPIN_ICON:MIC_ICON;
+      m.classList.toggle("gx-mic-on",rec);m.classList.toggle("gx-mic-busy",busy);var icon=rec?STOP_ICON:busy?SPIN_ICON:MIC_ICON;if(m.__gxIcon!==icon){m.innerHTML=icon;m.__gxIcon=icon;}
       m.setAttribute("aria-label",tip);m.setAttribute("data-gx-tip",tip);m.setAttribute("aria-pressed",rec?"true":"false");m.disabled=button.disabled||(dictPhase!=="idle"&&!mine);});};
     var dictHint=function(a,text,error){hint(a,text,error);a.__gxDictHint=!!text&&!error;};
     boxes().forEach(function(area){
@@ -1119,7 +1122,10 @@ function setup(root){
     window.addEventListener("gx-dictation",function(e){
       var d=e.detail||{},t=dictTarget,a=t&&t.area;
       if(typeof d.phase==="string"){dictPhase=d.phase;
-        if(a){if(d.phase==="starting")dictHint(a,"Starting the microphone…");else if(d.phase==="recording")dictHint(a,keyboard?"Listening… press the microphone again to transcribe, or Escape to cancel.":"Listening… tap the microphone again to transcribe.");else if(d.phase==="transcribing")dictHint(a,"Transcribing…");else if(a.__gxDictHint)dictHint(a,"");}}
+        if(a){if(d.phase==="starting")dictHint(a,"Starting the microphone…");else if(d.phase==="recording")dictHint(a,keyboard?"Listening… press the microphone again to transcribe, or Escape to cancel.":"Listening… tap the microphone again to transcribe.");else if(d.phase==="transcribing")dictHint(a,"Transcribing…");
+          /* A cancel kept the recording (`restorable`, CDXC:Dictate 2026-11-21 in apps/desktop/src/app/voice_agent/dictation.rs): say so, with Restore, which types it into this box. */
+          else if(d.restorable&&!a.readOnly&&!button.disabled){dictHint(a,"Dictation cancelled. Your recording is kept.");var r=el("button","gx-dict-restore","Restore");r.type="button";r.setAttribute("data-gx-tip","Transcribe the cancelled recording into this box");r.addEventListener("mousedown",function(e){e.preventDefault();});r.addEventListener("click",function(){dictateHost("restore");});a.__gxHint.append(r);}
+          else if(a.__gxDictHint)dictHint(a,"");}}
       if(typeof d.text==="string"&&d.text.trim()&&a){
         if(a.readOnly||button.disabled)dictHint(a,"Your answers were already sent, so the dictated words were not added.",true);
         else{var v=a.value,s,en;if(v===t.value){s=t.start;en=t.end;}else{var c=a.__gxBox&&document.activeElement===a.__gxBox?caretIn(a.__gxBox):null;s=c?c.start:v.length;en=c?c.end:v.length;}

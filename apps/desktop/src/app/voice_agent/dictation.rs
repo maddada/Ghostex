@@ -71,6 +71,55 @@ pub(crate) enum DictatePhase {
     Notice {
         failure: DictateFailure,
     },
+    /// The reader cancelled a recording or its transcription: the recording is kept, and Restore
+    /// transcribes it into the place it was aimed at. Shown for [`CANCELLED_SHOWN`], then Idle
+    /// (the recording stays for Transcribe previous and in Settings > Dictation > Past recordings).
+    ///
+    /// CDXC:Dictate 2026-11-21 DECISION: User: "if the user cancels transcription by mistake we still make sure we send it to hex to be saved there or we save the audio or something cuz i dont want it to be lost imagine if they had very long transcription they would be very mad to lose it". Every cancel (✕, Escape, a page leaving the screen) already kept the recording in gxserver's store (CDXC:VoiceMode 2026-10-20), but nothing said so: right after a cancel the chat box's pill and a page's box say "Dictation cancelled" with Restore, which transcribes that same recording into the same place. The audio stays in Ghostex's store rather than Hex's history: Hex's local API only transcribes, and the store serves every engine (Hex, OpenAI, xAI, Superwhisper) and the phone.
+    Cancelled {
+        restore: Restorable,
+    },
+}
+
+/// How long the "Dictation cancelled · Restore" pill stays after a cancel.
+const CANCELLED_SHOWN: Duration = Duration::from_secs(12);
+/// How long Restore waits for a cancelled recording to reach gxserver (the upload of a long
+/// recording, or a gxserver restart).
+const RESTORE_WAIT: Duration = Duration::from_secs(60);
+
+/// Where a run's recording ends up, told once its hand-over to gxserver is done (in the
+/// background, so a cancel never waits): Restore waits for it.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Restorable(Arc<(Mutex<Option<Option<Kept>>>, std::sync::Condvar)>);
+
+impl Restorable {
+    /// `None`: the run had no recording to restore (nothing was waiting).
+    fn fill(&self, kept: Option<Kept>) {
+        let (slot, ready) = &*self.0;
+        if let Ok(mut slot) = slot.lock() {
+            *slot = Some(kept);
+            ready.notify_all();
+        }
+    }
+
+    fn filled(&self) -> bool {
+        self.0.0.lock().is_ok_and(|slot| slot.is_some())
+    }
+
+    /// The recording, once known; `None` when there is none or its hand-over did not end in
+    /// `timeout`.
+    fn wait(&self, timeout: Duration) -> Option<Kept> {
+        let (slot, ready) = &*self.0;
+        let slot = slot.lock().ok()?;
+        let (slot, _) = ready
+            .wait_timeout_while(slot, timeout, |kept| kept.is_none())
+            .ok()?;
+        slot.clone().flatten()
+    }
+
+    fn same(&self, other: &Restorable) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 /// Why a transcription failed: gxserver's `error` on the recording (`recordings.rs` `Problem`),
@@ -133,6 +182,8 @@ pub(crate) struct Dictate {
     /// The recording the work in flight is transcribing, once gxserver has it, so a cancel can
     /// dismiss it at once.
     in_flight: Arc<Mutex<Option<String>>>,
+    /// Where this run's recording ends up, for Restore after a cancel.
+    kept: Restorable,
     work: Option<Task<()>>,
     ticker: Option<Task<()>>,
     elapsed: Duration,
@@ -140,8 +191,28 @@ pub(crate) struct Dictate {
     levels: VecDeque<f32>,
     /// When this recording last heard more than near-silence (`cant_hear`).
     loud_at: std::time::Instant,
-    /// A hotkey hold ended while the microphone was still opening: stop as soon as it records.
+    /// A hotkey hold ended, or the Stop button was pressed, while the microphone was still
+    /// opening: stop as soon as it records.
     stop_when_started: bool,
+    /// Ends the "Dictation cancelled" pill after [`CANCELLED_SHOWN`].
+    cancelled_shown: Option<Task<()>>,
+}
+
+impl Drop for Dictate {
+    /// A recording still running when its control goes away (its chat or page window closed) is
+    /// handed to gxserver now, so it is in Past recordings and Transcribe previous at once rather
+    /// than at the next Dictate. Its file is already on disk either way (`recorder.rs`).
+    fn drop(&mut self) {
+        if let Some(active) = self.active.take() {
+            let _ = std::thread::Builder::new()
+                .name("ghostex-dictation-hand-over".into())
+                .spawn(move || {
+                    let recording = active.finish();
+                    let _ = recorder::upload(&recording, None);
+                    refresh_previous();
+                });
+        }
+    }
 }
 
 impl EventEmitter<DictateEvent> for Dictate {}
@@ -153,12 +224,14 @@ impl Dictate {
             active: None,
             cancelled: Arc::new(AtomicBool::new(false)),
             in_flight: Arc::new(Mutex::new(None)),
+            kept: Restorable::default(),
             work: None,
             ticker: None,
             elapsed: Duration::ZERO,
             levels: resting_levels(),
             loud_at: std::time::Instant::now(),
             stop_when_started: false,
+            cancelled_shown: None,
         }
     }
 
@@ -199,9 +272,13 @@ impl Dictate {
             DictatePhase::Idle
             | DictatePhase::Failed { .. }
             | DictatePhase::Unavailable { .. }
-            | DictatePhase::Notice { .. } => self.start(cx),
+            | DictatePhase::Notice { .. }
+            | DictatePhase::Cancelled { .. } => self.start(cx),
             DictatePhase::Recording => self.stop(cx),
-            DictatePhase::Starting | DictatePhase::Transcribing => {}
+            // The button already shows Stop while the microphone opens (it can take a couple of
+            // seconds: the engine check, macOS asking for access), so a press then is a Stop too.
+            DictatePhase::Starting => self.stop_when_started = true,
+            DictatePhase::Transcribing => {}
         }
     }
 
@@ -210,6 +287,7 @@ impl Dictate {
             return;
         }
         self.phase = DictatePhase::Starting;
+        self.cancelled_shown = None;
         self.elapsed = Duration::ZERO;
         self.levels = resting_levels();
         self.stop_when_started = false;
@@ -345,20 +423,21 @@ impl Dictate {
         self.phase = DictatePhase::Transcribing;
         let cancelled = self.cancelled.clone();
         let in_flight = self.in_flight.clone();
+        let kept = self.kept.clone();
         self.work = Some(cx.spawn(async move |this, cx| {
             let recording = cx
                 .background_executor()
                 .spawn(async move { active.finish() })
                 .await;
-            let outcome =
-                cx.background_executor()
-                    .spawn({
-                        let cancelled = cancelled.clone();
-                        async move {
-                            save_and_transcribe(Kept::Local(recording), &cancelled, &in_flight)
-                        }
-                    })
-                    .await;
+            let outcome = cx
+                .background_executor()
+                .spawn({
+                    let cancelled = cancelled.clone();
+                    async move {
+                        save_and_transcribe(Kept::Local(recording), &cancelled, &in_flight, &kept)
+                    }
+                })
+                .await;
             let _ = this.update(cx, |this, cx| this.finish(outcome, &cancelled, cx));
         }));
         cx.notify();
@@ -367,6 +446,7 @@ impl Dictate {
     /// Escape or ✕: a recording stops and is kept as dismissed; a transcription in flight is
     /// dismissed; a failure row goes away (its recording stays for Transcribe previous).
     pub(crate) fn cancel(&mut self, cx: &mut Context<Self>) {
+        let mut restorable = None;
         match &self.phase {
             DictatePhase::Idle => return,
             DictatePhase::Starting => {
@@ -376,14 +456,24 @@ impl Dictate {
                 self.cancelled.store(true, Ordering::SeqCst);
                 self.ticker = None;
                 if let Some(active) = self.active.take() {
+                    let kept = self.kept.clone();
                     cx.background_executor()
                         .spawn(async move {
                             let mut recording = active.finish();
                             recording.dismiss();
-                            let _ = recorder::upload(&recording, None);
+                            kept.fill(Some(match recorder::upload(&recording, None) {
+                                Ok(dictation) => Kept::Server(
+                                    dictation["id"]
+                                        .as_str()
+                                        .map_or_else(|| recording.id.clone(), str::to_string),
+                                ),
+                                // Still on this computer; Restore hands it over first.
+                                Err(_) => Kept::Local(recording),
+                            }));
                             refresh_previous();
                         })
                         .detach();
+                    restorable = Some(self.kept.clone());
                 }
             }
             DictatePhase::Transcribing => {
@@ -399,16 +489,77 @@ impl Dictate {
                         })
                         .detach();
                 }
-                // It finishes on its own and types nothing.
+                // It finishes on its own and types nothing; it tells `kept` where the recording
+                // went.
                 if let Some(work) = self.work.take() {
                     work.detach();
                 }
+                restorable = Some(self.kept.clone());
             }
             DictatePhase::Failed { .. }
             | DictatePhase::Unavailable { .. }
-            | DictatePhase::Notice { .. } => {}
+            | DictatePhase::Notice { .. }
+            | DictatePhase::Cancelled { .. } => {}
         }
-        self.phase = DictatePhase::Idle;
+        self.cancelled_shown = None;
+        self.phase = match restorable {
+            Some(restore) => {
+                self.cancelled_shown = Some(cx.spawn({
+                    let restore = restore.clone();
+                    async move |this, cx| {
+                        cx.background_executor().timer(CANCELLED_SHOWN).await;
+                        let _ = this.update(cx, |this, cx| {
+                            if matches!(&this.phase, DictatePhase::Cancelled { restore: shown } if shown.same(&restore))
+                            {
+                                this.phase = DictatePhase::Idle;
+                                cx.notify();
+                            }
+                        });
+                    }
+                }));
+                DictatePhase::Cancelled { restore }
+            }
+            None => DictatePhase::Idle,
+        };
+        cx.notify();
+    }
+
+    /// Restore after a cancel: the cancelled recording, transcribed into the place it was aimed
+    /// at (CDXC:Dictate 2026-11-21 on [`DictatePhase::Cancelled`]).
+    pub(crate) fn restore(&mut self, cx: &mut Context<Self>) {
+        let DictatePhase::Cancelled { restore } = &self.phase else {
+            return;
+        };
+        let restore = restore.clone();
+        self.cancelled_shown = None;
+        self.phase = DictatePhase::Transcribing;
+        self.reset_run();
+        let cancelled = self.cancelled.clone();
+        let in_flight = self.in_flight.clone();
+        let kept = self.kept.clone();
+        self.work = Some(cx.spawn(async move |this, cx| {
+            let outcome = cx
+                .background_executor()
+                .spawn({
+                    let cancelled = cancelled.clone();
+                    async move {
+                        match restore.wait(RESTORE_WAIT) {
+                            Some(recording) => {
+                                save_and_transcribe(recording, &cancelled, &in_flight, &kept)
+                            }
+                            None => {
+                                kept.fill(None);
+                                Outcome::Error(
+                                    "The cancelled recording hasn't reached Ghostex's service yet. It is kept on this computer; find it in Settings > Dictation > Past recordings."
+                                        .to_string(),
+                                )
+                            }
+                        }
+                    }
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| this.finish(outcome, &cancelled, cx));
+        }));
         cx.notify();
     }
 
@@ -432,9 +583,11 @@ impl Dictate {
 
     fn transcribe_kept(&mut self, kept: Option<Kept>, cx: &mut Context<Self>) {
         self.phase = DictatePhase::Transcribing;
+        self.cancelled_shown = None;
         self.reset_run();
         let cancelled = self.cancelled.clone();
         let in_flight = self.in_flight.clone();
+        let slot = self.kept.clone();
         self.work = Some(cx.spawn(async move |this, cx| {
             let outcome = cx
                 .background_executor()
@@ -442,8 +595,8 @@ impl Dictate {
                     let cancelled = cancelled.clone();
                     async move {
                         match kept {
-                            Some(kept) => save_and_transcribe(kept, &cancelled, &in_flight),
-                            None => transcribe_latest(&cancelled, &in_flight),
+                            Some(kept) => save_and_transcribe(kept, &cancelled, &in_flight, &slot),
+                            None => transcribe_latest(&cancelled, &in_flight, &slot),
                         }
                     }
                 })
@@ -457,6 +610,7 @@ impl Dictate {
     fn reset_run(&mut self) {
         self.cancelled = Arc::new(AtomicBool::new(false));
         self.in_flight = Arc::new(Mutex::new(None));
+        self.kept = Restorable::default();
     }
 
     fn finish(&mut self, outcome: Outcome, cancelled: &AtomicBool, cx: &mut Context<Self>) {
@@ -562,6 +716,7 @@ fn save_and_transcribe(
     kept: Kept,
     cancelled: &AtomicBool,
     in_flight: &Mutex<Option<String>>,
+    slot: &Restorable,
 ) -> Outcome {
     let id = match kept {
         Kept::Server(id) => id,
@@ -575,6 +730,7 @@ fn save_and_transcribe(
                     None => recording.id.clone(),
                 },
                 Err(error) => {
+                    slot.fill(Some(Kept::Local(recording.clone())));
                     return Outcome::Failed(
                         Kept::Local(recording),
                         DictateFailure::new(
@@ -592,6 +748,7 @@ fn save_and_transcribe(
     if let Ok(mut slot) = in_flight.lock() {
         *slot = Some(id.clone());
     }
+    slot.fill(Some(Kept::Server(id.clone())));
     if cancelled.load(Ordering::SeqCst) {
         let _ = recorder::rpc("dismissDictation", json!({"id": id}), LIST_TIMEOUT);
         refresh_previous();
@@ -606,13 +763,18 @@ fn save_and_transcribe(
     outcome
 }
 
-fn transcribe_latest(cancelled: &AtomicBool, in_flight: &Mutex<Option<String>>) -> Outcome {
+fn transcribe_latest(
+    cancelled: &AtomicBool,
+    in_flight: &Mutex<Option<String>>,
+    slot: &Restorable,
+) -> Outcome {
     recorder::send_unsent();
-    // Named before the call, so a cancel while xAI works can dismiss it.
-    if let Some((id, _, _)) = previous_recording()
-        && let Ok(mut slot) = in_flight.lock()
-    {
-        *slot = Some(id);
+    // Named before the call, so a cancel while xAI works can dismiss it (and Restore take it).
+    if let Some((id, _, _)) = previous_recording() {
+        if let Ok(mut in_flight) = in_flight.lock() {
+            *in_flight = Some(id.clone());
+        }
+        slot.fill(Some(Kept::Server(id)));
     }
     let answer = recorder::rpc(
         "transcribeDictation",
@@ -639,6 +801,14 @@ fn transcribe_latest(cancelled: &AtomicBool, in_flight: &Mutex<Option<String>>) 
         }
         Err(message) => Outcome::Error(message.clone()),
     };
+    if !slot.filled() {
+        slot.fill(
+            answer
+                .ok()
+                .and_then(|answer| answer["dictation"]["id"].as_str().map(str::to_string))
+                .map(Kept::Server),
+        );
+    }
     refresh_previous();
     outcome
 }
@@ -680,6 +850,15 @@ fn keep_dismissed(mut recording: LocalRecording, cx: &mut Context<Dictate>) {
             refresh_previous();
         })
         .detach();
+}
+
+/// Hands gxserver the recordings an earlier run of this app left on this computer (it quit or
+/// crashed while recording or uploading), so they are in Past recordings and Transcribe previous
+/// from the start rather than after the next Dictate (blocking).
+pub(crate) fn hand_over_unsent() {
+    if recorder::send_unsent() > 0 {
+        refresh_previous();
+    }
 }
 
 /// The newest recording without text, as the last refresh found it (for the microphone's hover
@@ -728,4 +907,60 @@ pub(crate) fn refresh_engine() {
 pub(crate) fn clock(duration: Duration) -> String {
     let seconds = duration.as_secs();
     format!("{}:{:02}", seconds / 60, seconds % 60)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn restore_waits_for_the_cancelled_recording_to_reach_gxserver() {
+        let restorable = Restorable::default();
+        let filler = restorable.clone();
+        let hand_over = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            filler.fill(Some(Kept::Server("rec-1".to_string())));
+        });
+        match restorable.wait(Duration::from_secs(5)) {
+            Some(Kept::Server(id)) => assert_eq!(id, "rec-1"),
+            other => panic!("expected the recording gxserver took, got {other:?}"),
+        }
+        hand_over.join().unwrap();
+    }
+
+    #[test]
+    fn restore_gives_up_when_the_hand_over_never_ends() {
+        let restorable = Restorable::default();
+        assert!(restorable.wait(Duration::from_millis(20)).is_none());
+        assert!(!restorable.filled());
+    }
+
+    #[test]
+    fn a_run_with_nothing_to_restore_answers_at_once() {
+        let restorable = Restorable::default();
+        restorable.fill(None);
+        assert!(restorable.filled());
+        let started = std::time::Instant::now();
+        assert!(restorable.wait(Duration::from_secs(5)).is_none());
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn a_recording_gxserver_could_not_take_is_restored_from_this_computer() {
+        let restorable = Restorable::default();
+        let recording = LocalRecording {
+            id: "rec-2".to_string(),
+            path: std::path::PathBuf::from("/nonexistent/rec-2.wav"),
+            created_at: 1,
+            duration_ms: 60_000,
+            dismissed: true,
+        };
+        restorable.fill(Some(Kept::Local(recording)));
+        match restorable.wait(Duration::from_secs(1)) {
+            Some(Kept::Local(recording)) => assert_eq!(recording.id, "rec-2"),
+            other => panic!("expected the local recording, got {other:?}"),
+        }
+        assert!(restorable.same(&restorable.clone()));
+        assert!(!restorable.same(&Restorable::default()));
+    }
 }
