@@ -17,7 +17,12 @@ use crate::GhostexGpuiApp;
 pub(super) const SESSION_HEIGHT: f32 = 30.0;
 /// A work-mode card with links: line 1 exactly as tall as every other card, then the chips.
 pub(super) const WORK_SESSION_HEIGHT: f32 = SESSION_HEIGHT + 18.0;
-pub(super) const SESSION_SPACING: f32 = 1.0;
+/// Between two session rows.
+///
+/// CDXC:Sidebar 2026-11-21 DECISION:
+/// User: 2px more gap between the session rows, the rows and their highlight keeping their height,
+/// so rows are 33pt apart (30pt plus 3pt) instead of 31pt.
+pub(super) const SESSION_SPACING: f32 = 3.0;
 /// Horizontal gap between the list edge and a session card's rounded body.
 pub(super) const SESSION_INSET_X: f32 = 3.0;
 

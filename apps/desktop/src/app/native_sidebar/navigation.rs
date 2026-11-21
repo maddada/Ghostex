@@ -159,6 +159,20 @@ pub(crate) fn corner_row_top_padding(scale: f32) -> f32 {
     (WINDOW_CORNER_CENTER_Y - TITLEBAR_CONTROL_HEIGHT * scale / 2.0).max(0.0)
 }
 
+/// More room under the top row in the window's corner on macOS, unscaled like the lights.
+///
+/// CDXC:Sidebar 2026-11-21 DECISION:
+/// User: on macOS the traffic lights sit too close to the New session button; shift it, and
+/// everything under it in the sidebar, 2px down, with the gaps between them unchanged. Windows and
+/// Linux keep theirs. The top row's bottom padding grows by 2pt there (the full-height floating
+/// panel keeps its even padding), which moves the New session row and the list below it. The rail
+/// does not follow: its icons hang from Toggle sidebar's centre (sidebar_rail/render.rs).
+const MAC_LIGHTS_ROW_EXTRA_BOTTOM: f32 = if cfg!(all(target_os = "macos", not(ghostex_web))) {
+    2.0
+} else {
+    0.0
+};
+
 /// The floating sidebar's top row's top padding while the panel carries the traffic lights: the
 /// docked row's, which centres its buttons on the lights, `gutter` lower (the work area frame's,
 /// which moves the lights down too; `floating_sidebar_lights_row`).
@@ -378,7 +392,7 @@ impl GhostexGpuiApp {
                 let bottom_padding = if floating_row {
                     top_padding
                 } else {
-                    3.0 * scale
+                    3.0 * scale + MAC_LIGHTS_ROW_EXTRA_BOTTOM
                 };
                 (
                     top_padding + TITLEBAR_CONTROL_HEIGHT * scale + bottom_padding,
@@ -395,9 +409,7 @@ impl GhostexGpuiApp {
                 0.0 => self.sidebar_width,
                 width => width,
             };
-            let leading = corner_toggle_x
-                .or(floating_toggle_x)
-                .unwrap_or(5.0 * scale);
+            let leading = corner_toggle_x.or(floating_toggle_x).unwrap_or(5.0 * scale);
             let toggle = if toggle_button {
                 (TITLEBAR_SIDEBAR_COLLAPSE_ICON_SIZE + 2.0 * TITLEBAR_BUTTON_HORIZONTAL_PADDING)
                     * scale

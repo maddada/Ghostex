@@ -171,11 +171,7 @@ impl GhostexGpuiApp {
             })
             .child(div().flex_1())
             .when(section.collapsed, |row| {
-                row.child(super::sessions::session_time_label(
-                    section.count.to_string(),
-                    false,
-                    scale,
-                ))
+                row.child(super::sessions::section_count_label(section.count, scale))
             })
             .on_hover(cx.listener(move |app, hovered, _, cx| {
                 if *hovered {

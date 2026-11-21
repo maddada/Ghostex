@@ -473,3 +473,16 @@ pub(super) fn session_time_label(
         })
         .child(text.into())
 }
+
+/// The count a folded section heading shows at its right end (Sessions 17, Parked 22, GBots):
+/// a row's time, in a sleeping row's grey.
+///
+/// CDXC:Sidebar 2026-11-21 DECISION:
+/// User, after the counts took the time's style: they still looked bigger and brighter than the
+/// time. Measured at 2x they were the same size (digits 21px tall, 14px wide), but drawn in an
+/// awake row's time grey (#A6A6A6) where the time the user compared, a sleeping row's, is #686868.
+/// A count stands for folded rows, not a live one, so it takes the dimmer grey, which also sits
+/// with the muted heading beside it.
+pub(super) fn section_count_label(count: usize, scale: f32) -> gpui::Div {
+    session_time_label(count.to_string(), true, scale)
+}
