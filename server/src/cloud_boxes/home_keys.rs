@@ -15,13 +15,14 @@
 //! Easy Connect. The paired devices' list and its rules are unchanged, `client-default` never joins
 //! a ticket, and the private halves never leave this computer. The keys are used only to dial an
 //! address that is one of this computer's own boxes, and they go when its last box is deleted (the
-//! next box makes new ones).
+//! next box makes new ones). Each purpose has a few keys, one per open box (`SLOTS`).
 //! SEE-ALSO: server/src/remote_access/computer_link_keys.rs (`easy_connect_link_key_answer`, which
 //! names them to the desktop and the CLI), server/src/cloud_boxes/boot_steps.rs
 //! (`allowed_device_keys`).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use ghostex_gx_protocol::cloud_box::{CloudBoxState, CloudProviderId};
 
@@ -33,21 +34,32 @@ use crate::remote_access::computer_link_keys::{
 
 const PURPOSES: [&str; 2] = [LINK_KEY_PURPOSE_APP, LINK_KEY_PURPOSE_SERVER];
 
+/// How many keys of each purpose this computer keeps for its boxes.
+///
+/// CDXC:CloudBoxes 2026-11-21 FIX: review of c1d1a8a3a (finding 1): with one key per purpose, two
+/// boxes open at once dialed with the same key, and a relay delivers a key's traffic only to that
+/// key's newest connection (GitHub #526): 8 of 56 relayed pings went unanswered, none on separate
+/// keys. A box can't be given a key once it is running (its devices only ever go), so every ticket
+/// names a small fixed set, and each open box dials with a slot of its own (`slot_for`): the first
+/// open box the first key of each purpose, the next the second, and so on. Only a fifth box open at
+/// once shares a slot again.
+const SLOTS: usize = 4;
+
 fn keys_lock() -> &'static Mutex<()> {
     static LOCK: Mutex<()> = Mutex::new(());
     &LOCK
 }
 
-fn key_file(paths: &GxserverPaths, purpose: &str) -> PathBuf {
+fn key_file(paths: &GxserverPaths, purpose: &str, slot: usize) -> PathBuf {
     paths
         .root_dir
         .join("pairing")
         .join("link-keys")
-        .join(format!("own-cloud-boxes-{purpose}.json"))
+        .join(format!("own-cloud-boxes-{purpose}-{slot}.json"))
 }
 
-/// The public halves of this computer's box keys, made the first time. None without an Easy
-/// Connect helper here (nothing on this computer could dial a box then).
+/// The public halves of all of this computer's box keys, made the first time. None without an
+/// Easy Connect helper here (nothing on this computer could dial a box then).
 pub(super) fn public_keys(paths: &GxserverPaths) -> Vec<String> {
     let Some(binary) = crate::tailcat::resolve_client_tailcat_binary() else {
         return Vec::new();
@@ -57,37 +69,70 @@ pub(super) fn public_keys(paths: &GxserverPaths) -> Vec<String> {
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     PURPOSES
         .iter()
-        .filter_map(|purpose| {
-            let file = key_file(paths, purpose);
+        .flat_map(|purpose| (0..SLOTS).map(move |slot| (*purpose, slot)))
+        .filter_map(|(purpose, slot)| {
+            let file = key_file(paths, purpose, slot);
             if let Some(parent) = file.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
             make_client_key(&binary, &file)
                 .map_err(|error| {
-                    eprintln!("[gxserver] Cloud Boxes: no {purpose} key for this computer's boxes ({error:#})");
+                    eprintln!("[gxserver] Cloud Boxes: no {purpose} key {slot} for this computer's boxes ({error:#})");
                 })
                 .ok()
         })
         .collect()
 }
 
+/// Which open box holds which slot, in this gxserver.
+fn slots() -> &'static Mutex<HashMap<String, usize>> {
+    static SLOTS_HELD: OnceLock<Mutex<HashMap<String, usize>>> = OnceLock::new();
+    SLOTS_HELD.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// The slot `box_id` dials with: the one it holds, else the lowest no open box holds. A box gives
+/// its slot back once it is no longer among `open` (running, idle or being dialed now).
+fn slot_for(box_id: &str, open: &[String]) -> usize {
+    let mut held = slots()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    held.retain(|holder, _| holder == box_id || open.iter().any(|id| id == holder));
+    if let Some(slot) = held.get(box_id) {
+        return *slot;
+    }
+    let slot = (0..SLOTS)
+        .find(|slot| !held.values().any(|taken| taken == slot))
+        .unwrap_or(held.len() % SLOTS);
+    held.insert(box_id.to_string(), slot);
+    slot
+}
+
 /// The key file `purpose` dials `address` with when `address` is one of this computer's own boxes
-/// (not deleted, reached over Easy Connect); `None` for any other address.
+/// (not deleted, reached over Easy Connect): that box's slot of `purpose`. `None` for any other
+/// address.
 pub(crate) fn own_box_key(paths: &GxserverPaths, address: &str, purpose: &str) -> Option<PathBuf> {
     let address = address.trim();
     if !PURPOSES.contains(&purpose) || address.is_empty() {
         return None;
     }
-    let file = key_file(paths, purpose);
-    if !file.is_file() {
-        return None;
-    }
-    let own = store::list_boxes(paths).ok()?.into_iter().any(|stored| {
-        stored.row.state != CloudBoxState::Deleted
-            && stored.row.provider != CloudProviderId::Local
-            && stored.row.tailcat_address.as_deref().map(str::trim) == Some(address)
-    });
-    own.then_some(file)
+    let rows: Vec<_> = store::list_boxes(paths)
+        .ok()?
+        .into_iter()
+        .map(|stored| stored.row)
+        .filter(|row| {
+            row.state != CloudBoxState::Deleted && row.provider != CloudProviderId::Local
+        })
+        .collect();
+    let row = rows
+        .iter()
+        .find(|row| row.tailcat_address.as_deref().map(str::trim) == Some(address))?;
+    let open: Vec<String> = rows
+        .iter()
+        .filter(|other| other.state.is_reachable() || other.box_id == row.box_id)
+        .map(|other| other.box_id.clone())
+        .collect();
+    let file = key_file(paths, purpose, slot_for(&row.box_id, &open));
+    file.is_file().then_some(file)
 }
 
 /// After a box is deleted: once none of this computer's boxes is left, its box keys go.
@@ -105,6 +150,8 @@ pub(super) fn forget_when_no_box_is_left(paths: &GxserverPaths) {
         return;
     }
     for purpose in PURPOSES {
-        let _ = std::fs::remove_file(key_file(paths, purpose));
+        for slot in 0..SLOTS {
+            let _ = std::fs::remove_file(key_file(paths, purpose, slot));
+        }
     }
 }
