@@ -158,17 +158,20 @@ pub(super) fn page_for_cover_link(
     file: &Path,
     cover_id: &str,
 ) -> Result<Option<CoverLinkPage>, String> {
-    let Some(session_ref) = read_record(gxserver_state_dir, cover_id)
-        .filter(has_session)
-        .and_then(|record| {
-            record
-                .get("sessionRef")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
+    let Some(cover) = read_record(gxserver_state_dir, cover_id).filter(has_session) else {
+        return Ok(None);
+    };
+    let Some(session_ref) = cover
+        .get("sessionRef")
+        .and_then(Value::as_str)
+        .map(str::to_string)
     else {
         return Ok(None);
     };
+    // A section's own links belong to the cover it was opened from, so sections that link each
+    // other (next, back, themselves) open one page per file, never a new one on every hop.
+    let cover_id = linked_from(&cover).unwrap_or(cover_id).to_string();
+    let cover_id = cover_id.as_str();
     let Ok(canonical) = fs::canonicalize(file) else {
         return Ok(None);
     };
@@ -189,6 +192,9 @@ pub(super) fn page_for_cover_link(
     };
     let prepare = || prepare_page(&source, file.parent().unwrap_or(Path::new("/")));
     let awaits_seen = asks_nothing(&source);
+    // Held from the lookup to the write, so first clicks that arrive together open one page.
+    static MAKING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _making = MAKING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some((id, record)) = published_from(gxserver_state_dir, &file, |record| {
         linked_from(record) == Some(cover_id)
     }) {
@@ -211,15 +217,19 @@ pub(super) fn page_for_cover_link(
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Live page".to_string())
     });
-    let id = write_page(
+    let mut marks = vec![(LINKED_FROM_KEY, serde_json::json!(cover_id))];
+    if awaits_seen {
+        marks.push(("awaitsSeen", serde_json::json!(true)));
+    }
+    let id = super::store::write_page_marked(
         gxserver_state_dir,
         &title,
         &prepared.html,
         Some(&session_ref),
         Some(&file),
+        &marks,
     )
     .map_err(|error| format!("Could not save the page: {error}"))?;
-    super::store::mark_linked_from(gxserver_state_dir, &id, cover_id, awaits_seen);
     Ok(Some(CoverLinkPage {
         id,
         made_for: Some(LinkedSession {
