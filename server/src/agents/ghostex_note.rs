@@ -1,6 +1,8 @@
 //! The Ghostex note: the few sentences every agent session Ghostex starts is told about Ghostex,
 //! and the browser preference it and `ghostex agent-guide` state.
 
+use std::path::Path;
+
 use serde_json::Value;
 
 use crate::paths::GxserverPaths;
@@ -35,6 +37,18 @@ pub const NEEDS_YOU_NOTE: &str = "When a step can only be done by the user (a su
 /// Ghostex starts learns the verb here instead; threads, which take no note, from their brief
 /// (coordinators/brief.rs `thread_brief`).
 pub const SECRETS_NOTE: &str = "When a task needs a secret only the user has (a password, a sudo password, an API key or token), run `ghostex secret request --label <what> --reason <why>`: the user types it on a private card and you get a private file holding it. Never ask for it in chat.";
+
+/// The paragraph after the Secrets one that has agents link what they mention and keep the images
+/// they show in Ghostex's image folder, named by its real path.
+///
+/// CDXC:AgentGuide 2026-11-21 DECISION:
+/// User (Q4347, Q4348 "launch note"): these two rules move out of the user's own global instructions into the note every session gets, so every agent in Ghostex follows them. Ghostex writes the image folder's real path (`<data dir>/i`, which follows `GHOSTEX_HOME` and `XDG_DATA_HOME`), the folder storage_cleanup/images.rs keeps for 60 days.
+fn links_note(images_dir: &Path) -> String {
+    format!(
+        "In your replies, link what you made or mention so the user can click it: a file by its absolute path ([label](/abs/path)), a PR, issue, commit or run as a Markdown link with the full URL, never a bare #123, short SHA or plain path. Before you show an image you made, copy it to {}/ with a descriptive name and link that copy, never one in /tmp or a cache.",
+        images_dir.display()
+    )
+}
 
 const NOTE_SETTING_KEY: &str = "agentGhostexNote";
 pub(crate) const PREVIEW_BROWSER_SETTING_KEY: &str = "agentPreviewBrowser";
@@ -92,13 +106,15 @@ pub(crate) fn agent_preview_browser(paths: &GxserverPaths) -> PreviewBrowser {
     )
 }
 
-/// The note with the browser sentence the user's choice adds, then the Needs you paragraph.
-pub(crate) fn ghostex_note_text(browser: PreviewBrowser) -> String {
+/// The note with the browser sentence the user's choice adds, then the Needs you, Secrets and
+/// links paragraphs.
+pub(crate) fn ghostex_note_text(browser: PreviewBrowser, images_dir: &Path) -> String {
+    let links = links_note(images_dir);
     match browser.note_sentence() {
         Some(sentence) => {
-            format!("{GHOSTEX_NOTE} {sentence}\n\n{NEEDS_YOU_NOTE}\n\n{SECRETS_NOTE}")
+            format!("{GHOSTEX_NOTE} {sentence}\n\n{NEEDS_YOU_NOTE}\n\n{SECRETS_NOTE}\n\n{links}")
         }
-        None => format!("{GHOSTEX_NOTE}\n\n{NEEDS_YOU_NOTE}\n\n{SECRETS_NOTE}"),
+        None => format!("{GHOSTEX_NOTE}\n\n{NEEDS_YOU_NOTE}\n\n{SECRETS_NOTE}\n\n{links}"),
     }
 }
 
@@ -141,7 +157,8 @@ pub(crate) fn note_text_with(
     marked_handovers: bool,
     with_extensions: bool,
 ) -> Option<String> {
-    let note = ghostex_note_enabled(paths).then(|| ghostex_note_text(agent_preview_browser(paths)));
+    let note = ghostex_note_enabled(paths)
+        .then(|| ghostex_note_text(agent_preview_browser(paths), &paths.app_data_dir.join("i")));
     let text = launch_note_text(note.as_deref(), marked_handovers);
     // Unit tests assert exact commands, which must not depend on the user's extensions.
     if cfg!(test) {
@@ -169,9 +186,11 @@ fn with_extension_notes(text: Option<String>, notes: &[String]) -> Option<String
 mod tests {
     use super::*;
 
+    const IMAGES: &str = "/data/ghostex/i";
+
     #[test]
     fn note_and_marked_handovers_join_into_one_text() {
-        let note = ghostex_note_text(PreviewBrowser::Ask);
+        let note = ghostex_note_text(PreviewBrowser::Ask, Path::new(IMAGES));
         assert_eq!(launch_note_text(None, false), None);
         assert_eq!(
             launch_note_text(Some(&note), false).as_deref(),
@@ -194,17 +213,22 @@ mod tests {
             PreviewBrowser::Ask
         );
         assert_eq!(
-            ghostex_note_text(PreviewBrowser::Ask),
-            format!("{GHOSTEX_NOTE}\n\n{NEEDS_YOU_NOTE}\n\n{SECRETS_NOTE}")
+            ghostex_note_text(PreviewBrowser::Ask, Path::new(IMAGES)),
+            format!(
+                "{GHOSTEX_NOTE}\n\n{NEEDS_YOU_NOTE}\n\n{SECRETS_NOTE}\n\n{}",
+                links_note(Path::new(IMAGES))
+            )
         );
-        assert!(
-            ghostex_note_text(PreviewBrowser::from_setting(Some("internal-browser")))
-                .contains("opened in the Ghostex browser.\n\n")
-        );
-        assert!(
-            ghostex_note_text(PreviewBrowser::from_setting(Some("system-default-browser")))
-                .contains("opened in their default browser.\n\n")
-        );
+        assert!(ghostex_note_text(
+            PreviewBrowser::from_setting(Some("internal-browser")),
+            Path::new(IMAGES)
+        )
+        .contains("opened in the Ghostex browser.\n\n"));
+        assert!(ghostex_note_text(
+            PreviewBrowser::from_setting(Some("system-default-browser")),
+            Path::new(IMAGES)
+        )
+        .contains("opened in their default browser.\n\n"));
     }
 
     #[test]

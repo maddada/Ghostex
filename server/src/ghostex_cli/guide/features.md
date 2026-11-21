@@ -3071,7 +3071,10 @@ session Ghostex starts a short note that it runs in Ghostex: Ghostex can show
 Live pages, Ghostex forms and Ghostex visuals in the chat, open pages the agent
 builds in its own browser, run other agents and coordinators, and explain or
 change its own settings. The agent uses it only when you ask for one of those
-things, and then reads the details from `ghostex agent-guide`. It reaches
+things, and then reads the details from `ghostex agent-guide`. The note also
+asks every agent to link the files, PRs and issues it mentions so you can
+click them, and to keep the images it shows you in Ghostex's image folder, so
+they still open after a restart. It reaches
 Claude Code, Codex, ZCode, Antigravity CLI, Grok Build, Copilot, Kiro,
 CodeBuddy, Qoder, Pi, OMP and Factory Droid when they start; in other agents
 (OpenCode, Cursor, Kimi Code and the rest) type `/ghostex` (`$ghostex` in
