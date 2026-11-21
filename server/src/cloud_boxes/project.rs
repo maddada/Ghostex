@@ -92,11 +92,12 @@ pub(super) fn write_project_settings(
 }
 
 impl HomeProject {
-    /// The repository's origin URL, which a blank box clones.
+    /// The repository's origin URL, which a blank box clones, without any credentials in it.
     pub(super) fn origin_url(&self) -> Option<String> {
         self.path.as_deref().and_then(|path| {
             crate::project_git_remote::cached_project_git_remote(path)
                 .and_then(|remote| remote.origin_url)
+                .map(|origin| without_credentials(&origin))
         })
     }
 
@@ -116,4 +117,32 @@ impl HomeProject {
             .map(str::to_string)
             .unwrap_or_else(|| self.project_id.clone())
     }
+}
+
+/// CDXC:CloudBoxes 2026-11-21 WHY: an origin can carry a token (`https://user:ghp_…@github.com/o/r`),
+/// and the clone request sent it to the box as-is, into the `git clone` arguments, the checkout's
+/// `.git/config` and so every snapshot of it. The request now gets the URL without credentials: all
+/// of an http(s) URL's user part (a token can stand there alone), and an ssh:// URL's password,
+/// keeping its user (`git@`). A box reaches a private repository through its own GitHub login.
+pub(super) fn without_credentials(url: &str) -> String {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        // scp-like `git@github.com:o/r` has no password.
+        return url.to_string();
+    };
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(authority_end);
+    let Some((userinfo, host)) = authority.rsplit_once('@') else {
+        return url.to_string();
+    };
+    let user = if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
+        ""
+    } else {
+        userinfo.split(':').next().unwrap_or_default()
+    };
+    let user = if user.is_empty() {
+        String::new()
+    } else {
+        format!("{user}@")
+    };
+    format!("{scheme}://{user}{host}{tail}")
 }

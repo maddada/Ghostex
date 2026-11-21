@@ -59,9 +59,15 @@ fn ensure_checkout(request: &BoxPrepareSessionRequest) -> Result<PathBuf, String
                 .map_err(|error| format!("Can't make {}: {error}", parent.display()))?;
         }
         let signed_in = is_github(url) && github_login_for_git(Path::new("/"));
+        // gh's login serves git only over https, so a signed-in box clones a GitHub SSH origin
+        // (`git@github.com:o/r.git`) as the https form of the same repository.
+        let clone_url = match github_https_form(url) {
+            Some(https) if signed_in => https,
+            _ => url.to_string(),
+        };
         git(
             checkout.parent().unwrap_or(Path::new("/")),
-            &["clone", url, &checkout.to_string_lossy()],
+            &["clone", &clone_url, &checkout.to_string_lossy()],
         )
         .map_err(|error| needs_github_login(url, signed_in, error))?;
     } else if !is_repository(&checkout) {
@@ -72,8 +78,30 @@ fn ensure_checkout(request: &BoxPrepareSessionRequest) -> Result<PathBuf, String
     Ok(checkout)
 }
 
+/// Whether `url` (https, ssh:// or scp-like `git@github.com:o/r`) is on github.com, by its host.
 fn is_github(url: &str) -> bool {
-    url.contains("github.com")
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = rest.split('/').next().unwrap_or_default();
+    let host = authority.rsplit('@').next().unwrap_or_default();
+    host.split(':')
+        .next()
+        .unwrap_or_default()
+        .eq_ignore_ascii_case("github.com")
+}
+
+/// The https form of a GitHub SSH origin (`git@github.com:o/r.git`, `ssh://git@github.com/o/r`);
+/// `None` for anything else.
+fn github_https_form(url: &str) -> Option<String> {
+    if !is_github(url) {
+        return None;
+    }
+    let path = match url.split_once("://") {
+        Some((scheme, rest)) if scheme.eq_ignore_ascii_case("ssh") => rest.split_once('/')?.1,
+        Some(_) => return None,
+        None => url.split_once(':')?.1,
+    };
+    let path = path.trim_start_matches('/');
+    (!path.is_empty()).then(|| format!("https://github.com/{path}"))
 }
 
 /// Whether the box is signed in to GitHub (`gh`, saved in the project's snapshot, Q1019); when it
@@ -92,23 +120,25 @@ fn github_login_for_git(dir: &Path) -> bool {
 
 /// CDXC:CloudBoxes 2026-11-21 WHY: a box with no GitHub login can't clone a private repository,
 /// and the chat showed git's own words ("could not read Username for 'https://github.com':
-/// terminal prompts disabled"). Said plainly, with how to give the box a login.
+/// terminal prompts disabled"). Said plainly. The message never repeats the URL: an origin can
+/// carry a token (`https://user:ghp_…@github.com/…`), which git's own error leaves out.
+/// Only GitHub refusing a caller with no login counts: over https that reads the same for a
+/// private repository and a mistyped public one, so both get this message; a 403 or "Repository
+/// not found" (a login without access) keeps git's error.
 fn needs_github_login(url: &str, signed_in: bool, error: String) -> String {
     let refused = [
         "could not read Username",
         "Authentication failed",
-        "Repository not found",
         "Permission denied (publickey)",
-        "403",
+        "Host key verification failed",
     ]
     .iter()
     .any(|sign| error.contains(sign));
     if !is_github(url) || signed_in || !refused {
         return error;
     }
-    format!(
-        "This box isn't signed in to GitHub, so it can't clone {url}: a private repository needs a GitHub login on the box, saved in the project's snapshot."
-    )
+    "This box isn't signed in to GitHub, so it can't clone this project's repository: a private repository needs a GitHub login on the box, saved in the project's snapshot."
+        .to_string()
 }
 
 /// `origin/<base>` when the remote has it, else the local `<base>`.
