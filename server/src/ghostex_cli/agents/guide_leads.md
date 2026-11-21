@@ -22,22 +22,33 @@ reports to its coordinator, without the coordinator role:
 - Turns the user starts in the linked session are never forwarded.
 - Both stay ordinary sessions: each keeps its own work items and replies, and
   the linked session can still `ghostex agents send` its lead.
-- The linked session nests under its lead in the sidebar.
+- The linked session nests under its lead in the sidebar (a sub-lead's sessions
+  under the sub-lead).
 
-Links are one level deep: a lead can't be linked to another lead, and a
-coordinator or a coordinator's thread can't take part (a coordinator has
-threads: `ghostex coordinator start-thread`). Both sessions are on this
-computer.
+Links go at most two levels deep: a main lead, the sub-leads linked to it, and
+the sessions linked to each sub-lead. Ghostex refuses a third level and a loop.
+Each lead hears only the turns it started: the main lead hears its sub-lead's
+turns, the sub-lead hears its own sessions' turns, and a session's reports never
+skip a level. So a sub-lead whose sessions finish the work in later turns (not
+the one the main lead started) sends the main lead the result itself with
+`ghostex agents send <lead-ref> "..."`. A coordinator or a coordinator's thread
+can't take part (a coordinator has threads: `ghostex coordinator
+start-thread`). All the sessions are on this computer.
 
 ## Commands
 
 ```bash
 ghostex agents create <agent-id> --lead self --task "..."   # start one linked to you
+ghostex agents create <agent-id> --lead self --model <m> --effort <e> --task "..."
 ghostex agents link <session-ref> --lead self               # link one that already runs
-ghostex agents links                                        # the sessions linked to you
+ghostex agents links                                        # the sessions linked to you, and
+                                                            # your sub-leads' (with the chain)
 ghostex agents unlink <session-ref>                         # end one link
 ghostex agents unlink --all                                 # end every link to you
 ```
+
+A sub-lead links its own sessions the same way, with `--lead self` in its own
+session. `agents links` run by a sub-lead also says whom it reports to.
 
 A session can only link others to itself (`--lead self`); only the user (from
 their own terminal or the app) can link a session to another lead. Send the
@@ -50,7 +61,8 @@ arrives as a message when the turn ends.
 
 The user can end links from the sidebar: Unlink from Lead on a linked
 session, Stop leading on the lead. An unlinked session keeps running as an
-ordinary session and simply stops reporting; nothing is closed.
+ordinary session and simply stops reporting; nothing is closed. Unlinking a
+sub-lead keeps its own sessions linked to it.
 
 If the user wants a session that only delegates and follows the work, a
 coordinator fits better (`ghostex coordinator promote`).
