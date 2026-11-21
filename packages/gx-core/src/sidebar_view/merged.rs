@@ -286,9 +286,12 @@ pub(super) fn merge_machines(
         index = subgroups.end;
     }
 
-    // Then every other machine's, in the machine tabs' order.
+    // Then every other machine's, in the machine tabs' order, leaving out the projects filed in a
+    // Space this computer keeps in another workspace (`OtherWorkspaceSpaces`).
+    let elsewhere = local_spaces_in_other_workspaces(store, input.inputs);
     for guest in &guests {
         let machine = &cache.machines[&guest.machine];
+        let filed_elsewhere = elsewhere.guest_projects(store, &guest.machine);
         let needs = side_chat_needs(store, &guest.machine);
         let context = RowContext {
             side_chat_needs: &needs,
@@ -338,6 +341,13 @@ pub(super) fn merge_machines(
                 continue;
             };
             if project.bot_profile.is_some() {
+                continue;
+            }
+            let owner = project
+                .worktree
+                .as_ref()
+                .map_or(project_id, |worktree| &worktree.parent_project_id);
+            if filed_elsewhere.contains(owner) {
                 continue;
             }
             let project_key = ProjectKey {
@@ -1074,14 +1084,20 @@ pub(crate) fn union_spaces_of(
         .unwrap_or(spaces)
 }
 
-/// This computer's Spaces that belong to a workspace other than the window's, by id and by name.
+/// This computer's Spaces that belong to a workspace other than the window's, and those that
+/// belong to the window's, by id and by name.
 ///
 /// CDXC:Workspaces 2026-11-21 WHY:
 /// Settings sync gives every computer the same Spaces but not their workspace (workspace ids are each computer's own), so another computer holds a Work Space of this one in its own default workspace. The one list added every other computer's Spaces after the window's workspace filter had run, and a Space made in Work showed (empty) in Personal too. Another computer's Space that this computer files in another workspace, matched the way [`union_spaces`] matches (by id, else by name), stays out; one this computer does not have still joins.
+///
+/// CDXC:Workspaces 2026-11-21 DECISION:
+/// User (via the coordinator, option b after the review): "also leave out another computer's projects whose Space this computer files in another workspace, so Work projects follow their Space and never show in Personal". Another computer's project filed in such a Space (directly, through its group, or as a worktree of such a project) is left out of the one list too, instead of falling to Other.
 #[derive(Default)]
 struct OtherWorkspaceSpaces {
     ids: BTreeSet<String>,
     names: BTreeSet<String>,
+    shown_ids: BTreeSet<String>,
+    shown_names: BTreeSet<String>,
 }
 
 fn local_spaces_in_other_workspaces(
@@ -1100,10 +1116,12 @@ fn local_spaces_in_other_workspaces(
         return found;
     };
     for space in local.spaces.values() {
-        if !workspace.shows_space(space.workspace_id.as_deref()) {
-            found.ids.insert(space.space_id.clone());
-            found.names.insert(space.name.trim().to_lowercase());
-        }
+        let (ids, names) = match workspace.shows_space(space.workspace_id.as_deref()) {
+            true => (&mut found.shown_ids, &mut found.shown_names),
+            false => (&mut found.ids, &mut found.names),
+        };
+        ids.insert(space.space_id.clone());
+        names.insert(space.name.trim().to_lowercase());
     }
     found
 }
@@ -1121,19 +1139,62 @@ impl OtherWorkspaceSpaces {
             .map(|space| space.name.trim().to_lowercase())
             .collect();
         theirs.spaces.retain(|space_id, space| {
-            if ours.spaces.contains_key(space_id) {
-                return true;
-            }
-            if self.ids.contains(space_id) {
-                return false;
-            }
-            let name = space.name.trim().to_lowercase();
-            shown_names.contains(&name) || !self.names.contains(&name)
+            ours.spaces.contains_key(space_id)
+                || shown_names.contains(&space.name.trim().to_lowercase())
+                || !self.files_elsewhere(space_id, &space.name)
         });
         theirs
             .order
             .retain(|space_id| theirs.spaces.contains_key(space_id));
         theirs
+    }
+
+    /// Whether another computer's Space is one this computer files in another workspace: by id,
+    /// else by a name none of the window's own Spaces use.
+    fn files_elsewhere(&self, space_id: &str, name: &str) -> bool {
+        if self.shown_ids.contains(space_id) {
+            return false;
+        }
+        if self.ids.contains(space_id) {
+            return true;
+        }
+        let name = name.trim().to_lowercase();
+        !self.shown_names.contains(&name) && self.names.contains(&name)
+    }
+
+    /// `machine`'s projects filed (directly or through their group) in a Space this computer
+    /// files in another workspace. A worktree project follows its parent's.
+    fn guest_projects(&self, store: &PresentationStore, machine: &MachineId) -> HashSet<String> {
+        let mut projects = HashSet::new();
+        if self.ids.is_empty() {
+            return projects;
+        }
+        let Some(side) = store.machine(machine).map(|entry| entry.side_state()) else {
+            return projects;
+        };
+        let Some(spaces) = side.spaces.as_ref() else {
+            return projects;
+        };
+        let collections = side
+            .project_collections
+            .as_ref()
+            .map(CollectionsState::from_wire)
+            .unwrap_or_default();
+        for space in spaces.spaces.values() {
+            if !self.files_elsewhere(&space.space_id, &space.name) {
+                continue;
+            }
+            projects.extend(space.member_project_ids.iter().cloned());
+            for collection in &collections.collections {
+                if space
+                    .member_collection_ids
+                    .contains(&collection.collection_id)
+                {
+                    projects.extend(collection.project_ids.iter().cloned());
+                }
+            }
+        }
+        projects
     }
 }
 
