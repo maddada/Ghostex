@@ -116,14 +116,29 @@ const WORKER_PAGE_NOTE: &str =
 const FILE_PAGE_NOTE: &str =
     "Read-only: no agent sent this page, so answers sent from here go nowhere.";
 
+/// What the page API's `submit` says when a page opened from its file refuses to send
+/// (`window.__gxReadOnlyWhy`); a Worker's page keeps the API's own words.
+const FILE_PAGE_REFUSAL: &str =
+    "No agent sent this page, so it is read-only here. Nothing was sent.";
+
 /// The page opened read-only: `window.__gxReadOnly` makes the page API's `submit` refuse (so no
 /// answers leave it, whatever the page's own script does), and a note says why.
 ///
 /// CDXC:SessionChat 2026-10-30 DECISION:
 /// User: a coordinator's Resources lists "any of the inline html files that were posted in a thread". A thread's questions are answered by its coordinator bringing them over, and a page answers to the session that published it, so a page opened from the coordinator's list must not send answers on its own. It opens read-only; pressing Send says nothing was sent and why. The thread's own chat opens the same page normally, and it still takes answers there.
 pub(super) fn with_read_only(page: Vec<u8>, note: &str) -> Vec<u8> {
+    let why = if note == FILE_PAGE_NOTE {
+        format!(
+            "window.__gxReadOnlyWhy={};",
+            serde_json::Value::from(FILE_PAGE_REFUSAL)
+                .to_string()
+                .replace('<', "\\u003c")
+        )
+    } else {
+        String::new()
+    };
     let script = format!(
-        "<script>window.__gxReadOnly=true;document.addEventListener('DOMContentLoaded',function(){{var n=document.createElement('div');n.textContent={};n.style.cssText='position:fixed;top:8px;right:8px;z-index:2147483647;max-width:280px;padding:6px 10px;border-radius:8px;font:12px/1.35 system-ui,sans-serif;background:rgba(236,236,240,.86);color:#1c1c1e;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 1px 6px rgba(0,0,0,.18);pointer-events:none';document.body.appendChild(n);}});</script>",
+        "<script>window.__gxReadOnly=true;{why}document.addEventListener('DOMContentLoaded',function(){{var n=document.createElement('div');n.textContent={};n.style.cssText='position:fixed;top:8px;right:8px;z-index:2147483647;max-width:280px;padding:6px 10px;border-radius:8px;font:12px/1.35 system-ui,sans-serif;background:rgba(236,236,240,.86);color:#1c1c1e;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 1px 6px rgba(0,0,0,.18);pointer-events:none';document.body.appendChild(n);}});</script>",
         serde_json::Value::from(note).to_string().replace('<', "\\u003c")
     );
     let Ok(html) = String::from_utf8(page) else {

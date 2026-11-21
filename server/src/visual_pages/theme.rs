@@ -247,7 +247,7 @@ w.querySelector(".gx-export-save").addEventListener("click",function(){var url=U
 document.body.appendChild(w);w.querySelector(".gx-export-save").focus();}
 window.ghostex={get exported(){return ex;},get answered(){return!!(st&&st.answered);},get awaitsSeen(){return!!(st&&st.awaitsSeen);},get answers(){return st&&st.answered?st.answers:null;},
 get draft(){return draft.page===undefined?null:draft.page;},saveDraft:function(value){save("page",value===undefined?null:value);},
-submit:function(answers,retrying){var body=JSON.stringify({answers:answers===undefined?null:answers}),tries=0,wait=0;return new Promise(function(resolve,reject){if(window.__gxReadOnly){reject(new Error("This page was posted by a Worker, so it is read-only here. Nothing was sent: answer through your coordinator."));return;}
+submit:function(answers,retrying){var body=JSON.stringify({answers:answers===undefined?null:answers}),tries=0,wait=0;return new Promise(function(resolve,reject){if(window.__gxReadOnly){reject(new Error(window.__gxReadOnlyWhy||"This page was posted by a Worker, so it is read-only here. Nothing was sent: answer through your coordinator."));return;}
 if(ex){exportAnswers(answers);resolve({exported:true});return;}
 function sent(j){st={answered:true,answers:answers,answeredAt:j.answeredAt};draft={};dirty=false;clearTimeout(timer);note();if(document.documentElement.hasAttribute("data-gx-floating"))setTimeout(function(){window.close();},700);resolve(j);}
 function again(){if(typeof retrying==="function")try{retrying("Not sent yet: Ghostex can't be reached. Trying again… Your answers are kept.");}catch(e){}wait=later(wait);setTimeout(attempt,wait);}
