@@ -392,19 +392,8 @@ impl GhostexGpuiApp {
             .children(
                 drop_position.map(|position| super::space_drag::insertion_line(position, scale)),
             )
-            // CDXC:Spaces 2026-09-22 DECISION: User: remove the numbers for now and match the dots exactly to the session card status dots. Since 2026-11-20 one dot, the most urgent (status.rs `TileCounts`).
-            .children(
-                super::status::tile_status_dot(tile_counts, scale, dot_backdrop).map(|dot| {
-                    h_flex()
-                        .absolute()
-                        .top(px(20.5 * scale))
-                        .left_0()
-                        .w_full()
-                        .justify_center()
-                        .h(px(11.0 * scale))
-                        .child(dot)
-                }),
-            )
+            // CDXC:Spaces 2026-09-22 DECISION: User: remove the numbers for now and match the dots exactly to the session card status dots. Since 2026-11-20 one dot, the most urgent (status.rs `TileCounts`); since 2026-11-21 a 4pt dot in the tile's top-right corner (status.rs `tile_status_dot`).
+            .children(super::status::tile_status_dot(tile_counts, scale, dot_backdrop))
             .when(
                 self.native_sidebar.pointer_inside
                     && self.native_sidebar.menu.is_none()
