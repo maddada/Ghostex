@@ -68,7 +68,7 @@ pub struct SidebarRevealPlan {
     pub collapsed_owner_group: Option<String>,
     /// The folded coordinators above the row, by sidebar row id.
     pub collapsed_coordinators: Vec<String>,
-    /// The group or its collection is hidden and Show Hidden is off.
+    /// The group, its collection or its Space is hidden and Show Hidden is off.
     pub show_hidden: bool,
     /// The ticked tag filters leave the row out.
     pub clear_tag_filters: bool,
@@ -195,6 +195,7 @@ pub fn reveal_plan(
     let located = built.as_ref().unwrap_or(view);
     let group = located.group(&found.group_id)?;
     let collection_id = group.collection_id.clone();
+    let space = space_of_group(core, inputs, group);
     let collection_storage_id = collection_id
         .as_ref()
         .map(|collection_id| format!("{}:{collection_id}", inputs.ui.section_key()));
@@ -225,8 +226,12 @@ pub fn reveal_plan(
             .unwrap_or_default()
             .get(found.section)
             .then_some(found.section),
+        // A hidden Space is lifted the same way: the selection never rests on one while Show
+        // Hidden is off, so selecting it alone would leave the row out (CDXC:Spaces 2026-11-21 in
+        // spaces.rs `Space::shown`).
         show_hidden: !inputs.ui.show_hidden
-            && (inputs.ui.hidden_items.group_ids.contains(&found.group_id)
+            && (space.as_ref().is_some_and(|space| space.hidden)
+                || inputs.ui.hidden_items.group_ids.contains(&found.group_id)
                 || collection_storage_id.is_some_and(|storage_id| {
                     inputs.ui.hidden_items.collection_keys.contains(&storage_id)
                 })),
@@ -238,12 +243,17 @@ pub fn reveal_plan(
                 found.on_cloud_box,
                 &inputs.ui.selected_tag_filters,
             ),
-        select_space: space_for_reveal(core, inputs, group),
-        remember_space: space_of_group(core, inputs, group).map(|space_id| FocusedRowSpace {
+        select_space: space
+            .as_ref()
+            .filter(|space| section_space_moves(inputs, &inputs.ui.section_key(), &space.id))
+            .map(|space| space.id.clone()),
+        remember_space: space.map(|space| FocusedRowSpace {
             section_key: inputs.ui.section_key(),
-            // The reveal's own `select_space` above carries the move; this is only the memory.
+            // The reveal's own `select_space` and `show_hidden` above carry the move; this is
+            // only the memory.
             follow: false,
-            space_id,
+            show_hidden: false,
+            space_id: space.id,
         }),
         select_machine,
         select_mode,
@@ -317,7 +327,7 @@ pub fn space_for_focused_row(
     let drawn = (!other_machine)
         .then(|| find_group(view, sidebar_session_id))
         .flatten();
-    let space_id = match drawn {
+    let space = match drawn {
         Some(group) => space_of_group(core, inputs, group)?,
         None => {
             let unfiltered_inputs = unfiltered(inputs, SidebarMode::Projects);
@@ -329,10 +339,11 @@ pub fn space_for_focused_row(
     // `rememberNativeSidebarFocus` writes the section's Space when the setting is on, and writes it
     // unconditionally, so a section that has never been written gets its first value here.
     let follow = inputs.settings.sidebar_space_follow_active_session
-        && section_space_moves(inputs, &section_key, &space_id);
+        && section_space_moves(inputs, &section_key, &space.id);
     Some(FocusedRowSpace {
         section_key,
-        space_id,
+        show_hidden: follow && space.hidden && !inputs.ui.show_hidden,
+        space_id: space.id,
         follow,
     })
 }
@@ -467,7 +478,7 @@ fn locate(
 /// One function rather than two: the reveal, the follow and the per-Space session memory all ask
 /// exactly this question, and the reveal once had its own copy of the "has it moved" test as well,
 /// which is how the follow and the drawing could have drifted by one section key.
-fn space_of_group(core: &Core, inputs: &SidebarInputs, group: &GroupView) -> Option<String> {
+fn space_of_group(core: &Core, inputs: &SidebarInputs, group: &GroupView) -> Option<GroupSpace> {
     // A bot belongs to no Space, so revealing one neither moves nor remembers a Space.
     let is_bot = group
         .core
@@ -499,13 +510,22 @@ fn space_of_group(core: &Core, inputs: &SidebarInputs, group: &GroupView) -> Opt
         inputs.ui.show_hidden,
     );
     let project = group.space_project.as_ref();
-    Some(space_for_group(
+    let id = space_for_group(
         &spaces,
         &selection,
         project.map(|project| project.project_id.as_str()),
         project.and_then(|project| project.collection_id.as_deref()),
         project.and_then(|project| project.parent_project_id.as_deref()),
-    ))
+    );
+    let hidden = spaces.spaces.get(&id).is_some_and(|space| space.hidden);
+    Some(GroupSpace { id, hidden })
+}
+
+/// The Space [`space_of_group`] found, and whether it is hidden: selecting a hidden Space shows
+/// nothing until Show Hidden is on.
+struct GroupSpace {
+    id: String,
+    hidden: bool,
 }
 
 /// Whether writing this Space into the section changes anything.
@@ -527,12 +547,6 @@ fn section_space_moves(inputs: &SidebarInputs, section_key: &str, space_id: &str
     }
 }
 
-/// The reveal's own use of the two above: the Space to select, when it is not already selected.
-fn space_for_reveal(core: &Core, inputs: &SidebarInputs, group: &GroupView) -> Option<String> {
-    let space_id = space_of_group(core, inputs, group)?;
-    section_space_moves(inputs, &inputs.ui.section_key(), &space_id).then_some(space_id)
-}
-
 /// The Space a focused row belongs to, and whether the section has to move to it.
 ///
 /// Both answers come from one question, because `rememberNativeSidebarFocus` asks it once and does
@@ -547,6 +561,9 @@ pub struct FocusedRowSpace {
     pub space_id: String,
     /// The section must move to that Space.
     pub follow: bool,
+    /// The Space it moves to is hidden and Show Hidden is off, so Show Hidden is turned on with
+    /// the move, as a reveal does (CDXC:Spaces 2026-11-21 in spaces.rs `Space::shown`).
+    pub show_hidden: bool,
 }
 
 /// The machine tab a sidebar row belongs to, from its id alone.

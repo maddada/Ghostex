@@ -66,6 +66,14 @@ impl GhostexGpuiApp {
         // the Space it belongs to and not under whichever one the section was showing.
         self.gx_store_remember_space_session(&resolved, &focused, cx);
         if resolved.follow {
+            // Following into a hidden Space turns Show Hidden on first, as a reveal does: the
+            // selection never rests on a hidden Space while it is off (gx-core `FocusedRowSpace`).
+            if resolved.show_hidden {
+                self.gx_store_apply_sidebar_ui_intent(
+                    ghostex_gx_core::SidebarUiIntent::ToggleShowHidden,
+                    cx,
+                );
+            }
             // The ROW's section, not the tab's: a focused row on another machine moves that
             // machine's section and leaves the tab where it is (reveal.rs, `space_for_focused_row`).
             self.gx_store_apply_sidebar_ui_intent(
