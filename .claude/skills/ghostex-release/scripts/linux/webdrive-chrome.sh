@@ -10,7 +10,7 @@ case "${1:-}" in
     else GL_FLAGS="--disable-features=WebGPU --use-angle=swiftshader --enable-unsafe-swiftshader"; fi
     rm -rf "$PROFILE"; mkdir -p "$PROFILE"; size="${3:-1440x900}"
     nohup chromium --headless=new --remote-debugging-port=0 --user-data-dir="$PROFILE" --window-size="${size/x/,}" \
-      $GL_FLAGS --disable-extensions --no-first-run --no-default-browser-check \
+      $GL_FLAGS --use-mock-keychain --password-store=basic --disable-extensions --no-first-run --no-default-browser-check \
       --disable-background-timer-throttling --disable-renderer-backgrounding "$2" > "$PROFILE.log" 2>&1 &
     echo $! > "$PROFILE.pid"; for _ in $(seq 1 50); do [ -s "$PROFILE/DevToolsActivePort" ] && break; sleep 0.2; done
     echo "chromium pid $(cat "$PROFILE.pid") devtools port $(head -1 "$PROFILE/DevToolsActivePort")" ;;

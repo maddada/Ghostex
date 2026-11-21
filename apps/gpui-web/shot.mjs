@@ -59,6 +59,9 @@ const chrome = spawn(
   chromeBinary(),
   [
     '--headless=new',
+    // Without these Chrome asks the macOS keychain for its "Chrome Safe Storage" key; where a sandbox blocks the keychain macOS shows a "Keychain Not Found" popup.
+    '--use-mock-keychain',
+    '--password-store=basic',
     '--enable-unsafe-webgpu',
     ...(process.platform === 'darwin' ? ['--use-angle=metal'] : []),
     '--remote-debugging-port=0',

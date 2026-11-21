@@ -1037,6 +1037,10 @@ impl Browser {
                 "--hide-scrollbars",
                 "--mute-audio",
                 "--allow-file-access-from-files",
+                // Without these Chrome asks the macOS keychain for its "Chrome Safe Storage" key, and where
+                // the sandbox blocks ~/Library/Keychains macOS shows a "Keychain Not Found" popup.
+                "--use-mock-keychain",
+                "--password-store=basic",
             ])
             .arg(format!("--user-data-dir={}", profile.display()))
             .arg("about:blank")
