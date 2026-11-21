@@ -58,7 +58,7 @@ pub(crate) fn record_panic(details: &Value) {
                 .collect()
         })
         .unwrap_or_default();
-    let (screen, recent_events) = context::snapshot();
+    let (screen, cef, recent_events) = context::snapshot();
     record::save_pending(&CrashRecord {
         kind: CrashKind::Panic,
         version: system::APP_VERSION.to_string(),
@@ -73,6 +73,9 @@ pub(crate) fn record_panic(details: &Value) {
         screen,
         recent_events,
         build_id: None,
+        crashing_module: None,
+        cef,
+        main_thread_stack: Vec::new(),
     });
 }
 
@@ -80,7 +83,7 @@ pub(crate) fn record_panic(details: &Value) {
 /// and call stack, right before the process ends.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) fn record_uncaught_exception(name: &str, reason: &str, call_stack: &[String]) {
-    let (screen, recent_events) = context::snapshot();
+    let (screen, cef, recent_events) = context::snapshot();
     record::save_pending(&CrashRecord {
         kind: CrashKind::UncaughtException,
         version: system::APP_VERSION.to_string(),
@@ -110,6 +113,9 @@ pub(crate) fn record_uncaught_exception(name: &str, reason: &str, call_stack: &[
         screen,
         recent_events,
         build_id: None,
+        crashing_module: None,
+        cef,
+        main_thread_stack: Vec::new(),
     });
 }
 

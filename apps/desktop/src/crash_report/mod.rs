@@ -40,7 +40,9 @@ fn logs_directory() -> std::path::PathBuf {
 }
 
 pub(crate) use capture::{PendingCrash, collect_pending, record_panic, record_uncaught_exception};
-pub(crate) use context::{note_event, note_screen};
+pub(crate) use context::{
+    note_cef_phase, note_cef_pump, note_cef_trigger, note_cef_version, note_event, note_screen,
+};
 pub(crate) use record::{CrashRecord, SentCrash};
 pub(crate) use report::{CrashReport, build_report, summary_line};
 pub(crate) use system::{SystemFacts, read_system_facts};

@@ -60,8 +60,9 @@ pub(crate) fn build_report(
     let note: String = note.trim().chars().take(NOTE_MAX_CHARS).collect();
 
     let mut stack = record.stack.clone();
+    let mut main_thread_stack = record.main_thread_stack.clone();
     let mut log_tail = record.log_tail.clone();
-    let mut left_out = (0usize, 0usize);
+    let mut left_out = (0usize, 0usize, 0usize);
     loop {
         let raw = body_text(
             record,
@@ -70,12 +71,13 @@ pub(crate) fn build_report(
             &note,
             &fingerprint,
             &stack,
+            &main_thread_stack,
             &log_tail,
             left_out,
         );
         let body = scrub_personal_data(&raw, context);
         if body.encode_utf16().count() <= BODY_MAX_UNITS
-            || (stack.is_empty() && log_tail.is_empty())
+            || (stack.is_empty() && main_thread_stack.is_empty() && log_tail.is_empty())
         {
             let removed = removed_summary(&raw, &body);
             return CrashReport {
@@ -85,9 +87,13 @@ pub(crate) fn build_report(
                 removed,
             };
         }
-        // Too long for the service: the oldest log lines go first, then the deepest frames.
+        // Too long for the service: oldest log lines go first, then deepest main-thread frames,
+        // then deepest crashing-thread frames.
         if !log_tail.is_empty() {
             log_tail.remove(0);
+            left_out.2 += 1;
+        } else if !main_thread_stack.is_empty() {
+            main_thread_stack.pop();
             left_out.1 += 1;
         } else {
             stack.pop();
@@ -104,8 +110,9 @@ fn body_text(
     note: &str,
     fingerprint: &str,
     stack: &[String],
+    main_thread_stack: &[String],
     log_tail: &[String],
-    (frames_left_out, lines_left_out): (usize, usize),
+    (frames_left_out, main_frames_left_out, lines_left_out): (usize, usize, usize),
 ) -> String {
     let recent_events = &record.recent_events;
     let what = match record.kind {
@@ -144,17 +151,25 @@ fn body_text(
         what.to_string(),
         String::new(),
         format!("- Crash: {}", record.location),
+    ];
+    if let Some(crashing_module) = &record.crashing_module {
+        lines.push(format!("- Crash module: {crashing_module}"));
+    }
+    lines.extend([
         format!("- Error: {}", one_line(&record.message)),
         format!("- {ghostex}"),
         format!("- System: {system}"),
         format!("- When: {when}"),
         format!("- Crash id: {fingerprint}"),
-    ];
+    ]);
     if let Some(thread) = &record.thread {
         lines.push(format!("- Thread: {thread}"));
     }
     if let Some(screen) = &record.screen {
         lines.push(format!("- On screen: {screen}"));
+    }
+    if let Some(cef) = &record.cef {
+        lines.push(format!("- CEF: {cef}"));
     }
     if !note.is_empty() {
         lines.push(String::new());
@@ -167,6 +182,18 @@ fn body_text(
         lines.extend(stack.iter().map(|frame| fenced(frame)));
         if frames_left_out > 0 {
             lines.push(format!("… {frames_left_out} more frames left out to fit"));
+        }
+        lines.push("```".to_string());
+    }
+    if !main_thread_stack.is_empty() || main_frames_left_out > 0 {
+        lines.push(String::new());
+        lines.push("Main thread stack".to_string());
+        lines.push("```text".to_string());
+        lines.extend(main_thread_stack.iter().map(|frame| fenced(frame)));
+        if main_frames_left_out > 0 {
+            lines.push(format!(
+                "… {main_frames_left_out} more frames left out to fit"
+            ));
         }
         lines.push("```".to_string());
     }

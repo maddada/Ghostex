@@ -88,6 +88,7 @@ impl GhostexGpuiApp {
             if web_runtime_state() != WebRuntimeState::Installed {
                 return;
             }
+            crate::crash_report::note_cef_trigger("warmUp");
             support_logs::append(
                 support_logs::GpuiSupportLog::HostLifecycle,
                 "gpui.host.webRuntimeWarmUp",
@@ -109,6 +110,7 @@ impl GhostexGpuiApp {
             return;
         }
         self.cef_runtime_requested = true;
+        crate::crash_report::note_cef_trigger("onDemand");
         self.start_web_runtime(cx);
     }
 

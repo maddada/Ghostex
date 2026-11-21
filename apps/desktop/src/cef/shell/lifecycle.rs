@@ -42,8 +42,11 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
     CEF_INITIALIZE_STARTED_AT.get_or_init(std::time::Instant::now);
     CEF_SHUTDOWN_IN_PROGRESS.store(false, Ordering::Release);
 
+    crate::crash_report::note_cef_version(env!("GHOSTEX_CEF_VERSION"));
+    crate::crash_report::note_cef_phase("loadLibraryStart");
     let args = cef::args::Args::new();
     let platform_runtime = platform::load_cef_runtime()?;
+    crate::crash_report::note_cef_phase("loadLibraryDone");
 
     if cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0).is_null() {
         anyhow::bail!(unsupported_cef_api_message());
@@ -59,6 +62,7 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
     if process_exit_code >= 0 {
         std::process::exit(process_exit_code);
     }
+    crate::crash_report::note_cef_phase("executeProcessDone");
 
     let root_cache_path = cef_root_cache_path()?;
     /*
@@ -76,6 +80,12 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
         ..Default::default()
     };
     platform::apply_platform_settings(&mut settings);
+    let pump_mode = if settings.external_message_pump != 0 {
+        "externalPump"
+    } else {
+        "cefMessageLoop"
+    };
+    crate::crash_report::note_cef_pump(pump_mode);
 
     /*
     CDXC:CefRuntime 2026-06-14-15:25:
@@ -90,6 +100,7 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
     platform::install_message_pump(cx);
     let runtime_app = app.clone();
     platform::start_cef(Box::new(move || {
+        crate::crash_report::note_cef_phase("initializeStart");
         let initialized = cef::initialize(
             Some(args.as_main_args()),
             Some(&settings),
@@ -104,6 +115,7 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
             }
             anyhow::bail!("CEF initialization returned false");
         }
+        crate::crash_report::note_cef_phase("initializeDone");
         start_cef_devtools_relay();
         Ok(())
     }))?;
@@ -308,6 +320,7 @@ wrap_browser_process_handler! {
             profile on first launch.
             */
             if !CEF_CONTEXT_INITIALIZED.swap(true, Ordering::AcqRel) {
+                crate::crash_report::note_cef_phase("contextInitialized");
                 log_runtime_ready();
             }
             if let Some(context) = cef::request_context_get_global_context() {

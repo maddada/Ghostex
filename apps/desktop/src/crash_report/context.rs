@@ -27,9 +27,13 @@ const EVENT_MAX_CHARS: usize = 80;
 struct State {
     view: &'static str,
     focus: &'static str,
+    cef_phase: &'static str,
+    cef_version: &'static str,
+    cef_trigger: &'static str,
+    cef_pump: &'static str,
     /// `(ms since 1970, event name)`, oldest first.
     recent: VecDeque<(u64, String)>,
-    /// When the screen tags were last handed to the crash handler.
+    /// When the scope tags were last handed to the crash handler.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     tags_applied_at: Option<Instant>,
 }
@@ -37,6 +41,10 @@ struct State {
 static STATE: Mutex<State> = Mutex::new(State {
     view: "",
     focus: "",
+    cef_phase: "",
+    cef_version: "",
+    cef_trigger: "",
+    cef_pump: "",
     recent: VecDeque::new(),
     tags_applied_at: None,
 });
@@ -50,16 +58,24 @@ fn clean_event_name(event: &str) -> String {
         .collect()
 }
 
-/// Notes that `event` happened (a support log event name such as `gpui.cefRuntime.ready`). The
-/// same event twice in a row is kept once.
-pub(crate) fn note_event(event: &str) {
-    let name = clean_event_name(event);
-    if name.is_empty() {
-        return;
+#[cfg(target_os = "macos")]
+fn apply_tags(state: &mut State) {
+    for (key, value) in [
+        (VIEW_TAG, state.view),
+        (FOCUS_TAG, state.focus),
+        (CEF_PHASE_TAG, state.cef_phase),
+        (CEF_VERSION_TAG, state.cef_version),
+        (CEF_TRIGGER_TAG, state.cef_trigger),
+        (CEF_PUMP_TAG, state.cef_pump),
+    ] {
+        if !value.is_empty() {
+            handler::set_tag(key, value);
+        }
     }
-    let Ok(mut state) = STATE.lock() else {
-        return;
-    };
+    state.tags_applied_at = Some(Instant::now());
+}
+
+fn push_event(state: &mut State, name: String) {
     if state.recent.back().is_some_and(|(_, last)| *last == name) {
         return;
     }
@@ -77,11 +93,23 @@ pub(crate) fn note_event(event: &str) {
         let stale = state
             .tags_applied_at
             .is_none_or(|applied| applied.elapsed().as_secs() >= 5);
-        if stale && !state.view.is_empty() {
-            handler::set_screen_tags(state.view, state.focus);
-            state.tags_applied_at = Some(Instant::now());
+        if stale {
+            apply_tags(state);
         }
     }
+}
+
+/// Notes that `event` happened (a support log event name such as `gpui.cefRuntime.ready`). The
+/// same event twice in a row is kept once.
+pub(crate) fn note_event(event: &str) {
+    let name = clean_event_name(event);
+    if name.is_empty() {
+        return;
+    }
+    let Ok(mut state) = STATE.lock() else {
+        return;
+    };
+    push_event(&mut state, name);
 }
 
 /// Notes what is on screen: the view (`Agents`, `Browser`, ...) and where the keyboard is
@@ -96,10 +124,66 @@ pub(crate) fn note_screen(view: &'static str, focus: &'static str) {
     state.view = view;
     state.focus = focus;
     #[cfg(target_os = "macos")]
-    {
-        handler::set_screen_tags(view, focus);
-        state.tags_applied_at = Some(Instant::now());
+    apply_tags(&mut state);
+}
+
+/// Notes a fixed-label CEF startup milestone in the crash breadcrumbs and `ghostex.cef_phase` tag.
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
+    allow(dead_code)
+)]
+pub(crate) fn note_cef_phase(phase: &'static str) {
+    let Ok(mut state) = STATE.lock() else {
+        return;
+    };
+    state.cef_phase = phase;
+    let breadcrumb = clean_event_name(&format!("gpui.cef.phase.{phase}"));
+    if !breadcrumb.is_empty() {
+        push_event(&mut state, breadcrumb);
     }
+    #[cfg(target_os = "macos")]
+    apply_tags(&mut state);
+}
+
+/// Notes how CEF was first triggered (`warmUp` or `onDemand`); the first trigger wins.
+pub(crate) fn note_cef_trigger(trigger: &'static str) {
+    let Ok(mut state) = STATE.lock() else {
+        return;
+    };
+    if !state.cef_trigger.is_empty() {
+        return;
+    }
+    state.cef_trigger = trigger;
+    #[cfg(target_os = "macos")]
+    handler::set_tag(CEF_TRIGGER_TAG, trigger);
+}
+
+/// Notes the exact compiled CEF version string before loading the runtime.
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
+    allow(dead_code)
+)]
+pub(crate) fn note_cef_version(version: &'static str) {
+    let Ok(mut state) = STATE.lock() else {
+        return;
+    };
+    state.cef_version = version;
+    #[cfg(target_os = "macos")]
+    handler::set_tag(CEF_VERSION_TAG, version);
+}
+
+/// Notes the CEF message-pump mode (`cefMessageLoop` or `externalPump`).
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
+    allow(dead_code)
+)]
+pub(crate) fn note_cef_pump(pump: &'static str) {
+    let Ok(mut state) = STATE.lock() else {
+        return;
+    };
+    state.cef_pump = pump;
+    #[cfg(target_os = "macos")]
+    handler::set_tag(CEF_PUMP_TAG, pump);
 }
 
 /// `Agents view, keyboard in an agent pane`, when known.
@@ -111,18 +195,53 @@ pub(crate) fn screen_text(view: &str, focus: &str) -> Option<String> {
     }
 }
 
+/// `phase initializeStart · trigger warmUp · pump cefMessageLoop · version ... · build id ...`,
+/// when any CEF startup state or loaded framework UUID is known.
+pub(crate) fn cef_text(
+    phase: &str,
+    trigger: &str,
+    pump: &str,
+    version: &str,
+    build_id: Option<&str>,
+) -> Option<String> {
+    let mut parts = Vec::new();
+    if !phase.is_empty() {
+        parts.push(format!("phase {phase}"));
+    }
+    if !trigger.is_empty() {
+        parts.push(format!("trigger {trigger}"));
+    }
+    if !pump.is_empty() {
+        parts.push(format!("pump {pump}"));
+    }
+    if !version.is_empty() {
+        parts.push(format!("version {version}"));
+    }
+    if let Some(id) = build_id.filter(|id| !id.is_empty()) {
+        parts.push(format!("build id {id}"));
+    }
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
 /// What a crash record keeps, read in the crashing process (panic hook, exception handler). Never
 /// blocks: a lock held elsewhere gives nothing rather than a hang while the app is dying.
-pub(crate) fn snapshot() -> (Option<String>, Vec<String>) {
+pub(crate) fn snapshot() -> (Option<String>, Option<String>, Vec<String>) {
     let Ok(state) = STATE.try_lock() else {
-        return (None, Vec::new());
+        return (None, None, Vec::new());
     };
     let recent = state
         .recent
         .iter()
         .map(|(at_ms, name)| format!("{} {name}", clock_text(*at_ms)))
         .collect();
-    (screen_text(state.view, state.focus), recent)
+    let cef = cef_text(
+        state.cef_phase,
+        state.cef_trigger,
+        state.cef_pump,
+        state.cef_version,
+        None,
+    );
+    (screen_text(state.view, state.focus), cef, recent)
 }
 
 /// `13:33:02` (UTC).
@@ -153,13 +272,11 @@ mod handler {
         fn sentry_add_breadcrumb(breadcrumb: SentryValue);
     }
 
-    pub(super) fn set_screen_tags(view: &str, focus: &str) {
-        for (key, value) in [(super::VIEW_TAG, view), (super::FOCUS_TAG, focus)] {
-            let (Ok(key), Ok(value)) = (CString::new(key), CString::new(value)) else {
-                continue;
-            };
-            unsafe { sentry_set_tag(key.as_ptr(), value.as_ptr()) };
-        }
+    pub(super) fn set_tag(key: &str, value: &str) {
+        let (Ok(key), Ok(value)) = (CString::new(key), CString::new(value)) else {
+            return;
+        };
+        unsafe { sentry_set_tag(key.as_ptr(), value.as_ptr()) };
     }
 
     pub(super) fn add_breadcrumb(name: &str) {
@@ -176,3 +293,7 @@ mod handler {
 /// The tag names native.rs reads back from a crash file.
 pub(crate) const VIEW_TAG: &str = "ghostex.view";
 pub(crate) const FOCUS_TAG: &str = "ghostex.focus";
+pub(crate) const CEF_PHASE_TAG: &str = "ghostex.cef_phase";
+pub(crate) const CEF_VERSION_TAG: &str = "ghostex.cef_version";
+pub(crate) const CEF_TRIGGER_TAG: &str = "ghostex.cef_trigger";
+pub(crate) const CEF_PUMP_TAG: &str = "ghostex.cef_pump";

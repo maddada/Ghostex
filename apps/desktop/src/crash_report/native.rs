@@ -132,6 +132,41 @@ pub(crate) fn read_crash_file(path: &Path, written_ms: u64) -> Option<CrashRecor
         .ok()
         .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
         .is_some_and(|modified| (modified.as_millis() as u64) <= at_ms);
+    let crashing_module = crash
+        .as_ref()
+        .and_then(|crash| crash.frames.first())
+        .and_then(|address| images.image_of(*address))
+        .and_then(|image| {
+            let debug_id = image.debug_id.as_deref()?;
+            if image.name == main.name && same_binary {
+                return None;
+            }
+            Some(format!("{} · {debug_id}", image.name))
+        });
+    let cef_build_id = images
+        .list
+        .iter()
+        .find(|image| image.name == "Chromium Embedded Framework")
+        .and_then(|image| image.debug_id.as_deref());
+    let cef = super::context::cef_text(
+        tag(&envelope.event, super::context::CEF_PHASE_TAG).unwrap_or_default(),
+        tag(&envelope.event, super::context::CEF_TRIGGER_TAG).unwrap_or_default(),
+        tag(&envelope.event, super::context::CEF_PUMP_TAG).unwrap_or_default(),
+        tag(&envelope.event, super::context::CEF_VERSION_TAG).unwrap_or_default(),
+        cef_build_id,
+    );
+    let main_thread_stack: Vec<String> = crash
+        .as_ref()
+        .filter(|crash| !crash.is_main_thread)
+        .map(|crash| {
+            crash
+                .main_thread_frames
+                .iter()
+                .take(STACK_MAX_FRAMES)
+                .map(|address| images.describe(*address))
+                .collect()
+        })
+        .unwrap_or_default();
     Some(CrashRecord {
         kind: CrashKind::Native,
         // The file says which build of the terminal library crashed, not which Ghostex: this
@@ -165,6 +200,9 @@ pub(crate) fn read_crash_file(path: &Path, written_ms: u64) -> Option<CrashRecor
         ),
         recent_events: recent_events(&envelope.event),
         build_id: main.debug_id.clone().filter(|_| same_binary),
+        crashing_module,
+        cef,
+        main_thread_stack,
     })
 }
 
@@ -176,10 +214,10 @@ fn tag<'a>(event: &'a Value, name: &str) -> Option<&'a str> {
         .and_then(Value::as_str)
         .filter(|value| {
             !value.is_empty()
-                && value.len() <= 60
+                && value.len() <= 80
                 && value
                     .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || " .,_:-()".contains(c))
+                    .all(|c| c.is_ascii_alphanumeric() || " .,_:-()+".contains(c))
         })
 }
 
@@ -348,7 +386,8 @@ impl Images {
     }
 }
 
-/// The crashing thread of a minidump: its exception and its frames.
+/// The crashing thread of a minidump: its exception, its frames, and (when a background thread
+/// crashed) the main thread's frames.
 struct CrashingThread {
     code: u32,
     flags: u32,
@@ -356,6 +395,8 @@ struct CrashingThread {
     frames: Vec<u64>,
     /// The first thread of the process (the one AppKit and GPUI run on) crashed.
     is_main_thread: bool,
+    /// The main thread's frames when another thread crashed.
+    main_thread_frames: Vec<u64>,
 }
 
 struct Minidump;
@@ -397,22 +438,10 @@ impl Minidump {
         })
     }
 
-    fn crashing_thread(bytes: &[u8]) -> Option<CrashingThread> {
-        // MDRawExceptionStream: thread id, padding, the exception record (code, flags, record,
-        // address, ...: 152 bytes), then the thread's context location.
-        let (_, exception) = Self::stream(bytes, Self::EXCEPTION_STREAM)?;
-        let thread_id = Self::u32_at(bytes, exception)?;
-        let code = Self::u32_at(bytes, exception + 8)?;
-        let flags = Self::u32_at(bytes, exception + 12)?;
-        let address = Self::u64_at(bytes, exception + 24)?;
-        let context_size = Self::u32_at(bytes, exception + 160)? as usize;
-        let context_at = Self::u32_at(bytes, exception + 164)? as usize;
-        let context = bytes.get(context_at..context_at.checked_add(context_size)?)?;
+    fn walk_frames(context: &[u8], stack: Option<(u64, &[u8])>) -> Option<Vec<u64>> {
         let (pc, lr, fp, address_mask) = Self::registers(context)?;
-        let stack = Self::thread_stack(bytes, thread_id);
-        let is_main_thread = Self::first_thread_id(bytes) == Some(thread_id);
         let mut frames = vec![pc];
-        if let Some(lr) = lr {
+        if let Some(lr) = lr.filter(|lr| *lr != 0) {
             frames.push(lr);
         }
         if let Some((start, memory)) = stack {
@@ -436,25 +465,62 @@ impl Minidump {
                 frame = next;
             }
         }
+        Some(frames)
+    }
+
+    fn crashing_thread(bytes: &[u8]) -> Option<CrashingThread> {
+        // MDRawExceptionStream: thread id, padding, the exception record (code, flags, record,
+        // address, ...: 152 bytes), then the thread's context location.
+        let (_, exception) = Self::stream(bytes, Self::EXCEPTION_STREAM)?;
+        let thread_id = Self::u32_at(bytes, exception)?;
+        let code = Self::u32_at(bytes, exception + 8)?;
+        let flags = Self::u32_at(bytes, exception + 12)?;
+        let address = Self::u64_at(bytes, exception + 24)?;
+        let context_size = Self::u32_at(bytes, exception + 160)? as usize;
+        let context_at = Self::u32_at(bytes, exception + 164)? as usize;
+        let context = bytes.get(context_at..context_at.checked_add(context_size)?)?;
+        let stack = Self::thread_stack(bytes, thread_id);
+        let frames = Self::walk_frames(context, stack)?;
+        let first_thread = Self::first_thread(bytes);
+        let is_main_thread = first_thread
+            .as_ref()
+            .is_some_and(|(id, _, _)| *id == thread_id);
+        let main_thread_frames = if !is_main_thread {
+            first_thread
+                .and_then(|(_, main_stack, main_context)| {
+                    Self::walk_frames(main_context?, main_stack)
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
         Some(CrashingThread {
             code,
             flags,
             address,
             frames,
             is_main_thread,
+            main_thread_frames,
         })
     }
 
-    /// The id of the thread list's first thread: the process's main thread (Breakpad lists the
-    /// task's threads in the order the kernel gives them, main first).
-    fn first_thread_id(bytes: &[u8]) -> Option<u32> {
+    /// The thread list's first thread (the process's main thread: Breakpad lists the task's
+    /// threads in the order the kernel gives them, main first): its id, saved stack and context.
+    fn first_thread(bytes: &[u8]) -> Option<(u32, Option<(u64, &[u8])>, Option<&[u8]>)> {
         let (size, list) = Self::stream(bytes, Self::THREAD_LIST_STREAM)?;
         let count = Self::u32_at(bytes, list)? as usize;
         if count == 0 {
             return None;
         }
         let first = (list + size).checked_sub(count.checked_mul(48)?)?;
-        Self::u32_at(bytes, first)
+        let thread_id = Self::u32_at(bytes, first)?;
+        let stack = Self::entry_stack(bytes, first);
+        let context = (|| {
+            let context_size = Self::u32_at(bytes, first + 40)? as usize;
+            let context_at = Self::u32_at(bytes, first + 44)? as usize;
+            bytes.get(context_at..context_at.checked_add(context_size)?)
+        })();
+        Some((thread_id, stack, context))
     }
 
     /// The program counter, the link register (arm64), the frame pointer, and the mask that
@@ -482,6 +548,13 @@ impl Minidump {
         None
     }
 
+    fn entry_stack(bytes: &[u8], entry: usize) -> Option<(u64, &[u8])> {
+        let start = Self::u64_at(bytes, entry + 24)?;
+        let length = Self::u32_at(bytes, entry + 32)? as usize;
+        let at = Self::u32_at(bytes, entry + 36)? as usize;
+        Some((start, bytes.get(at..at.checked_add(length)?)?))
+    }
+
     /// The start address and bytes of `thread_id`'s saved stack.
     fn thread_stack(bytes: &[u8], thread_id: u32) -> Option<(u64, &[u8])> {
         // MDRawThreadList: a count, then 48-byte MDRawThread entries that end the stream (the
@@ -494,10 +567,7 @@ impl Minidump {
             if Self::u32_at(bytes, entry)? != thread_id {
                 return None;
             }
-            let start = Self::u64_at(bytes, entry + 24)?;
-            let length = Self::u32_at(bytes, entry + 32)? as usize;
-            let at = Self::u32_at(bytes, entry + 36)? as usize;
-            Some((start, bytes.get(at..at.checked_add(length)?)?))
+            Self::entry_stack(bytes, entry)
         })
     }
 }

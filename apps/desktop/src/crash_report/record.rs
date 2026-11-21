@@ -63,6 +63,14 @@ pub(crate) struct CrashRecord {
     /// The crashed executable's build id (its Mach-O UUID as 32 hex digits), which names the
     /// exact binary to read the stack's offsets against.
     pub(crate) build_id: Option<String>,
+    /// The crashing module and its Mach-O UUID (`module · <hex>`) when the top frame is outside
+    /// Ghostex's own binary (or when `build_id` is unavailable).
+    pub(crate) crashing_module: Option<String>,
+    /// CEF startup phase, trigger, pump mode, version and loaded framework UUID when CEF was
+    /// started or loaded.
+    pub(crate) cef: Option<String>,
+    /// Main thread frames (`module+offset`) when a background thread crashed.
+    pub(crate) main_thread_stack: Vec<String>,
 }
 
 impl CrashRecord {

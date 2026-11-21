@@ -423,6 +423,7 @@ pub extern "C" fn GhostexGpuiCEFRunMessageLoop() {
         super::shell::record_deferred_start_failure(&error);
         return;
     }
+    crate::crash_report::note_cef_phase("messageLoopStart");
     crate::support_logs::append(
         crate::support_logs::GpuiSupportLog::HostLifecycle,
         "gpui.cef.messageLoopStarted",
