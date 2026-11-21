@@ -1,4 +1,4 @@
 # The compiler for the phone's chat core; packages/gx-chat-json pins the same one.
 [toolchain]
-channel = "1.99.1"
+channel = "1.100.0"
 targets = ["wasm32-unknown-unknown"]

@@ -1,0 +1,5 @@
+# CDXC:Build 2026-11-21 WHY:
+# Without a pin this crate built with whatever `stable` the machine had (1.89.0 on the maintainer's computer), which is exactly the minimum Rust of zip 9 and rusqlite 0.41+.
+# Keep this in step with apps/desktop/rust-toolchain.toml and server/rust-toolchain.toml.
+[toolchain]
+channel = "1.100.0"
