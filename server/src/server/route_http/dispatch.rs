@@ -86,8 +86,7 @@ pub(in crate::server) async fn route_http(
     // that file's own page (linked.rs).
     if method == Method::GET && crate::visual_pages::is_link_route(&path) {
         let query = parts.uri.query().map(str::to_string);
-        return crate::visual_pages::follow_page_link(state.paths.root_dir.clone(), path, query)
-            .await;
+        return crate::visual_pages::follow_page_link(state.clone(), path, query).await;
     }
 
     // `GET /visual/<id>/export` is the page's exported file, as a download (exported.rs).

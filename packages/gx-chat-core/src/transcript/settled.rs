@@ -793,6 +793,10 @@ impl SettledPrefix {
             &mut found,
             state.session.resource_index.view(),
         );
+        crate::questions::resource_index::add_linked_pages(
+            &mut found,
+            state.session.resource_index.view(),
+        );
         crate::transcript::open_questions::share_answers(&mut found);
         // `mark_inherited`, with the prefix's times kept rather than searched for.
         if let Some(forked_at) = state.session.forked_at {
