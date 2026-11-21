@@ -204,7 +204,7 @@ pub(crate) fn reversal(entry: &JournalEntry) -> Vec<FileChange> {
 pub(crate) fn by_label(by: &str, bot_name: &str) -> String {
     match by {
         "user" => "You".to_string(),
-        "chief" => "Chief of Staff".to_string(),
+        "chief" => "Ghostex AI".to_string(),
         "self" => bot_name.to_string(),
         _ => "Another agent".to_string(),
     }

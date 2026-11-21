@@ -126,7 +126,7 @@ pub fn set_main_coordinator(
     let chief = crate::chief::read_record(db).map(|record| record.key());
     if !can_be_main(&record, repository, chief.as_ref()) {
         return Err(DomainStateError::bad_request(
-            "Only an open coordinator of a project can be its main coordinator (not Chief of Staff, a GBot's chat or a closed one).",
+            "Only an open coordinator of a project can be its main coordinator (not Ghostex AI, a GBot's chat or a closed one).",
         ));
     }
     let previous = main_coordinator_of(db, repository, &key.0);

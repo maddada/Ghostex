@@ -187,9 +187,9 @@ pub fn document_with_board(
             title: if coordinator_threads::is_chief(state.session.coordinator_threads.as_deref()) {
                 // CDXC:Chief 2026-11-21 DECISION: User: Chief of Staff gets its own empty-chat line instead of "What should this coordinator work on?" ("Press Start and Chief of Staff will help you set up Ghostex."), on the desktop, web and phone alike.
                 if crate::composer::first_message::waiting(state) {
-                    "Press Start and Chief of Staff will help you set up Ghostex.".to_string()
+                    "Press Start and Ghostex AI will help you set up Ghostex.".to_string()
                 } else {
-                    "Ask Chief of Staff about Ghostex or any of your agents.".to_string()
+                    "Ask Ghostex AI about Ghostex or any of your agents.".to_string()
                 }
             } else if coordinator_threads::is_coordinator(
                 state.session.coordinator_threads.as_deref(),

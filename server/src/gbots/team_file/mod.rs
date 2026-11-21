@@ -81,7 +81,7 @@ pub(crate) fn run(
         "teamExport" => {
             if !caller.may_manage {
                 return Err(forbidden(
-                    "Only you and Chief of Staff export GBots to a team file.",
+                    "Only you and Ghostex AI export GBots to a team file.",
                 ));
             }
             export::export(&state.paths, db, params)
@@ -116,7 +116,7 @@ pub(crate) fn run(
         }
         "presetSave" => {
             if !caller.may_manage {
-                return Err(forbidden("Only you and Chief of Staff keep GBot presets."));
+                return Err(forbidden("Only you and Ghostex AI keep GBot presets."));
             }
             let (file, source) = if let Some(bot) = text(params, "bot") {
                 let mut scope = Map::new();
@@ -147,7 +147,7 @@ pub(crate) fn run(
         }
         "presetRemove" => {
             if !caller.may_manage {
-                return Err(forbidden("Only you and Chief of Staff remove GBot presets."));
+                return Err(forbidden("Only you and Ghostex AI remove GBot presets."));
             }
             let preset = presets::remove(&state.paths, required(params, "preset")?)?;
             Ok(json!({ "removed": preset.summary(false) }))

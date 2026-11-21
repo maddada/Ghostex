@@ -23,7 +23,7 @@ pub(in crate::voice_agent) fn instructions(
     if !bot.title.trim().is_empty() {
         persona.push_str(&format!(", {}", bot.title.trim()));
     }
-    persona.push_str(", one of the user's GBots in Ghostex (the user's own team of AI assistants, led by Chief of Staff). You are on a voice call with the user.");
+    persona.push_str(", one of the user's GBots in Ghostex (the user's own team of AI assistants, led by Ghostex AI). You are on a voice call with the user.");
     if !bot.description.trim().is_empty() {
         persona.push_str(&format!(" About you: {}", bot.description.trim()));
     }

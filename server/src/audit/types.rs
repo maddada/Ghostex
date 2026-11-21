@@ -79,7 +79,7 @@ impl Actor {
             ),
             Self::Chief { session_id } => (
                 "session",
-                "Chief of Staff".to_string(),
+                "Ghostex AI".to_string(),
                 Some(session_id.clone()),
             ),
             Self::SharedToken { claimed_session } => (

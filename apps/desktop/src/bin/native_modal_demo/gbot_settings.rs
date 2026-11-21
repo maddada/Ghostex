@@ -276,7 +276,7 @@ fn memory_fixture(state: &str) -> serde_json::Value {
         "journal": [
             { "id": "m6", "at": "2026-11-09T13:05:00Z", "byLabel": "Researcher", "what": "Added a note", "undoable": true },
             { "id": "m5", "at": "2026-11-09T09:40:00Z", "byLabel": "You", "what": "Edited MEMORY.md" },
-            { "id": "m4", "at": "2026-11-08T16:31:00Z", "byLabel": "Chief of Staff", "what": "Added a note to lisbon" },
+            { "id": "m4", "at": "2026-11-08T16:31:00Z", "byLabel": "Ghostex AI", "what": "Added a note to lisbon" },
             { "id": "m3", "at": "2026-11-08T10:02:00Z", "byLabel": "Researcher", "what": "Forgot a note", "undone": true },
         ],
     })

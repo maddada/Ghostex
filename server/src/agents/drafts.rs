@@ -460,7 +460,7 @@ pub(crate) fn switch_draft_agent(
         .any(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id.as_str()))
     {
         return Err(DomainStateError::bad_request(format!(
-            "Chief of Staff can't run on {agent_id}: pick one of {}.",
+            "Ghostex AI can't run on {agent_id}: pick one of {}.",
             crate::coordinators::coordinator_agent_families_text()
         ))
         .into());

@@ -115,10 +115,10 @@ fn print_routine(routine: &Value) {
         }
     }
     if routine["deliver"] == json!("chief") {
-        println!("  Results that need you go to Chief of Staff too.");
+        println!("  Results that need you go to Ghostex AI too.");
     }
     if routine["deliver"] == json!("brief") {
-        println!("  What it finds goes to Chief of Staff, who tells you, with a notification.");
+        println!("  What it finds goes to Ghostex AI, who tells you, with a notification.");
     }
     if let Some(run) = routine["lastRun"].as_object() {
         let summary = run

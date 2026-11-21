@@ -80,7 +80,7 @@ pub(super) fn write_record(
 ) -> Result<(), DomainStateError> {
     let text = serde_json::to_string(record).map_err(|error| DomainStateError {
         code: "internalError",
-        message: format!("Could not save Chief of Staff's record: {error}"),
+        message: format!("Could not save Ghostex AI's record: {error}"),
     })?;
     db.execute(
         r#"
@@ -92,7 +92,7 @@ pub(super) fn write_record(
     )
     .map_err(|error| DomainStateError {
         code: "internalError",
-        message: format!("SQLite Chief of Staff error: {error}"),
+        message: format!("SQLite Ghostex AI error: {error}"),
     })?;
     remember(paths, Some(record.key()));
     Ok(())

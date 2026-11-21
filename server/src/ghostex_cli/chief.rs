@@ -16,7 +16,7 @@ use super::{
 };
 
 const HELP: &str =
-    "Chief of Staff: the Ghostex-wide coordinator, pinned at the top of Main Hub in the sidebar.
+    "Ghostex AI: the Ghostex-wide coordinator, pinned at the top of Main Hub in the sidebar.
 
 USAGE
   ghostex chief status [--computer <name>] [--json]
@@ -26,14 +26,14 @@ USAGE
   ghostex chief set-agent <agent-id> [--json]
   ghostex chief send [--computer <name>] \"<text>\"
 
-status says whether Chief of Staff is on, which session it is and which agent runs it.
-guide prints the playbook Chief of Staff follows. open starts Chief of Staff (the first time
+status says whether Ghostex AI is on, which session it is and which agent runs it.
+guide prints the playbook Ghostex AI follows. open starts Ghostex AI (the first time
 only) on --agent, or on your default agent (Settings > Agents) when you name none, with the
 model picked for it; its first message waits for Start in its chat; new-chat starts it fresh, keeping its memory and
 threads; set-agent moves it to another agent the same way. Only you can run
-those three, from your own terminal or Chief of Staff's menu in the sidebar. send
-messages Chief of Staff (another computer's with --computer), which is how one Chief of Staff
-hands work to the Chief of Staff of the computer it runs on.
+those three, from your own terminal or Ghostex AI's menu in the sidebar. send
+messages Ghostex AI (another computer's with --computer), which is how Ghostex AI on one
+computer hands work to Ghostex AI on another.
 ";
 
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
@@ -116,17 +116,17 @@ fn change(op: &str, params: Value, flags: &Flags, json_output: bool) -> CliResul
     let text = |key: &str| chief[key].as_str().unwrap_or_default().to_string();
     match result["status"].as_str() {
         Some("existing") => println!(
-            "Chief of Staff is already running on {} ({}:{}).",
+            "Ghostex AI is already running on {} ({}:{}).",
             text("agentId"),
             text("projectId"),
             text("sessionId")
         ),
         Some("replaced") => println!(
-            "Chief of Staff started a new chat on {}; its memory and threads came along.",
+            "Ghostex AI started a new chat on {}; its memory and threads came along.",
             text("agentId")
         ),
         _ => println!(
-            "Chief of Staff started on {}{}. Its first message waits for Start in its chat.",
+            "Ghostex AI started on {}{}. Its first message waits for Start in its chat.",
             text("agentId"),
             chief["model"]["model"]
                 .as_str()
@@ -145,19 +145,19 @@ fn change(op: &str, params: Value, flags: &Flags, json_output: bool) -> CliResul
 
 fn print_status(status: &Value) {
     if status["enabled"].as_bool() != Some(true) {
-        println!("Chief of Staff is turned off. Turn it on in Settings > Extensions.");
+        println!("Ghostex AI is turned off. Turn it on in Settings > Extensions.");
         return;
     }
     match status.get("chief").filter(|chief| chief.is_object()) {
         Some(chief) => println!(
-            "Chief of Staff runs on {} ({}).",
+            "Ghostex AI runs on {} ({}).",
             chief["agentId"].as_str().unwrap_or_default(),
             status["globalRef"].as_str().unwrap_or_default()
         ),
         None => {
             match status["defaultAgentId"].as_str() {
-                Some(agent) => println!("Chief of Staff hasn't been opened yet. `ghostex chief open` starts it on your default agent, {agent} (or pick one with --agent <agent-id>)."),
-                None => println!("Chief of Staff hasn't been opened yet. Pick its agent with: ghostex chief open --agent <agent-id>"),
+                Some(agent) => println!("Ghostex AI hasn't been opened yet. `ghostex chief open` starts it on your default agent, {agent} (or pick one with --agent <agent-id>)."),
+                None => println!("Ghostex AI hasn't been opened yet. Pick its agent with: ghostex chief open --agent <agent-id>"),
             }
             let agents: Vec<&str> = status["agents"]
                 .as_array()
@@ -189,7 +189,7 @@ fn send(rest: &[String], raw: &Flags, flags: &Flags) -> CliResult<()> {
         .unwrap_or_default();
     if status["enabled"].as_bool() != Some(true) {
         return Err(CliError::Other(format!(
-            "Chief of Staff{where_} is turned off."
+            "Ghostex AI{where_} is turned off."
         )));
     }
     let reference = status["globalRef"]
@@ -197,7 +197,7 @@ fn send(rest: &[String], raw: &Flags, flags: &Flags) -> CliResult<()> {
         .filter(|reference| !reference.is_empty())
         .ok_or_else(|| {
             CliError::Other(format!(
-                "Chief of Staff{where_} hasn't been opened yet, so there is no one to send to."
+                "Ghostex AI{where_} hasn't been opened yet, so there is no one to send to."
             ))
         })?
         .to_string();

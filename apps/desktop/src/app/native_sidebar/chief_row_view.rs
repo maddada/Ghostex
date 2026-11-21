@@ -19,7 +19,10 @@ use gpui_component::{h_flex, v_flex};
 
 /// Chief's name on its row and in its menus: "Chief of Staff" (server/src/chief/mod.rs
 /// `CHIEF_TITLE`, CDXC:Chief 2026-11-08 there).
-pub(crate) const CHIEF_LABEL: &str = "Chief of Staff";
+/// Its row and menu name (CDXC:Chief 2026-11-21 in server/src/chief/mod.rs); [`CHIEF_NAME`] in a
+/// sentence.
+pub(crate) const CHIEF_LABEL: &str = "Ask Ghostex AI";
+pub(crate) const CHIEF_NAME: &str = "Ghostex AI";
 /// The home project's name on its header and card: "Main Hub". The one place the desktop spells it.
 pub(crate) const HOME_LABEL: &str = "Main Hub";
 /// The Ghostex flower in one colour (Q1735): the app icon's silhouette, filled.
@@ -177,7 +180,7 @@ pub(crate) const MAIN_HUB_TOOLTIP_WIDTH: f32 = 264.0;
 pub(crate) fn main_hub_tooltip_lines() -> [&'static str; 2] {
     [
         "The home for chats that don't belong to a project: quick questions, terminals and agents started in your home folder.",
-        "Chief of Staff, pinned at the top, is the agent that sees and steers every Ghostex agent on this computer, and talks to the Chiefs of Staff on your other computers.",
+        "Ghostex AI, pinned at the top, is the agent that sees and steers every Ghostex agent on this computer, and talks to Ghostex AI on your other computers.",
     ]
 }
 

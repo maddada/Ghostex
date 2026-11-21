@@ -155,7 +155,7 @@ pub(super) fn check_lead_edit(
     };
     let Some(own) = own else {
         return Err(refused(
-            "Only you and Chief of Staff can change a GBot. Ask Chief of Staff to.".to_string(),
+            "Only you and Ghostex AI can change a GBot. Ask Ghostex AI to.".to_string(),
         ));
     };
     let target = require_bot(
@@ -167,7 +167,7 @@ pub(super) fn check_lead_edit(
     )?;
     if target.bot_id == own.bot_id {
         return Err(refused(
-            "Your own instructions are set by the user and Chief of Staff. Say in your report what should change.".to_string(),
+            "Your own instructions are set by the user and Ghostex AI. Say in your report what should change.".to_string(),
         ));
     }
     let department = own
@@ -179,13 +179,13 @@ pub(super) fn check_lead_edit(
         .flatten();
     let Some(department) = department else {
         return Err(refused(format!(
-            "Only you, Chief of Staff and the lead of {}'s department change it. Say in your report what should change.",
+            "Only you, Ghostex AI and the lead of {}'s department change it. Say in your report what should change.",
             target.name
         )));
     };
     if target.department_id.as_deref() != Some(department.department_id.as_str()) {
         return Err(refused(format!(
-            "You lead {}, and {} isn't in it, so you can't change its instructions. Ask Chief of Staff to.",
+            "You lead {}, and {} isn't in it, so you can't change its instructions. Ask Ghostex AI to.",
             department.name, target.name
         )));
     }
@@ -196,7 +196,7 @@ pub(super) fn check_lead_edit(
         .collect();
     if !other_fields.is_empty() || !params.contains_key("soul") {
         return Err(refused(format!(
-            "As {}'s lead you change only your members' instructions (--soul or --soul-file). Ask Chief of Staff for the rest.",
+            "As {}'s lead you change only your members' instructions (--soul or --soul-file). Ask Ghostex AI for the rest.",
             department.name
         )));
     }

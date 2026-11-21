@@ -377,7 +377,7 @@ pub(crate) fn send_report(state: &AppState, db: &Connection, problem: &mut Probl
                         db,
                         (project, session_id),
                         &format!(
-                            "{}'s chat {what}, so Ghostex stopped telling Chief of Staff about it for an hour. Open it to see what's wrong.",
+                            "{}'s chat {what}, so Ghostex stopped telling Ghostex AI about it for an hour. Open it to see what's wrong.",
                             bot.name
                         ),
                     );

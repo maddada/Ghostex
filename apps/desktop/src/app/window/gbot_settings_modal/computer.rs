@@ -308,7 +308,7 @@ impl GpuiGbotSettingsModalWindow {
                     .line_height(px(17.5))
                     .text_color(hsla(p.muted))
                     .child(format!(
-                        "On a Cloud Box each chat gets its own worktree of that project, and the box runs (and bills) while it works. A chat Chief of Staff or another GBot starts there asks for your approval first."
+                        "On a Cloud Box each chat gets its own worktree of that project, and the box runs (and bills) while it works. A chat Ghostex AI or another GBot starts there asks for your approval first."
                     )),
             );
         }

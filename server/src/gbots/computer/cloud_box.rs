@@ -29,7 +29,7 @@ fn first_message(
         .map(|team| super::super::brief::brief_text(&state.paths, bot, team))
         .unwrap_or_default();
     let mut text = format!(
-        "You are {}{}, one of the user's GBots, working on the Cloud Box {}. Your brief is below. From the box, `ghostex gbots` commands can't reach the computer that keeps your memory, so don't run them: when something should be remembered, end your final message with a short \"To remember:\" list and the user or Chief of Staff saves it.\n\n{brief}",
+        "You are {}{}, one of the user's GBots, working on the Cloud Box {}. Your brief is below. From the box, `ghostex gbots` commands can't reach the computer that keeps your memory, so don't run them: when something should be remembered, end your final message with a short \"To remember:\" list and the user or Ghostex AI saves it.\n\n{brief}",
         bot.name,
         if bot.title.is_empty() { String::new() } else { format!(", {}", bot.title) },
         computer.label(),

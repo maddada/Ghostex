@@ -317,8 +317,8 @@ impl Render for ChiefRowPreview {
                 heading("Sessions"),
                 home_session("Preventing Mac screen lock", false, Some(dot(WORKING)))
                     .into_any_element(),
-                home_session("Chief of Staff \u{b7} 8 Nov, 13:30", true, None).into_any_element(),
-                home_session("Chief of Staff \u{b7} 7 Nov, 09:12", true, None).into_any_element(),
+                home_session("Ask Ghostex AI \u{b7} 8 Nov, 13:30", true, None).into_any_element(),
+                home_session("Ask Ghostex AI \u{b7} 7 Nov, 09:12", true, None).into_any_element(),
                 home_session("CPU usage investigation", true, None).into_any_element(),
             ],
             "home-combined" => vec![

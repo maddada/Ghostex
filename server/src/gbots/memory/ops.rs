@@ -101,7 +101,7 @@ fn target(
             Ok((require_bot(db, reference)?, caller.label))
         }
         (Some(_), None) => Err(forbidden(
-            "Only a GBot's own chats, you and Chief of Staff read or change its memory.",
+            "Only a GBot's own chats, you and Ghostex AI read or change its memory.",
         )),
         (None, None) => Err(DomainStateError::bad_request(
             "This isn't a GBot's chat: name the GBot with --bot.",
@@ -122,7 +122,7 @@ pub(crate) fn run(
         "prefsSet" => {
             if !caller.may_manage {
                 return Err(forbidden(
-                    "Only you and Chief of Staff change the shared preferences.",
+                    "Only you and Ghostex AI change the shared preferences.",
                 ));
             }
             let body = params
@@ -532,7 +532,7 @@ fn edit(
                 Some(entry) if entry.by == "user" => {
                     "it was edited from another window".to_string()
                 }
-                Some(entry) if entry.by == "chief" => "Chief of Staff wrote to it".to_string(),
+                Some(entry) if entry.by == "chief" => "Ghostex AI wrote to it".to_string(),
                 _ => "it was written to".to_string(),
             };
             let file = target

@@ -4325,7 +4325,7 @@ version of the Projects features in Cursor and Claude Code.
   another coordinator, a session in a box, or a draft cannot be made an
   coordinator.
 - **Threads in the Project sidebar**: a coordinator's row shows the coordinator crown (a three-point outline) in
-  place of its agent's logo (Chief of Staff and department leads keep their filled crown), and a crew icon
+  place of its agent's logo (Ghostex AI and department leads keep their filled crown), and a crew icon
   with one number: how many sessions under it (its threads' threads too) are
   stuck waiting for your approval; when none, how many of its threads are
   waiting on you; when none are waiting, how many are working; when neither,
@@ -4367,7 +4367,7 @@ version of the Projects features in Cursor and Claude Code.
 - **Main coordinator**: each project has one main coordinator on each
   computer, and its coordinator icon is gold (in the Project and Unified
   sidebars, the chat's `+` picker and the phone's sessions list). It is the one other
-  agents and Chief of Staff contact when they want something from that
+  agents and Ghostex AI contact when they want something from that
   project. The first coordinator you create in a project gets it; to give it to
   another coordinator there, right-click that coordinator and choose **Make
   main coordinator** (long-press on the phone). Closing or deleting the main
@@ -4761,18 +4761,18 @@ note list in one call, as the editors save), and `ghostex coordinator guide` (th
 coordinator's own playbook, ending with your playbook overrides). `ghostex coordinator --help` lists every flag. `ghostex orchestrator …`
 is an alias that runs the same commands.
 
-## Main Hub and Chief of Staff (on by default)
+## Main Hub and Ask Ghostex AI (on by default)
 
-Main Hub is on by default, and Chief of Staff in it is where to start in
-Ghostex. You can turn it off in **Settings > Extensions > Main Hub**; only you
+Main Hub is on by default, and **Ask Ghostex AI** in it (called Chief of Staff
+before) is where to start in Ghostex. You can turn it off in **Settings > Extensions > Main Hub**; only you
 can turn it back on, not an agent. A computer that had it off only because it
 used to be off by default is turned on once with this version; if you had
-turned it off yourself (or Chief of Staff was already opened there, or you
+turned it off yourself (or Ghostex AI was already opened there, or you
 changed one of its settings), it stays off. While it is off,
 your home folder's project (if you have one) is an ordinary project and nothing
 here applies, except one thing: the chats you start with **Ask Ghostex AI** (the
 sidebar menu row) show under a **Main Hub** row at the top of the sidebar, only
-while you have one, with just those chats and no Chief of Staff. They run in
+while you have one, with just those chats and no Ghostex AI. They run in
 Ghostex's settings folder, never in your home folder.
 
 Turned on, the project at your home folder (`~`, `C:\Users\<name>` on
@@ -4781,7 +4781,8 @@ for chats that don't belong to a project. If you already had a project there, it
 becomes Main Hub as it is, with its sessions, history and settings. Rest the
 pointer on its header and a card beside the sidebar says what it is.
 
-**Chief of Staff**, pinned first under Main Hub, is one agent per computer you
+**Ask Ghostex AI** (Ghostex AI for short; it was called Chief of Staff), pinned
+first under Main Hub, is one agent per computer you
 can ask about anything: any session, agent, project or computer, and Ghostex
 itself ("what's stuck?", "how do I pair my phone?").
 
@@ -4790,8 +4791,8 @@ itself ("what's stuck?", "how do I pair my phone?").
   agents can't read) above the project's own menu (Move to Space, New Terminal
   and the rest). It sits at the top of the Space it is in, or of every Space with
   **Show Main Hub on all Spaces** (Settings > Agents > Home folder).
-- **First open**: before Chief of Staff runs, its row says "Start here". Click it
-  and Chief of Staff starts on your default agent (Settings > Agents, the one you
+- **First open**: before Ghostex AI runs, its row says "Start here". Click it
+  and Ghostex AI starts on your default agent (Settings > Agents, the one you
   picked during setup): Claude on the newest Opus, Codex on the newest GPT Sol,
   Antigravity on the newest Gemini Neon, each at High effort, read from the
   agent's own model list; another agent on its default model. Its first message
@@ -4799,19 +4800,19 @@ itself ("what's stuck?", "how do I pair my phone?").
   until you press Start or send a message; until then you can switch its agent
   or model in place. A model or effort you pick in its chat is kept for its next
   chats on that agent.
-- **Getting started**: on its first start Chief of Staff greets you and offers
+- **Getting started**: on its first start Ghostex AI greets you and offers
   first steps as a form: add your projects, theme Ghostex, configure it, connect
   your phone or another computer, set up Boosts and Autopilot, or a short tour.
   Pick any and it does them for you with `ghostex` commands (pairing a phone or
   a computer stays yours: it opens the right window and says what to do).
-- **What Chief of Staff does**: it reads every session's chat and screen,
+- **What Ghostex AI does**: it reads every session's chat and screen,
   messages, interrupts and types into any session, and answers other agents'
   questions and permission prompts, without asking you each time. Work in a
   project goes to that project's coordinator, and work on another computer to
-  that computer's Chief of Staff. Collab, pairing, Easy Connect, connecting
+  that computer's Ghostex AI. Collab, pairing, Easy Connect, connecting
   computers, Autopilot's limits, turning GBots on, security settings and
   installing things stay yours.
-- **New Chat keeps your old chat**: right-click the Chief of Staff row for New
+- **New Chat keeps your old chat**: right-click the Ask Ghostex AI row for New
   Chat (Ghostex asks first; tick Don't ask again to stop asking). The old chat
   stays in Main Hub, asleep and named after the day it started. Change Agent
   moves it to another agent the same way. A new chat's first message waits for
@@ -4823,16 +4824,16 @@ itself ("what's stuck?", "how do I pair my phone?").
   `.config/gh`, `.netrc`, keychains, password stores, browser profiles, agent
   logins and the like. Claude Code's file tools are held to it, but its shell
   commands are not; Codex is held to it for everything it runs; other agents are
-  not. Chief of Staff on Codex runs without asking, because Codex's sandbox would
+  not. Ghostex AI on Codex runs without asking, because Codex's sandbox would
   otherwise stop it reaching Ghostex; Codex still keeps it out of these folders.
 - **Several computers**: with computers combined, every computer's home is one
-  Main Hub, each computer's Chief of Staff pinned at the top and other
+  Main Hub, each computer's Ghostex AI pinned at the top and other
   computers' chats marked with their computer's name.
-- **Ask Ghostex AI's chats** (when Chief of Staff isn't running to take the
+- **Ask Ghostex AI's chats** (when Ghostex AI isn't running to take the
   question) are listed in Main Hub too, so turning Main Hub on or off never
   moves them out of it.
-- **Turning it off again** hides Main Hub and Chief of Staff, puts Chief of
-  Staff's agent to sleep and takes away its control over your other agents; its
+- **Turning it off again** hides Main Hub and Ghostex AI, puts Ghostex
+  AI's agent to sleep and takes away its control over your other agents; its
   chat and memory are kept for when you turn it back on.
 - **Each computer has its own switch**: Main Hub, GBots and CLIProxyAPI are
   turned on per computer, so turning them on here leaves a connected computer
@@ -5172,7 +5173,7 @@ Setting: `botAutomationsHidden` (on by default, which keeps the feed hidden).
 
 ## GBots (beta, off by default)
 
-GBots (beta) are your own team of bots, led by Chief of Staff in Main Hub. Each GBot
+GBots (beta) are your own team of bots, led by Ghostex AI in Main Hub. Each GBot
 has a name, a role, standing instructions, an icon and a colour, and a memory
 it keeps in every chat; its chats run on your own Claude Code or Codex. Turn
 them on in Settings > Extensions, on the Experimental tab (for a connected
@@ -5184,10 +5185,10 @@ menu items, cards or Settings rows beyond the switch. Their chats sleep and
 every `ghostex gbots` command stops; the bots and their memory stay for when
 you turn them back on.
 
-- **In the sidebar**: your GBots sit in Main Hub under Chief of Staff, in a
+- **In the sidebar**: your GBots sit in Main Hub under Ghostex AI, in a
   GBots group above Main Hub's other chats. Each GBot's row shows its icon in
   its colour, its name and a dot while one of its chats works or waits for
-  you; click it to fold its chats under it (a chat Chief of Staff opened says
+  you; click it to fold its chats under it (a chat Ghostex AI opened says
   "Chief"). Right-click a GBot for New Chat, GBot Settings… and Remove GBot…,
   and right-click the GBots heading (or press its +) or Main Hub for New
   GBot…. On the phone, GBots show the same way in Main Hub; long-press a GBot
@@ -5200,18 +5201,18 @@ you turn them back on.
   new GBot starts at Ask; a Codex GBot starts at Full access, because Codex's
   sandbox below Full can't reach Ghostex, and Codex still keeps it out of your
   secret folders. Only you can let a GBot do more.
-- **Adding a GBot**: press + on the GBots heading, ask Chief of Staff for one, or run
+- **Adding a GBot**: press + on the GBots heading, ask Ghostex AI for one, or run
   `ghostex gbots create --name <name> --title <role>` (add `--soul-file
   <file>` for its instructions, `--agent <id>` for what it runs on, `--icon`
   and `--color` for its look). From a terminal, Ghostex asks for your
-  approval first (Chief of Staff adds one on its own, see Handing it work).
-  Only you and Chief of Staff can add, change or remove GBots; a department's
+  approval first (Ghostex AI adds one on its own, see Handing it work).
+  Only you and Ghostex AI can add, change or remove GBots; a department's
   lead may change only its members' instructions, and other agents are refused.
 - **Chatting with it**: `ghostex gbots new-chat <bot>` opens a chat (add
   `--task "<text>"` to hand it something to do). A GBot can have several chats
   at once, all sharing its instructions and memory; `ghostex gbots chats <bot>`
   lists them and who opened them, and `ghostex gbots close-chat <chat>` closes
-  one (Chief of Staff can close only the chats it opened).
+  one (Ghostex AI can close only the chats it opened).
 - **Its folder**: each GBot has a folder holding its instructions (`SOUL.md`),
   its memory (`MEMORY.md` and `memory/`) and its working files (`files/`);
   `ghostex gbots show <bot>` says where. A new chat starts with its
@@ -5233,7 +5234,7 @@ you turn them back on.
   terminal: `ghostex gbots memory show|add|forget|edit|undo|journal|topics|topic|log
   --bot <bot>`. Keys and passwords in a note are replaced with «redacted».
 - **Preferences every GBot reads**: `ghostex gbots prefs set --text "<how you
-  like things>"` (you and Chief of Staff only) puts up to 100 lines in every
+  like things>"` (you and Ghostex AI only) puts up to 100 lines in every
   GBot's brief; open chats are told to read it again.
 - **Routines**: ask a GBot in its chat for something on a schedule ("every
   weekday at 8, check my inbox folder") and it sets a routine: each run is a
@@ -5244,22 +5245,22 @@ you turn them back on.
   costs nothing. Runs come at least 15 minutes apart, 24 a day at most; a run
   missed while Ghostex was closed is caught up only if it is less than 12 hours
   late, and a failing check backs off up to 4 hours. A routine can also tell
-  Chief of Staff when it finds something, or hand what it finds to Chief of
-  Staff to tell you with a notification (`--deliver brief`). The Routines tab
+  Ghostex AI when it finds something, or hand what it finds to Ghostex
+  AI to tell you with a notification (`--deliver brief`). The Routines tab
   of GBot Settings (on the phone too) lists them with Pause, Resume, Run now and Remove; Edit on the
   card opens the Automate view. A command check a GBot sets waits paused until
   you turn it on. From a terminal: `ghostex gbots routine
   list|add|edit|pause|resume|remove|run-now --bot <bot>`.
 - **Keep an eye on my day**: with Gmail or Google Calendar connected in
-  Settings > Connectors, ask Chief of Staff to keep an eye on your day (it
+  Settings > Connectors, ask Ghostex AI to keep an eye on your day (it
   also offers once, when they are connected). It adds a GBot, Day Watcher,
   that only reads your mail and calendar (Ghostex refuses anything it tries to
   send, reply to, accept, create or change) with two routines: a daily brief at
   08:00 (Needs you, Your day, Important emails, Routines) and a watch every 15
   minutes from 07:00 to 21:45 that tells you when a meeting is about to start
-  or important mail comes in. Both land in Chief of Staff's chat with a
-  notification and a phone push; a quiet watch costs nothing. Ask Chief of
-  Staff for another time or to stop, pause a routine or Day Watcher in its GBot
+  or important mail comes in. Both land in Ghostex AI's chat with a
+  notification and a phone push; a quiet watch costs nothing. Ask Ghostex
+  AI for another time or to stop, pause a routine or Day Watcher in its GBot
   Settings, or remove it. From a terminal: `ghostex gbots day-watch
   [status]|on [--brief-time HH:MM]|off`.
 - **Starting work in a folder**: ask a GBot to make a project in a folder and
@@ -5272,13 +5273,13 @@ you turn them back on.
 - **Its computer**: give a GBot a computer of its own in the Computer tab of
   GBot Settings (right-click the GBot, Computer…): one of your connected
   computers (Settings > Remote, with Agent access on) or one of your Cloud
-  Boxes. The chats you, Chief of Staff and other GBots open with it then run
+  Boxes. The chats you, Ghostex AI and other GBots open with it then run
   there (chats already open stay where they are), and its row shows that
   computer's name. On a connected computer its chats work in `~/GBots/<name>`
   there, still read its instructions and keep its memory on this computer, and
   show under its row while that computer is connected. On a Cloud Box each chat
   gets its own worktree of the box's project and carries its instructions with
-  it; a chat Chief of Staff or another GBot starts there asks for your approval
+  it; a chat Ghostex AI or another GBot starts there asks for your approval
   first, since the box gets your agent logins and the GBot's instructions and
   memory, and runs and bills while it works. Use the screen and apps
   lets it drive apps on that computer with SpaceO or cua-driver (macOS); off,
@@ -5315,17 +5316,17 @@ you turn them back on.
   it for Department Settings… or Remove Department… (its GBots stay, in no
   department). Set a GBot's department, whether it leads, and the department's
   name and shared instructions in the Department tab of GBot Settings (on the
-  phone too), where you can also add a new department. Only you and Chief of
-  Staff change departments. From a terminal: `ghostex gbots department
+  phone too), where you can also add a new department. Only you and Ghostex
+  AI change departments. From a terminal: `ghostex gbots department
   list|show|create|edit|set-lead|remove`, and `ghostex gbots edit <bot>
   --department <name>|none [--lead]` to move a GBot.
-- **Handing it work**: Chief of Staff hands work to the right GBot on its own,
+- **Handing it work**: Ghostex AI hands work to the right GBot on its own,
   and adds one when no GBot fits, telling you in a "GBot added" card in its
   chat with Undo (Undo removes the bot and closes its chats; it is refused once
   the bot was changed since). To have it ask you before each add instead, turn
-  off Settings > Agents > Chief of Staff may add GBots on its own. Chief of
-  Staff and a department's lead hand a GBot work with `ghostex gbots ask <bot>
-  --task "<brief>"` (Chief of Staff gives a department with a lead its work
+  off Settings > Agents > Ghostex AI may add GBots on its own. Ghostex
+  AI and a department's lead hand a GBot work with `ghostex gbots ask <bot>
+  --task "<brief>"` (Ghostex AI gives a department with a lead its work
   through the lead); any other GBot or coordinator may only ask it a question
   (`--consult`). The answer comes back to the sender's chat when the GBot
   finishes, headed "Researcher reports on A12"; a report that falls short goes
@@ -5334,14 +5335,14 @@ you turn them back on.
   changes` what was added or changed, and `ghostex gbots undo <change>` undoes
   an add or a change.
 - **When a GBot gets stuck**: Ghostex watches the GBot chats nobody is
-  following (ones you opened, routine runs, ones Chief of Staff opened) and
-  tells Chief of Staff in its chat when one can't start (Ghostex tries a plain
+  following (ones you opened, routine runs, ones Ghostex AI opened) and
+  tells Ghostex AI in its chat when one can't start (Ghostex tries a plain
   start failure once more first), stops and can't be restarted, shows no new
-  output for 20 minutes, or a routine run fails. Chief of Staff can restart it
+  output for 20 minutes, or a routine run fails. Ghostex AI can restart it
   where it stopped (twice at most) or send it a new message, and tells you in
   two lines when only you can fix it, such as a sign-in or a missing key. A
   GBot opened by anyone but you that waits on a question or an approval goes
-  to Chief of Staff too: Chief of Staff may answer it for the GBots it added
+  to Ghostex AI too: Ghostex AI may answer it for the GBots it added
   (never a push, a deletion, a publish or spending money you didn't ask for),
   and otherwise tells you where to answer; a sign-in always comes to you. A
   GBot can also raise a flag itself (`ghostex gbots flag "<what it needs>"`).
@@ -5379,8 +5380,8 @@ you turn them back on.
   GBot's key once, inside a `curl` command to paste (Copy command, Copy key).
   Ghostex keeps only the key's fingerprint, so copy it then; New key makes
   another and the old one stops working, and turning it off stops the key at
-  once. Only you can turn it on, make a key or turn it off (agents, Chief of
-  Staff included, can't), and each change goes into the security log. An app
+  once. Only you can turn it on, make a key or turn it off (agents, Ghostex
+  AI included, can't), and each change goes into the security log. An app
   sends `POST /hooks/gbots/bots/<id>/messages` with `{"message": "…"}` and
   `Authorization: Bearer <key>`, and gets the GBot's reply (`"wait"` up to 300
   seconds; a longer answer comes back as "working" with an address to ask
@@ -7636,7 +7637,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   simple: Actions (off by default), Open In (on by default), Spaces (off by
   default), Cloud Boxes (on by default), Workspaces (off by default; it brings workspaces and the team's
   Slack flow), the Session details panel (beta, on by default) and Main Hub
-  with Chief of Staff (on by default). Turning one off removes it everywhere at once (its header button,
+  with Ghostex AI (on by default). Turning one off removes it everywhere at once (its header button,
   Settings pages and rows, hotkeys, Quick Access rows and menus) and turning it
   back on restores everything you had set up. Settings: `actionsHidden`,
   `openInTitlebarButtonHidden`, `sidebarSpacesEnabled`, `cloudBoxesEnabled`,

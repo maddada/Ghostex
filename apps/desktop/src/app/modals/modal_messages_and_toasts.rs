@@ -281,7 +281,7 @@ impl GhostexGpuiApp {
                 level: GpuiAppToastLevel::Info,
                 title: "Main Hub turned off".to_string(),
                 description: Some(
-                    "Chief of Staff's chat and memory are kept. Turn it back on in Settings > Extensions."
+                    "Ghostex AI's chat and memory are kept. Turn it back on in Settings > Extensions."
                         .to_string(),
                 ),
                 copy_text: None,

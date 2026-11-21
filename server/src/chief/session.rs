@@ -33,7 +33,7 @@ const CHIEF_GOAL: &str =
     "Answer the user about anything in Ghostex, and steer their agents and coordinators for them.";
 
 /// What follows the coordinator skill line in Chief's first message.
-pub(super) const CHIEF_FIRST_REQUEST: &str = "You are Chief of Staff, the Ghostex-wide coordinator on this computer and the user's starting point in Ghostex: they ask you about any session, agent, project or computer, or about Ghostex itself, and you help them set it up. Before your first reply, and again after any context compaction, run `ghostex chief guide` and follow it; where it differs from the coordinator guide, it wins. Then greet the user as its \"Your first reply\" section says.";
+pub(super) const CHIEF_FIRST_REQUEST: &str = "You are Ghostex AI, the Ghostex-wide coordinator on this computer and the user's starting point in Ghostex: they ask you about any session, agent, project or computer, or about Ghostex itself, and you help them set it up. Before your first reply, and again after any context compaction, run `ghostex chief guide` and follow it; where it differs from the coordinator guide, it wins. Then greet the user as its \"Your first reply\" section says.";
 
 /// The launchers Chief can run on: set up to start, and an agent family a coordinator runs on.
 /// GBots run on the same list (server/src/gbots/session.rs).
@@ -99,7 +99,7 @@ pub(super) fn open_chief(
     let Some(agent_id) = picked else {
         return Err(DomainStateError {
             code: "chiefNeedsAgent",
-            message: "No agent can run Chief of Staff yet. Set up Claude, Codex or Antigravity in Settings > Agents first.".to_string(),
+            message: "No agent can run Ghostex AI yet. Set up Claude, Codex or Antigravity in Settings > Agents first.".to_string(),
         });
     };
     let agent_id = agent_id.as_str();
@@ -125,7 +125,7 @@ pub(super) fn replace_chief(
     let Some(old) = read_record(&db) else {
         return Err(DomainStateError {
             code: "chiefNeedsAgent",
-            message: "Chief of Staff has not been opened yet. Open it and pick its agent first."
+            message: "Ghostex AI has not been opened yet. Open it and pick its agent first."
                 .to_string(),
         });
     };
@@ -261,7 +261,7 @@ fn create_chief_session(
         .any(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id))
     {
         return Err(DomainStateError::bad_request(format!(
-            "Chief of Staff can't run on {agent_id}: pick one of {}.",
+            "Ghostex AI can't run on {agent_id}: pick one of {}.",
             crate::coordinators::coordinator_agent_families_text()
         )));
     }
@@ -388,7 +388,7 @@ pub(super) fn move_coordinator(
 ) -> Result<(), DomainStateError> {
     let sql = |error: rusqlite::Error| DomainStateError {
         code: "internalError",
-        message: format!("SQLite Chief of Staff error: {error}"),
+        message: format!("SQLite Ghostex AI error: {error}"),
     };
     let transaction =
         rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)

@@ -83,7 +83,7 @@ pub(crate) fn brief_text(paths: &GxserverPaths, bot: &Bot, team: &Team) -> Strin
     // finding 4).
     out.push_str("Your playbook is `ghostex gbots guide` (the `ghostex-gbots` skill is retired): read it before your first reply and again after any context compaction.\n\n");
     out.push_str(&format!(
-        "You are a GBot: one of the user's own bots in Ghostex, led by Chief of Staff. You keep this name, these instructions and your memory in every chat you have; several of your chats may be open at once, all sharing this folder ({}). Your working files go in `files/`.\n\n",
+        "You are a GBot: one of the user's own bots in Ghostex, led by Ghostex AI. You keep this name, these instructions and your memory in every chat you have; several of your chats may be open at once, all sharing this folder ({}). Your working files go in `files/`.\n\n",
         folder.display()
     ));
     if !bot.description.is_empty() {
@@ -91,7 +91,7 @@ pub(crate) fn brief_text(paths: &GxserverPaths, bot: &Bot, team: &Team) -> Strin
     }
     out.push_str("## Your instructions\n\n");
     if bot.soul.trim().is_empty() {
-        out.push_str("(None yet. The user or Chief of Staff sets them.)\n\n");
+        out.push_str("(None yet. The user or Ghostex AI sets them.)\n\n");
     } else {
         out.push_str(&format!("{}\n\n", bot.soul.trim()));
     }
@@ -213,16 +213,16 @@ fn department_section(bot: &Bot, team: &Team) -> String {
     match lead {
         _ if bot.is_lead => {
             out.push_str(&format!(
-                "You lead {}. Hand its members work with `ghostex gbots ask <bot> --task \"<brief>\"`, read their reports, and change a member's instructions with `ghostex gbots edit <bot> --soul-file <file>` when the user or Chief of Staff asks for it. Other GBots you may only ask questions (`--consult`).\n\n",
+                "You lead {}. Hand its members work with `ghostex gbots ask <bot> --task \"<brief>\"`, read their reports, and change a member's instructions with `ghostex gbots edit <bot> --soul-file <file>` when the user or Ghostex AI asks for it. Other GBots you may only ask questions (`--consult`).\n\n",
                 department.name
             ));
         }
         Some(lead) => out.push_str(&format!(
-            "{lead} leads {}: your work comes from {lead} or Chief of Staff, and your reports go back to whoever handed you the work.\n\n",
+            "{lead} leads {}: your work comes from {lead} or Ghostex AI, and your reports go back to whoever handed you the work.\n\n",
             department.name
         )),
         None => out.push_str(&format!(
-            "{} has no lead: Chief of Staff hands you work.\n\n",
+            "{} has no lead: Ghostex AI hands you work.\n\n",
             department.name
         )),
     }
@@ -248,7 +248,7 @@ fn department_section(bot: &Bot, team: &Team) -> String {
 /// with its department and whether it leads.
 fn roster(bot: &Bot, team: &Team) -> String {
     let mut out =
-        String::from("## Your team\n\n- Chief of Staff: leads the GBots and may hand you work.\n");
+        String::from("## Your team\n\n- Ghostex AI: leads the GBots and may hand you work.\n");
     let line = |other: &Bot| {
         let you = if other.bot_id == bot.bot_id {
             " (you)"

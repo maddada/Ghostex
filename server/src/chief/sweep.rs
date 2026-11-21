@@ -174,8 +174,9 @@ fn log_default_on(state: &AppState, decision: super::default_on::Decision, error
     );
 }
 
-/// A Chief session created under an earlier name is still titled "Chief" or "Main Hub": it takes
-/// the current name once, at gxserver start. A title the user gave it is left alone.
+/// A Chief session created under an earlier name is still titled "Chief", "Main Hub" or "Chief of
+/// Staff", or an earlier chat "Chief of Staff · 8 Nov, 13:30": each takes the current name once, at
+/// gxserver start. A title the user gave it is left alone.
 fn rename_old_title(state: &AppState) {
     let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
         return;
@@ -184,30 +185,52 @@ fn rename_old_title(state: &AppState) {
         return;
     };
     let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
-    let titled_old = repository
-        .get_session(&record.project_id, &record.session_id)
-        .ok()
-        .flatten()
-        .is_some_and(|session| {
-            session
-                .get("title")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|title| super::OLD_CHIEF_TITLES.contains(&title))
-        });
-    if !titled_old {
-        return;
+    let chats = std::iter::once((record.project_id.clone(), record.session_id.clone())).chain(
+        record
+            .earlier
+            .iter()
+            .map(|chat| (chat.project_id.clone(), chat.session_id.clone())),
+    );
+    for (project_id, session_id) in chats {
+        let title = repository
+            .get_session(&project_id, &session_id)
+            .ok()
+            .flatten()
+            .and_then(|session| {
+                session
+                    .get("title")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            });
+        let Some(new_title) = title.as_deref().and_then(renamed_title) else {
+            continue;
+        };
+        let mut params = Map::new();
+        params.insert("projectId".into(), json!(project_id));
+        params.insert("sessionId".into(), json!(session_id));
+        params.insert("title".into(), json!(new_title));
+        if repository.update_session(&params).is_ok() {
+            let _ = crate::server::schedule_presentation_session_delta(
+                state,
+                &db,
+                &repository,
+                &project_id,
+                &session_id,
+            );
+        }
     }
-    let mut params = Map::new();
-    params.insert("projectId".into(), json!(record.project_id));
-    params.insert("sessionId".into(), json!(record.session_id));
-    params.insert("title".into(), json!(super::CHIEF_TITLE));
-    if repository.update_session(&params).is_ok() {
-        let _ = crate::server::schedule_presentation_session_delta(
-            state,
-            &db,
-            &repository,
-            &record.project_id,
-            &record.session_id,
-        );
+}
+
+/// The current name for a title Ghostex gave a Chief chat under an earlier name (its dated suffix
+/// kept); `None` for any other title.
+fn renamed_title(title: &str) -> Option<String> {
+    if super::OLD_CHIEF_TITLES.contains(&title) {
+        return Some(super::CHIEF_TITLE.to_string());
     }
+    super::OLD_CHIEF_TITLES.iter().find_map(|old| {
+        title
+            .strip_prefix(old)
+            .filter(|rest| rest.starts_with(" \u{b7} "))
+            .map(|rest| format!("{}{rest}", super::CHIEF_TITLE))
+    })
 }

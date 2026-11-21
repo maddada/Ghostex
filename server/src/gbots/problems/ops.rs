@@ -117,7 +117,7 @@ pub(crate) fn run(
     }
     if !may_manage {
         return Err(forbidden(
-            "Only you and Chief of Staff look after GBot problems. A GBot raises one with `ghostex gbots flag`.",
+            "Only you and Ghostex AI look after GBot problems. A GBot raises one with `ghostex gbots flag`.",
         ));
     }
     match op {
@@ -207,7 +207,7 @@ fn rebrief(
         session_text(&session, "sessionId"),
     );
     let who = if by == "chief" {
-        "Chief of Staff"
+        "Ghostex AI"
     } else {
         "The user"
     };
@@ -233,7 +233,7 @@ fn flag(
 ) -> Result<Value, DomainStateError> {
     let Some((bot_id, project, session_id)) = own_chat else {
         return Err(forbidden(
-            "Only a GBot raises a flag, from its own chat. Tell Chief of Staff directly instead.",
+            "Only a GBot raises a flag, from its own chat. Tell Ghostex AI directly instead.",
         ));
     };
     let what = required(params, "text").map_err(|_| {
@@ -251,7 +251,7 @@ fn flag(
         .filter(|live| live.source.as_deref() == Some("flag"))
     {
         return Err(conflict(format!(
-            "Your flag {} is still open. Wait for Chief of Staff's answer in this chat, then end your turn.",
+            "Your flag {} is still open. Wait for Ghostex AI's answer in this chat, then end your turn.",
             live.problem_id
         )));
     }
@@ -260,10 +260,10 @@ fn flag(
     insert_problem(db, &mut problem)?;
     super::report::send_report(state, db, &mut problem);
     let told = match problem.reported_to.as_deref() {
-        Some("user") => "the user was notified (there is no Chief of Staff to tell)",
+        Some("user") => "the user was notified (there is no Ghostex AI to tell)",
         Some("muted") => "this chat raised too many flags this hour, so nobody was told; wait, or say it in your reply",
-        Some(_) => "Chief of Staff was told",
-        None => "Chief of Staff will be told in a moment",
+        Some(_) => "Ghostex AI was told",
+        None => "Ghostex AI will be told in a moment",
     };
     Ok(json!({
         "problem": summary(state, db, &problem),
@@ -291,9 +291,7 @@ pub(crate) async fn retry(
     params: Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     if !may_manage {
-        return Err(forbidden(
-            "Only you and Chief of Staff retry a GBot problem.",
-        ));
+        return Err(forbidden("Only you and Ghostex AI retry a GBot problem."));
     }
     let planning = state.clone();
     let plan = tokio::task::spawn_blocking(move || plan_retry(&planning, &params))
@@ -366,7 +364,7 @@ pub(crate) async fn retry(
                     &state,
                     &project,
                     &session,
-                    &format!("Ghostex restarted this chat for Chief of Staff {what}, on the same conversation. Check where you were and carry on."),
+                    &format!("Ghostex restarted this chat for Ghostex AI {what}, on the same conversation. Check where you were and carry on."),
                     true,
                 );
             }
