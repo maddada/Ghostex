@@ -570,7 +570,7 @@ pub(crate) fn require_manager(may_manage: bool) -> Result<(), DomainStateError> 
         Ok(())
     } else {
         Err(forbidden(
-            "Only you and Chief of Staff set up departments and move GBots between them. Ask Chief of Staff to.",
+            "Only you and Ghostex AI set up departments and move GBots between them. Ask Ghostex AI to.",
         ))
     }
 }

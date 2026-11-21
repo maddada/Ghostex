@@ -30,7 +30,7 @@ pub(super) const MEMORY_HELP: &str = "  ghostex gbots memory show [--bot <bot>] 
                                                  What the GBot did each day (Ghostex writes it)
   ghostex gbots prefs show [--json]              The preferences every GBot reads
   ghostex gbots prefs set (--body-file <file> | --text <text>)
-                                                 Replace them (you and Chief of Staff only)
+                                                 Replace them (you and Ghostex AI only)
 ";
 
 fn gbots(params: Value, flags: &Flags) -> CliResult<Value> {

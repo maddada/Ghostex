@@ -240,12 +240,12 @@ pub(crate) fn brief_section(paths: &GxserverPaths, bot_id: &str) -> String {
     match &computer.place {
         Place::This => {}
         Place::Computer(_) => out.push_str(&format!(
-            "## Where you work\n\nThe chats the user, Chief of Staff and other GBots open with you run on {name}, in {folder} there; your working files go in that folder. Your own folder (SOUL.md, MEMORY.md, your notes) stays on {home}: from {name}, `ghostex gbots brief` and `ghostex gbots memory …` reach it as usual, so use them and don't look for those files on {name}. Your routine runs stay on {home}.\n\n",
+            "## Where you work\n\nThe chats the user, Ghostex AI and other GBots open with you run on {name}, in {folder} there; your working files go in that folder. Your own folder (SOUL.md, MEMORY.md, your notes) stays on {home}: from {name}, `ghostex gbots brief` and `ghostex gbots memory …` reach it as usual, so use them and don't look for those files on {name}. Your routine runs stay on {home}.\n\n",
             name = computer.label(),
             folder = computer.folder.clone().unwrap_or_else(|| super::ops::default_folder("GBot")),
         )),
         Place::CloudBox(_) => out.push_str(&format!(
-            "## Where you work\n\nThe chats the user, Chief of Staff and other GBots open with you run on the Cloud Box {name}, each in its own worktree of that project, and carry this brief with them. Your routine runs stay on {home}.\n\n",
+            "## Where you work\n\nThe chats the user, Ghostex AI and other GBots open with you run on the Cloud Box {name}, each in its own worktree of that project, and carry this brief with them. Your routine runs stay on {home}.\n\n",
             name = computer.label(),
         )),
     }

@@ -218,7 +218,7 @@ fn run(
         "create" => {
             if !asker.may_manage() {
                 return Err(forbidden(
-                    "Only you and Chief of Staff can add GBots. Ask Chief of Staff for one.",
+                    "Only you and Ghostex AI can add GBots. Ask Ghostex AI for one.",
                 ));
             }
             // Fields left out come from a preset (team_file/presets.rs), its starter notes after.
@@ -251,7 +251,7 @@ fn run(
         "remove" => {
             if !asker.may_manage() {
                 return Err(forbidden(
-                    "Only you and Chief of Staff can remove a GBot.",
+                    "Only you and Ghostex AI can remove a GBot.",
                 ));
             }
             remove(state, &db, &repository, asker, required(params, "bot")?)
@@ -259,7 +259,7 @@ fn run(
         "newChat" => {
             if !asker.may_manage() {
                 return Err(forbidden(
-                    "Only you and Chief of Staff can open a chat with a GBot.",
+                    "Only you and Ghostex AI can open a chat with a GBot.",
                 ));
             }
             let bot = require_bot(&db, required(params, "bot")?)?;
@@ -314,9 +314,9 @@ fn run(
             let allowed = asker.is_user() || (asker == Asker::Chief && change.by == "chief");
             if !allowed {
                 return Err(forbidden(if asker == Asker::Chief {
-                    "Chief of Staff undoes only the changes it made; the user undoes the rest."
+                    "Ghostex AI undoes only the changes it made; the user undoes the rest."
                 } else {
-                    "Only you and Chief of Staff undo a change to GBots."
+                    "Only you and Ghostex AI undo a change to GBots."
                 }));
             }
             if super::team_file::is_team_change(&change.kind) {
@@ -600,7 +600,7 @@ fn brief(
         (Some(reference), None) => {
             if !asker.may_manage() {
                 return Err(forbidden(
-                    "Only a GBot's own chats, you and Chief of Staff read its brief.",
+                    "Only a GBot's own chats, you and Ghostex AI read its brief.",
                 ));
             }
             require_bot(db, reference)?
@@ -926,9 +926,9 @@ fn close_chat(
     let allowed = asker.is_user() || (asker == Asker::Chief && opened_by == "chief");
     if !allowed {
         return Err(forbidden(if asker == Asker::Chief {
-            "Chief of Staff closes only the GBot chats it opened, never yours."
+            "Ghostex AI closes only the GBot chats it opened, never yours."
         } else {
-            "Only you, and Chief of Staff for the chats it opened, can close a GBot's chat."
+            "Only you, and Ghostex AI for the chats it opened, can close a GBot's chat."
         }));
     }
     let bot = read_bot(db, bot_id)?;

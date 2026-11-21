@@ -67,7 +67,7 @@ pub(crate) fn decide(settings: Option<&Value>, record: Option<&ChiefRecord>) -> 
         return Decision::AlreadyOn;
     }
     if bool_at(settings, "chiefHidden") == Some(true) {
-        return Decision::KeepOff("Chief of Staff was turned off in 11.1");
+        return Decision::KeepOff("Ghostex AI was turned off in 11.1");
     }
     if bool_at(settings, "chiefConfirmNewChat") == Some(false)
         || bool_at(settings, "chiefShowOnAllSpaces") == Some(true)
@@ -82,7 +82,7 @@ pub(crate) fn decide(settings: Option<&Value>, record: Option<&ChiefRecord>) -> 
             .is_none_or(|(created, since)| created >= since)
     });
     if opened_since_off_by_default {
-        return Decision::KeepOff("Chief of Staff was opened while Main Hub was off by default");
+        return Decision::KeepOff("Ghostex AI was opened while Main Hub was off by default");
     }
     Decision::TurnOn
 }

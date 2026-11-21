@@ -22,7 +22,7 @@ pub(crate) const PROBLEM_HELP: &str = "  ghostex gbots problem list [--all] [--j
   ghostex gbots problem close <problem> [--handed]
                                                  Done with it; --handed when you told the user
                                                  because only they can fix it
-  ghostex gbots flag \"<what you need and why>\"   From a GBot's own chat: tell Chief of Staff you
+  ghostex gbots flag \"<what you need and why>\"   From a GBot's own chat: tell Ghostex AI you
                                                  are stuck on something only it or the user can
                                                  give (an answer, a sign-in, a key, a decision)
 ";

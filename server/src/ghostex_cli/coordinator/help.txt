@@ -141,7 +141,7 @@ PROMOTE
 
 MAIN COORDINATOR
   Each project has one main coordinator on each computer: the one to contact by
-  default when an agent (or Chief of Staff) wants something from that project.
+  default when an agent (or Ghostex AI) wants something from that project.
   The first coordinator created in a project gets it; make-main gives it to
   another coordinator there (right-click > Make main coordinator does the same).
   Closing or deleting the main one passes it to the oldest coordinator left in

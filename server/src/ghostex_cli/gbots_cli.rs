@@ -10,7 +10,7 @@ use crate::ghostex_cli::{
 };
 
 const HELP_HEAD: &str =
-    "GBots: your own team of bots, led by Chief of Staff in Main Hub. Each GBot keeps
+    "GBots: your own team of bots, led by Ghostex AI in Main Hub. Each GBot keeps
 its name, instructions and memory in every chat; its chats run on your own Claude Code or Codex.
 
 USAGE
@@ -47,9 +47,9 @@ USAGE
 /// The rest of the help, after the memory verbs (gbots_memory_cli.rs).
 const HELP_TAIL: &str = "
   <bot> is a GBot's name or id. Colours: periwinkle, sky, mint, gold, coral, lavender, pink, rose.
-  Icons are Ghostex icon names (robot, search, pencil, …). Only you and Chief of Staff add, change
+  Icons are Ghostex icon names (robot, search, pencil, …). Only you and Ghostex AI add, change
   and remove GBots and departments; adding a GBot from a terminal asks for your approval first.
-  Chief of Staff and a department's lead hand a GBot work, and a lead changes its own members'
+  Ghostex AI and a department's lead hand a GBot work, and a lead changes its own members'
   instructions; any other GBot or coordinator may only ask it a question. Turn on Main Hub and
   GBots in Settings > Extensions. Add --computer <name> to run a command on another computer.
 ";

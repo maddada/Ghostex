@@ -147,7 +147,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make sure ux makes sense after fix"): while Main Hub is off the GBots card is hidden, not greyed with "Turn on Main Hub first"; Main Hub's card stands in for it on its tab and in a search, and says it unlocks GBots (settings_modal/tabs/extensions/sections.rs). The same goes for Bot automations under Bots.
     J::Obj(&[
         ("appWide", J::Bool(true)),
-        ("description", J::Str("Your own team of bots under Chief of Staff in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.")),
+        ("description", J::Str("Your own team of bots under Ghostex AI in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.")),
         ("category", J::Str("experimental")),
         ("id", J::Str("gbots")),
         ("placement", J::Str("feature")),
@@ -298,7 +298,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // User: "let's please make the main hub project and the chief of staff always enabled for everyone who installs ghostex ... chief of staff is basically the entry point to ghostex". Supersedes the off-by-default part of the decision above: Main Hub is on by default and listed with the features, not the experiments; everything it does while off stays as above, the user can still turn it off here, and only the user can turn it on. Existing computers: server/src/chief/default_on.rs.
     // SEE-ALSO: server/src/chief/ (the session, the head role, `chief_on`), packages/settings-catalog/src/data/defaults.rs (`mainHubHidden`), packages/settings-catalog/src/help/supplemental.rs.
     J::Obj(&[
-        ("description", J::Str("The home for chats that don't belong to a project, with Chief of Staff, an agent that can see and steer all your other agents, pinned at the top. Chief of Staff is where to start: it helps you add projects, set up and theme Ghostex, and connect your phone.")),
+        ("description", J::Str("The home for chats that don't belong to a project, with Ghostex AI, an agent that can see and steer all your other agents, pinned at the top. Ghostex AI is where to start: it helps you add projects, set up and theme Ghostex, and connect your phone.")),
         ("category", J::Str("features")),
         ("id", J::Str("chief")),
         ("placement", J::Str("feature")),

@@ -87,7 +87,7 @@ impl Sender {
         }
         let Some((project, session)) = project_and_session else {
             return Err(forbidden(
-                "Only you, Chief of Staff and GBots hand work to a GBot or ask it something.",
+                "Only you, Ghostex AI and GBots hand work to a GBot or ask it something.",
             ));
         };
         let key = (project.to_string(), session.to_string());
@@ -101,7 +101,7 @@ impl Sender {
             return Ok(Self::Coordinator(key.0, key.1));
         }
         Err(forbidden(
-            "A GBot's answer goes back to a coordinator, and this session isn't one. Ask Chief of Staff to hand the GBot the work.",
+            "A GBot's answer goes back to a coordinator, and this session isn't one. Ask Ghostex AI to hand the GBot the work.",
         ))
     }
 }
@@ -188,14 +188,14 @@ fn check_direction(sender: &Sender, bot: &Bot, consult: bool) -> Result<(), Doma
                 Ok(())
             } else {
                 Err(forbidden(&format!(
-                    "Only Chief of Staff and the lead of {}'s department hand it work. Ask it a question with --consult, or say in your report that {} should do it.",
+                    "Only Ghostex AI and the lead of {}'s department hand it work. Ask it a question with --consult, or say in your report that {} should do it.",
                     bot.name, bot.name
                 )))
             }
         }
         Sender::Coordinator(..) if consult => Ok(()),
         Sender::Coordinator(..) => Err(forbidden(&format!(
-            "Only you, Chief of Staff and a department's lead hand a GBot work. Ask {} a question with --consult, or ask Chief of Staff to hand it the work.",
+            "Only you, Ghostex AI and a department's lead hand a GBot work. Ask {} a question with --consult, or ask Ghostex AI to hand it the work.",
             bot.name
         ))),
     }

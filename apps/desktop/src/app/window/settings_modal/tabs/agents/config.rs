@@ -417,7 +417,7 @@ impl AgentsTab {
                 p,
                 CONFIRM_NEW_CHAT,
                 RowSpec::new("Ask before New Chat").description(
-                    "Ask before New Chat or Change Agent starts a new chat with Chief of Staff. Your earlier chats stay in Main Hub either way.",
+                    "Ask before New Chat or Change Agent starts a new chat with Ghostex AI. Your earlier chats stay in Main Hub either way.",
                 ),
                 values.bool(CONFIRM_NEW_CHAT),
                 cx,
@@ -433,8 +433,8 @@ impl AgentsTab {
                 self,
                 p,
                 CHIEF_ADDS_GBOTS,
-                RowSpec::new("Chief of Staff may add GBots on its own").description(
-                    "Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one.",
+                RowSpec::new("Ghostex AI may add GBots on its own").description(
+                    "Ghostex AI adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one.",
                 ),
                 values.bool(CHIEF_ADDS_GBOTS),
                 cx,

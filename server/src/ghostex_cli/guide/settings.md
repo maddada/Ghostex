@@ -476,8 +476,8 @@ How to use this file:
 ### Home folder
 
 - **Show Main Hub on all Spaces** `chiefShowOnAllSpaces` (boolean, default false): Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.
-- **Ask before New Chat** `chiefConfirmNewChat` (boolean, default true): Ask before New Chat or Change Agent starts a new chat with Chief of Staff. Your earlier chats stay in Main Hub either way.
-- **Chief of Staff may add GBots on its own** `gbotsChiefAddsOnItsOwn` (boolean, default true): With GBots on, Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one.
+- **Ask before New Chat** `chiefConfirmNewChat` (boolean, default true): Ask before New Chat or Change Agent starts a new chat with Ghostex AI. Your earlier chats stay in Main Hub either way.
+- **Ghostex AI may add GBots on its own** `gbotsChiefAddsOnItsOwn` (boolean, default true): With GBots on, Ghostex AI adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one.
 - **Folders agents can't read in your home folder** `homeSecretFolders` (structured value; change it in Settings, not with `ghostex settings set`): Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not.
 ### Agent configs
 
@@ -605,7 +605,7 @@ How to use this file:
 - **Automate** `automate` (Settings UI row without a settings key; use `ghostex settings open`): Turn repeatable project routines into simple workflows you can run whenever you need them.
 - **Bots** `bots` (Settings UI row without a settings key; use `ghostex settings open`): Swap the sidebar to your Hermes agents: one row each, with a new session one click away. Needs the Hermes CLI.
 - **Bot automations** `botAutomations` (Settings UI row without a settings key; use `ghostex settings open`): A feed of every Hermes cron run, one channel per job, opened from the Bots sidebar. Needs Bots.
-- **GBots** `gbots` (Settings UI row without a settings key; use `ghostex settings open`): Your own team of bots under Chief of Staff in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.
+- **GBots** `gbots` (Settings UI row without a settings key; use `ghostex settings open`): Your own team of bots under Ghostex AI in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.
 - **Files** `docs` (Settings UI row without a settings key; use `ghostex settings open`): Browse your project’s notes, plans, and reference files together in one focused reading space.
 - **Changes** `changes` (Settings UI row without a settings key; use `ghostex settings open`): Review what changed, comment on lines for your agent, revert a hunk, and commit, all beside your sessions.
 - **Terminal** `terminal` (Settings UI row without a settings key; use `ghostex settings open`): A command terminal beside your sessions, with its own tabs and splits, that works like the Commands pane but lives in the view panel.
@@ -623,7 +623,7 @@ How to use this file:
 - **Debugging** `debugging` (Settings UI row without a settings key; use `ghostex settings open`): The Debugging page in Settings: debug UI controls and the diagnostic logs you turn on while reproducing an issue.
 - **Extensions** `extensionsButton` (Settings UI row without a settings key; use `ghostex settings open`): An entry under Tools in the sidebar's menu that lists your installed extensions.
 - **Hide Bots** `botsHidden` (boolean, default true): Stop offering Bots, the sidebar mode with one row per Hermes profile. Hidden by default; offered only where the Hermes CLI is installed.
-- **GBots** `gbotsEnabled` (boolean, default false): Turn GBots on or off: your own team of bots under Chief of Staff in Main Hub, running on your Claude Code or Codex. Needs Main Hub. Off by default.
+- **GBots** `gbotsEnabled` (boolean, default false): Turn GBots on or off: your own team of bots under Ghostex AI in Main Hub, running on your Claude Code or Codex. Needs Main Hub. Off by default.
 - **Hide Bot automations** `botAutomationsHidden` (boolean, default true): Stop offering Bot automations, the Automations row in the Bots sidebar that opens a feed of every Hermes cron run. Hidden by default; needs Bots.
 - **Turn off Actions** `actionsHidden` (boolean, default true): Turn off Actions everywhere: the Start button, the Actions page in Settings, Actions pinned to project rows, the Start Action hotkeys and the Quick Access rows. Off by default; your saved actions are kept.
 - **Turn off Open In** `openInTitlebarButtonHidden` (boolean, default false): Turn off Open In everywhere: the Open button, the Open In page in Settings and the Open In menus. Your apps and custom commands are kept.
@@ -645,7 +645,7 @@ How to use this file:
 - **Terminal shaders** `terminalShadersEnabled` (boolean, default false): Apply the shaders from Ghostex's terminal config in order. macOS with Metal only; tested on Apple Silicon. Turn off to restore ordinary rendering in the same sessions. Experimental, off by default. Only on macOS.
 - **Turn off Debugging** `debuggingHidden` (boolean, default false): Leave the Debugging page out of Settings. On by default.
 - **Turn off the voice agent** `voiceAgentHidden` (boolean, default false): Turn off the voice agent everywhere: the headset at the top of the window and its arrow menu, voice calls about one session, the call rows on Settings > Voice and the voice agent hotkeys, on this computer and in the phone app connected to it. A call that is running ends. Dictate keeps working, and the xAI and OpenAI keys stay on Settings > Voice. On by default; your voice settings are kept.
-- **Turn off Main Hub** `mainHubHidden` (boolean, default false) [not agent-writable]: Main Hub is on by default: your home folder's project becomes the home for chats that don't belong to a project, with Chief of Staff, an agent that can see and steer your other agents and help you set up Ghostex, pinned at the top, here and in the phone app. Off, the home folder is an ordinary project and Chief of Staff's agent stops; its chat and memory are kept for when you turn it back on. Only you can change this, not an agent.
+- **Turn off Main Hub** `mainHubHidden` (boolean, default false) [not agent-writable]: Main Hub is on by default: your home folder's project becomes the home for chats that don't belong to a project, with Ghostex AI, an agent that can see and steer your other agents and help you set up Ghostex, pinned at the top, here and in the phone app. Off, the home folder is an ordinary project and Ghostex AI's agent stops; its chat and memory are kept for when you turn it back on. Only you can change this, not an agent.
 ### Get more
 
 - **Get more extensions** `store` (Settings UI row without a settings key; use `ghostex settings open`): Browse audited extensions, install them, and manage what is already installed.

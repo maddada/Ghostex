@@ -43,7 +43,7 @@ pub(crate) fn run(
     match op {
         "dayWatch" => status(state, db, repository),
         _ if !asker.may_manage() => Err(forbidden(
-            "Only you and Chief of Staff turn the day watch on or off.",
+            "Only you and Ghostex AI turn the day watch on or off.",
         )),
         "dayWatchOn" => turn_on(state, db, repository, asker, params),
         _ => turn_off(db),

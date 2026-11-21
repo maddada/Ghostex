@@ -79,7 +79,7 @@ pub(super) fn run(
         if !may_manage {
             return Err(DomainStateError {
                 code: "forbidden",
-                message: "Only you and Chief of Staff can change a GBot's voice.".to_string(),
+                message: "Only you and Ghostex AI can change a GBot's voice.".to_string(),
             });
         }
         let voice = params

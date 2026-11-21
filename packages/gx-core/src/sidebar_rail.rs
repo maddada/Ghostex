@@ -35,7 +35,8 @@ pub const RAIL_MENU_GROUPS: [&str; 4] = ["Go to", "Agents", "Views", "This compu
 pub const RAIL_ITEMS: &[RailItem] = &[
     item("search", "Search", "Go to"),
     item("notifications", "Notifications", "Go to"),
-    item("mainHub", "Main Hub", "Go to"),
+    // Opens Ask Ghostex AI's chat (CDXC:Chief 2026-11-21 in server/src/chief/mod.rs); the key stays.
+    item("mainHub", "Ask Ghostex AI", "Go to"),
     item("agentsHub", "Agents Hub", "Go to"),
     item("allAutomations", "All Automations", "Go to"),
     item("commands", "Commands", "Go to"),

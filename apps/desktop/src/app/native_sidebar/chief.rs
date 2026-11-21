@@ -189,9 +189,9 @@ impl GhostexGpuiApp {
                     .id("native-sidebar-chief-fold")
                     .role(gpui::Role::Button)
                     .aria_label(if expanded {
-                        "Fold Chief of Staff on the other computers"
+                        "Fold Ghostex AI on the other computers"
                     } else {
-                        "Show Chief of Staff on the other computers"
+                        "Show Ghostex AI on the other computers"
                     })
                     .absolute()
                     .left_0()
@@ -442,7 +442,7 @@ impl GhostexGpuiApp {
     pub(crate) fn native_sidebar_home_menu(&self, machine_id: &str) -> Value {
         let mut items = Vec::new();
         if chief_on() && self.native_sidebar_chief_of(machine_id).is_none() {
-            items.push(json!({ "label": format!("Start {}", super::chief_row_view::CHIEF_LABEL), "icon": "plus", "command": chief_command("open", machine_id) }));
+            items.push(json!({ "label": format!("Start {}", super::chief_row_view::CHIEF_NAME), "icon": "plus", "command": chief_command("open", machine_id) }));
         }
         // The first GBot has no GBots heading to add it from yet (native_sidebar/gbots_rows.rs).
         if machine_id == ghostex_gx_core::LOCAL_MACHINE_ID && super::gbots_rows::gbots_on() {
@@ -699,7 +699,7 @@ impl GhostexGpuiApp {
             CHIEF_NEW_CHAT_MODAL_INITIAL_HEIGHT, CHIEF_NEW_CHAT_MODAL_WIDTH,
             ChiefNewChatModalCommand, GpuiChiefNewChatModalWindow,
         };
-        let label = super::chief_row_view::CHIEF_LABEL;
+        let label = super::chief_row_view::CHIEF_NAME;
         let (title, message, confirm) = if params["op"] == "setAgent" {
             (
                 format!("Move {label} to another agent?"),
@@ -859,7 +859,7 @@ impl GhostexGpuiApp {
                     Err(error) => {
                         app.dispatch_gpui_app_modal_toast(
                             "warning",
-                            "Chief of Staff isn't available",
+                            "Ghostex AI isn't available",
                             &error.message,
                             cx,
                         );
@@ -887,7 +887,7 @@ impl GhostexGpuiApp {
                     );
                     return;
                 }
-                let mut items = vec![json!({ "label": "Which agent runs Chief of Staff?", "disabled": true })];
+                let mut items = vec![json!({ "label": "Which agent runs Ghostex AI?", "disabled": true })];
                 items.extend(app.native_sidebar.chief_agents.iter().map(|(agent_id, name)| {
                     json!({
                         "label": name,
@@ -897,7 +897,7 @@ impl GhostexGpuiApp {
                 if items.len() == 1 {
                     app.dispatch_gpui_app_modal_toast(
                         "warning",
-                        "No agent can run Chief of Staff",
+                        "No agent can run Ghostex AI",
                         "Set up Claude, Codex or another coordinator agent in Settings > Agents first.",
                         cx,
                     );
@@ -957,7 +957,7 @@ impl GhostexGpuiApp {
                 }
                 Err(error) => app.dispatch_gpui_app_modal_toast(
                     "warning",
-                    "Chief of Staff didn't start",
+                    "Ghostex AI didn't start",
                     &error.message,
                     cx,
                 ),

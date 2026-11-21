@@ -14,7 +14,7 @@ pub(crate) const DAY_WATCH_HELP: &str =
   ghostex gbots day-watch on [--brief-time HH:MM] [--timezone <zone>]
                                                  Day Watcher reads (never sends or changes)
                                                  your Gmail and Google Calendar through
-                                                 Connectors: a daily brief in Chief of Staff's
+                                                 Connectors: a daily brief in Ghostex AI's
                                                  chat (08:00 unless you say), and a heads-up when
                                                  a meeting is about to start or important mail
                                                  comes in. Adds the GBot the first time; turns it
@@ -91,7 +91,7 @@ pub(crate) fn run_day_watch(rest: &[String], flags: &Flags) -> CliResult<()> {
                     missing.join(" or ")
                 );
             }
-            println!("  Briefs and heads-ups land in Chief of Staff's chat. Turn it off with `ghostex gbots day-watch off`.");
+            println!("  Briefs and heads-ups land in Ghostex AI's chat. Turn it off with `ghostex gbots day-watch off`.");
             if let Some(change) = answer["changeId"].as_str() {
                 println!("  Undo: ghostex gbots undo {change}");
             }

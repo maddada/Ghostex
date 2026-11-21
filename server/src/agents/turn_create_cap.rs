@@ -91,7 +91,7 @@ fn helper_name(
     key: &SessionKey,
 ) -> Result<Option<&'static str>, DomainStateError> {
     if crate::chief::chief_key(paths).as_ref() == Some(key) {
-        return Ok(Some("Chief of Staff"));
+        return Ok(Some("Ghostex AI"));
     }
     let Some(project) = repository.get_project(&key.0)? else {
         return Ok(None);

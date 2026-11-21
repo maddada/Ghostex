@@ -79,7 +79,7 @@ impl Setter {
             return Ok(());
         }
         Err(forbidden(&format!(
-            "Only you, Chief of Staff and {}'s own chats set its routines.",
+            "Only you, Ghostex AI and {}'s own chats set its routines.",
             bot.name
         )))
     }

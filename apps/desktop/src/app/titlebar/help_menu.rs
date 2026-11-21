@@ -327,12 +327,12 @@ impl GhostexGpuiApp {
         */
         let (title, description) = if staged.is_some() {
             (
-                "Ask Chief of Staff",
+                "Ask Ghostex AI",
                 "It answers Ghostex questions here. Your question is in its chat box: press Enter to send it.",
             )
         } else {
             (
-                "Ask Chief of Staff",
+                "Ask Ghostex AI",
                 "It answers Ghostex questions here. Type your question in its chat box.",
             )
         };

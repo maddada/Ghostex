@@ -183,7 +183,7 @@ impl GpuiGbotSettingsModalWindow {
             });
         }
         if routine["deliver"] == "chief" {
-            lines.push("Tells Chief of Staff when it finds something.".to_string());
+            lines.push("Tells Ghostex AI when it finds something.".to_string());
         }
         if let Some(run) = routine["lastRun"].as_object() {
             let summary = run

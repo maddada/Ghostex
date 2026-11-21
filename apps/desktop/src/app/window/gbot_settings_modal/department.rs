@@ -433,7 +433,7 @@ impl GpuiGbotSettingsModalWindow {
         let mut choices = vec![self.department_choice(
             None,
             "None".to_string(),
-            "Chief of Staff hands it work.".to_string(),
+            "Ghostex AI hands it work.".to_string(),
             cx,
         )];
         for department in self.department.departments() {
@@ -480,7 +480,7 @@ impl GpuiGbotSettingsModalWindow {
                 format!("{bot_name} hands {name}'s GBots work and may change their instructions.")
             } else {
                 match text(&current["lead"], "name") {
-                    "" => format!("{name} has no lead, so Chief of Staff hands its GBots work."),
+                    "" => format!("{name} has no lead, so Ghostex AI hands its GBots work."),
                     lead => format!("{lead} leads {name} and hands {bot_name} its work."),
                 }
             };

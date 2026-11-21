@@ -345,8 +345,8 @@ impl GpuiGbotSettingsModalWindow {
             count => format!("{count} topics, read when needed"),
         };
         let team = match view.team {
-            0 | 1 => "Chief of Staff".to_string(),
-            count => format!("Chief of Staff and {count} GBots"),
+            0 | 1 => "Ghostex AI".to_string(),
+            count => format!("Ghostex AI and {count} GBots"),
         };
         section(
             &p,
