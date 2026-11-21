@@ -44,15 +44,6 @@ struct RailButtonLook {
 }
 
 impl GhostexGpuiApp {
-    /// Where the notifications feed hangs from (the sidebar's bell's anchor); the web build has no
-    /// feed.
-    fn sidebar_rail_bell_anchor(&self) -> Option<super::RailBounds> {
-        #[cfg(not(ghostex_web))]
-        return Some(self.titlebar_notification_bell_bounds.clone());
-        #[cfg(ghostex_web)]
-        None
-    }
-
     /// Whether this window draws the rail.
     pub(crate) fn sidebar_rail_shown(&self) -> bool {
         sidebar_rail_on()
@@ -478,9 +469,9 @@ impl GhostexGpuiApp {
         let bounds = self.sidebar_rail.more_bounds.clone();
         let hover = appearance.hover;
         let drop_line = appearance.foreground;
-        // The feed (from its hotkey) hangs beside ⋯ unless the bell in the sidebar's top bar or
-        // the header is on screen: they paint after the rail, so theirs is the anchor then.
-        let bell_anchor = self.sidebar_rail_bell_anchor();
+        // ⋯ is no anchor of the notifications feed: it wrote the bell's on every frame and won
+        // whenever the cached docked sidebar did not repaint (CDXC:Notifications 2026-11-21 on
+        // `toggle_gpui_titlebar_notifications_popup_at`).
         div()
             .id("ghostex-gpui-sidebar-rail-more")
             .role(gpui::Role::Button)
@@ -495,12 +486,7 @@ impl GhostexGpuiApp {
             .hover(move |button| button.bg(hover))
             .on_prepaint({
                 let bounds = bounds.clone();
-                move |rect, _, _| {
-                    bounds.set(Some(rect));
-                    if let Some(anchor) = &bell_anchor {
-                        anchor.set(Some(rail_popup_anchor(rect)));
-                    }
-                }
+                move |rect, _, _| bounds.set(Some(rect))
             })
             .child(titlebar_svg_icon(
                 "titlebar/dots.svg",
@@ -601,15 +587,6 @@ impl GhostexGpuiApp {
             }))
             .child(button)
             .into_any_element()
-    }
-}
-
-/// A popup anchor just right of a rail button, at its top: a popover opens there beside the rail,
-/// as from a context menu.
-fn rail_popup_anchor(button: gpui::Bounds<gpui::Pixels>) -> gpui::Bounds<gpui::Pixels> {
-    gpui::Bounds {
-        origin: gpui::point(button.right() + px(4.0), button.top()),
-        size: gpui::size(px(0.0), px(0.0)),
     }
 }
 

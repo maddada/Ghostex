@@ -560,10 +560,24 @@ impl GhostexGpuiApp {
             && self.official_view_scope_allows("notifications")
     }
 
-    /// Toggles the Notifications dropdown anchored to the last painted bell
-    /// bounds, for both the bell itself and the `openNotifications` hotkey.
+    /// Toggles the Notifications dropdown anchored to the last bell painted in the main window,
+    /// for the `openNotifications` hotkey and the rail's Notifications.
     pub(crate) fn toggle_gpui_titlebar_notifications_popup(
         &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.toggle_gpui_titlebar_notifications_popup_at(None, window, cx);
+    }
+
+    /// Toggles the Notifications dropdown hanging from `anchor` (a clicked bell's own bounds, the
+    /// sidebar menu's button), or from the last bell painted in the main window without one.
+    ///
+    /// CDXC:Notifications 2026-11-21 WHY:
+    /// User: "Not every single time, but every other time when I click on the notifications, it appears way down below where it should appear... if I see it appear very low and then I click on notifications again, it appears in the correct spot". The bell's anchor was one cell that every bell (the docked sidebar's, the hidden sidebar's header copy, the floating sidebar's in its own window), the rail's ⋯ (on every frame, for the hotkey) and the sidebar menu's Notifications row all wrote. The docked sidebar is a cached view, so on the frames where only the window's root redraws its bell does not prepaint while the rail's ⋯ does, and the cell held ⋯'s spot (beside the rail, far down) when the click came; the redraw that opening the dropdown causes painted both, so the next click was right. Now a click hangs the dropdown from the clicked bell's own bounds, only a bell in the main window updates the shared cell (the hotkey's and a reset warning's anchor), and nothing else writes it.
+    pub(crate) fn toggle_gpui_titlebar_notifications_popup_at(
+        &mut self,
+        anchor: Option<Bounds<Pixels>>,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -571,7 +585,7 @@ impl GhostexGpuiApp {
             return;
         }
         let open = !self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications);
-        let trigger_bounds = self.titlebar_notification_bell_bounds.get();
+        let trigger_bounds = anchor.or_else(|| self.titlebar_notification_bell_bounds.get());
         self.set_gpui_titlebar_popup_open(
             GpuiTitlebarPopupKind::Notifications,
             open,
@@ -616,8 +630,12 @@ impl GhostexGpuiApp {
         } else {
             appearance.chrome_icon
         };
-        let button_bounds: Rc<Cell<Option<Bounds<Pixels>>>> =
-            self.titlebar_notification_bell_bounds.clone();
+        // This bell's own bounds, which its clicks hang the dropdown from; a cached view replays
+        // this render's listeners with them, so they stay this bell's (CDXC:Notifications
+        // 2026-11-21 on `toggle_gpui_titlebar_notifications_popup_at`).
+        let button_bounds: Rc<Cell<Option<Bounds<Pixels>>>> = Rc::default();
+        let last_bell_bounds = self.titlebar_notification_bell_bounds.clone();
+        let main_window = self.main_window_handle.map(|handle| handle.window_id());
         let tooltip = titlebar_tooltip_label("Notifications", "openNotifications");
         let hover = appearance.hover;
 
@@ -639,25 +657,46 @@ impl GhostexGpuiApp {
             .hover(move |this| this.bg(hover))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, _: &MouseDownEvent, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                    this.toggle_gpui_titlebar_notifications_popup(window, cx);
+                cx.listener({
+                    let button_bounds = button_bounds.clone();
+                    move |this, _: &MouseDownEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        this.toggle_gpui_titlebar_notifications_popup_at(
+                            button_bounds.get(),
+                            window,
+                            cx,
+                        );
+                    }
                 }),
             )
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(|this, _: &MouseDownEvent, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                    this.toggle_gpui_titlebar_notifications_popup(window, cx);
+                cx.listener({
+                    let button_bounds = button_bounds.clone();
+                    move |this, _: &MouseDownEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        this.toggle_gpui_titlebar_notifications_popup_at(
+                            button_bounds.get(),
+                            window,
+                            cx,
+                        );
+                    }
                 }),
             )
             // The popup opens on the press; Enter and Space reach it as a click.
-            .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
-                if event.is_keyboard() {
-                    cx.stop_propagation();
-                    this.toggle_gpui_titlebar_notifications_popup(window, cx);
+            .on_click(cx.listener({
+                let button_bounds = button_bounds.clone();
+                move |this, event: &gpui::ClickEvent, window, cx| {
+                    if event.is_keyboard() {
+                        cx.stop_propagation();
+                        this.toggle_gpui_titlebar_notifications_popup_at(
+                            button_bounds.get(),
+                            window,
+                            cx,
+                        );
+                    }
                 }
             }))
             // A stop of the sidebar's focus order (it sits in the sidebar's top row).
@@ -686,8 +725,13 @@ impl GhostexGpuiApp {
                     },
                 )
             })
-            .on_prepaint(move |bounds, _window, _cx| {
+            .on_prepaint(move |bounds, window, _cx| {
                 button_bounds.set(Some(bounds));
+                // The floating sidebar's bell is in its own window, whose coordinates are not the
+                // main window's, where the hotkey opens the dropdown.
+                if main_window.is_none_or(|id| window.window_handle().window_id() == id) {
+                    last_bell_bounds.set(Some(bounds));
+                }
             })
             .child(titlebar_svg_icon(
                 NOTIFICATION_BELL_ICON,

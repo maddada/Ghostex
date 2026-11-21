@@ -38,11 +38,11 @@ impl GhostexGpuiApp {
             self.run_native_sidebar_gbots_command(&action.command, window, cx);
         } else if action.command["type"] == "openNotifications" {
             // The sidebar menu carries Notifications only while the bell is out of the row, so the
-            // dropdown hangs from the menu button instead of the bell's last painted spot.
-            if let Some(bounds) = self.native_sidebar.more_button_bounds.get() {
-                self.titlebar_notification_bell_bounds.set(Some(bounds));
-            }
-            self.toggle_gpui_titlebar_notifications_popup(window, cx);
+            // dropdown hangs from the menu button instead of the bell's last painted spot. The
+            // bell's own anchor is left alone: it is only ever a bell's (CDXC:Notifications
+            // 2026-11-21 on `toggle_gpui_titlebar_notifications_popup_at`).
+            let anchor = self.native_sidebar.more_button_bounds.get();
+            self.toggle_gpui_titlebar_notifications_popup_at(anchor, window, cx);
         } else if action.command["type"] == "removeActiveProjects" {
             // The Active projects star's menu (active_projects.rs).
             self.remove_native_active_projects(cx);
