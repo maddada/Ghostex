@@ -116,13 +116,29 @@ pub(super) fn forget(box_id: &str) {
 }
 
 /// A stored row with the overlay applied.
+/// Whether a failed `step` fails the whole box: only bringing the box up (cap, machine, boot).
+/// CDXC:CloudBoxes 2026-11-21 WHY: a session that can't start on a running box (a private repo it
+/// can't clone, secrets it can't write) marked the whole box failed while it kept running and
+/// billing, until the next session's card replaced it. Its error stays on the progress card, which
+/// the waiting chat shows as its own (`follow_box` reads `progress.error`).
+pub(super) fn step_fails_the_box(step: &CloudBoxBootStep) -> bool {
+    matches!(
+        step,
+        CloudBoxBootStep::CheckCap | CloudBoxBootStep::Create | CloudBoxBootStep::Boot
+    )
+}
+
 pub(super) fn with_overlay_applied(mut row: CloudBox) -> CloudBox {
     let overlay = with_overlay(&row.box_id, |overlay| overlay.clone());
     if let Some(transition) = overlay.transition {
         row.state = transition;
     }
     if let Some(progress) = overlay.progress {
-        if let Some(error) = progress.error.clone() {
+        let box_failed = progress
+            .steps
+            .iter()
+            .any(|line| line.state == CloudBoxStepState::Failed && step_fails_the_box(&line.step));
+        if let Some(error) = progress.error.clone().filter(|_| box_failed) {
             row.state = CloudBoxState::Failed;
             row.state_detail = Some(error);
         }
