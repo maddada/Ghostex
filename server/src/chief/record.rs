@@ -29,6 +29,11 @@ pub(crate) struct ChiefRecord {
     /// (session.rs `replace_chief`). A record written before this has none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub earlier: Vec<EarlierChat>,
+    /// The model and effort it started on (model.rs), and whether the user has since picked
+    /// another by hand in its chat; a hand pick carries over to its next chats on the same agent.
+    /// A record written before this has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<super::model::ChiefModel>,
 }
 
 /// One of Chief's earlier chats.

@@ -4761,10 +4761,14 @@ note list in one call, as the editors save), and `ghostex coordinator guide` (th
 coordinator's own playbook, ending with your playbook overrides). `ghostex coordinator --help` lists every flag. `ghostex orchestrator …`
 is an alias that runs the same commands.
 
-## Main Hub (beta extension, off by default)
+## Main Hub and Chief of Staff (on by default)
 
-Main Hub is a beta extension, off until you turn it on in **Settings >
-Extensions > Main Hub**. Only you can switch it, not an agent. While it is off,
+Main Hub is on by default, and Chief of Staff in it is where to start in
+Ghostex. You can turn it off in **Settings > Extensions > Main Hub**; only you
+can turn it back on, not an agent. A computer that had it off only because it
+used to be off by default is turned on once with this version; if you had
+turned it off yourself (or Chief of Staff was already opened there, or you
+changed one of its settings), it stays off. While it is off,
 your home folder's project (if you have one) is an ordinary project and nothing
 here applies, except one thing: the chats you start with **Ask Ghostex AI** (the
 sidebar menu row) show under a **Main Hub** row at the top of the sidebar, only
@@ -4786,8 +4790,20 @@ itself ("what's stuck?", "how do I pair my phone?").
   agents can't read) above the project's own menu (Move to Space, New Terminal
   and the rest). It sits at the top of the Space it is in, or of every Space with
   **Show Main Hub on all Spaces** (Settings > Agents > Home folder).
-- **First open**: before Chief of Staff runs, its row says "Pick an agent"; click
-  it and pick the agent it runs on.
+- **First open**: before Chief of Staff runs, its row says "Start here". Click it
+  and Chief of Staff starts on your default agent (Settings > Agents, the one you
+  picked during setup): Claude on the newest Opus, Codex on the newest GPT Sol,
+  Antigravity on the newest Gemini Neon, each at High effort, read from the
+  agent's own model list; another agent on its default model. Its first message
+  waits in the chat box with **Start**, so nothing runs (and nothing is spent)
+  until you press Start or send a message; until then you can switch its agent
+  or model in place. A model or effort you pick in its chat is kept for its next
+  chats on that agent.
+- **Getting started**: on its first start Chief of Staff greets you and offers
+  first steps as a form: add your projects, theme Ghostex, configure it, connect
+  your phone or another computer, set up Boosts and Autopilot, or a short tour.
+  Pick any and it does them for you with `ghostex` commands (pairing a phone or
+  a computer stays yours: it opens the right window and says what to do).
 - **What Chief of Staff does**: it reads every session's chat and screen,
   messages, interrupts and types into any session, and answers other agents'
   questions and permission prompts, without asking you each time. Work in a
@@ -4798,7 +4814,8 @@ itself ("what's stuck?", "how do I pair my phone?").
 - **New Chat keeps your old chat**: right-click the Chief of Staff row for New
   Chat (Ghostex asks first; tick Don't ask again to stop asking). The old chat
   stays in Main Hub, asleep and named after the day it started. Change Agent
-  moves it to another agent the same way. On the phone, a long press on the row
+  moves it to another agent the same way. A new chat's first message waits for
+  Start too. On the phone, a long press on the row
   offers New Chat and Change Agent.
 - **Your secret folders stay out of reach**: agents Ghostex starts in your home
   folder can't read the folders listed in **Folders agents can't read in your
@@ -7610,7 +7627,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   that; an update always shows the list again, and permissions you removed stay
   removed when it updates.
   Experimental holds features that are still early, each off until you turn it
-  on: Main Hub (beta), GBots (beta), Read aloud, Connectors, OS Integration, Keep Awake
+  on: GBots (beta), Read aloud, Connectors, OS Integration, Keep Awake
   (macOS), All Automations, Terminal shaders (macOS), Faster rendering, Tool call lines and
   Security logs. They replace the single
   Enable Experimental Features switch; anyone who had it on keeps each of these
@@ -7618,12 +7635,13 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Built-in holds whole parts of Ghostex you can switch off to keep the app
   simple: Actions (off by default), Open In (on by default), Spaces (off by
   default), Cloud Boxes (on by default), Workspaces (off by default; it brings workspaces and the team's
-  Slack flow) and the Session details panel (beta, on by default). Turning one off removes it everywhere at once (its header button,
+  Slack flow), the Session details panel (beta, on by default) and Main Hub
+  with Chief of Staff (on by default). Turning one off removes it everywhere at once (its header button,
   Settings pages and rows, hotkeys, Quick Access rows and menus) and turning it
   back on restores everything you had set up. Settings: `actionsHidden`,
   `openInTitlebarButtonHidden`, `sidebarSpacesEnabled`, `cloudBoxesEnabled`,
-  `workspacesHidden`, `sessionDetailsPanelHidden`; Experimental: `mainHubHidden`,
-  `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
+  `workspacesHidden`, `sessionDetailsPanelHidden`, `mainHubHidden` (Main Hub,
+  on by default); Experimental: `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
   `keepAwakeEnabled`, `allAutomationsEnabled`, `terminalShadersEnabled`, `fasterRendering`,
   `chatToolCallLines`, `securityLogsEnabled`.
   **Sidebar extensions** (such as Workbench) put their own content in the
@@ -8050,8 +8068,8 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
 - Welcome to Ghostex is the onboarding that opens the first time Ghostex
   runs. Its five panels cover: Welcome, with three things Ghostex does (agents
   that work together, coordinators, desktop and mobile); the agents found on
-  this computer, with Install buttons for Claude Code, Codex, Cursor Agent and
-  Grok Build (an Add to PATH button when an installed CLI is not on PATH; a
+  this computer, with Install buttons for Claude Code, Codex, Antigravity CLI,
+  Cursor Agent and Grok Build (an Add to PATH button when an installed CLI is not on PATH; a
   command that is only a launcher installing the agent the first time it runs,
   like Omarchy's, shows as not installed yet), an Install guide that installs
   any other supported agent, and how Ghostex follows each agent: Built in for
@@ -8059,9 +8077,9 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   small Ghostex helper for agents that need one, like Cursor Agent, which setup
   adds when you go on (the button names it, "Connect Cursor Agent & continue";
   it says Next when nothing needs a helper). A line checks the chosen agent is
-  signed in (Claude Code, Codex and Cursor; a saved account in Settings >
-  Accounts counts) with a Sign in button that opens the agent's own sign-in in
-  your browser (starting an agent that needs a helper and was installed after
+  signed in (Claude Code, Codex, Antigravity CLI and Cursor; a saved account in
+  Settings > Accounts counts) with a Sign in button that opens the agent's own
+  sign-in in your browser (Google's for Antigravity) (starting an agent that needs a helper and was installed after
   setup asks once to connect it, and Not now there is remembered for that
   agent). Then the workspace: Files and VS Code, Spaces (on for a first run,
   the same switch as Settings > Sidebar & Sessions > Spaces), the Unified

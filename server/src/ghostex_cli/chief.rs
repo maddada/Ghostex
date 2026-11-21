@@ -27,8 +27,9 @@ USAGE
   ghostex chief send [--computer <name>] \"<text>\"
 
 status says whether Chief of Staff is on, which session it is and which agent runs it.
-guide prints the playbook Chief of Staff follows. open starts Chief of Staff on the agent you
-pick (the first time only); new-chat starts it fresh, keeping its memory and
+guide prints the playbook Chief of Staff follows. open starts Chief of Staff (the first time
+only) on --agent, or on your default agent (Settings > Agents) when you name none, with the
+model picked for it; its first message waits for Start in its chat; new-chat starts it fresh, keeping its memory and
 threads; set-agent moves it to another agent the same way. Only you can run
 those three, from your own terminal or Chief of Staff's menu in the sidebar. send
 messages Chief of Staff (another computer's with --computer), which is how one Chief of Staff
@@ -124,7 +125,20 @@ fn change(op: &str, params: Value, flags: &Flags, json_output: bool) -> CliResul
             "Chief of Staff started a new chat on {}; its memory and threads came along.",
             text("agentId")
         ),
-        _ => println!("Chief of Staff started on {}.", text("agentId")),
+        _ => println!(
+            "Chief of Staff started on {}{}. Its first message waits for Start in its chat.",
+            text("agentId"),
+            chief["model"]["model"]
+                .as_str()
+                .map(|model| format!(
+                    " ({model}{})",
+                    chief["model"]["effort"]
+                        .as_str()
+                        .map(|effort| format!(", {effort}"))
+                        .unwrap_or_default()
+                ))
+                .unwrap_or_default()
+        ),
     }
     Ok(())
 }
@@ -141,7 +155,10 @@ fn print_status(status: &Value) {
             status["globalRef"].as_str().unwrap_or_default()
         ),
         None => {
-            println!("Chief of Staff hasn't been opened yet. Pick its agent with: ghostex chief open --agent <agent-id>");
+            match status["defaultAgentId"].as_str() {
+                Some(agent) => println!("Chief of Staff hasn't been opened yet. `ghostex chief open` starts it on your default agent, {agent} (or pick one with --agent <agent-id>)."),
+                None => println!("Chief of Staff hasn't been opened yet. Pick its agent with: ghostex chief open --agent <agent-id>"),
+            }
             let agents: Vec<&str> = status["agents"]
                 .as_array()
                 .map(|rows| {

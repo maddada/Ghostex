@@ -1834,6 +1834,16 @@ pub(crate) async fn select_session_chat_model(
             &model,
             &effort,
         );
+        // Chief of Staff keeps the user's pick for its next chats (CDXC:Chief 2026-11-21 in
+        // chief/model.rs).
+        crate::chief::remember_hand_pick(
+            &state.paths,
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref().unwrap_or_default(),
+            &model,
+            &effort,
+        );
     }
     log_picker(
         LogLevel::Info,

@@ -88,7 +88,7 @@ pub(crate) fn chief_block(scale: f32, left: f32, right: f32) -> Div {
 }
 
 /// The selected computer's Chief, drawn as a project header: the fold chevron in the gutter
-/// (dimmed with no other computers' Chiefs), the flower in the project-icon column, "Chief", "Pick an agent"
+/// (dimmed with no other computers' Chiefs), the flower in the project-icon column, "Chief", "Start here"
 /// before its first open, its status dot. `outline` is drawn over
 /// it while its chat is open (the sidebar's selected outline).
 pub(crate) fn chief_header_row(
@@ -164,7 +164,7 @@ pub(crate) fn chief_header_row(
                     .flex_shrink_0()
                     .text_size(px(12.0 * scale))
                     .text_color(colors.muted)
-                    .child("Pick an agent"),
+                    .child("Start here"),
             )
         })
         .children(status)

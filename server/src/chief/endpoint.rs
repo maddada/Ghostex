@@ -1,9 +1,9 @@
 //! `/api/chief`: `{ op: "status" | "guide" | "open" | "newChat" | "setAgent", agentId? }`.
 //!
-//! - `status` (any caller): whether Chief is on, its record, and the agents it can run on (the
-//!   first-open picker's list).
+//! - `status` (any caller): whether Chief is on, its record, the agents it can run on, and the
+//!   one its first open starts on (`defaultAgentId`, the user's default agent).
 //! - `guide` (any caller): Chief's playbook.
-//! - `open { agentId? }`, `newChat`, `setAgent { agentId }`: only the owner's devices and the
+//! - `open { agentId? }` (no agent: the default one), `newChat`, `setAgent { agentId }`: only the owner's devices and the
 //!   user's own terminal (the token file). No session may create or move Chief, Chief included,
 //!   and none of them while Chief is turned off.
 
@@ -162,6 +162,13 @@ fn status(state: &AppState) -> Result<Value, DomainStateError> {
             &record.session_id,
         )),
         "needsAgent": record.is_none(),
+        // The agent its first open starts on (model.rs); clients that see it skip the agent
+        // question.
+        "defaultAgentId": super::model::default_agent(
+            &state.paths,
+            &db,
+            &chief_agent_rows(&repository.list_projects()?),
+        ),
         "agents": agents,
     }))
 }

@@ -268,6 +268,17 @@ pub(crate) fn dispatch_agent_http_blocking(
                     crate::session_chat_options::forget_session_chat_options(
                         state, project_id, session_id,
                     );
+                    // Chief of Staff switched before Start: its record names the new agent.
+                    if endpoint_path == "/api/switchDraftAgent" {
+                        if let Some(agent_id) = params.get("agentId").and_then(Value::as_str) {
+                            crate::chief::follow_agent_switch(
+                                &state.paths,
+                                project_id,
+                                session_id,
+                                agent_id,
+                            );
+                        }
+                    }
                 }
             }
             if endpoint_path == "/api/updateAgentActivity" {
