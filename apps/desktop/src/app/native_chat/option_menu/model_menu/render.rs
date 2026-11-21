@@ -129,6 +129,38 @@ impl ChatOptionMenuPanel {
                     }),
             );
         }
+        // The "+" at the row's right end: Settings > Agents, where more agents are installed or
+        // turned on (CDXC:AgentLauncher 2026-11-21 in gx-chat-core menus/picker/projection.rs).
+        if view["addAgent"] == true {
+            let hover = palette.ink(0.06);
+            bar = bar.child(div().flex_1()).child(
+                div()
+                    .id("model-menu-add-agent")
+                    .role(gpui::Role::Button)
+                    .aria_label("Add agents")
+                    .size(px(32.0 * scale))
+                    .rounded(px(ITEM_RADIUS * scale))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .hover(move |style| style.bg(hover))
+                    .tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new("Add agents in Settings > Agents")
+                            .build(window, cx)
+                    })
+                    .on_click(cx.listener(|panel, _, _, cx| {
+                        panel.model_menu_send(json!({"type":"openAgentSettings"}), cx);
+                        panel.menu.update(cx, |menu, cx| menu.close(None, cx));
+                    }))
+                    .child(
+                        svg()
+                            .path("titlebar/plus.svg")
+                            .size(px(15.0 * scale))
+                            .text_color(palette.muted),
+                    ),
+            );
+        }
         bar.into_any_element()
     }
 

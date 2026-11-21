@@ -596,6 +596,11 @@ impl GhostexGpuiApp {
                 Err(error) => {
                     if error.code.as_deref() == Some("projectPathUnavailable") {
                         this.gx_store_answer_project_path_unavailable(&project_id, cx);
+                    } else if let Some(name) =
+                        agent_not_installed_name(error.code.as_deref(), &error.message)
+                    {
+                        let name = name.to_string();
+                        this.show_agent_not_installed_notice(&name, &error.message, cx);
                     }
                 }
             });
@@ -792,3 +797,68 @@ fn remember_agent_hooks_answer(hook_agent_id: &str, install_hooks: bool) {
 
 #[cfg(ghostex_web)]
 fn remember_agent_hooks_answer(_hook_agent_id: &str, _install_hooks: bool) {}
+
+/// The sentence gxserver refuses a launch with when the agent's CLI isn't installed
+/// (`agent_not_installed_error` in server/src/agents/cli_missing.rs): `<Name> isn't installed on
+/// this computer. …`.
+const AGENT_NOT_INSTALLED_SENTENCE: &str = " isn't installed on this computer.";
+
+/// The agent a launch refusal names when it was refused for a missing CLI: by its error code
+/// where the caller still has it, else by the refusal's sentence (the Windows create path keeps
+/// only the message).
+pub(crate) fn agent_not_installed_name<'a>(
+    code: Option<&str>,
+    message: &'a str,
+) -> Option<&'a str> {
+    let (name, _) = message.split_once(AGENT_NOT_INSTALLED_SENTENCE)?;
+    let name = name.trim();
+    (code.is_none_or(|code| code == "agentNotInstalled") && !name.is_empty()).then_some(name)
+}
+
+impl GhostexGpuiApp {
+    /// CDXC:AgentLauncher 2026-11-21 DECISION:
+    /// User (Q4370 "check first"): a launch gxserver refused because the agent's CLI isn't
+    /// installed shows a notice naming the agent, with a button to Settings > Agents, where it is
+    /// installed or another agent is picked, instead of a chat that fails in the terminal.
+    pub(crate) fn show_agent_not_installed_notice(
+        &mut self,
+        agent_name: &str,
+        message: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        use crate::app::window::{
+            GPUI_APP_TOAST_DEFAULT_DURATION_MS, GpuiAppToast, GpuiAppToastAction, GpuiAppToastLevel,
+        };
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: format!("gpui-app-toast-agent-not-installed-{agent_name}"),
+                level: GpuiAppToastLevel::Warning,
+                title: format!("{agent_name} isn't installed"),
+                description: Some(message.to_string()),
+                copy_text: None,
+                action: Some(GpuiAppToastAction::OpenAgentSettings),
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS * 2,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
+    /// A launch that failed: the not-installed notice when that is why, else the warning toast
+    /// launches have always shown.
+    pub(crate) fn show_agent_launch_failure(
+        &mut self,
+        message: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        match agent_not_installed_name(None, message) {
+            Some(name) => {
+                let name = name.to_string();
+                self.show_agent_not_installed_notice(&name, message, cx);
+            }
+            None => self.dispatch_gpui_app_modal_toast("warning", "Agent unavailable", message, cx),
+        }
+    }
+}

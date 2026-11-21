@@ -419,9 +419,16 @@ impl GhostexGpuiApp {
                 "Open the skill from the Ghostex app's Agents Hub.",
                 cx,
             ),
+            // The picker's "+" names the Agents page; Session details' Manage, Connectors.
             Some("openSettingsPage") => self.web_chat_needs_app_toast(
                 "Settings are in the Ghostex app",
-                "Open Settings > Connectors in the Ghostex app.",
+                match message["page"].as_str() {
+                    Some("agents") => {
+                        "Install or turn on agents in Settings > Agents in the Ghostex app."
+                    }
+                    Some("cloudBoxes") => "Open Settings > Cloud Boxes in the Ghostex app.",
+                    _ => "Open Settings > Connectors in the Ghostex app.",
+                },
                 cx,
             ),
             Some("gitAction") => self.web_chat_needs_app_toast(

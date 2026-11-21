@@ -1324,7 +1324,11 @@ and terminals and chats keep the minutes above. VS Code still reloads when you
 switch VS Code between computers, including when you switch back.
 Starting a new agent from the sidebar launcher or New Thread picker keeps your
 current view open, including Code, Browser, Beads, Automate, and Files. Select
-Agents when you want to open the new agent there.
+Agents when you want to open the new agent there. An agent whose CLI isn't
+installed on that computer doesn't start: a notice names it ("Codex isn't
+installed") with a button to Settings > Agents, where you install it or pick
+another agent. First-run setup saves the default agent its Agents step shows
+when you go on, so a new chat never starts on an agent you don't have.
 Opening a view puts it beside your sessions rather than over them: the whole grid of
 terminal panes and chats stays on the left, the view takes the right half, and a
 divider separates them. Drag the divider to change the balance and double-click it to
@@ -3260,7 +3264,10 @@ after it the reasoning level, for example "Opus 5.5 High". Claude's Opus 5.5
 comes with a 1M or a 200K context window: picking it from another model always
 starts on 1M, and the pill only names the window when it is 200K
 ("Opus 5.5 High · 200K"). Click it to open the model picker: a row of agent tabs
-with a starred Favorites tab first, the models of the chosen tab (starred ones
+with a starred Favorites tab first (only agents that are turned on in Settings >
+Agents and installed on this computer get a tab, plus the chat's own agent),
+a **+** at the row's right end that opens Settings > Agents (on the phone, the
+computer's Agent CLIs) to install or turn on more, the models of the chosen tab (starred ones
 first, in alphabetical order, then the rest in their usual order),
 and along the bottom a button each for the reasoning level (brain), the context
 window (chart bars) and Fast mode (bolt). Clicking the context window or Fast
@@ -4803,8 +4810,9 @@ itself ("what's stuck?", "how do I pair my phone?").
   and the rest). It sits at the top of the Space it is in, or of every Space with
   **Show Main Hub on all Spaces** (Settings > Agents > Home folder).
 - **First open**: before Ghostex AI runs, its row says "Start here". Click it
-  and Ghostex AI starts on your default agent (Settings > Agents, the one you
-  picked during setup): Claude on the newest Opus, Codex on the newest GPT Sol,
+  and Ghostex AI starts on your default agent (Settings > Agents, the one setup
+  showed or you picked there) when it is installed, otherwise on the first
+  installed agent that can run it: Claude on the newest Opus, Codex on the newest GPT Sol,
   Antigravity on the newest Gemini Neon, each at High effort, read from the
   agent's own model list; another agent on its default model. Its first message
   waits in the chat box with **Start**, so nothing runs (and nothing is spent)

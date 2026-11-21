@@ -309,6 +309,11 @@ pub fn model_menu_projection(
         "placeholder": MODEL_MENU_SEARCH_PLACEHOLDER,
         // Fetch latest models at the right end of the search row (`picker/refresh.rs`).
         "refresh": crate::menus::picker::refresh::projection(tab, view.refreshing),
+        /*
+        CDXC:AgentLauncher 2026-11-21 DECISION:
+        User (Q4371 "installed tabs"): the agent tabs row shows only installed agents (gxserver sends them, agents/cli_missing.rs) and ends with a "+" at its right that opens Settings > Agents (`openAgentSettings`), where more are installed or turned on. A Hermes chat's picker is its bot's own tab alone, so it has no "+".
+        */
+        "addAgent": context.provider != Some(ModelPickerProvider::Hermes),
         "tabs": model_menu_tabs(&entries, tab)
             .into_iter()
             .map(|mut entry| {

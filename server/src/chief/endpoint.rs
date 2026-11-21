@@ -140,8 +140,13 @@ fn status(state: &AppState) -> Result<Value, DomainStateError> {
             .flatten()
             .is_some()
     });
+    // Only agents whose CLI is installed are offered (CDXC:AgentLauncher 2026-11-21 in
+    // agents/cli_missing.rs).
     let agents: Vec<Value> = chief_agent_rows(&repository.list_projects()?)
         .into_iter()
+        .filter(|row| {
+            !crate::agents::launcher_row_cli_missing(row, state.paths.agent_config_home_dir())
+        })
         .map(|row| {
             json!({
                 "agentId": row.get("agentId").cloned().unwrap_or(Value::Null),

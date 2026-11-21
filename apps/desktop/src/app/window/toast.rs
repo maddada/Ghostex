@@ -168,6 +168,9 @@ pub(crate) enum GpuiAppToastAction {
     OpenAccounts { provider: Option<String> },
     /// Settings > Extensions, where views are turned on.
     OpenViewSettings,
+    /// Settings > Agents, where an agent that isn't installed is installed or another one picked
+    /// (gx_store/create/agent.rs `show_agent_not_installed_notice`).
+    OpenAgentSettings,
     /// The release page of the update a failed AppImage update was installing (Linux).
     #[cfg_attr(not(all(target_os = "linux", not(ghostex_web))), allow(dead_code))]
     OpenUpdateDownloadPage,
@@ -225,6 +228,7 @@ impl GpuiAppToastAction {
         match self {
             Self::OpenAccounts { .. } => "Open Accounts",
             Self::OpenViewSettings => "Open Settings",
+            Self::OpenAgentSettings => "Install or pick another agent",
             Self::OpenUpdateDownloadPage => "Open download page",
             Self::UndoSyncedChange { .. } | Self::UndoChiefDisable => "Undo",
             Self::ResetInterfaceScale => "Set to 100%",

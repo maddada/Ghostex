@@ -64,7 +64,7 @@ impl GhostexGpuiApp {
                     Err(error) => Err(error),
                 };
                 if let Err(error) = &outcome {
-                    this.dispatch_gpui_app_modal_toast("warning", "Agent unavailable", error, cx);
+                    this.show_agent_launch_failure(error, cx);
                 }
                 if let Some(request_id) = request_id.as_deref() {
                     this.dispatch_gpui_first_launch_create_project_session_result(request_id, outcome.is_ok(), outcome.as_ref().err().map(String::as_str), cx);

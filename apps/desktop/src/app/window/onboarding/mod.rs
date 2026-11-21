@@ -395,6 +395,9 @@ impl GpuiOnboardingWindow {
     fn go(&mut self, next: usize, cx: &mut Context<Self>) {
         let next = next.clamp(1, PANEL_COUNT);
         let changed = next != self.panel;
+        if changed && self.panel == 2 {
+            self.save_shown_default_agent(cx);
+        }
         self.panel = next;
         if changed {
             self.scene_started = Instant::now();
@@ -468,12 +471,35 @@ impl GpuiOnboardingWindow {
         if self.closed {
             return;
         }
+        self.save_shown_default_agent(cx);
         self.closed = true;
         let after = AfterSetup {
             pair_phone: self.flow.phone_queued,
             add_computer: self.flow.computer_queued,
         };
         self.send(OnboardingCommand::Finish(target, after), cx);
+    }
+
+    /// CDXC:Onboarding 2026-11-21 DECISION:
+    /// User (Q4369): setup saves the default agent it shows. The Agents step marks the first
+    /// installed agent as the default when the stored one (Codex out of the box) isn't installed,
+    /// but only a click on a row saved it, so Next and Finish left Codex as the default on a
+    /// computer without Codex and Ask Ghostex AI started on it. Leaving the step, and finishing
+    /// setup, now save the default the step shows. Waits for the agent scan, so a partial list
+    /// never replaces a default that is installed.
+    fn save_shown_default_agent(&mut self, cx: &mut Context<Self>) {
+        if self.agents.is_empty() || self.agents_loading {
+            return;
+        }
+        let Some(shown) = model::default_agent_id(&self.settings, &self.agents) else {
+            return;
+        };
+        if shown == self.settings.default_prompt_agent_id {
+            return;
+        }
+        let mut patch = Map::new();
+        patch.insert("defaultPromptAgentId".into(), Value::String(shown));
+        self.update_settings(patch, cx);
     }
 
     /// Closing without a project (the window's close control, or skipping setup on Get started).

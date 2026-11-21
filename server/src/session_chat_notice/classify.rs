@@ -276,25 +276,46 @@ pub fn classify_session_chat_terminal_notice(
     if screen.folded.is_empty() {
         return None;
     }
-    if screen.ends_with_shell_prompt()
-        && [
-            "ParseException",
-            "BadExpression",
-            "CommandNotFoundException",
-            "UnauthorizedAccess",
-        ]
-        .iter()
-        .any(|error| {
-            matches_parts(
-                &flatten_tail(&screen.folded, NOTICE_EXIT_SCAN_LINES),
-                &[
-                    NoticePart::Text("FullyQualifiedErrorId :"),
-                    NoticePart::Gap(80),
-                    NoticePart::Text(error),
-                ],
-            )
+    /*
+    CDXC:AgentLauncher 2026-11-21 DECISION:
+    User (Q4370): the PowerShell failure notice says which of its four error ids it saw, in plain words, instead of one message for all of them.
+    */
+    let powershell_error = screen
+        .ends_with_shell_prompt()
+        .then(|| {
+            let tail = flatten_tail(&screen.folded, NOTICE_EXIT_SCAN_LINES);
+            [
+                (
+                    "CommandNotFoundException",
+                    "PowerShell couldn't find the agent's command (CommandNotFoundException): it isn't installed, or isn't on PATH. Install it in Settings > Agents, then start it again.",
+                ),
+                (
+                    "UnauthorizedAccess",
+                    "PowerShell blocked the agent's startup script (UnauthorizedAccess): the execution policy doesn't allow it to run. Check the error in the terminal.",
+                ),
+                (
+                    "ParseException",
+                    "PowerShell couldn't read the agent's startup command (ParseException). Check the agent's command in Settings > Agents and the error in the terminal.",
+                ),
+                (
+                    "BadExpression",
+                    "PowerShell couldn't run an expression in the agent's startup command (BadExpression). Check the agent's command in Settings > Agents and the error in the terminal.",
+                ),
+            ]
+            .into_iter()
+            .find(|(error, _)| {
+                matches_parts(
+                    &tail,
+                    &[
+                        NoticePart::Text("FullyQualifiedErrorId :"),
+                        NoticePart::Gap(80),
+                        NoticePart::Text(error),
+                    ],
+                )
+            })
         })
-    {
+        .flatten();
+    if let Some((_, detail)) = powershell_error {
         return Some(
             SessionChatTerminalNotice::new(
                 SESSION_CHAT_NOTICE_AGENT_EXITED,
@@ -302,7 +323,7 @@ pub fn classify_session_chat_terminal_notice(
                 SessionChatTerminalNoticeSource::Screen,
                 "The agent failed to start",
             )
-            .with_detail("PowerShell could not run the agent's startup command. Check the error in the terminal before starting it again.")
+            .with_detail(detail)
             .with_screen_tail(screen.screen_tail())
             .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
                 OPEN_TERMINAL.label,

@@ -3,7 +3,8 @@
 //! `welcome-coordinators`, `welcome-mobile`, `agents`, `agents-scanning`, `agents-already-connected`,
 //! `agents-none-installed`, `agents-install-available`, `agents-install-partial`,
 //! `agents-installing`, `agents-install-failed`, `agents-integration`, `agents-guide`,
-//! `agents-antigravity` (Antigravity installed and the default), `agents-signed-out` (the chosen
+//! `agents-antigravity` (Antigravity installed and the default), `agents-default-missing` (the
+//! stored default is Codex, which isn't installed; Claude and Cursor are), `agents-signed-out` (the chosen
 //! agent is not signed in), `agents-signing-in` (presses Sign in
 //! after 1.5s; the browser sign-in finishes 4s later),
 //! `workspace`, `workspace-no-browser-skill`, `workspace-agents`, `workspace-docs`,
@@ -272,6 +273,16 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         // Antigravity installed and picked as the default (Chief of Staff runs on it).
         let with_antigravity: &[&str] = &["claude", "codex", "antigravity"];
         match state {
+            "agents-default-missing" => (
+                InitialPanel::Panel(2),
+                &["claude", "cursor"],
+                false,
+                "none",
+                "off",
+                true,
+                false,
+                false,
+            ),
             "agents-antigravity" => (
                 InitialPanel::Panel(2),
                 with_antigravity,
@@ -461,6 +472,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "defaultPromptAgentId".into(),
         json!(if state == "agents-antigravity" {
             "antigravity"
+        } else if state == "agents-default-missing" {
+            "codex"
         } else {
             "claude"
         }),
@@ -524,6 +537,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         let host = host_for_commands.clone();
         match command {
             OnboardingCommand::UpdateSettings(patch) => {
+                let patch_echo = patch.clone();
                 let snapshot = {
                     let mut state = host.borrow_mut();
                     for (key, value) in patch {
@@ -531,7 +545,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     }
                     state.settings.clone()
                 };
-                eprintln!("updateSettings");
+                eprintln!("updateSettings {}", Value::Object(patch_echo));
                 cx.defer(move |cx| {
                     let settings = demo_settings(&snapshot);
                     with_view(&host, cx, move |view, cx| {
