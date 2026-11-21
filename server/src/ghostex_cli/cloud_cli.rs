@@ -44,7 +44,8 @@ USAGE
   cap sets the monthly spending cap: at 80% Ghostex warns, at 100% it refuses new
   boxes, and running boxes keep running. attach makes this terminal the session's
   terminal on a running box (the ids are the box's own, as `ghostex cloud show` lists
-  them); it does not wake a stopped box.
+  them); it does not wake a stopped box. An Instabox box has one fixed size (4x8),
+  so sizes lists only that one there and create refuses any other --size.
 
 EXAMPLES
   ghostex cloud connect instabox
