@@ -280,18 +280,35 @@ pub fn start_tailcat_from_persisted_state(paths: &GxserverPaths, runtime: &Tailc
     last boot among them, until the boot's `enableForBoxDevices` landed. On a box, the saved
     devices the ticket (written before gxserver starts) no longer names are taken off first. It
     only ever removes, so a forged ticket gains nothing; if that write fails, the helper waits
-    for the boot's update instead of starting on the old list.
+    for the boot's update instead of starting on the old list. A ticket that can't be read names
+    nobody. Every removal gets a security-log line, so none is silent.
     */
     if let Some(named) = crate::cloud_boxes::box_mode::boot::devices_ticket_names() {
         let stale = |keys: &[String]| keys.iter().any(|key| !named.contains(key));
         let saved = read_tailcat_state_or_default(&TailcatRepository::new(&db));
         if saved.map_or(true, |state| stale(&state.allowed_client_keys)) {
             let trimmed = change_tailcat_state(paths, &db, None, |state| {
+                let before = state.allowed_client_keys.len();
                 state.allowed_client_keys.retain(|key| named.contains(key));
-                Ok(())
+                Ok(before - state.allowed_client_keys.len())
             });
-            if trimmed.is_err() {
+            let Ok((_, removed)) = trimmed else {
                 return;
+            };
+            if removed > 0 {
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "easyConnect.allowList",
+                        if removed == 1 {
+                            "Took 1 device off this Cloud Box's Easy Connect: its ticket no longer names it".to_string()
+                        } else {
+                            format!("Took {removed} devices off this Cloud Box's Easy Connect: its ticket no longer names them")
+                        },
+                    ),
+                    crate::audit::Actor::Ghostex,
+                    crate::audit::Outcome::Done,
+                    None,
+                );
             }
         }
     }

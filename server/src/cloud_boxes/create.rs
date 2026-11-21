@@ -496,16 +496,15 @@ async fn step<T: Send + 'static>(
 }
 
 /// Wakes a box's machine for a resume. Returns whether this wake started it: `false` when the
-/// provider already ran it (a box marked failed by a later step, its sessions still live) or its
-/// state couldn't be read, so a failed boot after it leaves the machine running.
+/// provider already runs it (a box marked failed by a later step, its sessions still live; no
+/// wake is sent, since a provider may refuse to start a running machine) or its state couldn't be
+/// read, so a failed boot after it leaves the machine running.
 fn wake_machine(ops: &Ops, target: &Target, current: &CloudBoxState) -> Result<bool, String> {
-    let was_running = match ops.get(target) {
-        Ok(Some(machine)) => machine.state == CloudBoxState::Running,
-        Ok(None) => false,
-        Err(_) => true,
-    };
-    ops.resume(target, current)?;
-    Ok(!was_running)
+    match ops.get(target) {
+        Ok(Some(machine)) if machine.state == CloudBoxState::Running => Ok(false),
+        Ok(_) => ops.resume(target, current).map(|()| true),
+        Err(_) => ops.resume(target, current).map(|()| false),
+    }
 }
 
 /// Boot, then the session steps. Used by create and resume. `started_here`: this attempt made or
