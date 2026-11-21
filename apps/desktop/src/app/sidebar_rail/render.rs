@@ -124,10 +124,16 @@ impl GhostexGpuiApp {
                     .into_any_element();
             }
         };
-        // The room under the window buttons: the sidebar's top row, so the first icon starts level
-        // with what is under that row.
-        let top_inset =
-            crate::app::native_sidebar::navigation::sidebar_corner_row_height(appearance.scale);
+        // CDXC:Sidebar 2026-11-21 DECISION:
+        // User: the gap between Toggle sidebar at the rail's top and Search under it was smaller
+        // than the gaps between the other rail buttons; make it the same. Toggle sidebar stays on
+        // the window lights' line, and the icon column starts one rail pitch (`RAIL_BUTTON` +
+        // `RAIL_GAP`, 44pt) below its centre, so Search is as far from it as every icon from the
+        // next.
+        let toggle_center =
+            crate::app::native_sidebar::navigation::corner_row_top_padding(appearance.scale)
+                + crate::app::consts::TITLEBAR_CONTROL_HEIGHT * appearance.scale / 2.0;
+        let icons_top = toggle_center + RAIL_BUTTON / 2.0 + RAIL_GAP;
         let pins = sidebar_rail_pins();
         let mut buttons = Vec::new();
         for (index, key) in pins.iter().copied().enumerate() {
@@ -186,10 +192,12 @@ impl GhostexGpuiApp {
             .bg(sidebar_chrome_fill(appearance.glass, 180.0))
             // Which half has the pointer, for the hidden sidebar's reveal
             // (`sidebar_rail_reveal_hover`); a press starts its wait again.
-            .on_mouse_move(cx.listener(|app, event: &gpui::MouseMoveEvent, window, cx| {
-                let top_half = event.position.y < window.viewport_size().height / 2.0;
-                app.sidebar_rail_reveal_hover(Some(top_half), cx);
-            }))
+            .on_mouse_move(
+                cx.listener(|app, event: &gpui::MouseMoveEvent, window, cx| {
+                    let top_half = event.position.y < window.viewport_size().height / 2.0;
+                    app.sidebar_rail_reveal_hover(Some(top_half), cx);
+                }),
+            )
             .on_hover(cx.listener(|app, hovered: &bool, _, cx| {
                 if !*hovered {
                     app.sidebar_rail_reveal_hover(None, cx);
@@ -244,7 +252,7 @@ impl GhostexGpuiApp {
                 v_flex()
                     .id("ghostex-gpui-sidebar-rail-top")
                     .w_full()
-                    .h(px(top_inset))
+                    .h(px(icons_top))
                     .flex_shrink_0()
                     .items_center()
                     .pt(px(

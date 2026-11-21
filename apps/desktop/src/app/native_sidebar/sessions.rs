@@ -278,17 +278,7 @@ impl GhostexGpuiApp {
                     && session.activity != "attention"
                     && !session.has_background_work))
         {
-            trailing.push(
-                div()
-                    .text_size(px(13.55 * scale))
-                    .text_color(if sleeping {
-                        chrome_color(0x686868, 0x959595)
-                    } else {
-                        chrome_color(0xa6a6a6, 0x424242)
-                    })
-                    .child(time.clone())
-                    .into_any_element(),
-            );
+            trailing.push(session_time_label(time.clone(), sleeping, scale).into_any_element());
         }
         if approval {
             trailing.push(super::status::approval_indicator(scale));
@@ -461,4 +451,25 @@ fn title_with_rename_shake(
             },
         )
         .into_any_element()
+}
+
+/// A row's trailing time ("5d"), and the count a folded section heading shows at its right end
+/// (sections.rs, gbots_rows.rs).
+///
+/// CDXC:Sidebar 2026-11-21 DECISION:
+/// User: the counts next to the section headings (Parked 22, Sessions 17) are the same size and
+/// style as the time on a session row, not the heading's larger text.
+pub(super) fn session_time_label(
+    text: impl Into<gpui::SharedString>,
+    sleeping: bool,
+    scale: f32,
+) -> gpui::Div {
+    div()
+        .text_size(px(13.55 * scale))
+        .text_color(if sleeping {
+            chrome_color(0x686868, 0x959595)
+        } else {
+            chrome_color(0xa6a6a6, 0x424242)
+        })
+        .child(text.into())
 }

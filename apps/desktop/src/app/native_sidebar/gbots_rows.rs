@@ -326,7 +326,11 @@ impl GhostexGpuiApp {
             })
             .child(div().flex_1())
             .when(collapsed && !hovered, |row| {
-                row.child(folded.bots.to_string())
+                row.child(super::sessions::session_time_label(
+                    folded.bots.to_string(),
+                    false,
+                    scale,
+                ))
             })
             .when(hovered, |row| {
                 row.child(

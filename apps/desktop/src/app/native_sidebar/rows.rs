@@ -142,14 +142,11 @@ impl GhostexGpuiApp {
                                 );
                                 self.render_native_disclosure(key, rows, cx)
                             });
-                        // The gaps of the 2026-11-21 spacing (sections.rs).
-                        let gap_above = match index.checked_sub(1) {
-                            _ if hide_lone_sessions_heading => 0.0,
-                            Some(above) if group.sections[above].collapsed => {
-                                super::sections::SECTION_GAP_AFTER_FOLDED
-                            }
-                            Some(_) => super::sections::SECTION_GAP_AFTER_ROWS,
-                            None => 0.0,
+                        // The gap of the 2026-11-21 spacing (sections.rs).
+                        let gap_above = if index > 0 && !hide_lone_sessions_heading {
+                            super::sections::SECTION_GAP_ABOVE
+                        } else {
+                            0.0
                         };
                         v_flex()
                             .w_full()

@@ -155,12 +155,6 @@ const WINDOW_CORNER_CENTER_Y: f32 = 18.5;
 ///
 /// CDXC:Sidebar 2026-10-31 WHY:
 /// GitHub #375: the sidebar zoom shrinks this row, so at 90% a padding that scaled with it put the buttons 1.85pt above the traffic lights and the workarea header's own buttons, whatever their size. The lights and the header do not zoom, so this row holds their centre line instead of scaling away from it.
-/// The docked top row's height in the window's corner: where the rail's first icon starts below
-/// (app/sidebar_rail/).
-pub(crate) fn sidebar_corner_row_height(scale: f32) -> f32 {
-    corner_row_top_padding(scale) + TITLEBAR_CONTROL_HEIGHT * scale + 3.0 * scale
-}
-
 pub(crate) fn corner_row_top_padding(scale: f32) -> f32 {
     (WINDOW_CORNER_CENTER_Y - TITLEBAR_CONTROL_HEIGHT * scale / 2.0).max(0.0)
 }

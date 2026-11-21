@@ -23,14 +23,22 @@ muted grey, 35pt above its first row's centre where rows are 31pt apart, and a g
 15pt below the last row of the one above. The section headings (Pinned, Sessions, Parked and the
 others) and Main Hub's GBots heading take those measures; they were 20pt, 12pt capitals, 8pt apart.
 */
-/// A section heading's row, unscaled: a session row's height.
-pub(super) const SECTION_HEADING_HEIGHT: f32 = super::session_list::SESSION_HEIGHT;
+/*
+CDXC:Sidebar 2026-11-21 DECISION:
+User, on the spacing above: the gap above "Sessions" is too big, and the gaps around the section
+headings (Pinned and its sessions, Sessions, Parked) are a bit too large overall; tighten them,
+about halfway between the old and the new values, consistent with each other. Halfway: the heading
+row 25pt (was 20, then 30), 2pt to its first row (0, then 4), and 6pt above a heading whether the
+section above is open or folded (0 and 8, then 12 and 4). So a heading is 31pt from the folded one
+above it (the rows' own pitch), about 30pt from its first row's centre, and 34.5pt from the last
+row above it.
+*/
+/// A section heading's row, unscaled.
+pub(super) const SECTION_HEADING_HEIGHT: f32 = 25.0;
 /// Between an open section's heading and its first row.
-pub(super) const SECTION_HEADING_GAP_BELOW: f32 = 4.0;
-/// Above a heading whose section follows a folded one (two headings in a row).
-pub(super) const SECTION_GAP_AFTER_FOLDED: f32 = 4.0;
-/// Above a heading whose section follows an open one (under its last row).
-pub(super) const SECTION_GAP_AFTER_ROWS: f32 = 12.0;
+pub(super) const SECTION_HEADING_GAP_BELOW: f32 = 2.0;
+/// Above a heading under another section, open or folded.
+pub(super) const SECTION_GAP_ABOVE: f32 = 6.0;
 
 /// A section's heading text: its id in sentence case ("pinned" → "Pinned").
 pub(super) fn section_heading_title(id: &str) -> String {
@@ -163,7 +171,11 @@ impl GhostexGpuiApp {
             })
             .child(div().flex_1())
             .when(section.collapsed, |row| {
-                row.child(section.count.to_string())
+                row.child(super::sessions::session_time_label(
+                    section.count.to_string(),
+                    false,
+                    scale,
+                ))
             })
             .on_hover(cx.listener(move |app, hovered, _, cx| {
                 if *hovered {
