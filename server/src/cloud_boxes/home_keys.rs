@@ -90,7 +90,12 @@ pub(crate) fn own_box_key(paths: &GxserverPaths, address: &str, purpose: &str) -
     own.then_some(file)
 }
 
-/// After a box is deleted: once none of this computer's boxes is left, its box keys go.
+/// After the user deleted a box: once none of this computer's boxes is left, its box keys go.
+///
+/// CDXC:CloudBoxes 2026-11-21 FIX: review of c1d1a8a3a (finding 7): reconcile also called this when
+/// a provider's list no longer showed boxes, and one empty list (a provider hiccup) marked every
+/// box deleted and deleted the keys; when the rows came back, this computer couldn't open those
+/// boxes until they were stopped and woken. Only the user's Delete (`lifecycle::delete`) calls it.
 pub(super) fn forget_when_no_box_is_left(paths: &GxserverPaths) {
     let _guard = keys_lock()
         .lock()
