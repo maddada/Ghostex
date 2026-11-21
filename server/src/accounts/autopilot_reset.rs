@@ -393,3 +393,61 @@ fn bell(
     )
     .is_ok()
 }
+
+/// BLOCKING. The check for the account a session runs on, at the moment Autopilot finds the
+/// session stuck at its usage limit with no account that has room (server/src/server/
+/// autopilot_runtime.rs, `AutopilotSwitch::NoRoom`). `true` when a reset was used; the session then
+/// carries on by itself (reset_used.rs).
+///
+/// CDXC:Autopilot 2026-11-21 DECISION:
+/// Coordinator, for the user: "run the reset check right when a covered session hits its limit (not only every 5 minutes)", after the security fixes. Autopilot's sweep sees a session at its limit within its sweep (2 minutes by default, at once when a turn ends), tries to move it, and only when no account has room asks here; every condition of `check` still holds, and the 5-minute pass in reset_watch.rs stays as the retry.
+pub(crate) fn check_session(state: &AppState, project_id: &str, session_id: &str) -> bool {
+    let config = crate::autopilot::read_config(&state.paths);
+    if !(config.enabled && config.use_limit_resets) {
+        return false;
+    }
+    let snapshot = state.accounts.refresh(&state.paths.home_dir, false);
+    let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
+        return false;
+    };
+    let Ok(registry) = super::store::read(&db) else {
+        return false;
+    };
+    let repository = DomainRepository::new(&db, &state.metadata.server_id);
+    let (Ok(Some(session)), Ok(Some(project))) = (
+        repository.get_session(project_id, session_id),
+        repository.get_project(project_id),
+    ) else {
+        return false;
+    };
+    if launch::provider(&project, &session) != Some(Provider::Claude) {
+        return false;
+    }
+    let Some(account_id) = super::session_identity::display_account_id(
+        &registry,
+        Provider::Claude,
+        &session,
+        &state.paths.home_dir,
+    )
+    .map(str::to_string) else {
+        return false;
+    };
+    let Some(saved) = registry.accounts.iter().find(|a| a.id == account_id) else {
+        return false;
+    };
+    let Some(account) = snapshot
+        .accounts
+        .iter()
+        .find(|a| a.provider == Provider::Claude && super::endpoint::account_id(a) == account_id)
+    else {
+        return false;
+    };
+    let used = matches!(
+        check(state, &registry, &snapshot, saved, account, false),
+        Check::Used
+    );
+    if used {
+        crate::notification_feed::broadcast_notification_feed_changed(state);
+    }
+    used
+}
