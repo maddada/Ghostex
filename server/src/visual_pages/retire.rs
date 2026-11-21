@@ -89,6 +89,8 @@ pub(super) fn retire(state: &AppState, given: &[String]) -> Value {
             return json!({"retired": [], "notFound": [], "noSession": given});
         }
     };
+    // The pages a retired cover's links made, retired with it after the loop.
+    let mut sections: Vec<String> = Vec::new();
     for text in given {
         let Some((id, record)) =
             page_id_of(text).and_then(|id| read_record(dir, &id).map(|record| (id, record)))
@@ -131,11 +133,29 @@ pub(super) fn retire(state: &AppState, given: &[String]) -> Value {
         }
         note_retired(dir, &id);
         remember_retired(&id);
+        sections.extend(super::file_page::sections_of(dir, &id));
         retired.push(json!({
             "id": id,
             "title": record.get("title").and_then(Value::as_str).unwrap_or("Live page"),
             "chats": taken_back,
         }));
+    }
+    // A cover's sections answer to its agent only through the cover (file_page.rs
+    // `page_for_cover_link`): retiring the cover takes them back too, so none keeps waiting on the
+    // reader. Sections record their cover, never another section, so this goes one level deep.
+    //
+    // CDXC:SessionChat 2026-11-21 DECISION:
+    // Security review of linked sections (Fable), smallest fix: "retiring a cover (ghostex page
+    // retire, or a re-publish that replaces it) also retires the pages its links made, and a
+    // retired cover's links open read-only".
+    sections.retain(|id| {
+        !given
+            .iter()
+            .any(|text| page_id_of(text).as_deref() == Some(id))
+    });
+    if !sections.is_empty() {
+        let more = retire(state, &sections);
+        retired.extend(more["retired"].as_array().cloned().unwrap_or_default());
     }
     json!({"retired": retired, "notFound": not_found, "noSession": no_session})
 }
