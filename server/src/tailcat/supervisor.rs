@@ -106,6 +106,8 @@ pub(super) struct TailcatRuntimeInner {
     relay_host: Option<String>,
     /// The last `/generate_204` answer of the relay named first, for that relay only.
     relay_reachable: Option<(String, bool)>,
+    /// Set by [`TailcatRuntime::stop`]: no helper starts again after it.
+    stopped: bool,
     /// Where link records go (`link_log.rs`); none in tests.
     logger: Option<std::sync::Arc<crate::logging::GxserverLogger>>,
 }
@@ -543,8 +545,17 @@ impl TailcatRuntime {
         super::status::start_tailcat_from_persisted_state(paths, self);
     }
 
-    /// Stops every helper (gxserver is stopping).
+    /// Stops every helper for good (gxserver is stopping).
+    ///
+    /// CDXC:RemotePairing 2026-11-21 FIX: a reconcile already on its way (the one
+    /// `answer_before_restart` runs a second after an answer, a knock's) could start a helper after
+    /// this, and that helper, in a process group of its own, outlived gxserver: the SSH pairing tests
+    /// left orphaned `tailcat serve` processes this way even after they stopped their runtime. Once
+    /// stopped, `start` starts nothing.
     pub fn stop(&self) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.stopped = true;
+        }
         self.stop_because("gxserverStopping");
     }
 
@@ -596,6 +607,9 @@ impl TailcatRuntime {
             let Ok(mut inner) = self.inner.lock() else {
                 return;
             };
+            if inner.stopped {
+                return;
+            }
             let logger = inner.logger.clone();
             let state = inner.lane(spec.lane);
             state.generation = state.generation.wrapping_add(1);
