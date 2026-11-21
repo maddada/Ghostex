@@ -127,8 +127,8 @@ pub(super) fn cloud_box_machine_known(machine_id: &str) -> bool {
 }
 
 /// Where a chat request to a session on a box goes (Q1013: "On sending a message there. Not on
-/// opening the session."). `Ok(None)` for a machine that is not a box. A send to a paused or
-/// stopped box asks home gxserver to `resume` it and waits until this client is connected to it;
+/// opening the session."). `Ok(None)` for a machine that is not a box. A send to a paused,
+/// stopped or failed box asks home gxserver to `resume` it and waits until this client is connected to it;
 /// every other request to a box that is not connected is refused with the reason, never sent to
 /// this computer's gxserver, which does not hold the box's sessions.
 pub(crate) async fn cloud_box_send_target(
@@ -156,14 +156,33 @@ pub(crate) async fn cloud_box_send_target(
             _ => refusal(UNAVAILABLE, "This cloud box is not connected yet."),
         });
     }
-    if state.wakes_on_send() && links(|links| links.waking.insert(box_id.to_string())) {
+    /*
+    CDXC:CloudBoxes 2026-11-21 FIX:
+    GitHub #698: a box whose boot failed is stopped and says "Send a message to try again", which
+    the phone did (`wake.ts`) and the desktop refused with "The cloud box failed to start." A send
+    to a failed box now asks home gxserver to `resume` it like a paused or stopped one, and keeps
+    the row `resume` answers, so the wait below doesn't stop on the old `failed`.
+    */
+    let wakes = state.wakes_on_send() || state == CloudBoxState::Failed;
+    if wakes && links(|links| links.waking.insert(box_id.to_string())) {
         let resumed = gx_rpc(
             None,
             CLOUD_BOXES_ROUTE,
             json!({ "action": "resume", "boxId": box_id }),
         )
         .await;
-        links(|links| links.waking.remove(box_id));
+        let resumed = resumed.map(|answer| {
+            answer
+                .get("box")
+                .cloned()
+                .and_then(|row| serde_json::from_value::<CloudBox>(row).ok())
+        });
+        links(|links| {
+            links.waking.remove(box_id);
+            if let Ok(Some(row)) = &resumed {
+                links.states.insert(box_id.to_string(), row.state.clone());
+            }
+        });
         if let Err(error) = resumed {
             return Err(refusal(
                 UNAVAILABLE,
@@ -176,7 +195,11 @@ pub(crate) async fn cloud_box_send_target(
         if let Some(target) = cloud_box_request_target(machine_id) {
             return Ok(Some(target));
         }
-        if links(|links| links.states.get(box_id) == Some(&CloudBoxState::Failed)) {
+        // A send that came in while another one wakes the box waits for that wake to answer.
+        if links(|links| {
+            !links.waking.contains(box_id)
+                && links.states.get(box_id) == Some(&CloudBoxState::Failed)
+        }) {
             return Err(refusal(UNAVAILABLE, "The cloud box failed to start."));
         }
         futures_timer(WAKE_POLL).await;

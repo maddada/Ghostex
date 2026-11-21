@@ -89,13 +89,20 @@ pub(crate) async fn handle_tailcat_http(
                 (
                     TailcatLogErrorCode::StateUpdateDatabaseUnavailable,
                     format!("SQLite gxserver state error: {error}"),
+                    false,
                 )
             })?;
             let record =
                 apply_tailcat_state_update(&paths, &db, &runtime, update).map_err(|error| {
+                    // A refusal is the caller's to fix: said as it is, answered as a bad request.
+                    if let Some(refusal) = error.downcast_ref::<TailcatRefusal>() {
+                        return (TailcatLogErrorCode::StateUpdateFailed, refusal.0.clone(), true);
+                    }
+                    let refused = error.to_string().contains(super::EASY_CONNECT_OFF_REFUSAL);
                     (
                         TailcatLogErrorCode::StateUpdateFailed,
                         format!("tailcat state update failed: {error}"),
+                        refused,
                     )
                 })?;
             Ok((record, read_tailcat_status_payload(&paths, &db, &runtime)))
@@ -108,15 +115,22 @@ pub(crate) async fn handle_tailcat_http(
         Err(error) => Err((
             TailcatLogErrorCode::StateUpdateFailed,
             format!("tailcat state update task failed: {error}"),
+            false,
         )),
     };
 
+    let devices_let_in = match (&update, &outcome) {
+        (TailcatStateUpdate::EnableForBoxDevices {}, Ok((record, _))) => {
+            Some(record.state.allowed_client_keys.len())
+        }
+        _ => None,
+    };
     crate::audit::record(
-        easy_connect_audit_action(&update),
+        easy_connect_audit_action(&update, devices_let_in),
         crate::audit::Actor::current(),
         match &outcome {
             Ok(_) => crate::audit::Outcome::Done,
-            Err((_, message)) => crate::audit::Outcome::Failed(message.clone()),
+            Err((_, message, _)) => crate::audit::Outcome::Failed(message.clone()),
         },
         None,
     );
@@ -153,15 +167,16 @@ pub(crate) async fn handle_tailcat_http(
                 rpc_success(request_id, json!({ "status": status })),
             )
         }
-        Err((error_code, message)) => {
+        Err((error_code, message, refused)) => {
             log_tailcat_state_update_failure(
                 &logger,
                 &update,
                 error_code,
                 started_at.elapsed().as_millis(),
             );
-            // Adding a device while Easy Connect is off is the caller's to fix, not a fault here.
-            let code = if message.contains(super::EASY_CONNECT_OFF_REFUSAL) {
+            // A refusal (a device added while Easy Connect is off, a box update with no box ticket
+            // naming devices) is the caller's to fix, not a fault here.
+            let code = if refused {
                 "badRequest"
             } else {
                 "internalError"
@@ -171,8 +186,12 @@ pub(crate) async fn handle_tailcat_http(
     }
 }
 
-/// The security log's line for an Easy Connect change.
-fn easy_connect_audit_action(update: &TailcatStateUpdate) -> crate::audit::Action {
+/// The security log's line for an Easy Connect change; `devices_let_in` counts the devices a
+/// Cloud Box's boot let in.
+fn easy_connect_audit_action(
+    update: &TailcatStateUpdate,
+    devices_let_in: Option<usize>,
+) -> crate::audit::Action {
     use crate::audit::Action;
     match update {
         TailcatStateUpdate::SetEnabled { enabled: true } => {
@@ -183,7 +202,15 @@ fn easy_connect_audit_action(update: &TailcatStateUpdate) -> crate::audit::Actio
         }
         TailcatStateUpdate::EnableForBoxDevices {} => Action::new(
             "easyConnect.enable",
-            "Turned on Easy Connect for the devices this Cloud Box's boot names",
+            match devices_let_in {
+                Some(1) => "Turned on Easy Connect for this Cloud Box and let 1 device connect"
+                    .to_string(),
+                Some(count) => format!(
+                    "Turned on Easy Connect for this Cloud Box and let {count} devices connect"
+                ),
+                None => "Turn on Easy Connect for this Cloud Box's devices"
+                    .to_string(),
+            },
         ),
         TailcatStateUpdate::SetPorts { ports } => Action::new(
             "easyConnect.ports",

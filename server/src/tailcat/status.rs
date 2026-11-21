@@ -116,7 +116,7 @@ pub fn apply_tailcat_state_update(
             }
             TailcatStateUpdate::EnableForBoxDevices {} => {
                 let keys = crate::cloud_boxes::box_mode::boot::ticket_device_keys()
-                    .map_err(anyhow::Error::msg)?;
+                    .map_err(|refusal| anyhow::Error::new(TailcatRefusal(refusal)))?;
                 state.allowed_client_keys = normalize_tailcat_client_keys(keys);
                 state.enabled = true;
             }
@@ -220,6 +220,19 @@ Easy Connect is strictly opt-in (11.6.0 put an SSH-only iPhone on a computer's E
 SEE-ALSO: remote_access/pair_device.rs (`finish_pairing`, `/api/pairOverSsh` refuse before anything is written), apps/mobile/app/src/machines/sshPairing.ts.
 SEE-ALSO: `TailcatStateUpdate::EnableForBoxDevices` (CDXC:CloudBoxes 2026-11-21 in cloud_boxes/box_mode/boot.rs): a Cloud Box's boot turns Easy Connect on and sets its devices in the same write, so the rule holds without an exception; that update works only on a box and only for its ticket's devices.
 */
+/// An update refused for a reason the caller can fix (not a fault): `/api/updateTailcatState`
+/// answers it as a bad request, with this message as it is.
+#[derive(Debug)]
+pub struct TailcatRefusal(pub String);
+
+impl std::fmt::Display for TailcatRefusal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for TailcatRefusal {}
+
 /// The refusal for a key added while Easy Connect is off.
 pub const EASY_CONNECT_OFF_REFUSAL: &str =
     "Easy Connect is off on this computer, so no device can be added to it. Turn it on in Ghostex Settings › Remote first.";
@@ -260,6 +273,28 @@ pub fn start_tailcat_from_persisted_state(paths: &GxserverPaths, runtime: &Tailc
     let Ok(db) = open_gxserver_database(paths) else {
         return;
     };
+    /*
+    CDXC:CloudBoxes 2026-11-21 FIX:
+    GitHub #698 review: a woken Cloud Box (or one made from a snapshot) has Easy Connect saved on,
+    so its gxserver started the helper on the saved devices, a device unpaired at home since the
+    last boot among them, until the boot's `enableForBoxDevices` landed. On a box, the saved
+    devices the ticket (written before gxserver starts) no longer names are taken off first. It
+    only ever removes, so a forged ticket gains nothing; if that write fails, the helper waits
+    for the boot's update instead of starting on the old list.
+    */
+    if let Some(named) = crate::cloud_boxes::box_mode::boot::devices_ticket_names() {
+        let stale = |keys: &[String]| keys.iter().any(|key| !named.contains(key));
+        let saved = read_tailcat_state_or_default(&TailcatRepository::new(&db));
+        if saved.map_or(true, |state| stale(&state.allowed_client_keys)) {
+            let trimmed = change_tailcat_state(paths, &db, None, |state| {
+                state.allowed_client_keys.retain(|key| named.contains(key));
+                Ok(())
+            });
+            if trimmed.is_err() {
+                return;
+            }
+        }
+    }
     // In turn with the writes, so a reload that read "on" can't start the helpers after an Off.
     let _writes = TAILCAT_STATE_WRITES
         .lock()

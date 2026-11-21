@@ -365,13 +365,27 @@ fn easy_connect_action(state: &AppState, params: &Map<String, Value>) -> Option<
         }
         // Turns Easy Connect on and lets the box ticket's devices in. The box's own boot runs it
         // with the token file (you); an agent asks every time, as for any device let in.
-        TailcatStateUpdate::EnableForBoxDevices {} => Some(
-            ActionRequest::new(
-                SensitiveAction::EasyConnectAllowList,
-                "Turn on Easy Connect for this Cloud Box's devices",
+        TailcatStateUpdate::EnableForBoxDevices {} => {
+            // Not a box, or a ticket naming no device: nothing to approve, the handler refuses it.
+            let keys = crate::cloud_boxes::box_mode::boot::ticket_device_keys().ok()?;
+            let devices = if keys.len() == 1 {
+                "one device".to_string()
+            } else {
+                format!("{} devices", keys.len())
+            };
+            Some(
+                ActionRequest::new(
+                    SensitiveAction::EasyConnectAllowList,
+                    format!("Turn on Easy Connect and let {devices} connect"),
+                )
+                // The devices are part of what is approved: a ticket changed afterwards asks again.
+                .params(serde_json::json!({
+                    "kind": "enableForBoxDevices",
+                    "allowedClientKeys": keys,
+                }))
+                .detail(format!("Devices: {}", keys.join(", "))),
             )
-            .params(exact()),
-        ),
+        }
         TailcatStateUpdate::SetPorts { ports } => {
             let open: HashSet<u16> = current
                 .as_ref()

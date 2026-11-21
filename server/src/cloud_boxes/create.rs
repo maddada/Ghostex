@@ -385,7 +385,7 @@ pub(super) async fn create(
             box_id: target_box,
             provider_box_id,
         };
-        finish_boot(&task_state, ops, target, ticket, context).await;
+        finish_boot(&task_state, ops, target, ticket, context, true).await;
     });
     Ok(CreateResult {
         cloud_box: first,
@@ -437,15 +437,14 @@ async fn reuse(
         if wake {
             let resume_ops = ops.clone();
             let resume_target = target.clone();
-            if step(&task_state, &box_id, Step::Create, move || {
-                resume_ops.resume(&resume_target, &current)
+            let Some(woke) = step(&task_state, &box_id, Step::Create, move || {
+                wake_machine(&resume_ops, &resume_target, &current)
             })
             .await
-            .is_none()
-            {
+            else {
                 return;
-            }
-            finish_boot(&task_state, ops, target, ticket, context).await;
+            };
+            finish_boot(&task_state, ops, target, ticket, context, woke).await;
         } else {
             registry::set_step(&box_id, Step::Create, StepState::Skipped, None);
             registry::set_step(&box_id, Step::Boot, StepState::Skipped, None);
@@ -496,24 +495,49 @@ async fn step<T: Send + 'static>(
     }
 }
 
-/// Boot, then the session steps. Used by create and resume.
+/// Wakes a box's machine for a resume. Returns whether this wake started it: `false` when the
+/// provider already ran it (a box marked failed by a later step, its sessions still live) or its
+/// state couldn't be read, so a failed boot after it leaves the machine running.
+fn wake_machine(ops: &Ops, target: &Target, current: &CloudBoxState) -> Result<bool, String> {
+    let was_running = match ops.get(target) {
+        Ok(Some(machine)) => machine.state == CloudBoxState::Running,
+        Ok(None) => false,
+        Err(_) => true,
+    };
+    ops.resume(target, current)?;
+    Ok(!was_running)
+}
+
+/// Boot, then the session steps. Used by create and resume. `started_here`: this attempt made or
+/// woke the machine, so a failed boot stops it again.
 async fn finish_boot(
     state: &Arc<AppState>,
     ops: Ops,
     target: Target,
     ticket: BoxBootTicket,
     context: SessionContext,
+    started_here: bool,
 ) {
     let box_id = target.box_id.clone();
     let boot_ops = ops.clone();
     let boot_target = target.clone();
     let Some(result) = step(state, &box_id, Step::Boot, move || {
-        boot_steps::install_package(&boot_ops, &boot_target)?;
-        boot_steps::boot(&boot_ops, &boot_target, &ticket)
+        boot_steps::install_package(&boot_ops, &boot_target)
+            .and_then(|()| boot_steps::boot(&boot_ops, &boot_target, &ticket))
+            // Inside the step, so the box still counts as starting while it is stopped: a send
+            // can't wake it under the stop, and the row is written once, with the whole reason.
+            .map_err(|error| {
+                if started_here {
+                    stopped_after_failed_boot(&boot_ops, &boot_target, &error)
+                } else {
+                    format!(
+                        "{error} The box was already running before this start, so it was left running for the sessions on it: stop or delete it in Settings › Cloud Boxes."
+                    )
+                }
+            })
     })
     .await
     else {
-        stop_after_failed_boot(state, &ops, &target).await;
         return;
     };
     // A `local` box's token is read from the box itself when a client attaches; the others keep
@@ -550,37 +574,23 @@ billing, with nothing on it a client could reach (all three of the reporter's tr
 Instabox machine running). A failed boot now stops the machine: its programs end (gxserver, and
 tailcat if it got that far), the disk is kept, the row stays `failed` with the boot's error, and a
 send boots it again from the start (`resume` takes a failed box); Delete frees it. When the stop
-itself fails, the error says so and points at Delete.
+itself fails, the error says so and points at Delete. Only a machine this attempt made or woke is
+stopped: a box marked failed by a later step can still run live sessions (`wake_machine`).
 */
-/// Stops a box whose boot failed, so it doesn't keep running at its provider.
-async fn stop_after_failed_boot(state: &Arc<AppState>, ops: &Ops, target: &Target) {
-    let stop_ops = ops.clone();
-    let stop_target = target.clone();
-    let stopped = params::blocking(move || stop_ops.stop(&stop_target))
-        .await
-        .unwrap_or_else(|error| Err(error.message));
+/// Stops a box whose boot failed, so it doesn't keep running at its provider, and returns the
+/// boot's error with what happened to the machine.
+fn stopped_after_failed_boot(ops: &Ops, target: &Target, error: &str) -> String {
     let provider = ops.provider();
-    let mut message = None;
-    let _ = registry::update(&state.paths, &target.box_id, |stored| {
-        let reason = stored.row.state_detail.clone().unwrap_or_default();
-        let next = match &stopped {
-            Ok(()) => {
-                stored.row.stopped_at = Some(super::time::now_iso());
-                format!(
-                    "{reason} The box was stopped so it doesn't keep running at {}. Send a message to try again, or delete it.",
-                    provider.label()
-                )
-            }
-            Err(error) => format!(
-                "{reason} Ghostex couldn't stop it at {} ({error}), so it may still be running: delete it in Settings › Cloud Boxes.",
-                provider.label()
-            ),
-        };
-        stored.row.state_detail = Some(next.trim().to_string());
-        message = stored.row.state_detail.clone();
-    });
-    registry::set_step(&target.box_id, Step::Boot, StepState::Failed, message);
-    push(state, &target.box_id).await;
+    match ops.stop(target) {
+        Ok(()) => format!(
+            "{error} The box was stopped so it doesn't keep running at {}. Send a message to try again, or delete it.",
+            provider.label()
+        ),
+        Err(stop) => format!(
+            "{error} Ghostex couldn't stop it at {} ({stop}), so it may still be running: delete it in Settings › Cloud Boxes.",
+            provider.label()
+        ),
+    }
 }
 
 /// Secrets, then prepare-session for a draft, then the card closes (clients attach themselves).
@@ -729,16 +739,15 @@ pub(super) async fn resume(
     tokio::spawn(async move {
         let resume_ops = ops.clone();
         let resume_target = target.clone();
-        if step(&task_state, &box_id, Step::Create, move || {
-            resume_ops.resume(&resume_target, &current)
+        if let Some(woke) = step(&task_state, &box_id, Step::Create, move || {
+            wake_machine(&resume_ops, &resume_target, &current)
         })
         .await
-        .is_some()
         {
             let _ = registry::update(&task_state.paths, &box_id, |stored| {
                 stored.row.state = CloudBoxState::Booting;
             });
-            finish_boot(&task_state, ops, target, ticket, context).await;
+            finish_boot(&task_state, ops, target, ticket, context, woke).await;
         }
     });
     let row = registry::row(&state.paths, &row.box_id)?;

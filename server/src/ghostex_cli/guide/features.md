@@ -6629,10 +6629,13 @@ choice in a new chat and in New Thread shows once you've connected a provider
   that fails while it starts Ghostex is stopped at its provider, so it doesn't
   keep billing for running time: it shows failed with the reason (its disk is
   kept, and a stopped Instabox box still counts toward the plan's box limit),
-  sending a message tries the start again, and Delete removes it. If Ghostex
-  can't stop it, the reason says so and to delete it. A box answers only your
-  own paired devices: it turns on its Easy Connect with exactly those devices
-  in one step, never open to anyone else.
+  sending a message (on your computer or phone) tries the start again, and
+  Delete removes it. If Ghostex can't stop it, the reason says so and to
+  delete it. A box that was already running sessions when a start failed is
+  left running for them, and the reason says so. A box answers only your own
+  paired devices: it turns on its Easy Connect with exactly those devices in
+  one step, never open to anyone else, and a device you unpaired is taken off
+  the box the next time it starts.
 - **From your phone**: cloud sessions sit in their project on the phone too,
   with the same cloud badge, and open in chat without waking the box; sending
   a message wakes it. The box pill under a cloud chat's header shows its
