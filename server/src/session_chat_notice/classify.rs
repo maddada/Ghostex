@@ -614,8 +614,8 @@ pub fn classify_session_chat_terminal_notice(
             return Some(notice);
         }
     }
-    // The agents whose dialogs replace their input box: a dialog phrase with that agent's ready
-    // input box below it is text on the screen (`has_composer_after`).
+    // The agents whose dialogs replace their input box: a dialog phrase on a row above or inside
+    // that agent's ready input box is text on the screen (`phrase_in_or_above_input_box`).
     let dialog_composer = match agent {
         SessionChatOptionAgent::Claude => Some("claude"),
         SessionChatOptionAgent::Antigravity => Some("antigravity"),
@@ -669,9 +669,9 @@ pub fn classify_session_chat_terminal_notice(
             }
             if rule.blocks_input
                 && matches!(signature.scope, NoticeScope::Dialog)
-                && dialog_composer
-                    .zip(signature_needle(signature))
-                    .is_some_and(|(composer, needle)| screen.has_composer_after(composer, needle))
+                && dialog_composer.is_some_and(|composer| {
+                    screen.phrase_in_or_above_input_box(composer, signature)
+                })
             {
                 return false;
             }

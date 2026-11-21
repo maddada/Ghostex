@@ -139,32 +139,85 @@ fn antigravitys_input_box_is_not_taken_for_its_sign_in_menu() {
     );
 }
 
+/// A ready input box whose draft spells the menu's words is the user's draft, never the sign-in
+/// menu: no sign-in card, a ready verdict and an allowed write.
+fn assert_draft_box_is_not_a_sign_in(agent: &str, screen: &str) {
+    assert_eq!(
+        crate::session_chat_composer::detect_session_chat_composer_ready(Some(agent), screen).state,
+        SessionChatComposerState::Ready,
+        "{agent}: the fixture draws a ready input box"
+    );
+    assert!(
+        crate::session_chat_composer::session_chat_composer_input(agent, screen)
+            .is_some_and(|input| input.text.contains("Google OAuth")),
+        "{agent}: the menu's words are the input box's draft"
+    );
+    assert!(
+        classify_session_chat_terminal_notice(Some(agent), screen)
+            .is_none_or(|notice| notice.kind != SESSION_CHAT_NOTICE_LOGIN_EXPIRED),
+        "{agent}"
+    );
+    assert_eq!(
+        session_composer_verdict(Some(agent), screen).state,
+        SessionChatComposerState::Ready,
+        "{agent}"
+    );
+    assert_eq!(
+        guarded_write_refusal(Some(agent), &InputGuard::InputBox, Some(screen)),
+        Ok(()),
+        "{agent}"
+    );
+}
+
+/// Antigravity's input box with `rows` as its draft.
+fn agy_draft(rows: &str) -> String {
+    agy_input_box("").replace("\n> \n", &format!("\n{rows}\n"))
+}
+
 /// A signed-in user's draft that spells the menu's words sits inside the input box itself, so no
 /// ready box is drawn below the matched row; the box around that row still proves it is a draft.
 #[test]
 fn a_draft_in_the_input_box_that_spells_the_menu_is_not_a_sign_in() {
     let draft = "Can you explain Select login method: Google OAuth?";
-    let agy = agy_input_box("").replace("\n> \n", &format!("\n> {draft}\n"));
     let rule = "─".repeat(55);
-    let claude = format!("{rule}\n❯ {draft}\n{rule}\n  Sonnet 5.5 | medium | $0.00");
-    for (agent, screen) in [("antigravity", agy), ("claude", claude)] {
-        assert_eq!(
-            crate::session_chat_composer::detect_session_chat_composer_ready(Some(agent), &screen)
-                .state,
-            SessionChatComposerState::Ready,
-            "{agent}: the fixture draws a ready input box"
-        );
-        assert!(
-            classify_session_chat_terminal_notice(Some(agent), &screen)
-                .is_none_or(|notice| notice.kind != SESSION_CHAT_NOTICE_LOGIN_EXPIRED),
-            "{agent}"
-        );
-        assert_eq!(
-            guarded_write_refusal(Some(agent), &InputGuard::InputBox, Some(&screen)),
-            Ok(()),
-            "{agent}"
-        );
-    }
+    assert_draft_box_is_not_a_sign_in("antigravity", &agy_draft(&format!("> {draft}")));
+    assert_draft_box_is_not_a_sign_in(
+        "claude",
+        &format!("{rule}\n❯ {draft}\n{rule}\n  Sonnet 5.5 | medium | $0.00"),
+    );
+}
+
+/// A Markdown `---` row in the draft is part of the box, not its top rule.
+#[test]
+fn a_draft_with_a_markdown_rule_above_the_menus_words_is_not_a_sign_in() {
+    assert_draft_box_is_not_a_sign_in(
+        "antigravity",
+        &agy_draft("> Please correct this Markdown:\n  ---\n  Select login method: Google OAuth"),
+    );
+}
+
+/// The phrase the menu is matched on can wrap at the box's width, as the matcher reads it.
+#[test]
+fn a_draft_wrapped_inside_the_menus_words_is_not_a_sign_in() {
+    let first = format!("> {}Select login", "x".repeat(41));
+    assert_eq!(first.chars().count(), 55);
+    assert_draft_box_is_not_a_sign_in(
+        "antigravity",
+        &agy_draft(&format!("{first}\n  method: Google OAuth?")),
+    );
+}
+
+/// Claude Code's scrolled input box (`─── ↑ 2 more ───` over a continuation row).
+#[test]
+fn claudes_scrolled_draft_that_spells_its_login_menu_is_not_a_sign_in() {
+    let foot = "─".repeat(55);
+    let head = format!("──── ↑ 2 more {}", "─".repeat(41));
+    assert_draft_box_is_not_a_sign_in(
+        "claude",
+        &format!(
+            "{head}\n  Can you explain Select login method: Google OAuth?\n{foot}\n  Sonnet 5.5 | medium | $0.00"
+        ),
+    );
 }
 
 #[test]

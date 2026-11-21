@@ -118,23 +118,52 @@ impl NoticeScreen {
     }
 
     /// CDXC:AgentScreenDetection 2026-09-24 WHY:
-    /// Claude's dialogs replace its input box, so a ready composer painted below the newest line carrying a dialog phrase proves that line is transcript text: an agent reply quoting "Do you trust the files in this folder?" refused every send with a hidden folder-trust notice.
-    /// Antigravity's sign-in menu replaces its input box the same way, so a reply quoting that menu is held to the same proof.
-    /// The box is read from the rule row above the matched line: a draft that spells the phrase sits inside the box, whose top rule is above it, and read only from below it held every send of a signed-in user typing "Select login method: Google OAuth?".
-    pub(super) fn has_composer_after(&self, agent_id: &str, needle: &str) -> bool {
-        let Some(index) = self.folded.iter().rposition(|line| line.contains(needle)) else {
+    /// Claude's dialogs replace its input box, so a dialog phrase on a row above or inside the agent's ready input box is text on the screen, not a dialog: an agent reply quoting "Do you trust the files in this folder?" refused every send with a hidden folder-trust notice.
+    /// Antigravity's sign-in menu replaces its input box the same way. The box is the one its readiness and draft readers find (`session_chat_input_box_rows`), not a rule row near the phrase: a draft spelling "Select login method: Google OAuth" inside the box held every send, also below a Markdown `---` row in the draft, in Claude's scrolled box (`─── ↑ 2 more ───`), and wrapped across two rows, which the matcher reads as one.
+    pub(super) fn phrase_in_or_above_input_box(
+        &self,
+        agent_id: &str,
+        signature: &NoticeSignature,
+    ) -> bool {
+        let Some(row) = self.newest_match_row(signature) else {
             return false;
         };
-        let from = self.display[..index]
+        crate::session_chat_composer::session_chat_input_box_rows(agent_id, &self.display)
+            .is_some_and(|input_box| row < input_box.end)
+            && crate::session_chat_composer::detect_session_chat_composer_ready(
+                Some(agent_id),
+                &self.display.join("\n"),
+            )
+            .state
+                == crate::session_chat_composer::SessionChatComposerState::Ready
+    }
+
+    /// The row the newest match of `signature` starts on, found in the flattened window the matcher
+    /// reads (`signature_matches`), so a phrase wrapped over two rows is found as well.
+    fn newest_match_row(&self, signature: &NoticeSignature) -> Option<usize> {
+        let Some((NoticePart::Text(first), rest)) = signature.parts.split_first() else {
+            return None;
+        };
+        let window = self.window(signature.scope);
+        let offset = window
+            .match_indices(first)
+            .map(|(index, _)| index)
+            .filter(|index| matches_from(window, index + first.len(), rest))
+            .last()?;
+        let rows = match signature.scope {
+            NoticeScope::Dialog => NOTICE_DIALOG_SCAN_LINES,
+            NoticeScope::Banner | NoticeScope::Exit => NOTICE_BANNER_SCAN_LINES,
+        };
+        // The window is these rows joined by one space (`flatten_tail`).
+        let start = self.folded.len().saturating_sub(rows);
+        let mut row_end = 0;
+        self.folded[start..]
             .iter()
-            .rposition(|line| is_decoration_line(line))
-            .unwrap_or(index + 1);
-        crate::session_chat_composer::detect_session_chat_composer_ready(
-            Some(agent_id),
-            &self.display[from..].join("\n"),
-        )
-        .state
-            == crate::session_chat_composer::SessionChatComposerState::Ready
+            .position(|line| {
+                row_end += line.len() + 1;
+                offset < row_end
+            })
+            .map(|row| start + row)
     }
 
     /// CDXC:AgentScreenDetection 2026-11-11 WHY:
