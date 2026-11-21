@@ -135,7 +135,16 @@ pub(crate) fn picker_rows(
     }
     let scratch = cache_dir.join("model-picker-scratch");
     std::fs::create_dir_all(&scratch).ok()?;
-    let Some(rows) = read_picker(agent, &program, &scratch).filter(|rows| !rows.is_empty()) else {
+    // agy saves the scratch folder as trusted when the read answers its folder question: taken
+    // out again afterwards unless it was trusted already (agent_folder_trust/agy_trust.rs).
+    let agy_scratch = (agent == "antigravity")
+        .then(|| crate::agent_folder_trust::agy_folder_key(&scratch))
+        .filter(|key| !crate::agent_folder_trust::agy_trusts(home, key));
+    let read = read_picker(agent, &program, &scratch);
+    if let Some(key) = agy_scratch.as_deref() {
+        crate::agent_folder_trust::agy_forget(home, key);
+    }
+    let Some(rows) = read.filter(|rows| !rows.is_empty()) else {
         return cached;
     };
     cache.insert(
