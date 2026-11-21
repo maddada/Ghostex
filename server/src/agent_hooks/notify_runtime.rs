@@ -382,9 +382,13 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<Option<String>, DomainStateE
         if let Some(context) = coordinator_additional_context(&response) {
             // ZCode reads a bare `additionalContext`; Claude and Codex read SessionStart's
             // `hookSpecificOutput` (a coordinator's role after /clear, coordinators/role.rs
-            // `coordinator_role_again`).
+            // `coordinator_role_again`); Antigravity injects a system message (the Ghostex note,
+            // agents/activity.rs `SESSION_START_NOTE_AGENTS`).
             let answer = match agent_key.as_str() {
                 "zcode" => Some(json!({ "additionalContext": context })),
+                "antigravity" => Some(json!({
+                    "injectSteps": [{ "systemMessage": { "systemMessage": context } }],
+                })),
                 "claude" | "codex" => Some(json!({
                     "continue": true,
                     "hookSpecificOutput": {
@@ -833,8 +837,8 @@ fn post_json_once(
 }
 
 /// The `additionalContext` gxserver answered with, when the response carries one. The hook prints
-/// it only for a SessionStart of ZCode (a coordinator's guide pointer, the Marked handovers note),
-/// Claude or Codex (a coordinator's role after /clear), so every other event keeps the wrapper's
+/// it only for a SessionStart of ZCode or Antigravity (the Ghostex note, a coordinator's guide
+/// pointer, the Marked handovers note), Claude or Codex (a coordinator's role after /clear), so every other event keeps the wrapper's
 /// canned response and every other agent sees an empty helper stdout.
 fn coordinator_additional_context(response: &str) -> Option<String> {
     let body = response.split_once("\r\n\r\n")?.1;

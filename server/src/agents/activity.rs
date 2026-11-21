@@ -541,7 +541,20 @@ unchanged. Every ZCode SessionStart also gets the Ghostex note while Tell agents
 (agents/ghostex_note.rs). Since 2026-10-17 a new coordinator takes its role from the `ghostex-coordinator` skill
 (coordinators/role.rs), so only coordinators made before then get the pointer; every coordinator
 still gets the Marked handovers note unless Marked handovers is Off (CDXC:MarkedHandovers 2026-11-13).
+CDXC:AgentGuide 2026-11-21 WHY:
+An Antigravity CLI session started in Ghostex had no idea it ran in Ghostex: no note, and no skill
+it could see (the `ghostex` skill is opt-in and `disable-model-invocation`, which agy honours like
+Claude). agy has no system-prompt flag either, but its SessionStart hook can inject a system
+message (`injectSteps`, agy 1.5.13; tested live: the message reaches the first turn, persists, and
+a `--conversation` resume fires no second SessionStart). So Antigravity takes the note the way ZCode
+does, through [`SESSION_START_NOTE_AGENTS`], and gets the same text a launch flag carries: the
+Ghostex note, Marked handovers, and for an ordinary session the extensions' lines.
 */
+/// Agents whose launch command cannot carry the Ghostex note (agents/marked_handovers.rs
+/// `with_note_at`) but whose SessionStart hook adds its output to the agent's context, so the note
+/// rides that hook instead. agent_hooks/notify_runtime.rs prints it in each one's shape.
+pub(crate) const SESSION_START_NOTE_AGENTS: &[&str] = &["zcode", "antigravity"];
+
 fn coordinator_session_start_context(
     repository: &DomainRepository<'_>,
     lifecycle: &LifecycleParams,
@@ -573,7 +586,7 @@ fn coordinator_session_start_context(
             &source,
         ));
     }
-    if !(agent == "zcode" && is_session_start) {
+    if !(SESSION_START_NOTE_AGENTS.contains(&agent.as_str()) && is_session_start) {
         return Ok(None);
     }
     let coordinator = crate::coordinators::read_coordinator(
@@ -596,12 +609,11 @@ fn coordinator_session_start_context(
     };
     let legacy_coordinator =
         coordinator && !crate::coordinators::coordinator_role_is_skill(session);
-    let note = super::ghostex_note_enabled(&paths)
-        .then(|| super::ghostex_note_text(super::agent_preview_browser(&paths)));
+    // Extension lines are for ordinary sessions only, as on a launch flag (marked_handovers.rs).
+    let note = super::note_text_with(&paths, marked, !coordinator && !thread);
     let parts = [
         legacy_coordinator.then_some(crate::coordinators::GUIDE_POINTER_COORDINATOR_INSTRUCTIONS),
         note.as_deref(),
-        marked.then_some(super::MARKED_HANDOVERS_NOTE),
     ];
     let context = parts.into_iter().flatten().collect::<Vec<_>>().join("\n\n");
     Ok((!context.is_empty()).then_some(context))
