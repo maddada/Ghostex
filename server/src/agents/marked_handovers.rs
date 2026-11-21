@@ -91,7 +91,7 @@ pub(crate) fn coordinator_marks_replies(paths: &GxserverPaths) -> bool {
 /// CDXC:MarkedHandovers 2026-10-11 WHY:
 /// For a session the setting covers, the note is added when the launch or resume command is resolved instead of being saved in the session's base command: the command is resolved again on every start, resume, fork and account switch, so turning the setting on or off reaches each session the next time it starts or resumes, while a running agent keeps the instructions it started with. Orchestrators made before 2026-10-17 carry it in their role (role.rs) unless Marked handovers is Off; newer ones read it from `ghostex orchestrator guide`, which their `ghostex-coordinator` skill sends them to (role.rs `coordinator_guide`), and threads have it saved in their base command at creation (`with_thread_marked_handovers`), so both keep it whatever the setting says. Claude keeps only the last `--append-system-prompt-file` (tested 2026-10-11 on Claude Code 2.1.296) and Codex reads one `developer_instructions`, so a command that already names its own is left alone rather than lose it, except a Codex orchestrator's guide pointer, which the note joins. ZCode has no such flag and gets the note as SessionStart hook context (activity.rs); Empryo ignores hook context and other agents have no channel Ghostex can use, so they do not get the note outside an Empryo orchestrator's profile.
 /// CDXC:AgentGuide 2026-11-02 WHY:
-/// The Ghostex note (agents/ghostex_note.rs) rides the same flag, joined with this note into one file or value, so neither replaces the other. Pi (`--append-system-prompt`, which takes a file), Droid (`--append-system-prompt-file`), Grok Build (`--rules`) and OMP (`--append-system-prompt`) get the joined text through their own flags; ZCode and Antigravity get it from their SessionStart hook (activity.rs `SESSION_START_NOTE_AGENTS`); the `ghostex` skill does not stand in for it, since it never loads on its own.
+/// The Ghostex note (agents/ghostex_note.rs) rides the same flag, joined with this note into one file or value, so neither replaces the other. Pi (`--append-system-prompt`, which takes a file), Droid (`--append-system-prompt-file`), Grok Build (`--rules`) and OMP (`--append-system-prompt`) get the joined text through their own flags, Copilot through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` (`with_copilot_note`); ZCode, Antigravity, Kiro, CodeBuddy and Qoder get it from their SessionStart hook (activity.rs `SESSION_START_NOTE_AGENTS`); the `ghostex` skill does not stand in for it, since it never loads on its own.
 /// SEE-ALSO: server/src/agents/launch_plan.rs (`resolve_agent_launch_command` calls this), server/src/coordinators/role.rs (`coordinator_role_file` and `GUIDE_POINTER_COORDINATOR_INSTRUCTIONS`, the older orchestrators' role flags this combines with), server/src/agents/ghostex_note.rs.
 ///
 /// CDXC:Extensions 2026-11-16 WHY:
@@ -189,6 +189,9 @@ fn with_note_at(family: &str, command: &str, text: &str, path: &std::path::Path)
                 quote_shell_arg(text)
             );
         }
+        "copilot" if !command.contains(COPILOT_INSTRUCTIONS_DIRS) => {
+            return with_copilot_note(command, text, path);
+        }
         _ => return command.to_string(),
     };
     match write_note_file(path, text) {
@@ -198,6 +201,43 @@ fn with_note_at(family: &str, command: &str, text: &str, path: &std::path::Path)
             quote_shell_arg(&path.to_string_lossy())
         ),
         Err(_) => command.to_string(),
+    }
+}
+
+const COPILOT_INSTRUCTIONS_DIRS: &str = "COPILOT_CUSTOM_INSTRUCTIONS_DIRS";
+
+/// CDXC:AgentGuide 2026-11-21 WHY:
+/// Copilot CLI (1.0.107) has no system prompt flag, but it loads every `*.instructions.md` in the folders `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`
+/// names (`copilot instruction list` shows them; a plain AGENTS.md or copilot-instructions.md
+/// there is not read). So the note is written as `ghostex.instructions.md` (`applyTo: "**"`) in a
+/// folder of its own beside `path`, and the launch names that folder in front of any the user's
+/// shell already sets. An empty entry left by an unset variable is ignored (tested live).
+fn with_copilot_note(command: &str, text: &str, path: &std::path::Path) -> String {
+    let stem = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "note".to_string());
+    let dir = path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join(format!("{stem}-copilot"));
+    let file = dir.join("ghostex.instructions.md");
+    if write_note_file(&file, &format!("---\napplyTo: \"**\"\n---\n\n{text}\n")).is_err() {
+        return command.to_string();
+    }
+    let dir = dir.to_string_lossy();
+    if cfg!(windows) {
+        let dir = dir.replace('\'', "''");
+        format!("$env:{COPILOT_INSTRUCTIONS_DIRS}='{dir},' + $env:{COPILOT_INSTRUCTIONS_DIRS}; {command}")
+    } else {
+        let dir = dir
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('$', "\\$")
+            .replace('`', "\\`");
+        format!(
+            "env {COPILOT_INSTRUCTIONS_DIRS}=\"{dir}${{{COPILOT_INSTRUCTIONS_DIRS}:+,${COPILOT_INSTRUCTIONS_DIRS}}}\" {command}"
+        )
     }
 }
 

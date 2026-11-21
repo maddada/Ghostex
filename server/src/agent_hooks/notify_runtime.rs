@@ -378,18 +378,24 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<Option<String>, DomainStateE
     if has_state_path {
         write_hook_state(Path::new(state_path), &state)?;
     }
-    if event_name.eq_ignore_ascii_case("SessionStart") {
+    let session_start = event_name.eq_ignore_ascii_case("SessionStart")
+        || (agent_key == "kiro" && event_name.eq_ignore_ascii_case("agentSpawn"));
+    if session_start {
         if let Some(context) = coordinator_additional_context(&response) {
+            // Kiro adds a successful `agentSpawn` hook's plain stdout to the agent's context.
+            if agent_key == "kiro" {
+                return Ok(Some(context));
+            }
             // ZCode reads a bare `additionalContext`; Claude and Codex read SessionStart's
             // `hookSpecificOutput` (a coordinator's role after /clear, coordinators/role.rs
-            // `coordinator_role_again`); Antigravity injects a system message (the Ghostex note,
-            // agents/activity.rs `SESSION_START_NOTE_AGENTS`).
+            // `coordinator_role_again`), as CodeBuddy and Qoder do; Antigravity injects a system
+            // message (the Ghostex note, agents/activity.rs `SESSION_START_NOTE_AGENTS`).
             let answer = match agent_key.as_str() {
                 "zcode" => Some(json!({ "additionalContext": context })),
                 "antigravity" => Some(json!({
                     "injectSteps": [{ "systemMessage": { "systemMessage": context } }],
                 })),
-                "claude" | "codex" => Some(json!({
+                "claude" | "codex" | "codebuddy" | "qoder" => Some(json!({
                     "continue": true,
                     "hookSpecificOutput": {
                         "hookEventName": "SessionStart",
@@ -596,7 +602,7 @@ fn post_gxserver_hook_event(
     params.insert("eventName".to_string(), json!(event_name));
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("rawEventName".to_string(), json!(event_name));
-    if matches!(agent_key, "codex" | "claude") {
+    if matches!(agent_key, "codex" | "claude" | "codebuddy" | "qoder") {
         if let Some(source) = payload.get("source").and_then(Value::as_str) {
             params.insert("hookSource".to_string(), json!(source));
         }
@@ -837,7 +843,7 @@ fn post_json_once(
 }
 
 /// The `additionalContext` gxserver answered with, when the response carries one. The hook prints
-/// it only for a SessionStart of ZCode or Antigravity (the Ghostex note, a coordinator's guide
+/// it only for a SessionStart of ZCode, Antigravity, Kiro, CodeBuddy or Qoder (the Ghostex note, a coordinator's guide
 /// pointer, the Marked handovers note), Claude or Codex (a coordinator's role after /clear), so every other event keeps the wrapper's
 /// canned response and every other agent sees an empty helper stdout.
 fn coordinator_additional_context(response: &str) -> Option<String> {

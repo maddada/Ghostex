@@ -3053,9 +3053,9 @@ Live pages, Ghostex forms and Ghostex visuals in the chat, open pages the agent
 builds in its own browser, run other agents and coordinators, and explain or
 change its own settings. The agent uses it only when you ask for one of those
 things, and then reads the details from `ghostex agent-guide`. It reaches
-Claude Code, Codex, ZCode, Antigravity CLI, Grok Build, Pi, OMP and Factory
-Droid when they start; in other agents (OpenCode, Cursor, Copilot and the
-rest) type `/ghostex` (`$ghostex` in
+Claude Code, Codex, ZCode, Antigravity CLI, Grok Build, Copilot, Kiro,
+CodeBuddy, Qoder, Pi, OMP and Factory Droid when they start; in other agents
+(OpenCode, Cursor, Kimi Code and the rest) type `/ghostex` (`$ghostex` in
 Codex) to send the agent to `ghostex agent-guide`. That Ghostex skill installs
 from Settings > Integrations > Agent skills or with `ghostex agent-guide
 install-skill`. A change applies to sessions started or resumed
