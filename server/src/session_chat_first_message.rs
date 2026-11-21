@@ -199,12 +199,29 @@ pub(crate) fn hold(
 /// The coordinator's agent is being switched before Start (`/api/switchDraftAgent`, CDXC:Drafts
 /// 2026-11-21 in agents/no_conversation.rs): a message typed into the old agent's box, or taken out
 /// for a model change, goes into the new agent's box once it shows. One the user cleared from the
-/// box stays out, as before.
+/// box beforehand stays out, as before.
+///
+/// WHY: under the box lock, so a look of the watch already under way when the switch began (the
+/// switch guard makes later ones wait) finishes first; one that saw the old box empty as its agent
+/// exited and marked the message `left` is undone here, since that was the switch, not the user.
 pub(crate) fn retype_after_agent_switch(db: &Connection, project_id: &str, session_id: &str) {
-    let _ = db.execute(
-        "UPDATE session_chat_first_messages SET state = ?3, updatedAt = ?4 WHERE projectId = ?1 AND sessionId = ?2 AND state IN (?5, ?6)",
-        params![project_id, session_id, WAITING, now_iso(), TYPED, LIFTED],
-    );
+    if !read(db, project_id, session_id)
+        .is_some_and(|message| matches!(message.state.as_str(), TYPED | LIFTED))
+    {
+        return;
+    }
+    let paths = crate::paths::get_gxserver_paths(None);
+    let (project_id, session_id) = (project_id.to_string(), session_id.to_string());
+    tokio::spawn(async move {
+        let lock = box_lock(&project_id, &session_id);
+        let _guard = lock.lock().await;
+        if let Ok(db) = open_gxserver_database(&paths) {
+            let _ = db.execute(
+                "UPDATE session_chat_first_messages SET state = ?3, updatedAt = ?4 WHERE projectId = ?1 AND sessionId = ?2 AND state IN (?5, ?6, ?7)",
+                params![project_id, session_id, WAITING, now_iso(), TYPED, LIFTED, LEFT],
+            );
+        }
+    });
 }
 
 /// Watches every waiting first message again after gxserver starts. One a model change had taken
@@ -278,6 +295,7 @@ fn spawn_watch(state: &AppState, project_id: &str, session_id: &str) {
 /// record is gone) or Enter in the terminal (the box no longer holds it and the agent works).
 async fn watch(state: &AppState, project_id: &str, session_id: &str) {
     let started = Instant::now();
+    let mut terminal_turn = TerminalTurn::default();
     loop {
         let pause = if started.elapsed() < WATCH_FAST_FOR {
             WATCH_FAST
@@ -308,14 +326,16 @@ async fn watch(state: &AppState, project_id: &str, session_id: &str) {
             Err(_) => continue,
         };
         match message.state.as_str() {
-            WAITING => {
-                if ready_to_type(state, &target).await
-                    && type_into_box(state, &target, &message.text).await
-                    && set_state(state, project_id, session_id, &[WAITING], TYPED)
-                {
+            // The user started the conversation in the terminal before the message was typed:
+            // typing it now would put it in the box after their turn. Start still sends it.
+            WAITING
+                if crate::agents::agent_recorded_a_prompt(&target.session)
+                    || terminal_turn.happened(&target.session) =>
+            {
+                if set_state(state, project_id, session_id, &[WAITING], LEFT) {
                     log(
                         state,
-                        "coordinatorFirstMessageTyped",
+                        "coordinatorFirstMessageLeftForTerminalTurn",
                         project_id,
                         session_id,
                         json!({}),
@@ -323,6 +343,24 @@ async fn watch(state: &AppState, project_id: &str, session_id: &str) {
                     broadcast(state, project_id, session_id);
                 }
             }
+            WAITING => match box_check(state, &target).await {
+                BoxCheck::Empty => {
+                    if type_into_box(state, &target, &message.text).await
+                        && set_state(state, project_id, session_id, &[WAITING], TYPED)
+                    {
+                        log(
+                            state,
+                            "coordinatorFirstMessageTyped",
+                            project_id,
+                            session_id,
+                            json!({}),
+                        );
+                        broadcast(state, project_id, session_id);
+                    }
+                }
+                BoxCheck::HoldsText => terminal_turn.box_held_text(&target.session),
+                BoxCheck::NotReady => {}
+            },
             TYPED => match box_reading(&target, &message.text).await {
                 BoxReading::HoldsIt | BoxReading::Unreadable => {}
                 BoxReading::Other => {
@@ -388,17 +426,65 @@ fn agent_took_it(target: &SessionChatSendTarget) -> bool {
     matches!(activity.as_str(), "working" | "attention")
 }
 
+/// A turn the user started in the agent's own terminal while the message waited: the box was seen
+/// holding their text, and the agent then worked (its last-active time moved, or it works now).
+/// The agent's own records of it can come much later (Codex's transcript path, about 40 s), by
+/// which time the watch would have typed the message after their turn.
+#[derive(Default)]
+struct TerminalTurn {
+    /// The session's `lastActiveAt` when the box was first seen holding text.
+    active_when_box_held_text: Option<Option<String>>,
+}
+
+impl TerminalTurn {
+    fn box_held_text(&mut self, session: &Value) {
+        if self.active_when_box_held_text.is_none() {
+            self.active_when_box_held_text = Some(last_active_at(session));
+        }
+    }
+
+    fn happened(&self, session: &Value) -> bool {
+        self.active_when_box_held_text
+            .as_ref()
+            .is_some_and(|before| {
+                *before != last_active_at(session)
+                    || crate::presentation::presentation_activity(session, &now_iso()) == "working"
+            })
+    }
+}
+
+fn last_active_at(session: &Value) -> Option<String> {
+    session
+        .get("lastActiveAt")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+/// What the agent's input box shows to the watch.
+enum BoxCheck {
+    /// Up and empty, with nothing else on its way into it: the message can be typed now.
+    Empty,
+    /// Up and holding other text: the user is typing in the terminal.
+    HoldsText,
+    /// Not up, not readable, or something else is on its way into it.
+    NotReady,
+}
+
 /// Whether the message can be typed now: the agent runs and shows its input box, and nothing else
 /// is on its way into the box (the queue, as a ZCode or OpenCode coordinator's `/model` line, or a
 /// model change).
 async fn ready_to_type(state: &AppState, target: &SessionChatSendTarget) -> bool {
+    matches!(box_check(state, target).await, BoxCheck::Empty)
+}
+
+async fn box_check(state: &AppState, target: &SessionChatSendTarget) -> BoxCheck {
     if target.session["lifecycleState"].as_str() != Some("running")
         || crate::agentbox::pending_session_agentbox(&target.session).is_some()
     {
-        return false;
+        return BoxCheck::NotReady;
     }
     let Ok(db) = open_gxserver_database(&state.paths) else {
-        return false;
+        return BoxCheck::NotReady;
     };
     if crate::session_chat_queue::session_has_pending_session_chat_queue(
         &db,
@@ -409,22 +495,22 @@ async fn ready_to_type(state: &AppState, target: &SessionChatSendTarget) -> bool
         &target.project_id,
         &target.session_id,
     ) {
-        return false;
+        return BoxCheck::NotReady;
     }
     drop(db);
     // Pi and OMP take the text through their chat channel (`place_terminal_text`).
     if crate::pi_chat_actions::is_pi_family(&target.session)
         && crate::pi_chat_channel::live(&target.project_id, &target.session_id).is_some()
     {
-        return true;
+        return BoxCheck::Empty;
     }
     let Some(agent) = agent_of(target) else {
-        return false;
+        return BoxCheck::NotReady;
     };
     let Some(screen) =
         crate::session_chat_send::capture_session_terminal_text_vt(&target.zmx_name).await
     else {
-        return false;
+        return BoxCheck::NotReady;
     };
     let notice =
         crate::session_chat_notice::classify_session_chat_terminal_notice(Some(&agent), &screen);
@@ -433,9 +519,14 @@ async fn ready_to_type(state: &AppState, target: &SessionChatSendTarget) -> bool
         &screen,
         notice.as_ref(),
     );
-    ready.state == crate::session_chat_composer::SessionChatComposerState::Ready
-        && crate::session_chat_composer::session_chat_composer_input(&agent, &screen)
-            .is_some_and(|input| input.is_empty())
+    if ready.state != crate::session_chat_composer::SessionChatComposerState::Ready {
+        return BoxCheck::NotReady;
+    }
+    match crate::session_chat_composer::session_chat_composer_input(&agent, &screen) {
+        Some(input) if input.is_empty() => BoxCheck::Empty,
+        Some(input) if !input.text_unreadable() => BoxCheck::HoldsText,
+        _ => BoxCheck::NotReady,
+    }
 }
 
 async fn type_into_box(state: &AppState, target: &SessionChatSendTarget, text: &str) -> bool {
