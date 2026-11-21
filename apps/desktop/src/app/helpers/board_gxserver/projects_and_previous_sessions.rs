@@ -205,6 +205,9 @@ pub(crate) struct GpuiPreviousSessionsRequest {
     pub(crate) request_id: String,
     pub(crate) session_tags: Option<Vec<String>>,
     pub(crate) project_id: Option<String>,
+    /// History of a project the sidebar's one list merged: every copy's workspace project id
+    /// (`remote:<machine>:project:<id>` on another computer), each read on its own computer.
+    pub(crate) project_ids: Vec<String>,
     pub(crate) external_only: bool,
     pub(crate) refresh_external_sessions: bool,
 }

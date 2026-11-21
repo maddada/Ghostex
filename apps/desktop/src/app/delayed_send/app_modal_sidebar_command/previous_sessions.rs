@@ -14,7 +14,29 @@ impl GhostexGpuiApp {
         match command_type {
             "requestPreviousSessions" => {
                 let request = gpui_previous_sessions_request_from_command(command);
-                let remote_sources = self.connected_gpui_remote_previous_session_sources();
+                let mut remote_sources = self.connected_gpui_remote_previous_session_sources();
+                // History across a project's copies also reads a copy on a computer the saved
+                // list doesn't hold, such as a Cloud Box.
+                for reference in request
+                    .project_ids
+                    .iter()
+                    .filter_map(|id| gpui_remote_project_reference_from_project_id(id))
+                {
+                    let machine_id = reference.remote_machine_id;
+                    if remote_sources
+                        .iter()
+                        .any(|source| source.remote_machine_id == machine_id)
+                    {
+                        continue;
+                    }
+                    if let Some(target) = self.gpui_remote_gxserver_request_target(&machine_id) {
+                        remote_sources.push(GpuiRemotePreviousSessionSource {
+                            machine_name: None,
+                            remote_machine_id: machine_id,
+                            target,
+                        });
+                    }
+                }
                 self.run_gpui_app_modal_sidebar_status_task(
                     move || gpui_previous_sessions_result_message(request, remote_sources),
                     cx,

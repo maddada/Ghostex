@@ -807,6 +807,11 @@ impl QuickAccessController {
             } else {
                 String::new()
             },
+            notices: if self.tab == QuickAccessTab::RecentSessions {
+                self.sessions.unreachable_notices()
+            } else {
+                Vec::new()
+            },
             editor: if prompts_tab {
                 editor_state(&self.prompts, data)
             } else {

@@ -1752,7 +1752,11 @@ when you open it.
   right-click on the project) opens Quick Access > Sessions with that project
   selected and Closed active, ready to search sessions you closed. Enter or a
   click on a closed session brings it back and keeps Quick Access open, so you
-  can bring back several in a row; each one leaves the list.
+  can bring back several in a row; each one leaves the list. With Separate by
+  machine off, History of a project that is on several computers lists the
+  closed sessions of every copy, newest first, each marked with its computer's
+  icon and name, and brings one back on its own computer; a computer that isn't
+  connected shows a "<computer> is offline" line instead.
   From a terminal, `ghostex previous-sessions [--query text] --json` lists closed
   sessions and `ghostex restore-previous-session --project-id <id> --session-id <id>`
   brings one back.

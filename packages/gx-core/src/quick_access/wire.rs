@@ -70,6 +70,9 @@ pub enum QuickAccessRow {
         title: String,
         icon: QuickAccessIcon,
         project_label: String,
+        /// The icon of the computer `project_label` names, while History lists a project's copies
+        /// on several computers; `None` otherwise.
+        computer_icon: QuickAccessIcon,
         file_size: String,
         file_size_loading: bool,
         time: String,
@@ -241,6 +244,9 @@ pub struct QuickAccessSnapshot {
     pub primary_action: String,
     pub action_hotkeys: Vec<String>,
     pub hint: String,
+    /// Short lines over the list, such as "<computer> is offline" for a computer History could
+    /// not read.
+    pub notices: Vec<String>,
     pub editor: Option<QuickAccessPromptEditor>,
     pub tag_composer: Option<QuickAccessTagComposer>,
 }

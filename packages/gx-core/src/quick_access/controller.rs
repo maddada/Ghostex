@@ -272,6 +272,15 @@ impl QuickAccessController {
         if !self.sessions.project_id.is_empty() {
             message["projectId"] = json!(self.sessions.project_id);
         }
+        // History of a project the one list merged: every copy's id, each read on its computer.
+        if self.sessions.spans_copies() {
+            message["projectIds"] = json!(self
+                .sessions
+                .project_copies
+                .iter()
+                .map(|copy| copy.project_id.as_str())
+                .collect::<Vec<_>>());
+        }
         effects.push(QuickAccessEffect::Post(message));
     }
 
@@ -524,6 +533,8 @@ impl QuickAccessController {
                         self.sessions = SessionsTabState::new(context.clock.now_ms());
                         self.sessions.project_id =
                             command["projectId"].as_str().unwrap_or("").to_string();
+                        self.sessions.project_copies =
+                            sessions::project_copies_from_value(&command["projectCopies"]);
                         self.sessions.scope = command["scope"]
                             .as_str()
                             .map(SessionScope::parse)
@@ -683,6 +694,8 @@ impl QuickAccessController {
                 let value = str_field("value");
                 if self.tab == QuickAccessTab::RecentSessions {
                     self.sessions.project_id = value;
+                    self.sessions.project_copies.clear();
+                    self.sessions.unreachable_machine_ids.clear();
                     self.schedule_sessions_request(true, &mut effects);
                 } else if self.tab == QuickAccessTab::SavedPrompts {
                     if value == ALL_PROJECTS_VALUE {
@@ -844,6 +857,7 @@ impl QuickAccessController {
                         !seen.contains(session["historyId"].as_str().unwrap_or(""))
                     }));
                 } else {
+                    self.sessions.unreachable_machine_ids.clear();
                     self.sessions.remote_sessions = Some(page);
                     self.sessions.resolved_query_key =
                         Some(self.sessions_request_query_key.clone());
@@ -853,6 +867,14 @@ impl QuickAccessController {
                         self.sessions.history_window_count = 1;
                     }
                 }
+                self.sessions.unreachable_machine_ids.extend(
+                    message["unreachableMachineIds"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string),
+                );
                 if let Some(projects) = message["projects"].as_array() {
                     self.sessions.project_options = projects
                         .iter()

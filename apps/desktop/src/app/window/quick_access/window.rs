@@ -23,7 +23,7 @@ use super::editor::{quick_access_prompt_editor, quick_access_tag_composer};
 use super::model::{QuickAccessSnapshot, QuickAccessTabId, QuickAccessToolbar};
 use super::palette::{
     QUICK_ACCESS_GROUP_HEADING_HEIGHT, QUICK_ACCESS_ITEM_FONT_SIZE, QUICK_ACCESS_LIST_PADDING,
-    QUICK_ACCESS_ROW_PADDING_X, QuickAccessPalette, hsla,
+    QUICK_ACCESS_META_FONT_SIZE, QUICK_ACCESS_ROW_PADDING_X, QuickAccessPalette, hsla,
 };
 use super::rows::{RowCallbacks, quick_access_row};
 use crate::app::window::native_modal_kit::MODAL_UI_FONT;
@@ -1023,8 +1023,24 @@ impl GpuiQuickAccessWindow {
         let selected = snapshot.selected_key.clone();
         let mut children: Vec<AnyElement> = Vec::new();
         let mut row_index = 0usize;
+        // "<computer> is offline" for a computer History could not read (gx-core quick_access).
+        for notice in &snapshot.notices {
+            children.push(
+                div()
+                    .w_full()
+                    .flex_shrink_0()
+                    .px(px(QUICK_ACCESS_ROW_PADDING_X))
+                    .py(px(5.0))
+                    .text_size(px(QUICK_ACCESS_META_FONT_SIZE))
+                    .line_height(px(16.0))
+                    .text_color(hsla(p.muted))
+                    .child(SharedString::from(notice.clone()))
+                    .into_any_element(),
+            );
+        }
+        let notices = children.len();
         for group in &snapshot.groups {
-            if group.separated && !children.is_empty() {
+            if group.separated && children.len() > notices {
                 children.push(
                     div()
                         .my(px(4.0))
@@ -1065,11 +1081,11 @@ impl GpuiQuickAccessWindow {
                 row_index += 1;
             }
         }
-        if children.is_empty() && snapshot.loading {
+        if children.len() == notices && snapshot.loading {
             if self.loading_revealed {
                 children.push(quick_access_loading(&p, &snapshot.loading_label));
             }
-        } else if children.is_empty() {
+        } else if children.len() == notices {
             children.push(
                 div()
                     .w_full()

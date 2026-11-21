@@ -345,11 +345,42 @@ fn plan_project_action(view: &SidebarView, command: &Value) -> Option<SidebarAct
         "coordinator" => Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
             payload: new_coordinator_modal_payload(group_id, target.title),
         })),
-        "history" => Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
-            payload: quick_access_sessions(Some(workspace_project_id.as_str()), "closed"),
-        })),
+        "history" => {
+            let mut payload = quick_access_sessions(Some(workspace_project_id.as_str()), "closed");
+            if let Some(copies) = history_project_copies(view, group_id) {
+                payload["initialProjectCopies"] = copies;
+            }
+            Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
+                payload,
+            }))
+        }
         _ => None,
     }
+}
+
+/// Every copy of the entry `group_id` acts for, for its History (CDXC:RemoteMachines 2026-11-21 in
+/// quick_access/sessions.rs): `[{ projectId, machineId, computer }]`, the workspace project id of
+/// each. `None` unless the one list merged more than one copy into it, which it never does while
+/// Separate by machine is on.
+fn history_project_copies(view: &SidebarView, group_id: &str) -> Option<Value> {
+    let copies = view.project_copies(group_id)?;
+    if copies.len() < 2 {
+        return None;
+    }
+    Some(Value::Array(
+        copies
+            .iter()
+            .filter_map(|copy| {
+                let project_id =
+                    ProjectKey::parse_sidebar_group_id(&copy.group_id)?.to_workspace_project_id();
+                Some(json!({
+                    "projectId": project_id,
+                    "machineId": copy.machine_id,
+                    "computer": copy.computer,
+                }))
+            })
+            .collect(),
+    ))
 }
 
 /// The two effects every navigation row runs, in the TypeScript's order.

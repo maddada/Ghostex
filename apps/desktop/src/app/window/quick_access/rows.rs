@@ -109,6 +109,18 @@ fn glyph_tile(p: &QuickAccessPalette, icon: &QuickAccessIcon) -> AnyElement {
 
 /// Title and muted subtitle on one baseline. The subtitle gives way first.
 fn row_text(p: &QuickAccessPalette, title: &str, subtitle: &str) -> gpui::Div {
+    row_text_marked(p, title, subtitle, &QuickAccessIcon::None)
+}
+
+/// [`row_text`] with a glyph before the subtitle: a session row's computer while History lists a
+/// project on several computers (gx-core quick_access/sessions.rs).
+fn row_text_marked(
+    p: &QuickAccessPalette,
+    title: &str,
+    subtitle: &str,
+    subtitle_icon: &QuickAccessIcon,
+) -> gpui::Div {
+    let marked = !matches!(subtitle_icon, QuickAccessIcon::None);
     h_flex()
         .flex_1()
         .min_w_0()
@@ -127,7 +139,7 @@ fn row_text(p: &QuickAccessPalette, title: &str, subtitle: &str) -> gpui::Div {
                 .child(SharedString::from(title.to_string())),
         )
         .children((!subtitle.is_empty()).then(|| {
-            div()
+            let text = div()
                 .flex_shrink(8.0)
                 .min_w_0()
                 .overflow_hidden()
@@ -136,7 +148,18 @@ fn row_text(p: &QuickAccessPalette, title: &str, subtitle: &str) -> gpui::Div {
                 .text_size(px(QUICK_ACCESS_META_FONT_SIZE))
                 .line_height(px(20.0))
                 .text_color(hsla(p.muted))
-                .child(SharedString::from(subtitle.to_string()))
+                .child(SharedString::from(subtitle.to_string()));
+            if !marked {
+                return text;
+            }
+            h_flex()
+                .flex_shrink(8.0)
+                .min_w_0()
+                .gap(px(4.0))
+                .items_center()
+                .self_center()
+                .child(quick_access_icon(subtitle_icon, 12.0, p.muted))
+                .child(text)
         }))
 }
 
@@ -282,6 +305,7 @@ pub(crate) fn quick_access_row<V: 'static>(
             title,
             icon,
             project_label,
+            computer_icon,
             file_size,
             file_size_loading,
             time,
@@ -299,7 +323,7 @@ pub(crate) fn quick_access_row<V: 'static>(
             cx,
         )
         .child(glyph_tile(p, icon))
-        .child(row_text(p, title, project_label))
+        .child(row_text_marked(p, title, project_label, computer_icon))
         .child(
             accessories()
                 .children((!file_size.is_empty()).then(|| {

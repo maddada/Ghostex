@@ -68,11 +68,30 @@ pub(crate) struct ProjectOption {
     pub(crate) name: String,
 }
 
+/// One copy of the project History opened on: a project the Project sidebar's one list merged
+/// into the entry whose header opened it (gx-core `sidebar_view::ProjectCopy`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SessionProjectCopy {
+    /// The workspace project id: the raw id on this computer, `remote:<machine>:project:<id>` on
+    /// another.
+    pub(crate) project_id: String,
+    pub(crate) machine_id: String,
+    /// Its computer's name as the sidebar spells it.
+    pub(crate) computer: String,
+    /// Its computer's icon, a bundled `titlebar/<name>.svg` name; empty when the host has none.
+    pub(crate) icon: String,
+}
+
 /// `SessionsTabState`.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SessionsTabState {
     pub(crate) scope: SessionScope,
     pub(crate) project_id: String,
+    /// Every copy of the project History opened on, while the project filter is still that
+    /// project: its rows come from all of them (`SessionsTabState::spans_copies`).
+    pub(crate) project_copies: Vec<SessionProjectCopy>,
+    /// The computers of `project_copies` the last answer could not reach.
+    pub(crate) unreachable_machine_ids: BTreeSet<String>,
     pub(crate) tag_filters: Vec<String>,
     pub(crate) remote_sessions: Option<Vec<Value>>,
     pub(crate) cursor: Option<String>,
@@ -93,6 +112,8 @@ impl SessionsTabState {
         Self {
             scope: SessionScope::All,
             project_id: String::new(),
+            project_copies: Vec::new(),
+            unreachable_machine_ids: BTreeSet::new(),
             tag_filters: Vec::new(),
             remote_sessions: None,
             cursor: None,
@@ -110,6 +131,49 @@ impl SessionsTabState {
         self.restored_keys.insert(dedupe_key(session));
     }
 
+    /// CDXC:RemoteMachines 2026-11-21 DECISION:
+    /// User: "when i click on a project's header and open history then please show me sessions for the project on all my machines when i have separate by machine off. right now i only saw my macbook last closed sessions didn't see the ones on my windows machine". With Separate by machine off, a project header's History lists the closed sessions of every copy the one list merged into that entry (each connected computer's, and a second clone here), newest first, each row naming its computer with its icon; a computer that can't be reached gets an "<computer> is offline" line. Picking another project in the filter drops back to that one project. With Separate by machine on, History lists the one computer's project, as before.
+    pub(crate) fn spans_copies(&self) -> bool {
+        !self.project_id.is_empty()
+            && self.project_copies.len() > 1
+            && self
+                .project_copies
+                .iter()
+                .any(|copy| copy.project_id == self.project_id)
+    }
+
+    /// The copy `project_id` names, while the filter spans copies.
+    pub(crate) fn copy_of(&self, project_id: Option<&str>) -> Option<&SessionProjectCopy> {
+        let project_id = project_id?;
+        if !self.spans_copies() {
+            return None;
+        }
+        self.project_copies
+            .iter()
+            .find(|copy| copy.project_id == project_id)
+    }
+
+    /// Whether a row of `project_id` passes the project filter.
+    pub(crate) fn matches_project(&self, project_id: Option<&str>) -> bool {
+        self.project_id.is_empty()
+            || project_id == Some(self.project_id.as_str())
+            || self.copy_of(project_id).is_some()
+    }
+
+    /// The "<computer> is offline" lines for the copies the last answer could not reach.
+    pub(crate) fn unreachable_notices(&self) -> Vec<String> {
+        if !self.spans_copies() {
+            return Vec::new();
+        }
+        let mut seen = BTreeSet::new();
+        self.project_copies
+            .iter()
+            .filter(|copy| self.unreachable_machine_ids.contains(&copy.machine_id))
+            .filter(|copy| seen.insert(copy.machine_id.clone()))
+            .map(|copy| format!("{} is offline", copy.computer))
+            .collect()
+    }
+
     pub(crate) fn has_filters_or_query(&self, query: &str) -> bool {
         !js_trim(query).is_empty()
             || !self.tag_filters.is_empty()
@@ -118,17 +182,40 @@ impl SessionsTabState {
     }
 }
 
+/// The copies a History open names (`initialProjectCopies`, gx-core `sidebar_actions/open.rs`):
+/// `[{ projectId, machineId, computer, icon }]`. Rows without a project id are left out.
+pub(crate) fn project_copies_from_value(value: &Value) -> Vec<SessionProjectCopy> {
+    let text = |copy: &Value, key: &str| copy[key].as_str().unwrap_or("").trim().to_string();
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|copy| SessionProjectCopy {
+            project_id: text(copy, "projectId"),
+            machine_id: text(copy, "machineId"),
+            computer: text(copy, "computer"),
+            icon: text(copy, "icon"),
+        })
+        .filter(|copy| !copy.project_id.is_empty())
+        .collect()
+}
+
 /// `sessionsQueryKey`: the answer a page must match to count as this query's.
 pub(crate) fn sessions_query_key(state: &SessionsTabState, query: &str) -> String {
     let mut tags = state.tag_filters.clone();
     tags.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
-    serde_json::json!([
+    let mut key = serde_json::json!([
         js_trim(query),
         tags,
         state.project_id,
         state.scope == SessionScope::External
-    ])
-    .to_string()
+    ]);
+    if state.spans_copies() {
+        if let Some(parts) = key.as_array_mut() {
+            parts.push(Value::Bool(true));
+        }
+    }
+    key.to_string()
 }
 
 /// A session either kind of row reads, open or closed.
@@ -457,11 +544,14 @@ pub(crate) enum SessionItem<'a> {
         project_label: Option<String>,
         session: &'a QuickAccessSession,
         timestamp: i64,
+        /// Its project's copy, while History spans a project's copies.
+        copy: Option<&'a SessionProjectCopy>,
     },
     Closed {
         key: String,
         session: &'a Value,
         timestamp: i64,
+        copy: Option<&'a SessionProjectCopy>,
     },
 }
 
@@ -474,6 +564,11 @@ impl SessionItem<'_> {
     fn timestamp(&self) -> i64 {
         match self {
             Self::Open { timestamp, .. } | Self::Closed { timestamp, .. } => *timestamp,
+        }
+    }
+    fn copy(&self) -> Option<&SessionProjectCopy> {
+        match self {
+            Self::Open { copy, .. } | Self::Closed { copy, .. } => *copy,
         }
     }
 }
@@ -526,9 +621,8 @@ pub(crate) fn visible_items<'a>(
             .collect();
         for index in filter_sessions(&fields, query, &catalog) {
             let (group, session) = open[index];
-            if !state.project_id.is_empty()
-                && group_project_id(group).as_deref() != Some(state.project_id.as_str())
-            {
+            let project_id = group_project_id(group);
+            if !state.matches_project(project_id.as_deref()) {
                 continue;
             }
             let title = js_trim(&group.title);
@@ -537,6 +631,7 @@ pub(crate) fn visible_items<'a>(
                 project_label: (!title.is_empty()).then(|| title.to_string()),
                 session,
                 timestamp: parse_timestamp(session.last_interaction_at.as_deref()).unwrap_or(0),
+                copy: state.copy_of(project_id.as_deref()),
             });
         }
     }
@@ -548,8 +643,7 @@ pub(crate) fn visible_items<'a>(
         .filter(|session| !is_web_page(session))
         .filter(|session| !state.restored_keys.contains(&dedupe_key(session)))
         .filter(|session| {
-            (state.project_id.is_empty()
-                || session["projectId"].as_str() == Some(state.project_id.as_str()))
+            state.matches_project(session["projectId"].as_str())
                 && (!external_only || session["externalSession"].as_bool().unwrap_or(false))
         })
         .collect();
@@ -575,6 +669,7 @@ pub(crate) fn visible_items<'a>(
             key: format!("closed:{}", session["historyId"].as_str().unwrap_or("")),
             session,
             timestamp: closed_at,
+            copy: state.copy_of(session["projectId"].as_str()),
         });
     }
     items.sort_by(|left, right| {
@@ -716,11 +811,21 @@ pub(crate) fn session_groups(
                 session["isRestorable"] == Value::Bool(true),
             ),
         };
+        // While History spans a project's copies every row is that project, so the label names
+        // the row's computer instead, after its icon.
+        let copy = item.copy();
+        let project_label = copy.map_or(project_label, |copy| copy.computer.clone());
+        let computer_icon = copy
+            .filter(|copy| !copy.icon.is_empty())
+            .map_or(QuickAccessIcon::None, |copy| {
+                QuickAccessIcon::asset(&copy.icon, None)
+            });
         let row = QuickAccessRow::Session {
             key: item.key().to_string(),
             title: card_title(session),
             icon: session_icon(session, &catalog),
             project_label,
+            computer_icon,
             file_size: match size {
                 None => "…".to_string(),
                 Some(None) => "-".to_string(),

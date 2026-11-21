@@ -164,37 +164,78 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let request = projects_lifted::gpui_previous_sessions_request_from_command(command);
-        let params = projects_lifted::gpui_previous_sessions_list_params(&request);
+        // History of a project the one list merged reads each copy (the desktop's
+        // `gpui_project_copies_previous_sessions_result_message`); the page has only this
+        // computer, so another computer's copy is one it cannot reach.
+        let (local_ids, unreachable): (Vec<String>, Vec<String>) = request
+            .project_ids
+            .iter()
+            .cloned()
+            .partition(|id| !id.starts_with("remote:"));
+        let unreachable: Vec<String> = unreachable
+            .iter()
+            .filter_map(|id| id.strip_prefix("remote:")?.split_once(":project:"))
+            .map(|(machine, _)| machine.to_string())
+            .collect();
+        let scoped: Vec<projects_lifted::GpuiPreviousSessionsRequest> =
+            if request.project_ids.is_empty() {
+                vec![request.clone()]
+            } else {
+                local_ids
+                    .into_iter()
+                    .map(|project_id| {
+                        let mut scoped = request.clone();
+                        scoped.project_id = Some(project_id);
+                        scoped
+                    })
+                    .collect()
+            };
         cx.spawn(async move |this, cx| {
-            let result = gx_rpc(None, "/api/listPreviousSessions", params).await.ok();
-            let mut items: Vec<Value> = result
-                .as_ref()
-                .and_then(|result| result.get("results"))
-                .and_then(Value::as_array)
-                .map(|rows| {
-                    rows.iter()
+            let mut items: Vec<Value> = Vec::new();
+            let mut cursor: Option<String> = None;
+            let mut projects: Vec<Value> = Vec::new();
+            for scoped in &scoped {
+                let params = projects_lifted::gpui_previous_sessions_list_params(scoped);
+                let Some(result) = gx_rpc(None, "/api/listPreviousSessions", params).await.ok()
+                else {
+                    continue;
+                };
+                items.extend(
+                    result
+                        .get("results")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
                         .filter_map(
                             projects_lifted::gpui_gxserver_search_result_to_previous_session_item,
-                        )
-                        .collect()
-                })
-                .unwrap_or_default();
+                        ),
+                );
+                if cursor.is_none() {
+                    cursor = result
+                        .get("cursor")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                projects.extend(
+                    result
+                        .get("projects")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .cloned(),
+                );
+            }
             projects_lifted::gpui_sort_previous_session_items_by_closed_time(&mut items);
-            let cursor = result
-                .as_ref()
-                .and_then(|result| result.get("cursor"))
-                .and_then(Value::as_str)
-                .map(str::to_string);
             let mut payload = projects_lifted::gpui_previous_sessions_result_payload(
                 &request.request_id,
                 request.query.as_deref(),
                 cursor.as_deref(),
                 items,
             );
-            payload["projects"] = result
-                .as_ref()
-                .and_then(|result| result.get("projects").cloned())
-                .unwrap_or_else(|| json!([]));
+            payload["projects"] = json!(projects);
+            if !unreachable.is_empty() {
+                payload["unreachableMachineIds"] = json!(unreachable);
+            }
             let _ = this.update(cx, |this, cx| this.quick_access_receive(payload, cx));
         })
         .detach();
