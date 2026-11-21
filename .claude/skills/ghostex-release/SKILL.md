@@ -301,8 +301,11 @@ git rev-parse HEAD        # record: the release point
 
 Before `release:actions` runs for real, the release commit gets a smoke test on
 the user's Mac (user decision 2026-11-17, Q3734 to Q3736). A thread runs
-`cargo xtask typecheck` on the release point (so formatting and generated
-files are settled before the smoke, not after it), rebuilds the app from it
+`cargo xtask typecheck` and `cargo check --locked --all-targets` in
+`apps/desktop` on the release point (so formatting, generated files and the
+app's other bins and tests are settled before the smoke, not after it; 11.13.0
+lost about 50 minutes to a `native-modal-demo` error only CI's all-targets
+check found), rebuilds the app from it
 with `cargo xtask rebuild`, then runs every step itself: `scripts/smoke.sh`
 does the CLI half (sessions, messages, reply waits, the crash baseline, the
 5.3 page, the defaults after a model pick, the clean-up) and the thread does
