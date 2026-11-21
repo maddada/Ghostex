@@ -1,9 +1,9 @@
 //! Boosts in the chat (gx-chat-core `extras/boosts.rs` has the user's decisions and the rules): the
 //! Boost pill at the right of the pill strip; its menu, one 460px list in Show, Actions, Work and
-//! Custom sections with section chips and Edit… at its bottom, and a preview card beside it; the one-time callout bubble
+//! Custom sections with section chips and Edit at its bottom, and a preview card beside it; the one-time callout bubble
 //! above the pill; the Boost pills' hover and double click; "Try a Boost" on a new chat; and Save as
 //! Boost. Editing is Settings > Boosts (window/settings_modal/tabs/boosts.rs), which the menu's
-//! Edit… button, a pill's double click and Save as Boost open.
+//! Edit button, a pill's double click and Save as Boost open.
 //!
 //! The core's `boosts` document key holds it all; `null` (an older gxserver, no answer yet, or
 //! Boosts switched off) draws none of it.
@@ -44,7 +44,7 @@ const TRY_A_BOOST: [&str; 4] = ["live-page", "chart", "compare", "computer-use"]
 /// three lines) and what a click does.
 const PREVIEW_HEIGHT: f32 = 228.0;
 /// The menu's parts (unscaled): a section header, a row (its padding, the name's line and the
-/// one-line description), the gap between rows, and the bottom bar of section chips and Edit….
+/// one-line description), the gap between rows, and the bottom bar of section chips and Edit.
 const SECTION_HEIGHT: f32 = 26.0;
 const ROW_PAD_Y: f32 = 7.0;
 const LABEL_LINE: f32 = 18.0;
@@ -329,7 +329,7 @@ impl NativeChatView {
 
     /// The menu: one list of every Boost under its section's header (icon, name, the description
     /// on one line, a tick while in the message), then a bar with the section chips on the left (a
-    /// click scrolls to that section; the one at the top of the list is lit) and Edit… on the
+    /// click scrolls to that section; the one at the top of the list is lit) and Edit on the
     /// right. A row under the pointer shows its preview, with the whole description, beside the
     /// menu; a click puts it in the message or takes it out. `window` is the menu's own.
     pub(super) fn boost_menu_body(
@@ -387,10 +387,14 @@ impl NativeChatView {
                 let hovered = preview.as_deref() == Some(id.as_str());
                 let hover_id = id.clone();
                 let click_id = id.clone();
+                let edit_id = id.clone();
+                let custom = row["custom"] == true;
+                let group = format!("boost-row-group-{id}");
                 let draft = draft.clone();
                 children.push(
                     div()
                         .id(gpui::ElementId::Name(format!("boost-row-{id}").into()))
+                        .group(group.clone())
                         .role(gpui::Role::MenuItem)
                         .aria_label(format!(
                             "{}. {}",
@@ -446,6 +450,53 @@ impl NativeChatView {
                                     .size(px(14.0 * s))
                                     .flex_shrink_0()
                                     .text_color(p.foreground),
+                            )
+                        })
+                        .when(custom, |row| {
+                            // CDXC:Boosts 2026-11-21 DECISION: User: hovering a custom Boost row
+                            // shows a small Edit button at its right end, level with the name's
+                            // line; it opens that Boost's editor in Settings > Boosts without
+                            // putting the Boost in the message. Built-in Boosts have no editor.
+                            row.child(
+                                div()
+                                    .id(gpui::ElementId::Name(
+                                        format!("boost-row-edit-{edit_id}").into(),
+                                    ))
+                                    .role(gpui::Role::Button)
+                                    .aria_label("Edit this Boost")
+                                    .flex()
+                                    .flex_shrink_0()
+                                    .items_center()
+                                    .gap(px(4.0 * s))
+                                    .h(px(LABEL_LINE * s))
+                                    .px(px(6.0 * s))
+                                    .rounded(px(5.0 * s))
+                                    .text_size(px(12.0 * s))
+                                    .text_color(p.card_muted)
+                                    .chat_cursor_pointer()
+                                    .opacity(0.0)
+                                    .group_hover(group.clone(), |button| button.opacity(1.0))
+                                    .hover(|style| {
+                                        style
+                                            .text_color(p.foreground)
+                                            .bg(p.foreground.opacity(0.1))
+                                    })
+                                    .child(
+                                        svg()
+                                            .path("titlebar/pencil.svg")
+                                            .size(px(12.0 * s))
+                                            .flex_shrink_0()
+                                            .text_color(p.card_muted),
+                                    )
+                                    .child("Edit")
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        cx.stop_propagation();
+                                        this.open_boost_settings(
+                                            Some(format!("boost:{edit_id}")),
+                                            None,
+                                            cx,
+                                        );
+                                    })),
                             )
                         })
                         .on_hover(cx.listener(move |this, hovered: &bool, window, cx| {
@@ -547,7 +598,7 @@ impl NativeChatView {
                     .size(px(14.0 * s))
                     .text_color(p.card_muted),
             )
-            .child("Edit\u{2026}")
+            .child("Edit")
             .on_click(cx.listener(|this, _, _, cx| this.open_boost_settings(None, None, cx)));
         // The bar reaches over the menu's own 6px padding below it, so its row sits halfway
         // between the line above and the menu's bottom edge.
