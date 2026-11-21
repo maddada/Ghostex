@@ -231,6 +231,11 @@ pub(crate) struct ResetCredit {
     /// The claim succeeds only while the account is at a usage limit.
     #[serde(skip)]
     pub requires_limit: bool,
+    /// The limits a Claude grant clears, in Anthropic's names (`five_hour`, `seven_day`, and a
+    /// model's weekly limit such as `seven_day_overage_included` for Fable); `None` when the
+    /// provider does not say (Codex). Autopilot's limit resets read it (reset_watch.rs `frees`).
+    #[serde(skip)]
+    pub clears: Option<Vec<String>>,
 }
 #[derive(Clone, Default)]
 pub(crate) struct Snapshot {

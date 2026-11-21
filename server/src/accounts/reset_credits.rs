@@ -55,6 +55,7 @@ fn parse(value: &Value, now: chrono::DateTime<chrono::Utc>) -> Result<Vec<ResetC
             note: None,
             paused: false,
             requires_limit: false,
+            clears: None,
         });
     }
     credits.sort_by(|a, b| match (&a.expires_at, &b.expires_at) {

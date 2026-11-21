@@ -150,10 +150,15 @@ fn account_usage_line(account: &Value) -> Option<String> {
         Some(format!("{label}: {}%", used.round() as i64))
     };
     let values: Vec<String> = if account["provider"].as_str() == Some("claude") {
-        claude_headline_windows(windows)
+        let mut values: Vec<String> = claude_headline_windows(windows)
             .into_iter()
             .filter_map(percent)
-            .collect()
+            .collect();
+        // A Claude account names its limit resets once it has any (CDXC:AgentProviders 2026-11-21 in titlebar/account_usage.rs).
+        if let Some(resets) = account["resetCredits"].as_u64().filter(|n| *n > 0) {
+            values.push(format!("{resets}rs"));
+        }
+        values
     } else {
         let mut values: Vec<String> = weekly.and_then(percent).into_iter().collect();
         if let Some(resets) = account["resetCredits"].as_u64() {

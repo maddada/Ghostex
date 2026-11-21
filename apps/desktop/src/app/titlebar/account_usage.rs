@@ -547,7 +547,23 @@ fn badge_lines(account: &Value) -> Vec<String> {
         }
         lines
     } else {
-        claude_headline_windows(windows)
+        let headline = claude_headline_windows(windows);
+        // CDXC:AgentProviders 2026-11-21 DECISION:
+        // User: "why can't u see that they have resets btw? please add to sessions in ghostex the ability to see the resets for my claude accounts". The tile has two lines, both Claude's headline percentages. Once one of them is used up and the account still has a limit reset, the other line becomes the reset count ("100%" over "1rs", as a Codex tile writes it), so a stuck account says at a glance that a reset can free it; the usage popup lists the resets with their Use buttons.
+        let resets = account["resetCredits"].as_u64().filter(|n| *n > 0);
+        if let (Some(full), Some(resets)) = (
+            headline
+                .iter()
+                .find(|w| w["usedPercent"].as_f64().is_some_and(|v| v >= 100.0)),
+            resets,
+        ) {
+            return pct(full)
+                .map(|v| format!("{v}%"))
+                .into_iter()
+                .chain([format!("{resets}rs")])
+                .collect();
+        }
+        headline
             .into_iter()
             .filter_map(|w| pct(w).map(|v| format!("{v}%")))
             .collect()
@@ -1598,5 +1614,22 @@ mod tests {
             account("local", "claude", "claude-ms", "MS"),
         ];
         assert_eq!(shown(&accounts), [("local".to_string(), "MS".to_string())]);
+    }
+
+    #[test]
+    fn a_claude_tile_at_its_limit_names_its_resets() {
+        let windows = json!([
+            {"id": "sevenDay", "usedPercent": 100.0, "limitWindowSeconds": 604800},
+            {"id": "Fable", "usedPercent": 23.0, "limitWindowSeconds": 604800, "model": "Fable"},
+        ]);
+        let mut claude = json!({"provider": "claude", "usage": windows, "resetCredits": 1});
+        assert_eq!(badge_lines(&claude), vec!["100%", "1rs"]);
+        // No reset left: both percentages, as before.
+        claude["resetCredits"] = json!(0);
+        assert_eq!(badge_lines(&claude), vec!["100%", "23%"]);
+        // Below the limit the tile keeps its two percentages even with resets banked.
+        claude["resetCredits"] = json!(3);
+        claude["usage"][0]["usedPercent"] = json!(40.0);
+        assert_eq!(badge_lines(&claude), vec!["40%", "23%"]);
     }
 }

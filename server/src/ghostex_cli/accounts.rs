@@ -155,6 +155,9 @@ fn print_account(row: &Value, all_sessions: bool) {
     if let Some(error) = row["usageError"].as_str().filter(|error| !error.is_empty()) {
         println!("        {error}");
     }
+    if let Some(line) = resets_line(row) {
+        println!("        {line}");
+    }
     let sessions = row["sessions"].as_array().cloned().unwrap_or_default();
     if !sessions.is_empty() {
         println!("        Sessions ({}):", sessions.len());
@@ -174,4 +177,34 @@ fn print_account(row: &Value, all_sessions: bool) {
     if stopped > 0 && !all_sessions {
         println!("        + {stopped} stopped (ghostex accounts --all lists them)");
     }
+}
+
+/// CDXC:AgentProviders 2026-11-21 DECISION:
+/// User: "why can't u see that they have resets btw?" The JSON always carried `resetCredits` (Claude's from Anthropic's reset grants, claude_resets.rs; Codex's reset credits), but the text listing never printed it, so an account at its limit looked the same with or without a reset to free it. Each account that reports resets now says how many are left and when the soonest one expires; an account whose plan has no reset program prints nothing.
+fn resets_line(row: &Value) -> Option<String> {
+    if let Some(error) = row["resetCreditsError"]
+        .as_str()
+        .filter(|error| !error.is_empty())
+    {
+        return Some(format!("Limit resets: {error}"));
+    }
+    let count = row["resetCredits"].as_u64()?;
+    if count == 0 {
+        return Some("Limit resets: none left".into());
+    }
+    let soonest = row["resetCreditDetails"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|credit| credit["expiresAt"].as_str())
+        .filter_map(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+        .min();
+    let mut line = format!("Limit resets: {count} left");
+    if let Some(at) = soonest {
+        line.push_str(&format!(
+            " (soonest expires {})",
+            at.with_timezone(&chrono::Local).format("%b %-d %H:%M")
+        ));
+    }
+    Some(line)
 }

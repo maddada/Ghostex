@@ -130,6 +130,13 @@ pub struct AutopilotConfig {
     /// CDXC:Autopilot 2026-11-18 DECISION:
     /// User: read-only threads must not get stuck on an approval ("agent is getting stuck on this which i dont want to happen", "we need to fix this"), and "yes do this but add a toggle for it in settings that ppl can toggle on if they want". Off (the default), Autopilot never takes a read-only thread out of read-only and never leaves it waiting either: it approves what only reads, answers a plan exit with "No, keep planning" and a note, and declines edits and commands (server/src/server/autopilot_answers.rs). On, it approves the plan exit with the Yes that fits the tier, and the thread's later cards are judged like any thread's.
     pub read_only_leave_plan: bool,
+    /// "Use a limit reset when an account hits its limit": while Autopilot is on, a Claude account
+    /// at a usage limit uses one of its banked limit resets at once. Off by default, and only the
+    /// user turns it on (server/src/server/autopilot_http.rs refuses an agent).
+    ///
+    /// CDXC:Autopilot 2026-11-21 DECISION:
+    /// User: "please add to sessions in ghostex the ability to see the resets for my claude accounts so i can enable this feature in the auto pilot to auto apply the reset." Settings > Accounts already had "Also use expiring Claude resets at a limit", which waits for a reset's last 24 hours; this one uses any reset Anthropic offers, soonest-expiring first, and only one whose grant clears the limit that is used up, so a Fable-only reset is never spent on the weekly limit (server/src/accounts/reset_watch.rs `decide`). It waits when the limit lifts on its own within 30 minutes. Each use goes to the security log and the bell.
+    pub use_limit_resets: bool,
     pub supervisor: SupervisorModel,
     pub sweep_seconds: u64,
     /// "Supervisor check-up": every this many minutes Ghostex looks for covered sessions that seem
@@ -158,6 +165,7 @@ impl Default for AutopilotConfig {
             answer_approvals: true,
             answer_approvals_set: false,
             read_only_leave_plan: false,
+            use_limit_resets: false,
             supervisor: SupervisorModel::OpusMedium,
             sweep_seconds: SWEEP_DEFAULT_SECS,
             checkup_minutes: CHECKUP_DEFAULT_MINUTES,
