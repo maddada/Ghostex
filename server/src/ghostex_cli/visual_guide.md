@@ -644,25 +644,6 @@ works.
    Read the reply like any message from the reader. Do not add a button of
    your own for this.
 
-   A page with no questions (a report, a mockup to look at, a comparison)
-   waits for the reader until they mark it seen: Ghostex ends it with a
-   "Reply about this page" box and a Mark as read button on its own, and its
-   block carries `"awaitsSeen": true`, which keeps it in the reader's list of
-   things that need them. Once they press it you receive the page's answers
-   message with `{"seen": true}`, plus `"reply"` when they wrote one:
-
-   ```
-   <ghostex-page-answers page="7fb3c974921c07aade81deda4809122d" title="Release notes draft">
-   {
-     "seen": true,
-     "reply": "Looks good, ship it."
-   }
-   </ghostex-page-answers>
-   ```
-
-   Read the reply like any message from the reader. Do not add a button of
-   your own for this.
-
 Publishing a newer version of the same file with `ghostex show` replaces its
 older cards by itself. To take back a page you replaced with another file or
 that is out of date, with its open questions, run `ghostex page retire <page>`

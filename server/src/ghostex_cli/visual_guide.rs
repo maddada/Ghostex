@@ -28,6 +28,8 @@ before you make one, once per conversation:
                                  with `ghostex show` (mockups, comparisons,
                                  small tools, triage pages, questions with
                                  pictures)
+  ghostex visual guide pages export  Exporting a Live page
+  ghostex visual guide pages picks   Lists with picks on rows
   ghostex visual guide example   A complete Live page to copy the shape of
   ghostex visual guide all       Everything above but the example";
 
@@ -92,7 +94,25 @@ fn guide_text(topic: &str) -> Option<String> {
     let text = match topic {
         "visuals" | "visual" | "charts" => format!("{opening}\n{}", section("Ghostex visuals")?),
         "forms" | "form" | "questions" => format!("{opening}\n{}", section("Ghostex forms")?),
-        "pages" | "page" | "live-pages" => format!("{opening}\n{}", section("Live pages")?),
+        "pages" | "page" | "live-pages" => {
+            let pages = section("Live pages")?;
+            let (before_export, rest) = pages.split_once("### Exported pages")?;
+            let (_, after_export) = rest.split_once("### Live pages with questions")?;
+            let (questions, _) =
+                after_export.split_once("### Lists you ask about: picks on rows")?;
+            format!("{opening}\n{before_export}\n### Live pages with questions{questions}\nFor exports: `ghostex visual guide pages export`. For row picks: `ghostex visual guide pages picks`.\n")
+        }
+        "pages-export" => {
+            let pages = section("Live pages")?;
+            let (_, rest) = pages.split_once("### Exported pages")?;
+            let (export, _) = rest.split_once("### Live pages with questions")?;
+            format!("### Exported pages{export}")
+        }
+        "pages-picks" => {
+            let pages = section("Live pages")?;
+            let (_, picks) = pages.split_once("### Lists you ask about: picks on rows")?;
+            format!("### Lists you ask about: picks on rows{picks}")
+        }
         "example" => return Some(EXAMPLE.to_string()),
         "all" => {
             let mut all = opening;
@@ -113,6 +133,20 @@ pub(crate) fn guide_command(args: &[String]) -> CliResult<()> {
         println!("{GUIDE_HELP}");
         return Ok(());
     }
+    let topic = if matches!(topic, "pages" | "page" | "live-pages") {
+        match args.get(1).map(String::as_str) {
+            Some("export") => "pages-export",
+            Some("picks") => "pages-picks",
+            Some(_) => {
+                return Err(CliError::Other(format!(
+                    "Unknown pages topic.\n\n{GUIDE_HELP}"
+                )))
+            }
+            None => topic,
+        }
+    } else {
+        topic
+    };
     match guide_text(topic) {
         Some(text) => {
             println!("{}", text.trim_end());
