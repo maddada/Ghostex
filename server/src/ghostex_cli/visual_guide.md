@@ -488,8 +488,9 @@ Ghostex injects the page's look, so a page that styles itself fights it:
 ### Theme
 
 Ghostex paints every page itself: a soft neutral grey backdrop (or, in
-the desktop's page window, the reader's blurred wallpaper) behind frosted
-glass cards, so never paint `html` or `body`.
+the desktop's page window, the app's blurred artwork or wallpaper under a
+readable glass tint) behind frosted glass cards, so leave `html` and `body`
+backgrounds transparent and never paint them.
 Style what you draw with the theme tokens, so it reads right in dark and
 light: `--gx-bg`, `--gx-surface` (soft fills inside a card), `--gx-raised`
 (controls), `--gx-card` and `--gx-card-border` (a glass panel of your own;

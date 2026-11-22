@@ -104,10 +104,10 @@ pub(super) const THEME_STYLE: &str = concat!(
     ":where(:root[data-gx-floating]){--gx-backdrop-fade:linear-gradient(var(--gx-backdrop-top),transparent 56px),}",
     "html{background-color:var(--background);background-image:var(--gx-backdrop-fade,) var(--gx-backdrop,none);background-attachment:fixed;min-height:100%;color:var(--foreground);font-family:var(--font-sans);",
     "font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}",
-    // The picture behind the app's glass, when the desktop's page window hands one over
-    // (apps/desktop/src/app/window/visual_page_modal/glass.rs), dimmed under the page's cards.
+    // The picture behind the app's glass or art backdrop, when the desktop's page window hands one
+    // over (apps/desktop/src/app/window/visual_page_modal/glass.rs), dimmed under the page's cards.
     "html[data-gx-glass]{background-image:linear-gradient(var(--gx-glass-dim),var(--gx-glass-dim)),var(--gx-glass-picture);",
-    "background-size:auto,var(--gx-glass-size,cover);background-position:0 0,var(--gx-glass-position,center);background-repeat:no-repeat}",
+    "background-size:auto,var(--gx-glass-size,cover);background-position:0 0,var(--gx-glass-position,center);background-repeat:no-repeat;background-attachment:fixed}",
     "body{margin:0;padding:16px}",
     // A page laid out by the template's container (kit.rs) has its own gutters.
     ":where(body:has(>gx-page,>gx-questions)){padding:0}",

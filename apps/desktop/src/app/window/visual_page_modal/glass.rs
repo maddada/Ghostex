@@ -16,7 +16,9 @@
 //! User: "can we make the titlebar part of the inline html instead of being a different color?" and "want to be able to resize and move them". The window paints the page's backdrop behind its header too: this picture under this tint at the same place on screen, or the page's own top colour without one (`PAGE_TOP_DARK` / `PAGE_TOP_LIGHT`). The picture is placed for the whole window and the page is told its part of it (`picture_rect`), so it runs on unbroken from the header into the page. While the window moves or is resized the new placement goes straight into the current page (`execute_app_owned_script`); the scripts kept for later documents are only added again on the once-a-second check, so a long drag does not pile them up.
 //! CDXC:SessionChat 2026-11-05 DECISION:
 //! User: "please make the bg more blurred (can't be changed by user basically), let's just set a heavier blur once here that we decide on". The main window's picture comes with the reader's own Blur setting (theirs is 3 points, so the picture was nearly sharp under the page's text), so the page window softens it once more itself: made small and blurred by a fixed `PICTURE_BLUR_POINTS` points of the screen (`soften`), the same for every reader. The window's band paints the same softened picture, so the two still match exactly.
-//! SEE-ALSO: .dependencies/zed/crates/gpui_macos/src/window_wallpaper.rs (`jpeg`), server/src/visual_pages/theme.rs (`data-gx-glass`, `--gx-glass-tint-dark` / `-light`, `--gx-backdrop-top`).
+//! CDXC:SessionChat 2026-11-22 DECISION:
+//! User: "If we have Art selected, the background of these Live pages should be that art, but more blurred (like we do to the wallpaper)." Art themes (built-in artworks and Your image, `window_art.rs`) paint in an opaque GPUI window without a platform wallpaper snapshot, and Animated (`window_glass_live.rs`) previously returned `None`, leaving every Live page on Art or Animated with the flat dusk/dawn fill. `page_glass` now checks Art first (softening `window_art_snapshot` by `PICTURE_BLUR_POINTS` on top of `windowArtBlur` and combining `windowArtDim` with the work area tint in `art_tint`), then Animated (softening a frame of the active style in the current theme's colours from `live_backdrop.rs`), before falling through to Window transparency's Wallpaper / Custom image / Desktop snapshot.
+//! SEE-ALSO: .dependencies/zed/crates/gpui_macos/src/window_wallpaper.rs (`jpeg`), app/helpers/window_art.rs (`window_art_snapshot`), server/src/visual_pages/theme.rs (`data-gx-glass`, `--gx-glass-tint-dark` / `-light`, `--gx-backdrop-top`).
 
 use super::{GpuiVisualPageModalWindow, TOP_BAND_HEIGHT};
 use base64::Engine as _;
@@ -60,8 +62,10 @@ pub(super) struct PageGlass {
 }
 
 /// The picture behind the header: the page's own, at the same place, under the same tint.
+/// Kept as a decoded `RenderImage` so the top band paints it on the very first frame with no
+/// async-decode flash against the page below.
 pub(super) struct Backdrop {
-    pub(super) image: Arc<gpui::Image>,
+    pub(super) image: Arc<gpui::RenderImage>,
     /// Where the picture lies, in the window's coordinates.
     pub(super) rect: Bounds<Pixels>,
     pub(super) tint: Rgba,
@@ -109,7 +113,7 @@ impl GpuiVisualPageModalWindow {
 
     /// `keep`: the look also goes into the documents the page loads later (a reload, Refresh);
     /// otherwise only into the current one.
-    fn sync_page_glass(&mut self, keep: bool, window: &Window, cx: &mut Context<Self>) {
+    fn sync_page_glass(&mut self, keep: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(surface) = self.surface.clone() else {
             return;
         };
@@ -119,9 +123,10 @@ impl GpuiVisualPageModalWindow {
             .as_ref()
             .map(|glass| glass.jpeg.clone())
             .unwrap_or_default();
+        let picture_same = self.glass.picture.as_ref() == Some(&jpeg);
         // Page scripts run in the current document and in every one it loads later, in the order
         // they were added, so a reload ends on the latest of each.
-        if self.glass.picture.as_ref() != Some(&jpeg) {
+        if !picture_same {
             surface.read(cx).add_page_script(&picture_script(&jpeg));
             self.glass.picture = Some(jpeg);
         }
@@ -137,15 +142,16 @@ impl GpuiVisualPageModalWindow {
             surface.update(cx, |surface, _| surface.execute_app_owned_script(&look));
             self.glass.shown_look = Some(look);
         }
-        let backdrop = glass.map(|glass| Backdrop {
-            image: match &self.glass.backdrop {
-                Some(backdrop) if backdrop.image.bytes() == glass.jpeg.as_slice() => {
-                    backdrop.image.clone()
-                }
-                _ => Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Jpeg, glass.jpeg)),
-            },
-            rect: glass.rect,
-            tint: glass.tint,
+        let backdrop = glass.and_then(|glass| {
+            let image = match &self.glass.backdrop {
+                Some(backdrop) if picture_same => backdrop.image.clone(),
+                _ => decode_backdrop_image(&glass.jpeg)?,
+            };
+            Some(Backdrop {
+                image,
+                rect: glass.rect,
+                tint: glass.tint,
+            })
         });
         let changed = match (&self.glass.backdrop, &backdrop) {
             (Some(old), Some(new)) => {
@@ -154,40 +160,99 @@ impl GpuiVisualPageModalWindow {
             (None, None) => false,
             _ => true,
         } || self.glass.light != light;
+        let replaced_image = match (&self.glass.backdrop, &backdrop) {
+            (Some(old), Some(new)) if !Arc::ptr_eq(&old.image, &new.image) => {
+                Some(old.image.clone())
+            }
+            (Some(old), None) => Some(old.image.clone()),
+            _ => None,
+        };
         self.glass.backdrop = backdrop;
         self.glass.light = light;
+        if let Some(old_image) = replaced_image {
+            let _ = window.drop_image(old_image);
+        }
         if changed {
             cx.notify();
         }
     }
 }
 
-/// The picture behind the main window's glass, where it lies in the page window `window`, and the
-/// work area's tint; `None` while the glass shows no picture (glass off, a video or a live style).
+/// Decodes a softened backdrop JPEG into a BGRA `RenderImage` so GPUI paints the header band
+/// synchronously on the first frame instead of flashing a solid top colour while decoding.
+fn decode_backdrop_image(jpeg: &[u8]) -> Option<Arc<gpui::RenderImage>> {
+    let mut rgba = image::load_from_memory_with_format(jpeg, image::ImageFormat::Jpeg)
+        .ok()?
+        .into_rgba8();
+    for pixel in rgba.pixels_mut() {
+        pixel.0.swap(0, 2);
+    }
+    Some(Arc::new(gpui::RenderImage::new(vec![image::Frame::new(
+        rgba,
+    )])))
+}
+
+/// The picture behind the main window's backdrop (Art, Your image, Animated, or Window
+/// transparency's wallpaper/picture), where it lies in the page window `window`, and the tint
+/// over it; `None` while the window is solid or uses a custom video.
 fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
-    let (snapshot, main_bounds) = crate::app::helpers::window_glass_active()
-        .then(|| crate::app::helpers::main_window_handle(cx))
-        .flatten()
-        .and_then(|main| {
-            main.update(cx, |_, window, _| {
-                (
-                    window.background_wallpaper_snapshot(PICTURE_MAX_WIDTH),
-                    window.bounds(),
-                )
-            })
-            .ok()
-        })?;
+    if !crate::app::helpers::window_glass_active() {
+        return None;
+    }
     let bounds = window.bounds();
-    let tint = Rgba::from(
-        crate::app::helpers::workspace_background_color()
-            .opacity(crate::app::helpers::work_area_glass_alpha()),
-    );
+    let display_width = window
+        .display(cx)
+        .map(|display| f32::from(display.bounds().size.width))
+        .unwrap_or_else(|| f32::from(bounds.size.width).max(1280.0));
+    let workspace = Rgba::from(crate::app::helpers::workspace_background_color());
+    let work_alpha = crate::app::helpers::work_area_glass_alpha();
+
+    // Art (built-in artwork or Your image): painted by GPUI inside an opaque window rather than
+    // through the platform wallpaper layer. Soften it by `PICTURE_BLUR_POINTS` on top of the main
+    // window's art blur, and combine `windowArtDim` with the work area's tint so dark and light
+    // text stay as readable as in the chat behind it. Never fall through to the desktop wallpaper
+    // while Art is active.
+    if crate::app::helpers::window_art_active() {
+        let art = crate::app::helpers::window_art_snapshot(cx)?;
+        let jpeg = softened(&art.jpeg, display_width);
+        let tint = art_tint(workspace, work_alpha, art.dim, art.light);
+        return Some(Glass {
+            jpeg,
+            rect: picture_rect(bounds.size, art.size, None),
+            tint,
+        });
+    }
+
+    let tint = Rgba {
+        a: work_alpha,
+        ..workspace
+    };
+
+    // Animated (Live): render a snapshot of the active animated style in the current theme's
+    // colours and brightness and soften it like Wallpaper mode. Custom video keeps dusk/dawn.
+    if crate::app::helpers::window_glass_live::window_glass_live_mode() {
+        let live = crate::app::helpers::window_glass_live::window_glass_live()?;
+        let (raw_jpeg, art_size) = super::live_backdrop::render_snapshot(&live)?;
+        let jpeg = softened(&raw_jpeg, display_width);
+        return Some(Glass {
+            jpeg,
+            rect: picture_rect(bounds.size, art_size, None),
+            tint,
+        });
+    }
+
+    let (snapshot, main_bounds) = crate::app::helpers::main_window_handle(cx).and_then(|main| {
+        main.update(cx, |_, window, _| {
+            (
+                window.background_wallpaper_snapshot(PICTURE_MAX_WIDTH),
+                window.bounds(),
+            )
+        })
+        .ok()
+    })?;
     let desktop = desktop_picture_path(bounds.center());
     let source = picture_source(desktop.as_deref());
     let Some(snapshot) = snapshot else {
-        if crate::app::helpers::window_glass_live::window_glass_live_mode() {
-            return None;
-        }
         return stand_in_glass(window, cx, tint, desktop.as_deref(), &source)
             .or_else(|| remembered_glass(bounds.size, tint, &source));
     };
@@ -209,6 +274,32 @@ fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
         rect: picture_rect(bounds.size, snapshot.screen, on_screen),
         tint,
     })
+}
+
+/// Combines the artwork dimming wash (`dim` of black in dark mode, white in light mode) with the
+/// work area's tint (`workspace` at `work_alpha`) into one equivalent Source-Over tint layer.
+/// Keeping the dimming in the tint layer rather than baking it into the JPEG also lets the reader
+/// flip the page's Dark / Light switch to the other appearance cleanly.
+fn art_tint(workspace: Rgba, work_alpha: f32, dim: f32, light: bool) -> Rgba {
+    let w = work_alpha.clamp(0.0, 1.0);
+    let d = dim.clamp(0.0, 1.0);
+    let alpha = 1.0 - (1.0 - w) * (1.0 - d);
+    if alpha <= f32::EPSILON {
+        return Rgba {
+            r: workspace.r,
+            g: workspace.g,
+            b: workspace.b,
+            a: 0.0,
+        };
+    }
+    let wash = if light { 1.0 } else { 0.0 };
+    let dim_weight = (1.0 - w) * d;
+    Rgba {
+        r: (workspace.r * w + wash * dim_weight) / alpha,
+        g: (workspace.g * w + wash * dim_weight) / alpha,
+        b: (workspace.b * w + wash * dim_weight) / alpha,
+        a: alpha,
+    }
 }
 
 /// What the page window's picture is a picture of: the custom picture the glass shows, else the

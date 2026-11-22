@@ -38,6 +38,22 @@ struct ArtChoice {
 /// A decoded artwork's identity: the artwork (or Your image's picture) and its blur.
 type ArtKey = (&'static str, u64, u8);
 
+/// A small JPEG of the active artwork (toned and blurred as the main window draws it), for the
+/// floating Live page window to soften further (`visual_page_modal/glass.rs`).
+#[cfg(not(ghostex_web))]
+pub(crate) struct WindowArtSnapshot {
+    pub(crate) jpeg: Vec<u8>,
+    pub(crate) size: gpui::Size<gpui::Pixels>,
+    pub(crate) dim: f32,
+    pub(crate) light: bool,
+}
+
+#[cfg(not(ghostex_web))]
+type ArtPreview = Option<(Vec<u8>, (u32, u32))>;
+
+#[cfg(not(ghostex_web))]
+const ART_PREVIEW_MAX_WIDTH: u32 = 640;
+
 static WINDOW_ART: Mutex<Option<ArtChoice>> = Mutex::new(None);
 /// An artwork is chosen for the appearance the app shows.
 static WINDOW_ART_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -47,8 +63,15 @@ static ART_WORK_AREA_PERCENT: AtomicU8 = AtomicU8::new(88);
 
 /// The decoded artwork in use (by id and blur), the one being fetched and decoded, and the last
 /// one that could not be had (not tried again until another is asked for).
+struct ReadyArt {
+    key: ArtKey,
+    image: Arc<RenderImage>,
+    #[cfg(not(ghostex_web))]
+    preview: ArtPreview,
+}
+
 struct Decoded {
-    ready: Option<(ArtKey, Arc<RenderImage>)>,
+    ready: Option<ReadyArt>,
     pending: Option<ArtKey>,
     failed: Option<ArtKey>,
 }
@@ -200,10 +223,44 @@ const ART_COLOUR_SATURATION: f32 = 0.70;
 /// first, so a huge photo costs no more memory than an artwork.
 const YOUR_IMAGE_MAX_SIDE: u32 = 3840;
 
+/// Resizes a toned RGBA artwork to at most [`ART_PREVIEW_MAX_WIDTH`] pixels wide and encodes it as
+/// a JPEG for the floating Live page window (`window_art_snapshot`).
+#[cfg(not(ghostex_web))]
+fn encode_art_preview(rgba: &image::RgbaImage) -> ArtPreview {
+    let (width, height) = (rgba.width(), rgba.height());
+    if width == 0 || height == 0 {
+        return None;
+    }
+    let out_width = width.min(ART_PREVIEW_MAX_WIDTH);
+    let out_height = ((height as f32 * out_width as f32 / width as f32).round() as u32).max(1);
+    let small = if out_width == width && out_height == height {
+        rgba.clone()
+    } else {
+        image::imageops::resize(
+            rgba,
+            out_width,
+            out_height,
+            image::imageops::FilterType::Triangle,
+        )
+    };
+    let rgb = image::DynamicImage::ImageRgba8(small).to_rgb8();
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 90)
+        .encode_image(&rgb)
+        .ok()?;
+    Some((out, (width, height)))
+}
+
 /// Decodes `bytes` into the BGRA bitmap GPUI draws, blurred by `blur` points first and toned to
 /// [`ART_COLOUR_SATURATION`] of its colour. An artwork is WebP; Your image is any picture format
 /// gxserver accepted (server/src/theme/art.rs), scaled to [`YOUR_IMAGE_MAX_SIDE`].
-fn decode_artwork(bytes: &[u8], blur: u8, yours: bool) -> Option<Arc<RenderImage>> {
+#[cfg(not(ghostex_web))]
+type DecodedArtwork = (Arc<RenderImage>, ArtPreview);
+
+#[cfg(ghostex_web)]
+type DecodedArtwork = Arc<RenderImage>;
+
+fn decode_artwork(bytes: &[u8], blur: u8, yours: bool) -> Option<DecodedArtwork> {
     let decoded = if yours {
         let picture = image::load_from_memory(bytes).ok()?;
         if picture.width().max(picture.height()) > YOUR_IMAGE_MAX_SIDE {
@@ -234,15 +291,25 @@ fn decode_artwork(bytes: &[u8], blur: u8, yours: bool) -> Option<Arc<RenderImage
                 .round()
                 .clamp(0.0, 255.0) as u8
         };
-        let nr = tone(r);
-        let ng = tone(g);
-        let nb = tone(b);
-        // GPUI RenderImage expects BGRA.
-        pixel.0[0] = nb;
-        pixel.0[1] = ng;
-        pixel.0[2] = nr;
+        pixel.0[0] = tone(r);
+        pixel.0[1] = tone(g);
+        pixel.0[2] = tone(b);
     }
-    Some(Arc::new(RenderImage::new(vec![image::Frame::new(rgba)])))
+    #[cfg(not(ghostex_web))]
+    let preview = encode_art_preview(&rgba);
+    // GPUI RenderImage expects BGRA.
+    for pixel in rgba.pixels_mut() {
+        pixel.0.swap(0, 2);
+    }
+    let image = Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
+    #[cfg(not(ghostex_web))]
+    {
+        Some((image, preview))
+    }
+    #[cfg(ghostex_web)]
+    {
+        Some(image)
+    }
 }
 
 /// The artwork's bytes from gxserver, which downloads it the first time (server/src/theme/art.rs):
@@ -277,10 +344,10 @@ async fn fetch_artwork(id: &'static str, light: bool) -> Option<Vec<u8>> {
 fn artwork_image(choice: ArtChoice, cx: &mut App) -> Option<Arc<RenderImage>> {
     let key = (choice.id, choice.picture, choice.blur);
     let mut decoded = DECODED.lock().ok()?;
-    if let Some((ready_key, image)) = &decoded.ready
-        && *ready_key == key
+    if let Some(ready) = &decoded.ready
+        && ready.key == key
     {
-        return Some(image.clone());
+        return Some(ready.image.clone());
     }
     if decoded.pending == Some(key) || decoded.failed == Some(key) {
         return None;
@@ -291,7 +358,7 @@ fn artwork_image(choice: ArtChoice, cx: &mut App) -> Option<Arc<RenderImage>> {
     let background = cx.background_executor().clone();
     cx.spawn(async move |cx| {
         let yours = choice.id == ghostex_settings_catalog::YOUR_IMAGE_ART_ID;
-        let image = match fetch_artwork(choice.id, choice.light).await {
+        let result = match fetch_artwork(choice.id, choice.light).await {
             Some(bytes) => {
                 background
                     .spawn(async move { decode_artwork(&bytes, choice.blur, yours) })
@@ -309,21 +376,54 @@ fn artwork_image(choice: ArtChoice, cx: &mut App) -> Option<Arc<RenderImage>> {
                     return;
                 }
                 decoded.pending = None;
-                let Some(image) = image else {
+                let Some(result) = result else {
                     // Offline or refused: the window stays solid in the theme's colour.
                     decoded.failed = Some(key);
                     return;
                 };
-                decoded.ready.replace((key, image))
+                #[cfg(not(ghostex_web))]
+                let entry = ReadyArt {
+                    key,
+                    image: result.0,
+                    preview: result.1,
+                };
+                #[cfg(ghostex_web)]
+                let entry = ReadyArt { key, image: result };
+                decoded.ready.replace(entry)
             };
-            if let Some((_, previous)) = previous {
-                cx.drop_image(previous, None);
+            if let Some(previous) = previous {
+                cx.drop_image(previous.image, None);
             }
             cx.refresh_windows();
         });
     })
     .detach();
     None
+}
+
+/// The active artwork's JPEG preview, aspect size, dimming and appearance, for the floating Live
+/// page window (`visual_page_modal/glass.rs`). Starts fetching the artwork if it is not decoded
+/// yet, and returns `None` when no artwork is active or while it is still loading.
+#[cfg(not(ghostex_web))]
+pub(crate) fn window_art_snapshot(cx: &mut App) -> Option<WindowArtSnapshot> {
+    if !window_art_active() {
+        return None;
+    }
+    let choice = (*WINDOW_ART.lock().ok()?)?;
+    let _ = artwork_image(choice, cx)?;
+    let key = (choice.id, choice.picture, choice.blur);
+    let decoded = DECODED.lock().ok()?;
+    let ready = decoded.ready.as_ref()?;
+    if ready.key != key {
+        return None;
+    }
+    let (jpeg, (width, height)) = ready.preview.as_ref()?;
+    Some(WindowArtSnapshot {
+        jpeg: jpeg.clone(),
+        size: gpui::size(gpui::px(*width as f32), gpui::px(*height as f32)),
+        dim: f32::from(choice.dim) / 100.0,
+        light: choice.light,
+    })
 }
 
 /// The window's bottom layer while an artwork shows: the theme's own colour, the artwork covering

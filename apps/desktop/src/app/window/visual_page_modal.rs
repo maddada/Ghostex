@@ -21,6 +21,7 @@
 //! SEE-ALSO: apps/desktop/src/app/visual_page_modal_lifecycle.rs (open and close), apps/desktop/src/app/native_chat/visual.rs (the card), packages/gx-visual (the `open` mark).
 pub(crate) mod frame;
 mod glass;
+mod live_backdrop;
 mod more_menu;
 mod more_menu_panel;
 pub(crate) mod open_timing;
