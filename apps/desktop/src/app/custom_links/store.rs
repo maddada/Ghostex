@@ -20,9 +20,17 @@ const PAGE_FILE: &str = "custom-link-page.json";
 /// cef/shell/workspace_browser.rs).
 pub(crate) const CUSTOM_LINK_BROWSER_PROFILE: &str = "workspace-custom-links";
 
+/// What `custom-link-page.json` keeps: the link the page shows and the Browser profile it opens in
+/// (`None`: the links' own profile, `CUSTOM_LINK_BROWSER_PROFILE`).
+#[derive(Clone, Debug, Default)]
+struct PageFile {
+    link_id: Option<String>,
+    profile: Option<u64>,
+}
+
 thread_local! {
-    /// The link the page shows, read from `custom-link-page.json` the first time it is asked.
-    static PICKED: RefCell<Option<Option<String>>> = const { RefCell::new(None) };
+    /// The page file, read the first time it is asked.
+    static PICKED: RefCell<Option<PageFile>> = const { RefCell::new(None) };
 }
 
 /// The links the ⋯ menu lists, in their saved order.
@@ -40,27 +48,53 @@ fn page_file() -> std::path::PathBuf {
         .join(PAGE_FILE)
 }
 
-fn picked_link_id() -> Option<String> {
+fn with_page_file<T>(f: impl FnOnce(&mut PageFile) -> T) -> T {
     PICKED.with(|picked| {
-        picked
-            .borrow_mut()
-            .get_or_insert_with(|| {
-                std::fs::read_to_string(page_file())
-                    .ok()
-                    .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-                    .and_then(|saved| saved["linkId"].as_str().map(str::to_string))
-            })
-            .clone()
+        let mut picked = picked.borrow_mut();
+        let file = picked.get_or_insert_with(|| {
+            let saved = std::fs::read_to_string(page_file())
+                .ok()
+                .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+                .unwrap_or_default();
+            PageFile {
+                link_id: saved["linkId"].as_str().map(str::to_string),
+                profile: saved["profileId"].as_u64(),
+            }
+        });
+        f(file)
     })
 }
 
-pub(crate) fn set_custom_link_page_link(id: Option<&str>) {
-    PICKED.with(|picked| *picked.borrow_mut() = Some(id.map(str::to_string)));
+fn save_page_file() {
+    let (link_id, profile) = with_page_file(|file| (file.link_id.clone(), file.profile));
     let path = page_file();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(path, json!({ "linkId": id }).to_string());
+    let _ = std::fs::write(
+        path,
+        json!({ "linkId": link_id, "profileId": profile }).to_string(),
+    );
+}
+
+fn picked_link_id() -> Option<String> {
+    with_page_file(|file| file.link_id.clone())
+}
+
+pub(crate) fn set_custom_link_page_link(id: Option<&str>) {
+    with_page_file(|file| file.link_id = id.map(str::to_string));
+    save_page_file();
+}
+
+/// The Browser profile the page opens in, picked from the toolbar's Profile button; `None` is the
+/// links' own profile.
+pub(crate) fn custom_link_page_profile() -> Option<BrowserProfileId> {
+    with_page_file(|file| file.profile).map(BrowserProfileId)
+}
+
+pub(crate) fn set_custom_link_page_profile(profile: Option<BrowserProfileId>) {
+    with_page_file(|file| file.profile = profile.map(|profile| profile.0));
+    save_page_file();
 }
 
 /// The link the page shows: the one opened last, while it is still saved.
@@ -70,7 +104,7 @@ pub(crate) fn custom_link_page_link() -> Option<CustomLink> {
 
 /// The icon the Browser cached for the link's site (helpers/browser_favicon_cache.rs), as a
 /// `data:` image for the menu row; the row shows the globe without one.
-fn custom_link_favicon_data_url(link: &CustomLink) -> Option<String> {
+pub(crate) fn custom_link_favicon_data_url(link: &CustomLink) -> Option<String> {
     let favicon = browser_favicon_cache_lookup(&link.url, None)?;
     let image = &favicon.image;
     Some(format!(

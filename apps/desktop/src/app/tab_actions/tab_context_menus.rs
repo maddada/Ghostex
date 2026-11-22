@@ -15,6 +15,10 @@ impl GhostexGpuiApp {
         pane_id: BrowserPaneId,
         cx: &mut gpui::Context<Self>,
     ) {
+        if pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE {
+            self.open_custom_link_page_externally();
+            return;
+        }
         let Some(tab) = self.browser_tabs.active_tab_for_pane(pane_id) else {
             return;
         };

@@ -20,7 +20,9 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        if self.browser_tabs.find_leaf(pane_id).is_none() {
+        if pane_id != crate::app::custom_links::CUSTOM_LINK_PAGE_PANE
+            && self.browser_tabs.find_leaf(pane_id).is_none()
+        {
             return;
         }
         let kind = GpuiTitlebarPopupKind::BrowserActions(pane_id);

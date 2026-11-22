@@ -160,10 +160,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let tooltip_placement = ManagedTooltipPlacement::Left;
+        let link_page = pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE;
         let profile_number = if matches!(action, BrowserToolbarAction::ProfileMenu) {
-            self.browser_tabs
-                .active_tab_for_pane(pane_id)
-                .and_then(|tab| tab.profile_id.display_number())
+            if link_page {
+                crate::app::custom_links::custom_link_page_profile()
+                    .and_then(BrowserProfileId::display_number)
+            } else {
+                self.browser_tabs
+                    .active_tab_for_pane(pane_id)
+                    .and_then(|tab| tab.profile_id.display_number())
+            }
         } else {
             None
         };
@@ -198,6 +204,19 @@ impl GhostexGpuiApp {
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, _: &gpui::MouseDownEvent, window, cx| {
+                        // The link page's toolbar (app/custom_links/page.rs) runs each action on
+                        // its own page.
+                        if link_page {
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            this.run_custom_link_toolbar_action(
+                                action,
+                                trigger_bounds.get(),
+                                window,
+                                cx,
+                            );
+                            return;
+                        }
                         match action {
                             BrowserToolbarAction::Back
                             | BrowserToolbarAction::Forward

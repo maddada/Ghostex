@@ -221,18 +221,39 @@ pub fn custom_link_menu_rows(
     rows
 }
 
-/// What a link row's hover ⋯ and right-click open: Edit… and Remove.
+/// What a link row's hover ⋯ and right-click open: Edit…, Pin to rail or Unpin from rail (in the
+/// rail layout's ⋯ menu, whose host sets `pinned`), and Remove.
 pub fn custom_link_row_menu(row_menu: &Value) -> Option<Value> {
     if row_menu["kind"] != CUSTOM_LINK_ROW_MENU_KIND {
         return None;
     }
     let id = row_menu["key"].as_str()?;
-    Some(Value::Array(vec![
-        MenuItem::row("Edit…", "pencil", command("edit", Some(id))).to_json(),
+    let mut rows = vec![MenuItem::row("Edit…", "pencil", command("edit", Some(id))).to_json()];
+    if let Some(pinned) = row_menu["pinned"].as_bool() {
+        rows.push(
+            MenuItem::row(
+                if pinned {
+                    "Unpin from rail"
+                } else {
+                    "Pin to rail"
+                },
+                if pinned { "pin-outline" } else { "pin-filled" },
+                MenuCommand::host(json!({
+                    "type": crate::sidebar_rail::RAIL_COMMAND_TYPE,
+                    "op": "pin",
+                    "key": crate::sidebar_rail::rail_link_pin_key(id),
+                    "pinned": !pinned,
+                })),
+            )
+            .to_json(),
+        );
+    }
+    rows.push(
         MenuItem::row("Remove", "trash", command("remove", Some(id)))
             .with_danger()
             .to_json(),
-    ]))
+    );
+    Some(Value::Array(rows))
 }
 
 /// Puts the link rows into the classic sidebar's ⋯ menu as the host opens it: their own group

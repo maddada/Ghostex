@@ -82,7 +82,13 @@ impl GhostexGpuiApp {
             self.render_project_editor_sleeping_placeholder(mode, cx)
         } else if let Some(surface) = self.project_workarea_runtime_cef_surface_for_render(slot_key)
         {
-            self.render_project_workarea_runtime_cef_surface(slot_key, surface, cx)
+            let page = self.render_project_workarea_runtime_cef_surface(slot_key, surface, cx);
+            // A link's page takes the toolbar's phone or tablet frame (app/custom_links/page.rs).
+            if place == WebPlace::Link {
+                self.custom_link_framed_page(page)
+            } else {
+                page
+            }
         } else {
             let signature = self
                 .web_runtime_placeholder_signature(mode)

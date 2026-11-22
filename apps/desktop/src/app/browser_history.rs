@@ -77,8 +77,11 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        if self.active_mode != TitlebarMode::Browser
-            || self.browser_tabs.find_leaf(pane_id).is_none()
+        // The link page's toolbar opens it too (app/custom_links/page.rs).
+        let link_page = pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE;
+        if !link_page
+            && (self.active_mode != TitlebarMode::Browser
+                || self.browser_tabs.find_leaf(pane_id).is_none())
         {
             return;
         }

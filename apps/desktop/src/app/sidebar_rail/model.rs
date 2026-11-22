@@ -107,8 +107,8 @@ pub(crate) fn note_sidebar_layout(settings: &serde_json::Map<String, serde_json:
     );
 }
 
-/// The pinned items' keys, top to bottom.
-pub(crate) fn sidebar_rail_pins() -> Vec<&'static str> {
+/// The pinned items' keys, top to bottom: rail items' keys and links' `link:<id>`.
+pub(crate) fn sidebar_rail_pins() -> Vec<String> {
     let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
     ghostex_gx_core::sidebar_rail::rail_pins(settings.object())
 }
@@ -160,18 +160,40 @@ pub(crate) struct RailItemState {
     pub(crate) badge: Option<RailBadge>,
 }
 
-/// A pinned icon being dragged along the rail.
-#[derive(Clone, Debug)]
-pub(crate) struct DraggedRailItem {
-    pub(crate) key: &'static str,
+/// A pinned link, as its rail button shows it (packages/gx-core/src/sidebar_rail.rs,
+/// `RAIL_LINK_PIN_PREFIX`). The web build has no links' page, so it never pins one.
+#[cfg_attr(ghostex_web, allow(dead_code))]
+#[derive(Clone)]
+pub(crate) struct RailLinkPin {
+    pub(crate) id: String,
+    /// Its name, or its host and port without one: the tooltip.
+    pub(crate) label: String,
+    /// The site's icon once its page has been opened; the globe without one.
+    pub(crate) image: Option<std::sync::Arc<gpui::Image>>,
+    /// Its page is the one on screen.
+    pub(crate) showing: bool,
+}
+
+/// What a rail button draws: its tooltip, and its artwork (an image, such as a link's site icon,
+/// stands in for the outline icon when there is one).
+#[derive(Clone)]
+pub(crate) struct RailButtonFace {
+    pub(crate) label: String,
     pub(crate) icon: &'static str,
     pub(crate) icon_size: f32,
+    pub(crate) image: Option<std::sync::Arc<gpui::Image>>,
+}
+
+/// A pinned icon being dragged along the rail.
+#[derive(Clone)]
+pub(crate) struct DraggedRailItem {
+    pub(crate) key: String,
+    pub(crate) face: RailButtonFace,
 }
 
 /// The icon that follows the pointer while one is dragged.
 pub(crate) struct RailDragPreview {
-    pub(crate) icon: &'static str,
-    pub(crate) icon_size: f32,
+    pub(crate) face: RailButtonFace,
     pub(crate) fill: Hsla,
     pub(crate) border: Hsla,
     pub(crate) color: Hsla,
@@ -185,7 +207,7 @@ pub(crate) type RailBounds = Rc<Cell<Option<Bounds<Pixels>>>>;
 pub(crate) struct SidebarRailState {
     /// The ⋯ button.
     pub(crate) more_bounds: RailBounds,
-    items: RefCell<HashMap<&'static str, RailBounds>>,
+    items: RefCell<HashMap<String, RailBounds>>,
     /// Which half of the rail has the pointer (`Some(true)`: the top), for the hidden sidebar's
     /// reveal (`sidebar_rail_reveal_hover` in host.rs). None off the rail.
     #[cfg(not(ghostex_web))]
@@ -204,7 +226,11 @@ pub(crate) struct SidebarRailState {
 
 impl SidebarRailState {
     /// Where item `key`'s button was last painted.
-    pub(crate) fn item_bounds(&self, key: &'static str) -> RailBounds {
-        self.items.borrow_mut().entry(key).or_default().clone()
+    pub(crate) fn item_bounds(&self, key: &str) -> RailBounds {
+        self.items
+            .borrow_mut()
+            .entry(key.to_string())
+            .or_default()
+            .clone()
     }
 }

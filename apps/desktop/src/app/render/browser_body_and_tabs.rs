@@ -321,7 +321,7 @@ impl GhostexGpuiApp {
 
 /// CDXC:Browser 2026-10-16 WHY:
 /// The phone or tablet preview gives the page's own native view a smaller frame in normal layout, centred under a size caption, instead of scaling or overlaying it, so clicks and focus stay with that one view. A pane smaller than the device shrinks the frame to fit (the caption keeps the nominal size).
-fn render_browser_device_frame(
+pub(crate) fn render_browser_device_frame(
     pane_id: BrowserPaneId,
     device_view: BrowserDeviceView,
     (width, height): (f32, f32),

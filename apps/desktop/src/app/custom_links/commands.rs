@@ -115,6 +115,13 @@ impl GhostexGpuiApp {
         }
         let showing = custom_link_page_link().is_some_and(|link| link.id == id);
         self.save_custom_links(&links, cx);
+        // Its rail pin goes with it (packages/gx-core/src/sidebar_rail.rs).
+        let pin = ghostex_gx_core::sidebar_rail::rail_link_pin_key(id);
+        let pins = crate::app::sidebar_rail::sidebar_rail_pins();
+        if pins.contains(&pin) {
+            let pins = ghostex_gx_core::sidebar_rail::rail_pins_with(&pins, &pin, false);
+            self.save_sidebar_rail_pins(&pins, cx);
+        }
         if showing {
             set_custom_link_page_link(None);
             if self.web_place_on() == Some(WebPlace::Link) {

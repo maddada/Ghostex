@@ -90,6 +90,10 @@ impl GhostexGpuiApp {
                 else {
                     return;
                 };
+                if pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE {
+                    self.open_custom_link_history_visit(url, window, cx);
+                    return;
+                }
                 if !self.browser_tabs.focus_pane(pane_id) {
                     return;
                 }

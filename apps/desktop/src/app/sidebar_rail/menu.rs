@@ -6,13 +6,31 @@ use gpui::{Bounds, Pixels, Point, Window};
 use serde_json::{Value, json};
 
 use ghostex_gx_core::sidebar_rail::{
-    RAIL_ITEMS, RAIL_MENU_GROUPS, rail_item, rail_pins, rail_pins_moved, rail_pins_with,
+    RAIL_COMMAND_TYPE, RAIL_ITEMS, RAIL_MENU_GROUPS, rail_item, rail_link_pin_id, rail_pins,
+    rail_pins_moved, rail_pins_with,
 };
 
 use crate::GhostexGpuiApp;
 
 /// The host command type every rail menu row carries.
-const SIDEBAR_RAIL_COMMAND_TYPE: &str = "sidebarRail";
+const SIDEBAR_RAIL_COMMAND_TYPE: &str = RAIL_COMMAND_TYPE;
+
+/// A row's pin (filled while pinned; an unpinned row's shows on hover, "Pin to rail").
+fn pin_button(key: &str, pinned: bool) -> Value {
+    json!({
+        "icon": if pinned { "pin-filled" } else { "pin-outline" },
+        "label": "",
+        "ariaLabel": if pinned { "Unpin from rail" } else { "Pin to rail" },
+        "tooltip": if pinned { "Unpin from rail" } else { "Pin to rail" },
+        "hoverOnly": !pinned,
+        "command": {
+            "type": SIDEBAR_RAIL_COMMAND_TYPE,
+            "op": "pin",
+            "key": key,
+            "pinned": !pinned,
+        },
+    })
+}
 
 /// The menu icon name (titlebar/<name>.svg, native_sidebar/menus.rs) of item `key`, or its agent
 /// logo for the logos.
@@ -55,7 +73,7 @@ impl GhostexGpuiApp {
                 json!({ "label": group, "heading": true, "checked": false, "disabled": false }),
             );
             for item in items {
-                let pinned = pins.contains(&item.key);
+                let pinned = pins.iter().any(|pin| pin == item.key);
                 let (icon, agent_icon) = menu_icon(item.key);
                 let mut row = json!({
                     "label": item.label,
@@ -63,19 +81,7 @@ impl GhostexGpuiApp {
                     "command": command("run", item.key),
                     "checked": false,
                     "disabled": false,
-                    "secondary": {
-                        "icon": if pinned { "pin-filled" } else { "pin-outline" },
-                        "label": "",
-                        "ariaLabel": if pinned { "Unpin from rail" } else { "Pin to rail" },
-                        "tooltip": if pinned { "Unpin from rail" } else { "Pin to rail" },
-                        "hoverOnly": !pinned,
-                        "command": {
-                            "type": SIDEBAR_RAIL_COMMAND_TYPE,
-                            "op": "pin",
-                            "key": item.key,
-                            "pinned": !pinned,
-                        },
-                    },
+                    "secondary": pin_button(item.key, pinned),
                 });
                 // The agents' coloured logos, as the agent launcher draws them.
                 if let Some(agent_icon) = agent_icon {
@@ -103,7 +109,11 @@ impl GhostexGpuiApp {
             rows.push(
                 json!({ "label": "Links", "heading": true, "checked": false, "disabled": false }),
             );
-            rows.extend(crate::app::custom_links::custom_link_menu_rows_now());
+            rows.extend(
+                crate::app::custom_links::custom_link_menu_rows_now()
+                    .into_iter()
+                    .map(|row| with_link_pin(row, &pins)),
+            );
         }
         Value::Array(rows)
     }
@@ -111,7 +121,7 @@ impl GhostexGpuiApp {
     /// The right-click menu of a pinned icon: move it, or unpin it.
     pub(crate) fn sidebar_rail_item_menu(&self, key: &str) -> Value {
         let pins = sidebar_rail_pins_now();
-        let index = pins.iter().position(|pin| *pin == key);
+        let index = pins.iter().position(|pin| pin == key);
         let mut rows = Vec::new();
         if index.is_some_and(|index| index > 0) {
             rows.push(json!({ "label": "Move up", "icon": "arrow-up", "command": command("moveUp", key), "checked": false, "disabled": false }));
@@ -158,11 +168,12 @@ impl GhostexGpuiApp {
         if command.get("type").and_then(Value::as_str) != Some(SIDEBAR_RAIL_COMMAND_TYPE) {
             return false;
         }
+        // A rail item, or a pinned link (`link:<id>`, packages/gx-core/src/sidebar_rail.rs).
         let Some(key) = command
             .get("key")
             .and_then(Value::as_str)
-            .and_then(rail_item)
-            .map(|item| item.key)
+            .filter(|key| rail_item(key).is_some() || rail_link_pin_id(key).is_some())
+            .map(str::to_string)
         else {
             return true;
         };
@@ -170,14 +181,28 @@ impl GhostexGpuiApp {
             Some("run") => {
                 self.dismiss_native_sidebar_menu(cx);
                 self.defer_in_main_window(cx, move |app, window, cx| {
-                    app.run_sidebar_rail_item(key, window, cx);
+                    if let Some(item) = rail_item(&key) {
+                        app.run_sidebar_rail_item(item.key, window, cx);
+                    } else if let Some(id) = rail_link_pin_id(&key) {
+                        app.run_sidebar_rail_link(id, window, cx);
+                    }
                 });
             }
             Some("pin") => {
                 let pinned = command.get("pinned").and_then(Value::as_bool) == Some(true);
-                let pins = rail_pins_with(&sidebar_rail_pins_now(), key, pinned);
+                let pins = rail_pins_with(&sidebar_rail_pins_now(), &key, pinned);
                 self.save_sidebar_rail_pins(&pins, cx);
-                // The open ⋯ menu redraws its pins in place.
+                // From a link row's own menu (beside the ⋯ menu) the menus close; from the ⋯
+                // menu's pin it redraws its pins in place.
+                if self
+                    .native_sidebar
+                    .menu
+                    .as_ref()
+                    .is_some_and(|menu| menu.panels.len() > 1)
+                {
+                    self.dismiss_native_sidebar_menu(cx);
+                    return true;
+                }
                 let rows = self.sidebar_rail_more_menu(cx);
                 if let Some(panel) = self
                     .native_sidebar
@@ -198,7 +223,7 @@ impl GhostexGpuiApp {
                     } else {
                         index + 1
                     };
-                    self.save_sidebar_rail_pins(&rail_pins_moved(&pins, key, to), cx);
+                    self.save_sidebar_rail_pins(&rail_pins_moved(&pins, &key, to), cx);
                 }
                 self.dismiss_native_sidebar_menu(cx);
             }
@@ -210,7 +235,7 @@ impl GhostexGpuiApp {
     /// The dragged pin `key` dropped on the pin at `index` (`pins.len()`: after the last one).
     pub(crate) fn move_sidebar_rail_pin(
         &mut self,
-        key: &'static str,
+        key: &str,
         index: usize,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -224,10 +249,10 @@ impl GhostexGpuiApp {
     /// The web build reads this computer's settings but keeps no settings file of its own, so the
     /// page shows the pins without changing them (its ⋯ rows carry no pin).
     #[cfg(ghostex_web)]
-    fn save_sidebar_rail_pins(&mut self, _pins: &[&'static str], _cx: &mut gpui::Context<Self>) {}
+    fn save_sidebar_rail_pins(&mut self, _pins: &[String], _cx: &mut gpui::Context<Self>) {}
 
     #[cfg(not(ghostex_web))]
-    fn save_sidebar_rail_pins(&mut self, pins: &[&'static str], cx: &mut gpui::Context<Self>) {
+    pub(crate) fn save_sidebar_rail_pins(&mut self, pins: &[String], cx: &mut gpui::Context<Self>) {
         let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
             .object()
             .clone();
@@ -247,6 +272,20 @@ fn is_rail_row(row: &Value) -> bool {
     row["command"]["type"] == SIDEBAR_RAIL_COMMAND_TYPE
 }
 
-fn sidebar_rail_pins_now() -> Vec<&'static str> {
+pub(crate) fn sidebar_rail_pins_now() -> Vec<String> {
     rail_pins(crate::shared_settings::shared_sidebar_settings_snapshot().object())
+}
+
+/// A link row of the rail's ⋯ menu with its pin, as every rail item has, and Pin to rail or Unpin
+/// from rail in its own menu (`rowMenu.pinned`, packages/gx-core/src/custom_links.rs).
+#[cfg(not(ghostex_web))]
+fn with_link_pin(mut row: Value, pins: &[String]) -> Value {
+    let Some(id) = row["rowMenu"]["key"].as_str().map(str::to_string) else {
+        return row;
+    };
+    let key = ghostex_gx_core::sidebar_rail::rail_link_pin_key(&id);
+    let pinned = pins.contains(&key);
+    row["rowMenu"]["pinned"] = json!(pinned);
+    row["secondary"] = pin_button(&key, pinned);
+    row
 }

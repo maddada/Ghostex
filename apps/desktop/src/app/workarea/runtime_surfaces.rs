@@ -289,8 +289,9 @@ impl GhostexGpuiApp {
                     } else if slot_key.titlebar_mode().is_grok_web() {
                         Some(self.grok_web_profile())
                     } else if slot_key.titlebar_mode().is_link_web() {
-                        // Every link's page shares one profile of its own (app/custom_links/).
-                        Some(crate::app::custom_links::CUSTOM_LINK_BROWSER_PROFILE.to_string())
+                        // The links' own profile, or the Browser profile picked from the link
+                        // page's toolbar (app/custom_links/page.rs).
+                        Some(self.custom_link_cef_profile())
                     } else {
                         None
                     };

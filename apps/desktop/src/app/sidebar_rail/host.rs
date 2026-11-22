@@ -4,7 +4,7 @@
 use gpui::Window;
 use serde_json::json;
 
-use super::model::{RailBadge, RailItemState};
+use super::model::{RailBadge, RailItemState, RailLinkPin};
 use crate::GhostexGpuiApp;
 use crate::app::claude_web::{TakeoverPage, WebPlace};
 use crate::app::native_sidebar::actions::NativeSidebarAction;
@@ -65,6 +65,40 @@ impl GhostexGpuiApp {
             _ => {}
         }
         state
+    }
+
+    /// The pinned link `key` (`link:<id>`) as its rail button shows it, while the link is saved.
+    pub(crate) fn sidebar_rail_link_pin(&self, key: &str) -> Option<RailLinkPin> {
+        let id = ghostex_gx_core::sidebar_rail::rail_link_pin_id(key)?;
+        let link = crate::app::custom_links::saved_custom_link(id)?;
+        let image =
+            crate::browser_favicon_cache_lookup(&link.url, None).map(|favicon| favicon.image);
+        let showing = self.web_place_on() == Some(WebPlace::Link)
+            && crate::app::custom_links::custom_link_page_link()
+                .is_some_and(|showing| showing.id == link.id);
+        Some(RailLinkPin {
+            label: link.label(),
+            id: link.id,
+            image,
+            showing,
+        })
+    }
+
+    /// A click on a pinned link: its page opens, or closes when it is the one showing.
+    pub(crate) fn run_sidebar_rail_link(
+        &mut self,
+        id: &str,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let showing = self.web_place_on() == Some(WebPlace::Link)
+            && crate::app::custom_links::custom_link_page_link()
+                .is_some_and(|showing| showing.id == id);
+        if showing {
+            self.turn_claude_off(cx);
+        } else {
+            self.open_custom_link(id, cx);
+        }
     }
 
     /// A click on item `key`, on the rail or its ⋯ menu.

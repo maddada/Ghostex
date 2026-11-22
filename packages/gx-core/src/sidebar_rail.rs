@@ -11,6 +11,9 @@ use serde_json::{Map, Value};
 /// The settings key holding the pinned items' keys, top to bottom.
 pub const RAIL_PINS_SETTINGS_KEY: &str = "sidebarRailPins";
 
+/// The host command type of the rail's menu rows (pin, unpin, move, run).
+pub const RAIL_COMMAND_TYPE: &str = "sidebarRail";
+
 /// The settings key choosing the rail ("rail") or the classic sidebar ("classic").
 pub const SIDEBAR_LAYOUT_SETTINGS_KEY: &str = "sidebarLayout";
 
@@ -77,49 +80,88 @@ pub fn rail_layout_on(settings: &Map<String, Value>) -> bool {
         != Some("classic")
 }
 
-/// The pinned items' keys, top to bottom: known keys only, each once.
-pub fn rail_pins(settings: &Map<String, Value>) -> Vec<&'static str> {
+/// The start of a link's pin key (`link:<id>`): one of the user's own links (custom_links.rs).
+///
+/// CDXC:Sidebar 2026-11-22 DECISION:
+/// User: "please allow pinning custom links that are added by the user to the rail". A link pins
+/// like any rail item: Pin to rail and Unpin from rail on its ⋯ menu row (hover pin, or the row's
+/// right-click menu), drag into any order among the other pins, Move up and Move down. Its pin is
+/// `link:<id>` in `sidebarRailPins`, the same list, so the order is one order; the icon is the
+/// site's icon once its page has been opened (the globe until then), the tooltip its name, and a
+/// click opens its page. A pin whose link is gone is dropped when the pins are read, and removing
+/// a link unpins it. Like the links (and `sidebarRailPins` itself), the pins stay on this computer.
+pub const RAIL_LINK_PIN_PREFIX: &str = "link:";
+
+/// The pin key of link `id`.
+pub fn rail_link_pin_key(id: &str) -> String {
+    format!("{RAIL_LINK_PIN_PREFIX}{id}")
+}
+
+/// The link id of pin `key`, when it is a link's.
+pub fn rail_link_pin_id(key: &str) -> Option<&str> {
+    key.strip_prefix(RAIL_LINK_PIN_PREFIX)
+        .filter(|id| !id.is_empty())
+}
+
+/// Whether `key` can be pinned: a rail item, or a link.
+fn pinnable(key: &str) -> bool {
+    rail_item(key).is_some() || rail_link_pin_id(key).is_some()
+}
+
+/// The pinned items' keys, top to bottom: known items and saved links only, each once.
+pub fn rail_pins(settings: &Map<String, Value>) -> Vec<String> {
     let Some(saved) = settings
         .get(RAIL_PINS_SETTINGS_KEY)
         .and_then(Value::as_array)
     else {
-        return RAIL_DEFAULT_PINS.to_vec();
+        return RAIL_DEFAULT_PINS
+            .iter()
+            .map(|key| key.to_string())
+            .collect();
     };
-    let mut pins: Vec<&'static str> = Vec::new();
+    let links = crate::custom_links::custom_links_from_settings(settings);
+    let mut pins: Vec<String> = Vec::new();
     for key in saved.iter().filter_map(Value::as_str) {
-        if let Some(item) = rail_item(key) {
-            if !pins.contains(&item.key) {
-                pins.push(item.key);
-            }
+        let known = match rail_link_pin_id(key) {
+            Some(id) => links.iter().any(|link| link.id == id),
+            None => rail_item(key).is_some(),
+        };
+        if known && !pins.iter().any(|pin| pin == key) {
+            pins.push(key.to_string());
         }
     }
     pins
 }
 
 /// `pins` with `key` pinned (at the end) or unpinned.
-pub fn rail_pins_with(pins: &[&'static str], key: &str, pinned: bool) -> Vec<&'static str> {
-    let mut next: Vec<&'static str> = pins.iter().copied().filter(|pin| *pin != key).collect();
-    if pinned {
-        next.extend(rail_item(key).map(|item| item.key));
+pub fn rail_pins_with<S: AsRef<str>>(pins: &[S], key: &str, pinned: bool) -> Vec<String> {
+    let mut next: Vec<String> = pins
+        .iter()
+        .map(|pin| pin.as_ref().to_string())
+        .filter(|pin| pin != key)
+        .collect();
+    if pinned && pinnable(key) {
+        next.push(key.to_string());
     }
     next
 }
 
 /// `pins` with `key` moved to `index` (counted in the list without it), pinning it there when it
 /// was not pinned (a ⋯ row dropped on the rail).
-pub fn rail_pins_moved(pins: &[&'static str], key: &str, index: usize) -> Vec<&'static str> {
-    let Some(item) = rail_item(key) else {
-        return pins.to_vec();
-    };
-    let mut next: Vec<&'static str> = pins.iter().copied().filter(|pin| *pin != key).collect();
-    next.insert(index.min(next.len()), item.key);
+pub fn rail_pins_moved<S: AsRef<str>>(pins: &[S], key: &str, index: usize) -> Vec<String> {
+    let mut next: Vec<String> = pins.iter().map(|pin| pin.as_ref().to_string()).collect();
+    if !pinnable(key) {
+        return next;
+    }
+    next.retain(|pin| pin != key);
+    next.insert(index.min(next.len()), key.to_string());
     next
 }
 
 /// `pins` with the pinned `key` dropped on the pin at `target` (an index into `pins`; `pins.len()`
 /// drops it after the last one): it takes that pin's place, before it, whichever way it moved.
-pub fn rail_pins_dropped(pins: &[&'static str], key: &str, target: usize) -> Vec<&'static str> {
-    let Some(from) = pins.iter().position(|pin| *pin == key) else {
+pub fn rail_pins_dropped<S: AsRef<str>>(pins: &[S], key: &str, target: usize) -> Vec<String> {
+    let Some(from) = pins.iter().position(|pin| pin.as_ref() == key) else {
         return rail_pins_moved(pins, key, target);
     };
     // `rail_pins_moved` counts in the list without the dragged pin, where everything after it
@@ -129,10 +171,10 @@ pub fn rail_pins_dropped(pins: &[&'static str], key: &str, target: usize) -> Vec
 }
 
 /// `pins` as the settings value.
-pub fn rail_pins_value(pins: &[&'static str]) -> Value {
+pub fn rail_pins_value<S: AsRef<str>>(pins: &[S]) -> Value {
     Value::Array(
         pins.iter()
-            .map(|key| Value::String((*key).to_string()))
+            .map(|key| Value::String(key.as_ref().to_string()))
             .collect(),
     )
 }

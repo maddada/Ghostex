@@ -1113,13 +1113,22 @@ layout's ⋯ menu) saves any web page there, such as a local dashboard. The
 address can be a full address or just a host and port: `localhost:8317` opens
 `http://localhost:8317/`, and a name without a port such as `example.com` opens
 over https. The name is optional; without one the row shows the host. Clicking a
-link opens its page in the sessions column's place, the way Grok Bot opens, with
-an address bar that stays on top: Back, Forward, Reload, the address (type
-another and press Enter to go there) and Close. Each row shows the site's icon
-once the page has been opened, and its ⋯ (or a right-click) has Edit… and
-Remove. Links belong to no project, and they stay on this computer: they are in
-no Sync category, since an address like `localhost` means something else on
-another machine (`customLinks`). The phone does not have them.
+link opens its page in the sessions column's place, the way Grok Bot opens, under
+the side panel Browser's own toolbar, which stays on top: Back, Forward, Reload,
+Home (the link's own address), the address (type another and press Enter to go
+there), Page Size (phone and tablet preview), Annotate, History, Profile (the
+links' own profile, or one of the Browser's profiles), DevTools, the ⋯ menu, and
+Close. Each row shows the site's icon once the page has been opened, and its ⋯
+(or a right-click) has Edit… and Remove. In the rail layout a link pins to the
+rail like any rail item: the pin on its row in the rail's ⋯ menu, or Pin to rail
+in the row's own menu. A pinned link shows the site's icon (the globe until the
+page has been opened) with its name as the tooltip, opens its page on a click,
+drags into any order among the other pins, and its right-click menu has Move up,
+Move down and Unpin from rail. Removing a link removes its pin. Links belong to
+no project, and they and their pins stay on this computer: they are in no Sync
+category, since an address like `localhost` means something else on another
+machine (`customLinks`, `sidebarRailPins` with `link:<id>` entries). The phone
+does not have them.
 **Group working sessions** (in the More menu's Sort & Filter page, and in
 Settings > Sidebar; both switch the same setting, off by default) moves each
 project's sessions into a Working section under that project while their agent

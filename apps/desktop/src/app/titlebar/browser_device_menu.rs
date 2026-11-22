@@ -18,6 +18,9 @@ const BROWSER_ICON_DEVICE_MOBILE: &str = "modals/settings/device-mobile.svg";
 
 impl GhostexGpuiApp {
     pub(crate) fn browser_device_view_for_pane(&self, pane_id: BrowserPaneId) -> BrowserDeviceView {
+        if pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE {
+            return self.custom_link_device_view();
+        }
         self.browser_tabs
             .active_tab_for_pane(pane_id)
             .map(|tab| tab.device_view)
@@ -32,6 +35,10 @@ impl GhostexGpuiApp {
         device_view: BrowserDeviceView,
         cx: &mut gpui::Context<Self>,
     ) {
+        if pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE {
+            self.set_custom_link_device_view(device_view, cx);
+            return;
+        }
         if !self.titlebar_mode_available(TitlebarMode::Browser) {
             return;
         }
@@ -99,7 +106,9 @@ impl GhostexGpuiApp {
                 cx.listener(move |this, _: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
-                    if this.browser_tabs.find_leaf(pane_id).is_none() {
+                    if pane_id != crate::app::custom_links::CUSTOM_LINK_PAGE_PANE
+                        && this.browser_tabs.find_leaf(pane_id).is_none()
+                    {
                         return;
                     }
                     this.set_gpui_titlebar_popup_open(

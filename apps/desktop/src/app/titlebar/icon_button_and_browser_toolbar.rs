@@ -52,7 +52,14 @@ impl GhostexGpuiApp {
         CDXC:Browser 2026-06-23-11:04:
         The Browser feedback toolbar starts Agentation through CEF main-frame JavaScript injection. Keep github.com and *.github.com disabled before injection, and keep the toolbar surface status private by showing only bounded page-data-free notifications for missing CEF surfaces or frames.
         */
-        let address_value = self.browser_tabs.address_value_for_pane(pane_id);
+        // The link page draws this toolbar for a pane id no Browser pane has (CDXC:Browser
+        // 2026-11-22 in app/custom_links/page.rs): its page state comes from there.
+        let link_page = pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE;
+        let link_state = link_page.then(|| self.custom_link_toolbar_page());
+        let address_value = match &link_state {
+            Some((address, ..)) => address.clone(),
+            None => self.browser_tabs.address_value_for_pane(pane_id),
+        };
         /*
         CDXC:Browser 2026-11-15 DECISION:
         User (of the "From this computer" chip): "please just show the icon of the machine here,
@@ -61,9 +68,9 @@ impl GhostexGpuiApp {
         through it or has no page yet, this computer's while it opens from here, helpers/remote/
         browser_route.rs), a cloud for a Cloud Box, and the computer's name as its tooltip.
         */
-        let route_mark = self
-            .browser_tabs
-            .active_tab_for_pane(pane_id)
+        let route_mark = (!link_page)
+            .then(|| self.browser_tabs.active_tab_for_pane(pane_id))
+            .flatten()
             .and_then(|tab| Some((tab.remote_machine_id.as_deref()?, tab.url.as_str())))
             .map(|(id, url)| {
                 let from_this_computer = gpui_remote_browser_route_for_machine(id)
@@ -79,18 +86,25 @@ impl GhostexGpuiApp {
             // packages/settings-catalog/src/hotkey_definitions.rs).
             titlebar_tooltip_label(BROWSER_FEEDBACK_TOOL_AGENTATION_LABEL, "toggleAnnotate")
         };
-        let (is_loading, runtime_can_go_back, runtime_can_go_forward) = self
-            .browser_tabs
-            .active_tab_for_pane(pane_id)
-            .map(|tab| {
-                (
-                    tab.runtime_is_loading,
-                    tab.runtime_can_go_back,
-                    tab.runtime_can_go_forward,
-                )
-            })
-            .unwrap_or((false, false, false));
-        let active_browser_surface = self.browser_surface_for_pane(pane_id);
+        let (is_loading, runtime_can_go_back, runtime_can_go_forward) = match &link_state {
+            Some((_, loading, back, forward)) => (*loading, *back, *forward),
+            None => self
+                .browser_tabs
+                .active_tab_for_pane(pane_id)
+                .map(|tab| {
+                    (
+                        tab.runtime_is_loading,
+                        tab.runtime_can_go_back,
+                        tab.runtime_can_go_forward,
+                    )
+                })
+                .unwrap_or((false, false, false)),
+        };
+        let active_browser_surface = if link_page {
+            self.custom_link_surface()
+        } else {
+            self.browser_surface_for_pane(pane_id)
+        };
         let can_go_back = active_browser_surface
             .as_ref()
             .is_some_and(|surface| runtime_can_go_back || surface.read(cx).can_go_back());
@@ -119,8 +133,9 @@ impl GhostexGpuiApp {
         active tab's origin has a stored microphone/camera answer, so the site
         can be asked again.
         */
-        let media_permission_reset_tooltip = self
-            .browser_media_permission_reset_target(pane_id)
+        let media_permission_reset_tooltip = (!link_page)
+            .then(|| self.browser_media_permission_reset_target(pane_id))
+            .flatten()
             .map(|(_, origin)| {
                 gpui::SharedString::from(format!(
                     "Reset Microphone and Camera Access ({})",
@@ -201,7 +216,11 @@ impl GhostexGpuiApp {
                     )),
             )
             .child(div().flex_shrink_0().w(px(BROWSER_TOOLBAR_ADDRESS_GAP)))
-            .child(self.render_browser_address_field(pane_id, cx))
+            .child(if link_page {
+                self.render_custom_link_address_field(cx)
+            } else {
+                self.render_browser_address_field(pane_id, cx)
+            })
             .child(
                 div()
                     .flex_shrink_0()
@@ -270,7 +289,11 @@ impl GhostexGpuiApp {
                         pane_id,
                         cx,
                     ))
-                    .child(self.render_browser_toolbar_overflow_button(pane_id, cx)),
+                    .child(self.render_browser_toolbar_overflow_button(pane_id, cx))
+                    // The link page keeps its Close (app/custom_links/page.rs).
+                    .when(link_page, |this| {
+                        this.child(self.render_custom_link_close_button(cx))
+                    }),
             )
     }
 }

@@ -58,4 +58,21 @@ impl GhostexGpuiApp {
             _ => {}
         }
     }
+
+    /// A page in a browser has no links' page (app/custom_links/ on the desktop), so it shows no
+    /// pinned link.
+    pub(crate) fn sidebar_rail_link_pin(
+        &self,
+        _key: &str,
+    ) -> Option<crate::app::sidebar_rail::RailLinkPin> {
+        None
+    }
+
+    pub(crate) fn run_sidebar_rail_link(
+        &mut self,
+        _id: &str,
+        _window: &mut Window,
+        _cx: &mut gpui::Context<Self>,
+    ) {
+    }
 }

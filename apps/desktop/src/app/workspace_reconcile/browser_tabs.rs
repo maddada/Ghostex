@@ -661,6 +661,11 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        // The link page's Profile menu (app/custom_links/page.rs).
+        if pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE {
+            self.select_custom_link_profile(profile_id.0, cx);
+            return;
+        }
         if !self.browser_profile_actions_available() {
             return;
         }
@@ -691,6 +696,10 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        if pane_id == crate::app::custom_links::CUSTOM_LINK_PAGE_PANE {
+            self.create_custom_link_profile(window, cx);
+            return;
+        }
         if !self.browser_profile_actions_available() {
             return;
         }
