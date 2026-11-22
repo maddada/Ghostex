@@ -4185,8 +4185,8 @@ receive it once with the next delivered message after compaction. An agent turne
 Settings > Agents is not listed, and `agents create`, `create-agent`,
 `run-agent`, `coordinator create`/`start-thread --agent` and `board start-work
 --agent` refuse it, naming the agents to use instead, unless `--allow-hidden` is
-passed. `agents list` finds
-sessions, and `agents send <session-ref> "<text>"` attaches the sender's identity
+passed. `agents list` finds running agents in the caller's project; `agents list --all` includes sleeping agents and other projects.
+`agents send <session-ref> "<text>"` attaches the sender's identity
 and reply reference automatically; an agent that sends with
 `send-session-chat-message`, `queue-session-chat-prompt` or `send-message`
 instead gets the same identity attached, so its message never shows as yours. A normal send reaches a busy agent at its
@@ -4209,7 +4209,7 @@ recorded it yet (usually because it is busy), `pending` while a waking agent is
 still starting, and fails with the reason when the agent did not take it. If Ghostex cannot deliver
 a queued message, the row stays in the recipient's queue marked Not delivered
 with Retry and Delete, and the sending agent gets a note saying so. `agents close
-<session-ref>` ends that session, including any unfinished work. `ghostex read-session-chat` and `ghostex read-text` read replies.
+<session-ref>` ends that session, including any unfinished work. `ghostex read-session-chat` and `ghostex read-text` read replies. `read-text` shows the last 40 lines by default; use `--lines <n>` or `--all` for more.
 A script or a check that must block on an answer runs `ghostex agents wait-reply
 <session-ref> [--contains <text>] [--timeout <seconds>] [--after <message-id>|now]`:
 it waits until that agent's next reply finishes, prints it (`--json` adds its

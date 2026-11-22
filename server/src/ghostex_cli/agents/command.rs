@@ -71,10 +71,25 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             };
             let mut inventory = sessions::fetch_session_list(&flags, false)?;
             identity::resolve_names(&mut inventory, &flags);
+            let hidden = if args.all {
+                0
+            } else {
+                inventory
+                    .iter()
+                    .filter(|row| {
+                        identity::is_agent(row)
+                            && (caller
+                                .as_ref()
+                                .is_none_or(|caller| row["projectId"] != caller["projectId"])
+                                || identity::text(row, "lifecycleState") != "running")
+                    })
+                    .count()
+            };
             let rows: Vec<_> = inventory
                 .iter()
                 .filter(|row| {
                     identity::is_agent(row)
+                        && (args.all || identity::text(row, "lifecycleState") == "running")
                         && caller
                             .as_ref()
                             .is_none_or(|caller| row["projectId"] == caller["projectId"])
@@ -82,7 +97,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 .map(identity::summary)
                 .collect();
             if args.json {
-                print_json(&json!({"ok": true, "sessions": rows}));
+                print_json(&json!({"ok": true, "sessions": rows, "otherCount": hidden}));
             } else {
                 println!("REFERENCE\tAGENT\tACTIVITY\tLIFECYCLE\tPROJECT\tTITLE");
                 for row in rows {
@@ -99,6 +114,9 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                         .map(|key| identity::text(&row, key).replace(['\n', '\r', '\t'], " "))
                         .join("\t")
                     );
+                }
+                if !args.all {
+                    println!("{hidden} other agent sessions. Use --all to list them.");
                 }
             }
         }
