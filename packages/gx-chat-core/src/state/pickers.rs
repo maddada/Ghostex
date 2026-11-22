@@ -144,6 +144,8 @@ pub struct ContextState {
     /// The session computer's status line, for a host that follows it
     /// (`menus/context/computer_pins.rs`).
     pub computer: crate::menus::context::computer_pins::ComputerPins,
+    /// The host turned the status line under the chat box off (`ChatSettings::status_line`).
+    pub status_line_off: bool,
 }
 
 /// One preferences record per agent.

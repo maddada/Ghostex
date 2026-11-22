@@ -773,7 +773,8 @@ pub fn claude_rows() -> Vec<RowDefinition> {
             id: "idleCompactAt",
             group: GroupId::Context,
             label: "Compacts while idle",
-            description: "When Claude Code compacts this chat if it stays idle, before the cache expires",
+            description:
+                "When Claude Code compacts this chat if it stays idle, before the cache expires",
             recommended: true,
             value: value_idle_compact_at,
             copy: None,
@@ -940,7 +941,7 @@ pub fn claude_rows() -> Vec<RowDefinition> {
         group: GroupId::Usage,
         label: "Account resets",
         description: "Limit resets left on the saved Claude account assigned to this session",
-        // Shown unless the user hid it in Choose details: a row a saved record does not name
+        // Shown unless the user hid it in Customize session details: a row a saved record does not name
         // follows this flag (preferences.rs `is_shown`).
         recommended: true,
         value: crate::menus::context::codex::value_account_resets,

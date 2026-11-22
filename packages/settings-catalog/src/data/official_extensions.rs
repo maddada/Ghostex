@@ -348,6 +348,19 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Session notes")),
         ("hotkeys", J::Arr(&[J::Str("sessionNote")])),
     ]),
+    // CDXC:SessionChat 2026-11-22 DECISION:
+    // User, of the row of pills under the chat box (the status line, which old users saw as three empty grey placeholder pills): "i dont wanna see this anymore". It becomes opt-in: a built-in extension, Chat Status Line, off by default under a key that enables (`chatStatusLineEnabled`), so a settings file from before it, which has no such key, reads off and existing users lose the line too. Off, no line and no room for one under the chat box, in the desktop and Ghostex in a browser; on, the line shows the details pinned to it as before. The pinned details are kept either way.
+    // SEE-ALSO: apps/desktop/src/app/gx_chat/boot.rs (`ChatSettings::status_line`, the desktop's and the browser's switch), packages/gx-chat-core/src/menus/context/document.rs (`statusLineOff`), apps/desktop/src/app/native_chat/context_meter.rs (the line).
+    J::Obj(&[
+        ("description", J::Str("A line under the chat box with the details you pin to it, such as your plan limits, the account or the branch. Pick them with the pen at the line's end or with Customize session details.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("chatStatusLine")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("chatStatusLineEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Chat Status Line")),
+    ]),
     // CDXC:Extensions 2026-10-25 DECISION:
     // User: claude.ai inside Ghostex "has to be built in extension", not an external Ghostex extension from the Store. Enabled, it adds a sidebar button that opens a global page, with "different claude profiles for each account" to switch between. The 2026-10-28 decision in apps/desktop/src/app/claude_web/takeover.rs supersedes "switches to a global page that just keeps just my sidebar shown": turning Claude on now hides the sidebar too. A whole-feature entry with a new key (`claudeWebHidden`, default on = hidden, so it starts off like Actions) because the settings file stores every default. Off removes the sidebar button and the Claude view; each account's claude.ai sign-in is kept.
     // SEE-ALSO: apps/desktop/src/app/claude_web/ (the view, the button and the account bar).

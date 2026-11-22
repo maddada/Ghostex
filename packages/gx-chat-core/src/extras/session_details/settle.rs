@@ -61,13 +61,11 @@ pub fn set_visible(
     if !enabled(state) {
         return Vec::new();
     }
-    let mut effects = Vec::new();
-    if !state.extras.session_details.collapsed_read {
-        state.extras.session_details.collapsed_read = true;
-        effects.push(Effect::ReadStorage {
-            key: collapsed_key(),
-        });
-    }
+    // The folds are one choice for the whole app, so every opening reads them again: a fold
+    // changed in another chat's panel since this one last showed comes back here too.
+    let mut effects = vec![Effect::ReadStorage {
+        key: collapsed_key(),
+    }];
     if state.extras.session_details.request.is_none() {
         effects.push(read(state, false, next_request_id()));
     }

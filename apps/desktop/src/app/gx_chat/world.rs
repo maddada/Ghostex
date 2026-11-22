@@ -600,7 +600,10 @@ fn settings_moved(
             .is_some_and(|offer| Some(offer) != state.core.offer_compact_before_sending)
         || settings
             .compact_chats_above
-            .is_some_and(|above| Some(above) != state.core.compact_chats_above))
+            .is_some_and(|above| Some(above) != state.core.compact_chats_above)
+        || settings
+            .status_line
+            .is_some_and(|on| on == state.pickers.context.status_line_off))
     .then(|| Event::SettingsChanged(Box::new(settings.clone())))
 }
 

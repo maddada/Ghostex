@@ -64,6 +64,14 @@ pub fn document_with_icon(
     let result = compute_context_meter(&input, &preferences, &meter_context);
     into.context_meter = match result.meter {
         Value::Null => Tri::Null,
+        Value::Object(mut meter) if pickers.context.status_line_off => {
+            // The Chat Status Line extension is off (CDXC:SessionChat 2026-11-22 in
+            // packages/settings-catalog/src/data/official_extensions.rs): no line and no room
+            // held for one; the details and their pins stay for the ring and the editor.
+            meter.insert("statusLineOff".into(), Value::Bool(true));
+            meter.insert("statusLineReserved".into(), Value::Bool(false));
+            Tri::Value(Value::Object(meter))
+        }
         meter => Tri::Value(meter),
     };
 

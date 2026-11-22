@@ -205,6 +205,12 @@ pub(super) fn chat_settings() -> ChatSettings {
         // The desktop draws its own status line, which is what its gxserver sends the phone
         // (gx-chat-core `menus/context/computer_pins.rs`).
         status_line_from_computer: None,
+        // The Chat Status Line built-in extension, off by default; a web page whose settings have
+        // not arrived reads that default, so the line never shows before the computer says it is on.
+        status_line: Some(ghostex_settings_catalog::built_in_extensions::enabled(
+            object,
+            ghostex_settings_catalog::built_in_extensions::CHAT_STATUS_LINE,
+        )),
         // The chat box row switches Settings > Experience sets (gx-chat-core `composer/row.rs`);
         // a web page whose settings have not arrived keeps the whole row.
         composer_row: (!object.is_empty()).then(|| {

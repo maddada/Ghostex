@@ -92,6 +92,12 @@ fn remember_last_status_line_reservation(reserved: bool) {
     let _ = std::fs::write(path, json!({ "reserved": reserved }).to_string());
 }
 
+/// Whether a chat's first paint holds the status line's row: the last answer any session gave.
+/// The pre-view shell (`session_chat_skeleton.rs`) asks it too.
+pub(crate) fn status_line_expected() -> bool {
+    last_status_line_reservation()
+}
+
 pub(super) fn remembered_status_line_reservation(session: &str) -> bool {
     REMEMBERED_STATUS_LINES
         .with_borrow(|sessions| sessions.get(session).copied())
@@ -162,17 +168,30 @@ pub(super) fn ring(percentage: f32, appearance: &ChatAppearance) -> AnyElement {
 }
 
 impl NativeChatView {
-    /// Whether the status line holds its row of space, by the core's rule
-    /// (`status_line_reserved` in `menus/context/meter.rs`). The core
-    /// answers it; until it has, the last answer for this session stands.
+    /// Whether the status line shows under the chat box this frame. Its row is held by the core's
+    /// rule (`status_line_reserved` in `menus/context/meter.rs`, none while the Chat Status Line
+    /// extension is off); until the core answers, the last answer for this session stands.
     ///
     /// CDXC:SessionChat 2026-11-09 DECISION:
     /// User: nothing is pinned to the status line by default for a new user. The row is held only
     /// while the last answer for this session (or, before any, for any session) said items are
     /// pinned: waiting for the chat to load used to hold it for everyone, which drew an empty
-    /// skeleton bar and a gap under the chat box for a user who pinned nothing.
-    pub(super) fn status_line_reserved(&self) -> bool {
+    /// skeleton bar and a gap under the chat box for a user who pinned nothing. A held row shows
+    /// while it has pinned values, or while the chat is still loading them (the skeleton stands
+    /// in for them).
+    ///
+    /// CDXC:SessionChat 2026-11-22 WHY:
+    /// The row used to draw its grey skeleton pills whenever it was held and had no values, not
+    /// only while loading. Someone whose record pins rows this agent never fills (an existing
+    /// user's recommended Claude pins in an Antigravity or Gemini chat: held by `hasConfiguredItems`,
+    /// nothing resolved into `starred`) saw three empty placeholder pills under the chat box for
+    /// good. Once the chat has loaded, a line with no values takes no row.
+    pub(super) fn status_line_shown(&self) -> bool {
         self.status_line_reserved
+            && (self.status_line_loading()
+                || self.snapshot["contextMeter"]["starred"]
+                    .as_array()
+                    .is_some_and(|items| !items.is_empty()))
     }
 
     fn status_line_loading(&self) -> bool {
@@ -188,11 +207,13 @@ impl NativeChatView {
         if !context.is_object() {
             return;
         }
-        let reserved = context["statusLineReserved"] == true
-            || context["hasConfiguredItems"] == true
-            || context["starred"]
-                .as_array()
-                .is_some_and(|items| !items.is_empty());
+        // The Chat Status Line extension off (`statusLineOff`) holds no row, whatever is pinned.
+        let reserved = context["statusLineOff"] != true
+            && (context["statusLineReserved"] == true
+                || context["hasConfiguredItems"] == true
+                || context["starred"]
+                    .as_array()
+                    .is_some_and(|items| !items.is_empty()));
         self.status_line_reserved = reserved;
         let session = self.config.session_id.clone();
         REMEMBERED_STATUS_LINES.with_borrow_mut(|sessions| sessions.insert(session, reserved));
@@ -322,10 +343,10 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
+        // Drawn only while `status_line_shown`: no values yet means the chat is still loading.
         if self.snapshot["contextMeter"]["starred"]
             .as_array()
             .is_none_or(Vec::is_empty)
-            && (self.status_line_loading() || self.status_line_reserved)
         {
             return status_line_skeleton(appearance);
         }

@@ -26,8 +26,10 @@ const SUBTITLE_HEIGHT: f32 = 20.0;
 const BAR_HEIGHT: f32 = 14.0;
 const SUMMARY_HEIGHT: f32 = 24.0;
 const NOTE_HEIGHT: f32 = 20.0;
-/// The tab bar over the cards: its 24 and the cards' gap under it.
-const TABS_HEIGHT: f32 = 24.0 + CARD_GAP;
+/// An area's header (Overview, Limits), the cards' gap under it included.
+const AREA_HEADER_HEIGHT: f32 = 28.0;
+/// Customize session details: the room above the button and the button.
+const CUSTOMIZE_HEIGHT: f32 = 4.0 + 24.0;
 /// Compact context under the Context card's breakdown: the button and the room above it.
 const COMPACT_HEIGHT: f32 = 6.0 + 24.0;
 
@@ -38,6 +40,11 @@ const BACKGROUND_FINISHED_KEY: &str = "session-details:background:finished";
 
 fn card_key(id: &str) -> String {
     format!("session-details:{id}")
+}
+
+/// The disclosure key of an area (Overview, Limits).
+fn area_key(id: &str) -> String {
+    format!("session-details:area:{id}")
 }
 
 fn str_of(value: &Value, key: &str) -> String {
@@ -79,41 +86,62 @@ fn swatch(key: &str, p: &ChatAppearance) -> Hsla {
     }
 }
 
-/// The floating card's content height for `details`, in unscaled pixels. `open` says how far a
-/// fold is open (0 shut, 1 open) given its key and whether it is open now, so the card's window
-/// follows a fold that is still easing instead of clipping it.
+/// The floating card's content height for `details`, in unscaled pixels: each area's header and
+/// the part of its body still showing. `open` says how far a fold is open (0 shut, 1 open) given
+/// its key and whether it is open now, so the card's window follows a fold that is still easing
+/// instead of clipping it.
 pub(super) fn panel_height(details: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f32 {
+    let mut total = 0.0;
+    for (index, area) in details["areas"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        if index > 0 {
+            total += CARD_GAP;
+        }
+        total += AREA_HEADER_HEIGHT;
+        let id = area["id"].as_str().unwrap_or_default();
+        let fold = open(&area_key(id), area["collapsed"] != true);
+        if fold <= 0.0 {
+            continue;
+        }
+        let body = if id == "usage" {
+            usage_height(details)
+        } else {
+            overview_height(details, open)
+        };
+        total += body * fold;
+    }
+    total + 4.0
+}
+
+/// The Overview area's cards, or the room the panel's notes take when it has none.
+fn overview_height(details: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f32 {
     let sections = details["sections"]
         .as_array()
         .map_or(&[][..], Vec::as_slice);
-    let mut total = tabs_height(details);
+    if sections.is_empty() {
+        return NOTE_HEIGHT * 2.0;
+    }
+    let mut total = 0.0;
     for (index, section) in sections.iter().enumerate() {
         if index > 0 {
             total += CARD_GAP;
         }
         total += section_height(section, open);
     }
-    if sections.is_empty() {
-        total = NOTE_HEIGHT * 2.0;
-    }
-    total + 4.0
+    total
 }
 
-/// The tab bar's height, while the core names tabs (an older core sends none).
-fn tabs_height(details: &Value) -> f32 {
-    if len(details, "tabs") > 1 {
-        TABS_HEIGHT
-    } else {
-        0.0
-    }
-}
-
-/// The second tab's height: its cards, or the line saying none is picked, then Choose details.
-pub(super) fn usage_height(details: &Value) -> f32 {
+/// The Limits area's height: its cards, or the line saying none is picked, then Customize session
+/// details.
+fn usage_height(details: &Value) -> f32 {
     let cards = details["usage"]["cards"]
         .as_array()
         .map_or(&[][..], Vec::as_slice);
-    let mut total = tabs_height(details);
+    let mut total = 0.0;
     for card in cards {
         total += CARD_PADDING_Y * 2.0 + HEADER_HEIGHT + len(card, "rows") as f32 * ROW_HEIGHT;
         total += CARD_GAP;
@@ -121,13 +149,22 @@ pub(super) fn usage_height(details: &Value) -> f32 {
     if cards.is_empty() {
         total += NOTE_HEIGHT * 2.0 + CARD_GAP;
     }
-    total + ROW_HEIGHT + 4.0
+    total + CUSTOMIZE_HEIGHT
 }
 
-/// How far down the first tab's scrolling cards the Context card starts, for the rings that open
-/// the panel there. The tab bar stays above the scroll, so it doesn't count.
+/// How far down the panel's scrolling content the Context card starts, for the rings that open
+/// the panel there: under the Overview header, while that area is open.
 pub(super) fn context_offset(details: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f32 {
-    let mut total = 0.0;
+    let overview_open = details["areas"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|area| area["id"] == "overview")
+        .is_none_or(|area| area["collapsed"] != true);
+    if !overview_open {
+        return 0.0;
+    }
+    let mut total = AREA_HEADER_HEIGHT;
     for section in details["sections"].as_array().into_iter().flatten() {
         if section["id"] == "context" {
             break;
@@ -378,14 +415,30 @@ impl NativeChatView {
                     .child(error.to_string()),
             );
         }
-        // The tab bar is drawn above the scroll by the dock and the floating card
-        // (`session_details_tab_bar`), so it stays put while the cards scroll.
-        if len(&details, "tabs") > 1 && self.session_details.tab == 1 {
-            column = column.child(self.session_details_usage(&details["usage"], p, cx));
-        } else {
-            for section in details["sections"].as_array().into_iter().flatten() {
-                column = column.child(self.session_details_card(section, &details, p, cx));
-            }
+        // The Overview area's cards, then the Limits area's (the decision at `TABS` in
+        // gx-chat-core `session_details/document.rs`), each under a header that folds it.
+        for area in details["areas"].as_array().into_iter().flatten() {
+            let id = str_of(area, "id");
+            let open = area["collapsed"] != true;
+            let key = area_key(&id);
+            let motion = self.disclosure_frame(&key, open, cx);
+            let header = self.session_details_area_header(area, open, motion, p, cx);
+            let body = (open || motion.is_some()).then(|| {
+                let body = if id == "usage" {
+                    self.session_details_usage(&details["usage"], p, cx)
+                } else {
+                    self.session_details_overview(&details, p, cx)
+                };
+                self.disclosure_body_motion(&key, motion, 0.0, body)
+            });
+            column = column.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .min_w_0()
+                    .child(header)
+                    .children(body),
+            );
         }
         // A fold that is opening or closing needs the next frame, in whichever window draws it.
         if self.disclosure_motion.borrow().running() {
@@ -394,77 +447,92 @@ impl NativeChatView {
         column.into_any_element()
     }
 
-    /// The tab bar over the scrolling cards, while the core names more than one tab.
-    pub(super) fn session_details_tab_bar(
+    /// The Overview area's body: the session's cards in the core's order.
+    fn session_details_overview(
         &mut self,
+        details: &Value,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        let tabs = self.snapshot["sessionDetails"]["tabs"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-        (tabs.len() > 1).then(|| self.session_details_tabs(&tabs, p, cx))
+    ) -> AnyElement {
+        let mut column = div()
+            .flex()
+            .flex_col()
+            .gap(px(CARD_GAP * p.scale))
+            .min_w_0();
+        for section in details["sections"].as_array().into_iter().flatten() {
+            column = column.child(self.session_details_card(section, details, p, cx));
+        }
+        column.into_any_element()
     }
 
-    /// The tab bar: the core's tab names (`TABS` in gx-chat-core `session_details/document.rs`).
-    fn session_details_tabs(
+    /// An area's header (Overview, Limits), drawn like the sidebar's section headings
+    /// (`native_sidebar/sections.rs`): the title in sentence case, light and dim, a rounded hover
+    /// wash, and the chevron while hovered (or while the area is folded, so a folded area says it
+    /// opens). The whole row folds the area.
+    fn session_details_area_header(
         &mut self,
-        tabs: &[Value],
+        area: &Value,
+        open: bool,
+        motion: Option<FoldFrame>,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let mut bar = div()
-            .id("session-details-tabs")
-            .role(gpui::Role::TabList)
+        let id = str_of(area, "id");
+        let title = str_of(area, "title");
+        let toggle = area["toggle"].clone();
+        let group = SharedString::from(format!("session-details-area-{id}"));
+        let dim = p.foreground.opacity(0.42);
+        let lit = p.foreground.opacity(0.66);
+        div()
+            .id(group.clone())
+            .group(group.clone())
+            .role(gpui::Role::Button)
+            .aria_label(format!("{} {title}", if open { "Hide" } else { "Show" }))
+            .aria_expanded(open)
+            .h(px(AREA_HEADER_HEIGHT * s))
+            .pb(px(CARD_GAP * s))
             .flex()
-            .gap(px(2.0 * s))
-            .h(px(24.0 * s))
-            .p(px(2.0 * s))
-            .rounded(px(7.0 * s))
-            .bg(p.foreground.opacity(0.05));
-        for (index, tab) in tabs.iter().enumerate() {
-            let on = self.session_details.tab == index;
-            let label = str_of(tab, "label");
-            bar = bar.child(
+            .child(
                 div()
-                    .id(SharedString::from(format!("session-details-tab-{index}")))
-                    .role(gpui::Role::Tab)
-                    .aria_label(label.clone())
                     .flex_1()
+                    .min_w_0()
                     .flex()
                     .items_center()
-                    .justify_center()
+                    .gap(px(5.0 * s))
+                    .pl(px(5.0 * s))
+                    .pr(px(6.0 * s))
                     .rounded(px(5.0 * s))
-                    .text_size(px(12.0 * s))
-                    .truncate()
-                    .when(on, |tab| {
-                        tab.bg(p.foreground.opacity(0.10))
-                            .text_color(p.foreground)
-                            .font_weight(FontWeight::SEMIBOLD)
+                    .text_size(px(13.0 * s))
+                    .font_weight(FontWeight::LIGHT)
+                    .text_color(dim)
+                    .chat_cursor_pointer()
+                    .group_hover(group.clone(), |row| {
+                        row.bg(p.foreground.opacity(0.06)).text_color(lit)
                     })
-                    .when(!on, |tab| {
-                        tab.text_color(p.card_muted)
-                            .chat_cursor_pointer()
-                            .hover(|tab| tab.bg(p.foreground.opacity(0.06)))
-                    })
-                    .child(label)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.session_details.tab = index;
-                        // The tab bar stays put above the scroll: the new tab starts at its top.
-                        let top = gpui::point(px(0.0), px(0.0));
-                        this.session_details.scroll.set_offset(top);
-                        this.session_details.menu_scroll.set_offset(top);
-                        cx.notify();
-                    })),
-            );
-        }
-        bar.into_any_element()
+                    .child(div().truncate().child(title))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .when(open, |chevron| {
+                                chevron
+                                    .opacity(0.0)
+                                    .group_hover(group.clone(), |chevron| chevron.opacity(1.0))
+                            })
+                            .child(fold_chevron(open, motion, 14.0 * s, p.muted)),
+                    ),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| {
+                cx.stop_propagation();
+                this.session_details_action(&toggle, cx);
+            }))
+            .into_any_element()
     }
 
-    /// The second tab: the core's cards of the context meter's details, then Choose details.
+    /// The Limits area: the core's cards of the context meter's details, then Customize session
+    /// details (the meter's editor), a button at the right end.
     fn session_details_usage(
         &mut self,
         usage: &Value,
@@ -536,25 +604,39 @@ impl NativeChatView {
         }
         let choose = &usage["chooseDetails"];
         if choose.is_object() {
-            let pencil = svg()
-                .path("titlebar/pencil.svg")
-                .size(px(12.0 * s))
-                .flex_shrink_0()
-                .text_color(p.card_muted)
-                .into_any_element();
-            column = column.child(self.detail_row_folding(
-                "usage-choose-details".to_string(),
-                None,
-                str_of(choose, "label"),
-                None,
-                None,
-                Some(choose["action"].clone()),
-                true,
-                false,
-                Some(pencil),
-                p,
-                cx,
-            ));
+            let label = str_of(choose, "label");
+            let action = choose["action"].clone();
+            column = column.child(
+                div().pt(px(4.0 * s)).flex().justify_end().child(
+                    div()
+                        .id("session-details-customize")
+                        .role(gpui::Role::Button)
+                        .aria_label(label.clone())
+                        .h(px(24.0 * s))
+                        .px(px(10.0 * s))
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0 * s))
+                        .rounded(px(6.0 * s))
+                        .bg(p.foreground.opacity(0.06))
+                        .text_size(px(12.0 * s))
+                        .text_color(p.foreground)
+                        .chat_cursor_pointer()
+                        .hover(|button| button.bg(p.foreground.opacity(0.10)))
+                        .child(
+                            svg()
+                                .path("titlebar/pencil.svg")
+                                .size(px(12.0 * s))
+                                .flex_shrink_0()
+                                .text_color(p.card_muted),
+                        )
+                        .child(label)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.session_details_action(&action, cx);
+                        })),
+                ),
+            );
         }
         column.into_any_element()
     }
@@ -1618,7 +1700,7 @@ mod tests {
     #[test]
     fn a_folding_card_counts_the_part_of_its_body_still_showing() {
         let height = |connectors: f32| {
-            panel_height(&details(), &mut |key, open| {
+            overview_height(&details(), &mut |key, open| {
                 if key == "session-details:connectors" {
                     connectors
                 } else if open {
@@ -1641,7 +1723,7 @@ mod tests {
             if more {
                 section["foldAction"] = json!({"type": "sessionDetailsList"});
             }
-            panel_height(&json!({"sections": [section]}), &mut |_, open| {
+            overview_height(&json!({"sections": [section]}), &mut |_, open| {
                 f32::from(open)
             })
         };
@@ -1652,11 +1734,11 @@ mod tests {
     fn a_folded_context_card_keeps_its_usage_line_and_bar() {
         let context = |collapsed: bool| {
             let section = json!({"id": "context", "collapsed": collapsed, "rows": [{}, {}]});
-            panel_height(&json!({"sections": [section]}), &mut |_, open| {
+            overview_height(&json!({"sections": [section]}), &mut |_, open| {
                 f32::from(open)
             })
         };
-        let card = CARD_PADDING_Y * 2.0 + HEADER_HEIGHT + 4.0;
+        let card = CARD_PADDING_Y * 2.0 + HEADER_HEIGHT;
         assert_eq!(context(true), card + SUMMARY_HEIGHT + BAR_HEIGHT);
         assert_eq!(context(false) - context(true), 2.0 * ROW_HEIGHT);
     }
@@ -1666,7 +1748,7 @@ mod tests {
         let height = |foldable: bool| {
             let section =
                 json!({"id": "context", "collapsed": false, "foldable": foldable, "rows": [{}]});
-            panel_height(&json!({"sections": [section]}), &mut |_, open| {
+            overview_height(&json!({"sections": [section]}), &mut |_, open| {
                 f32::from(open)
             })
         };

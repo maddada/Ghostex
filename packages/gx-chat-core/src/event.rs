@@ -371,6 +371,12 @@ pub struct ChatSettings {
     /// the web build, an older phone) keeps this host's own line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_line_from_computer: Option<bool>,
+    /// The Chat Status Line built-in extension (`chatStatusLineEnabled`): `false` leaves the status
+    /// line under the chat box out, room included (`statusLineOff` on `contextMeter`). The desktop
+    /// and the web build send it from the computer's settings; absent (the phone, an older host)
+    /// keeps the line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_line: Option<bool>,
     /// The chat box row switches (`composer/row.rs`): the desktop's from its settings file, the
     /// phone's from its own settings. Absent keeps the whole row (an older host).
     #[serde(default, skip_serializing_if = "Option::is_none")]

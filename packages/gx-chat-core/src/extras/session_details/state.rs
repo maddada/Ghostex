@@ -24,11 +24,11 @@ pub struct SessionDetailsState {
     /// Background commands asked to stop, until they leave the running list.
     pub stopping: Vec<String>,
     /// The user's own folds, remembered across restarts: the ids of sections they folded, and
-    /// `<id>:open` for a section folded by default ([`FOLDED_BY_DEFAULT`]) that they unfolded.
+    /// `<id>:open` for a section folded by default ([`FOLDED_BY_DEFAULT`]) that they unfolded. The
+    /// Overview and Limits areas fold here too, as `area:<id>` (document.rs `area_fold_id`). Read
+    /// again each time the panel opens.
     /// Read it through [`is_collapsed`].
     pub collapsed: Vec<String>,
-    /// The folds were read from storage (or never will be).
-    pub collapsed_read: bool,
     /// The lists unfolded inside a section: `finished`, `skills`, `mcp`, `messages`.
     pub open_lists: Vec<String>,
     /// How many "Show more" presses the Tasks card's done list has had; 0 is the short form.

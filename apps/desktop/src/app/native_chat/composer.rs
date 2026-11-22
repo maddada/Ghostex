@@ -860,7 +860,7 @@ impl NativeChatView {
                         .children(self.render_dictation_pill(p, cx)),
                 ),
         );
-        if self.status_line_reserved() && !self.collab_guest() {
+        if self.status_line_shown() && !self.collab_guest() {
             footer = footer.child(self.render_context_status(p, cx));
         }
         self.composer_row()

@@ -12662,6 +12662,18 @@
       "agentWritable": true
     },
     {
+      "key": "chatStatusLineEnabled",
+      "title": "Chat Status Line",
+      "subtitle": "Turn the Chat Status Line on or off: the line under the chat box with the details you pin to it, such as your plan limits, the account or the branch. Off by default; the details you pinned are kept while it is off.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "claudeWebHidden",
       "title": "Turn off Claude",
       "subtitle": "Turn off Claude: the Claude button in the header and the Claude view, which shows claude.ai with a bar to switch between your saved Claude accounts. Off by default; each account's claude.ai sign-in is kept.",

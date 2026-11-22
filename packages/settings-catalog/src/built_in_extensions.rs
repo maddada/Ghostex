@@ -66,6 +66,8 @@ pub const SESSION_DETAILS: &str = "sessionDetailsPanel";
 /// line, the chat's Session note row, the note dialog, its hotkey, `ghostex session-note`). Off by
 /// default; the phone learns it from `builtInFeaturesOff`. Saved notes are kept while it is off.
 pub const SESSION_NOTES: &str = "sessionNotes";
+/// The Chat Status Line (the line of pinned details under the chat box). Off by default.
+pub const CHAT_STATUS_LINE: &str = "chatStatusLine";
 /// OS Integration (Settings > OS Integration). Experimental, off by default.
 pub const OS_INTEGRATION: &str = "osIntegration";
 /// The Beads view (the view panel's Beads tab, Tree and Board). A view, not a whole feature, so

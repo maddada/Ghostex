@@ -178,6 +178,9 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
             if let Some(follow) = settings.status_line_from_computer {
                 state.pickers.context.computer.followed = follow;
             }
+            if let Some(on) = settings.status_line {
+                state.pickers.context.status_line_off = !on;
+            }
             if let Some(row) = settings.composer_row {
                 state.core.composer_row = row;
             }
@@ -313,6 +316,9 @@ pub fn boot_read(
         }
         if let Some(follow) = settings.status_line_from_computer {
             state.pickers.context.computer.followed = follow;
+        }
+        if let Some(on) = settings.status_line {
+            state.pickers.context.status_line_off = !on;
         }
         if let Some(row) = settings.composer_row {
             state.core.composer_row = row;

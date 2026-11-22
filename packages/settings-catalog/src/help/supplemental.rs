@@ -481,6 +481,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "chatStatusLineEnabled",
+        tab: EXTENSIONS,
+        group: None,
+        section: "official",
+        section_title: "Built-in",
+        title: "Chat Status Line",
+        subtitle: "Turn the Chat Status Line on or off: the line under the chat box with the details you pin to it, such as your plan limits, the account or the branch. Off by default; the details you pinned are kept while it is off.",
+        options: &[],
+        user_only: false,
+    },
+    Supplemental {
         key: "claudeWebHidden",
         tab: EXTENSIONS,
         group: None,

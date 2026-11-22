@@ -1,5 +1,6 @@
 use crate::app::native_chat::appearance::ChatAppearance;
 use crate::*;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div, px,
 };
@@ -101,7 +102,12 @@ fn session_chat_skeleton(p: &ChatAppearance, glass: bool) -> AnyElement {
                             .child(div().w(px(52.0 * s)).h(px(10.0 * s)).rounded_full().bg(p.primary.opacity(0.24)))
                             .child(div().size(px(24.0 * s)).rounded(px(6.0 * s)).bg(p.primary.opacity(0.24)))),
                 )
-                .child(crate::app::native_chat::context_meter::status_line_skeleton(p)),
+                // The status line's skeleton only where chats hold its row (the Chat Status Line
+                // extension is on and something is pinned).
+                .when(
+                    crate::app::native_chat::context_meter::status_line_expected(),
+                    |shell| shell.child(crate::app::native_chat::context_meter::status_line_skeleton(p)),
+                ),
         )
         .into_any_element()
 }

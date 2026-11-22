@@ -2756,11 +2756,17 @@ composer cursor. Older messages load as needed when returning to a place in
 the conversation's history. Shortcuts: `openSessionSearchPalette`,
 `navigateHistoryBack`, `navigateHistoryForward`.
 
-Nothing is pinned to the status line under the chat box until you pin
-something, so a new install shows no line there. To show one, star items in
-Context details; hover the status line and click the pen after its last item to
-open Context details again. Everyone who already used Ghostex keeps the line
-they had, and your own changes are never overwritten. The phone shows the line
+The status line under the chat box is a built-in extension, Chat Status Line,
+off by default for everyone (also for people who saw the line before it became
+an extension): turn it on in Settings > Extensions > Built-in. While it is off
+the chat box has no line under it, on this computer and in Ghostex in a browser
+connected to it; what you pinned is kept for when you turn it back on. While it
+is on, nothing is pinned to the line until you pin something. To show one, star
+items in Context details (Customize session details in the Session details
+panel opens it too); hover the status line and click the pen after its last item
+to open Context details again. A line whose pinned items this agent never
+reports takes no room. Everyone who pinned items before keeps them, and your own
+changes are never overwritten. The phone shows the line
 the chat's computer shows: what you pinned in the Ghostex app on that computer,
 for each agent, picked up when a chat opens or catches up. The phone's own pins
 are used only with a computer that has no Ghostex app or runs an older Ghostex.
@@ -3179,10 +3185,12 @@ it is too narrow the panel opens as a floating card under the ring, and a click
 on the chat closes it. Opening Session details while the Work panel is open
 swaps one for the other in place. On the phone the same ring sits in the chat's
 header and opens the cards as a sheet (Changes opens the phone's Changes view).
-The panel has two tabs, Overview and Limits, the same on the computer and on the
-phone; on the computer they stay at the top while the cards scroll. The chat box's context ring opens it too, on Overview at the Context
-card, so there is no separate Context window popover any more (a chat without
-the panel keeps it).
+The panel has two parts, Overview and then Limits. On the computer they are two
+areas one under the other, both open at first; click an area's title to fold or
+unfold it, and Ghostex remembers each one for the whole app, so the panel opens
+the way you left it in any chat. On the phone they are two tabs. The chat box's
+context ring opens the panel too, at the Context card, so there is no separate
+Context window popover any more (a chat without the panel keeps it).
 
 Overview holds Environment (the computer, by its icon and name, or the
 box the session runs in, its folder, branch and account, the agent's version, and how much memory
@@ -3203,7 +3211,7 @@ Agents Hub); Memory files (the CLAUDE.md and AGENTS.md files Claude loaded;
 click to open); Background tasks (each running command with its time and a
 stop button, then the finished ones); and Agent (the agent's other settings).
 Limits holds Plan limits (each limit with when it resets), Cost and time and
-Cache, and Choose details, which picks the rows to show. A card's title folds
+Cache, and a Customize session details button, which picks the rows to show. A card's title folds
 it, except Context. Claude task list (Settings > Agents > Defaults, shown while
 the extension is on, on by default) starts Claude with its task list tools, which
 recent Claude models only get when Ghostex asks; it applies to Claude sessions

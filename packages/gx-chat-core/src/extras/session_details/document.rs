@@ -751,9 +751,18 @@ fn background(
 /// we lost the stuff that's below the context fam" and the Context card moved to the first tab, the desktop taking the
 /// same tabs in its panel while the chat box's Context window popover goes (Q2763, option A), and the names "Overview |
 /// Limits" (Q2769). The first tab is what the session is (`OVERVIEW_ORDER`; its Context card folds again since
-/// 2026-11-14, see `FOLDED_BY_DEFAULT` in `state.rs`); the second lists the context meter's More details rows (the ones Choose details picks, which also pin
+/// 2026-11-14, see `FOLDED_BY_DEFAULT` in `state.rs`); the second lists the context meter's More details rows (the ones Customize session details picks, which also pin
 /// the status line) as cards (`USAGE_CARDS`). Rows another place already shows are not listed (`SHOWN_ELSEWHERE`).
+///
+/// CDXC:SessionDetails 2026-11-22 DECISION:
+/// User, of the desktop panel's Overview / Limits tabs: remove the tabs; instead two collapsible areas, both expanded by default, the Overview content first and all of the Limits content below it, each area's expanded or collapsed state remembered for the whole app (one setting, not per session or project) and restored when the panel is closed and opened again, with the app's collapsible section header style. Supersedes the desktop's tab bar above: the desktop and the web build draw `areas`, whose folds live with the cards' folds (`area_fold_id`, `sessionDetailsCollapsed`). `tabs` stays in the document for the phone's sheet, which still draws these names as tabs.
 pub const TABS: [(&str, &str); 2] = [("overview", "Overview"), ("usage", "Limits")];
+
+/// The fold id of the area `id` (a [`TABS`] id) among the remembered folds, apart from the cards'
+/// own ids.
+pub fn area_fold_id(id: &str) -> String {
+    format!("area:{id}")
+}
 
 /// The first tab's cards in this order; a card added later follows them.
 const OVERVIEW_ORDER: [&str; 9] = [
@@ -852,7 +861,7 @@ const SHOWN_ELSEWHERE: [&str; 14] = [
     "agentName",
 ];
 
-/// The context meter's detail rows (`contextMeter.details`, the ones Choose details picked) with a
+/// The context meter's detail rows (`contextMeter.details`, the ones Customize session details picked) with a
 /// value, in the meter's order: `(id, label, value)`.
 fn detail_items(meter: Option<&Value>) -> Vec<(String, String, String)> {
     meter
@@ -883,7 +892,8 @@ fn rider_text(rider: &str, value: &str) -> String {
     }
 }
 
-/// The second tab: its cards from the detail rows, and Choose details (the meter's editor).
+/// The second tab (the Limits area): its cards from the detail rows, and Customize session details
+/// (the meter's editor).
 fn usage_tab(items: &[(String, String, String)]) -> Value {
     let find = |id: &str| items.iter().find(|item| item.0 == id);
     let cards: Vec<Value> = USAGE_CARDS
@@ -920,8 +930,8 @@ fn usage_tab(items: &[(String, String, String)]) -> Value {
         .collect();
     json!({
         "cards": cards,
-        "empty": "Nothing picked to show here. Choose details picks which rows show.",
-        "chooseDetails": {"label": "Choose details", "action": {"type": "contextEdit"}},
+        "empty": "Nothing picked to show here. Customize session details picks which rows show.",
+        "chooseDetails": {"label": "Customize session details", "action": {"type": "contextEdit"}},
     })
 }
 
@@ -1067,6 +1077,20 @@ pub fn document(state: &ChatState, context: &ChatContext, meter: Option<&Value>)
         "loading": data.is_none() && details.request.is_some(),
         "error": details.error,
         "tabs": TABS.iter().map(|(id, label)| json!({"id": id, "label": label})).collect::<Vec<_>>(),
+        // The same two, as the desktop's collapsible areas: `sections` under Overview, `usage`
+        // under Limits.
+        "areas": TABS
+            .iter()
+            .map(|(id, label)| {
+                let fold = area_fold_id(id);
+                json!({
+                    "id": id,
+                    "title": label,
+                    "collapsed": is_collapsed(collapsed, &fold),
+                    "toggle": {"type": "sessionDetailsSection", "section": fold},
+                })
+            })
+            .collect::<Vec<_>>(),
         "sections": sections,
         "usage": usage_tab(&items),
     })
