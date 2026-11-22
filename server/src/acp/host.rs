@@ -34,7 +34,7 @@ use super::spec::{
 
 const ACP_LOAD_TIMEOUT: Duration = Duration::from_secs(90);
 const ACP_RPC_TIMEOUT: Duration = Duration::from_secs(30);
-const POLL_RETRY_DELAY: Duration = Duration::from_millis(300);
+pub(super) const POLL_RETRY_DELAY: Duration = Duration::from_millis(300);
 const SPOOL_MAX_BYTES: u64 = 16 * 1024 * 1024;
 const SPOOL_RETENTION: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
@@ -42,14 +42,19 @@ const SPOOL_RETENTION: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 static SIGNAL_TERMINATE: AtomicBool = AtomicBool::new(false);
 
 #[cfg(unix)]
+pub(super) fn termination_requested() -> bool {
+    SIGNAL_TERMINATE.load(Ordering::Acquire)
+}
+
+#[cfg(unix)]
 extern "C" fn handle_termination_signal(_signal: libc::c_int) {
     SIGNAL_TERMINATE.store(true, Ordering::SeqCst);
 }
 
-struct TerminationSignalGuard;
+pub(super) struct TerminationSignalGuard;
 
 impl TerminationSignalGuard {
-    fn install() -> Self {
+    pub(super) fn install() -> Self {
         #[cfg(unix)]
         unsafe {
             SIGNAL_TERMINATE.store(false, Ordering::SeqCst);
@@ -74,14 +79,14 @@ impl Drop for TerminationSignalGuard {
     }
 }
 
-struct HostArgs {
-    family: String,
-    cli_command: Option<String>,
-    resume_session_id: Option<String>,
-    approval_level: AcpApprovalLevel,
-    writable_roots: Vec<PathBuf>,
-    model: Option<String>,
-    effort: Option<String>,
+pub(super) struct HostArgs {
+    pub(super) family: String,
+    pub(super) cli_command: Option<String>,
+    pub(super) resume_session_id: Option<String>,
+    pub(super) approval_level: AcpApprovalLevel,
+    pub(super) writable_roots: Vec<PathBuf>,
+    pub(super) model: Option<String>,
+    pub(super) effort: Option<String>,
 }
 
 fn parse_args(args: &[String]) -> Result<HostArgs, String> {
@@ -146,7 +151,7 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
     })
 }
 
-fn now_ms() -> i64 {
+pub(super) fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
@@ -154,18 +159,18 @@ fn now_ms() -> i64 {
 }
 
 #[derive(Clone)]
-struct GxserverEndpoint {
-    base_url: String,
-    token: String,
-    channel_secret: Option<String>,
-    session_ref: String,
-    project_id: String,
-    session_id: String,
-    instance: String,
+pub(super) struct GxserverEndpoint {
+    pub(super) base_url: String,
+    pub(super) token: String,
+    pub(super) channel_secret: Option<String>,
+    pub(super) session_ref: String,
+    pub(super) project_id: String,
+    pub(super) session_id: String,
+    pub(super) instance: String,
 }
 
 impl GxserverEndpoint {
-    fn from_env() -> Option<Self> {
+    pub(super) fn from_env() -> Option<Self> {
         let session_ref = env::var("GHOSTEX_GLOBAL_SESSION_REF")
             .ok()?
             .trim()
@@ -214,7 +219,7 @@ impl GxserverEndpoint {
         })
     }
 
-    fn post_json(&self, path: &str, body: Value, timeout: Duration) -> Result<Value, String> {
+    pub(super) fn post_json(&self, path: &str, body: Value, timeout: Duration) -> Result<Value, String> {
         let url = format!("{}{path}", self.base_url);
         let agent: ureq::Agent = crate::http_agent::config()
             .http_status_as_error(false)
@@ -241,11 +246,22 @@ impl GxserverEndpoint {
         Ok(parsed)
     }
 
-    fn report_activity(
+    pub(super) fn report_activity(
         &self,
         family: &str,
         activity: &str,
         native_session_id: Option<&str>,
+        pending_permission: Option<&PendingPermission>,
+    ) {
+        self.report_activity_with_path(family, activity, native_session_id, None, pending_permission);
+    }
+
+    pub(super) fn report_activity_with_path(
+        &self,
+        family: &str,
+        activity: &str,
+        native_session_id: Option<&str>,
+        explicit_transcript_path: Option<&str>,
         pending_permission: Option<&PendingPermission>,
     ) {
         let event_name = match activity {
@@ -263,20 +279,41 @@ impl GxserverEndpoint {
         });
         if let Some(sid) = native_session_id.filter(|s| !s.is_empty()) {
             params["agentSessionId"] = json!(sid);
-            if let Some(path) = transcript_path_for_session(family, sid) {
-                params["agentSessionPath"] = json!(path.to_string_lossy().to_string());
+            if let Some(path) = explicit_transcript_path
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .or_else(|| {
+                    transcript_path_for_session(family, sid)
+                        .map(|p| p.to_string_lossy().to_string())
+                })
+            {
+                params["agentSessionPath"] = json!(path);
             }
         }
         if let Some(perm) = pending_permission {
-            params["toolName"] = json!(perm.tool_name);
-            params["toolInput"] = json!({ "command": perm.summary });
+            let prompt = perm.to_ghostex_prompt();
+            if perm.is_question || prompt.get("kind").and_then(Value::as_str) == Some("question") {
+                // `/api/ingestAgentHookEvent` derives the stored question card from
+                // `(toolName, toolInput)` via `derive_session_chat_prompt`; sending
+                // `"AskUserQuestion"` + `{ "questions": [...] }` ensures every agent family
+                // (Claude `AskUserQuestion`, Codex `request_user_input`, Antigravity) stores a
+                // real `kind: "question"` card rather than falling back to `kind: "approval"`.
+                params["toolName"] = json!("AskUserQuestion");
+                params["toolInput"] = json!({
+                    "questions": prompt.get("questions").cloned().unwrap_or_else(|| json!([])),
+                });
+            } else {
+                params["toolName"] = json!(perm.tool_name);
+                params["toolInput"] = json!({ "command": perm.summary });
+            }
             if let Some(tool_use_id) = perm.tool_use_id.as_deref().filter(|s| !s.is_empty()) {
                 params["toolUseId"] = json!(tool_use_id);
             }
             if let Some(reason) = perm.reason.as_deref().filter(|s| !s.trim().is_empty()) {
                 params["approvalReason"] = json!(reason);
             }
-            params["sessionChatPrompt"] = perm.to_ghostex_prompt();
+            params["sessionChatPrompt"] = prompt;
         }
         let body = json!({
             "requestId": format!("acp-act-{}", now_ms()),
@@ -285,7 +322,7 @@ impl GxserverEndpoint {
         let _ = self.post_json("/api/ingestAgentHookEvent", body, Duration::from_secs(5));
     }
 
-    fn ack(&self, id: &str, ok: bool, result: Value, error: Option<&str>) {
+    pub(super) fn ack(&self, id: &str, ok: bool, result: Value, error: Option<&str>) {
         let mut params = json!({
             "action": "ack",
             "sessionRef": self.session_ref,
@@ -306,7 +343,7 @@ impl GxserverEndpoint {
         let _ = self.post_json("/api/agentChatChannel", body, Duration::from_secs(5));
     }
 
-    fn close_channel(&self) {
+    pub(super) fn close_channel(&self) {
         let mut params = json!({
             "action": "close",
             "sessionRef": self.session_ref,
@@ -323,7 +360,7 @@ impl GxserverEndpoint {
     }
 }
 
-struct SpoolWriter {
+pub(super) struct SpoolWriter {
     path: PathBuf,
     file: Option<File>,
     bytes_written: u64,
@@ -376,7 +413,7 @@ impl SpoolWriter {
         }
     }
 
-    fn open(session_id: &str) -> Self {
+    pub(super) fn open(session_id: &str) -> Self {
         let dir = crate::paths::get_gxserver_paths(None)
             .root_dir
             .join("acp-spool");
@@ -425,7 +462,7 @@ impl SpoolWriter {
         self.bytes_written = 0;
     }
 
-    fn append(&mut self, event: &Value) {
+    pub(super) fn append(&mut self, event: &Value) {
         self.seq += 1;
         let line = json!({
             "seq": self.seq,
@@ -452,18 +489,22 @@ impl SpoolWriter {
 }
 
 #[derive(Clone, Debug)]
-struct PendingPermission {
-    rpc_id: Value,
-    tool_name: String,
-    summary: String,
-    tool_use_id: Option<String>,
-    reason: Option<String>,
-    is_question: bool,
-    options: Vec<AcpPermissionOption>,
+pub(super) struct PendingPermission {
+    pub(super) rpc_id: Value,
+    pub(super) tool_name: String,
+    pub(super) summary: String,
+    pub(super) tool_use_id: Option<String>,
+    pub(super) reason: Option<String>,
+    pub(super) is_question: bool,
+    pub(super) options: Vec<AcpPermissionOption>,
+    pub(super) custom_prompt_override: Option<Value>,
 }
 
 impl PendingPermission {
-    fn to_ghostex_prompt(&self) -> Value {
+    pub(super) fn to_ghostex_prompt(&self) -> Value {
+        if let Some(custom) = &self.custom_prompt_override {
+            return custom.clone();
+        }
         if self.is_question {
             return json!({
                 "kind": "question",
@@ -558,13 +599,13 @@ impl PendingPermission {
     }
 }
 
-fn now_iso_rfc3339() -> String {
+pub(super) fn now_iso_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-const LIVE_STREAM_MAX_CHARS: usize = 32_768;
+pub(super) const LIVE_STREAM_MAX_CHARS: usize = 32_768;
 
-fn append_bounded(buf: &mut String, chunk: &str, max_bytes: usize) {
+pub(super) fn append_bounded(buf: &mut String, chunk: &str, max_bytes: usize) {
     if chunk.is_empty() {
         return;
     }
@@ -990,6 +1031,7 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
         reason: None,
         is_question,
         options,
+        custom_prompt_override: None,
     }
 }
 
@@ -1258,7 +1300,7 @@ fn stop_child_gracefully(transport: &AcpTransport, child: &mut Child, child_pid:
     }
 }
 
-fn exec_interactive_cli(
+pub(super) fn exec_interactive_cli(
     spec: &AcpAgentSpec,
     cli_command: Option<&str>,
     native_session_id: Option<&str>,
@@ -1314,6 +1356,12 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("Agent `{}` does not support ACP mode yet.", parsed.family);
         return 2;
     };
+    if spec.family == "claude" {
+        return super::driver_claude::run(spec, parsed);
+    }
+    if spec.family == "codex" {
+        return super::driver_codex::run(spec, parsed);
+    }
     let cwd_path = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let cwd = cwd_path.to_string_lossy().to_string();
     let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);

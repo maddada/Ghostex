@@ -222,6 +222,8 @@ pub(super) fn supports_chat_view(agent_id: &str, icon: Option<&str>) -> bool {
 pub(super) fn non_cli_mode_family(agent_id: &str, icon: Option<&str>) -> Option<&'static str> {
     let check = |value: &str| match value.trim().to_ascii_lowercase().as_str() {
         "antigravity" | "agy" => Some("antigravity"),
+        "claude" | "claude-code" => Some("claude"),
+        "codex" | "codex-cli" => Some("codex"),
         _ => None,
     };
     check(agent_id).or_else(|| icon.and_then(check))
