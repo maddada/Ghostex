@@ -368,6 +368,262 @@ fn a_same_looking_approval_after_a_clear_screen_is_a_new_request() {
     assert_ne!(second.detected_at, first.detected_at);
 }
 
+/// A chat as every Ghostex client folds it: the chat core, fed the frames one follower sent.
+struct ChatClient {
+    core: ghostex_gx_chat_core::ChatCore,
+    folded: usize,
+}
+
+impl ChatClient {
+    fn open(fixture: &Fixture) -> Self {
+        let mut client = Self {
+            core: ghostex_gx_chat_core::ChatCore::new(),
+            folded: 0,
+        };
+        let start: ghostex_gx_chat_core::StartConfig = serde_json::from_value(json!({
+            "clientId": "client-1",
+            "projectId": fixture.project_id(),
+            "sessionId": fixture.session_id,
+        }))
+        .expect("the start config parses");
+        client.drive(ghostex_gx_chat_core::Event::Start(Box::new(start)));
+        let boot: ghostex_gx_chat_core::ComposerBootRead = serde_json::from_value(json!({
+            "sessionKey": format!("{}:{}", fixture.project_id(), fixture.session_id),
+            "clientId": "client-1",
+        }))
+        .expect("the boot read parses");
+        client.drive(ghostex_gx_chat_core::Event::ComposerBootRead(Box::new(
+            boot,
+        )));
+        client
+    }
+
+    fn drive(&mut self, event: ghostex_gx_chat_core::Event) -> Vec<ghostex_gx_chat_core::Effect> {
+        let now_ms = chrono::Utc::now().timestamp_millis() as f64;
+        self.core
+            .handle(event, ghostex_gx_chat_core::ChatContext::at(now_ms))
+    }
+
+    /// Folds the frames it has not seen yet, in the order the follower sent them.
+    fn fold(&mut self, frames: &Mutex<Vec<Value>>) {
+        use ghostex_gx_chat_core::ChatFrame;
+        let frames = frames.lock().expect("frames").clone();
+        for frame in &frames[self.folded..] {
+            let parsed = match frame["type"].as_str() {
+                Some("sessionChatSnapshot") => ChatFrame::Snapshot(Box::new(
+                    serde_json::from_value(frame.clone()).expect("snapshot frame"),
+                )),
+                Some("sessionChatReplaced") => ChatFrame::Replaced(Box::new(
+                    serde_json::from_value(frame.clone()).expect("replaced frame"),
+                )),
+                Some("sessionChatAppended") => ChatFrame::Appended(Box::new(
+                    serde_json::from_value(frame.clone()).expect("appended frame"),
+                )),
+                Some("sessionChatState") => ChatFrame::State(Box::new(
+                    serde_json::from_value(frame.clone()).expect("state frame"),
+                )),
+                other => panic!("a follower frame of type {other:?}"),
+            };
+            self.drive(ghostex_gx_chat_core::Event::Frame(Box::new(parsed)));
+        }
+        self.folded = frames.len();
+    }
+
+    fn act(&mut self, action: Value) -> Vec<ghostex_gx_chat_core::Effect> {
+        let action: ghostex_gx_chat_core::UserAction =
+            serde_json::from_value(action).expect("the action parses");
+        self.drive(ghostex_gx_chat_core::Event::Action(Box::new(action)))
+    }
+
+    /// Closes the approval card the way a person can: the pick they made is refused (OMP's box
+    /// changed under it), and then the card offers to close.
+    fn close_after_a_refused_pick(&mut self) {
+        let effects = self.act(json!({
+            "type": "answer",
+            "answer": { "kind": "terminalChoice", "choiceIndex": 1 },
+        }));
+        let request_id = effects
+            .iter()
+            .find_map(|effect| match effect {
+                ghostex_gx_chat_core::Effect::SendRpc {
+                    request_id, method, ..
+                } if *method == ghostex_gx_chat_core::ChatRpcMethod::AnswerSessionChatPrompt => {
+                    Some(*request_id)
+                }
+                _ => None,
+            })
+            .expect("the pick goes to gxserver");
+        self.drive(ghostex_gx_chat_core::Event::RpcSettled {
+            request_id,
+            outcome: Box::new(ghostex_gx_chat_core::RpcOutcome::Err {
+                code: Some("invalidState".into()),
+                message: "OMP's approval changed. Review the current choices and try again.".into(),
+                endpoint: Some("/api/answerSessionChatPrompt".into()),
+            }),
+        });
+        self.act(json!({ "type": "dismissNotice" }));
+    }
+
+    fn card_shown(&self) -> bool {
+        serde_json::to_value(self.core.document()).expect("the document is JSON")["noticeVisible"]
+            == true
+    }
+}
+
+/// Waits up to ten seconds for `done`.
+async fn until(what: &str, done: impl Fn() -> bool) {
+    for _ in 0..400 {
+        if done() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("timed out waiting for {what}");
+}
+
+/// Two readers of one screen. The chat's follower publishes the first `commit` approval and the
+/// person closes its card. OMP takes the answer from the terminal; another read of the screen (the
+/// one after an answer) sees the box gone, and OMP asks for the second `commit` before the
+/// follower reads again. The follower reads the two same-looking requests and never the clear
+/// screen between them; the chat still shows the second request's card.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_next_approval_shows_its_card_when_another_read_saw_the_first_answered() {
+    use std::sync::atomic::AtomicUsize;
+
+    let fixture = Fixture::new();
+    let daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    let transcript = fixture._temp.path().join("omp-session.jsonl");
+    std::fs::write(&transcript, "").expect("the session's transcript");
+    // The follower's reads wait while the test holds the screen, so it never sees the clear one.
+    let turn = Arc::new(Mutex::new(()));
+    let refreshes = Arc::new(AtomicUsize::new(0));
+    // The reader the follower registry gives every follower (session_chat_follower/registry.rs),
+    // behind the turn.
+    let options_reader: crate::session_chat_options::SessionChatOptionsReader = {
+        let detector = crate::session_chat_options::SessionChatOptionDetector::new(&fixture.state);
+        let project_id = fixture.project_id().to_owned();
+        let session_id = fixture.session_id.clone();
+        let (turn, refreshes) = (turn.clone(), refreshes.clone());
+        Arc::new(move |mode| {
+            let _turn = turn.lock().expect("turn");
+            let mut detection = match mode {
+                crate::session_chat_options::SessionChatOptionsReadMode::Cached => {
+                    detector.cached(&project_id, &session_id)
+                }
+                crate::session_chat_options::SessionChatOptionsReadMode::Refresh => {
+                    refreshes.fetch_add(1, Ordering::SeqCst);
+                    detector.detect_blocking(&project_id, &session_id, Some("omp"), true)
+                }
+            };
+            detection.notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+                &project_id,
+                &session_id,
+                detection.notice,
+            );
+            detection
+        })
+    };
+    let state_reader: crate::session_chat::SessionChatStateReader = {
+        let transcript = transcript.to_string_lossy().into_owned();
+        Arc::new(move || crate::session_chat::SessionChatLiveState {
+            prompt: None,
+            // The eval call's hooks said working, and no hook announced the approval.
+            working: true,
+            agent_session_id: Some("omp-session".into()),
+            agent_session_path: Some(transcript.clone()),
+        })
+    };
+    let frames: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+    let emit: crate::session_chat::SessionChatFrameEmitter = {
+        let frames = frames.clone();
+        Arc::new(move |frame| frames.lock().expect("frames").push(frame))
+    };
+    let config = crate::session_chat::SessionChatFollowerConfig {
+        project_id: fixture.project_id().to_owned(),
+        session_id: fixture.session_id.clone(),
+        agent: Some("omp".into()),
+        agent_session_id: Some("omp-session".into()),
+        agent_session_path: Some(transcript.to_string_lossy().into_owned()),
+        limit: 50,
+        protocol_version: 1,
+        server_id: fixture.state.metadata.server_id.clone(),
+        state_reader: Some(state_reader),
+        options_reader: Some(options_reader),
+        options_change_watch: None,
+        screen_change_watch: None,
+        queue_reader: None,
+        successor_hooks: None,
+        notice_publisher: None,
+        tuning: crate::session_chat::SessionChatFollowerTuning {
+            reconcile_interval: std::time::Duration::from_millis(20),
+            stale_transcript_idle: std::time::Duration::from_secs(600),
+            successor_scan_interval: std::time::Duration::from_secs(600),
+            successor_stale_substantive_idle_ms: 600_000,
+        },
+    };
+    let follower = tokio::spawn(crate::session_chat::run_session_chat_follower(
+        config,
+        Arc::new(crate::session_chat::SessionChatStream::new()),
+        Arc::new(tokio::sync::Notify::new()),
+        Arc::new(crate::session_chat::SessionChatFollowerHeartbeat::new()),
+        emit,
+    ));
+
+    let published_key = |frames: &Mutex<Vec<Value>>| {
+        frames
+            .lock()
+            .expect("frames")
+            .iter()
+            .rev()
+            .find_map(|frame| {
+                frame["terminalNotice"]["detectedAt"]
+                    .as_str()
+                    .map(str::to_owned)
+            })
+    };
+    until("the follower to publish the first approval", || {
+        published_key(&frames).is_some()
+    })
+    .await;
+    let first = published_key(&frames).expect("the first approval's key");
+    let mut chat = ChatClient::open(&fixture);
+    chat.fold(&frames);
+    assert!(chat.card_shown(), "the first approval shows its card");
+    chat.close_after_a_refused_pick();
+    assert!(!chat.card_shown(), "the person closed it");
+
+    {
+        let _turn = turn.lock().expect("turn");
+        daemon.show(&answered_screen());
+        fixture.read_screen();
+        assert!(
+            screen_notice(&fixture).is_none(),
+            "the other read saw the first approval answered"
+        );
+        // Detection stamps are milliseconds; the second request comes later.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        daemon.show(APPROVAL_SCREEN);
+    }
+    let before = refreshes.load(Ordering::SeqCst);
+    until("the follower to read the screen again", || {
+        refreshes.load(Ordering::SeqCst) >= before + 3
+    })
+    .await;
+    let second = screen_notice(&fixture).expect("the second commit approval");
+    assert_ne!(
+        second.detected_at, first,
+        "the second request has its own key"
+    );
+    chat.fold(&frames);
+    follower.abort();
+    assert!(chat.card_shown(), "the second request shows its card");
+    assert_eq!(
+        published_key(&frames).as_deref(),
+        Some(second.detected_at.as_str()),
+        "under the second request's own key"
+    );
+}
+
 /// The bell keeps its meaning: a screen-only approval gives the red dot, but does not turn the
 /// session's newest row (a finished turn already read) into an unread approval.
 #[test]

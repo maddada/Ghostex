@@ -461,8 +461,10 @@ impl SessionChatTerminalNotice {
         })
     }
 
-    /// `same_notice`, plus the screen a pass-through card shows: a moved highlight there is news
-    /// for the clients, though it is still the same instance.
+    /// The same publication: `same_notice` (the same classification), plus what a client needs a
+    /// new frame for. A moved highlight on the screen a pass-through card shows is news though it
+    /// is still the same instance; a permission prompt the detector gave a new `detectedAt` is a
+    /// new request though it reads the same.
     pub fn same_frame(&self, other: Option<&SessionChatTerminalNotice>) -> bool {
         self.same_notice(other)
             && other.is_some_and(|other| {
@@ -470,9 +472,25 @@ impl SessionChatTerminalNotice {
                     && self.checkbox == other.checkbox
                     && self.checkboxes == other.checkboxes
                     && self.checkboxes_detail == other.checkboxes_detail
+                    && self.same_permission_request(other)
             })
             && (!self.passes_keys_through()
                 || other.is_some_and(|other| self.screen_tail == other.screen_tail))
+    }
+
+    /*
+    CDXC:SessionStatus 2026-11-22 WHY:
+    The detector gives a permission prompt a new `detectedAt` once a whole capture saw the previous
+    one gone (session_chat_options/detector.rs), and the client closes an approval card by that key
+    alone (`is_notice_dismissed` in packages/gx-chat-core/src/questions/notice_state.rs). Each
+    observer compares against what it published itself, so when another read (the post-answer
+    probe) saw the clear screen and the follower did not, the follower's next read of a
+    same-looking request compared equal by its words, no frame went out, and the client kept the
+    closed card's key: the next approval stayed hidden. Classification (`same_notice`, which
+    decides whether a reading inherits the key) still ignores the key.
+    */
+    fn same_permission_request(&self, other: &SessionChatTerminalNotice) -> bool {
+        self.kind != SESSION_CHAT_NOTICE_PERMISSION_PROMPT || self.detected_at == other.detected_at
     }
 
     /*

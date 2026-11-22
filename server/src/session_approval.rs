@@ -42,7 +42,7 @@ pub(crate) const SESSION_CHAT_SCREEN_APPROVAL_DETECTED_AT_KEY: &str =
     "sessionChatScreenApprovalDetectedAt";
 
 /// CDXC:SessionStatus 2026-11-21 WHY:
-/// OMP asks for an eval cell's tool calls (`commit`, any prelude helper) with the same "Allow tool" dialog, but that path raises no `tool_approval_requested`, so Ghostex's OMP extension sends no PermissionRequest; its hooks stay at the eval call's working and a standalone session kept its orange working dot while the chat's notice read "Allow this? (permissionPrompt)" (Ghostex 11.13.0, OMP 19.0.1). Only coordinator threads had a screen record, so the screen reading now leaves a marker on any session, set and cleared by the one funnel every capture passes through, like the compaction marker; a marker only the screen can clear is read again by the stall tick until a capture shows the prompt gone.
+/// OMP asks for an eval cell's tool calls (`commit`, any prelude helper) with the same "Allow tool" dialog, but that path raises no `tool_approval_requested` (so in OMP 18.21.0 and 19.0.1; their ordinary tool approval does raise it), so Ghostex's OMP extension sends no PermissionRequest; its hooks stay at the eval call's working and a standalone session kept its orange working dot while the chat's notice read "Allow this? (permissionPrompt)" (Ghostex 11.13.0; the report named no OMP version). Only coordinator threads had a screen record, so the screen reading now leaves a marker on any session, set and cleared by the one funnel every capture passes through, like the compaction marker; a marker only the screen can clear is read again by the stall tick until a capture shows the prompt gone.
 pub(crate) fn screen_shows_approval(session: &Value) -> bool {
     session
         .pointer(&format!(
