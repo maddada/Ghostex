@@ -814,6 +814,36 @@ fn question_tag(word: &str) -> Option<String> {
     (!digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())).then(|| format!("Q{digits}"))
 }
 
+/// Whether a thread row's wait genuinely requires the user in Needs you (approval, folder trust,
+/// sign-in, or an exhausted account pool with no auto-resume). Usage-limit pauses that stay calm
+/// or auto-recover, exited agents, and coordinator-handled questions return `false`
+/// (CDXC:Coordinators 2026-11-22 DECISION, Q4476-Q4478).
+/// A legacy or remote row with `state == "waiting"` and no `waitKind` / `waitNeedsUser` metadata
+/// keeps its existing behavior so older peers do not lose visibility.
+pub(super) fn thread_wait_needs_user(row: &Value) -> bool {
+    if let Some(needs) = row.get("waitNeedsUser").and_then(Value::as_bool) {
+        return needs;
+    }
+    if row["needsApproval"] == true {
+        return true;
+    }
+    match row.get("waitKind").and_then(Value::as_str) {
+        Some("approval" | "signIn") => true,
+        Some("usageLimit" | "agentExited" | "question") => false,
+        None => row["state"] == "waiting",
+        Some(_) => false,
+    }
+}
+
+/// Whether a thread row is paused on a usage limit or waiting on something the coordinator handles
+/// (not promoted to Needs you, and kept in In progress instead of dropping to Not being worked on).
+fn thread_has_paused_wait(row: &Value) -> bool {
+    if thread_wait_needs_user(row) {
+        return false;
+    }
+    row["waitKind"] == "usageLimit" || row["state"] == "waiting"
+}
+
 /// The status the user sees and who has the ball.
 pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Value) {
     let you = || json!({ "kind": "user", "label": "You" });
@@ -851,7 +881,11 @@ pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Valu
     if item.asks.iter().any(|ask| ask.is_open() && ask.holds) {
         return ("blocked", you());
     }
-    if threads.iter().any(|row| row["state"] == "waiting") {
+    // CDXC:Coordinators 2026-11-22 DECISION (Q4476, Q4478):
+    // Only promote a thread wait to Needs you when it truly requires the user (approval, folder
+    // trust, sign-in, or an exhausted usage-limit pool requiring manual action). Calm /
+    // auto-recovering usage limits and coordinator-handled pauses stay out of Needs you.
+    if threads.iter().any(|row| thread_wait_needs_user(row)) {
         return ("needs", you());
     }
     if let Some(row) = threads.iter().find(|row| row["state"] == "working") {
@@ -877,6 +911,11 @@ pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Valu
             }
             None => return context.coordinator_on(item),
         }
+    }
+    // Keep usage-limit-paused and coordinator-paused threads in In progress with their thread
+    // chip and calm limit pill, rather than promoting to Needs you or dropping to Idle.
+    if let Some(row) = threads.iter().find(|row| thread_has_paused_wait(row)) {
+        return ("moving", thread_owner(row));
     }
     if matches!(item.status.as_str(), "moving" | "blocked") {
         // A thread that still owes work (a job running, a turn cut off) keeps the ball.
@@ -1026,16 +1065,22 @@ fn thread_value(thread: &WorkThread, row: Option<&Value>) -> Value {
         "branch",
         "globalRef",
         "unfinished",
+        "waitKind",
+        "waitSummary",
+        "waitResetsAt",
     ] {
         let value = text(row, key);
         if !value.is_empty() {
             out[key] = json!(value);
         }
     }
-    for key in ["stuck", "needsApproval", "untested"] {
+    for key in ["stuck", "needsApproval", "untested", "waitAutoRecover"] {
         if row[key] == true {
             out[key] = json!(true);
         }
+    }
+    if let Some(needs) = row.get("waitNeedsUser").and_then(Value::as_bool) {
+        out["waitNeedsUser"] = json!(needs);
     }
     if let Some(pr) = row.get("pullRequest").filter(|pr| pr.is_object()) {
         out["pr"] = pr.clone();

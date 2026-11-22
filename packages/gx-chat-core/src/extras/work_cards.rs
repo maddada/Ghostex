@@ -173,6 +173,261 @@ pub fn waits_line(item: &Value) -> String {
     }
 }
 
+/// Whether a thread attached to a work item genuinely requires manual user action in Needs you
+/// (approval, folder trust, sign-in, or an exhausted account pool with no auto-resume).
+/// Calm / auto-recovering usage limits, exited agents, and coordinator-handled questions stay out
+/// of Needs you (CDXC:Coordinators 2026-11-22 DECISION, Q4476-Q4478).
+pub(crate) fn thread_wait_needs_user(thread: &Value) -> bool {
+    if let Some(needs) = thread.get("waitNeedsUser").and_then(Value::as_bool) {
+        return needs;
+    }
+    if thread["needsApproval"] == true {
+        return true;
+    }
+    match text(thread, "waitKind") {
+        "approval" | "signIn" => true,
+        "usageLimit" | "agentExited" | "question" => false,
+        "" => text(thread, "state") == "waiting",
+        _ => false,
+    }
+}
+
+/// The highest-priority attached thread on `item` that genuinely needs the user: approvals first,
+/// then sign-in, then exhausted usage limits, then any other user-blocking wait.
+pub(crate) fn waiting_user_thread(item: &Value) -> Option<&Value> {
+    let priority = |thread: &Value| -> u8 {
+        if thread["needsApproval"] == true || text(thread, "waitKind") == "approval" {
+            0
+        } else if text(thread, "waitKind") == "signIn" {
+            1
+        } else if text(thread, "waitKind") == "usageLimit" {
+            2
+        } else {
+            3
+        }
+    };
+    item["threads"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|thread| thread_wait_needs_user(thread))
+        .min_by_key(|thread| priority(thread))
+}
+
+/// The first attached thread on `item` currently paused on a usage limit.
+pub(crate) fn usage_limit_thread(item: &Value) -> Option<&Value> {
+    item["threads"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|thread| text(thread, "waitKind") == "usageLimit")
+}
+
+/// Short human countdown to a future RFC3339 reset timestamp: `"2h 15m"`, `"45m"`, `"1d 3h"`.
+pub(crate) fn format_reset_countdown(resets_at: &str, now_ms: i64) -> Option<String> {
+    let target = at_ms(resets_at)?;
+    let remaining = target - now_ms;
+    if remaining <= 0 {
+        return None;
+    }
+    let total_minutes = (remaining + 59_999) / 60_000;
+    if total_minutes < 60 {
+        Some(format!("{}m", total_minutes.max(1)))
+    } else if total_minutes < 24 * 60 {
+        let hours = total_minutes / 60;
+        let minutes = total_minutes % 60;
+        if minutes == 0 {
+            Some(format!("{hours}h"))
+        } else {
+            Some(format!("{hours}h {minutes}m"))
+        }
+    } else {
+        let days = total_minutes / (24 * 60);
+        let hours = (total_minutes % (24 * 60)) / 60;
+        if hours == 0 {
+            Some(format!("{days}d"))
+        } else {
+            Some(format!("{days}d {hours}h"))
+        }
+    }
+}
+
+/// Calm status pill label, tone (`"hold"` blue-grey while auto-recovering, `"warn"` amber when
+/// manual or exhausted), and hover tooltip for a thread paused on a usage limit (Q4476, Q4478).
+pub(crate) fn usage_limit_pill(thread: &Value, now_ms: i64) -> (String, &'static str, String) {
+    let countdown = format_reset_countdown(text(thread, "waitResetsAt"), now_ms);
+    let auto_recover = thread["waitAutoRecover"] == true;
+    let needs_user = thread_wait_needs_user(thread);
+    if auto_recover && !needs_user {
+        let label = match countdown {
+            Some(cd) => format!("Waiting for reset \u{b7} {cd}"),
+            None => "Waiting for reset".to_string(),
+        };
+        (
+            label,
+            "hold",
+            "Paused on usage limit. Resumes automatically after reset.".to_string(),
+        )
+    } else if needs_user {
+        let label = match countdown {
+            Some(cd) => format!("All accounts full \u{b7} {cd}"),
+            None => "All accounts full \u{b7} switch model".to_string(),
+        };
+        let tip = match text(thread, "waitSummary") {
+            "" => "Every account is out of room. Open the thread to switch model or account."
+                .to_string(),
+            summary => summary.to_string(),
+        };
+        (label, "warn", tip)
+    } else {
+        let label = match countdown {
+            Some(cd) => format!("Paused on usage limit \u{b7} {cd}"),
+            None => "Paused on usage limit".to_string(),
+        };
+        let tip = match text(thread, "waitSummary") {
+            "" => "Paused on usage limit. Open the thread to wait for reset or switch model."
+                .to_string(),
+            summary => summary.to_string(),
+        };
+        (label, "warn", tip)
+    }
+}
+
+/// Plain title, subtitle/detail (never `item.now`), wait kind, and action label for a thread that
+/// genuinely needs the user in Needs you (CDXC:Coordinators 2026-11-22 DECISION, Q4477).
+pub(crate) fn thread_wait_copy(
+    item: Option<&Value>,
+    thread: &Value,
+    now_ms: i64,
+) -> (String, String, &'static str, &'static str) {
+    let thread_title = text(thread, "title").trim();
+    let is_approval =
+        text(thread, "waitKind") == "approval" || thread["needsApproval"] == true;
+    let wait_kind = if is_approval {
+        "approval"
+    } else {
+        match text(thread, "waitKind") {
+            "signIn" => "signIn",
+            "usageLimit" => "usageLimit",
+            _ => "other",
+        }
+    };
+    let title = match wait_kind {
+        "approval" if !thread_title.is_empty() => format!("Approval needed in {thread_title}"),
+        "approval" => "Approval needed".to_string(),
+        "signIn" if !thread_title.is_empty() => format!("Sign in required in {thread_title}"),
+        "signIn" => "Sign in required".to_string(),
+        "usageLimit" if !thread_title.is_empty() => format!("Usage limit in {thread_title}"),
+        "usageLimit" => "Usage limit reached".to_string(),
+        _ if !thread_title.is_empty() => format!("Input needed in {thread_title}"),
+        _ => "Input needed".to_string(),
+    };
+    let raw_summary = match text(thread, "waitSummary").trim() {
+        "" => text(thread, "detail").trim(),
+        summary => summary,
+    };
+    let detail = if !raw_summary.is_empty() {
+        raw_summary.to_string()
+    } else {
+        match wait_kind {
+            "approval" => "Waiting for your approval".to_string(),
+            "signIn" => "Account login expired".to_string(),
+            "usageLimit" => match format_reset_countdown(text(thread, "waitResetsAt"), now_ms) {
+                Some(cd) => format!("All accounts full \u{b7} resets in {cd}"),
+                None => "All accounts full \u{b7} switch model or account".to_string(),
+            },
+            _ => "Waiting for your input".to_string(),
+        }
+    };
+    let item_ref = item
+        .filter(|i| text(i, "kind") == "item")
+        .map(|i| text(i, "ref"))
+        .filter(|r| !r.is_empty());
+    let subtitle = match item_ref {
+        Some(reference) => format!("{reference} \u{b7} {detail}"),
+        None => detail,
+    };
+    let open_label = if wait_kind == "approval" {
+        "Open approval"
+    } else {
+        "Open thread"
+    };
+    (title, subtitle, wait_kind, open_label)
+}
+
+/// The next clock tick (ms) at which any live usage-limit reset countdown label changes.
+pub(crate) fn reset_countdown_changes_at(state: &ChatState, now_ms: i64) -> Option<i64> {
+    let has_future_reset = crate::extras::work_source::work_of(state)
+        .and_then(|work| work.get("items"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|item| !matches!(text(item, "status"), "finished" | "dropped"))
+        .flat_map(|item| item["threads"].as_array().into_iter().flatten())
+        .filter(|thread| text(thread, "waitKind") == "usageLimit")
+        .filter_map(|thread| at_ms(text(thread, "waitResetsAt")))
+        .any(|target| target > now_ms);
+    has_future_reset.then(|| ((now_ms / 60_000) + 1) * 60_000)
+}
+
+/// A Needs you dock row for a thread that genuinely needs the user (approval, folder trust,
+/// sign-in, or exhausted usage-limit pool), derived from the thread's actual wait reason instead
+/// of `item.now` and opening the thread directly instead of showing a bare Done button (Q4477).
+fn thread_wait_dock_row(item: &Value, thread: &Value, turns: &[Turn], now_ms: i64) -> Value {
+    let (title, subtitle, wait_kind, open_label) = thread_wait_copy(Some(item), thread, now_ms);
+    let reference = text(item, "ref");
+    let key = if text(item, "kind") == "thread" {
+        text(item, "key").to_string()
+    } else {
+        format!(
+            "work-thread-wait:{reference}:{}:{}",
+            text(thread, "projectId"),
+            text(thread, "sessionId")
+        )
+    };
+    let open_command = json!({
+        "type": "openCoordinatorThread",
+        "serverId": text(thread, "serverId"),
+        "projectId": text(thread, "projectId"),
+        "sessionId": text(thread, "sessionId"),
+    });
+    let at = at_ms(text(item, "at")).unwrap_or(now_ms);
+    let changed_at = item["history"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|event| at_ms(text(event, "at")))
+        .max()
+        .unwrap_or(at);
+    let mut row = json!({
+        "key": key,
+        "kind": "threadWait",
+        "waitKind": wait_kind,
+        "status": "needs",
+        "title": title,
+        "preview": subtitle,
+        "detail": [subtitle],
+        "age": crate::transcript::message_time::age_label(now_ms, at),
+        "open": open_command,
+        "openLabel": open_label,
+        "buttons": [{
+            "label": open_label,
+            "recommended": false,
+            "picked": false,
+            "command": open_command,
+        }],
+        "agentIcon": crate::transcript::agent_message_card::agent_icon(text(thread, "agent"), ""),
+        "needsApproval": wait_kind == "approval",
+        "mention": mention_of(item),
+        "needs": true,
+    });
+    if text(item, "kind") == "item" && !reference.is_empty() {
+        row["itemRef"] = json!(reference);
+    }
+    row["showInChat"] = show_in_chat(turns, changed_at, &key);
+    row
+}
+
 /// The chips under an item card: the threads on it, its steps, what it asks of the user, its
 /// links. Never "You" or "Coordinator": the card's status already says whose turn it is.
 ///
@@ -189,6 +444,23 @@ pub fn waits_line(item: &Value) -> String {
 /// only where it says something the card does not: which thread has the work.
 pub fn item_chips(item: &Value, now_ms: i64) -> Vec<Value> {
     let mut chips = Vec::new();
+    if !matches!(text(item, "status"), "finished" | "dropped") {
+        if let Some(thread) = usage_limit_thread(item) {
+            let (label, tone, tip) = usage_limit_pill(thread, now_ms);
+            chips.push(json!({
+                "kind": "usageLimit",
+                "label": label,
+                "tone": tone,
+                "title": tip,
+                "command": {
+                    "type": "openCoordinatorThread",
+                    "serverId": text(thread, "serverId"),
+                    "projectId": text(thread, "projectId"),
+                    "sessionId": text(thread, "sessionId"),
+                },
+            }));
+        }
+    }
     for thread in item["threads"].as_array().into_iter().flatten() {
         let title = text(thread, "title");
         if title.is_empty() {
@@ -319,7 +591,18 @@ pub(crate) fn done_answer_key(item: &Value) -> Option<String> {
         .into_iter()
         .flatten()
         .any(|ask| ask["open"] == true);
-    (text(item, "kind") == "item" && text(item, "status") == "needs" && !asks_open)
+    // A Needs you item promoted because an attached thread is waiting never gets a bare Done
+    // button: it renders its thread-wait row with a direct Open action instead (Q4477).
+    let thread_waiting = waiting_user_thread(item).is_some()
+        || item["threads"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|thread| text(thread, "state") == "waiting");
+    (text(item, "kind") == "item"
+        && text(item, "status") == "needs"
+        && !asks_open
+        && !thread_waiting)
         .then(|| format!("work-done:{}:{}", text(item, "ref"), text(item, "at")))
 }
 
@@ -799,6 +1082,20 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             "needs": true,
         });
         row["showInChat"] = show_in_chat(&turns, changed_at, &key);
+        needs.push((now_ms - at > DAY_MS, at, row));
+    }
+    // Every Needs you item or loose thread whose attached thread genuinely needs the user
+    // (permission approval, folder trust, sign-in, or exhausted account pool): derived from the
+    // thread's actual wait reason with a direct Open action, never item.now or Done (Q4477).
+    for item in &items {
+        if text(item, "status") != "needs" {
+            continue;
+        }
+        let Some(thread) = waiting_user_thread(item) else {
+            continue;
+        };
+        let at = at_ms(text(item, "at")).unwrap_or(now_ms);
+        let row = thread_wait_dock_row(item, thread, turns, now_ms);
         needs.push((now_ms - at > DAY_MS, at, row));
     }
     // Then every blocked line of work no holding ask already stands for (none from a server since
@@ -2059,7 +2356,9 @@ pub fn ages_change_at(state: &ChatState, cards: &Value, now_ms: i64) -> Option<i
         .filter(|card| card["folded"] != true)
         .filter_map(|card| card["at"].as_i64())
         .map(|at| crate::transcript::message_time::age_label_changes_at(now_ms, at));
-    ages.chain(snoozes_end_at(state, now_ms)).min()
+    ages.chain(snoozes_end_at(state, now_ms))
+        .chain(reset_countdown_changes_at(state, now_ms))
+        .min()
 }
 
 /// When the first snooze still running at `now_ms` ends: gxserver's `snoozedUntil` on an open ask,

@@ -124,6 +124,8 @@ fn stat_icon(kind: &str) -> &'static str {
         "thinking" => "titlebar/bulb.svg",
         "approval" => "titlebar/shield-check.svg",
         "question" => "titlebar/help-circle.svg",
+        "signIn" => "titlebar/alert-triangle.svg",
+        "usageLimit" => "titlebar/clock.svg",
         "stalled" => "titlebar/clock.svg",
         "untested" => "titlebar/flask.svg",
         "delivered" | "finished" => "titlebar/circle-check.svg",

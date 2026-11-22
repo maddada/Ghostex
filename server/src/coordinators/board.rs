@@ -252,7 +252,27 @@ pub(crate) fn thread_row(
                 .filter(|at| !at.is_empty())
                 .unwrap_or_else(|| active_at.clone()),
         ),
-        "waiting" => ("needs", String::new(), active_at.clone()),
+        "waiting" if super::work::thread_wait_needs_user(row) => {
+            ("needs", String::new(), active_at.clone())
+        }
+        "waiting" => {
+            let group = if row["waitKind"] == "usageLimit" && row["waitAutoRecover"] == true {
+                "hold"
+            } else {
+                "moving"
+            };
+            (group, String::new(), active_at.clone())
+        }
+        _ if row["waitKind"] == "usageLimit" => {
+            let group = if super::work::thread_wait_needs_user(row) {
+                "needs"
+            } else if row["waitAutoRecover"] == true {
+                "hold"
+            } else {
+                "moving"
+            };
+            (group, String::new(), active_at.clone())
+        }
         _ => {
             let unfinished = text(row, "unfinished");
             if let Some(pin) = pin.filter(|pin| pin.moves_thread()) {
@@ -344,12 +364,29 @@ pub(crate) fn thread_row(
         out["stuck"] = json!(true);
     }
     // What the user can do about a thread that waits on them.
-    if state == "waiting" {
+    if super::work::thread_wait_needs_user(row) {
         out["waiting"] = json!(if row["needsApproval"] == true {
             "approval"
         } else {
-            "question"
+            match row.get("waitKind").and_then(Value::as_str) {
+                Some("approval") => "approval",
+                Some("signIn") => "signIn",
+                Some("usageLimit") => "usageLimit",
+                _ => "question",
+            }
         });
+    }
+    for key in ["waitKind", "waitSummary", "waitResetsAt"] {
+        let value = text(row, key);
+        if !value.is_empty() {
+            out[key] = json!(value);
+        }
+    }
+    if row["waitAutoRecover"] == true {
+        out["waitAutoRecover"] = json!(true);
+    }
+    if let Some(needs) = row.get("waitNeedsUser").and_then(Value::as_bool) {
+        out["waitNeedsUser"] = json!(needs);
     }
     // The coordinator's own line for a thread it moved, which its card shows when it has no links.
     if let Some(note) = pin

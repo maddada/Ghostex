@@ -253,6 +253,23 @@ fn row_markdown(row: &Value, forms: &Value) -> String {
 pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::Hsla) {
     let status = text(row, "status");
     let (icon, color) = status_look(&status, p);
+    if text(row, "kind") == "threadWait" {
+        return match text(row, "waitKind").as_str() {
+            "approval" => (
+                "titlebar/shield-check.svg",
+                gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
+            ),
+            "signIn" | "usageLimit" => (
+                "titlebar/alert-triangle.svg",
+                gpui::rgb(crate::app::native_sidebar::status::WORKING_COLOR).into(),
+            ),
+            _ if row["needsApproval"] == true => (
+                "titlebar/shield-check.svg",
+                gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
+            ),
+            _ => (icon, color),
+        };
+    }
     if row["page"] == true && status == "needs" {
         return ("titlebar/file.svg", color);
     }
@@ -536,6 +553,7 @@ fn chip_icon(kind: &str) -> &'static str {
         "steps" => "titlebar/checklist.svg",
         "item" => "titlebar/stack.svg",
         "question" => "titlebar/help-circle.svg",
+        "usageLimit" => "titlebar/clock.svg",
         "link" => "titlebar/link.svg",
         "file" => "titlebar/file-text.svg",
         _ => "titlebar/clock.svg",
@@ -1167,9 +1185,13 @@ impl NativeChatView {
         // basically) where i can click to see show in chat/dismiss/snooze. don't make it expand
         // on click since it's useless when it expands".
         let page_row = row["page"] == true && row["open"].is_object();
-        // A form's row opens the form at once, as a page's opens the page: the panel it went
-        // through had nothing but another Open (gx-chat-core `details_fields`' decision).
-        let opens_directly = page_row || (text(row, "kind") == "form" && row["open"].is_object());
+        // A form's or thread-wait row opens its target at once, as a page's opens the page: no
+        // empty intermediate modal (gx-chat-core `details_fields`, Q4477).
+        let opens_directly = page_row
+            || (matches!(
+                text(row, "kind").as_str(),
+                "form" | "thread" | "threadWait"
+            ) && row["open"].is_object());
         let (icon, color) = row_mark(row, p);
         // A thread (only a Work panel card, `BoardRow::dock`) is marked by its agent's logo, as
         // the panel's agent button and the Moving list's Who are.
@@ -2624,17 +2646,24 @@ impl NativeChatView {
         let label = text(chip, "label");
         let command = chip["command"].clone();
         let agent = text(chip, "agentIcon");
+        let state = text(chip, "state");
+        let state_color = super::coordinator_board::tone_color(&text(chip, "tone"))
+            .map_or(p.muted, |color| gpui::rgb(color).into());
         let (icon, icon_color) = match kind.as_str() {
             "thread" if !agent.is_empty() => (
                 format!("agent-icons/{agent}.svg"),
                 super::new_session_welcome::brand_logo_color(&agent, p),
             ),
             "github" => ("titlebar/brand-github.svg".to_string(), p.muted),
+            "usageLimit" => (chip_icon(&kind).to_string(), state_color),
             _ => (chip_icon(&kind).to_string(), p.muted),
         };
-        let state = text(chip, "state");
-        let state_color = super::coordinator_board::tone_color(&text(chip, "tone"))
-            .map_or(p.muted, |color| gpui::rgb(color).into());
+        let label_color = if kind == "usageLimit" {
+            state_color
+        } else {
+            p.card_muted
+        };
+        let tip = text(chip, "title");
         // A part that opens something wears the dotted underline a session name has on a message
         // card, faint at rest and full under the pointer (the user's "hovering on these kind of
         // links should put dotted underline below them so it's clear they are clickable").
@@ -2664,7 +2693,13 @@ impl NativeChatView {
             .min_h(px(PROSE_LINE_HEIGHT * s))
             .text_size(px(PROSE_SIZE * s))
             .line_height(px(PROSE_LINE_HEIGHT * s))
-            .text_color(p.card_muted)
+            .text_color(label_color)
+            .when(!tip.is_empty(), |part| {
+                let tip = tip.clone();
+                part.tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+                })
+            })
             .aria_label(if state.is_empty() {
                 label.clone()
             } else {

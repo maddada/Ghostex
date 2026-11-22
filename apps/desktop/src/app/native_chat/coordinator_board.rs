@@ -172,6 +172,7 @@ pub(super) fn tone_color(tone: &str) -> Option<u32> {
         "bad" => Some(crate::app::native_sidebar::status::APPROVAL_COLOR),
         "running" | "warn" => Some(crate::app::native_sidebar::status::WORKING_COLOR),
         "good" => Some(GOOD_COLOR),
+        "hold" => Some(HOLD_COLOR),
         "held" | "merged" => Some(HELD_COLOR),
         "closed" => Some(0x8a8f98),
         _ => None,
@@ -202,6 +203,7 @@ fn chip_icon(kind: &str) -> Option<&'static str> {
         "link" => "titlebar/link.svg",
         "question" => "titlebar/help-circle.svg",
         // A work item's chips (gx-chat-core work_panel.rs).
+        "usageLimit" => "titlebar/clock.svg",
         "owner" => "titlebar/user.svg",
         "steps" => "titlebar/checklist.svg",
         _ => return None,
@@ -338,9 +340,19 @@ fn dock_card_height(dock: &Value) -> f32 {
     } else {
         6.0 + 19.0 + 6.0
     };
-    // The card's 2px inset and border, the row's 6px sides, the title's lines, the answers' line
-    // (6px over a 28px button), the command chip.
-    2.0 * 3.0 + 12.0 + lines * PROSE_LINE_HEIGHT + if answers { 34.0 } else { 0.0 } + command
+    let preview_height = if text(dock, "preview").trim().is_empty() {
+        0.0
+    } else {
+        PROSE_LINE_HEIGHT
+    };
+    // The card's 2px inset and border, the row's 6px sides, the title's lines, the preview line,
+    // the answers' line (6px over a 28px button), the command chip.
+    2.0 * 3.0
+        + 12.0
+        + lines * PROSE_LINE_HEIGHT
+        + preview_height
+        + if answers { 34.0 } else { 0.0 }
+        + command
 }
 
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
@@ -1319,6 +1331,10 @@ impl NativeChatView {
         // (relayed_approval.rs; the user's Q1297).
         let relayed = Some(text(&row["openThread"], "sessionId"))
             .filter(|session| !session.is_empty())
+            .or_else(|| {
+                Some(text(&row["dock"]["open"], "sessionId"))
+                    .filter(|session| !session.is_empty())
+            })
             .and_then(|session| self.relayed_card_for_thread(&session));
         // Line 2 closed, or the chip block open: every chip when open (they wrap), else the chips
         // that fit and a "+N" for the rest.
@@ -1768,6 +1784,10 @@ impl NativeChatView {
         let hover_group = gpui::SharedString::from(format!("chat-board-card-hover:{key}"));
         let relayed = Some(text(&row["openThread"], "sessionId"))
             .filter(|session| !session.is_empty())
+            .or_else(|| {
+                Some(text(&row["dock"]["open"], "sessionId"))
+                    .filter(|session| !session.is_empty())
+            })
             .and_then(|session| self.relayed_card_for_thread(&session));
         let go = Some(row["go"].clone()).filter(Value::is_object);
         // A page's count follows its draft while the card is drawn, as the dock's row's
@@ -3215,14 +3235,16 @@ impl NativeChatView {
             .rounded(px(11.0 * s))
             .border(px(s))
             .border_color(
-                if (tint.is_some() && kind == "release") || user_color.is_some() {
+                if (tint.is_some() && matches!(kind.as_str(), "release" | "usageLimit"))
+                    || user_color.is_some()
+                {
                     color.opacity(0.45)
                 } else {
                     p.foreground.opacity(0.1)
                 },
             )
             .text_size(px(CHIP_SIZE * s))
-            .text_color(if kind == "release" || kind == "question" {
+            .text_color(if matches!(kind.as_str(), "release" | "question" | "usageLimit") {
                 color
             } else {
                 p.card_muted

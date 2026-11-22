@@ -125,6 +125,9 @@ pub fn phase_label(kind: &str) -> &'static str {
         "thinking" => "Thinking",
         "approval" => "Needs your approval",
         "question" => "Waiting for an answer",
+        "signIn" => "Sign in required",
+        "usageLimit" => "Paused on usage limit",
+        "waitingReset" => "Waiting for reset",
         "untested" => "Untested",
         "delivered" => "Delivered",
         _ => "Finished",
@@ -150,7 +153,29 @@ fn row_stats(row: &Value, status: &str) -> Vec<RowStat> {
             let label = phase_label(&phase).to_string();
             (phase, label)
         }
-        "approval" | "question" => (status.to_string(), phase_label(status).to_string()),
+        "paused" => {
+            let kind = "usageLimit".to_string();
+            let label = if row["waitAutoRecover"] == true {
+                phase_label("waitingReset").to_string()
+            } else {
+                phase_label("usageLimit").to_string()
+            };
+            (kind, label)
+        }
+        "approval" => ("approval".to_string(), phase_label("approval").to_string()),
+        "question" => {
+            let wait_kind = text(row, "waitKind");
+            if wait_kind == "signIn" {
+                ("signIn".to_string(), phase_label("signIn").to_string())
+            } else if wait_kind == "usageLimit" {
+                (
+                    "usageLimit".to_string(),
+                    phase_label("usageLimit").to_string(),
+                )
+            } else {
+                ("question".to_string(), phase_label("question").to_string())
+            }
+        }
         _ if row["untested"] == true => {
             ("untested".to_string(), phase_label("untested").to_string())
         }
@@ -572,6 +597,12 @@ fn parse_rows(rows: Option<&Value>) -> Vec<(String, CoordinatorThreadRow)> {
         .map(|row| {
             let state = text(row, "state");
             let working = state == "working";
+            let needs_approval = !working && row.get("needsApproval") == Some(&Value::Bool(true));
+            let wait_kind = text(row, "waitKind");
+            let wait_needs_user = crate::extras::work_cards::thread_wait_needs_user(row);
+            let waiting = !working && (needs_approval || (state == "waiting" && wait_needs_user));
+            let paused_on_limit =
+                !working && !waiting && wait_kind == "usageLimit";
             let mut parsed = CoordinatorThreadRow {
                 // A thread on another computer keeps that computer in its key: ids are only
                 // unique within one gxserver.
@@ -590,8 +621,8 @@ fn parse_rows(rows: Option<&Value>) -> Vec<(String, CoordinatorThreadRow)> {
                 title: text(row, "title"),
                 detail: text(row, "detail"),
                 working,
-                needs_approval: !working && row.get("needsApproval") == Some(&Value::Bool(true)),
-                waiting: state == "waiting",
+                needs_approval,
+                waiting,
                 recent: row.get("recent") == Some(&Value::Bool(true)),
                 branch: text(row, "branch"),
                 lifecycle_state: text(row, "lifecycleState"),
@@ -600,10 +631,12 @@ fn parse_rows(rows: Option<&Value>) -> Vec<(String, CoordinatorThreadRow)> {
                 last_report: text(row, "lastReport"),
                 status: if working {
                     "working"
-                } else if row.get("needsApproval") == Some(&Value::Bool(true)) {
+                } else if needs_approval {
                     "approval"
-                } else if state == "waiting" {
+                } else if waiting {
                     "question"
+                } else if paused_on_limit {
+                    "paused"
                 } else {
                     "done"
                 }

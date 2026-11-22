@@ -25,7 +25,7 @@ use std::{
 };
 
 /// The recovery reason of a usage-limit wait with no account that has room.
-pub(super) const NO_ROOM: &str = "Waiting for an eligible account to have capacity.";
+pub(crate) const NO_ROOM: &str = "Waiting for an eligible account to have capacity.";
 
 /// `blockedAlertedBy` stamped on sessions blocked by an exhausted account pool: the pool's own
 /// single notification alerts once, so clients draw each session's red dot without firing a

@@ -17,8 +17,9 @@ use crate::session_chat_interactive::{
 };
 use crate::session_chat_notice::{
     SessionChatTerminalNotice, SESSION_CHAT_NOTICE_AGENT_EXITED,
-    SESSION_CHAT_NOTICE_PERMISSION_PROMPT, SESSION_CHAT_NOTICE_TRUST_PROMPT,
-    SESSION_CHAT_NOTICE_USAGE_LIMIT,
+    SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN, SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
+    SESSION_CHAT_NOTICE_PERMISSIONS_WARNING, SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
+    SESSION_CHAT_NOTICE_TRUST_PROMPT, SESSION_CHAT_NOTICE_USAGE_LIMIT,
 };
 use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;
 
@@ -81,6 +82,53 @@ impl ThreadState {
 pub struct ThreadPrompt {
     pub key: String,
     pub summary: String,
+}
+
+/// Why a thread is paused or waiting, so work items, the dock, the Work panel, and the Workers
+/// popover can separate real user blockers from usage-limit pauses and coordinator-handled waits
+/// (CDXC:Coordinators 2026-11-22 DECISION, Q4476-Q4478).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThreadWaitKind {
+    /// Permission prompt, hook approval, folder trust dialog, or Connectors card.
+    Approval,
+    /// Expired login or sign-in dialog requiring manual user action.
+    SignIn,
+    /// Usage or quota limit (either auto-recovering / waiting for reset, or exhausted pool).
+    UsageLimit,
+    /// Interactive question in the thread (typically coordinator-handled).
+    Question,
+    /// Agent exited back to shell or failed to start.
+    AgentExited,
+    /// Other blocking terminal dialog or non-turnComplete attention.
+    Other,
+}
+
+impl ThreadWaitKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approval => "approval",
+            Self::SignIn => "signIn",
+            Self::UsageLimit => "usageLimit",
+            Self::Question => "question",
+            Self::AgentExited => "agentExited",
+            Self::Other => "other",
+        }
+    }
+}
+
+/// Structured wait metadata for a thread row (`waitKind`, `waitSummary`, `waitResetsAt`,
+/// `waitAutoRecover`, `waitNeedsUser`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ThreadWaitInfo {
+    pub kind: ThreadWaitKind,
+    /// Plain one-line description of what the thread is waiting on.
+    pub summary: String,
+    /// RFC3339 timestamp when a usage-limit reset is expected, if known.
+    pub resets_at: Option<String>,
+    /// True when Ghostex or Autopilot is waiting to resume automatically.
+    pub auto_recover: bool,
+    /// True when this wait genuinely requires the user in Needs you.
+    pub needs_user: bool,
 }
 
 /// What the thread record adds to the session's own state.
@@ -176,13 +224,23 @@ fn is_antigravity_session(session: &Value) -> bool {
 
 /// A waiting thread is blocked on something only the user can grant: an approval card, or attention
 /// that is no question at all (a permission notification, a folder-trust dialog). A question in its
-/// chat is the coordinator's to answer, so it does not count.
-/// A screen wait (Empryo's only signal) follows the same rule: a screen that blocks input is the
-/// user's, a question read off the screen is the coordinator's.
+/// chat is the coordinator's to answer, so it does not count. Usage limits, exited agents, and
+/// sign-in notices never count as approvals (CDXC:Coordinators 2026-11-22, Q4476-Q4478).
 pub fn thread_needs_user_approval(session: &Value) -> bool {
     let screen = recorded_screen_wait(session);
-    if screen.as_ref().is_some_and(|wait| wait.blocking) {
-        return true;
+    if let Some(wait) = screen.as_ref() {
+        if matches!(
+            wait.kind,
+            ThreadWaitKind::UsageLimit
+                | ThreadWaitKind::AgentExited
+                | ThreadWaitKind::SignIn
+                | ThreadWaitKind::Question
+        ) {
+            return false;
+        }
+        if wait.user_approval || wait.approval || wait.blocking {
+            return true;
+        }
     }
     if let Some(prompt) = session_chat_prompt_setting(session)
         .and_then(|stored| parse_stored_session_chat_prompt(&stored))
@@ -194,7 +252,236 @@ pub fn thread_needs_user_approval(session: &Value) -> bool {
     if screen.is_some() {
         return false;
     }
+    if session_usage_limit_info(session, None, false).is_some() {
+        return false;
+    }
     !crate::session_approval::session_has_question(session)
+}
+
+/// Structured wait classification for a thread row, reading cached screen notices/prompts,
+/// stored chat prompts, `accountRecovery.accountWait`, and `quotaLimit` state.
+pub fn thread_wait_info(session: &Value, state: ThreadState) -> Option<ThreadWaitInfo> {
+    if matches!(
+        state,
+        ThreadState::Working | ThreadState::Done | ThreadState::Closed
+    ) {
+        return None;
+    }
+    if state != ThreadState::Waiting {
+        return session_usage_limit_info(session, None, false);
+    }
+    if let Some(wait) = recorded_screen_wait(session) {
+        return Some(match wait.kind {
+            ThreadWaitKind::UsageLimit => session_usage_limit_info(
+                session,
+                wait.notice_resets_at.as_deref(),
+                wait.notice_auto_recover,
+            )
+            .unwrap_or_else(|| ThreadWaitInfo {
+                kind: ThreadWaitKind::UsageLimit,
+                summary: if wait.notice_auto_recover {
+                    "Waiting for reset".to_string()
+                } else {
+                    "Paused on usage limit".to_string()
+                },
+                resets_at: wait.notice_resets_at,
+                auto_recover: wait.notice_auto_recover,
+                needs_user: false,
+            }),
+            ThreadWaitKind::Approval => ThreadWaitInfo {
+                kind: ThreadWaitKind::Approval,
+                summary: wait.short_summary,
+                resets_at: None,
+                auto_recover: false,
+                needs_user: true,
+            },
+            ThreadWaitKind::SignIn => ThreadWaitInfo {
+                kind: ThreadWaitKind::SignIn,
+                summary: wait.short_summary,
+                resets_at: None,
+                auto_recover: false,
+                needs_user: true,
+            },
+            ThreadWaitKind::AgentExited => ThreadWaitInfo {
+                kind: ThreadWaitKind::AgentExited,
+                summary: wait.short_summary,
+                resets_at: None,
+                auto_recover: false,
+                needs_user: false,
+            },
+            ThreadWaitKind::Question => ThreadWaitInfo {
+                kind: ThreadWaitKind::Question,
+                summary: wait.short_summary,
+                resets_at: None,
+                auto_recover: false,
+                needs_user: false,
+            },
+            ThreadWaitKind::Other => ThreadWaitInfo {
+                kind: ThreadWaitKind::Other,
+                summary: wait.short_summary,
+                resets_at: None,
+                auto_recover: false,
+                needs_user: wait.blocking,
+            },
+        });
+    }
+    if let Some(prompt) = session_chat_prompt_setting(session)
+        .and_then(|stored| parse_stored_session_chat_prompt(&stored))
+    {
+        let approval = matches!(prompt, SessionChatInteractivePrompt::Approval { .. })
+            || crate::connectors::is_connector_card(&prompt);
+        return Some(ThreadWaitInfo {
+            kind: if approval {
+                ThreadWaitKind::Approval
+            } else {
+                ThreadWaitKind::Question
+            },
+            summary: short_prompt_summary(&prompt),
+            resets_at: None,
+            auto_recover: false,
+            needs_user: approval,
+        });
+    }
+    if crate::session_chat_async_questions::pending_question_count(session) > 0 {
+        return Some(ThreadWaitInfo {
+            kind: ThreadWaitKind::Question,
+            summary: "Asked a question".to_string(),
+            resets_at: None,
+            auto_recover: false,
+            needs_user: false,
+        });
+    }
+    if let Some(limit) = session_usage_limit_info(session, None, false) {
+        return Some(limit);
+    }
+    let approval = thread_needs_user_approval(session);
+    Some(ThreadWaitInfo {
+        kind: if approval {
+            ThreadWaitKind::Approval
+        } else {
+            ThreadWaitKind::Question
+        },
+        summary: if approval {
+            "Waiting for approval".to_string()
+        } else {
+            "Waiting for an answer".to_string()
+        },
+        resets_at: None,
+        auto_recover: false,
+        needs_user: approval,
+    })
+}
+
+/// Reads usage-limit recovery / quota-wait state from `runtimeSettings.accountRecovery` and
+/// `runtimeSettings.quotaLimit` (Q4476, Q4478): calm auto-recovering waits stay out of Needs you,
+/// while exhausted pools with no auto-resume escalate to manual user action.
+fn session_usage_limit_info(
+    session: &Value,
+    screen_resets_at: Option<&str>,
+    screen_auto_recover: bool,
+) -> Option<ThreadWaitInfo> {
+    let runtime = session.get("runtimeSettings");
+    let recovery = runtime.and_then(|rt| rt.get("accountRecovery"));
+    let fallback_reset = || {
+        screen_resets_at
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    if let Some(recovery) = recovery {
+        if crate::accounts::limit_wait::limit_gave_up(recovery) {
+            let resets_at = recovery
+                .pointer("/accountWait/resetsAt")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .or_else(fallback_reset);
+            return Some(ThreadWaitInfo {
+                kind: ThreadWaitKind::UsageLimit,
+                summary: "All accounts full; switch model or account".to_string(),
+                resets_at,
+                auto_recover: false,
+                needs_user: true,
+            });
+        }
+        if recovery["status"] == "paused" && recovery["accountWait"]["mode"] == "afterRestart" {
+            let resets_at = recovery
+                .pointer("/accountWait/resetsAt")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .or_else(fallback_reset);
+            return Some(ThreadWaitInfo {
+                kind: ThreadWaitKind::UsageLimit,
+                summary: "Paused on usage limit after restart".to_string(),
+                resets_at,
+                auto_recover: false,
+                needs_user: true,
+            });
+        }
+    }
+    if let Some((resets_at, wait_state)) = crate::accounts::limit_wait::presentation_fields(session)
+    {
+        let resets_at = resets_at.or_else(fallback_reset);
+        let is_no_room = recovery.is_some_and(|rec| {
+            rec["status"] == "waiting" && rec["reason"] == crate::accounts::limit_wait::NO_ROOM
+        });
+        if is_no_room && wait_state == "blocked" && resets_at.is_none() {
+            return Some(ThreadWaitInfo {
+                kind: ThreadWaitKind::UsageLimit,
+                summary: "All accounts full; switch model or account".to_string(),
+                resets_at: None,
+                auto_recover: false,
+                needs_user: true,
+            });
+        }
+        return Some(ThreadWaitInfo {
+            kind: ThreadWaitKind::UsageLimit,
+            summary: "Waiting for reset".to_string(),
+            resets_at,
+            auto_recover: true,
+            needs_user: false,
+        });
+    }
+    if let Some((resets_at, wait_state)) = crate::accounts::quota_wait::presentation_fields(session)
+    {
+        let resets_at = resets_at.or_else(fallback_reset);
+        let auto_recover = wait_state == "waiting" || screen_auto_recover;
+        return Some(ThreadWaitInfo {
+            kind: ThreadWaitKind::UsageLimit,
+            summary: if auto_recover {
+                "Waiting for reset".to_string()
+            } else {
+                "Paused on usage limit".to_string()
+            },
+            resets_at,
+            auto_recover,
+            needs_user: false,
+        });
+    }
+    None
+}
+
+fn short_prompt_summary(prompt: &SessionChatInteractivePrompt) -> String {
+    match prompt {
+        SessionChatInteractivePrompt::Approval { tool, summary, .. } => match summary {
+            Some(summary) if !summary.trim().is_empty() => {
+                let first = summary.trim().lines().next().unwrap_or_default().trim();
+                if tool.eq_ignore_ascii_case("bash") || tool.eq_ignore_ascii_case("shell") {
+                    format!("Run command: {first}")
+                } else {
+                    format!("{tool}: {first}")
+                }
+            }
+            _ => format!("Approval for {tool}"),
+        },
+        SessionChatInteractivePrompt::Question { questions, .. } => questions
+            .first()
+            .map(|q| q.question.trim().lines().next().unwrap_or_default().trim())
+            .filter(|line| !line.is_empty())
+            .unwrap_or("Waiting for an answer")
+            .to_string(),
+    }
 }
 
 /// The prompt a thread is showing: the stored question or approval card, or the async questions
@@ -264,9 +551,14 @@ pub(crate) fn prompt_summary(prompt: &SessionChatInteractivePrompt) -> String {
 #[derive(Clone, Debug)]
 pub struct ThreadScreenWait {
     prompt: ThreadPrompt,
-    /// A screen that blocks input (folder trust, a login, a usage limit, an approval) rather than
-    /// a question read off it.
+    /// Structured wait category for work items, the dock, and the Work panel.
+    kind: ThreadWaitKind,
+    /// True when this wait came from a terminal notice (gives precedence in `waiting_prompt`).
+    from_notice: bool,
+    /// A screen that genuinely blocks user input (not a usage limit or exited agent).
     blocking: bool,
+    /// A permission prompt, folder-trust dialog, or settings approval only the user can grant.
+    user_approval: bool,
     /// A question or an approval, which counts even while hooks say working.
     asks: bool,
     /// A permission prompt or an approval read off the screen: the user's to grant.
@@ -275,9 +567,135 @@ pub struct ThreadScreenWait {
     agent_gone: bool,
     /// The screen shows a usage limit, which counts even while hooks say working.
     at_limit: bool,
+    /// Plain one-line summary for dock and Work panel rows.
+    short_summary: String,
+    /// Expected reset timestamp read off a usage-limit notice, if any.
+    notice_resets_at: Option<String>,
+    /// True when the usage-limit notice says it continues automatically at reset.
+    notice_auto_recover: bool,
     /// The notice itself, as a chat frame carries it, for a permission prompt or a folder-trust
     /// question: the card its coordinator's chat relays (relay.rs).
     notice: Option<Value>,
+}
+
+fn notice_wait_kind(notice: &SessionChatTerminalNotice) -> ThreadWaitKind {
+    match notice.kind.as_str() {
+        SESSION_CHAT_NOTICE_PERMISSION_PROMPT
+        | SESSION_CHAT_NOTICE_TRUST_PROMPT
+        | SESSION_CHAT_NOTICE_PERMISSIONS_WARNING => ThreadWaitKind::Approval,
+        SESSION_CHAT_NOTICE_LOGIN_EXPIRED | SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN => {
+            ThreadWaitKind::SignIn
+        }
+        SESSION_CHAT_NOTICE_USAGE_LIMIT => ThreadWaitKind::UsageLimit,
+        SESSION_CHAT_NOTICE_AGENT_EXITED => ThreadWaitKind::AgentExited,
+        _ => ThreadWaitKind::Other,
+    }
+}
+
+fn notice_short_summary(notice: &SessionChatTerminalNotice, kind: ThreadWaitKind) -> String {
+    if let Some(subject) = notice
+        .permission_request
+        .as_ref()
+        .and_then(|req| req.subject.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return subject.lines().next().unwrap_or(subject).trim().to_string();
+    }
+    if let Some(cmd) = notice
+        .approval_command
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let first = cmd.lines().next().unwrap_or(cmd).trim();
+        return format!("Run command: {first}");
+    }
+    match kind {
+        ThreadWaitKind::Approval => {
+            if notice.kind == SESSION_CHAT_NOTICE_TRUST_PROMPT {
+                "Trust this folder?".to_string()
+            } else {
+                notice
+                    .detail
+                    .as_deref()
+                    .and_then(|d| d.lines().map(str::trim).find(|line| !line.is_empty()))
+                    .map(str::to_string)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| notice.title.trim().to_string())
+            }
+        }
+        ThreadWaitKind::SignIn => {
+            let title = notice.title.trim();
+            if title.is_empty() {
+                "Account login expired".to_string()
+            } else {
+                title.to_string()
+            }
+        }
+        ThreadWaitKind::UsageLimit => "Paused on usage limit".to_string(),
+        ThreadWaitKind::AgentExited => {
+            let title = notice.title.trim();
+            if title.is_empty() {
+                "Agent stopped".to_string()
+            } else {
+                title.to_string()
+            }
+        }
+        _ => {
+            let title = notice.title.trim();
+            if title.is_empty() {
+                "Waiting for input".to_string()
+            } else {
+                title.to_string()
+            }
+        }
+    }
+}
+
+fn notice_resets_at(notice: &SessionChatTerminalNotice) -> Option<String> {
+    if notice.kind != SESSION_CHAT_NOTICE_USAGE_LIMIT {
+        return None;
+    }
+    for source in [notice.account_wait.as_ref(), notice.quota_wait.as_ref()] {
+        if let Some(at) = source
+            .and_then(|w| w.get("resetsAt"))
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            return Some(at.to_string());
+        }
+    }
+    let duration = crate::session_chat_notice::parse_notice_reset_duration(notice)?;
+    let base = chrono::DateTime::parse_from_rfc3339(&notice.detected_at)
+        .ok()
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(chrono::Utc::now);
+    Some((base + duration).to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+}
+
+fn notice_auto_recover(notice: &SessionChatTerminalNotice) -> bool {
+    if notice.kind != SESSION_CHAT_NOTICE_USAGE_LIMIT {
+        return false;
+    }
+    if notice
+        .account_wait
+        .as_ref()
+        .is_some_and(|w| w["mode"] == "reset" || w["acknowledgedAt"].is_string())
+    {
+        return true;
+    }
+    if notice
+        .quota_wait
+        .as_ref()
+        .is_some_and(|w| w["mode"] == "quotaWaiting")
+    {
+        return true;
+    }
+    notice
+        .detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("continues by itself"))
 }
 
 impl ThreadScreenWait {
@@ -292,9 +710,16 @@ impl ThreadScreenWait {
         // A Codex at a usage limit can sleep inside its turn on the provider's Retry-After (days, through a local proxy), so its hooks say working and its screen never changes. As a working thread it was nudged, which cost one more refused request each time, and its coordinator got "still not moving" every 8 minutes: 206 reports overnight, none of which it could act on. A usage limit on screen now makes the thread wait on it, working or not: one report saying so, no nudges, and the next report once something else happens (accounts/reset_used.rs continues it after a reset).
         let at_limit =
             |notice: &SessionChatTerminalNotice| notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT;
-        if let Some(notice) = notice
-            .filter(|notice| (notice.blocks_input() || at_limit(notice)) && !notice.auto_trust)
-        {
+        let is_sign_in = |notice: &SessionChatTerminalNotice| {
+            matches!(
+                notice.kind.as_str(),
+                SESSION_CHAT_NOTICE_LOGIN_EXPIRED | SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN
+            )
+        };
+        if let Some(notice) = notice.filter(|notice| {
+            (notice.blocks_input() || at_limit(notice) || is_sign_in(notice)) && !notice.auto_trust
+        }) {
+            let kind = notice_wait_kind(notice);
             let title = notice.title.trim();
             let detail = notice
                 .detail
@@ -306,16 +731,26 @@ impl ThreadScreenWait {
             let next = screen_fix(notice, thread_ref)
                 .unwrap_or_else(|| "Someone has to answer it in that thread.".to_string());
             let summary = format!("Its screen shows: {title}\n\n{detail}{next}");
+            let user_approval = matches!(kind, ThreadWaitKind::Approval);
+            // Usage limits and exited agents never count as user-approval blocking screens.
+            let blocking = notice.blocks_input()
+                && !matches!(kind, ThreadWaitKind::UsageLimit | ThreadWaitKind::AgentExited);
             return Some(Self {
                 prompt: ThreadPrompt {
                     key: format!("notice:{}:{}", notice.kind, notice.title),
                     summary,
                 },
-                blocking: true,
+                kind,
+                from_notice: true,
+                blocking,
+                user_approval,
                 asks: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
                 approval: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
                 agent_gone: notice.kind == SESSION_CHAT_NOTICE_AGENT_EXITED,
                 at_limit: at_limit(notice),
+                short_summary: notice_short_summary(notice, kind),
+                notice_resets_at: notice_resets_at(notice),
+                notice_auto_recover: notice_auto_recover(notice),
                 notice: matches!(
                     notice.kind.as_str(),
                     SESSION_CHAT_NOTICE_PERMISSION_PROMPT | SESSION_CHAT_NOTICE_TRUST_PROMPT
@@ -325,16 +760,28 @@ impl ThreadScreenWait {
         }
         let prompt = prompt?;
         let summary = prompt_summary(prompt);
+        let approval = matches!(prompt, SessionChatInteractivePrompt::Approval { .. })
+            || crate::connectors::is_connector_card(prompt);
         Some(Self {
             prompt: ThreadPrompt {
                 key: format!("screen:{}", stored_prompt_key(&summary)),
                 summary,
             },
+            kind: if approval {
+                ThreadWaitKind::Approval
+            } else {
+                ThreadWaitKind::Question
+            },
+            from_notice: false,
             blocking: false,
+            user_approval: approval,
             asks: true,
-            approval: matches!(prompt, SessionChatInteractivePrompt::Approval { .. }),
+            approval,
             agent_gone: false,
             at_limit: false,
+            short_summary: short_prompt_summary(prompt),
+            notice_resets_at: None,
+            notice_auto_recover: false,
             notice: None,
         })
     }
@@ -449,7 +896,7 @@ pub fn waits_on_screen(session: &Value) -> bool {
 pub fn waiting_prompt(session: &Value) -> Option<ThreadPrompt> {
     let screen = recorded_screen_wait(session);
     match screen {
-        Some(wait) if wait.blocking => Some(wait.prompt),
+        Some(wait) if wait.from_notice || wait.blocking => Some(wait.prompt),
         _ => thread_prompt(session)
             .map(|prompt| ThreadPrompt {
                 key: format!("prompt:{}", prompt.key),

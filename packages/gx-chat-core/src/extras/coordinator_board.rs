@@ -477,6 +477,16 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
             chip.command = open_thread_command.clone();
             tags.push(chip);
         }
+        "signIn" => {
+            let mut chip = tag("action", "Sign in in thread", "warn");
+            chip.command = open_thread_command.clone();
+            tags.push(chip);
+        }
+        "usageLimit" => {
+            let mut chip = tag("action", "Open thread", "warn");
+            chip.command = open_thread_command.clone();
+            tags.push(chip);
+        }
         "question" => {
             let mut chip = tag("action", "Answer in thread", "question");
             chip.command = open_thread_command.clone();
@@ -522,21 +532,42 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         chip.title = format!("Tagged {}", text(look, "label"));
         tags.insert(0, chip);
     }
-    // A work item's own chips: who has the ball, its steps, what it asks (work_panel.rs).
+    // A work item's own chips: usage-limit reset pill, who has the ball, its steps, what it asks
+    // (work_panel.rs). Preserve any click command and tooltip carried on the chip.
     for chip in row["workChips"].as_array().into_iter().flatten() {
-        tags.push(tag(
+        let mut built = tag(
             text(chip, "kind"),
             text(chip, "label"),
             text(chip, "tone"),
-        ));
+        );
+        if let Some(command) = chip.get("command").filter(|c| c.is_object()) {
+            built.command = command.clone();
+        }
+        let tip = text(chip, "title");
+        if !tip.is_empty() {
+            built.title = tip.to_string();
+        }
+        tags.push(built);
     }
     let open_thread = match text(row, "kind") {
-        "thread" => open_thread_command,
+        "thread" => open_thread_command.clone(),
         _ => Value::Null,
     };
-    // What Open opens: the thread, else the item's link, worded by what the link is.
+    // What Open opens: the thread, a waiting attached thread, else the item's link, worded by what
+    // the link is.
     let (open_command, open_label) = if open_thread.is_object() {
-        (open_thread.clone(), "Open thread".to_string())
+        let label = match text(row, "openLabel") {
+            "" => "Open thread".to_string(),
+            custom => custom.to_string(),
+        };
+        (open_thread.clone(), label)
+    } else if row["threadWait"] == true && !text(row, "sessionId").is_empty() {
+        let label = match text(row, "openLabel") {
+            "" if row["needsApproval"] == true => "Open approval".to_string(),
+            "" => "Open thread".to_string(),
+            custom => custom.to_string(),
+        };
+        (open_thread_command, label)
     } else if let Some(link) = row["links"].as_array().and_then(|links| links.first()) {
         let label = text(link, "label");
         let words = match text(link, "kind") {
@@ -997,8 +1028,9 @@ fn dock_row_of(row: &BoardRow, raw: &Value, dock_rows: &[Value]) -> Value {
         text(dock, "key") == key
             || item.is_some_and(|reference| {
                 !reference.is_empty()
-                    && text(dock, "kind") == "item"
-                    && text(&dock["reply"], "item") == reference
+                    && ((text(dock, "kind") == "item" && text(&dock["reply"], "item") == reference)
+                        || (text(dock, "kind") == "threadWait"
+                            && text(dock, "itemRef") == reference))
             })
     });
     if let Some(found) = found {
@@ -1431,6 +1463,9 @@ fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
         .chain(questions)
         .map(next)
         .chain(crate::extras::work_cards::snoozes_end_at(state, now_ms))
+        .chain(crate::extras::work_cards::reset_countdown_changes_at(
+            state, now_ms,
+        ))
         .min()
 }
 

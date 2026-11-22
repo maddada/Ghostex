@@ -25,8 +25,8 @@ use super::live::{thread_live, ThreadLive};
 use super::records::{list_coordinators, SessionKey, ThreadRecord};
 use super::remote_threads::{list_remote_threads, RemoteThreadRecord};
 use super::state::{
-    classify_thread_session, thread_needs_user_approval, waiting_prompt, ThreadProgress,
-    ThreadState,
+    classify_thread_session, thread_needs_user_approval, thread_wait_info, waiting_prompt,
+    ThreadProgress, ThreadState,
 };
 use crate::domain::DomainRepository;
 use crate::presentation::{effective_lifecycle_state, now_iso};
@@ -549,10 +549,17 @@ fn build_row(
         .filter(|report| !report.trim().is_empty())
         .map(|report| report_headline(report, 140));
     let report_line = last_report.clone();
+    let wait_info = session.and_then(|session| thread_wait_info(session, state));
     let detail = match state {
-        ThreadState::Waiting => session
-            .and_then(waiting_prompt)
-            .map(|prompt| report_headline(&prompt.summary, 140))
+        ThreadState::Waiting => wait_info
+            .as_ref()
+            .map(|info| info.summary.clone())
+            .filter(|summary| !summary.is_empty())
+            .or_else(|| {
+                session
+                    .and_then(waiting_prompt)
+                    .map(|prompt| report_headline(&prompt.summary, 140))
+            })
             .unwrap_or_else(|| "Waiting for an answer".to_string()),
         // What it says in the turn it is on beats its last report, and that beats the brief it
         // started from: a long-lived thread's brief is about its first task, its last report about
@@ -641,6 +648,19 @@ fn build_row(
     } else if super::stall::session_stuck_since(&thread.project_id, &thread.session_id).is_some() {
         // An idle thread its background job still waits for, even after its nudge (idle_wait.rs).
         row["stuck"] = json!(true);
+    }
+    if let Some(info) = &wait_info {
+        row["waitKind"] = json!(info.kind.as_str());
+        if !info.summary.is_empty() {
+            row["waitSummary"] = json!(info.summary);
+        }
+        if let Some(resets_at) = &info.resets_at {
+            row["waitResetsAt"] = json!(resets_at);
+        }
+        if info.auto_recover {
+            row["waitAutoRecover"] = json!(true);
+        }
+        row["waitNeedsUser"] = json!(info.needs_user);
     }
     if state == ThreadState::Waiting && session.is_some_and(thread_needs_user_approval) {
         row["needsApproval"] = json!(true);

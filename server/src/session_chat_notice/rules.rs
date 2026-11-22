@@ -994,6 +994,25 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
         NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[
+                NoticePart::Text("Usage limit reached"),
+                NoticePart::Gap(120),
+                NoticePart::Text("Resets in"),
+            ],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[NoticePart::Text("Usage limit reached")],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[NoticePart::Text("usage limit reached")],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[
                 NoticePart::Text("Individual quota reached"),
                 NoticePart::Gap(120),
                 NoticePart::Text("Resets in"),

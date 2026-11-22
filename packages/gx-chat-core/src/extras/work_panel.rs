@@ -67,10 +67,31 @@ fn group_of(status: &str) -> &'static str {
     }
 }
 
-/// An item's own chips after the board's: who has the ball, its steps, what it asks of the user
-/// (its open asks not snoozed at `now_ms`: a snoozed one waits in Later, so it is not "for you").
+/// An item's own chips after the board's: usage-limit reset pill (when paused on a limit), who
+/// has the ball, its steps, what it asks of the user (its open asks not snoozed at `now_ms`: a
+/// snoozed one waits in Later, so it is not "for you").
 fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
     let mut chips = Vec::new();
+    if !matches!(status, "finished" | "dropped") {
+        if let Some(thread) = crate::extras::work_cards::usage_limit_thread(item) {
+            if status != "needs" || !crate::extras::work_cards::thread_wait_needs_user(thread) {
+                let (label, tone, tip) =
+                    crate::extras::work_cards::usage_limit_pill(thread, now_ms);
+                chips.push(json!({
+                    "kind": "usageLimit",
+                    "label": label,
+                    "tone": tone,
+                    "title": tip,
+                    "command": {
+                        "type": "openCoordinatorThread",
+                        "serverId": text(thread, "serverId"),
+                        "projectId": text(thread, "projectId"),
+                        "sessionId": text(thread, "sessionId"),
+                    },
+                }));
+            }
+        }
+    }
     let owner = owner_words(item);
     let waiting_says = status == "waiting" && !waits_line(item).is_empty();
     // Only a thread is worth naming: "You" and "Coordinator" are what the group already says
@@ -107,6 +128,8 @@ fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
 /// An item's row, in the shape of a board item row.
 fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
     let reference = text(item, "ref");
+    let waiting_thread = crate::extras::work_cards::waiting_user_thread(item);
+    let mut title = text(item, "title").to_string();
     let mut line = text(item, "now").to_string();
     if status == "waiting" {
         let waits = waits_line(item);
@@ -114,12 +137,29 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
             line = waits;
         }
     }
+    let thread_wait = status == "needs"
+        && waiting_thread.is_some()
+        && !item["asks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|ask| ask["open"] == true);
+    let mut open_label = String::new();
+    let mut wait_kind_str = String::new();
+    if let Some(thread) = waiting_thread.filter(|_| thread_wait) {
+        let (wait_title, wait_subtitle, wait_kind, action_label) =
+            crate::extras::work_cards::thread_wait_copy(Some(item), thread, now_ms);
+        title = wait_title;
+        line = wait_subtitle;
+        wait_kind_str = wait_kind.to_string();
+        open_label = action_label.to_string();
+    }
     let mut row = json!({
         "key": text(item, "key"),
         "kind": "item",
         "ref": reference,
         "group": group,
-        "title": text(item, "title"),
+        "title": title,
         "detail": line,
         // A row with nothing to say yet says who has it, never the board's "No links yet".
         "note": if line.is_empty() {
@@ -135,6 +175,11 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
         "at": text(item, "at"),
         "workChips": item_chips(item, status, now_ms),
     });
+    if thread_wait {
+        row["threadWait"] = json!(true);
+        row["waitKind"] = json!(wait_kind_str);
+        row["openLabel"] = json!(open_label);
+    }
     for key in ["reason", "release", "link", "tag", "tagLook", "links", "pr"] {
         if let Some(value) = item.get(key).filter(|value| !value.is_null()) {
             row[key] = value.clone();
@@ -150,7 +195,7 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
     }
     // Under Needs you with no open question: Done, its one answer ("W7: Done"), given until the
     // coordinator next changes the item (`saidDone`); `answerKey` locks it here and on its dock
-    // row alike (work_cards.rs `done_answer_key`).
+    // row alike (work_cards.rs `done_answer_key`). Thread-wait rows never get a bare Done button.
     if let Some(answer_key) = crate::extras::work_cards::done_answer_key(item) {
         row["answers"] = json!([{ "label": "Done", "recommended": false }]);
         row["answerKey"] = json!(answer_key);
@@ -158,23 +203,23 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
             row["answered"] = json!("Done");
         }
     }
-    // A thread on it waiting on the user: the board's chip that opens it. A thread that is only
-    // quiet gets none: healing it is the coordinator's job, not the user's (2026-11-20).
-    if let Some(thread) = item["threads"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|thread| thread["state"] == "waiting")
-    {
+    // A thread on it genuinely waiting on the user: the board's chip that opens it. Usage-limit
+    // pauses and quiet threads do not get approval/question chips here (Q4476-Q4478).
+    if let Some(thread) = waiting_thread {
         for key in ["projectId", "sessionId", "serverId"] {
             row[key] = thread.get(key).cloned().unwrap_or(json!(""));
         }
-        row["waiting"] = json!(if thread["needsApproval"] == true {
+        let kind = if thread["needsApproval"] == true || text(thread, "waitKind") == "approval" {
             "approval"
         } else {
-            "question"
-        });
-        row["needsApproval"] = json!(thread["needsApproval"] == true);
+            match text(thread, "waitKind") {
+                "signIn" => "signIn",
+                "usageLimit" => "usageLimit",
+                _ => "question",
+            }
+        };
+        row["waiting"] = json!(kind);
+        row["needsApproval"] = json!(kind == "approval");
     }
     // No links of its own: its first thread's.
     if row.get("links").is_none() {
@@ -239,19 +284,52 @@ fn ask_row(items: &[&Value], item: &Value, ask: &Value, now_ms: i64) -> Value {
 }
 
 /// A thread on no item, in the shape of a board thread row.
-fn thread_row(item: &Value, group: &str) -> Value {
+fn thread_row(item: &Value, group: &str, now_ms: i64) -> Value {
     let thread = item["threads"].get(0).cloned().unwrap_or(Value::Null);
+    let mut title = text(item, "title").to_string();
+    let mut detail = text(item, "now").to_string();
+    let thread_wait = group == "needs"
+        && crate::extras::work_cards::waiting_user_thread(item).is_some();
+    let mut open_label = String::new();
+    let mut wait_kind_str = String::new();
+    if thread_wait {
+        let (wait_title, wait_subtitle, wait_kind, action_label) =
+            crate::extras::work_cards::thread_wait_copy(Some(item), &thread, now_ms);
+        title = wait_title;
+        detail = wait_subtitle;
+        wait_kind_str = wait_kind.to_string();
+        open_label = action_label.to_string();
+    }
     let mut row = json!({
         "key": text(item, "key"),
         "kind": "thread",
         "ref": text(item, "ref"),
         "group": group,
-        "title": text(item, "title"),
-        "detail": text(item, "now"),
+        "title": title,
+        "detail": detail,
         "at": text(item, "at"),
         "projectId": text(&thread, "projectId"),
         "sessionId": text(&thread, "sessionId"),
     });
+    if thread_wait {
+        row["threadWait"] = json!(true);
+        row["waitKind"] = json!(wait_kind_str);
+        row["openLabel"] = json!(open_label);
+    } else if !matches!(group, "done" | "needs") && text(&thread, "waitKind") == "usageLimit" {
+        let (label, tone, tip) = crate::extras::work_cards::usage_limit_pill(&thread, now_ms);
+        row["workChips"] = json!([{
+            "kind": "usageLimit",
+            "label": label,
+            "tone": tone,
+            "title": tip,
+            "command": {
+                "type": "openCoordinatorThread",
+                "serverId": text(&thread, "serverId"),
+                "projectId": text(&thread, "projectId"),
+                "sessionId": text(&thread, "sessionId"),
+            },
+        }]);
+    }
     for key in [
         "serverId",
         "globalRef",
@@ -319,7 +397,7 @@ pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
         }
         let group = group_of(status);
         if item["kind"] == "thread" {
-            push(group, thread_row(item, group));
+            push(group, thread_row(item, group, now_ms));
             continue;
         }
         let reference = text(item, "ref");
@@ -354,7 +432,7 @@ pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
                 .as_array()
                 .into_iter()
                 .flatten()
-                .any(|thread| thread["state"] == "waiting");
+                .any(crate::extras::work_cards::thread_wait_needs_user);
         if !only_asking {
             push(group, item_row(item, group, status, now_ms));
         }
