@@ -887,15 +887,27 @@ fn detail_items(meter: Option<&Value>) -> Vec<(String, String, String)> {
         .collect()
 }
 
-/// A rider's words on its host's row: a reset is the window's name and the countdown ("5h 2h 10m"),
-/// which reads "resets in 2h 10m" there.
+/// A rider's words on its host's row: a reset row's value is the window's name, then "resets" and
+/// the countdown ("7d resets 1d 19h", `usage_reset_text` in menus/context/windows.rs), or "reset
+/// due" once it has passed; on the host's row it reads "resets in 1d 19h" or "reset due".
+///
+/// CDXC:SessionDetails 2026-11-22 WHY:
+/// The 7d limit row read "resets in resets 1d 19h" (and the 5h row the same): this took everything
+/// after the window's name as a bare countdown, but the value already says "resets". Only the
+/// countdown after that word is kept now.
 fn rider_text(rider: &str, value: &str) -> String {
-    if rider.ends_with("Reset") {
-        let countdown = value.split_once(' ').map_or(value, |(_, rest)| rest);
-        format!("resets in {countdown}")
-    } else {
-        value.to_string()
+    if !rider.ends_with("Reset") {
+        return value.to_string();
     }
+    let after_label = value.split_once(' ').map_or(value, |(_, rest)| rest);
+    if after_label == "reset due" {
+        return after_label.to_string();
+    }
+    let countdown = after_label
+        .strip_prefix("resets in ")
+        .or_else(|| after_label.strip_prefix("resets "))
+        .unwrap_or(after_label);
+    format!("resets in {countdown}")
 }
 
 /// The second tab (the Limits area): its cards from the detail rows, and Customize session details
