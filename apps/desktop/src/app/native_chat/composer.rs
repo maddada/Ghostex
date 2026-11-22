@@ -534,6 +534,10 @@ impl NativeChatView {
             .flatten()
         {
             if self.snapshot["prompt"]["kind"] == "question" {
+                self.hide_frosted_overlay(
+                    super::frosted_overlay_window::FrostedOverlay::BoostHint,
+                    cx,
+                );
                 // The question replaces the box and the dock, so the status keeps its own bar.
                 let working_card = match working_card {
                     None if dock.is_some()
@@ -832,6 +836,7 @@ impl NativeChatView {
         // The chat's pills ride in a strip along the box's top edge, inside its border
         // (pills_strip.rs); what the box holds under it is unchanged.
         let pills_strip = if maximized || self.collab_guest() {
+            self.hide_frosted_overlay(super::frosted_overlay_window::FrostedOverlay::BoostHint, cx);
             self.set_where_pill_shows_project(false, cx);
             None
         } else {

@@ -742,9 +742,9 @@ pub fn handle(
             let content = toggle_boost(&text, &row.id, &row.label);
             let mut effects = Vec::new();
             // Using a Boost is what the callout asked for: it does not come back.
-            if state.extras.boosts.hint_seen == Some(false) && state.extras.boosts.request.is_none()
-            {
+            if state.extras.boosts.hint_seen == Some(false) {
                 state.extras.boosts.hint_seen = Some(true);
+                state.core.request_publish();
                 effects.push(read(state, next_request_id(), json!({ "op": "hintSeen" })));
             }
             let caret = content.encode_utf16().count();

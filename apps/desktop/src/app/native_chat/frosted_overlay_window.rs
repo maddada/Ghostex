@@ -125,6 +125,9 @@ impl NativeChatView {
         control: Option<Bounds<Pixels>>,
         cx: &mut Context<Self>,
     ) {
+        // A deferred canvas callback from the frame before a pane hid, a modal opened, or the
+        // Boost callout was dismissed must never reopen an overlay over another chat.
+        let control = control.filter(|_| self.frosted_overlay_allowed(overlay, cx));
         let state = self.frosted_overlays.state(overlay);
         state.wanted = control.map(window_frame);
         if state.busy || state.frame == state.wanted {
@@ -133,6 +136,14 @@ impl NativeChatView {
         state.busy = true;
         let chat = cx.entity();
         cx.defer(move |cx| apply_frosted_overlay(chat, overlay, cx));
+    }
+
+    /// Whether `overlay` is currently allowed to appear on screen.
+    fn frosted_overlay_allowed(&self, overlay: FrostedOverlay, cx: &gpui::App) -> bool {
+        !self.pane_hidden
+            && !self.frosted_overlay_covered(overlay, cx)
+            && (overlay != FrostedOverlay::BoostHint
+                || super::boosts::boost_hint_visible(&self.snapshot["boosts"]["hint"]))
     }
 
     /// Whether something else sits over the pane, so a control's own window (which would float
@@ -186,10 +197,21 @@ fn apply_frosted_overlay(
     overlay: FrostedOverlay,
     cx: &mut gpui::App,
 ) {
-    let (wanted, handle, parent, main) = chat.update(cx, |chat, cx| {
+    let (wanted, handle, parent, main, glass) = chat.update(cx, |chat, cx| {
         let parent = chat.child_window_parent(cx);
+        let allowed = chat.frosted_overlay_allowed(overlay, cx);
+        let glass = crate::app::helpers::window_glass_active_for(chat.main_window);
         let state = chat.frosted_overlays.state(overlay);
-        (state.wanted, state.handle.take(), parent, chat.main_window)
+        if !allowed {
+            state.wanted = None;
+        }
+        (
+            state.wanted,
+            state.handle.take(),
+            parent,
+            chat.main_window,
+            glass,
+        )
     });
     // An open control follows its pane in place instead of being closed and reopened.
     if let (Some(frame), Some(handle)) = (wanted, handle)
@@ -228,6 +250,7 @@ fn apply_frosted_overlay(
         FrostedOverlay::BoostHint => frame.size.height.min(px(24.0)) / 2.0,
     };
     let display_id = owner.display_for(Bounds::new(origin + frame.origin, frame.size), cx);
+    let blurred = glass && !cfg!(ghostex_web);
     let result = cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::new(
@@ -244,13 +267,22 @@ fn apply_frosted_overlay(
             is_minimizable: false,
             app_id: crate::gpui_platform_window_app_id(),
             icon: crate::gpui_platform_window_icon(),
-            window_background: gpui::WindowBackgroundAppearance::Blurred,
+            window_background: if blurred {
+                gpui::WindowBackgroundAppearance::Blurred
+            } else {
+                gpui::WindowBackgroundAppearance::Transparent
+            },
             ..Default::default()
         },
         {
             let chat = chat.clone();
             move |window, cx| {
-                window.set_background_corner_radius(radius);
+                if blurred {
+                    window.set_background_corner_radius(radius);
+                    if overlay == FrostedOverlay::BoostHint {
+                        crate::app::helpers::apply_frosted_menu_blur(window);
+                    }
+                }
                 attach_overlay_window(window, parent);
                 let view = cx.new(|cx| FrostedOverlayView {
                     chat: chat.downgrade(),
@@ -305,7 +337,8 @@ impl Render for FrostedOverlayView {
         let Some(chat) = self.chat.upgrade() else {
             return div().into_any_element();
         };
-        let p = ChatAppearance::current(&chat.read(cx).snapshot).on_window_glass(true);
+        let glass = crate::app::helpers::window_glass_active_for(chat.read(cx).main_window);
+        let p = ChatAppearance::current(&chat.read(cx).snapshot).on_window_glass(glass);
         let hover = if p.light {
             gpui::black().opacity(0.08)
         } else {
@@ -313,7 +346,19 @@ impl Render for FrostedOverlayView {
         };
         match self.overlay {
             FrostedOverlay::BoostHint => {
-                let hint = chat.read(cx).snapshot["boosts"]["hint"].clone();
+                let (hidden, hint) = {
+                    let chat = chat.read(cx);
+                    (chat.pane_hidden, chat.snapshot["boosts"]["hint"].clone())
+                };
+                if hidden || !super::boosts::boost_hint_visible(&hint) {
+                    let weak = self.chat.clone();
+                    cx.defer(move |cx| {
+                        let _ = weak.update(cx, |chat, cx| {
+                            chat.hide_frosted_overlay(FrostedOverlay::BoostHint, cx);
+                        });
+                    });
+                    return div().into_any_element();
+                }
                 super::boosts::boost_callout(self.chat.clone(), &hint, &p)
             }
             FrostedOverlay::ScrollBottom => match chat.read(cx).pill_toast() {

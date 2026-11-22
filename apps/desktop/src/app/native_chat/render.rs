@@ -265,10 +265,16 @@ impl Render for NativeChatView {
         let composer_ready = self.composer_ready;
         let account_switch_card = self.render_account_switch_card(&p, cx);
         // The transcript that places the floating controls' own windows is not drawn while
-        // maximized, and outside window glass they are drawn in the pane (scroll_bottom.rs,
-        // fork_branches.rs).
-        if maximized || !glass {
+        // covered, and outside window glass the scroll-bottom pill is drawn in the pane
+        // (scroll_bottom.rs). The Boost callout has no in-window fallback, so it stays owned by
+        // its own overlay window regardless of glass.
+        if covered {
             self.hide_frosted_overlays(cx);
+        } else if !glass {
+            self.hide_frosted_overlay(
+                super::frosted_overlay_window::FrostedOverlay::ScrollBottom,
+                cx,
+            );
         }
         let subagent_viewer = self.render_subagent_viewer(&p, window, cx);
         let edit_menu = self.edit_menu(window, cx);

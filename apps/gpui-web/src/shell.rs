@@ -416,8 +416,19 @@ impl GhostexGpuiApp {
 
     pub(crate) fn web_show_terminal(&mut self, terminal: bool, cx: &mut Context<Self>) {
         self.show_terminal = terminal;
-        if terminal && let Some(session) = self.open_session.clone() {
-            self.ensure_terminal(&session, cx);
+        if let Some(session) = self.open_session.clone() {
+            if let Some((_, view)) = self.native_chats.get(&session).cloned() {
+                view.update(cx, |view, cx| {
+                    if terminal {
+                        view.dismiss_windows_for_hidden_pane(cx);
+                    } else {
+                        view.restore_windows_for_shown_pane(cx);
+                    }
+                });
+            }
+            if terminal {
+                self.ensure_terminal(&session, cx);
+            }
         }
         cx.notify();
     }

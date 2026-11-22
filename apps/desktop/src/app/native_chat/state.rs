@@ -1246,6 +1246,12 @@ impl NativeChatView {
             self.adopt_board_focus(&before, cx);
             self.prune_kept_replies(&before, cx);
             self.sync_dock_ask_modal(cx);
+            if !super::boosts::boost_hint_visible(&self.snapshot["boosts"]["hint"]) {
+                self.hide_frosted_overlay(
+                    super::frosted_overlay_window::FrostedOverlay::BoostHint,
+                    cx,
+                );
+            }
             drop_off_main_thread(before, cx);
             if ring_moved {
                 cx.emit(NativeChatEvent::SessionDetailsRing);

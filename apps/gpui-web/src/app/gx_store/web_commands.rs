@@ -265,16 +265,26 @@ impl GhostexGpuiApp {
         session: ghostex_gx_core::SessionKey,
         cx: &mut gpui::Context<Self>,
     ) {
-        // A side chat belongs to the session it was opened from, so another session closes it.
-        if self.open_session.as_ref() != Some(&session) {
+        // A side chat and any floating chat overlay belong to the session they were opened from,
+        // so switching to another session closes them (matching desktop's pane hide/restore).
+        let previous = self.open_session.clone();
+        if previous.as_ref() != Some(&session) {
             self.side_chat_open = None;
+            if let Some(prev) = &previous
+                && let Some((_, view)) = self.native_chats.get(prev).cloned()
+            {
+                view.update(cx, |view, cx| view.dismiss_windows_for_hidden_pane(cx));
+            }
         }
         self.open_session = Some(session.clone());
         self.web_report_shown_sessions(cx);
         let chat_view_unavailable =
             ghostex_gx_core::session_chat_view_unavailable(&self.gx_store.core, &session);
         if !chat_view_unavailable {
-            self.ensure_native_chat(&session, cx);
+            let view = self.ensure_native_chat(&session, cx);
+            if !self.show_terminal {
+                view.update(cx, |view, cx| view.restore_windows_for_shown_pane(cx));
+            }
         }
         if self.web_shows_terminal(&session) {
             self.ensure_terminal(&session, cx);

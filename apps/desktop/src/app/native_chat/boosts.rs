@@ -182,9 +182,9 @@ impl NativeChatView {
         let active = pill["active"] == true;
         let bounds: Rc<Cell<Bounds<Pixels>>> = self.boost_pill_bounds.clone();
         let measured = bounds.clone();
-        // The callout, while it has not been seen, no compact prompt sits above the composer,
-        // and nothing covers the pane.
-        let hint_wanted = boosts["hint"].is_object()
+        // The callout, while it has not been seen, carries visible copy, no compact prompt sits
+        // above the composer, and nothing covers the pane.
+        let hint_wanted = boost_hint_visible(&boosts["hint"])
             && !self.compact_prompt_open()
             && !self.frosted_overlay_covered(
                 super::frosted_overlay_window::FrostedOverlay::BoostHint,
@@ -269,9 +269,10 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.hide_frosted_overlay(super::frosted_overlay_window::FrostedOverlay::BoostHint, cx);
         if self
             .boosts()
-            .is_some_and(|boosts| boosts["hint"].is_object())
+            .is_some_and(|boosts| boost_hint_visible(&boosts["hint"]))
         {
             self.invoke(json!({"type": "dismissBoostHint"}), cx);
         }
@@ -283,6 +284,7 @@ impl NativeChatView {
     /// The callout's Show me, from its own window: the menu opens on the chat's next frame, which
     /// has the chat's window.
     pub(super) fn request_boost_menu(&mut self, cx: &mut Context<Self>) {
+        self.hide_frosted_overlay(super::frosted_overlay_window::FrostedOverlay::BoostHint, cx);
         self.invoke(json!({"type": "dismissBoostHint"}), cx);
         self.boost_menu_requested = true;
         cx.notify();
@@ -966,6 +968,12 @@ fn callout_frame(pill: Bounds<Pixels>, s: f32) -> Bounds<Pixels> {
     Bounds::new(origin, size)
 }
 
+/// Whether `hint` carries visible copy (`title` or `text`). Never draw an empty callout.
+pub(super) fn boost_hint_visible(hint: &Value) -> bool {
+    hint.is_object()
+        && (!text(hint, "title").trim().is_empty() || !text(hint, "text").trim().is_empty())
+}
+
 /// The callout bubble, drawn in its own frosted window (frosted_overlay_window.rs): the sparkles,
 /// "New: Boosts" and one line, Show me and an x.
 pub(super) fn boost_callout(
@@ -973,14 +981,24 @@ pub(super) fn boost_callout(
     hint: &Value,
     p: &ChatAppearance,
 ) -> AnyElement {
+    if !boost_hint_visible(hint) {
+        return div().into_any_element();
+    }
     let s = p.scale;
     let tone = accent(p.light);
+    let title = text(hint, "title");
+    let body = text(hint, "text");
+    let fill = if p.window_glass && !cfg!(ghostex_web) {
+        p.menu_surface()
+    } else {
+        p.over_content_fill(p.menu_opaque())
+    };
     let show = chat.clone();
     let close = chat;
     div()
         .id("boost-callout")
         .role(gpui::Role::Status)
-        .aria_label(format!("{}. {}", text(hint, "title"), text(hint, "text")))
+        .aria_label(format!("{title}. {body}"))
         .size_full()
         .flex()
         .items_center()
@@ -989,6 +1007,8 @@ pub(super) fn boost_callout(
         .rounded(px(12.0 * s))
         .border(px(s))
         .border_color(p.foreground.opacity(0.12))
+        .bg(fill)
+        .font_family(p.font.clone())
         .child(
             svg()
                 .path("titlebar/sparkles.svg")
@@ -1002,22 +1022,26 @@ pub(super) fn boost_callout(
                 .flex_col()
                 .flex_1()
                 .min_w_0()
-                .child(
-                    div()
-                        .text_size(px(13.0 * s))
-                        .line_height(px(17.0 * s))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(p.foreground)
-                        .child(text(hint, "title")),
-                )
-                .child(
-                    div()
-                        .truncate()
-                        .text_size(px(12.0 * s))
-                        .line_height(px(16.0 * s))
-                        .text_color(p.card_muted)
-                        .child(text(hint, "text")),
-                ),
+                .when(!title.trim().is_empty(), |col| {
+                    col.child(
+                        div()
+                            .text_size(px(13.0 * s))
+                            .line_height(px(17.0 * s))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(p.foreground)
+                            .child(title),
+                    )
+                })
+                .when(!body.trim().is_empty(), |col| {
+                    col.child(
+                        div()
+                            .truncate()
+                            .text_size(px(12.0 * s))
+                            .line_height(px(16.0 * s))
+                            .text_color(p.card_muted)
+                            .child(body),
+                    )
+                }),
         )
         .child(
             div()
@@ -1059,7 +1083,11 @@ pub(super) fn boost_callout(
                 )
                 .on_click(move |_, _, cx| {
                     let _ = close.update(cx, |chat, cx| {
-                        chat.invoke(json!({"type": "dismissBoostHint"}), cx)
+                        chat.hide_frosted_overlay(
+                            super::frosted_overlay_window::FrostedOverlay::BoostHint,
+                            cx,
+                        );
+                        chat.invoke(json!({"type": "dismissBoostHint"}), cx);
                     });
                 }),
         )
