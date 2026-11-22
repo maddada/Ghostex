@@ -606,10 +606,14 @@ pub(crate) fn done_answer_key(item: &Value) -> Option<String> {
     // A Needs you item promoted because an attached thread genuinely needs the user never gets a
     // bare Done button: it renders its thread-wait row with a direct Open action instead (Q4477).
     let thread_waiting = waiting_user_thread(item).is_some();
+    // Once Done is recorded (`saidDone`), the row clears from Needs you even against an older
+    // remote gxserver that kept status as `needs`.
+    let already_done = item["saidDone"] == true;
     (text(item, "kind") == "item"
         && text(item, "status") == "needs"
         && !asks_open
-        && !thread_waiting)
+        && !thread_waiting
+        && !already_done)
         .then(|| format!("work-done:{}:{}", text(item, "ref"), text(item, "at")))
 }
 

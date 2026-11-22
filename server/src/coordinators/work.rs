@@ -473,7 +473,7 @@ pub fn raised_for_user_since(items: &[WorkItem], since: DateTime<Utc>) -> bool {
         |at: &str| DateTime::parse_from_rfc3339(at).is_ok_and(|at| at.with_timezone(&Utc) >= since);
     items
         .iter()
-        .filter(|item| item.finished_at.is_none() && item.dropped_at.is_none())
+        .filter(|item| item.dropped_at.is_none())
         .any(|item| {
             if item
                 .asks
@@ -482,7 +482,11 @@ pub fn raised_for_user_since(items: &[WorkItem], since: DateTime<Utc>) -> bool {
             {
                 return true;
             }
-            if !matches!(item.status.as_str(), "needs" | "blocked") {
+            if item.finished_at.is_some()
+                || !matches!(item.status.as_str(), "needs" | "blocked")
+                || said_done(item)
+                || finished_before_asks(item)
+            {
                 return false;
             }
             // When it last entered its current status (the event whose status changed to it).
@@ -1010,7 +1014,15 @@ pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Valu
         }
         return context.coordinator_on(item);
     }
-    if item.asks.iter().any(WorkAsk::is_open) || item.status == "needs" {
+    if item.asks.iter().any(WorkAsk::is_open) {
+        return ("needs", you());
+    }
+    if item.status == "needs" {
+        // A done item whose post-done asks are all closed, or a Needs you item the user already
+        // cleared with Done, never stays under Needs you with no open ask.
+        if said_done(item) || finished_before_asks(item) {
+            return ("finished", nobody());
+        }
         return ("needs", you());
     }
     ("later", nobody())
@@ -1464,11 +1476,12 @@ pub fn work_value(
     let mut rows: Vec<Value> = items
         .iter()
         .filter(|item| {
-            all || item
-                .finished_at
-                .as_deref()
-                .or(item.dropped_at.as_deref())
-                .is_none_or(|at| recent(at, now, PANEL_RECENT_DAYS))
+            all || (item.dropped_at.is_none() && item.asks.iter().any(WorkAsk::is_open))
+                || item
+                    .finished_at
+                    .as_deref()
+                    .or(item.dropped_at.as_deref())
+                    .is_none_or(|at| recent(at, now, PANEL_RECENT_DAYS))
         })
         .map(|item| {
             let mut row = item_value(
@@ -1668,11 +1681,22 @@ fn withdraw_open_asks(item: &mut WorkItem, at: &str) {
     }
 }
 
+/// Whether the item was already marked done and only post-done asks/answers followed (never
+/// reopened by `now`, `wait`, `status` or `restore`).
+fn finished_before_asks(item: &WorkItem) -> bool {
+    let Some(done_index) = item.history.iter().rposition(|event| event.kind == "done") else {
+        return false;
+    };
+    item.history[done_index + 1..].iter().all(|event| {
+        matches!(event.kind.as_str(), "ask" | "answer" | "settle" | "reply")
+    })
+}
+
 /// After an ask settles: an item that was only waiting on the user (Needs you by the
 /// coordinator's word) is finished once nothing is asked any more, as an answered board card was.
 fn finish_if_only_asking(item: &mut WorkItem, at: &str) {
     if item.status == "needs"
-        && item.threads.is_empty()
+        && (item.threads.is_empty() || finished_before_asks(item))
         && !item.asks.is_empty()
         && item.asks.iter().all(|ask| !ask.is_open())
     {
@@ -1914,10 +1938,9 @@ pub fn handle_work_request(
                     .and_then(|thread| serde_json::from_value(thread.clone()).ok()),
                 ..WorkAsk::default()
             });
-            item.finished_at = None;
-            if item.status == "finished" {
-                item.status = "needs".to_string();
-            }
+            // Keep a finished item finished: its open ask still shows under Needs you (or Blocked
+            // with --holds) in the dock and Work panel until answered or withdrawn, and keeping
+            // finished status ensures settling the ask never leaves the item stuck in Needs you.
             item.record("ask", format!("{tag}: {words}"), &now);
         }
         "wait" => {
@@ -2025,9 +2048,12 @@ pub fn handle_work_request(
             // Mention: "why don't i see a button to say All good on this task???? please fix for
             // always". Every Needs you item with no open question offers Done.
             if wanted.is_none() && given == "Done" && !item.asks.iter().any(WorkAsk::is_open) {
-                if said_done(&item) {
+                if said_done(&item) || item.finished_at.is_some() || item.status == "finished" {
                     return Err(bad(format!("{name} was already answered: Done.")));
                 }
+                item.status = "finished".to_string();
+                item.finished_at = Some(now.clone());
+                item.waits.clear();
                 item.record("answer", "Done", &now);
                 write_work_item(db, key, &item)?;
                 prune(db, key)?;
@@ -2428,13 +2454,15 @@ pub fn settle_chat_replies(
 pub fn has_question_items(db: &Connection, key: &SessionKey) -> bool {
     list_work_items(db, key).is_ok_and(|items| {
         items.iter().any(|item| {
-            item.finished_at.is_none()
-                && item.dropped_at.is_none()
+            item.dropped_at.is_none()
                 && (item
                     .asks
                     .iter()
                     .any(|ask| ask.is_open() && !item.question_tags(Some(ask)).is_empty())
-                    || (item.status == "needs"
+                    || (item.finished_at.is_none()
+                        && item.status == "needs"
+                        && !said_done(item)
+                        && !finished_before_asks(item)
                         && item.asks.is_empty()
                         && !item.question_tags(None).is_empty()))
         })

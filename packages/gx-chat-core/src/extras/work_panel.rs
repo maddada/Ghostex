@@ -385,12 +385,12 @@ pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
     let mut mentions = Map::new();
     let all_items: Vec<&Value> = work["items"].as_array().into_iter().flatten().collect();
     for item in work["items"].as_array().into_iter().flatten() {
-        let status = text(item, "status");
-        if status == "dropped" {
+        let raw_status = text(item, "status");
+        if raw_status == "dropped" {
             continue;
         }
-        let group = group_of(status);
         if item["kind"] == "thread" {
+            let group = group_of(raw_status);
             push(group, thread_row(item, group, now_ms));
             continue;
         }
@@ -403,6 +403,19 @@ pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
             .flatten()
             .filter(|ask| ask["open"] == true)
             .collect();
+        // Against an older remote gxserver that kept `status == "needs"` with `saidDone: true`
+        // after the user pressed Done on an item with no open ask or waiting thread, treat it as
+        // finished so the dock, Work panel and Needs you count all clear it together.
+        let status = if raw_status == "needs"
+            && open_asks.is_empty()
+            && item["saidDone"] == true
+            && crate::extras::work_cards::waiting_user_thread(item).is_none()
+        {
+            "finished"
+        } else {
+            raw_status
+        };
+        let group = group_of(status);
         for ask in &open_asks {
             push(
                 if snoozed_at(ask, now_ms) {
