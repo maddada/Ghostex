@@ -817,7 +817,7 @@ impl ThreadScreenWait {
 /// account without a saved login, a usage limit, an agent that exited.
 fn screen_fix(notice: &SessionChatTerminalNotice, thread_ref: &str) -> Option<String> {
     let switch = format!(
-        "run `ghostex accounts`, then `ghostex agents switch-account {thread_ref} --account <number>` with a ready account that has room; it resumes the same conversation there"
+        "run `ghostex accounts status`, then `ghostex agents switch-account {thread_ref} --account <number>` with an account it says you may switch to (\"yes\"); it resumes the same conversation there"
     );
     if notice.missing_login() {
         let slot = notice

@@ -153,8 +153,8 @@ Healing is your job; Ghostex never interrupts or reloads a thread itself:
    accounts you may move it to ("yes"); move it only there with
    `ghostex agents switch-account <thread ref> --account <number>` (`--force` ends a running turn;
    then send "." so it carries on). Never pick a "manual only" account unless the user named that
-   account in this request; then add `--user-named`. When no account works, tell the user which one
-   to sign in to.
+   account in this request; then add `--user-named` (the same for `start-thread --account`). When
+   no account works, tell the user which one to sign in to.
 6. Tell the user only when you moved or reloaded a thread, or healing failed.
 
 Two traps: Claude Code draws a faint guess at the next message in an empty input box; nobody typed

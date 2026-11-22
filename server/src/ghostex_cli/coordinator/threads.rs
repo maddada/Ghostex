@@ -222,8 +222,13 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         create["agentEffort"] = json!(effort);
     }
     // gxserver resolves and checks it the way switch-account does (accounts/launch.rs `requested_account`).
+    // `--user-named`: the user named this account, so a manual-only one is allowed (refused
+    // otherwise, as switch-account refuses it).
     if let Some(account) = flag_text(&parsed.flags, "account") {
         create["account"] = json!(account);
+        if parsed.flags.truthy("userNamed") {
+            create["accountUserNamed"] = json!(true);
+        }
     }
     // `--read-only`: gxserver starts the agent in its read-only mode, or refuses an agent that has
     // none (CDXC:Coordinators 2026-11-13 in server/src/coordinators/read_only.rs).

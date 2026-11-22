@@ -266,6 +266,8 @@ pub(crate) fn normalize_worktree_session_create_request(
         "markedHandovers",
         crate::coordinators::READ_ONLY_THREAD_PARAM,
         crate::agents::codex_lean::COORDINATOR_THREAD_KEY,
+        // `start-thread --account <n> --user-named` (accounts/launch.rs `requested_account`).
+        "accountUserNamed",
     ] {
         if params.get(key).and_then(Value::as_bool) == Some(true) {
             agent_session_params.insert(key.to_string(), Value::Bool(true));

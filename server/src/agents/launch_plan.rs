@@ -39,8 +39,15 @@ pub(crate) fn check_requested_account(
         icon.as_deref(),
         command.as_deref(),
         &wanted,
+        account_user_named(params),
     )
     .map(|_| ())
+}
+
+/// `accountUserNamed`: the user named the create's `account` (`start-thread --user-named`), so a
+/// manual-only account is allowed (accounts/launch.rs `requested_account`).
+pub(crate) fn account_user_named(params: &Map<String, Value>) -> bool {
+    params.get("accountUserNamed").and_then(Value::as_bool) == Some(true)
 }
 
 /// The CLI family (`claude`, `codex`…) of the agent a create starts, read from the same agent
@@ -222,6 +229,7 @@ pub(crate) fn create_agent_session_params_for_project(
             agent_icon.as_deref(),
             configured_command.as_deref(),
             &wanted,
+            account_user_named(params),
         )?;
         runtime_settings.insert("accountId".to_string(), json!(id));
     } else if agentbox_provider.is_none() && !runtime_settings.contains_key("accountId") {

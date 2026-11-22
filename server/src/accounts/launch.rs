@@ -204,12 +204,17 @@ pub(crate) fn provider(project: &Value, session: &Value) -> Option<Provider> {
     }
 }
 /// The saved account a new session of this agent starts on when its creator names one (`ghostex coordinator start-thread --account`): its number, email or id, resolved and refused the way `switch-account` does.
+/// CDXC:Coordinators 2026-11-22 DECISION: like `switch-account`, a manual-only account is refused
+/// unless `user_named` says the user named it (`start-thread --account <n> --user-named`, the
+/// create's `accountUserNamed`), so a coordinator can't start threads on the user's manual-only
+/// account on its own (cli.rs `resolve_ready_account`).
 pub(crate) fn requested_account(
     db: &Connection,
     agent_id: &str,
     icon: Option<&str>,
     command: Option<&str>,
     wanted: &str,
+    user_named: bool,
 ) -> Result<String, DomainStateError> {
     let provider = agent_provider(agent_id, icon).ok_or_else(|| {
         DomainStateError::bad_request(
@@ -238,10 +243,8 @@ pub(crate) fn requested_account(
         }
     }
     let snapshot = super::runtime::current_snapshot();
-    // The creator named this account itself, so a manual-only one is not refused here (only
-    // `switch-account` asks for `--user-named`; the playbook keeps coordinators off them).
     let (account, _) =
-        super::cli::resolve_ready_account(&registry, &snapshot, provider, wanted, true)?;
+        super::cli::resolve_ready_account(&registry, &snapshot, provider, wanted, user_named)?;
     Ok(account.id.clone())
 }
 /// The account provider of a launcher agent, read the way `apply_new_session` reads it: the icon family, else the agent id.
