@@ -636,8 +636,25 @@ fn list(parsed: &ParsedArgs) -> CliResult<()> {
 /// `next-tag`: the next free question tag, one past the highest the coordinator's chat or its work
 /// items used (server/src/session_chat_open_questions.rs `read_question_tags`), so a coordinator
 /// that lost count (a context compaction) never reuses one (issue #579).
+///
+/// CDXC:Coordinators 2026-11-22 WHY: briefs tell threads to take question tags from `next-tag`,
+/// but run in a thread it read the thread's own chat and answered Q1 (Q4388 was next). Without
+/// `--coordinator`, a thread now gets its coordinator's next tag: `readCoordinator` on a thread's
+/// key answers with its coordinator (endpoint.rs `resolve_coordinator`); any other session keeps
+/// its own.
 fn next_tag(parsed: &ParsedArgs) -> CliResult<()> {
-    let (coordinator, flags) = target_coordinator(parsed)?;
+    let (mut coordinator, flags) = target_coordinator(parsed)?;
+    let named = ["coordinator", "orchestrator", "session"]
+        .iter()
+        .any(|key| flag_text(&parsed.flags, key).is_some());
+    if !named {
+        if let Ok(view) = read_view(&coordinator, &flags) {
+            let owner = &view["coordinator"];
+            if !agents::text(owner, "sessionId").is_empty() {
+                coordinator = owner.clone();
+            }
+        }
+    }
     let tags = call_gxserver_rpc(
         "/api/readSessionChatQuestionTags",
         &json!({
