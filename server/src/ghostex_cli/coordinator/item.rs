@@ -131,7 +131,34 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
     }
     let json_out = switch(parsed, "json", &mut words);
     let all = switch(parsed, "all", &mut words);
+    let check = switch(parsed, "check", &mut words);
     match verb {
+        "list" | "show" if check => {
+            params.insert("op".into(), json!("list"));
+            params.insert("all".into(), json!(false));
+            let work = call_gxserver_rpc("/api/coordinatorWork", &Value::Object(params), &flags)?;
+            let problems = turn_problems(&work);
+            if json_out {
+                print_json(&json!({
+                    "ok": true,
+                    "clear": problems.is_empty(),
+                    "problems": problems.iter().map(|problem| json!({
+                        "ref": problem.reference,
+                        "title": problem.title,
+                        "kind": problem.kind,
+                        "detail": problem.detail,
+                        "fix": PROBLEM_KINDS
+                            .iter()
+                            .find(|(kind, ..)| *kind == problem.kind)
+                            .map(|(_, _, _, fix)| fix.replace("W<n>", &problem.reference)),
+                    })).collect::<Vec<_>>(),
+                    "counts": work["counts"],
+                }));
+            } else {
+                print_check(&work, &problems);
+            }
+            return Ok(());
+        }
         "list" | "show" => {
             params.insert("op".into(), json!("list"));
             params.insert("all".into(), json!(all || !words.is_empty()));
@@ -658,4 +685,153 @@ fn print_list(work: &Value, all: bool) {
     if !notice.is_empty() {
         println!("\n{notice}");
     }
+}
+
+/// One thing the end-of-turn check finds on an item.
+pub(super) struct Problem {
+    /// `delivered`, `idle`, `mine`, `recheck` or `quiet`.
+    pub kind: &'static str,
+    pub reference: String,
+    pub title: String,
+    /// What Ghostex said about it: the delivered event, the recheck reason, the quiet threads.
+    pub detail: String,
+}
+
+/// The end-of-turn problem kinds in the order `--check` prints them: a heading, the words
+/// `status` uses for "Needs a look", and the commands that settle one (`W<n>` stands for its item).
+pub(super) const PROBLEM_KINDS: [(&str, &str, &str, &str); 5] = [
+    (
+        "delivered",
+        "Delivered (what it waited on happened)",
+        "delivered",
+        "Check it shipped: item done W<n> \"<what; where it shipped>\", else item wait W<n> --on ...",
+    ),
+    (
+        "idle",
+        "Not being worked on (In progress, no thread on it)",
+        "not being worked on",
+        "Done? item done W<n> \"<what>\"; else item wait W<n> --on ..., item ask W<n>, or item now W<n>.",
+    ),
+    (
+        "mine",
+        "In progress on you, no thread on it (nobody's once your turn ends)",
+        "In progress on you",
+        "item done W<n> \"<what>\", item wait W<n> --on ..., item ask W<n>, or start a thread on it.",
+    ),
+    (
+        "recheck",
+        "Due a recheck",
+        "due a recheck",
+        "Happened or shipped? item done W<n> \"<line>\"; else item wait W<n> --on ... or item edit W<n> --status parked. Any item command counts as a recheck.",
+    ),
+    (
+        "quiet",
+        "A thread on it is not moving, even after Ghostex nudged it",
+        "with a thread not moving",
+        "Heal it: ghostex coordinator thread <ref>.",
+    ),
+];
+
+/// CDXC:Coordinators 2026-11-22 DECISION:
+/// User (context-bloat page, fix 6): before every turn end the playbook had the coordinator read
+/// the whole `item list` (5 to 15 KB, every item with every thread it ever had) to spot a few
+/// problems. `item list --check` prints only those, the playbook's end-of-turn rules: what it
+/// waited on was delivered, In progress with nobody on it (Not being worked on, or the
+/// coordinator's own In progress that ends with its turn), a Waiting or Later item due a recheck,
+/// and a thread on it that is not moving even after Ghostex nudged it. `coordinator status`
+/// prints the same list as its "Needs a look" line.
+pub(super) fn turn_problems(work: &Value) -> Vec<Problem> {
+    let mut problems = Vec::new();
+    for item in work["items"].as_array().into_iter().flatten() {
+        let mut add = |kind: &'static str, detail: &str| {
+            problems.push(Problem {
+                kind,
+                reference: agents::text(item, "ref").to_string(),
+                title: agents::text(item, "title").to_string(),
+                detail: detail.to_string(),
+            })
+        };
+        let delivered = agents::text(item, "delivered");
+        let status = agents::text(item, "status");
+        if !delivered.is_empty() {
+            add("delivered", delivered);
+        } else if status == "idle" {
+            add("idle", "");
+        } else if status == "moving" && item["owner"]["kind"] == "coordinator" {
+            add("mine", "");
+        }
+        let recheck = agents::text(item, "recheck");
+        if !recheck.is_empty() {
+            add("recheck", recheck);
+        }
+        let quiet = agents::text(item, "quiet");
+        if !quiet.is_empty() {
+            add("quiet", quiet);
+        }
+    }
+    problems
+}
+
+/// `item list --check`: the problems by kind, each kind's fix once, or one line saying all is
+/// clear with the counts.
+fn print_check(work: &Value, problems: &[Problem]) {
+    if problems.is_empty() {
+        let count = |status: &str| work["counts"][status].as_u64().unwrap_or(0);
+        let mut parts = vec![match count("moving") {
+            0 => "nothing in progress".to_string(),
+            moving => format!("{moving} in progress (each on a running thread)"),
+        }];
+        for (status, words) in [
+            ("waiting", "waiting (none due)"),
+            ("needs", "need you (each has its ask)"),
+            ("blocked", "blocked on you"),
+        ] {
+            if count(status) > 0 {
+                parts.push(format!("{} {words}", count(status)));
+            }
+        }
+        println!("Turn check: all clear. {}.", parts.join(", "));
+        return;
+    }
+    println!(
+        "Turn check: {} to fix before you end your turn:",
+        problems.len()
+    );
+    for (kind, heading, _, fix) in PROBLEM_KINDS {
+        let group: Vec<&Problem> = problems
+            .iter()
+            .filter(|problem| problem.kind == kind)
+            .collect();
+        if group.is_empty() {
+            continue;
+        }
+        println!("  {heading}:");
+        for problem in &group {
+            let detail = if problem.detail.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", problem.detail)
+            };
+            println!(
+                "    {} {}{detail}",
+                problem.reference,
+                short_title(&problem.title, 50)
+            );
+        }
+        let fix = match group.as_slice() {
+            [one] => fix.replace("W<n>", &one.reference),
+            _ => fix.to_string(),
+        };
+        println!("    -> {fix}");
+    }
+}
+
+/// The title cut at `max` characters on a word, with "…" when it was cut.
+pub(super) fn short_title(title: &str, max: usize) -> String {
+    if title.chars().count() <= max {
+        return title.to_string();
+    }
+    let cut: String = title.chars().take(max).collect();
+    let cut = cut.rsplit_once(' ').map_or(cut.as_str(), |(head, _)| head);
+    format!("{}…", cut.trim_end_matches([',', ';', ':', ' ']))
 }
