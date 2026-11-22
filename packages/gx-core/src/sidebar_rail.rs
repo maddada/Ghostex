@@ -141,29 +141,215 @@ fn pinnable(key: &str) -> bool {
     rail_item(key).is_some() || rail_link_pin_id(key).is_some() || is_rail_separator_key(key)
 }
 
-/// The pinned items' keys, top to bottom: known items, saved links, and separators, each once.
-pub fn rail_pins(settings: &Map<String, Value>) -> Vec<String> {
+/// The section of the rail where a pinned entry sits: top (below Toggle sidebar, above ⋯) or
+/// bottom (above the foot's workspace and account usage buttons).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RailSection {
+    Top,
+    Bottom,
+}
+
+/// The sentinel entry inside `sidebarRailPins` separating top pins from bottom pins.
+///
+/// CDXC:Sidebar 2026-11-22 DECISION:
+/// User: "please allow me to pin things bottom of the sidebar or top of the sidebar anywhere i
+/// want there. i dont see separator that i can pin in the sidebar also please fix this too".
+/// Keeping `sidebarRailPins` as a flat JSON string array with an optional `"slot:bottom"` marker
+/// keeps older saved layouts working unchanged (arrays without the marker place all entries at the
+/// top), lets older builds skip the marker cleanly, and preserves existing settings migrations
+/// (`unpin_bell_from_saved_rail_pins`, `drop_retired_rail_pins`). When `bottom` is empty, the
+/// marker is omitted on save so top-only layouts keep the exact same JSON shape.
+pub const RAIL_BOTTOM_MARKER: &str = "slot:bottom";
+
+/// The rail's pinned entries split into its top and bottom groups, each in top-to-bottom order.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RailLayout {
+    pub top: Vec<String>,
+    pub bottom: Vec<String>,
+}
+
+impl RailLayout {
+    /// Every pinned key across top then bottom, without the section marker.
+    pub fn all(&self) -> Vec<String> {
+        let mut all = Vec::with_capacity(self.top.len() + self.bottom.len());
+        all.extend(self.top.iter().cloned());
+        all.extend(self.bottom.iter().cloned());
+        all
+    }
+
+    /// Whether `key` is pinned in either section.
+    pub fn contains(&self, key: &str) -> bool {
+        self.top.iter().any(|pin| pin == key) || self.bottom.iter().any(|pin| pin == key)
+    }
+
+    /// Which section and index within that section `key` sits at.
+    pub fn position(&self, key: &str) -> Option<(RailSection, usize)> {
+        if let Some(index) = self.top.iter().position(|pin| pin == key) {
+            return Some((RailSection::Top, index));
+        }
+        self.bottom
+            .iter()
+            .position(|pin| pin == key)
+            .map(|index| (RailSection::Bottom, index))
+    }
+
+    pub fn section(&self, section: RailSection) -> &[String] {
+        match section {
+            RailSection::Top => &self.top,
+            RailSection::Bottom => &self.bottom,
+        }
+    }
+
+    fn section_mut(&mut self, section: RailSection) -> &mut Vec<String> {
+        match section {
+            RailSection::Top => &mut self.top,
+            RailSection::Bottom => &mut self.bottom,
+        }
+    }
+
+    /// Next unused separator key (`sep:1`, `sep:2`, …) across both sections.
+    pub fn next_separator_key(&self) -> String {
+        next_rail_separator_key(&self.all())
+    }
+
+    /// This layout with `key` removed from both sections and, when `pinned`, appended to `section`.
+    pub fn with_pin(&self, key: &str, section: RailSection, pinned: bool) -> Self {
+        let mut next = self.without(key);
+        if pinned && pinnable(key) {
+            next.section_mut(section).push(key.to_string());
+        }
+        next
+    }
+
+    /// This layout with `key` removed from whichever section holds it.
+    pub fn without(&self, key: &str) -> Self {
+        Self {
+            top: self
+                .top
+                .iter()
+                .filter(|pin| pin.as_str() != key)
+                .cloned()
+                .collect(),
+            bottom: self
+                .bottom
+                .iter()
+                .filter(|pin| pin.as_str() != key)
+                .cloned()
+                .collect(),
+        }
+    }
+
+    /// This layout with `new_key` inserted right after `after_key` in the same section (or appended
+    /// to the top section when `after_key` is not pinned).
+    pub fn insert_after(&self, after_key: &str, new_key: &str) -> Self {
+        let mut next = self.without(new_key);
+        if !pinnable(new_key) {
+            return next;
+        }
+        match next.position(after_key) {
+            Some((section, index)) => next
+                .section_mut(section)
+                .insert(index + 1, new_key.to_string()),
+            None => next.top.push(new_key.to_string()),
+        }
+        next
+    }
+
+    /// This layout with `new_key` appended to `section`.
+    pub fn push_in(&self, section: RailSection, new_key: &str) -> Self {
+        self.with_pin(new_key, section, true)
+    }
+
+    /// This layout with `key` placed at `index` in `section` (counted in `section` without `key`).
+    pub fn moved_in_section(&self, key: &str, section: RailSection, index: usize) -> Self {
+        let mut next = self.without(key);
+        if !pinnable(key) {
+            return next;
+        }
+        let target = next.section_mut(section);
+        let at = index.min(target.len());
+        target.insert(at, key.to_string());
+        next
+    }
+
+    /// This layout with `key` dropped before `target_index` in `target_section` (or at the end of
+    /// `target_section` when `target_index >= section.len()`).
+    pub fn dropped(&self, key: &str, target_section: RailSection, target_index: usize) -> Self {
+        let to = match self.position(key) {
+            Some((from_section, from_index))
+                if from_section == target_section && from_index < target_index =>
+            {
+                target_index - 1
+            }
+            _ => target_index,
+        };
+        self.moved_in_section(key, target_section, to)
+    }
+
+    /// This layout with `key` moved to the end of `target_section`.
+    pub fn move_to_section(&self, key: &str, target_section: RailSection) -> Self {
+        self.with_pin(key, target_section, true)
+    }
+
+    /// Serializes this layout for `sidebarRailPins`. Omits `RAIL_BOTTOM_MARKER` when `bottom` is
+    /// empty so top-only layouts keep the exact legacy array format.
+    pub fn to_value(&self) -> Value {
+        let mut entries: Vec<Value> = self
+            .top
+            .iter()
+            .map(|key| Value::String(key.clone()))
+            .collect();
+        if !self.bottom.is_empty() {
+            entries.push(Value::String(RAIL_BOTTOM_MARKER.to_string()));
+            entries.extend(self.bottom.iter().map(|key| Value::String(key.clone())));
+        }
+        Value::Array(entries)
+    }
+}
+
+/// The rail's pinned layout (top and bottom groups): known items, saved links, and separators,
+/// each at most once across both groups.
+pub fn rail_layout(settings: &Map<String, Value>) -> RailLayout {
     let Some(saved) = settings
         .get(RAIL_PINS_SETTINGS_KEY)
         .and_then(Value::as_array)
     else {
-        return RAIL_DEFAULT_PINS
-            .iter()
-            .map(|key| key.to_string())
-            .collect();
+        return RailLayout {
+            top: RAIL_DEFAULT_PINS
+                .iter()
+                .map(|key| key.to_string())
+                .collect(),
+            bottom: Vec::new(),
+        };
     };
     let links = crate::custom_links::custom_links_from_settings(settings);
-    let mut pins: Vec<String> = Vec::new();
+    let mut layout = RailLayout::default();
+    let mut in_bottom = false;
     for key in saved.iter().filter_map(Value::as_str) {
+        if key == RAIL_BOTTOM_MARKER {
+            in_bottom = true;
+            continue;
+        }
         let known = match rail_link_pin_id(key) {
             Some(id) => links.iter().any(|link| link.id == id),
             None => rail_item(key).is_some() || is_rail_separator_key(key),
         };
-        if known && !pins.iter().any(|pin| pin == key) {
-            pins.push(key.to_string());
+        if known && !layout.contains(key) {
+            let target = if in_bottom {
+                &mut layout.bottom
+            } else {
+                &mut layout.top
+            };
+            target.push(key.to_string());
         }
     }
-    pins
+    layout
+}
+
+/// The pinned items' keys, top to bottom across both groups: known items, saved links, and
+/// separators, each once.
+pub fn rail_pins(settings: &Map<String, Value>) -> Vec<String> {
+    rail_layout(settings).all()
 }
 
 /// `pins` with `key` pinned (at the end) or unpinned.

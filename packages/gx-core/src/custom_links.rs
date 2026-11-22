@@ -5,7 +5,7 @@
 //! User: "add the ability inside the 3 dots in the sidebar for the user to add any link they want. when they add it and click on that link then we show the browser expanded with that link open (almost exactly like we do for grok bot embed extension, only difference is we show the address bar like we do in the browser in the side panel and we don't hide it). useful for someone to add for example a link to their CLIProxyAPI and view it easily from inside ghostex ... not as part of any project since it's more meta". Follow-up same day: "Don't show links here, only in the 3 dots in the rail." The links are the computer's own, not a project's: `customLinks` in the settings file, each `{ "id", "name", "url" }`, in no Settings > Sync category, so a `localhost:8317` link stays on the computer it points at. The rail's ⋯ menu lists them under its own Links heading (favicon or globe, the name or else the address's host) with Add link… under them; the sidebar's ☰ main menu does not show them. A row opens its page in the sessions column's place the way Grok Bot's opens (apps/desktop/src/app/claude_web/takeover.rs), with the Browser toolbar always shown above it; its hover ⋯ and right-click open Edit…, Pin to rail / Unpin from rail, and Remove, the way the Unified filter's rows open their menus (`rowMenu`).
 //! SEE-ALSO: apps/desktop/src/app/custom_links/ (opening, the page, its bar), apps/desktop/src/app/window/custom_link_modal.rs (the Add link and Edit link dialog), apps/desktop/src/app/sidebar_rail/menu.rs.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::sidebar_menu::{MenuCommand, MenuItem};
 
@@ -260,23 +260,51 @@ pub fn custom_link_row_menu(row_menu: &Value) -> Option<Value> {
         MenuItem::row("Change icon…", "sparkles", command("changeIcon", Some(id))).to_json(),
     ];
     if let Some(pinned) = row_menu["pinned"].as_bool() {
-        rows.push(
-            MenuItem::row(
-                if pinned {
-                    "Unpin from rail"
-                } else {
-                    "Pin to rail"
-                },
-                if pinned { "pin-outline" } else { "pin-filled" },
-                MenuCommand::host(json!({
-                    "type": crate::sidebar_rail::RAIL_COMMAND_TYPE,
-                    "op": "pin",
-                    "key": crate::sidebar_rail::rail_link_pin_key(id),
-                    "pinned": !pinned,
-                })),
-            )
-            .to_json(),
-        );
+        let key = crate::sidebar_rail::rail_link_pin_key(id);
+        if pinned {
+            rows.push(
+                MenuItem::row(
+                    "Unpin from rail",
+                    "pin-outline",
+                    MenuCommand::host(json!({
+                        "type": crate::sidebar_rail::RAIL_COMMAND_TYPE,
+                        "op": "pin",
+                        "key": key,
+                        "pinned": false,
+                    })),
+                )
+                .to_json(),
+            );
+        } else {
+            rows.push(
+                MenuItem::row(
+                    "Pin to rail",
+                    "pin-filled",
+                    MenuCommand::host(json!({
+                        "type": crate::sidebar_rail::RAIL_COMMAND_TYPE,
+                        "op": "pin",
+                        "key": key,
+                        "pinned": true,
+                        "section": "top",
+                    })),
+                )
+                .to_json(),
+            );
+            rows.push(
+                MenuItem::row(
+                    "Pin to bottom",
+                    "pin-filled",
+                    MenuCommand::host(json!({
+                        "type": crate::sidebar_rail::RAIL_COMMAND_TYPE,
+                        "op": "pin",
+                        "key": key,
+                        "pinned": true,
+                        "section": "bottom",
+                    })),
+                )
+                .to_json(),
+            );
+        }
     }
     rows.push(
         MenuItem::row("Remove", "trash", command("remove", Some(id)))

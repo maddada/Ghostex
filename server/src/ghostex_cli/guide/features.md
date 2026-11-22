@@ -740,19 +740,23 @@ Settings > Extensions.
 The rail is a narrow column of icons at the window's left edge, left of the
 sidebar. It stays when you hide the sidebar. By default it holds Search,
 Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot (each only
-while its feature is on), then ⋯. The rail is for agents and hubs: its ⋯ menu,
-which opens right beside ⋯, lists those and Commands, Voice Call, Connect a
-Phone and Settings too. The side panel views (Files, Changes, Browser, Project
+while its feature is on), then ⋯. The rail is for agents, hubs and your own links:
+its ⋯ menu, which opens right beside ⋯, lists those, Commands, Voice Call,
+Links and Layout (Add separator / Add separator at bottom). The side panel views (Files, Changes, Browser, Project
 Board, Dev servers, Resources, Extensions) are not on the rail, not even while
 one is open, and Notifications is not either: the bell is in the sidebar's top
 bar. Views or a bell pinned by an earlier version come off the rail once.
 Point at a row and an outline pin shows at its right: click it to put the item
-on the rail; click the filled pin to take it off. Drag icons on the rail into
-your own order, or right-click one to move it up or down or unpin it. Clicking a
+on the rail; click the filled pin to take it off. Drag any pinned icon, link or
+separator into any order in either the top group or the bottom group of the rail
+(a straight horizontal drop line shows where it will land), or right-click one to
+move it up, down, to the top or to the bottom, add a separator below it, or unpin
+it. Right-clicking empty space on the rail (or ⋯) also lets you add a separator
+to the top or bottom group or add a link. Clicking a
 row you have not pinned opens it at once. When that row opens a page (Hermes,
 Claude, Grok Bot, the Hubs or Voice Call), its icon shows on the rail under a
 dashed line, in an outline, while it is open, then leaves when you go
-elsewhere; Search, Commands, Settings and Connect a Phone just open. Agents Hub and All Automations open across the
+elsewhere; Search and Commands just open. Agents Hub and All Automations open across the
 whole window like Claude and Grok Bot: the sidebar, the side panel and the
 Commands pane step aside, and clicking the lit icon again (or showing the
 sidebar, or opening a session) brings them back as they were. Agents Hub opened
@@ -1126,15 +1130,20 @@ and Remove. A link also pins to the rail like any rail item from the pin button
 on its row in the rail's ⋯ menu. A pinned link shows its chosen icon or the
 site's icon (the globe until the page has been opened) with its name as the
 tooltip, opens its page on a click, drags into any order among the other pins,
-and its right-click menu has Edit…, Change icon…, Move up, Move down, Add
-separator and Unpin from rail. Right-clicking any pinned rail icon also offers
-**Add separator** to place a thin non-clickable divider line directly below it;
-separators drag to reorder like icons, have their own right-click menu with Add
-separator and Remove, and are saved in the rail order (`sep:<id>` in
-`sidebarRailPins`). Removing a link removes its pin. Links belong to no project,
+and its right-click menu has Edit…, Change icon…, Move up, Move down, Move to
+bottom (or Move to top), Add separator and Unpin from rail. You can add a
+separator from the rail's ⋯ menu (under Layout: **Add separator** / **Add
+separator at bottom**), by right-clicking empty space on the rail (or ⋯), or by
+right-clicking any pinned rail icon or separator. Separators are thin
+non-clickable divider lines that can live at the top or bottom of the rail, drag
+to reorder like icons, have their own right-click menu (Move up, Move down, Move
+to top / Move to bottom, Add separator and Remove), and are saved in the rail
+order (`sep:<id>` in `sidebarRailPins`, with `slot:bottom` marking bottom-group
+entries when any are present). Removing a link removes its pin. Links belong to no project,
 and they and their pins stay on this computer: they are in no Sync category,
 since an address like `localhost` means something else on another machine
-(`customLinks`, `sidebarRailPins` with `link:<id>` and `sep:<id>` entries). On
+(`customLinks`, `sidebarRailPins` with `link:<id>`, `sep:<id>` and optional
+`slot:bottom` entries). On
 the phone, ☰ › Links keeps its own list of saved links (with Copy links from a
 computer).
 **Group working sessions** (in the More menu's Sort & Filter page, and in
