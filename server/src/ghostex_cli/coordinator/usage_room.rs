@@ -36,7 +36,9 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Local, Utc};
 use serde_json::{json, Value};
 
-use crate::ghostex_cli::{agents, args::Flags, rpc::call_gxserver_rpc};
+use crate::ghostex_cli::{
+    accounts as accounts_cli, agents, args::Flags, rpc::call_gxserver_rpc,
+};
 
 /// An account at this share of its 7d window (or any window longer than 5h, such as a usage-only
 /// account's month) or more is close to out: days of work are gone when it fills.
@@ -93,11 +95,16 @@ pub(super) fn read(view: &Value, flags: &Flags) -> Value {
 /// One account as the summary weighs it.
 struct Account {
     name: String,
+    email: String,
+    state: String,
     usable: bool,
     /// Ready with room, but manual only: the user's to pick, never counted as room.
     manual_room: bool,
     /// Ghostex's automatic switching may pick it (ready or not).
     automatic: bool,
+    default: bool,
+    manual_only: bool,
+    no_usage_reading: bool,
     /// The fullest account-wide window's percent, `None` with no reading.
     used: Option<f64>,
     /// The fullest window that is not the 5h one (7d, a month), `None` with none.
@@ -105,6 +112,8 @@ struct Account {
     /// The 5h window's percent and when it resets, `None` with no 5h window.
     short: Option<(f64, Option<DateTime<Utc>>)>,
     windows: String,
+    windows_json: Vec<Value>,
+    resets: accounts_cli::LimitResetSummary,
     /// When a limited account's last full window resets.
     frees_at: Option<DateTime<Utc>>,
     updated_at: Option<DateTime<Utc>>,
@@ -177,21 +186,44 @@ fn account(row: &Value, now: DateTime<Utc>) -> Account {
     let usable = ready && automatic;
     let manual_room =
         ready && !automatic && row["loginExpired"] != true && used.is_none_or(|used| used < 100.0);
+    let email = agents::text(row, "email").to_string();
     let name = if usage_only {
-        let email = agents::text(row, "email");
         if email.is_empty() {
             agents::text(row, "name").to_string()
         } else {
-            email.to_string()
+            email.clone()
         }
     } else {
         format!("#{}", agents::text(row, "number"))
     };
+    let limited = row["limitReached"]
+        .as_array()
+        .is_some_and(|windows| !windows.is_empty());
+    let state = if usage_only {
+        match agents::text(row, "status") {
+            "loginRequired" => "sign-in".to_string(),
+            "loading" => "loading".to_string(),
+            other => other.to_string(),
+        }
+    } else if agents::text(row, "state") == "needsSignIn" || row["loginExpired"] == true {
+        "sign-in".to_string()
+    } else if limited {
+        "limit".to_string()
+    } else if agents::text(row, "state") == "ready" {
+        "ready".to_string()
+    } else {
+        agents::text(row, "state").to_string()
+    };
     Account {
         name,
+        email,
+        state,
         usable,
         manual_room,
         automatic,
+        default: !usage_only && row["default"] == true,
+        manual_only: !usage_only && row["registered"] == true && row["eligible"] != true,
+        no_usage_reading: !usage_only && row["noUsageReading"] == true,
         used,
         long,
         short,
@@ -206,6 +238,8 @@ fn account(row: &Value, now: DateTime<Utc>) -> Account {
             })
             .collect::<Vec<_>>()
             .join(", "),
+        windows_json: accounts_cli::account_windows_json(row),
+        resets: accounts_cli::limit_resets(row, now),
         frees_at: full.into_iter().max(),
         updated_at: parse_time(agents::text(row, "usageUpdatedAt")),
     }
@@ -278,6 +312,26 @@ pub(super) fn summarize(view: &Value, roster: &Value, now: DateTime<Utc>) -> Val
             .filter(|account| account.manual_room)
             .map(|account| json!({ "account": account.name, "windows": account.windows }))
             .collect();
+        let limit_resets_count: u64 = accounts.iter().map(|account| account.resets.count).sum();
+        let account_details: Vec<Value> = accounts
+            .iter()
+            .map(|account| {
+                let mut detail = json!({
+                    "account": account.name,
+                    "email": account.email,
+                    "state": account.state,
+                    "usable": account.usable,
+                    "default": account.default,
+                    "manualOnly": account.manual_only,
+                    "windows": account.windows_json,
+                    "limitResets": account.resets.to_json(),
+                });
+                if account.no_usage_reading {
+                    detail["noUsageReading"] = json!(true);
+                }
+                detail
+            })
+            .collect();
         // The accounts a thread could ever run on without asking: one usable account left of
         // several of those is a warning; manual-only and turned-off ones never were in the pool.
         let pool = accounts.iter().filter(|account| account.automatic).count();
@@ -306,6 +360,8 @@ pub(super) fn summarize(view: &Value, roster: &Value, now: DateTime<Utc>) -> Val
             })),
             "freesAt": frees_at.map(|at| at.to_rfc3339()),
             "manualRoom": manual_room,
+            "limitResetsCount": limit_resets_count,
+            "accountDetails": account_details,
             "usedBy": { "coordinator": coordinator, "threads": threads },
             "inUse": in_use,
             "flag": flag,
@@ -416,6 +472,49 @@ pub(super) fn print_compact(room: &Value) {
     print_room(room, true);
 }
 
+fn account_detail_line(detail: &Value, name_width: usize) -> String {
+    let account = agents::text(detail, "account");
+    let state = agents::text(detail, "state");
+    let windows = detail["windows"]
+        .as_array()
+        .map(|windows| accounts_cli::format_windows_json(windows))
+        .unwrap_or_default();
+    let room = if !windows.is_empty() {
+        windows
+    } else if state == "sign-in" {
+        "needs signing in".to_string()
+    } else if state == "loading" {
+        "no reading yet".to_string()
+    } else if detail["noUsageReading"] == true {
+        "no usage reading".to_string()
+    } else {
+        String::new()
+    };
+    let resets = accounts_cli::format_limit_resets_json(&detail["limitResets"]);
+    let mut parts = Vec::new();
+    if !room.is_empty() {
+        parts.push(room);
+    }
+    if let Some(resets) = resets {
+        parts.push(resets);
+    }
+    let mut tags = Vec::new();
+    if detail["default"] == true {
+        tags.push("default");
+    }
+    if detail["manualOnly"] == true {
+        tags.push("manual only");
+    }
+    let mut line = format!("    {account:<name_width$}  {state:<7}");
+    if !parts.is_empty() {
+        line.push_str(&format!("  {}", parts.join(" · ")));
+    }
+    if !tags.is_empty() {
+        line.push_str(&format!("  [{}]", tags.join(", ")));
+    }
+    line
+}
+
 fn print_room(room: &Value, compact: bool) {
     if let Some(error) = room["error"].as_str() {
         println!("Usage room: not read ({error}). ghostex accounts status lists every account.");
@@ -464,6 +563,15 @@ fn print_room(room: &Value, compact: bool) {
             agents::text(agent, "label"),
             room_text(agent, compact)
         );
+        if compact {
+            let resets = agent["limitResetsCount"].as_u64().unwrap_or(0);
+            if resets > 0 {
+                line.push_str(&format!(
+                    " · {resets} reset{}",
+                    if resets == 1 { "" } else { "s" }
+                ));
+            }
+        }
         if compact && !users.is_empty() {
             line.push_str(&format!(" [{}]", users_short(agent)));
         } else if !users.is_empty() {
@@ -471,6 +579,18 @@ fn print_room(room: &Value, compact: bool) {
         }
         line.push_str(&manual_text(agent));
         println!("{line}");
+        if !compact {
+            if let Some(details) = agent["accountDetails"].as_array() {
+                let name_width = details
+                    .iter()
+                    .map(|detail| agents::text(detail, "account").chars().count())
+                    .max()
+                    .unwrap_or(0);
+                for detail in details {
+                    println!("{}", account_detail_line(detail, name_width));
+                }
+            }
+        }
     }
     if !brief.is_empty() {
         println!("  {}", brief.join(" · "));
@@ -515,5 +635,8 @@ fn print_room(room: &Value, compact: bool) {
             if agent["usedBy"]["coordinator"] == true || agent["usedBy"]["threads"].as_u64() != Some(1) { "" } else { "s" },
             manual_text(agent),
         );
+    }
+    if !compact {
+        println!("Limit resets are the user's to use: never spend them.");
     }
 }

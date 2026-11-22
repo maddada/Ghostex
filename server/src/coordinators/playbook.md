@@ -162,7 +162,9 @@ one has, and who runs on it. LOW means every usable account of an agent in use h
 more, or its 5h at 95% or more with an hour or more before it resets; OUT means none has room.
 "(manual only: #2 has room, ask the user)" names one you may offer in the ask, never use on your own.
 A "Note: only one usable account is left" line is information, not a reason to ask.
-`ghostex accounts status` has every account's room and when a full one frees.
+`ghostex accounts status` and `ghostex coordinator status usage` have every account's room, when
+each window resets on its own, and any available limit resets with their expiry times (only the user
+spends resets).
 
 - Read it at the start of every request and whenever `status` prints LOW or OUT.
 - On LOW or OUT for the agent you run on, ask once, before it runs out, on the item the work belongs

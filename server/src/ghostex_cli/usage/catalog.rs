@@ -128,7 +128,11 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "accounts [--all] [--refresh] [--json]",
-            "List every Claude and Codex account with its state, usage and reset times, the default, and the sessions on it, then the Gemini (Antigravity), Cursor and Copilot usage",
+            "List every Claude and Codex account with its state, usage and reset times, available limit resets (read-only: resets are the user's to use), the default, and the sessions on it, then the Gemini (Antigravity), Cursor and Copilot usage",
+        ),
+        format_help_command(
+            "accounts status [--refresh] [--json]",
+            "One line per account: room with window reset times, available limit resets with each expiry (read-only: resets are the user's to use), and whether an agent may switch a thread to it",
         ),
         format_help_command(
             "accounts hub [list|add|update|remove]",

@@ -6,15 +6,23 @@ use super::{
 use serde_json::{json, Value};
 
 const HELP: &str = "Usage: ghostex accounts [--all] [--refresh] [--json] [--server <profile>]
-       ghostex accounts status [--refresh] [--json]   One line per account: its room and whether
-                                                     an agent may move a thread to it on its own
+       ghostex accounts status [--refresh] [--json]   One line per account: its room, window reset
+                                                      times, available limit resets with expiries,
+                                                      and whether an agent may move a thread to it
 
 Lists every saved Claude (Claude Swap) and Codex (Codex Swap) account: its number, email,
 state (ready, limitReached, needsSignIn, disabled when turned off in Settings; a ready account
 with no usage reading says so, noUsageReading in --json, and may be at its limit unseen), usage
-per window with reset times, which account new sessions use (default), and its running and
-sleeping sessions, with a count of stopped ones (--all lists those too). The same reading Settings > Accounts shows; --refresh reads usage
-again instead of using a reading up to two minutes old.
+per window with reset times, available limit resets with their expiry times, which account new
+sessions use (default), and its running and sleeping sessions, with a count of stopped ones (--all
+lists those too). The same reading Settings > Accounts shows; --refresh reads usage again instead
+of using a reading up to two minutes old.
+
+`accounts status` prints one line per account with its 5h/7d window reset times, any available
+limit resets and when each expires (local time), and whether an agent may switch a thread to it.
+With --json, each account includes structured `windows` (with `resetsAt`) and `limitResets`
+(`count` and `resets` with `expiresAt`). Limit resets are read-only here and are the user's to
+use: no CLI command spends them.
 
 Then the accounts Ghostex reads only for their usage (Settings > Accounts): Gemini, whose
 quota is what Antigravity runs on, Cursor and Copilot, with their state (ready, needsSignIn,
@@ -303,9 +311,10 @@ fn resets_line(row: &Value) -> Option<String> {
 /// CDXC:Coordinators 2026-11-22 DECISION:
 /// User (context-bloat page, fix 4): `ghostex accounts` printed 312 lines, 307 of them the
 /// sessions on each account, when a coordinator needs five: which account it may move a thread
-/// to. `accounts status` prints one line per account with its room and that answer, from the
-/// roster's `autoSwitchable` (Ghostex's own automatic switching rule, `SavedAccount::
-/// auto_switchable`): manual only is the user's to name, turned off or signed out is never.
+/// to. `accounts status` prints one line per account with its room, window reset times, available
+/// limit resets with each expiry, and that answer, from the roster's `autoSwitchable` (Ghostex's
+/// own automatic switching rule, `SavedAccount::auto_switchable`): manual only is the user's to
+/// name, turned off or signed out is never. Limit resets are read-only and are the user's to use.
 /// SEE-ALSO: server/src/accounts/cli.rs (`roster`, `resolve_ready_account`),
 /// server/src/ghostex_cli/coordinator/usage_room.rs, server/src/coordinators/playbook.md.
 fn print_status(roster: &Value, json_output: bool) -> CliResult<()> {
@@ -356,25 +365,29 @@ fn print_status(roster: &Value, json_output: bool) -> CliResult<()> {
                 "no, the user must sign in".into(),
             );
         }
-        let room = compact_usage(row);
+        let room = account_windows_text(row);
         if limited {
-            let at = frees.unwrap_or_default();
-            let room = format!(
-                "{}{}",
-                row["limitReached"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .map(|window| format!("{window} 100%"))
-                    .collect::<Vec<_>>()
-                    .join(" · "),
-                if at.is_empty() {
-                    String::new()
-                } else {
-                    format!(", frees {at}")
-                }
-            );
+            let room = if !room.is_empty() {
+                room
+            } else {
+                let at = frees.unwrap_or_default();
+                format!(
+                    "{}{}",
+                    row["limitReached"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                        .map(|window| format!("{window} 100%"))
+                        .collect::<Vec<_>>()
+                        .join(" · "),
+                    if at.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", frees {at}")
+                    }
+                )
+            };
             return (
                 "limit",
                 room,
@@ -411,6 +424,8 @@ fn print_status(roster: &Value, json_output: bool) -> CliResult<()> {
             .iter()
             .map(|row| {
                 let (state, room, answer) = verdict(row);
+                let windows = account_windows_json(row);
+                let resets = limit_resets(row, now).to_json();
                 json!({
                     "provider": row["provider"],
                     "number": row["number"],
@@ -418,6 +433,8 @@ fn print_status(roster: &Value, json_output: bool) -> CliResult<()> {
                     "default": row["default"] == true,
                     "state": state,
                     "room": room,
+                    "windows": windows,
+                    "limitResets": resets,
                     "maySwitch": answer.starts_with("yes"),
                     "manualOnly": row["registered"] == true && row["eligible"] != true,
                     "answer": answer,
@@ -427,11 +444,13 @@ fn print_status(roster: &Value, json_output: bool) -> CliResult<()> {
         let usage: Vec<Value> = usage_rows
             .iter()
             .map(|row| {
+                let windows = account_windows_json(row);
                 json!({
                     "provider": row["provider"],
                     "email": row["email"],
                     "status": row["status"],
-                    "room": compact_usage(row),
+                    "room": format_windows_json(&windows),
+                    "windows": windows,
                 })
             })
             .collect();
@@ -478,13 +497,28 @@ fn print_status(roster: &Value, json_output: bool) -> CliResult<()> {
             .max()
             .unwrap_or(0);
         for (row, (state, room, answer)) in &lines {
-            println!(
-                "  #{:<2} {:<email_width$}  {:<7}  {:<28} {answer}",
-                row["number"].as_str().unwrap_or_default(),
-                label(row),
-                state,
-                room,
-            );
+            let resets = limit_resets(row, now).text();
+            let detail = match (room.is_empty(), resets) {
+                (true, Some(resets)) => resets,
+                (false, Some(resets)) => format!("{room} · {resets}"),
+                (false, None) => room.clone(),
+                (true, None) => String::new(),
+            };
+            if detail.is_empty() {
+                println!(
+                    "  #{:<2} {:<email_width$}  {:<7}  {answer}",
+                    row["number"].as_str().unwrap_or_default(),
+                    label(row),
+                    state,
+                );
+            } else {
+                println!(
+                    "  #{:<2} {:<email_width$}  {:<7}  {detail}  {answer}",
+                    row["number"].as_str().unwrap_or_default(),
+                    label(row),
+                    state,
+                );
+            }
         }
     }
     for (provider, heading) in [
@@ -498,15 +532,16 @@ fn print_status(roster: &Value, json_output: bool) -> CliResult<()> {
                 "loading" => "no reading yet",
                 other => other,
             };
-            println!(
-                "{heading:<21} {}  {status}  {}",
-                label(row),
-                compact_usage(row)
-            );
+            let room = account_windows_text(row);
+            if room.is_empty() {
+                println!("{heading:<21} {}  {status}", label(row));
+            } else {
+                println!("{heading:<21} {}  {status}  {room}", label(row));
+            }
         }
     }
     println!(
-        "Sessions per account: ghostex accounts. Limit resets are the user's: never spend them."
+        "Sessions per account: ghostex accounts. Limit resets are the user's to use: never spend them."
     );
     Ok(())
 }
@@ -518,20 +553,193 @@ fn label(row: &Value) -> &str {
     }
 }
 
-/// "5h 27% · 7d 4%": the account-wide windows only, without reset times.
-fn compact_usage(row: &Value) -> String {
+/// One available limit reset as reported by `accounts status` and `coordinator status usage`.
+pub(crate) struct LimitResetItem {
+    pub(crate) expires_at: Option<String>,
+    pub(crate) note: Option<String>,
+}
+
+/// Summary of an account's available limit resets, read-only.
+pub(crate) struct LimitResetSummary {
+    pub(crate) count: u64,
+    pub(crate) resets: Vec<LimitResetItem>,
+    pub(crate) error: Option<String>,
+}
+
+impl LimitResetSummary {
+    pub(crate) fn to_json(&self) -> Value {
+        let resets: Vec<Value> = self
+            .resets
+            .iter()
+            .map(|item| {
+                let mut entry = json!({ "expiresAt": item.expires_at });
+                if let Some(note) = &item.note {
+                    entry["note"] = json!(note);
+                }
+                entry
+            })
+            .collect();
+        let mut out = json!({
+            "count": self.count,
+            "resets": resets,
+        });
+        if let Some(error) = &self.error {
+            out["error"] = json!(error);
+        }
+        out
+    }
+
+    pub(crate) fn text(&self) -> Option<String> {
+        format_limit_resets_json(&self.to_json())
+    }
+}
+
+/// Reads an account's unexpired limit resets, soonest expiry first.
+pub(crate) fn limit_resets(row: &Value, now: chrono::DateTime<chrono::Utc>) -> LimitResetSummary {
+    let error = row["resetCreditsError"]
+        .as_str()
+        .filter(|error| !error.is_empty())
+        .map(str::to_string);
+    if let Some(details) = row["resetCreditDetails"].as_array() {
+        let mut items: Vec<(Option<chrono::DateTime<chrono::Utc>>, LimitResetItem)> = Vec::new();
+        for credit in details {
+            let expires_at = credit["expiresAt"]
+                .as_str()
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            let parsed = expires_at
+                .as_deref()
+                .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+                .map(|at| at.with_timezone(&chrono::Utc));
+            if parsed.is_some_and(|at| at <= now) {
+                continue;
+            }
+            let note = credit["note"]
+                .as_str()
+                .filter(|note| !note.is_empty())
+                .map(str::to_string);
+            items.push((parsed, LimitResetItem { expires_at, note }));
+        }
+        items.sort_by(|a, b| match (a.0, b.0) {
+            (Some(a), Some(b)) => a.cmp(&b),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        });
+        let resets: Vec<LimitResetItem> = items.into_iter().map(|(_, item)| item).collect();
+        return LimitResetSummary {
+            count: resets.len() as u64,
+            resets,
+            error,
+        };
+    }
+    let count = row["resetCredits"].as_u64().unwrap_or(0);
+    LimitResetSummary {
+        count,
+        resets: Vec::new(),
+        error,
+    }
+}
+
+/// Formats structured `limitResets` JSON into e.g. `"2 resets (expire Nov 24 18:00, Dec 1 09:00)"`.
+pub(crate) fn format_limit_resets_json(value: &Value) -> Option<String> {
+    let count = value["count"].as_u64().unwrap_or(0);
+    if count == 0 {
+        return None;
+    }
+    let noun = if count == 1 {
+        "1 reset".to_string()
+    } else {
+        format!("{count} resets")
+    };
+    let verb = if count == 1 { "expires" } else { "expire" };
+    let resets = value["resets"].as_array().map(Vec::as_slice).unwrap_or(&[]);
+    if resets.is_empty() {
+        return Some(format!("{noun} (expiry unavailable)"));
+    }
+    let mut any_expiry = false;
+    let mut any_paused = false;
+    let mut parts = Vec::with_capacity(resets.len());
+    for reset in resets {
+        let paused = reset["note"]
+            .as_str()
+            .is_some_and(|note| note.to_ascii_lowercase().contains("paused"));
+        any_paused |= paused;
+        let local = reset["expiresAt"]
+            .as_str()
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            .map(|at| {
+                at.with_timezone(&chrono::Local)
+                    .format("%b %-d %H:%M")
+                    .to_string()
+            });
+        match local {
+            Some(at) => {
+                any_expiry = true;
+                if paused {
+                    parts.push(format!("{at}, paused"));
+                } else {
+                    parts.push(at);
+                }
+            }
+            None => {
+                if paused {
+                    parts.push("no expiry, paused".to_string());
+                } else {
+                    parts.push("no expiry".to_string());
+                }
+            }
+        }
+    }
+    if !any_expiry && !any_paused {
+        return Some(format!("{noun} (no expiry)"));
+    }
+    Some(format!("{noun} ({verb} {})", parts.join(", ")))
+}
+
+/// Account-wide usage windows (excluding model-scoped windows and Extra usage), with `resetsAt`.
+pub(crate) fn account_windows_json(row: &Value) -> Vec<Value> {
     row["usage"]
         .as_array()
         .into_iter()
         .flatten()
         .filter(|window| window["model"].is_null() && window["id"] != "spend")
         .map(|window| {
-            format!(
+            json!({
+                "label": window["label"].as_str().unwrap_or_default(),
+                "usedPercent": window["usedPercent"],
+                "resetsAt": window["resetsAt"],
+            })
+        })
+        .collect()
+}
+
+/// `"5h 98% (resets Nov 22 15:00) · 7d 19% (resets Nov 27 10:00)"` from structured `windows` JSON.
+pub(crate) fn format_windows_json(windows: &[Value]) -> String {
+    windows
+        .iter()
+        .map(|window| {
+            let mut part = format!(
                 "{} {}%",
                 window["label"].as_str().unwrap_or_default(),
                 window["usedPercent"].as_f64().unwrap_or(0.0).round()
-            )
+            );
+            if let Some(at) = window["resetsAt"]
+                .as_str()
+                .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            {
+                part.push_str(&format!(
+                    " (resets {})",
+                    at.with_timezone(&chrono::Local).format("%b %-d %H:%M")
+                ));
+            }
+            part
         })
         .collect::<Vec<_>>()
         .join(" · ")
+}
+
+/// Account-wide windows with each window's local reset time.
+pub(crate) fn account_windows_text(row: &Value) -> String {
+    format_windows_json(&account_windows_json(row))
 }

@@ -170,7 +170,11 @@ STATUS
   agents you and your active threads run on, and a LOW or OUT line for an agent
   in use when every usable account is at 80% or more of its 7d window (or at
   95% or more of its 5h window with an hour or more to reset), or none is
-  usable; one usable account of several left is only a note.
+  usable; one usable account of several left is only a note. `status usage`
+  (and `status --full`) also prints one line per account with each window's
+  reset time and any available limit resets with their expiry times (`accountDetails`
+  under `usageRoom` with --json). Limit resets are read-only here and are the
+  user's to use: never spend them.
 
 THREADS
   start-thread creates an agent session in the coordinator's project, links it,

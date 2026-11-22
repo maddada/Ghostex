@@ -3687,7 +3687,13 @@ The same works from the command line, for you or an agent: `ghostex accounts`
 lists every Claude and Codex account with its state (ready, limit reached, needs
 sign-in), its usage per window with reset times, how many limit resets it has
 left and when the soonest expires (`resetCredits` and `resetCreditDetails` in
-`--json`), the default for new sessions and the sessions on it; `ghostex agents switch-account <session> --account
+`--json`), the default for new sessions and the sessions on it; `ghostex accounts status`
+prints one line per account with its room, window reset times, available limit
+resets with each expiry, and whether an agent may move a thread to it (`windows`
+and `limitResets` in `--json`), and `ghostex coordinator status usage` prints the
+same per-account room, window reset times and limit resets under each agent
+(`accountDetails` in `--json`); limit resets are read-only in the CLI and are the
+user's to use; `ghostex agents switch-account <session> --account
 <number or email>` moves a session to another account and resumes its
 conversation there, also when it could not start, and refuses an account that
 needs signing in (and a session in the middle of a turn, unless `--force` ends
