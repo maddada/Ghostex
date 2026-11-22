@@ -945,13 +945,14 @@ impl NativeChatView {
             - 5.0
             - 8.0
             - if collapsible { 24.0 + 6.0 } else { 0.0 };
+        let bar_font = crate::assets::chat_working::VISUAL.font_size;
         let named_width: f32 = counts
             .iter()
             .map(|(group, count)| {
                 14.0 + 5.0
-                    + dock_text_width(&count.to_string(), PROSE_SIZE, p, cx)
+                    + dock_text_width(&count.to_string(), bar_font, p, cx)
                     + 4.0
-                    + dock_text_width(name_of(group, *count), PROSE_SIZE, p, cx)
+                    + dock_text_width(name_of(group, *count), bar_font, p, cx)
             })
             .sum::<f32>()
             + 12.0 * counts.len().saturating_sub(1) as f32;
@@ -967,7 +968,7 @@ impl NativeChatView {
         let status_width = status_card.as_ref().map_or(0.0, |card| {
             24.0 + dock_text_width(
                 card["label"].as_str().unwrap_or_default(),
-                PROSE_SIZE,
+                bar_font,
                 p,
                 cx,
             ) + 12.0
@@ -1039,7 +1040,7 @@ impl NativeChatView {
             .gap(px(6.0 * s))
             .pl(px(12.0 * s))
             .pr(px(5.0 * s))
-            .text_size(px(PROSE_SIZE * s))
+            .text_size(px(bar_font * s))
             .line_height(px(19.0 * s))
             .whitespace_nowrap()
             .text_color(p.card_muted)

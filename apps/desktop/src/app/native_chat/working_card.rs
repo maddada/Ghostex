@@ -410,7 +410,7 @@ impl NativeChatView {
         let full = label.clone();
         let named = matches!(kind, "tool" | "activity");
         let (size, color, dim) = match look {
-            WorkingLineLook::Capsule if named => (13.0, p.foreground, p.muted),
+            WorkingLineLook::Capsule if named => (VISUAL.font_size, p.foreground, p.muted),
             WorkingLineLook::Capsule => (VISUAL.font_size, p.muted, p.muted),
             WorkingLineLook::Quiet if named => (quiet_work::TEXT_SIZE, p.muted, p.quiet_dim()),
             WorkingLineLook::Quiet => (quiet_work::TEXT_SIZE, p.quiet_dim(), p.quiet_dim()),
