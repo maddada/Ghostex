@@ -324,10 +324,12 @@ fn toml_string(value: &str) -> String {
 
 /// Codex in a permission profile that denies `folders`. A bypass launch (`--yolo`) would switch
 /// the sandbox off and with it the denies, so it becomes "never ask" in a profile that may write
-/// anywhere and reach the network, minus the denied folders; any other launch keeps Codex's
-/// workspace profile with the denies added.
+/// anywhere and reach the network, minus the denied folders; a `--sandbox read-only` launch keeps
+/// read-only + no network with the denies added; any other launch keeps Codex's workspace profile
+/// with the denies added.
 fn with_codex_denies(command: &str, folders: &[String]) -> String {
     let bypass = codex_bypass(command);
+    let read_only = !bypass && codex_read_only(command);
     let denies: Vec<String> = codex_paths(folders)
         .iter()
         .map(|folder| format!("{}=\"deny\"", toml_string(folder)))
@@ -335,6 +337,11 @@ fn with_codex_denies(command: &str, folders: &[String]) -> String {
     let profile = if bypass {
         format!(
             "{{filesystem={{\"/\"=\"write\", {}}}, network={{enabled=true}}}}",
+            denies.join(", ")
+        )
+    } else if read_only {
+        format!(
+            "{{filesystem={{\"/\"=\"read\", {}}}, network={{enabled=false}}}}",
             denies.join(", ")
         )
     } else {
@@ -357,6 +364,83 @@ fn with_codex_denies(command: &str, folders: &[String]) -> String {
         quote_shell_arg(&format!("permissions.{CODEX_PROFILE}={profile}")),
         quote_shell_arg(&format!("default_permissions=\"{CODEX_PROFILE}\""))
     )
+}
+
+/// Whether a Codex `command` explicitly asks for a read-only sandbox (`--sandbox read-only` / `-s read-only`).
+fn codex_read_only(command: &str) -> bool {
+    let tokens: Vec<&str> = command
+        .split_whitespace()
+        .map(|tok| tok.trim_matches(['"', '\'']))
+        .collect();
+    tokens.iter().enumerate().any(|(idx, tok)| {
+        *tok == "--sandbox=read-only"
+            || *tok == "-s=read-only"
+            || (matches!(*tok, "--sandbox" | "-s") && tokens.get(idx + 1) == Some(&"read-only"))
+    })
+}
+
+/// Server-side Claude `permissions.deny` rules for a Non-CLI session, computed directly from
+/// Ghostex's own settings (`homeSecretFolders`, `chief_shown()`, and `gxserver_private_paths()`
+/// for GBot API chats) instead of scraping any user/agent command string.
+pub(crate) fn claude_deny_rules_for_session(cwd: Option<&str>, gbot_api_chat: bool) -> Vec<Value> {
+    if cfg!(test) {
+        return Vec::new();
+    }
+    if gbot_api_chat {
+        let mut folders = home_secret_folders();
+        for path in gxserver_private_paths() {
+            if !folders.contains(&path) {
+                folders.push(path);
+            }
+        }
+        return claude_rules(&folders);
+    }
+    let at_home = cwd.is_some_and(crate::chief::is_home_folder) && crate::chief::chief_shown();
+    if !at_home {
+        return Vec::new();
+    }
+    let folders = home_secret_folders();
+    if folders.is_empty() {
+        return Vec::new();
+    }
+    claude_rules(&folders)
+}
+
+/// Server-side Codex deny paths for a Non-CLI session (`Some((is_api_chat, paths))` when a Ghostex
+/// deny profile applies, else `None`). Computed directly from Ghostex's structured flags and
+/// settings, never from a command string.
+pub(crate) fn codex_deny_paths_for_session(
+    cwd: Option<&str>,
+    gbot_chat: bool,
+    gbot_api_chat: bool,
+) -> Option<(bool, Vec<String>)> {
+    if cfg!(test) || cfg!(windows) {
+        return None;
+    }
+    if gbot_api_chat {
+        let mut folders = home_secret_folders();
+        for path in gxserver_private_paths() {
+            if !folders.contains(&path) {
+                folders.push(path);
+            }
+        }
+        return Some((true, codex_paths(&folders)));
+    }
+    let at_home = cwd.is_some_and(crate::chief::is_home_folder) && crate::chief::chief_shown();
+    if !at_home && !gbot_chat {
+        return None;
+    }
+    let folders = home_secret_folders();
+    if folders.is_empty() {
+        return None;
+    }
+    Some((false, codex_paths(&folders)))
+}
+
+/// Format a Codex TOML string literal (used by `driver_codex` when synthesizing Ghostex-generated
+/// permission profiles server-side).
+pub(crate) fn codex_toml_string(value: &str) -> String {
+    toml_string(value)
 }
 
 /// Whether a Codex `command` runs without its sandbox (`--yolo`).
@@ -389,14 +473,18 @@ fn without_flag(command: &str, flag: &str) -> String {
     out
 }
 
-/// Whether `runtime_settings` mark a GBot API chat (`runtimeSettings.gbot.openedBy` is
-/// `api:<keyId>`, server/src/gbots/api/chat.rs).
+/// Whether `runtime_settings` mark a GBot API chat (`runtimeSettings.gbot.openedBy` or
+/// `runtimeSettings.gbotHome.openedBy` is `api:<keyId>`, server/src/gbots/api/chat.rs).
 pub(crate) fn is_gbot_api_chat(runtime_settings: Option<&Map<String, Value>>) -> bool {
-    runtime_settings
-        .and_then(|runtime| runtime.get("gbot"))
-        .and_then(|gbot| gbot.get("openedBy"))
-        .and_then(Value::as_str)
-        .is_some_and(|by| by.starts_with("api:"))
+    runtime_settings.is_some_and(|runtime| {
+        ["gbot", "gbotHome"].iter().any(|key| {
+            runtime
+                .get(*key)
+                .and_then(|gbot| gbot.get("openedBy"))
+                .and_then(Value::as_str)
+                .is_some_and(|by| by.starts_with("api:"))
+        })
+    })
 }
 
 /// gxserver's own files an API chat is kept out of on top of the secret folders: its auth folder

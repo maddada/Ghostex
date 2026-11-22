@@ -29,7 +29,7 @@ use super::approval::{
 };
 use super::spec::{
     build_acp_server_argv, build_cli_switch_argv_with_options, spec_for_family,
-    transcript_path_for_session, AcpAgentSpec,
+    transcript_path_for_session, AcpAccountWrapper, AcpAgentSpec, AcpLaunchProfile,
 };
 
 const ACP_LOAD_TIMEOUT: Duration = Duration::from_secs(90);
@@ -89,6 +89,7 @@ pub(super) struct HostArgs {
     pub(super) writable_roots: Vec<PathBuf>,
     pub(super) model: Option<String>,
     pub(super) effort: Option<String>,
+    pub(super) profile: AcpLaunchProfile,
 }
 
 fn parse_args(args: &[String]) -> Result<HostArgs, String> {
@@ -101,6 +102,9 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
     let mut writable_roots = Vec::new();
     let mut model = None;
     let mut effort = None;
+    let mut wrapper_bin: Option<String> = None;
+    let mut wrapper_slot: Option<String> = None;
+    let mut profile = AcpLaunchProfile::default();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -139,12 +143,47 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
                 i += 1;
                 effort = args.get(i).cloned();
             }
+            "--account-wrapper-bin" => {
+                i += 1;
+                wrapper_bin = args.get(i).cloned();
+            }
+            "--account-wrapper-slot" => {
+                i += 1;
+                wrapper_slot = args.get(i).cloned();
+            }
+            "--hub-id" => {
+                i += 1;
+                profile.hub_id = args.get(i).cloned();
+            }
+            "--connector-env" => {
+                i += 1;
+                if let Some(pair) = args.get(i) {
+                    if let Some((k, v)) = pair.split_once('=') {
+                        profile.connector_envs.push((k.to_string(), v.to_string()));
+                    }
+                }
+            }
+            "--append-system-prompt-file" => {
+                i += 1;
+                profile.append_system_prompt_file = args.get(i).cloned();
+            }
+            "--developer-instructions" => {
+                i += 1;
+                profile.developer_instructions = args.get(i).cloned();
+            }
+            "--gbot-chat" => profile.gbot_chat = true,
+            "--gbot-api-chat" => profile.gbot_api_chat = true,
+            "--gbot-computer-use-off" => profile.gbot_computer_use_off = true,
+            "--lean-worker" => profile.lean_worker = true,
             other => return Err(format!("Unknown acp-host option: {other}")),
         }
         i += 1;
     }
     if family.is_empty() {
         return Err("acp-host requires --agent <family>.".to_string());
+    }
+    if let (Some(bin), Some(slot)) = (wrapper_bin, wrapper_slot) {
+        profile.account_wrapper = Some(AcpAccountWrapper { bin, slot });
     }
     Ok(HostArgs {
         family,
@@ -156,6 +195,7 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
         writable_roots,
         model,
         effort,
+        profile,
     })
 }
 
@@ -1313,6 +1353,8 @@ pub(super) fn exec_interactive_cli(
     native_session_id: Option<&str>,
     accept_all: bool,
     read_only: bool,
+    profile: &AcpLaunchProfile,
+    cwd: Option<&str>,
 ) -> i32 {
     let (envs, program, args) = build_cli_switch_argv_with_options(
         spec,
@@ -1320,6 +1362,8 @@ pub(super) fn exec_interactive_cli(
         native_session_id,
         accept_all,
         read_only,
+        profile,
+        cwd,
     );
     println!(
         "\r\nSwitching to interactive {} terminal...",
@@ -1390,7 +1434,8 @@ pub fn run(args: &[String]) -> i32 {
     let gx_paths = crate::paths::get_gxserver_paths(None);
     let signal_guard = TerminationSignalGuard::install();
 
-    let Some((acp_envs, prog, argv)) = build_acp_server_argv(spec, parsed.cli_command.as_deref())
+    let Some((acp_envs, prog, argv)) =
+        build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
         eprintln!("Invalid ACP server command for {}", spec.family);
         return 1;
@@ -2003,6 +2048,19 @@ pub fn run(args: &[String]) -> i32 {
                         let _ = transport.notify("session/cancel", json!({ "sessionId": sid }));
                     }
                     cancel_all_pending_permissions(&transport, &state);
+                    let wait_until = SystemTime::now() + Duration::from_secs(2);
+                    while SystemTime::now() < wait_until {
+                        if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                            break;
+                        }
+                        thread::sleep(Duration::from_millis(50));
+                    }
+                    if state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        s.turn_generation = s.turn_generation.wrapping_add(1);
+                        s.working = false;
+                        s.clear_live_turn_output();
+                    }
                     activity.sync();
                     ep.ack(id, true, json!({ "aborted": true }), None);
                 }
@@ -2421,6 +2479,8 @@ pub fn run(args: &[String]) -> i32 {
             sid.as_deref(),
             accept_all,
             parsed.read_only,
+            &parsed.profile,
+            Some(&cwd),
         );
     }
 

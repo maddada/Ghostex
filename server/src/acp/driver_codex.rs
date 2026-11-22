@@ -27,7 +27,10 @@ use super::host::{
     PendingPermission, SpoolWriter, TerminationSignalGuard, LIVE_STREAM_MAX_CHARS,
     POLL_RETRY_DELAY,
 };
-use super::spec::{build_acp_server_argv, transcript_path_for_session, AcpAgentSpec};
+use super::spec::{
+    build_acp_server_argv, is_allowed_connector_env_key, transcript_path_for_session,
+    AcpAgentSpec,
+};
 
 const CODEX_RPC_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -140,14 +143,24 @@ impl CodexTransport {
 }
 
 #[derive(Clone, Debug)]
+struct McpElicitationField {
+    key: String,
+    field_type: String,
+    multi_select: bool,
+    /// Wire values corresponding 1:1 with the question's display `options` (so titled `oneOf`
+    /// `[{ const, title }]` and legacy `enum` + `enumNames` send the wire value, never the display
+    /// title).
+    option_values: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
 enum CodexRequestKind {
     CommandApproval,
     FileChangeApproval,
     PermissionsApproval { permissions: Value },
     UserInput { questions: Vec<Value> },
     McpElicitation {
-        field_keys: Vec<String>,
-        field_types: Vec<String>,
+        fields: Vec<McpElicitationField>,
         questions: Vec<Value>,
     },
 }
@@ -200,7 +213,7 @@ impl PendingCodexRequest {
                         json!({
                             "question": q.get("question").and_then(Value::as_str).unwrap_or("Choose an option."),
                             "header": q.get("header").and_then(Value::as_str).unwrap_or("Question"),
-                            "multiSelect": false,
+                            "multiSelect": q.get("multiSelect").and_then(Value::as_bool).unwrap_or(false),
                             "allowCustom": q.get("isOther").and_then(Value::as_bool).unwrap_or(true),
                             "options": options,
                         })
@@ -254,15 +267,80 @@ impl PendingCodexRequest {
     }
 }
 
+const TURN_ID_HISTORY_CAP: usize = 64;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CodexDenyMode {
+    None,
+    HomeOrGbot,
+    GbotApi,
+}
+
+fn push_capped_turn_id(ring: &mut VecDeque<String>, tid: String) {
+    if ring.iter().any(|existing| existing == &tid) {
+        return;
+    }
+    while ring.len() >= TURN_ID_HISTORY_CAP {
+        ring.pop_front();
+    }
+    ring.push_back(tid);
+}
+
+fn remove_turn_id(ring: &mut VecDeque<String>, tid: &str) -> bool {
+    if let Some(pos) = ring.iter().position(|existing| existing == tid) {
+        ring.remove(pos);
+        true
+    } else {
+        false
+    }
+}
+
+/// Compute the Ghostex server-generated Codex permission profile name for `(deny_mode, level,
+/// read_only)`: always the MOST restrictive of the level's sandbox, `--read-only`, and the deny
+/// profile (a deny profile adds denies on top of the level and NEVER widens `readOnly` or
+/// `workspaceWrite` to `"/"="write"` or network-enabled).
+fn desired_codex_profile(
+    deny_mode: CodexDenyMode,
+    level: AcpApprovalLevel,
+    read_only: bool,
+) -> Option<&'static str> {
+    match deny_mode {
+        CodexDenyMode::None => None,
+        CodexDenyMode::GbotApi => {
+            if read_only {
+                Some("ghostex-api-ro")
+            } else {
+                Some("ghostex-api-ws")
+            }
+        }
+        CodexDenyMode::HomeOrGbot => {
+            if read_only {
+                Some("ghostex-ro")
+            } else if level == AcpApprovalLevel::FullAccess {
+                Some("ghostex-full")
+            } else {
+                Some("ghostex-ws")
+            }
+        }
+    }
+}
+
 struct CodexState {
     thread_id: Option<String>,
     thread_path: Option<String>,
     active_turn_id: Option<String>,
-    ignored_turn_ids: std::collections::HashSet<String>,
+    awaiting_turn_start: bool,
+    ignored_turn_ids: VecDeque<String>,
+    completed_turn_ids: VecDeque<String>,
     working: bool,
     approval_level: AcpApprovalLevel,
     read_only: bool,
-    has_ghostex_profile: bool,
+    deny_mode: CodexDenyMode,
+    active_profile: Option<&'static str>,
+    /// True if a live downgrade failed to reload the more restrictive Codex permission profile,
+    /// forcing explicit restrictive `sandboxPolicy` on `turn/start` so `"/"="write"` never leaks.
+    force_restrictive_sandbox: bool,
+    developer_instructions: Option<String>,
     cwd: PathBuf,
     writable_roots: Vec<PathBuf>,
     current_model: Option<String>,
@@ -285,10 +363,13 @@ struct CodexState {
 }
 
 impl CodexState {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         approval_level: AcpApprovalLevel,
         read_only: bool,
-        has_ghostex_profile: bool,
+        deny_mode: CodexDenyMode,
+        active_profile: Option<&'static str>,
+        developer_instructions: Option<String>,
         cwd: PathBuf,
         writable_roots: Vec<PathBuf>,
         initial_model: Option<String>,
@@ -298,11 +379,16 @@ impl CodexState {
             thread_id: None,
             thread_path: None,
             active_turn_id: None,
-            ignored_turn_ids: std::collections::HashSet::new(),
+            awaiting_turn_start: false,
+            ignored_turn_ids: VecDeque::new(),
+            completed_turn_ids: VecDeque::new(),
             working: false,
             approval_level,
             read_only,
-            has_ghostex_profile,
+            deny_mode,
+            active_profile,
+            force_restrictive_sandbox: false,
+            developer_instructions,
             cwd,
             writable_roots,
             current_model: initial_model,
@@ -547,38 +633,75 @@ fn approval_level_rank(level: AcpApprovalLevel) -> u8 {
     }
 }
 
-/// Apply a new approval level on Codex: reconcile `read_only`, and when lowering a level while
-/// a turn is active, interrupt the running turn so the stronger policy (`dangerFullAccess` or
-/// `auto_review`) cannot keep running under the weaker UI label.
+/// Apply a new approval level on Codex:
+/// 1. When lowering a level while a turn is active, interrupt the running turn (`turn/interrupt`)
+///    and return `Err` if interrupting fails so the stronger policy is never silently left running
+///    under a weaker UI label.
+/// 2. When a Ghostex deny profile is active (`HomeOrGbot` or `GbotApi`) and the effective profile
+///    changes (for example stepping down from `ghostex-full` to `ghostex-ws` / `ghostex-ro`),
+///    unsubscribe and reload the thread with `config: { "default_permissions": new_profile }` so
+///    Codex enforces BOTH the narrower level sandbox (`workspaceWrite`/no-network or `readOnly`)
+///    AND the secret-folder denies. If reload fails on a downgrade, set `force_restrictive_sandbox`
+///    so `turn/start` enforces explicit restrictive `sandboxPolicy` instead of keeping `"/"="write"`.
 fn apply_codex_approval_level(
     transport: &CodexTransport,
     state: &Mutex<CodexState>,
     activity: &CodexActivityReporter,
     desired: AcpApprovalLevel,
-) {
-    let interrupt_target = {
+) -> Result<(), String> {
+    let (
+        prev_level,
+        effective_read_only,
+        deny_mode,
+        prev_profile,
+        interrupt_target,
+        tid,
+        cwd_str,
+        roots,
+        model,
+        dev_instr,
+    ) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         let prev = s.approval_level;
-        s.approval_level = desired;
-        if desired != AcpApprovalLevel::Ask {
-            s.read_only = false;
-        }
-        if s.working && approval_level_rank(desired) < approval_level_rank(prev) {
-            if let Some(tid) = s.active_turn_id.clone() {
-                s.ignored_turn_ids.insert(tid);
+        let next_ro = if desired != AcpApprovalLevel::Ask {
+            false
+        } else {
+            s.read_only
+        };
+        let need_interrupt = s.working && approval_level_rank(desired) < approval_level_rank(prev);
+        let target = if need_interrupt {
+            if let Some(tid_old) = s.active_turn_id.clone() {
+                push_capped_turn_id(&mut s.ignored_turn_ids, tid_old);
             }
             Some((s.thread_id.clone(), s.active_turn_id.clone()))
         } else {
             None
-        }
+        };
+        (
+            prev,
+            next_ro,
+            s.deny_mode,
+            s.active_profile,
+            target,
+            s.thread_id.clone(),
+            s.cwd.to_string_lossy().to_string(),
+            s.writable_roots.clone(),
+            s.current_model.clone(),
+            s.developer_instructions.clone(),
+        )
     };
-    if let Some((Some(tid), Some(turn_id))) = interrupt_target {
+
+    if let Some((Some(tid_int), Some(turn_id))) = interrupt_target {
         cancel_all_pending_codex(transport, state);
-        let _ = transport.call(
+        if let Err(err) = transport.call(
             "turn/interrupt",
-            json!({ "threadId": tid, "turnId": turn_id }),
+            json!({ "threadId": tid_int, "turnId": turn_id }),
             Duration::from_secs(5),
-        );
+        ) {
+            return Err(format!(
+                "Could not interrupt active Codex turn to lower approval level: {err}"
+            ));
+        }
         let wait_until = SystemTime::now() + Duration::from_secs(2);
         while SystemTime::now() < wait_until {
             if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
@@ -589,10 +712,106 @@ fn apply_codex_approval_level(
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.working = false;
         s.active_turn_id = None;
+        s.awaiting_turn_start = false;
         s.clear_live_turn_output();
         drop(s);
         activity.sync();
     }
+
+    let next_profile = desired_codex_profile(deny_mode, desired, effective_read_only);
+    {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.approval_level = desired;
+        s.read_only = effective_read_only;
+    }
+
+    if let (Some(new_prof), Some(thread_id)) = (next_profile, tid) {
+        if prev_profile != Some(new_prof) {
+            let (new_approval, new_reviewer, _) =
+                codex_turn_policies(desired, effective_read_only, &roots);
+            let _ = transport.call(
+                "thread/unsubscribe",
+                json!({ "threadId": thread_id }),
+                Duration::from_secs(5),
+            );
+            thread::sleep(Duration::from_millis(120));
+            let mut resume_params = Map::new();
+            resume_params.insert("threadId".to_string(), json!(thread_id));
+            resume_params.insert("cwd".to_string(), json!(cwd_str));
+            resume_params.insert("approvalPolicy".to_string(), new_approval.clone());
+            resume_params.insert("approvalsReviewer".to_string(), json!(new_reviewer));
+            resume_params.insert(
+                "config".to_string(),
+                json!({ "default_permissions": new_prof }),
+            );
+            if let Some(instr) = dev_instr.as_deref().filter(|s| !s.is_empty()) {
+                resume_params.insert("developerInstructions".to_string(), json!(instr));
+            }
+            match transport.call(
+                "thread/resume",
+                Value::Object(resume_params),
+                CODEX_RPC_TIMEOUT,
+            ) {
+                Ok(_) => {
+                    let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                    s.active_profile = Some(new_prof);
+                    s.force_restrictive_sandbox = false;
+                }
+                Err(err) if err.to_ascii_lowercase().contains("no rollout found") => {
+                    // Thread has not run a turn yet: start a fresh thread with the new profile.
+                    let mut start_params = Map::new();
+                    start_params.insert("cwd".to_string(), json!(cwd_str));
+                    start_params.insert("approvalPolicy".to_string(), new_approval);
+                    start_params.insert("approvalsReviewer".to_string(), json!(new_reviewer));
+                    start_params.insert(
+                        "config".to_string(),
+                        json!({ "default_permissions": new_prof }),
+                    );
+                    if let Some(m) = model.as_deref().filter(|v| !v.is_empty()) {
+                        start_params.insert("model".to_string(), json!(m));
+                    }
+                    if let Some(instr) = dev_instr.as_deref().filter(|s| !s.is_empty()) {
+                        start_params.insert("developerInstructions".to_string(), json!(instr));
+                    }
+                    match transport.call(
+                        "thread/start",
+                        Value::Object(start_params),
+                        CODEX_RPC_TIMEOUT,
+                    ) {
+                        Ok(res) => {
+                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                            if let Some(new_tid) =
+                                res.pointer("/thread/id").and_then(Value::as_str)
+                            {
+                                s.thread_id = Some(new_tid.to_string());
+                            }
+                            s.active_profile = Some(new_prof);
+                            s.force_restrictive_sandbox = false;
+                        }
+                        Err(start_err) => {
+                            eprintln!("[Codex Non-CLI] Warning: could not switch deny profile to {new_prof}: {start_err}");
+                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                            if approval_level_rank(desired) < approval_level_rank(prev_level)
+                                || effective_read_only
+                            {
+                                s.force_restrictive_sandbox = true;
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    eprintln!("[Codex Non-CLI] Warning: could not reload thread with deny profile {new_prof}: {err}");
+                    let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                    if approval_level_rank(desired) < approval_level_rank(prev_level)
+                        || effective_read_only
+                    {
+                        s.force_restrictive_sandbox = true;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Extract every mutated path (including `kind.move_path` / `kind.movePath`) from a Codex
@@ -647,26 +866,28 @@ fn extract_codex_change_locations(changes: &Value) -> Vec<Value> {
     locations
 }
 
-/// Build Ghostex question items for a Codex `mcpServer/elicitation/request` (`mode: "form"`),
-/// returning `(field_keys, field_types, questions)`.
+/// Build Ghostex question items for a Codex `mcpServer/elicitation/request` (`mode`: `"form"`,
+/// `"openai/form"`, or `"openaiForm"`), returning `(fields, questions)` while preserving exact
+/// wire values (`const` / `enum`) separate from display labels (`title` / `enumNames`) and
+/// handling `type: "array"` multi-select enums.
 fn build_mcp_elicitation_questions(
     params: &Value,
-) -> (Vec<String>, Vec<String>, Vec<Value>) {
-    let mut field_keys = Vec::new();
-    let mut field_types = Vec::new();
+) -> (Vec<McpElicitationField>, Vec<Value>) {
+    let mut fields = Vec::new();
     let mut questions = Vec::new();
     let message = params
         .get("message")
         .and_then(Value::as_str)
         .unwrap_or("MCP server requests input");
-    if params.get("mode").and_then(Value::as_str) != Some("form") {
-        return (field_keys, field_types, questions);
+    let mode = params.get("mode").and_then(Value::as_str).unwrap_or("");
+    if !matches!(mode, "form" | "openai/form" | "openaiForm") {
+        return (fields, questions);
     }
     let Some(props) = params
         .pointer("/requestedSchema/properties")
         .and_then(Value::as_object)
     else {
-        return (field_keys, field_types, questions);
+        return (fields, questions);
     };
     for (key, schema) in props {
         let ftype = schema
@@ -680,47 +901,103 @@ fn build_mcp_elicitation_questions(
             .and_then(Value::as_str)
             .unwrap_or(key.as_str());
         let mut options = Vec::new();
+        let mut option_values = Vec::new();
+        let mut multi_select = false;
+
         if ftype == "boolean" {
             options.push(json!({ "label": "Yes" }));
+            option_values.push("true".to_string());
             options.push(json!({ "label": "No" }));
+            option_values.push("false".to_string());
+        } else if ftype == "array" {
+            multi_select = true;
+            if let Some(items) = schema.get("items").and_then(Value::as_object) {
+                if let Some(enum_vals) = items.get("enum").and_then(Value::as_array) {
+                    let names = items.get("enumNames").and_then(Value::as_array);
+                    for (idx, v) in enum_vals.iter().enumerate() {
+                        if let Some(wire) = v.as_str() {
+                            let label = names
+                                .and_then(|n| n.get(idx))
+                                .and_then(Value::as_str)
+                                .unwrap_or(wire);
+                            options.push(json!({ "label": label }));
+                            option_values.push(wire.to_string());
+                        }
+                    }
+                } else if let Some(choices) = items
+                    .get("anyOf")
+                    .or_else(|| items.get("oneOf"))
+                    .and_then(Value::as_array)
+                {
+                    for item in choices {
+                        if let Some(wire) = item
+                            .get("const")
+                            .or_else(|| item.get("title"))
+                            .and_then(Value::as_str)
+                        {
+                            let label = item
+                                .get("title")
+                                .and_then(Value::as_str)
+                                .unwrap_or(wire);
+                            options.push(json!({ "label": label }));
+                            option_values.push(wire.to_string());
+                        }
+                    }
+                }
+            }
         } else if let Some(enum_vals) = schema.get("enum").and_then(Value::as_array) {
-            for v in enum_vals {
-                if let Some(s) = v.as_str() {
-                    options.push(json!({ "label": s }));
+            let names = schema.get("enumNames").and_then(Value::as_array);
+            for (idx, v) in enum_vals.iter().enumerate() {
+                if let Some(wire) = v.as_str() {
+                    let label = names
+                        .and_then(|n| n.get(idx))
+                        .and_then(Value::as_str)
+                        .unwrap_or(wire);
+                    options.push(json!({ "label": label }));
+                    option_values.push(wire.to_string());
                 }
             }
         } else if let Some(one_of) = schema.get("oneOf").and_then(Value::as_array) {
             for item in one_of {
-                if let Some(label) = item
-                    .get("title")
-                    .or_else(|| item.get("const"))
+                if let Some(wire) = item
+                    .get("const")
+                    .or_else(|| item.get("title"))
                     .and_then(Value::as_str)
                 {
+                    let label = item
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .unwrap_or(wire);
                     options.push(json!({ "label": label }));
+                    option_values.push(wire.to_string());
                 }
             }
         }
-        field_keys.push(key.clone());
-        field_types.push(ftype);
+        fields.push(McpElicitationField {
+            key: key.clone(),
+            field_type: ftype,
+            multi_select,
+            option_values,
+        });
         questions.push(json!({
             "id": key,
             "header": title,
             "question": format!("{message}: {title}"),
+            "multiSelect": multi_select,
             "isOther": options.is_empty(),
             "options": options,
         }));
     }
-    (field_keys, field_types, questions)
+    (fields, questions)
 }
 
 fn build_mcp_elicitation_response(
-    field_keys: &[String],
-    field_types: &[String],
+    fields: &[McpElicitationField],
     questions: &[Value],
     selections: &[Value],
 ) -> Value {
     let mut content = Map::new();
-    for (idx, key) in field_keys.iter().enumerate() {
+    for (idx, field) in fields.iter().enumerate() {
         let Some(sel) = selections.get(idx) else {
             continue;
         };
@@ -728,6 +1005,40 @@ fn build_mcp_elicitation_response(
             .get(idx)
             .and_then(|q| q.get("options"))
             .and_then(Value::as_array);
+        let wire_for_index = |i: usize| -> Option<String> {
+            field
+                .option_values
+                .get(i)
+                .cloned()
+                .or_else(|| {
+                    options
+                        .and_then(|o| o.get(i))
+                        .and_then(|o| o.get("label").and_then(Value::as_str))
+                        .map(str::to_string)
+                })
+        };
+        if field.field_type == "array" || field.multi_select {
+            let mut vals = Vec::new();
+            if let Some(indices) = sel.get("indices").and_then(Value::as_array) {
+                for i in indices.iter().filter_map(Value::as_u64) {
+                    if let Some(wire) = wire_for_index(i as usize) {
+                        vals.push(Value::String(wire));
+                    }
+                }
+            }
+            if let Some(other) = sel
+                .get("other")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                vals.push(Value::String(other.to_string()));
+            }
+            if !vals.is_empty() {
+                content.insert(field.key.clone(), Value::Array(vals));
+            }
+            continue;
+        }
         let raw_val = sel
             .get("other")
             .and_then(Value::as_str)
@@ -739,15 +1050,12 @@ fn build_mcp_elicitation_response(
                     .and_then(Value::as_array)
                     .and_then(|arr| arr.first())
                     .and_then(Value::as_u64)
-                    .and_then(|i| options.and_then(|o| o.get(i as usize)))
-                    .and_then(|o| o.get("label").and_then(Value::as_str))
-                    .map(str::to_string)
+                    .and_then(|i| wire_for_index(i as usize))
             });
         let Some(val) = raw_val else {
             continue;
         };
-        let ftype = field_types.get(idx).map(String::as_str).unwrap_or("string");
-        let json_val = match ftype {
+        let json_val = match field.field_type.as_str() {
             "boolean" => Value::Bool(matches!(
                 val.to_ascii_lowercase().as_str(),
                 "yes" | "true" | "1"
@@ -764,7 +1072,7 @@ fn build_mcp_elicitation_response(
                 .unwrap_or_else(|| Value::String(val)),
             _ => Value::String(val),
         };
-        content.insert(key.clone(), json_val);
+        content.insert(field.key.clone(), json_val);
     }
     if content.is_empty() {
         json!({ "action": "decline" })
@@ -878,16 +1186,89 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let gx_paths = crate::paths::get_gxserver_paths(None);
     let signal_guard = TerminationSignalGuard::install();
 
-    let Some((acp_envs, prog, argv)) = build_acp_server_argv(spec, parsed.cli_command.as_deref())
+    let Some((acp_envs, prog, mut argv)) =
+        build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
         eprintln!("Invalid Codex Non-CLI command.");
         return 1;
     };
-    let has_ghostex_profile = argv.iter().any(|arg| {
-        let trimmed = arg.trim();
-        trimmed.starts_with("default_permissions=\"ghostex-")
-            || trimmed.starts_with("default_permissions=ghostex-")
-    });
+    // Synthesize Ghostex's own server-side Codex flags strictly from `parsed.profile` and Ghostex
+    // settings (never from untrusted command strings).
+    for (k, v) in &parsed.profile.connector_envs {
+        if is_allowed_connector_env_key(k) {
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "shell_environment_policy.set.{k}={}",
+                serde_json::to_string(v).unwrap_or_default()
+            ));
+        }
+    }
+    if parsed.profile.gbot_computer_use_off {
+        let codex_home = acp_envs
+            .iter()
+            .find(|(k, _)| k == "CODEX_HOME")
+            .map(|(_, v)| PathBuf::from(v));
+        for srv in crate::agents::codex_disabled_screen_servers(codex_home.as_deref()) {
+            argv.push("-c".to_string());
+            argv.push(format!("mcp_servers.{srv}.enabled=false"));
+        }
+    }
+    if parsed.profile.lean_worker {
+        for feat in crate::agents::lean_codex_disabled_features_if_enabled() {
+            argv.push("--disable".to_string());
+            argv.push(feat);
+        }
+    }
+
+    let (deny_mode, init_profile) = if let Some((is_api, deny_paths)) =
+        crate::agents::codex_deny_paths_for_session(
+            Some(&cwd),
+            parsed.profile.gbot_chat,
+            parsed.profile.gbot_api_chat,
+        )
+    {
+        let denies: Vec<String> = deny_paths
+            .iter()
+            .map(|p| format!("{}=\"deny\"", crate::agents::codex_toml_string(p)))
+            .collect();
+        let mode = if is_api {
+            let ro_fs = format!("\"/\"=\"read\", {}", denies.join(", "));
+            let mut ws_entries = vec!["\"/\"=\"read\"".to_string()];
+            if !cwd.trim().is_empty() {
+                ws_entries.push(format!("{}=\"write\"", crate::agents::codex_toml_string(&cwd)));
+            }
+            ws_entries.extend(denies.iter().cloned());
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "permissions.ghostex-api-ro={{filesystem={{{ro_fs}}}, network={{enabled=false}}}}"
+            ));
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "permissions.ghostex-api-ws={{filesystem={{{}}}, network={{enabled=true}}}}",
+                ws_entries.join(", ")
+            ));
+            CodexDenyMode::GbotApi
+        } else {
+            let deny_list = denies.join(", ");
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "permissions.ghostex-ro={{filesystem={{\"/\"=\"read\", {deny_list}}}, network={{enabled=false}}}}"
+            ));
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "permissions.ghostex-ws={{extends=\":workspace\", filesystem={{{deny_list}}}, network={{enabled=false}}}}"
+            ));
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "permissions.ghostex-full={{filesystem={{\"/\"=\"write\", {deny_list}}}, network={{enabled=true}}}}"
+            ));
+            CodexDenyMode::HomeOrGbot
+        };
+        let prof = desired_codex_profile(mode, parsed.approval_level, parsed.read_only);
+        (mode, prof)
+    } else {
+        (CodexDenyMode::None, None)
+    };
 
     let mut child = match Command::new(&prog)
         .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
@@ -920,7 +1301,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let state = Arc::new(Mutex::new(CodexState::new(
         parsed.approval_level,
         parsed.read_only,
-        has_ghostex_profile,
+        deny_mode,
+        init_profile,
+        parsed.profile.developer_instructions.clone(),
         cwd_path.clone(),
         writable_roots,
         parsed.model.clone(),
@@ -1277,8 +1660,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                 }
                             }
                             "mcpServer/elicitation/request" => {
-                                let (field_keys, field_types, questions) =
-                                    build_mcp_elicitation_questions(&params);
+                                let (fields, questions) = build_mcp_elicitation_questions(&params);
                                 let server_name = params
                                     .get("serverName")
                                     .and_then(Value::as_str)
@@ -1303,11 +1685,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                     .map(str::to_string);
                                 let pending = PendingCodexRequest {
                                     rpc_id,
-                                    kind: CodexRequestKind::McpElicitation {
-                                        field_keys,
-                                        field_types,
-                                        questions,
-                                    },
+                                    kind: CodexRequestKind::McpElicitation { fields, questions },
                                     tool_name: format!("MCP ({server_name})"),
                                     summary,
                                     tool_use_id,
@@ -1339,15 +1717,19 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     let params = msg.get("params").unwrap_or(&Value::Null);
                     match method {
                         "turn/started" => {
-                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                            s.working = true;
-                            if let Some(tid) = params
+                            let tid = params
                                 .pointer("/turn/id")
                                 .or_else(|| params.get("turnId"))
-                                .and_then(Value::as_str)
-                            {
-                                s.active_turn_id = Some(tid.to_string());
+                                .and_then(Value::as_str);
+                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            if let Some(tid_str) = tid {
+                                if s.ignored_turn_ids.iter().any(|id| id == tid_str) {
+                                    return;
+                                }
+                                s.active_turn_id = Some(tid_str.to_string());
                             }
+                            s.awaiting_turn_start = false;
+                            s.working = true;
                             drop(s);
                             act_out.sync();
                         }
@@ -1359,7 +1741,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             let (stale_turn, orphaned): (bool, Vec<PendingCodexRequest>) = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                                 if let Some(done_id) = completed_tid {
-                                    if s.ignored_turn_ids.remove(done_id) {
+                                    push_capped_turn_id(
+                                        &mut s.completed_turn_ids,
+                                        done_id.to_string(),
+                                    );
+                                    if remove_turn_id(&mut s.ignored_turn_ids, done_id) {
                                         (true, Vec::new())
                                     } else if s
                                         .active_turn_id
@@ -1367,15 +1753,24 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                         .is_some_and(|active| active != done_id)
                                     {
                                         (true, Vec::new())
+                                    } else if s.active_turn_id.is_none() && s.awaiting_turn_start {
+                                        // An untracked old turn completed while a new `turn/start`
+                                        // RPC is in flight (before `turn/started` for the new turn
+                                        // arrived): do not clobber the new turn.
+                                        (true, Vec::new())
                                     } else {
                                         s.working = false;
+                                        s.awaiting_turn_start = false;
                                         s.active_turn_id = None;
                                         s.file_change_items.clear();
                                         s.clear_live_turn_output();
                                         (false, s.pending_requests.drain(..).collect())
                                     }
+                                } else if s.awaiting_turn_start {
+                                    (true, Vec::new())
                                 } else {
                                     s.working = false;
+                                    s.awaiting_turn_start = false;
                                     s.active_turn_id = None;
                                     s.file_change_items.clear();
                                     s.clear_live_turn_output();
@@ -1598,8 +1993,18 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         req_params.insert("cwd".to_string(), json!(cwd));
         req_params.insert("approvalPolicy".to_string(), init_approval);
         req_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
-        if !has_ghostex_profile {
+        if let Some(prof) = init_profile {
+            req_params.insert("config".to_string(), json!({ "default_permissions": prof }));
+        } else {
             req_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
+        }
+        if let Some(instr) = parsed
+            .profile
+            .developer_instructions
+            .as_deref()
+            .filter(|s| !s.is_empty())
+        {
+            req_params.insert("developerInstructions".to_string(), json!(instr));
         }
         transport.call(method, Value::Object(req_params), CODEX_RPC_TIMEOUT)
     } else {
@@ -1607,11 +2012,21 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         start_params.insert("cwd".to_string(), json!(cwd));
         start_params.insert("approvalPolicy".to_string(), init_approval);
         start_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
-        if !has_ghostex_profile {
+        if let Some(prof) = init_profile {
+            start_params.insert("config".to_string(), json!({ "default_permissions": prof }));
+        } else {
             start_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
         }
         if let Some(m) = parsed.model.as_deref().filter(|s| !s.is_empty()) {
             start_params.insert("model".to_string(), json!(m));
+        }
+        if let Some(instr) = parsed
+            .profile
+            .developer_instructions
+            .as_deref()
+            .filter(|s| !s.is_empty())
+        {
+            start_params.insert("developerInstructions".to_string(), json!(instr));
         }
         transport.call(
             "thread/start",
@@ -1731,7 +2146,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .unwrap_or_else(|p| p.into_inner())
                         .approval_level;
                     if desired != current {
-                        apply_codex_approval_level(&transport, &state, &activity, desired);
+                        if let Err(err) =
+                            apply_codex_approval_level(&transport, &state, &activity, desired)
+                        {
+                            eprintln!("[Codex Non-CLI] Warning: could not sync approval level: {err}");
+                        }
                     }
                 }
                 if reconnecting {
@@ -1795,9 +2214,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         if let Some(tid_old) = turn_id {
-                            s.ignored_turn_ids.insert(tid_old);
+                            push_capped_turn_id(&mut s.ignored_turn_ids, tid_old);
                         }
                         s.working = false;
+                        s.awaiting_turn_start = false;
                         s.active_turn_id = None;
                         s.file_change_items.clear();
                         s.clear_live_turn_output();
@@ -1916,16 +2336,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         CodexRequestKind::UserInput { questions } => {
                             build_codex_user_input_answers(&questions, &selections)
                         }
-                        CodexRequestKind::McpElicitation {
-                            field_keys,
-                            field_types,
-                            questions,
-                        } => build_mcp_elicitation_response(
-                            &field_keys,
-                            &field_types,
-                            &questions,
-                            &selections,
-                        ),
+                        CodexRequestKind::McpElicitation { fields, questions } => {
+                            build_mcp_elicitation_response(&fields, &questions, &selections)
+                        }
                         _ => json!({ "answers": {} }),
                     };
                     match transport.respond(req.rpc_id, body) {
@@ -1976,7 +2389,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                         continue;
                     };
-                    apply_codex_approval_level(&transport, &state, &activity, level);
+                    if let Err(err) =
+                        apply_codex_approval_level(&transport, &state, &activity, level)
+                    {
+                        ep.ack(id, false, Value::Null, Some(&err));
+                        continue;
+                    }
                     let snap = state
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
@@ -1995,7 +2413,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         turn_id,
                         level,
                         read_only,
-                        has_profile,
+                        use_profile_sandbox,
                         roots,
                         model,
                         effort,
@@ -2007,7 +2425,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             s.active_turn_id.clone(),
                             s.approval_level,
                             s.read_only,
-                            s.has_ghostex_profile,
+                            s.active_profile.is_some() && !s.force_restrictive_sandbox,
                             s.writable_roots.clone(),
                             s.current_model.clone(),
                             s.current_effort.clone(),
@@ -2038,11 +2456,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                         cancel_all_pending_codex(&transport, &state);
                         if let Some(old_turn_id) = turn_id {
-                            state
-                                .lock()
-                                .unwrap_or_else(|p| p.into_inner())
-                                .ignored_turn_ids
-                                .insert(old_turn_id.clone());
+                            push_capped_turn_id(
+                                &mut state
+                                    .lock()
+                                    .unwrap_or_else(|p| p.into_inner())
+                                    .ignored_turn_ids,
+                                old_turn_id.clone(),
+                            );
                             let _ = transport.call(
                                 "turn/interrupt",
                                 json!({ "threadId": tid, "turnId": old_turn_id }),
@@ -2065,7 +2485,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     turn_params.insert("cwd".to_string(), json!(cwd));
                     turn_params.insert("approvalPolicy".to_string(), approval_policy);
                     turn_params.insert("approvalsReviewer".to_string(), json!(reviewer));
-                    if !has_profile {
+                    if !use_profile_sandbox {
                         turn_params.insert("sandboxPolicy".to_string(), sandbox_policy);
                     }
                     if let Some(m) = model.as_deref().filter(|v| !v.is_empty()) {
@@ -2077,25 +2497,31 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        s.awaiting_turn_start = true;
                         s.active_turn_id = None;
                         s.clear_live_turn_output();
                     }
                     match transport.call("turn/start", Value::Object(turn_params), CODEX_RPC_TIMEOUT)
                     {
                         Ok(res) => {
+                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                            s.awaiting_turn_start = false;
                             if let Some(new_turn_id) =
                                 res.pointer("/turn/id").and_then(Value::as_str)
                             {
-                                state
-                                    .lock()
-                                    .unwrap_or_else(|p| p.into_inner())
-                                    .active_turn_id = Some(new_turn_id.to_string());
+                                if !s.completed_turn_ids.iter().any(|c| c == new_turn_id) {
+                                    s.active_turn_id = Some(new_turn_id.to_string());
+                                }
                             }
+                            drop(s);
                             activity.sync();
                             ep.ack(id, true, json!({ "accepted": true, "sessionId": tid }), None);
                         }
                         Err(err) => {
-                            state.lock().unwrap_or_else(|p| p.into_inner()).working = false;
+                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                            s.awaiting_turn_start = false;
+                            s.working = false;
+                            drop(s);
                             activity.sync();
                             ep.ack(id, false, Value::Null, Some(&err));
                         }
@@ -2127,7 +2553,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         turn_id,
                         level,
                         read_only,
-                        has_profile,
+                        use_profile_sandbox,
                         roots,
                         model,
                         effort,
@@ -2139,7 +2565,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             s.active_turn_id.clone(),
                             s.approval_level,
                             s.read_only,
-                            s.has_ghostex_profile,
+                            s.active_profile.is_some() && !s.force_restrictive_sandbox,
                             s.writable_roots.clone(),
                             s.current_model.clone(),
                             s.current_effort.clone(),
@@ -2185,11 +2611,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         // steering into an older turn's stronger policy).
                         cancel_all_pending_codex(&transport, &state);
                         if let Some(old_turn_id) = turn_id {
-                            state
-                                .lock()
-                                .unwrap_or_else(|p| p.into_inner())
-                                .ignored_turn_ids
-                                .insert(old_turn_id.clone());
+                            push_capped_turn_id(
+                                &mut state
+                                    .lock()
+                                    .unwrap_or_else(|p| p.into_inner())
+                                    .ignored_turn_ids,
+                                old_turn_id.clone(),
+                            );
                             let _ = transport.call(
                                 "turn/interrupt",
                                 json!({ "threadId": tid, "turnId": old_turn_id }),
@@ -2213,7 +2641,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     turn_params.insert("cwd".to_string(), json!(cwd));
                     turn_params.insert("approvalPolicy".to_string(), approval_policy);
                     turn_params.insert("approvalsReviewer".to_string(), json!(reviewer));
-                    if !has_profile {
+                    if !use_profile_sandbox {
                         turn_params.insert("sandboxPolicy".to_string(), sandbox_policy);
                     }
                     if let Some(m) = model.as_deref().filter(|v| !v.is_empty()) {
@@ -2225,6 +2653,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        s.awaiting_turn_start = true;
                         s.active_turn_id = None;
                         s.clear_live_turn_output();
                     }
@@ -2233,14 +2662,16 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     match transport.call("turn/start", Value::Object(turn_params), CODEX_RPC_TIMEOUT)
                     {
                         Ok(res) => {
+                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                            s.awaiting_turn_start = false;
                             if let Some(new_turn_id) =
                                 res.pointer("/turn/id").and_then(Value::as_str)
                             {
-                                state
-                                    .lock()
-                                    .unwrap_or_else(|p| p.into_inner())
-                                    .active_turn_id = Some(new_turn_id.to_string());
+                                if !s.completed_turn_ids.iter().any(|c| c == new_turn_id) {
+                                    s.active_turn_id = Some(new_turn_id.to_string());
+                                }
                             }
+                            drop(s);
                             activity.sync();
                             ep.ack(
                                 id,
@@ -2250,7 +2681,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             );
                         }
                         Err(err) => {
-                            state.lock().unwrap_or_else(|p| p.into_inner()).working = false;
+                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                            s.awaiting_turn_start = false;
+                            s.working = false;
+                            drop(s);
                             activity.sync();
                             ep.ack(id, false, Value::Null, Some(&err));
                         }
@@ -2330,6 +2764,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             tid.as_deref(),
             accept_all,
             read_only,
+            &parsed.profile,
+            Some(&cwd),
         );
     }
 

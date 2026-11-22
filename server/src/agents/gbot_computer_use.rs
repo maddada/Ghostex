@@ -24,6 +24,51 @@ pub(crate) fn gbot_computer_use(runtime_settings: Option<&Map<String, Value>>) -
     Some(record.get("computerUse").and_then(Value::as_bool) == Some(true))
 }
 
+/// Claude `permissions.deny` rules for a GBot with `computerUse: false`.
+pub(crate) fn claude_screen_deny_rules() -> Vec<Value> {
+    SCREEN_SERVERS
+        .iter()
+        .map(|server| json!(format!("mcp__{server}")))
+        .chain(
+            SCREEN_COMMANDS
+                .iter()
+                .map(|tool| json!(format!("Bash({tool}:*)"))),
+        )
+        .collect()
+}
+
+/// Configured Codex screen-control MCP servers to disable for a GBot with `computerUse: false`,
+/// reading from the resolved `codex_home` (or `CODEX_HOME` / `~/.codex`).
+pub(crate) fn codex_disabled_screen_servers(
+    codex_home: Option<&std::path::Path>,
+) -> Vec<&'static str> {
+    if cfg!(test) {
+        return Vec::new();
+    }
+    let home = codex_home
+        .map(std::path::Path::to_path_buf)
+        .or_else(|| std::env::var("CODEX_HOME").ok().map(std::path::PathBuf::from))
+        .unwrap_or_else(|| ghostex_paths::user_home_dir().join(".codex"));
+    let Ok(text) = std::fs::read_to_string(home.join("config.toml")) else {
+        return Vec::new();
+    };
+    let configured: Vec<String> = text
+        .lines()
+        .filter_map(|line| {
+            let name = line
+                .trim()
+                .strip_prefix("[mcp_servers.")?
+                .strip_suffix(']')?;
+            (!name.contains('.')).then(|| name.trim_matches('"').to_string())
+        })
+        .collect();
+    SCREEN_SERVERS
+        .iter()
+        .copied()
+        .filter(|server| configured.iter().any(|name| name == *server))
+        .collect()
+}
+
 /// `command` without the screen tools when it starts a GBot chat whose GBot may not use them.
 pub(crate) fn with_gbot_computer_use(
     family: Option<&str>,
@@ -36,16 +81,7 @@ pub(crate) fn with_gbot_computer_use(
     }
     match family {
         Some("claude") => {
-            let rules = SCREEN_SERVERS
-                .iter()
-                .map(|server| json!(format!("mcp__{server}")))
-                .chain(
-                    SCREEN_COMMANDS
-                        .iter()
-                        .map(|tool| json!(format!("Bash({tool}:*)"))),
-                )
-                .collect();
-            super::home_secret_folders::with_claude_deny_rules(command, rules)
+            super::home_secret_folders::with_claude_deny_rules(command, claude_screen_deny_rules())
                 .unwrap_or_else(|| command.to_string())
         }
         Some("codex") => {

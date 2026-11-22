@@ -202,12 +202,6 @@ pub(crate) fn start_on_computer(
         .folder
         .clone()
         .unwrap_or_else(|| super::ops::default_folder(&bot.name));
-    let acp_level = match approval {
-        "edits" => crate::acp::AcpApprovalLevel::AutoEdits,
-        "auto" => crate::acp::AcpApprovalLevel::Auto,
-        "full" => crate::acp::AcpApprovalLevel::FullAccess,
-        _ => crate::acp::AcpApprovalLevel::Ask,
-    };
     let mut create = json!({
         "projectPath": folder,
         "agentId": bot.agent_id,
@@ -215,13 +209,16 @@ pub(crate) fn start_on_computer(
         "title": title,
         "markedHandovers": true,
         "runtimeSettings": {
-            crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY: acp_level.as_str(),
             HOME_KEY: {
                 "serverId": state.metadata.server_id,
                 "computerName": crate::connected_computers::this_computer_name(),
                 "botId": bot.bot_id,
                 "name": bot.name,
                 "openedBy": opening.opened_by,
+                // Carries the home computer's configured GBot approval (`ask`, `edits`, `auto`,
+                // `full`) over the authenticated paired-computer channel (`Principal::Peer`);
+                // non-user-device callers have `gbotHome` stripped by `guard_create_session_params`.
+                "approval": approval,
                 // That computer starts it without the screen tools unless this is on
                 // (agents/gbot_computer_use.rs there).
                 "computerUse": computer.computer_use,

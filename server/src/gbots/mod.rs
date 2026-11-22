@@ -101,6 +101,7 @@ pub(crate) use problems::start_gbots_problem_watch;
 pub(crate) use project::{
     add_create_project_path, gbots_bot_id as gbots_project_bot_id, refuse_bot_project_create,
 };
+pub(crate) use record::read_bot;
 pub(crate) use retire::retire_previous_gbots;
 pub(crate) use routine_runs::{
     routine_folder, routine_gate, routine_run_settled, start_routine_run, RoutineGate,

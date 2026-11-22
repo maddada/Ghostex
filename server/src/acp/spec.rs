@@ -143,33 +143,33 @@ fn quote_acp_launch_arg(value: &str, windows: bool) -> String {
     }
 }
 
-/// Build the command that `zmx`/`wmx` runs inside the session PTY to start `ghostex acp-host`.
-pub fn build_acp_host_launch_command(
-    family: &str,
-    cli_command: Option<&str>,
-    resume_session_id: Option<&str>,
-    approval_level: super::AcpApprovalLevel,
-    writable_roots: &[String],
-    model: Option<&str>,
-    effort: Option<&str>,
-) -> String {
-    build_acp_host_launch_command_with_options(
-        family,
-        cli_command,
-        resume_session_id,
-        approval_level,
-        writable_roots,
-        model,
-        effort,
-        false,
-        false,
-    )
+/// Validated `cswap` / `xswap` account wrapper extracted from Ghostex's account launch command
+/// (never carrying arbitrary flags or leading environment assignments).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AcpAccountWrapper {
+    pub bin: String,
+    pub slot: String,
 }
 
-/// Build the `ghostex acp-host` launch command with optional `--fork-session` (for side chats and
-/// session forks) and `--read-only` (for `start-thread --read-only`).
+/// Server-generated structured launch profile for `ghostex acp-host`. Non-CLI launches build the
+/// agent subprocess argv exclusively from these Ghostex-owned fields and Ghostex's own settings,
+/// NEVER forwarding flags or leading env vars from a user- or agent-supplied command string.
+#[derive(Clone, Debug, Default)]
+pub struct AcpLaunchProfile {
+    pub account_wrapper: Option<AcpAccountWrapper>,
+    pub hub_id: Option<String>,
+    pub connector_envs: Vec<(String, String)>,
+    pub append_system_prompt_file: Option<String>,
+    pub developer_instructions: Option<String>,
+    pub gbot_chat: bool,
+    pub gbot_api_chat: bool,
+    pub gbot_computer_use_off: bool,
+    pub lean_worker: bool,
+}
+
+/// Build the `ghostex acp-host` launch command with Ghostex's server-generated structured profile.
 #[allow(clippy::too_many_arguments)]
-pub fn build_acp_host_launch_command_with_options(
+pub fn build_acp_host_launch_command_with_profile(
     family: &str,
     cli_command: Option<&str>,
     resume_session_id: Option<&str>,
@@ -179,6 +179,7 @@ pub fn build_acp_host_launch_command_with_options(
     effort: Option<&str>,
     fork_session: bool,
     read_only: bool,
+    profile: &AcpLaunchProfile,
 ) -> String {
     build_acp_host_launch_command_for_platform(
         family,
@@ -190,6 +191,7 @@ pub fn build_acp_host_launch_command_with_options(
         effort,
         fork_session,
         read_only,
+        profile,
         cfg!(windows),
     )
 }
@@ -205,6 +207,7 @@ fn build_acp_host_launch_command_for_platform(
     effort: Option<&str>,
     fork_session: bool,
     read_only: bool,
+    profile: &AcpLaunchProfile,
     windows: bool,
 ) -> String {
     let mut parts = if windows {
@@ -255,6 +258,59 @@ fn build_acp_host_launch_command_for_platform(
     if let Some(e) = effort.map(str::trim).filter(|s| !s.is_empty()) {
         parts.push("--effort".to_string());
         parts.push(quote_acp_launch_arg(e, windows));
+    }
+    if let Some(wrapper) = profile.account_wrapper.as_ref() {
+        if is_valid_account_wrapper(family, wrapper) {
+            parts.push("--account-wrapper-bin".to_string());
+            parts.push(quote_acp_launch_arg(&wrapper.bin, windows));
+            parts.push("--account-wrapper-slot".to_string());
+            parts.push(quote_acp_launch_arg(&wrapper.slot, windows));
+        }
+    }
+    if let Some(hub_id) = profile
+        .hub_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| is_safe_hub_id(id))
+    {
+        parts.push("--hub-id".to_string());
+        parts.push(quote_acp_launch_arg(hub_id, windows));
+    }
+    for (k, v) in &profile.connector_envs {
+        if is_allowed_connector_env_key(k) {
+            parts.push("--connector-env".to_string());
+            parts.push(quote_acp_launch_arg(&format!("{k}={v}"), windows));
+        }
+    }
+    if let Some(path) = profile
+        .append_system_prompt_file
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        parts.push("--append-system-prompt-file".to_string());
+        parts.push(quote_acp_launch_arg(path, windows));
+    }
+    if let Some(instr) = profile
+        .developer_instructions
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        parts.push("--developer-instructions".to_string());
+        parts.push(quote_acp_launch_arg(instr, windows));
+    }
+    if profile.gbot_chat {
+        parts.push("--gbot-chat".to_string());
+    }
+    if profile.gbot_api_chat {
+        parts.push("--gbot-api-chat".to_string());
+    }
+    if profile.gbot_computer_use_off {
+        parts.push("--gbot-computer-use-off".to_string());
+    }
+    if profile.lean_worker {
+        parts.push("--lean-worker".to_string());
     }
     parts.join(" ")
 }
@@ -396,7 +452,9 @@ fn strip_ps_env_prefix(token: &str) -> Option<&str> {
     }
 }
 
-fn split_leading_env_assignments(tokens: Vec<String>) -> (Vec<(String, String)>, Vec<String>) {
+pub(crate) fn split_leading_env_assignments(
+    tokens: Vec<String>,
+) -> (Vec<(String, String)>, Vec<String>) {
     let mut envs = Vec::new();
     let mut idx = 0;
     let mut saw_env_cmd = false;
@@ -479,318 +537,367 @@ fn is_account_wrapper_bin(token: &str) -> bool {
     )
 }
 
-/// Sanitize a Claude inline `--settings` JSON object: strip `permissions.allow`,
-/// `permissions.defaultMode`, and `permissions.additionalDirectories` so an agent-supplied or
-/// inherited command can never loosen Ghostex's approval level, while preserving deny rules
-/// (home-secret-folder denies, GBot computer-use denies) and non-permission settings (hooks,
-/// compaction). Returns `None` for non-inline file paths so arbitrary settings files cannot be
-/// smuggled into Non-CLI mode.
-fn sanitize_claude_inline_settings(raw: &str) -> Option<String> {
-    let Ok(serde_json::Value::Object(mut obj)) = serde_json::from_str::<serde_json::Value>(raw.trim())
-    else {
-        return None;
+pub(crate) fn is_safe_hub_id(id: &str) -> bool {
+    let trimmed = id.trim();
+    !trimmed.is_empty()
+        && !trimmed.contains("..")
+        && trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+pub(crate) fn is_allowed_connector_env_key(key: &str) -> bool {
+    matches!(
+        key,
+        "GH_CONFIG_DIR"
+            | "GOOGLE_WORKSPACE_CLI_CONFIG_DIR"
+            | "GWS_CONFIG_DIR"
+            | "GWS_CREDENTIALS_FILE"
+    ) || key.starts_with("GH_CONFIG_")
+        || key.starts_with("GWS_")
+        || key.starts_with("GOOGLE_WORKSPACE_")
+}
+
+fn is_valid_account_wrapper_slot(slot: &str) -> bool {
+    !slot.is_empty()
+        && slot
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+pub(crate) fn is_valid_account_wrapper(family: &str, wrapper: &AcpAccountWrapper) -> bool {
+    let base = wrapper
+        .bin
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(&wrapper.bin)
+        .to_ascii_lowercase();
+    let bin_matches = match family {
+        "claude" => matches!(base.as_str(), "cswap" | "cswap.exe"),
+        "codex" => matches!(base.as_str(), "xswap" | "xswap.exe"),
+        _ => false,
     };
-    if let Some(perms) = obj
-        .get_mut("permissions")
-        .and_then(serde_json::Value::as_object_mut)
-    {
-        perms.remove("allow");
-        perms.remove("defaultMode");
-        perms.remove("additionalDirectories");
-    }
-    serde_json::to_string(&serde_json::Value::Object(obj)).ok()
+    bin_matches && is_valid_account_wrapper_slot(&wrapper.slot)
 }
 
-/// Extract safe pass-through flags (`--settings <sanitized-inline-json>`, `--add-dir <val>`,
-/// `--append-system-prompt`, `--append-system-prompt-file`) from a Claude CLI command so
-/// home-secret-folder denial, GBot computer-use denial, Ghostex skills, and compaction settings
-/// stay active in Non-CLI mode without leaking conflicting permission/bypass flags.
-fn preserved_claude_flags(tokens: &[String]) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < tokens.len() {
-        let tok = tokens[i].as_str();
-        if tok == "--settings" {
-            if let Some(val) = tokens.get(i + 1) {
-                if let Some(sanitized) = sanitize_claude_inline_settings(val) {
-                    out.push("--settings".to_string());
-                    out.push(sanitized);
-                }
-                i += 2;
-                continue;
-            }
-        } else if let Some(val) = tok.strip_prefix("--settings=") {
-            if let Some(sanitized) = sanitize_claude_inline_settings(val) {
-                out.push("--settings".to_string());
-                out.push(sanitized);
-            }
-            i += 1;
-            continue;
-        } else if matches!(
-            tok,
-            "--add-dir" | "--append-system-prompt" | "--append-system-prompt-file"
-        ) {
-            if let Some(val) = tokens.get(i + 1) {
-                out.push(tok.to_string());
-                out.push(val.clone());
-                i += 2;
-                continue;
-            }
-        } else if tok.starts_with("--add-dir=")
-            || tok.starts_with("--append-system-prompt=")
-            || tok.starts_with("--append-system-prompt-file=")
-        {
-            out.push(tok.to_string());
-        }
-        i += 1;
-    }
-    out
-}
-
-/// True when a Codex `-c <expr>` override is one of Ghostex's security/sandbox/feature controls
-/// (home-secret-folder denies, GBot API chat sandbox, GBot computer-use MCP server disables) and
-/// NOT an untrusted `approval_policy` or `sandbox_mode` override.
-fn is_safe_ghostex_codex_config_override(val: &str) -> bool {
-    let trimmed = val.trim();
-    if trimmed.starts_with("permissions.ghostex-") {
-        return true;
-    }
-    if trimmed.starts_with("default_permissions=\"ghostex-")
-        || trimmed.starts_with("default_permissions=ghostex-")
-    {
-        return true;
-    }
-    if let Some(rest) = trimmed.strip_prefix("mcp_servers.") {
-        if let Some(name) = rest.strip_suffix(".enabled=false") {
-            return !name.is_empty()
-                && name
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
-        }
-    }
-    false
-}
-
-/// Extract Ghostex's safe Codex CLI flags (`-c permissions.ghostex-*`,
-/// `-c default_permissions="ghostex-*"`, `-c mcp_servers.*.enabled=false`, and
-/// `--disable <feature>`) so Non-CLI Codex keeps every Ghostex sandbox, secret-folder denial,
-/// GBot computer-use restriction, and lean-worker flag without forwarding untrusted approval or
-/// sandbox overrides.
-fn preserved_codex_flags(tokens: &[String]) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < tokens.len() {
-        let tok = tokens[i].as_str();
-        if matches!(tok, "-c" | "--config") {
-            if let Some(val) = tokens.get(i + 1) {
-                if is_safe_ghostex_codex_config_override(val) {
-                    out.push("-c".to_string());
-                    out.push(val.clone());
-                }
-                i += 2;
-                continue;
-            }
-        } else if let Some(val) = tok
-            .strip_prefix("-c=")
-            .or_else(|| tok.strip_prefix("--config="))
-        {
-            if is_safe_ghostex_codex_config_override(val) {
-                out.push("-c".to_string());
-                out.push(val.to_string());
-            }
-            i += 1;
-            continue;
-        } else if tok == "--disable" {
-            if let Some(feature) = tokens.get(i + 1) {
-                if !feature.is_empty() && !feature.starts_with('-') {
-                    out.push("--disable".to_string());
-                    out.push(feature.clone());
-                }
-                i += 2;
-                continue;
-            }
-        } else if let Some(feature) = tok.strip_prefix("--disable=") {
-            if !feature.is_empty() && !feature.starts_with('-') {
-                out.push("--disable".to_string());
-                out.push(feature.to_string());
-            }
-            i += 1;
-            continue;
-        }
-        i += 1;
-    }
-    out
-}
-
-/// Build `(envs, program, args)` to launch the agent's stdio ACP/SDK subprocess, respecting custom
-/// executables and account wrappers (`cswap run <N> --share-history -- ...`, `xswap run <N> -- ...`).
-pub fn build_acp_server_argv(
-    spec: &AcpAgentSpec,
+/// Extract ONLY a validated `cswap run <slot>` / `xswap run <slot>` account wrapper or a plain
+/// family executable path from a command string (never forwarding arbitrary flags or leading env
+/// vars). Returns `(wrapper, custom_bin, ignored)` so Non-CLI callers can log discarded tokens.
+pub(crate) fn extract_account_wrapper_and_ignored(
+    family: &str,
+    default_cli_bin: &str,
     cli_command: Option<&str>,
-) -> Option<(Vec<(String, String)>, String, Vec<String>)> {
-    let (default_prog, acp_args) = spec.acp_argv.split_first()?;
-    let (envs, base_tokens) = cli_command
-        .map(tokenize_cli_command)
-        .map(split_leading_env_assignments)
-        .unwrap_or_default();
-
-    // Preserve `cswap` / `xswap` account wrappers cleanly (and ALWAYS keep `--share-history` on
-    // `cswap` so shared Claude projects/history are never unlinked).
-    if let Some(first) = base_tokens.first().filter(|t| is_account_wrapper_bin(t)) {
-        let is_cswap = first
+) -> (Option<AcpAccountWrapper>, Option<String>, Vec<String>) {
+    let Some(raw) = cli_command.map(str::trim).filter(|s| !s.is_empty()) else {
+        return (None, None, Vec::new());
+    };
+    let tokens = tokenize_cli_command(raw);
+    let (envs, base_tokens) = split_leading_env_assignments(tokens);
+    let mut ignored: Vec<String> = envs.into_iter().map(|(k, _)| format!("{k}=...")).collect();
+    let Some(first) = base_tokens.first() else {
+        return (None, None, ignored);
+    };
+    if is_account_wrapper_bin(first) {
+        let base = first
             .rsplit(['/', '\\'])
             .next()
             .unwrap_or(first)
-            .to_ascii_lowercase()
-            .starts_with("cswap");
-        let sep_idx = base_tokens.iter().position(|t| t == "--");
-        let mut args = Vec::new();
-        let tail_slice: &[String];
-        if let Some(sep) = sep_idx {
-            let mut prefix = base_tokens[1..sep].to_vec();
-            if is_cswap && !prefix.iter().any(|t| t == "--share-history") {
-                prefix.push("--share-history".to_string());
+            .to_ascii_lowercase();
+        let expected_wrapper = match family {
+            "claude" => matches!(base.as_str(), "cswap" | "cswap.exe"),
+            "codex" => matches!(base.as_str(), "xswap" | "xswap.exe"),
+            _ => false,
+        };
+        if expected_wrapper
+            && base_tokens.get(1).map(String::as_str) == Some("run")
+            && base_tokens
+                .get(2)
+                .is_some_and(|slot| is_valid_account_wrapper_slot(slot))
+        {
+            let wrapper = AcpAccountWrapper {
+                bin: first.clone(),
+                slot: base_tokens[2].clone(),
+            };
+            for tok in base_tokens.iter().skip(3) {
+                if !matches!(tok.as_str(), "--share-history" | "--")
+                    && tok.as_str() != default_cli_bin
+                {
+                    ignored.push(tok.clone());
+                }
             }
-            args.extend(prefix);
-            args.push("--".to_string());
-            tail_slice = &base_tokens[sep + 1..];
-        } else {
-            let mut prefix = base_tokens[1..].to_vec();
-            if is_cswap && !prefix.iter().any(|t| t == "--share-history") {
-                prefix.push("--share-history".to_string());
-            }
-            args.extend(prefix);
-            args.push("--".to_string());
-            tail_slice = &[];
+            return (Some(wrapper), None, ignored);
         }
-        // Both `cswap run <N> --share-history -- <args>` and `xswap run <N> -- <args>` pass
-        // everything after `--` directly to `claude` or `codex` (never the binary name itself).
-        args.extend(acp_args.iter().map(|s| (*s).to_string()));
-        if spec.family == "claude" {
-            args.extend(preserved_claude_flags(tail_slice));
-        } else if spec.family == "codex" {
-            args.extend(preserved_codex_flags(tail_slice));
-        }
-        return Some((envs, first.clone(), args));
+        ignored.extend(base_tokens.into_iter());
+        return (None, None, ignored);
     }
 
-    let program = base_tokens
-        .first()
-        .filter(|s| !s.is_empty())
-        .cloned()
-        .unwrap_or_else(|| (*default_prog).to_string());
-    let mut args: Vec<String> = acp_args.iter().map(|s| (*s).to_string()).collect();
-    if spec.family == "claude" && base_tokens.len() > 1 {
-        args.extend(preserved_claude_flags(&base_tokens[1..]));
-    } else if spec.family == "codex" && base_tokens.len() > 1 {
-        args.extend(preserved_codex_flags(&base_tokens[1..]));
+    let base_name = first.rsplit(['/', '\\']).next().unwrap_or(first);
+    let stem = base_name
+        .strip_suffix(".exe")
+        .or_else(|| base_name.strip_suffix(".EXE"))
+        .unwrap_or(base_name)
+        .to_ascii_lowercase();
+    let custom_bin = if stem == default_cli_bin {
+        Some(first.clone())
+    } else {
+        ignored.push(first.clone());
+        None
+    };
+    if base_tokens.len() > 1 {
+        ignored.extend(base_tokens.into_iter().skip(1));
     }
+    (None, custom_bin, ignored)
+}
+
+/// Resolve Ghostex's own CLIProxyAPI hub profile directory (`~/.claude-profiles/ghostex-<id>` or
+/// `~/.codex-profiles/ghostex-<id>`) for a Non-CLI session. Returns `None` if `hub_id` is invalid.
+pub(crate) fn resolve_hub_profile_dir(family: &str, hub_id: &str) -> Option<PathBuf> {
+    if !is_safe_hub_id(hub_id) {
+        return None;
+    }
+    let provider = match family {
+        "claude" => crate::accounts::model::Provider::Claude,
+        "codex" => crate::accounts::model::Provider::Codex,
+        _ => return None,
+    };
+    let home = crate::accounts::launch::home().ok()?;
+    Some(crate::accounts::hub::launch::profile_dir(
+        &home,
+        provider,
+        hub_id.trim(),
+    ))
+}
+
+/// Build `(envs, program, args)` to launch the agent's stdio ACP/SDK subprocess strictly from
+/// Ghostex's static per-agent spec and server-generated `AcpLaunchProfile`.
+///
+/// NEVER forwards arbitrary flags or leading environment assignments from a user- or
+/// agent-supplied command string (`cli_command`); any extra flags or env vars in `cli_command` are
+/// logged and ignored.
+pub fn build_acp_server_argv(
+    spec: &AcpAgentSpec,
+    cli_command: Option<&str>,
+    profile: &AcpLaunchProfile,
+) -> Option<(Vec<(String, String)>, String, Vec<String>)> {
+    let (default_prog, acp_args) = spec.acp_argv.split_first()?;
+    let (extracted_wrapper, custom_bin, ignored) =
+        extract_account_wrapper_and_ignored(spec.family, spec.default_cli_bin, cli_command);
+    if !ignored.is_empty() {
+        eprintln!(
+            "[Non-CLI] Ignoring extra flags/env in command string for {}: {}",
+            spec.family,
+            ignored.join(" ")
+        );
+    }
+
+    let wrapper = profile
+        .account_wrapper
+        .as_ref()
+        .filter(|w| is_valid_account_wrapper(spec.family, w))
+        .cloned()
+        .or(extracted_wrapper);
+
+    let mut envs: Vec<(String, String)> = Vec::new();
+    if wrapper.is_none() {
+        if let Some(hub_id) = profile.hub_id.as_deref() {
+            if let Some(dir) = resolve_hub_profile_dir(spec.family, hub_id) {
+                let env_key = match spec.family {
+                    "claude" => Some("CLAUDE_CONFIG_DIR"),
+                    "codex" => Some("CODEX_HOME"),
+                    _ => None,
+                };
+                if let Some(key) = env_key {
+                    envs.push((key.to_string(), dir.to_string_lossy().to_string()));
+                }
+            }
+        }
+    }
+
+    if let Some(wrapper) = wrapper {
+        let mut args = vec!["run".to_string(), wrapper.slot];
+        if spec.family == "claude" {
+            args.push("--share-history".to_string());
+        }
+        args.push("--".to_string());
+        args.extend(acp_args.iter().map(|s| (*s).to_string()));
+        return Some((envs, wrapper.bin, args));
+    }
+
+    let program = custom_bin.unwrap_or_else(|| (*default_prog).to_string());
+    let args: Vec<String> = acp_args.iter().map(|s| (*s).to_string()).collect();
     Some((envs, program, args))
 }
 
-/// Strip permissive approval/sandbox flags from CLI arguments when switching to Terminal while
-/// downgraded below `Full access` (e.g. `Ask`), keeping Ghostex deny profiles and other flags.
-fn strip_permissive_cli_flags(args: Vec<String>) -> Vec<String> {
-    let mut out = Vec::with_capacity(args.len());
-    let mut i = 0;
-    while i < args.len() {
-        let tok = args[i].as_str();
-        let lower = tok.to_ascii_lowercase();
-        if matches!(
-            lower.as_str(),
-            "--dangerously-skip-permissions"
-                | "--dangerously-bypass-approvals-and-sandbox"
-                | "--yolo"
-                | "--full-auto"
-                | "--allow-all"
-                | "--bypass-permissions"
-                | "--accept-all"
-        ) {
-            i += 1;
-            continue;
+/// Build Ghostex's own server-side Claude `--settings` JSON strictly from Ghostex's structured
+/// profile and Ghostex settings (never from any caller-supplied `--settings`, never containing
+/// `hooks`, command helpers, `permissions.allow`, `permissions.defaultMode`, or
+/// `permissions.additionalDirectories`).
+pub(crate) fn build_ghostex_claude_settings_json(
+    profile: &AcpLaunchProfile,
+    cwd: Option<&str>,
+    effort: Option<&str>,
+) -> Option<String> {
+    let mut settings = serde_json::Map::new();
+    let mut env_map = serde_json::Map::new();
+    for (k, v) in &profile.connector_envs {
+        if is_allowed_connector_env_key(k) {
+            env_map.insert(k.clone(), serde_json::Value::String(v.clone()));
         }
-        if matches!(
-            lower.as_str(),
-            "--permission-mode" | "--approval-mode" | "--ask-for-approval" | "-a" | "--sandbox" | "-s"
-        ) {
-            i += 2;
-            continue;
-        }
-        if lower.starts_with("--permission-mode=")
-            || lower.starts_with("--approval-mode=")
-            || lower.starts_with("--ask-for-approval=")
-            || lower.starts_with("-a=")
-            || lower.starts_with("--sandbox=")
-            || lower.starts_with("-s=")
-        {
-            i += 1;
-            continue;
-        }
-        out.push(args[i].clone());
-        i += 1;
     }
-    out
+    if !env_map.is_empty() {
+        settings.insert("env".to_string(), serde_json::Value::Object(env_map));
+    }
+    crate::agents::write_compaction_into_settings(&mut settings);
+    if effort
+        .map(str::trim)
+        .is_some_and(|e| matches!(e, "low" | "medium" | "high" | "xhigh" | "max"))
+    {
+        settings.insert("ultracode".to_string(), serde_json::Value::Bool(false));
+    }
+    crate::agent_skills_session::write_ghostex_skills_into_settings(&mut settings);
+
+    let mut deny_rules = crate::agents::claude_deny_rules_for_session(cwd, profile.gbot_api_chat);
+    if profile.gbot_computer_use_off {
+        for rule in crate::agents::claude_screen_deny_rules() {
+            if !deny_rules.contains(&rule) {
+                deny_rules.push(rule);
+            }
+        }
+    }
+    if !deny_rules.is_empty() {
+        let mut perms = serde_json::Map::new();
+        perms.insert("deny".to_string(), serde_json::Value::Array(deny_rules));
+        settings.insert(
+            "permissions".to_string(),
+            serde_json::Value::Object(perms),
+        );
+    }
+    if settings.is_empty() {
+        None
+    } else {
+        serde_json::to_string(&serde_json::Value::Object(settings)).ok()
+    }
+}
+
+/// Accept an `--append-system-prompt-file` path ONLY when it is a regular file living inside
+/// Ghostex's own root/state directory (`GxserverPaths::root_dir`).
+pub(crate) fn validated_ghostex_prompt_file(raw: Option<&str>) -> Option<String> {
+    let candidate = PathBuf::from(raw?.trim());
+    if !candidate.is_file() {
+        return None;
+    }
+    let root = crate::paths::get_gxserver_paths(None).root_dir;
+    let canon_root = std::fs::canonicalize(&root).ok()?;
+    let canon_file = std::fs::canonicalize(&candidate).ok()?;
+    if canon_file.starts_with(&canon_root) {
+        Some(canon_file.to_string_lossy().to_string())
+    } else {
+        None
+    }
 }
 
 /// Build `(envs, program, args)` to exec in-place inside `zmx`/`wmx` when the user switches an ACP
-/// session to the interactive CLI terminal, preserving `--permission-mode plan` /
-/// `--sandbox read-only` for `--read-only` threads and stripping non-bypass permissive flags when
-/// `!accept_all`.
+/// session to the interactive CLI terminal. Builds the interactive CLI strictly from Ghostex's
+/// structured `AcpLaunchProfile`, preserving `--permission-mode plan` /
+/// `--sandbox read-only --ask-for-approval on-request` for `--read-only` threads and re-applying
+/// Ghostex's own deny profiles cleanly for the session's current approval level (never leaking
+/// untrusted command flags or a full-write `ghostex-home` profile on downgrade).
 pub fn build_cli_switch_argv_with_options(
     spec: &AcpAgentSpec,
     cli_command: Option<&str>,
     native_session_id: Option<&str>,
     accept_all: bool,
     read_only: bool,
+    profile: &AcpLaunchProfile,
+    cwd: Option<&str>,
 ) -> (Vec<(String, String)>, String, Vec<String>) {
-    let (envs, mut base_tokens) = cli_command
-        .map(tokenize_cli_command)
-        .map(split_leading_env_assignments)
-        .unwrap_or_default();
-    if base_tokens.is_empty() {
-        base_tokens.push(spec.default_cli_bin.to_string());
-    }
-    let program = base_tokens[0].clone();
-    let is_wrapper = is_account_wrapper_bin(&program);
-    let is_cswap = program
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(&program)
-        .to_ascii_lowercase()
-        .starts_with("cswap");
+    let (extracted_wrapper, custom_bin, _) =
+        extract_account_wrapper_and_ignored(spec.family, spec.default_cli_bin, cli_command);
+    let wrapper = profile
+        .account_wrapper
+        .as_ref()
+        .filter(|w| is_valid_account_wrapper(spec.family, w))
+        .cloned()
+        .or(extracted_wrapper);
 
-    let (mut wrapper_prefix, mut inner_args) = if is_wrapper {
-        if let Some(sep) = base_tokens.iter().position(|t| t == "--") {
-            (base_tokens[1..sep].to_vec(), base_tokens[sep + 1..].to_vec())
-        } else {
-            (base_tokens[1..].to_vec(), Vec::new())
-        }
-    } else {
-        (Vec::new(), base_tokens[1..].to_vec())
-    };
-
-    if is_cswap && !wrapper_prefix.iter().any(|t| t == "--share-history") {
-        wrapper_prefix.push("--share-history".to_string());
-    }
-
-    if !accept_all || read_only {
-        inner_args = strip_permissive_cli_flags(inner_args);
-    }
-
-    if let Some(id) = native_session_id.map(str::trim).filter(|s| !s.is_empty()) {
-        if spec.family == "codex" {
-            // `codex resume [OPTIONS] [SESSION_ID]` expects `resume` as the subcommand before
-            // resume-specific flags.
-            if !inner_args.iter().any(|arg| arg == spec.cli_resume_flag) {
-                let mut next = vec![spec.cli_resume_flag.to_string(), id.to_string()];
-                next.extend(inner_args);
-                inner_args = next;
+    let mut envs: Vec<(String, String)> = Vec::new();
+    if wrapper.is_none() {
+        if let Some(hub_id) = profile.hub_id.as_deref() {
+            if let Some(dir) = resolve_hub_profile_dir(spec.family, hub_id) {
+                let env_key = match spec.family {
+                    "claude" => Some("CLAUDE_CONFIG_DIR"),
+                    "codex" => Some("CODEX_HOME"),
+                    _ => None,
+                };
+                if let Some(key) = env_key {
+                    envs.push((key.to_string(), dir.to_string_lossy().to_string()));
+                }
             }
-        } else if !inner_args.iter().any(|arg| arg == spec.cli_resume_flag) {
-            inner_args.push(spec.cli_resume_flag.to_string());
-            inner_args.push(id.to_string());
         }
     }
+
+    let mut inner_args: Vec<String> = Vec::new();
+    if let Some(id) = native_session_id.map(str::trim).filter(|s| !s.is_empty()) {
+        inner_args.push(spec.cli_resume_flag.to_string());
+        inner_args.push(id.to_string());
+    }
+
+    if spec.family == "claude" {
+        if let Some(settings_json) = build_ghostex_claude_settings_json(profile, cwd, None) {
+            inner_args.push("--settings".to_string());
+            inner_args.push(settings_json);
+        }
+        if let Some(path) = validated_ghostex_prompt_file(
+            profile.append_system_prompt_file.as_deref(),
+        ) {
+            inner_args.push("--append-system-prompt-file".to_string());
+            inner_args.push(path);
+        }
+    } else if spec.family == "codex" {
+        for (k, v) in &profile.connector_envs {
+            if is_allowed_connector_env_key(k) {
+                inner_args.push("-c".to_string());
+                inner_args.push(format!(
+                    "shell_environment_policy.set.{k}={}",
+                    serde_json::to_string(v).unwrap_or_default()
+                ));
+            }
+        }
+        if profile.gbot_computer_use_off {
+            let codex_home = envs
+                .iter()
+                .find(|(k, _)| k == "CODEX_HOME")
+                .map(|(_, v)| PathBuf::from(v));
+            for srv in crate::agents::codex_disabled_screen_servers(codex_home.as_deref()) {
+                inner_args.push("-c".to_string());
+                inner_args.push(format!("mcp_servers.{srv}.enabled=false"));
+            }
+        }
+        if profile.lean_worker {
+            for feat in crate::agents::lean_codex_disabled_features_if_enabled() {
+                inner_args.push("--disable".to_string());
+                inner_args.push(feat);
+            }
+        }
+        if let Some(instr) = profile
+            .developer_instructions
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            inner_args.push("-c".to_string());
+            inner_args.push(format!(
+                "developer_instructions={}",
+                crate::agents::codex_toml_string(instr)
+            ));
+        }
+    }
+
+    let codex_deny = if spec.family == "codex" {
+        crate::agents::codex_deny_paths_for_session(cwd, profile.gbot_chat, profile.gbot_api_chat)
+    } else {
+        None
+    };
 
     if read_only {
         if spec.family == "claude" {
@@ -799,26 +906,81 @@ pub fn build_cli_switch_argv_with_options(
         } else if spec.family == "codex" {
             inner_args.push("--sandbox".to_string());
             inner_args.push("read-only".to_string());
+            inner_args.push("--ask-for-approval".to_string());
+            inner_args.push("on-request".to_string());
         }
     } else if let Some(flag) = spec.cli_accept_all_flag {
-        if accept_all {
-            if !inner_args.iter().any(|arg| arg == flag) {
-                inner_args.push(flag.to_string());
-            }
-        } else {
-            inner_args.retain(|arg| arg != flag);
+        if accept_all && !(spec.family == "codex" && codex_deny.is_some()) {
+            inner_args.push(flag.to_string());
         }
     }
 
-    let mut args = Vec::new();
-    if is_wrapper {
-        args.extend(wrapper_prefix);
+    if let Some((is_api, deny_paths)) = codex_deny {
+        let denies: Vec<String> = deny_paths
+            .iter()
+            .map(|p| format!("{}=\"deny\"", crate::agents::codex_toml_string(p)))
+            .collect();
+        let (prof_name, prof_val) = if is_api {
+            let mut fs_entries = vec!["\"/\"=\"read\"".to_string()];
+            if !read_only {
+                if let Some(c) = cwd.map(str::trim).filter(|s| !s.is_empty()) {
+                    fs_entries.push(format!("{}=\"write\"", crate::agents::codex_toml_string(c)));
+                }
+            }
+            fs_entries.extend(denies);
+            (
+                "ghostex-gbot-api",
+                format!(
+                    "{{filesystem={{{}}}, network={{enabled={}}}}}",
+                    fs_entries.join(", "),
+                    if read_only { "false" } else { "true" }
+                ),
+            )
+        } else if read_only {
+            (
+                "ghostex-home",
+                format!(
+                    "{{filesystem={{\"/\"=\"read\", {}}}, network={{enabled=false}}}}",
+                    denies.join(", ")
+                ),
+            )
+        } else if accept_all {
+            inner_args.push("--ask-for-approval".to_string());
+            inner_args.push("never".to_string());
+            (
+                "ghostex-home",
+                format!(
+                    "{{filesystem={{\"/\"=\"write\", {}}}, network={{enabled=true}}}}",
+                    denies.join(", ")
+                ),
+            )
+        } else {
+            (
+                "ghostex-home",
+                format!(
+                    "{{extends=\":workspace\", filesystem={{{}}}, network={{enabled=false}}}}",
+                    denies.join(", ")
+                ),
+            )
+        };
+        inner_args.push("-c".to_string());
+        inner_args.push(format!("permissions.{prof_name}={prof_val}"));
+        inner_args.push("-c".to_string());
+        inner_args.push(format!("default_permissions=\"{prof_name}\""));
+    }
+
+    if let Some(wrapper) = wrapper {
+        let mut args = vec!["run".to_string(), wrapper.slot];
+        if spec.family == "claude" {
+            args.push("--share-history".to_string());
+        }
         if !inner_args.is_empty() {
             args.push("--".to_string());
             args.extend(inner_args);
         }
-    } else {
-        args.extend(inner_args);
+        return (envs, wrapper.bin, args);
     }
-    (envs, program, args)
+
+    let program = custom_bin.unwrap_or_else(|| spec.default_cli_bin.to_string());
+    (envs, program, inner_args)
 }

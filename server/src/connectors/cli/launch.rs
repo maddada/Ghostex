@@ -88,6 +88,28 @@ fn project_cli_env(db: &rusqlite::Connection, project: &Value) -> Vec<(String, S
     session_env(&paths, &workspace)
 }
 
+/// Workspace `gh`/`gws` sign-in env vars for a Non-CLI launch (never parsed from a command string).
+pub(crate) fn project_cli_env_for_acp(
+    db: &rusqlite::Connection,
+    project: &Value,
+) -> Vec<(String, String)> {
+    if cfg!(test) {
+        return Vec::new();
+    }
+    project_cli_env(db, project)
+}
+
+/// Same as [`project_cli_env_for_acp`] for resume/fork paths without an open database handle.
+pub(crate) fn project_cli_env_for_acp_resume(project: &Value) -> Vec<(String, String)> {
+    if cfg!(test) {
+        return Vec::new();
+    }
+    match crate::storage::open_gxserver_database(&get_gxserver_paths(None)) {
+        Ok(db) => project_cli_env(&db, project),
+        Err(_) => Vec::new(),
+    }
+}
+
 /// The same for a resume, which has no database open.
 pub(crate) fn with_project_cli_env_for_resume(
     project: &Value,
