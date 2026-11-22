@@ -844,6 +844,29 @@ fn compress_terminal_font_faces() {
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", stamp_path.display()));
 }
 
+/// CDXC:PlatformSupport 2026-11-22 WHY:
+/// Chromium 156 pins `gtk-modules` to "" after KDE has loaded colorreload-gtk-module and window-decorations-gtk-module (appmenu-gtk-module too, when the global menu is on). GTK unloads them while their theme callbacks are still registered, so a desktop theme change SIGSEGVs the runtime. Exporting `g_object_set` and `g_module_close` from the executable ignores that empty pin and keeps those modules mapped. libcef.so is DT_NEEDED, so a guard installed from `main` cannot interpose.
+/// SEE-ALSO: native/linux/gtk_module_guard.c
+fn link_linux_gtk_module_guard(manifest_dir: &Path) {
+    let source = manifest_dir.join("native/linux/gtk_module_guard.c");
+    println!("cargo:rerun-if-changed={}", source.display());
+    let mut build = cc::Build::new();
+    build
+        .file(&source)
+        .cargo_metadata(false)
+        .flag("-fno-function-sections")
+        .flag("-fno-data-sections");
+    build.compile("ghostex_gtk_module_guard");
+    let archive = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"))
+        .join("libghostex_gtk_module_guard.a");
+    println!(
+        "cargo:rustc-link-arg=-Wl,--whole-archive,{},--no-whole-archive",
+        archive.display()
+    );
+    println!("cargo:rustc-link-arg=-Wl,--export-dynamic-symbol=g_object_set");
+    println!("cargo:rustc-link-arg=-Wl,--export-dynamic-symbol=g_module_close");
+}
+
 fn main() {
     // `ghostex_web` is set only by the GPUI web build, which compiles many of these files (apps/gpui-web/build.rs).
     println!("cargo::rustc-check-cfg=cfg(ghostex_web)");
@@ -926,6 +949,7 @@ fn main() {
         on LD_LIBRARY_PATH.
         */
         println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+        link_linux_gtk_module_guard(&manifest_dir);
         return;
     }
 
