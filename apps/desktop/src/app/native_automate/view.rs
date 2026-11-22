@@ -149,11 +149,24 @@ impl NativeAutomateView {
         appearance: (bool, bool),
         cx: &mut Context<Self>,
     ) -> bool {
+        let had_remote_target = self
+            .context
+            .as_ref()
+            .and_then(|context| context.remote_target.as_ref())
+            .is_some();
+        let has_remote_target = context
+            .as_ref()
+            .and_then(|context| context.remote_target.as_ref())
+            .is_some();
         self.context = context;
         self.host = Some(host);
         let appearance_changed = self.appearance.replace(appearance) != Some(appearance);
         if self.scope.as_ref() == Some(&scope) {
             self.focus_request = None;
+            if !had_remote_target && has_remote_target && self.state.is_none() && !self.loading {
+                self.load(cx);
+                return true;
+            }
             return appearance_changed;
         }
         let load = !scope.coming_soon;

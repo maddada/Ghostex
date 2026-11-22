@@ -16,6 +16,8 @@ pub(crate) struct AutomateScope {
     pub(crate) project_id: String,
     pub(crate) project_path: String,
     pub(crate) project_name: String,
+    /// Owning remote computer id when the active project lives on another computer.
+    pub(crate) remote_machine_id: Option<String>,
     /// The project editor id the board requests carry.
     pub(crate) editor_id: String,
     /// All Automations without Show Beta Features: the "coming very soon" notice instead of data.

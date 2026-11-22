@@ -11,44 +11,61 @@ use gpui::{
     MouseDownEvent, ParentElement as _, StyleRefinement, Styled as _, Window, div,
 };
 
+fn native_automate_scope_from_snapshot(
+    snapshot: &GpuiProjectSnapshot,
+    all_automations_enabled: bool,
+) -> Option<AutomateScope> {
+    if !snapshot.feature_availability.automate {
+        return None;
+    }
+    let active_project_id = snapshot.active_project_id.as_ref()?.0.clone();
+    let editor_id = snapshot.surface_ids.automate_board_id.clone()?;
+    if active_project_id == GPUI_QUICK_AUTOMATIONS_PROJECT_ID {
+        return Some(AutomateScope {
+            all_projects: true,
+            project_id: active_project_id,
+            project_path: String::new(),
+            project_name: GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE.to_string(),
+            remote_machine_id: None,
+            editor_id,
+            coming_soon: !all_automations_enabled,
+        });
+    }
+    if snapshot.is_quick_projectless {
+        return None;
+    }
+    let project_path = snapshot
+        .in_memory_project_path
+        .as_ref()?
+        .to_string_lossy()
+        .to_string();
+    let remote_reference = gpui_remote_project_reference_from_project_id(&active_project_id);
+    let project_id = remote_reference
+        .as_ref()
+        .map(|reference| reference.project_id.clone())
+        .unwrap_or(active_project_id);
+    let remote_machine_id = remote_reference.map(|reference| reference.remote_machine_id);
+    Some(AutomateScope {
+        all_projects: false,
+        project_id,
+        project_path,
+        project_name: snapshot.display_name.clone(),
+        remote_machine_id,
+        editor_id,
+        coming_soon: false,
+    })
+}
+
 impl GhostexGpuiApp {
     /// The Automate scope for the sidebar's active project: no Automate feature, a projectless
     /// context, or missing identity leaves the static placeholder.
     fn native_automate_scope(&self) -> Option<AutomateScope> {
         let snapshot = self.latest_sidebar_project_snapshot.as_ref()?;
-        if !snapshot.feature_availability.automate {
-            return None;
-        }
-        let project_id = snapshot.active_project_id.as_ref()?.0.clone();
-        let editor_id = snapshot.surface_ids.automate_board_id.clone()?;
-        if project_id == GPUI_QUICK_AUTOMATIONS_PROJECT_ID {
-            return Some(AutomateScope {
-                all_projects: true,
-                project_id,
-                project_path: String::new(),
-                project_name: GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE.to_string(),
-                editor_id,
-                coming_soon: !self
-                    .sidebar_runtime_settings_snapshot
-                    .all_automations_enabled,
-            });
-        }
-        if snapshot.is_quick_projectless {
-            return None;
-        }
-        let project_path = snapshot
-            .in_memory_project_path
-            .as_ref()?
-            .to_string_lossy()
-            .to_string();
-        Some(AutomateScope {
-            all_projects: false,
-            project_id,
-            project_path,
-            project_name: snapshot.display_name.clone(),
-            editor_id,
-            coming_soon: false,
-        })
+        native_automate_scope_from_snapshot(
+            snapshot,
+            self.sidebar_runtime_settings_snapshot
+                .all_automations_enabled,
+        )
     }
 
     /// A GBot routine card's Edit (session_chat/host_actions.rs): the Automate view with routine
@@ -61,9 +78,11 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let in_scope = self
-            .native_automate_scope()
-            .is_some_and(|scope| !scope.all_projects && scope.project_id == project_id);
+        let in_scope = self.native_automate_scope().is_some_and(|scope| {
+            !scope.all_projects
+                && scope.remote_machine_id.is_none()
+                && scope.project_id == project_id
+        });
         if !in_scope || !self.titlebar_mode_available(TitlebarMode::Automate) {
             return false;
         }
@@ -110,6 +129,7 @@ impl GhostexGpuiApp {
             project_id: GPUI_QUICK_AUTOMATIONS_PROJECT_ID.to_string(),
             project_path: String::new(),
             project_name: GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE.to_string(),
+            remote_machine_id: None,
             editor_id: ghostex_gx_core::quick_automations_board_id(),
             coming_soon: !self
                 .sidebar_runtime_settings_snapshot

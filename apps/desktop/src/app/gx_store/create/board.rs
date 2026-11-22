@@ -62,6 +62,7 @@ pub(super) struct BoardRequest {
     pub(super) project_id: Option<String>,
     pub(super) project_path: Option<String>,
     pub(super) prompt: Option<String>,
+    pub(super) remote_machine_id: Option<String>,
     pub(super) request_id: String,
     pub(super) session_id: Option<String>,
     pub(super) start_location: Option<String>,
@@ -98,6 +99,7 @@ impl BoardRequest {
             project_id: bounded(request, "projectId", 512),
             project_path: bounded(request, "projectPath", 4096),
             prompt: bounded(request, "prompt", 60_000),
+            remote_machine_id: bounded(request, "remoteMachineId", 256),
             request_id: bounded(request, "requestId", 256)?,
             session_id: bounded(request, "sessionId", 512),
             start_location: bounded(request, "startLocation", 32),
@@ -121,11 +123,25 @@ pub(super) struct BoardContext {
     pub(super) link_checks: LinkChecks,
     /// Every session row, raw, for a link's `agentSessionId`, `agentSessionPath` and `zmxName`.
     pub(super) session_rows: HashMap<(String, String), Value>,
+    pub(super) remote_machine_id: Option<String>,
+    pub(super) remote_target: Option<crate::app::model::GpuiRemoteGxserverRequestTarget>,
 }
 
 impl BoardContext {
     pub(super) fn now_iso() -> String {
         iso_string_from_ms(super::super::host::now_ms() as i64)
+    }
+
+    pub(super) fn gxserver_target(
+        &self,
+    ) -> BoardResult<Option<crate::app::model::GpuiRemoteGxserverRequestTarget>> {
+        if self.remote_machine_id.is_none() {
+            return Ok(None);
+        }
+        self.remote_target
+            .clone()
+            .map(Some)
+            .ok_or_else(|| "The remote gxserver is not connected.".to_string())
     }
 }
 
@@ -153,7 +169,7 @@ impl GhostexGpuiApp {
             self.gx_store_board_respond(&request.request_id, Ok(None), cx);
             return true;
         }
-        let context = self.gx_store_board_context();
+        let context = self.gx_store_board_context(request.remote_machine_id.as_deref());
         cx.spawn(async move |this, cx| {
             let result = match request.action.as_str() {
                 "associateFocusedSession" => {
@@ -169,7 +185,9 @@ impl GhostexGpuiApp {
             let answer = match result {
                 Ok(()) => {
                     // The state is built from this app as it is NOW, after the action.
-                    let context = match this.update(cx, |this, _| this.gx_store_board_context()) {
+                    let context = match this.update(cx, |this, _| {
+                        this.gx_store_board_context(request.remote_machine_id.as_deref())
+                    }) {
                         Ok(context) => context,
                         Err(_) => return,
                     };
@@ -265,17 +283,20 @@ impl GhostexGpuiApp {
     }
 
     /// Everything a request reads from this app, taken at once so the async half needs nothing else.
-    pub(super) fn gx_store_board_context(&self) -> BoardContext {
+    pub(super) fn gx_store_board_context(&self, remote_machine_id: Option<&str>) -> BoardContext {
+        let machine = remote_machine_id
+            .map(|id| MachineId::Remote(id.to_string()))
+            .unwrap_or(MachineId::Local);
         let focus = self.gx_store.core.focus();
         let active_project_id = focus
             .active_project
             .as_ref()
-            .filter(|project| project.machine.is_local())
+            .filter(|project| project.machine == machine)
             .map(|project| project.project_id.clone());
         let focused_session_id = focus
             .focused_session
             .as_ref()
-            .filter(|session| session.machine.is_local())
+            .filter(|session| session.machine == machine)
             .map(|session| session.session_id.clone());
         let mut facts = BoardSessionFacts {
             active_project_id,
@@ -283,7 +304,7 @@ impl GhostexGpuiApp {
             ..BoardSessionFacts::default()
         };
         let mut session_rows = HashMap::new();
-        if let Some(loaded) = self.gx_store.core.presentation().loaded(&MachineId::Local) {
+        if let Some(loaded) = self.gx_store.core.presentation().loaded(&machine) {
             for project in loaded.projects() {
                 facts
                     .project_titles
@@ -354,6 +375,9 @@ impl GhostexGpuiApp {
                 .to_string(),
             link_checks: self.gx_store.create.board_link_checks.clone(),
             session_rows,
+            remote_machine_id: remote_machine_id.map(str::to_string),
+            remote_target: remote_machine_id
+                .and_then(|id| self.gpui_remote_gxserver_request_target(id)),
         }
     }
 
@@ -369,8 +393,8 @@ impl GhostexGpuiApp {
 }
 
 /// `listGpuiProjectBoardDomainProjects`: fresh, so other clients' link writes are visible.
-pub(super) async fn list_projects() -> BoardResult<Vec<Value>> {
-    let response = gx_rpc(None, "/api/listProjects", json!({}))
+pub(super) async fn list_projects(context: &BoardContext) -> BoardResult<Vec<Value>> {
+    let response = gx_rpc(context.gxserver_target()?, "/api/listProjects", json!({}))
         .await
         .map_err(|error| error.message)?;
     Ok(response
@@ -429,7 +453,7 @@ pub(super) async fn resolve_scope(
     request: &BoardRequest,
     context: &BoardContext,
 ) -> BoardResult<(Value, Vec<Value>, Vec<Value>)> {
-    let projects = list_projects().await?;
+    let projects = list_projects(context).await?;
     let board = select_board_project(request, &projects, context)?;
     let store = select_link_store_projects(&board, &projects, &context.global_beads_directory);
     Ok((board, store, projects))
@@ -545,14 +569,20 @@ async fn link_availability(
     context: &BoardContext,
 ) -> (String, LinkAvailability, bool) {
     let (project_id, session_id) = board_reference(ghostex_session_id, board_id);
-    let key = format!("{project_id}:{session_id}");
+    let key = match context.remote_machine_id.as_deref() {
+        Some(machine_id) => format!("{machine_id}:{project_id}:{session_id}"),
+        None => format!("{project_id}:{session_id}"),
+    };
     if let Some((checked_at, cached)) = context.link_checks.get(&key)
         && checked_at.elapsed() < LINK_CHECK_TTL
     {
         return (key, cached.clone(), false);
     }
+    let Ok(remote) = context.gxserver_target() else {
+        return (key, LinkAvailability::default(), false);
+    };
     let previous = gx_rpc(
-        None,
+        remote.clone(),
         "/api/listPreviousSessions",
         json!({
             "includeActive": false,
@@ -591,7 +621,7 @@ async fn link_availability(
                         title,
                     }
                 }
-                None => match link_resumable(&project_id, &session_id).await {
+                None => match link_resumable(remote, &project_id, &session_id).await {
                     Some(resumable) => LinkAvailability {
                         restorable: false,
                         resumable,
@@ -606,9 +636,13 @@ async fn link_availability(
 }
 
 /// `checkGpuiProjectBoardLinkResumable`: `None` when the daemon's answer could not be read.
-async fn link_resumable(project_id: &str, session_id: &str) -> Option<bool> {
+async fn link_resumable(
+    remote: Option<crate::app::model::GpuiRemoteGxserverRequestTarget>,
+    project_id: &str,
+    session_id: &str,
+) -> Option<bool> {
     let response = gx_rpc(
-        None,
+        remote,
         "/api/readAgentResumePlan",
         json!({ "projectId": project_id, "sessionId": session_id }),
     )

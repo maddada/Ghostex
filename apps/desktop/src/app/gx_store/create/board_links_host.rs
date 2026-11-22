@@ -59,7 +59,11 @@ fn links_json(links: &[BeadConversationLink]) -> Value {
 
 /// `writeGpuiProjectBoardConversationLinks`: `/api/updateProject` replaces `projectBoardConfig`
 /// wholesale, so the row's other board settings travel with the links.
-async fn write_links(project: &Value, links: &[BeadConversationLink]) -> BoardResult<()> {
+async fn write_links(
+    project: &Value,
+    links: &[BeadConversationLink],
+    context: &BoardContext,
+) -> BoardResult<()> {
     let mut config = project
         .get("projectBoardConfig")
         .and_then(Value::as_object)
@@ -67,7 +71,7 @@ async fn write_links(project: &Value, links: &[BeadConversationLink]) -> BoardRe
         .unwrap_or_default();
     config.insert("beadConversationLinks".into(), links_json(links));
     gx_rpc(
-        None,
+        context.gxserver_target()?,
         "/api/updateProject",
         json!({ "projectBoardConfig": config, "projectId": project_id(project) }),
     )
@@ -87,6 +91,7 @@ async fn mutate_link_stores(
     board: &Value,
     store: &[Value],
     now: &str,
+    context: &BoardContext,
     mutate: impl Fn(Vec<BeadConversationLink>, &Value) -> Vec<BeadConversationLink>,
 ) -> BoardResult<()> {
     let projects = match store.is_empty() {
@@ -99,7 +104,7 @@ async fn mutate_link_stores(
         if links_json(&next) == links_json(&current) {
             continue;
         }
-        write_links(project, &next).await?;
+        write_links(project, &next, context).await?;
     }
     Ok(())
 }
@@ -117,7 +122,7 @@ async fn reload_scope(
     store: &[Value],
     context: &BoardContext,
 ) -> (Value, Vec<Value>) {
-    match list_projects().await {
+    match list_projects(context).await {
         Ok(projects) => {
             let board_id = project_id(board);
             let latest = projects
@@ -155,7 +160,7 @@ async fn upsert_link(
     // The presentation row as it is now, after the create: `this.presentation` at this moment.
     let row = this
         .update(cx, |this, _| {
-            this.gx_store_board_context()
+            this.gx_store_board_context(context.remote_machine_id.as_deref())
                 .session_rows
                 .remove(&(session.project_id.clone(), session.session_id.clone()))
         })
@@ -226,7 +231,7 @@ async fn upsert_link(
         }
         None => links.push(next),
     }
-    write_links(&link_project, &links).await
+    write_links(&link_project, &links, context).await
 }
 
 /// `associateGpuiProjectBoardFocusedSession`.
@@ -300,7 +305,7 @@ pub(super) async fn start_work(
         // created session is focused by the create path itself).
         let board_id = project_id(&board);
         if context.facts.active_project_id.as_deref() != Some(board_id.as_str()) {
-            focus_project(this, cx, &board_id);
+            focus_project(this, cx, &board_id, context.remote_machine_id.as_deref());
         }
         create_agent_record(
             this,
@@ -329,8 +334,11 @@ pub(super) async fn start_work(
 
 /// `focusProjectId(projectId)`: the board activates the project the way a sidebar group click
 /// does, through the store's `focusGroup` (focus_perform.rs; the runtime's until 2026-09-25).
-fn focus_project(this: &App, cx: &mut AsyncApp, project_id: &str) {
-    let group_id = ProjectKey::local(project_id).to_sidebar_group_id();
+fn focus_project(this: &App, cx: &mut AsyncApp, project_id: &str, remote_machine_id: Option<&str>) {
+    let group_id = match remote_machine_id {
+        Some(machine_id) => ProjectKey::remote(machine_id, project_id).to_sidebar_group_id(),
+        None => ProjectKey::local(project_id).to_sidebar_group_id(),
+    };
     let _ = this.update(cx, |this, cx| {
         this.dispatch_native_sidebar_command(
             json!({ "type": "focusGroup", "groupId": group_id }),
@@ -365,7 +373,7 @@ async fn start_worktree_work(
     );
     let created = async {
         let response = gx_rpc_with_timeout(
-            None,
+            context.gxserver_target()?,
             "/api/createProjectWorktree",
             json!({
                 "baseRef": "HEAD",
@@ -388,7 +396,7 @@ async fn start_worktree_work(
                 None,
             );
             let identity = crate::app::gx_store::git::worktree_warning_identity(
-                "local",
+                context.remote_machine_id.as_deref().unwrap_or("local"),
                 board.get("path").and_then(Value::as_str),
                 &project_id(board),
             );
@@ -404,7 +412,7 @@ async fn start_worktree_work(
             "Could not create an agent session in the worktree.",
         )
         .await?;
-        focus_project(this, cx, &worktree_id);
+        focus_project(this, cx, &worktree_id, context.remote_machine_id.as_deref());
         BoardResult::Ok(session)
     }
     .await;
@@ -503,7 +511,8 @@ async fn create_agent_record(
         &AgentRecordOptions::default(),
         &agent_session_default_title(Some(&agent.name)),
     );
-    let response = gx_rpc(None, "/api/createAgentSession", params)
+    let remote = context.gxserver_target()?;
+    let response = gx_rpc(remote.clone(), "/api/createAgentSession", params)
         .await
         .map_err(|error| error.message)?;
     let (_, session_id) = created_session(&response, Some(project_id)).ok_or(missing_session)?;
@@ -524,25 +533,36 @@ async fn create_agent_record(
             .or_else(|| text("/session/runtimeSettings/agentSessionPath")),
         zmx_name: text("/session/zmxName"),
     };
-    let focused = SessionKey::local(project_id, &session_id);
-    let _ = this.update(cx, |this, cx| {
-        this.gx_store_focus_created_session(
-            &focused.project_id,
-            &focused.session_id,
-            false,
-            None,
-            cx,
-        );
-    });
+    if let Some(machine_id) = context.remote_machine_id.as_deref() {
+        let sidebar_session_id =
+            SessionKey::remote(machine_id, project_id, &session_id).to_sidebar_session_id();
+        let _ = this.update(cx, |this, cx| {
+            this.dispatch_native_sidebar_ui(
+                json!({ "type": "selectSession", "mode": "focus", "sessionId": sidebar_session_id }),
+                cx,
+            );
+        });
+    } else {
+        let focused = SessionKey::local(project_id, &session_id);
+        let _ = this.update(cx, |this, cx| {
+            this.gx_store_focus_created_session(
+                &focused.project_id,
+                &focused.session_id,
+                false,
+                None,
+                cx,
+            );
+        });
+    }
     gx_rpc(
-        None,
+        remote.clone(),
         "/api/startSessionProvider",
         start_provider_params(project_id, &session_id),
     )
     .await
     .map_err(|error| error.message)?;
     let receipt = gx_rpc(
-        None,
+        remote,
         "/api/queueSessionChatPrompt",
         queue_startup_prompt_params(project_id, &session_id, prompt),
     )
@@ -570,7 +590,7 @@ pub(super) async fn jump(
     let (reference_project, reference_session) =
         ghostex_gx_core::board_reference(session_id, &board_id);
     let answer = gx_rpc(
-        None,
+        context.gxserver_target()?,
         "/api/openConversation",
         json!({
             "projectId": reference_project,
@@ -594,8 +614,11 @@ pub(super) async fn jump(
         return Err("The linked Ghostex session is no longer available.".to_string());
     };
     if outcome == "focus" {
-        let sidebar_session_id =
-            SessionKey::local(&opened_project, &opened_session).to_sidebar_session_id();
+        let sidebar_session_id = match context.remote_machine_id.as_deref() {
+            Some(machine_id) => SessionKey::remote(machine_id, &opened_project, &opened_session)
+                .to_sidebar_session_id(),
+            None => SessionKey::local(&opened_project, &opened_session).to_sidebar_session_id(),
+        };
         let _ = this.update(cx, |this, cx| {
             this.dispatch_native_sidebar_ui(
                 json!({ "type": "selectSession", "mode": "focus", "sessionId": sidebar_session_id }),
@@ -604,7 +627,10 @@ pub(super) async fn jump(
         });
         return Ok(());
     }
-    let checked = format!("{reference_project}:{reference_session}");
+    let checked = match context.remote_machine_id.as_deref() {
+        Some(machine_id) => format!("{machine_id}:{reference_project}:{reference_session}"),
+        None => format!("{reference_project}:{reference_session}"),
+    };
     let _ = this.update(cx, |this, _| {
         this.gx_store.create.board_link_checks.remove(&checked);
     });
@@ -616,17 +642,30 @@ pub(super) async fn jump(
         &opened_project,
         &opened_session,
         text("zmxName"),
+        context,
     )
     .await?;
-    let _ = this.update(cx, |this, cx| {
-        this.gx_store_focus_created_session(&opened_project, &opened_session, false, None, cx);
-    });
+    if let Some(machine_id) = context.remote_machine_id.as_deref() {
+        let sidebar_session_id = SessionKey::remote(machine_id, &opened_project, &opened_session)
+            .to_sidebar_session_id();
+        let _ = this.update(cx, |this, cx| {
+            this.dispatch_native_sidebar_ui(
+                json!({ "type": "selectSession", "mode": "focus", "sessionId": sidebar_session_id }),
+                cx,
+            );
+        });
+    } else {
+        let _ = this.update(cx, |this, cx| {
+            this.gx_store_focus_created_session(&opened_project, &opened_session, false, None, cx);
+        });
+    }
     Ok(())
 }
 
 /// `replaceGpuiProjectBoardConversationLinkSession`: macOS `replaceProjectBoardConversationLinkSession`.
 /// Every link on the old session id moves to the restored one (scoped to one bead when the jump
 /// carried a bead id), collapsing any pre-existing duplicate link.
+#[allow(clippy::too_many_arguments)]
 async fn replace_link_session(
     board: &Value,
     store: &[Value],
@@ -635,13 +674,14 @@ async fn replace_link_session(
     restored_project: &str,
     restored_session: &str,
     restored_persistence_name: Option<String>,
+    context: &BoardContext,
 ) -> BoardResult<()> {
     let now = BoardContext::now_iso();
     let board_id = project_id(board);
     let ghostex_session_id = board_session_id(restored_project, restored_session, &board_id);
     let stored = stored_links(store, &now);
     let bead_key = bead_id.map(bead_conversation_link_match_key);
-    mutate_link_stores(board, store, &now, |links, store_project| {
+    mutate_link_stores(board, store, &now, context, |links, store_project| {
         links
             .into_iter()
             .filter_map(|link| {
@@ -691,7 +731,7 @@ pub(super) async fn unlink(request: &BoardRequest, context: &BoardContext) -> Bo
     let board_id = project_id(&board);
     let bead_key = bead_conversation_link_match_key(bead_id);
     let stored = stored_links(&store, &now);
-    mutate_link_stores(&board, &store, &now, |links, _| {
+    mutate_link_stores(&board, &store, &now, context, |links, _| {
         links
             .into_iter()
             .map(|link| {

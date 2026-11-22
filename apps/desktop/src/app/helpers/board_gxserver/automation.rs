@@ -34,12 +34,36 @@ pub(crate) fn gpui_automation_gxserver_endpoint_for_board_action(
     }
 }
 
+fn gpui_automation_remote_target(
+    context: Option<&ProjectBoardBridgeRuntimeContext>,
+) -> Result<Option<GpuiRemoteGxserverRequestTarget>, String> {
+    let Some(context) = context else {
+        return Ok(None);
+    };
+    if context.remote_machine_id.is_none() {
+        return Ok(None);
+    }
+    context
+        .remote_target
+        .clone()
+        .map(Some)
+        .ok_or_else(|| "The remote gxserver is not connected.".to_string())
+}
+
 pub(crate) fn gpui_automation_rpc_automation_state(
+    remote_target: Option<&GpuiRemoteGxserverRequestTarget>,
     endpoint: &str,
     params: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    let (status_code, body) =
-        gxserver_post_typed_operation(endpoint, params, Duration::from_secs(60))?;
+    let (status_code, body) = match remote_target {
+        Some(target) => gpui_remote_gxserver_post_typed_operation(
+            target,
+            endpoint,
+            params,
+            Duration::from_secs(60),
+        )?,
+        None => gxserver_post_typed_operation(endpoint, params, Duration::from_secs(60))?,
+    };
     if !(200..300).contains(&status_code) {
         return Err(gpui_automation_gxserver_error_message(&body, status_code));
     }
@@ -62,12 +86,22 @@ pub(crate) fn gpui_automation_gxserver_error_message(body: &str, status_code: u1
     format!("gxserver automation request failed with HTTP {status_code}.")
 }
 
-pub(crate) fn gpui_list_gxserver_domain_projects() -> Result<Vec<serde_json::Value>, String> {
-    let result = gpui_gxserver_rpc_result(
-        "/api/listProjects",
-        &serde_json::json!({}),
-        Duration::from_secs(30),
-    )?;
+pub(crate) fn gpui_list_gxserver_domain_projects(
+    remote_target: Option<&GpuiRemoteGxserverRequestTarget>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let result = match remote_target {
+        Some(target) => gpui_remote_gxserver_rpc_result(
+            target,
+            "/api/listProjects",
+            &serde_json::json!({}),
+            Duration::from_secs(30),
+        )?,
+        None => gpui_gxserver_rpc_result(
+            "/api/listProjects",
+            &serde_json::json!({}),
+            Duration::from_secs(30),
+        )?,
+    };
     Ok(result
         .get("projects")
         .and_then(serde_json::Value::as_array)
@@ -75,9 +109,12 @@ pub(crate) fn gpui_list_gxserver_domain_projects() -> Result<Vec<serde_json::Val
         .unwrap_or_default())
 }
 
-pub(crate) fn gpui_find_gxserver_project_id_by_path(path: &str) -> Result<Option<String>, String> {
+pub(crate) fn gpui_find_gxserver_project_id_by_path(
+    path: &str,
+    remote_target: Option<&GpuiRemoteGxserverRequestTarget>,
+) -> Result<Option<String>, String> {
     let normalized = gpui_normalized_project_path_for_comparison(path);
-    Ok(gpui_list_gxserver_domain_projects()?
+    Ok(gpui_list_gxserver_domain_projects(remote_target)?
         .iter()
         .find(|project| {
             project
@@ -101,10 +138,16 @@ pub(crate) fn gpui_automation_board_scope(
 ) -> GpuiAutomationBoardScope {
     // macOS `createGxserverAutomationParams` scope resolution: the request's
     // ids win (the overview page targets other projects), the active board
-    // project is the fallback.
+    // project is the fallback. Strip any machine-scoped remote prefix so the
+    // owning gxserver receives its own project id.
     let request_project_id = manage_request_string(request, "projectId")
         .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            gpui_remote_project_reference_from_project_id(&value)
+                .map(|reference| reference.project_id)
+                .unwrap_or(value)
+        });
     let request_project_path = manage_request_string(request, "projectPath")
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
@@ -175,8 +218,16 @@ pub(crate) fn gpui_project_board_automation_result(
     if action == "automationGetAllState" {
         return Ok((gpui_automation_all_projects_state(&scope)?, None));
     }
+    let remote_target = gpui_automation_remote_target(context)?;
+    let remote_machine_id = context.and_then(|context| context.remote_machine_id.as_deref());
     if action == "automationOpenRunSession" || action == "automationOpenWorktree" {
-        return gpui_automation_open_run_target(&action, request, &scope);
+        return gpui_automation_open_run_target(
+            &action,
+            request,
+            &scope,
+            remote_target.as_ref(),
+            remote_machine_id,
+        );
     }
     let endpoint = gpui_automation_gxserver_endpoint_for_board_action(&action)
         .ok_or_else(|| format!("Unsupported automation action: {action}"))?;
@@ -219,7 +270,11 @@ pub(crate) fn gpui_project_board_automation_result(
             serde_json::Value::Bool(gpui_automation_remove_worktree_from_payload(request)),
         );
     }
-    let state = gpui_automation_rpc_automation_state(endpoint, &serde_json::Value::Object(params))?;
+    let state = gpui_automation_rpc_automation_state(
+        remote_target.as_ref(),
+        endpoint,
+        &serde_json::Value::Object(params),
+    )?;
     Ok((state, None))
 }
 
@@ -236,7 +291,7 @@ pub(crate) fn gpui_automation_all_projects_state(
     */
     // CDXC:GBots 2026-11-09 DECISION: User: "pls fully hide gbots if disabled in experimental under extensions". While GBots are off their routines stay out of All projects; a GBot's folder is marked `launchSettings.gbotsBotId` (server/src/gbots/project.rs).
     let gbots_on = crate::app::native_sidebar::gbots_rows::gbots_on();
-    let target_projects: Vec<(String, String)> = gpui_list_gxserver_domain_projects()?
+    let target_projects: Vec<(String, String)> = gpui_list_gxserver_domain_projects(None)?
         .iter()
         .filter(|project| gbots_on || !project["launchSettings"]["gbotsBotId"].is_string())
         .filter(|project| {
@@ -275,6 +330,7 @@ pub(crate) fn gpui_automation_all_projects_state(
         .iter()
         .filter_map(|(project_id, path)| {
             gpui_automation_rpc_automation_state(
+                None,
                 "/api/readAutomationState",
                 &serde_json::json!({ "projectId": project_id, "projectPath": path }),
             )
@@ -359,12 +415,15 @@ pub(crate) fn gpui_automation_open_run_target(
     action: &str,
     request: &serde_json::Value,
     scope: &GpuiAutomationBoardScope,
+    remote_target: Option<&GpuiRemoteGxserverRequestTarget>,
+    remote_machine_id: Option<&str>,
 ) -> Result<(serde_json::Value, Option<GpuiAutomationBoardNavigation>), String> {
     let run_id = manage_request_string(request, "sessionId")
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "No automation run id was supplied.".to_string())?;
     let state = gpui_automation_rpc_automation_state(
+        remote_target,
         "/api/readAutomationState",
         &serde_json::Value::Object(gpui_automation_scope_params(scope)),
     )?;
@@ -392,10 +451,24 @@ pub(crate) fn gpui_automation_open_run_target(
     let navigation = if action == "automationOpenWorktree" {
         let worktree_path =
             worktree_path.ok_or_else(|| "Automation run has no linked worktree.".to_string())?;
-        match gpui_find_gxserver_project_id_by_path(&worktree_path)? {
+        match gpui_find_gxserver_project_id_by_path(&worktree_path, remote_target)? {
             // macOS parity: focus the registered worktree project when it
-            // exists, otherwise reveal the checkout in Finder.
-            Some(project_id) => Some(GpuiAutomationBoardNavigation::FocusProject(project_id)),
+            // exists, otherwise reveal a local checkout in Finder.
+            Some(project_id) => {
+                let focus_project_id = match remote_machine_id {
+                    Some(machine_id) => gpui_remote_scoped_project_id(machine_id, &project_id),
+                    None => project_id,
+                };
+                Some(GpuiAutomationBoardNavigation::FocusProject(
+                    focus_project_id,
+                ))
+            }
+            None if remote_machine_id.is_some() => {
+                return Err(
+                    "This worktree is on another computer and is not open as a project. Copy its path to open it there."
+                        .to_string(),
+                );
+            }
             None => Some(GpuiAutomationBoardNavigation::RevealWorktreePath(
                 worktree_path,
             )),
@@ -412,17 +485,23 @@ pub(crate) fn gpui_automation_open_run_target(
         // resolve the session's owning project like gxserver's own
         // `find_run_session_project_id` (worktree path match, else run project).
         let session_project_id = match &worktree_path {
-            Some(path) => {
-                gpui_find_gxserver_project_id_by_path(path)?.unwrap_or(run_project_id.clone())
-            }
+            Some(path) => gpui_find_gxserver_project_id_by_path(path, remote_target)?
+                .unwrap_or(run_project_id.clone()),
             None => run_project_id.clone(),
         };
-        gpui_combined_presentation_session_focus_id(&session_project_id, &session_id)
-            .map(GpuiAutomationBoardNavigation::FocusSession)
+        match remote_machine_id {
+            Some(machine_id) => Some(GpuiAutomationBoardNavigation::FocusSession(
+                ghostex_gx_core::SessionKey::remote(machine_id, &session_project_id, &session_id)
+                    .to_sidebar_session_id(),
+            )),
+            None => gpui_combined_presentation_session_focus_id(&session_project_id, &session_id)
+                .map(GpuiAutomationBoardNavigation::FocusSession),
+        }
     };
     let mut mark_read_params = gpui_automation_scope_params(scope);
     mark_read_params.insert("runId".to_string(), serde_json::Value::String(run_id));
     let refreshed = gpui_automation_rpc_automation_state(
+        remote_target,
         "/api/markAutomationRunRead",
         &serde_json::Value::Object(mark_read_params),
     )?;
