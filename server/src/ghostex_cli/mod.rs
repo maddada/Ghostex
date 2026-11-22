@@ -117,6 +117,7 @@ sees identical behavior after the Node CLI deletion.
 */
 
 pub fn run() -> i32 {
+    reset_sigpipe();
     // Started by Codex Swap as its Codex during a Settings login (account_login_codex.rs).
     if let Some(code) = account_login_codex::shim() {
         return code;
@@ -141,6 +142,24 @@ pub fn run() -> i32 {
         }
     }
 }
+
+/// Restore the default Unix SIGPIPE disposition so piping CLI output into a
+/// downstream consumer that closes stdout early (such as `head`, `grep -q`, or
+/// `sed -q`) exits cleanly instead of panicking with `Broken pipe (os error 32)`.
+/// Only `ghostex_cli::run()` calls this (covering both the `ghostex` binary and
+/// `gxserver` invoked via a `ghostex`/`gx` link); the `gxserver` daemon never
+/// calls it and keeps Rust's default `SIG_IGN`.
+#[cfg(unix)]
+fn reset_sigpipe() {
+    // SAFETY: Restoring `SIGPIPE` to `SIG_DFL` before any threads start is
+    // standard POSIX process initialization with no custom signal handler.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn reset_sigpipe() {}
 
 /// CDXC:AgentSandbox 2026-11-18 WHY:
 /// GitHub #669: a Codex whose environment policy hides Ghostex's variables
