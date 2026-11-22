@@ -20,6 +20,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:AgentProviders 2026-09-04 DECISION:
     // User: new installs must start with Agent approvals set to Keep default. Running supported agents without approval is an explicit opt-in.
     ("agentAcceptAllEnabled", J::Bool(false)),
+    // Per-agent opt-in map (`{ "<family>": true }`) for running supported agents through Ghostex's
+    // structured ACP host (`server/src/acp/`). Off by default so CLI mode stays unchanged.
+    ("agentAcpMode", J::Obj(&[])),
     // CDXC:AgentProviders 2026-11-14 DECISION: off by default, and on only with its confirmation
     // beside it (folder_trust.rs).
     ("trustProjectFoldersAutomatically", J::Bool(false)),

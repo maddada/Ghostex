@@ -139,6 +139,8 @@ impl Scanner {
                 .unwrap_or_default();
             self.records.push(Record {
                 agent: Agent::Claude,
+                kind: RecordKind::User,
+                interrupted: false,
                 title,
                 text: disp,
                 project,

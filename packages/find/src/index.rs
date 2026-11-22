@@ -13,7 +13,7 @@ use std::time::SystemTime;
 use crate::agent::Agent;
 use crate::favorites::{self, FavoriteSet};
 use crate::fuzzy::{Match, Matcher};
-use crate::scan::{Record, Scanner};
+use crate::scan::{Record, RecordKind, Scanner};
 
 pub const SECONDS_PER_DAY: i64 = 86_400;
 pub const UNKNOWN_DAY_KEY: i64 = i64::MIN;
@@ -57,6 +57,8 @@ pub struct QueryOptions {
     pub query: String,
     /// Empty means "all agents".
     pub agents: Vec<Agent>,
+    /// Empty means "all record kinds".
+    pub kinds: Vec<RecordKind>,
     /// Exact project path to restrict to.
     pub project: Option<String>,
     /// Day grouping changes the primary sort key to the day bucket.
@@ -102,7 +104,6 @@ pub struct SearchIndex {
     make a pending action point at the wrong prompt.
     */
     by_key: HashMap<u64, usize>,
-    matcher: Matcher,
 }
 
 impl SearchIndex {
@@ -122,7 +123,6 @@ impl SearchIndex {
             empryo_error: scanner.empryo_error.take(),
             built_at: SystemTime::now(),
             by_key,
-            matcher: Matcher::new(),
         }
     }
 
@@ -152,21 +152,42 @@ impl SearchIndex {
     }
 
     pub fn is_favorite(&self, rec: &Record) -> bool {
-        self.favorites
-            .contains(favorites::key(rec.agent.label(), &rec.text))
+        self.favorites.contains(favorites::key_for_kind(
+            rec.agent.label(),
+            rec.kind,
+            &rec.text,
+        ))
     }
 
-    /// Toggle the favorite flag for a record and persist the file.
+    /// Toggle the favorite flag for a user prompt and persist the file.
     pub fn toggle_favorite(&mut self, agent: Agent, text: &str) -> bool {
-        let now = self.favorites.toggle(favorites::key(agent.label(), text));
+        self.toggle_favorite_record(agent, RecordKind::User, text)
+    }
+
+    /// Toggle the favorite flag for a record (prompt or agent answer) and persist the file.
+    pub fn toggle_favorite_record(&mut self, agent: Agent, kind: RecordKind, text: &str) -> bool {
+        let now = self
+            .favorites
+            .toggle(favorites::key_for_kind(agent.label(), kind, text));
         self.favorites.save(&self.favorites_path);
         now
     }
 
-    /// Set the favorite flag explicitly and persist the file.
+    /// Set the favorite flag explicitly for a user prompt and persist the file.
     pub fn set_favorite(&mut self, agent: Agent, text: &str, favorite: bool) -> bool {
+        self.set_favorite_record(agent, RecordKind::User, text, favorite)
+    }
+
+    /// Set the favorite flag explicitly for a record (prompt or agent answer) and persist the file.
+    pub fn set_favorite_record(
+        &mut self,
+        agent: Agent,
+        kind: RecordKind,
+        text: &str,
+        favorite: bool,
+    ) -> bool {
         self.favorites
-            .set(favorites::key(agent.label(), text), favorite);
+            .set(favorites::key_for_kind(agent.label(), kind, text), favorite);
         self.favorites.save(&self.favorites_path);
         favorite
     }
@@ -205,111 +226,139 @@ impl SearchIndex {
     /// from the same total ordering, which keeps results identical to the
     /// single-threaded picker.
     pub fn query(&mut self, options: &QueryOptions) -> QueryResult {
-        let needle = options.query.as_bytes();
-        let agent_mask = options
-            .agents
-            .iter()
-            .fold(0u16, |mask, agent| mask | agent.bit());
-        let project = options.project.as_deref();
+        rank_records(&self.records, &self.favorites, options)
+    }
+}
 
-        let mut hits = self.collect_hits(needle, agent_mask, project);
+fn kind_mask(kinds: &[RecordKind]) -> u8 {
+    kinds.iter().fold(0u8, |mask, kind| {
+        mask | match kind {
+            RecordKind::User => 1 << 0,
+            RecordKind::AgentAnswer => 1 << 1,
+        }
+    })
+}
 
-        let query_empty = needle.is_empty();
-        let group_by_day = options.group_by_day;
-        hits.sort_by(|x, y| {
-            if hit_less(x, y, query_empty, group_by_day) {
-                std::cmp::Ordering::Less
-            } else if hit_less(y, x, query_empty, group_by_day) {
-                std::cmp::Ordering::Greater
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        });
+fn kind_bit(kind: RecordKind) -> u8 {
+    match kind {
+        RecordKind::User => 1 << 0,
+        RecordKind::AgentAnswer => 1 << 1,
+    }
+}
 
-        let matched = hits.len();
-        let start = options.offset.min(matched);
-        let end = if options.limit == 0 {
-            matched
+/// Rank any slice of records with Find's exact parallel fuzzy matcher and
+/// tie-break order. Shared by the in-memory `SearchIndex` and the SQLite FTS5
+/// candidate pipeline so every surface ranks identically.
+pub fn rank_records(
+    records: &[Record],
+    favorites: &FavoriteSet,
+    options: &QueryOptions,
+) -> QueryResult {
+    let needle = options.query.as_bytes();
+    let agent_mask = options
+        .agents
+        .iter()
+        .fold(0u16, |mask, agent| mask | agent.bit());
+    let kinds = kind_mask(&options.kinds);
+    let project = options.project.as_deref();
+
+    let mut hits = collect_hits_slice(records, favorites, needle, agent_mask, kinds, project);
+
+    let query_empty = needle.is_empty();
+    let group_by_day = options.group_by_day;
+    hits.sort_by(|x, y| {
+        if hit_less(x, y, query_empty, group_by_day) {
+            std::cmp::Ordering::Less
+        } else if hit_less(y, x, query_empty, group_by_day) {
+            std::cmp::Ordering::Greater
         } else {
-            (start + options.limit).min(matched)
-        };
-        let window = hits[start..end]
-            .iter()
-            .map(|h| Hit {
-                index: h.index,
-                score: h.score,
-                favorite: h.favorite,
-                positions: h.m.highlights().to_vec(),
-            })
-            .collect();
-
-        QueryResult {
-            total: self.records.len(),
-            matched,
-            hits: window,
+            std::cmp::Ordering::Equal
         }
+    });
+
+    let matched = hits.len();
+    let start = options.offset.min(matched);
+    let end = if options.limit == 0 {
+        matched
+    } else {
+        (start + options.limit).min(matched)
+    };
+    let window = hits[start..end]
+        .iter()
+        .map(|h| Hit {
+            index: h.index,
+            score: h.score,
+            favorite: h.favorite,
+            positions: h.m.highlights().to_vec(),
+        })
+        .collect();
+
+    QueryResult {
+        total: records.len(),
+        matched,
+        hits: window,
+    }
+}
+
+fn collect_hits_slice(
+    records: &[Record],
+    favorites: &FavoriteSet,
+    needle: &[u8],
+    agent_mask: u16,
+    kinds: u8,
+    project: Option<&str>,
+) -> Vec<RankedHit> {
+    let workers = query_worker_count(records.len());
+    if workers <= 1 {
+        let mut matcher = Matcher::new();
+        return match_range(
+            records,
+            favorites,
+            0,
+            records.len(),
+            needle,
+            agent_mask,
+            kinds,
+            project,
+            &mut matcher,
+        );
     }
 
-    fn collect_hits(
-        &mut self,
-        needle: &[u8],
-        agent_mask: u16,
-        project: Option<&str>,
-    ) -> Vec<RankedHit> {
-        let workers = query_worker_count(self.records.len());
-        if workers <= 1 {
-            let mut matcher = std::mem::take(&mut self.matcher);
-            let hits = match_range(
-                &self.records,
-                &self.favorites,
-                0,
-                self.records.len(),
-                needle,
-                agent_mask,
-                project,
-                &mut matcher,
-            );
-            self.matcher = matcher;
-            return hits;
-        }
-
-        let records = &self.records;
-        let favorites = &self.favorites;
-        let chunk = records.len().div_ceil(workers);
-        let mut collected: Vec<Vec<RankedHit>> = std::thread::scope(|scope| {
-            let mut handles = Vec::with_capacity(workers);
-            for worker in 0..workers {
-                let start = worker * chunk;
-                if start >= records.len() {
-                    break;
-                }
-                let end = (start + chunk).min(records.len());
-                handles.push(scope.spawn(move || {
-                    let mut matcher = Matcher::new();
-                    match_range(
-                        records,
-                        favorites,
-                        start,
-                        end,
-                        needle,
-                        agent_mask,
-                        project,
-                        &mut matcher,
-                    )
-                }));
+    let chunk = records.len().div_ceil(workers);
+    let mut collected: Vec<Vec<RankedHit>> = std::thread::scope(|scope| {
+        let mut handles = Vec::with_capacity(workers);
+        for worker in 0..workers {
+            let start = worker * chunk;
+            if start >= records.len() {
+                break;
             }
-            handles
-                .into_iter()
-                .filter_map(|handle| handle.join().ok())
-                .collect()
-        });
-        let total: usize = collected.iter().map(Vec::len).sum();
-        let mut hits = Vec::with_capacity(total);
-        for part in &mut collected {
-            hits.append(part);
+            let end = (start + chunk).min(records.len());
+            handles.push(scope.spawn(move || {
+                let mut matcher = Matcher::new();
+                match_range(
+                    records,
+                    favorites,
+                    start,
+                    end,
+                    needle,
+                    agent_mask,
+                    kinds,
+                    project,
+                    &mut matcher,
+                )
+            }));
         }
-        hits
+        handles
+            .into_iter()
+            .filter_map(|handle| handle.join().ok())
+            .collect()
+    });
+    let total: usize = collected.iter().map(Vec::len).sum();
+    let mut hits = Vec::with_capacity(total);
+    for part in &mut collected {
+        hits.append(part);
     }
+    hits
 }
 
 /// Records below this count are cheap enough that thread setup would dominate.
@@ -335,12 +384,16 @@ fn match_range(
     end: usize,
     needle: &[u8],
     agent_mask: u16,
+    kinds: u8,
     project: Option<&str>,
     matcher: &mut Matcher,
 ) -> Vec<RankedHit> {
     let mut hits = Vec::new();
     for (offset, rec) in records[start..end].iter().enumerate() {
         if agent_mask != 0 && (agent_mask & rec.agent.bit()) == 0 {
+            continue;
+        }
+        if kinds != 0 && (kinds & kind_bit(rec.kind)) == 0 {
             continue;
         }
         if let Some(p) = project {
@@ -351,7 +404,11 @@ fn match_range(
         let Some(m) = matcher.matches(needle, rec.text.as_bytes()) else {
             continue;
         };
-        let favorite = favorites.contains(favorites::key(rec.agent.label(), &rec.text));
+        let favorite = favorites.contains(favorites::key_for_kind(
+            rec.agent.label(),
+            rec.kind,
+            &rec.text,
+        ));
         hits.push(RankedHit {
             index: start + offset,
             score: m.score,
@@ -363,9 +420,9 @@ fn match_range(
     hits
 }
 
-/// Stable identity of a prompt: the favorites key of agent + text.
+/// Stable identity of a record: favorites hash of agent + kind + text.
 pub fn record_key(record: &Record) -> u64 {
-    favorites::key(record.agent.label(), &record.text)
+    favorites::key_for_kind(record.agent.label(), record.kind, &record.text)
 }
 
 fn build_key_map(records: &[Record]) -> HashMap<u64, usize> {
@@ -430,6 +487,8 @@ mod tests {
     fn record(agent: Agent, text: &str, project: &str, ts: i64) -> Record {
         Record {
             agent,
+            kind: RecordKind::User,
+            interrupted: false,
             title: String::new(),
             text: text.to_string(),
             project: project.to_string(),
@@ -449,7 +508,6 @@ mod tests {
             opencode_error: None,
             empryo_error: None,
             built_at: SystemTime::now(),
-            matcher: Matcher::new(),
         }
     }
 

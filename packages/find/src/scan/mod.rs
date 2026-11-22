@@ -22,6 +22,7 @@
 //! SQLite directly, which removes that external dependency instead of papering
 //! over it with a skip-and-warn path.
 
+pub mod answers;
 mod antigravity;
 mod claude;
 mod codex;

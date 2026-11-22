@@ -78,6 +78,8 @@ impl Scanner {
         };
         self.records.push(Record {
             agent: Agent::Hermes,
+            kind: RecordKind::User,
+            interrupted: false,
             title: row.title,
             text,
             project: row.cwd,

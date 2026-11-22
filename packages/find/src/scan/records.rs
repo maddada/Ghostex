@@ -39,9 +39,47 @@ pub struct Meta {
     pub usage: Usage,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordKind {
+    #[default]
+    User,
+    AgentAnswer,
+}
+
+impl RecordKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::AgentAnswer => "agent_answer",
+        }
+    }
+
+    pub const fn display_label(self) -> &'static str {
+        match self {
+            Self::User => "Prompt",
+            Self::AgentAnswer => "Answer",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "user" | "prompt" | "prompts" => Some(Self::User),
+            "agent_answer" | "agent-answer" | "answer" | "answers" | "agent" | "turn_final" => {
+                Some(Self::AgentAnswer)
+            }
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Record {
     pub agent: Agent,
+    #[serde(default)]
+    pub kind: RecordKind,
+    #[serde(default)]
+    pub interrupted: bool,
     #[serde(default)]
     pub title: String,
     pub text: String,

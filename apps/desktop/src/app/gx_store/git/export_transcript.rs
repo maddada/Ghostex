@@ -342,6 +342,7 @@ impl GhostexGpuiApp {
                         toggle("includeCommands") != Some(false),
                         toggle("includePatches") != Some(false),
                         toggle("includeReasoning") == Some(true),
+                        toggle("finalAnswerOnly") == Some(true),
                         toggle("includeMarkdown") == Some(true),
                         command.get("lastTurns").and_then(Value::as_u64),
                         cx,
@@ -357,6 +358,7 @@ impl GhostexGpuiApp {
                             commands: toggle("includeCommands") == Some(true),
                             patches: toggle("includePatches") == Some(true),
                             reasoning: toggle("includeReasoning") == Some(true),
+                            final_answer_only: toggle("finalAnswerOnly") == Some(true),
                         },
                         cx,
                     );
@@ -397,12 +399,14 @@ impl GhostexGpuiApp {
 
     /// The dialog's Export button (`runExportSessionTranscriptForDialog`). A failure surfaces the
     /// daemon's own message inside the dialog.
+    #[allow(clippy::too_many_arguments)]
     fn git_run_export(
         &mut self,
         request_id: &str,
         include_commands: bool,
         include_patches: bool,
         include_reasoning: bool,
+        final_answer_only: bool,
         include_markdown: bool,
         last_turns: Option<u64>,
         cx: &mut gpui::Context<Self>,
@@ -436,6 +440,7 @@ impl GhostexGpuiApp {
             "includeMarkdown": include_markdown,
             "includePatches": include_patches,
             "includeReasoning": include_reasoning,
+            "finalAnswerOnly": final_answer_only,
             "projectId": request.session.project_id,
             "sessionId": request.session.session_id,
         });
@@ -566,6 +571,7 @@ impl GhostexGpuiApp {
             "includeCommands": include.commands,
             "includePatches": include.patches,
             "includeReasoning": include.reasoning,
+            "finalAnswerOnly": include.final_answer_only,
             "projectId": request.session.project_id,
             "sessionId": request.session.session_id,
         });

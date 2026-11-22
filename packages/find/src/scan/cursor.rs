@@ -131,6 +131,8 @@ impl Scanner {
             };
             self.records.push(Record {
                 agent: Agent::Cursor,
+                kind: RecordKind::User,
+                interrupted: false,
                 title: title.to_string(),
                 text,
                 project: project.to_string(),

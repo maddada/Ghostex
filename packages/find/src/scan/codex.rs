@@ -328,6 +328,8 @@ impl Scanner {
                 .unwrap_or_default();
             self.records.push(Record {
                 agent: Agent::Codex,
+                kind: RecordKind::User,
+                interrupted: false,
                 title,
                 text,
                 project: string_field(&v, "project").unwrap_or("").to_string(),
@@ -378,6 +380,8 @@ impl Scanner {
                 .unwrap_or_default();
             self.records.push(Record {
                 agent: Agent::Codex,
+                kind: RecordKind::User,
+                interrupted: false,
                 title,
                 text,
                 project: String::new(),
@@ -517,6 +521,8 @@ impl Scanner {
         };
         self.records.push(Record {
             agent: Agent::Codex,
+            kind: RecordKind::User,
+            interrupted: false,
             title: state.session_title.clone(),
             text,
             project: state.cwd.clone(),

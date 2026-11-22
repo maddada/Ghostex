@@ -1,4 +1,4 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::args::Flags;
 use crate::ghostex_cli::rpc::{CliError, CliResult};
@@ -127,6 +127,20 @@ fn parse_agent_prompt_search(flags: &Flags) -> CliResult<Value> {
         if !list.is_empty() {
             map.insert("agents".to_string(), Value::Array(list));
         }
+    }
+    if let Some(kinds) = flags.text("kinds") {
+        let list = kinds
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| Value::String(value.to_string()))
+            .collect::<Vec<_>>();
+        if !list.is_empty() {
+            map.insert("kinds".to_string(), Value::Array(list));
+        }
+    }
+    if let Some(scope) = flags.text("scope").filter(|value| !value.trim().is_empty()) {
+        map.insert("scope".to_string(), Value::String(scope));
     }
     if flags.contains("groupByDay") {
         map.insert(

@@ -730,6 +730,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/setSessionChatDraft"
         // CDXC:SessionChat 2026-11-11 WHY: a chat's view pick is kept by the computer that runs the session (session_chat_view.rs), so a client looking at a remote machine sets it there; it carries project/session ids and four booleans with their times.
         | "/api/setSessionChatView"
+        | "/api/switchSessionAcpToCli"
         /*
         CDXC:TranscriptExport 2026-08-20:
         Exporting a transcript is remote-allowed for the same reason reading a
@@ -741,6 +742,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         | "/api/exportSessionTranscript"
         | "/api/countSessionTranscriptTurns"
+        | "/api/handoffToExistingSession"
+        | "/api/listSessionHandovers"
         | "/api/sendSessionText"
         | "/api/sendSessionMessage"
         | "/api/sendSessionEnter"

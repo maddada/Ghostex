@@ -79,6 +79,8 @@ impl Scanner {
                     };
                     self.records.push(Record {
                         agent: Agent::Copilot,
+                        kind: RecordKind::User,
+                        interrupted: false,
                         title: info.title.clone(),
                         text,
                         project: project.clone(),

@@ -69,7 +69,9 @@ struct WireRow {
     day_key: Option<f64>,
     favorite: bool,
     highlights: Vec<u32>,
+    interrupted: bool,
     key: String,
+    kind: String,
     meta: WireMeta,
     project: String,
     project_name: String,
@@ -106,11 +108,55 @@ struct WireSearchResult {
     total: usize,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum FindSearchScope {
+    #[default]
+    All,
+    Prompts,
+    Answers,
+}
+
+impl FindSearchScope {
+    pub(crate) fn cycle(self) -> Self {
+        match self {
+            Self::All => Self::Prompts,
+            Self::Prompts => Self::Answers,
+            Self::Answers => Self::All,
+        }
+    }
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Prompts => "Prompts",
+            Self::Answers => "Answers",
+        }
+    }
+
+    pub(crate) fn tooltip(self) -> &'static str {
+        match self {
+            Self::All => "Searching your prompts and agent closing answers (click to filter)",
+            Self::Prompts => "Searching your prompts only (click for agent answers)",
+            Self::Answers => "Searching agent closing answers only (click for all)",
+        }
+    }
+
+    pub(crate) fn kinds(self) -> &'static [&'static str] {
+        match self {
+            Self::All => &["user", "agent_answer"],
+            Self::Prompts => &["user"],
+            Self::Answers => &["agent_answer"],
+        }
+    }
+}
+
 /// One result, prepared once per page so a frame only lays out what it shows.
 pub(crate) struct FindRow {
     pub(crate) key: String,
     pub(crate) agent: SharedString,
     pub(crate) agent_color: Rgba,
+    pub(crate) is_agent_answer: bool,
+    pub(crate) interrupted: bool,
     /// `None` is the server's unknown day (a prompt without a session time).
     pub(crate) day_key: Option<i64>,
     pub(crate) favorite: bool,
@@ -181,6 +227,8 @@ pub(crate) fn parse_search_page(value: serde_json::Value) -> Result<SearchPage, 
                     fallback,
                 ),
                 agent: row.agent.into(),
+                is_agent_answer: row.kind == "agent_answer",
+                interrupted: row.interrupted,
                 // The server sends i64::MIN for an unknown day; anything past f64's exact range is that.
                 day_key: row
                     .day_key

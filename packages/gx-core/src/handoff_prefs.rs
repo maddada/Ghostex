@@ -13,7 +13,7 @@
 //! apps/mobile/app/src/contract/handoff/handoff.ts (the phone's port, held to this by
 //! `handoffFixture.json`).
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const PREFS_VERSION: u64 = 2;
 
@@ -31,6 +31,8 @@ pub struct HandoffInclude {
     pub commands: bool,
     pub patches: bool,
     pub reasoning: bool,
+    /// Keep only each turn's user prompt and closing agent answer (omitting mid-turn chatter).
+    pub final_answer_only: bool,
 }
 
 /// Where a handoff starts its new session.
@@ -198,6 +200,7 @@ pub fn parse_handoff_prefs(value: &Value) -> HandoffPrefs {
             commands: flag(value, "includeCommands"),
             patches: flag(value, "includePatches"),
             reasoning: flag(value, "includeReasoning"),
+            final_answer_only: flag(value, "finalAnswerOnly"),
         },
         include_open: flag(value, "includeOpen"),
         agent_id: text(value, "agentId").map(str::to_string),
@@ -237,6 +240,9 @@ pub fn handoff_prefs_json(prefs: &HandoffPrefs) -> Value {
         "historyAll": prefs.history.all,
         "historyTurns": prefs.history.turns,
     });
+    if prefs.include.final_answer_only {
+        value["finalAnswerOnly"] = json!(true);
+    }
     if let Some(agent_id) = &prefs.agent_id {
         value["agentId"] = json!(agent_id);
     }
@@ -313,6 +319,7 @@ mod tests {
                 commands: true,
                 patches: false,
                 reasoning: true,
+                final_answer_only: false,
             },
             include_open: true,
             agent_id: Some("codex".to_string()),

@@ -12,7 +12,7 @@
 
 use std::collections::BTreeMap;
 
-use ghostex_settings_catalog::{general_sections, Platform, ToJson};
+use ghostex_settings_catalog::{Platform, ToJson, general_sections};
 use serde_json::Value;
 
 use super::entries::{SyncConflict, SyncEntry};
@@ -47,6 +47,7 @@ const AGENT_DEFAULT_KEYS: &[&str] = &[
     "newSessionAgentScope",
     "sessionTitleGenerationAgent",
     "agentAcceptAllEnabled",
+    "agentAcpMode",
     "showQuickModelPickerInTerminal",
 ];
 

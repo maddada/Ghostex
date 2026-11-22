@@ -174,6 +174,8 @@ impl Scanner {
             };
             self.records.push(Record {
                 agent,
+                kind: RecordKind::User,
+                interrupted: false,
                 title: session_title.clone(),
                 text,
                 project: cwd.clone(),

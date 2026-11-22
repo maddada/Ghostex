@@ -71,6 +71,8 @@ impl Scanner {
             }
             self.records.push(Record {
                 agent: Agent::Antigravity,
+                kind: RecordKind::User,
+                interrupted: false,
                 title: String::new(),
                 text,
                 project: string_field(&v, "workspace").unwrap_or("").to_string(),

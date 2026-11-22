@@ -1,4 +1,4 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::agents::session_is_draft;
 use crate::session_status::{effective_working_started_at, meaningful_activity_at};
@@ -353,6 +353,9 @@ pub(crate) fn project_presentation_session(
     if let Some(cloud_box) = crate::cloud_boxes::presentation::presentation_cloud_box_value(session)
     {
         output.insert("cloudBox".to_string(), cloud_box);
+    }
+    if crate::acp::session_is_acp(session) {
+        output.insert("acpMode".to_string(), Value::Bool(true));
     }
     if activity == "attention" {
         output.insert(

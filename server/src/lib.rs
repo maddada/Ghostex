@@ -1,4 +1,5 @@
 pub(crate) mod accounts;
+pub mod acp;
 pub(crate) mod agent_cli;
 pub mod agent_folder_trust;
 pub mod agent_hooks;
@@ -289,6 +290,7 @@ pub mod session_close_log;
 pub(crate) mod session_details;
 pub(crate) mod session_files_links;
 pub mod session_git_status;
+pub mod session_handovers;
 pub(crate) mod session_identity_log;
 pub mod session_keep_awake;
 pub mod session_lifecycle;

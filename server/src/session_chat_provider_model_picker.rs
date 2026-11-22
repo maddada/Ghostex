@@ -15,10 +15,10 @@ pub(super) mod empryo_picker;
 pub(super) mod dsh_picker;
 
 use crate::session_chat_composer::{
-    detect_session_chat_composer_readiness, session_chat_composer_input, SessionChatComposerState,
+    SessionChatComposerState, detect_session_chat_composer_readiness, session_chat_composer_input,
 };
 use crate::session_chat_send::{
-    build_session_chat_paste_bytes, capture_session_terminal_text_vt, AGENT_TUI_CLEAR_INPUT_LINE,
+    AGENT_TUI_CLEAR_INPUT_LINE, build_session_chat_paste_bytes, capture_session_terminal_text_vt,
 };
 
 fn option_agent(provider: &str) -> SessionChatOptionAgent {
@@ -1036,7 +1036,7 @@ async fn pi_channel_pick(
         _ => {
             return Some(Err(invalid_params(format!(
                 "A {label} model is picked as provider/id."
-            ))))
+            ))));
         }
     };
     if !channel.supports("model") {
@@ -1068,10 +1068,10 @@ async fn pi_channel_pick(
             return Some(Err(unsupported_selection(format!(
                 "{label} did not switch to {}: {message}",
                 plan.model
-            ))))
+            ))));
         }
         Ok(Err(crate::pi_chat_channel::ChannelError::NoAnswer)) | Err(_) => {
-            return Some(Err(picker_timeout("model switch")))
+            return Some(Err(picker_timeout("model switch")));
         }
     };
     let model = state.get("model").unwrap_or(&Value::Null);
@@ -1196,15 +1196,34 @@ pub(crate) async fn run_provider_model_picker_job(
             None => driver.drive_dsh(&plan).await,
         },
         "antigravity" => {
-            async {
-                if !plan.model.is_empty() {
-                    driver.drive_provider(&plan).await?;
+            if crate::acp::channel::live(project_id, session_id, "model").is_some() {
+                async {
+                    if !plan.model.is_empty() || !plan.effort.is_empty() {
+                        crate::acp::channel::set_model(
+                            project_id,
+                            session_id,
+                            &plan.model,
+                            &plan.effort,
+                        )
+                        .await?;
+                    }
+                    if let Some(mode) = plan.options.mode.as_deref().filter(|m| !m.is_empty()) {
+                        crate::acp::channel::set_mode(project_id, session_id, mode).await?;
+                    }
+                    Ok(())
                 }
-                driver
-                    .drive_options(&plan, SessionChatOptionAgent::Antigravity)
-                    .await
+                .await
+            } else {
+                async {
+                    if !plan.model.is_empty() {
+                        driver.drive_provider(&plan).await?;
+                    }
+                    driver
+                        .drive_options(&plan, SessionChatOptionAgent::Antigravity)
+                        .await
+                }
+                .await
             }
-            .await
         }
         _ => driver.drive_provider(&plan).await,
     };

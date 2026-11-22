@@ -84,11 +84,6 @@ impl RenderedParts {
         self.turns.len()
     }
 
-    /// How many turns go when the selection asks for `last_turns`.
-    fn kept(&self, last_turns: Option<usize>) -> usize {
-        last_turns.map_or(self.turns.len(), |turns| turns.min(self.turns.len()))
-    }
-
     fn earlier_block(&self, kept: usize) -> String {
         let left_out = self.turns.len() - kept;
         if left_out == 0 {
@@ -119,14 +114,31 @@ impl RenderedParts {
     }
 
     pub(super) fn assemble(&self, last_turns: Option<usize>) -> String {
-        let kept = self.kept(last_turns);
+        self.assemble_with_skip(last_turns, 0)
+    }
+
+    pub(super) fn assemble_with_skip(
+        &self,
+        last_turns: Option<usize>,
+        skip_turns: usize,
+    ) -> String {
+        let total = self.turns.len();
+        let start_from_skip = skip_turns.min(total);
+        let available = total - start_from_skip;
+        let kept = last_turns.map_or(available, |turns| turns.min(available));
+        let start = total - kept;
         let mut out = self.head.clone();
-        if kept == self.turns.len() {
+        if start == 0 {
             out.push_str(&self.preamble);
+        } else if skip_turns > 0 && start == start_from_skip {
+            let turns_word = if start == 1 { "turn was" } else { "turns were" };
+            out.push_str(&format!(
+                "## ⏪ Delta handover\n\nThe first {start} {turns_word} already sent in an earlier handover. Only the {kept} new turn(s) follow:\n\n"
+            ));
         } else {
             out.push_str(&self.earlier_block(kept));
         }
-        for turn in &self.turns[self.turns.len() - kept..] {
+        for turn in &self.turns[start..] {
             out.push_str(turn);
         }
         out
@@ -181,7 +193,30 @@ pub(super) fn render_parts(
                 .get(index + 1)
                 .copied()
                 .unwrap_or(transcript.entries.len());
-            render_entries(&transcript.entries[*start..end], selection, cwd)
+            let slice = &transcript.entries[*start..end];
+            if selection.final_answer_only {
+                let last_answer_idx = slice
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .find(|(_, entry)| {
+                        entry.section == TranscriptExportSection::AgentMessage
+                            && !entry.text.trim().is_empty()
+                    })
+                    .map(|(idx, _)| idx);
+                let filtered: Vec<ExportEntry> = slice
+                    .iter()
+                    .enumerate()
+                    .filter(|(idx, entry)| {
+                        entry.section != TranscriptExportSection::AgentMessage
+                            || Some(*idx) == last_answer_idx
+                    })
+                    .map(|(_, entry)| entry.clone())
+                    .collect();
+                render_entries(&filtered, selection, cwd)
+            } else {
+                render_entries(slice, selection, cwd)
+            }
         })
         .collect();
     let prompts = starts

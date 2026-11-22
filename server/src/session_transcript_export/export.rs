@@ -304,8 +304,11 @@ pub fn export_session_transcript(
         .count();
     let parts = render_parts(&title, &transcript, selection);
     let turns = parts.turn_count();
-    let kept_turns = selection.last_turns.map_or(turns, |last| last.min(turns));
-    let markdown = parts.assemble(selection.last_turns);
+    let available = turns.saturating_sub(selection.skip_turns);
+    let kept_turns = selection
+        .last_turns
+        .map_or(available, |last| last.min(available));
+    let markdown = parts.assemble_with_skip(selection.last_turns, selection.skip_turns);
 
     let path = unique_export_path(request.exports_dir, &title, request.session_id)?;
     let (markdown, carried_files) = match request.data_dir {

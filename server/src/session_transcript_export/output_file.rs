@@ -177,6 +177,20 @@ async fn handle_session_transcript_http(
     CDXC:TranscriptExport 2026-11-03 DECISION:
     User (Q1150 to Q1156): Include's History slider picks how many of the last turns a handoff carries, and the dialog shows "10 of 120 turns · about 9k tokens". `lastTurns` limits the file (absent: all of it, so older clients export what they always did).
     */
+    let preset = params
+        .get("preset")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    let final_answer_only = params
+        .get("finalAnswerOnly")
+        .and_then(Value::as_bool)
+        .unwrap_or(preset.eq_ignore_ascii_case("prompts_and_answers"));
+    let skip_turns = params
+        .get("skipTurns")
+        .and_then(Value::as_u64)
+        .map(|turns| turns as usize)
+        .unwrap_or(0);
     let last_turns = params
         .get("lastTurns")
         .and_then(Value::as_u64)
@@ -225,13 +239,20 @@ async fn handle_session_transcript_http(
     let response_agent = agent.clone();
     let exports_dir = state.paths.app_data_dir.join("exports");
     let export_session_id = session_id.clone();
-    let selection =
+    let selection = if preset.eq_ignore_ascii_case("prompts_and_answers") {
+        crate::session_transcript_export::SessionTranscriptExportSelection::prompts_and_answers()
+            .with_last_turns(last_turns)
+            .with_skip_turns(skip_turns)
+    } else {
         crate::session_transcript_export::SessionTranscriptExportSelection::from_include_toggles(
             include_commands,
             include_patches,
             include_reasoning,
         )
-        .with_last_turns(last_turns);
+        .with_final_answer_only(final_answer_only)
+        .with_last_turns(last_turns)
+        .with_skip_turns(skip_turns)
+    };
     if count_only {
         let counted = tokio::task::spawn_blocking(move || {
             crate::session_transcript_export::count_session_transcript(
@@ -307,7 +328,7 @@ async fn handle_session_transcript_http(
                     code: "internalError",
                     message: "The transcript export did not finish.".to_string(),
                 },
-            )
+            );
         }
     };
     let outcome = match exported {
@@ -320,7 +341,7 @@ async fn handle_session_transcript_http(
                     code: error.code(),
                     message: error.to_string(),
                 },
-            )
+            );
         }
     };
 
@@ -392,7 +413,7 @@ async fn handle_session_transcript_http(
                         code: "internalError",
                         message: "The exported transcript could not be read back.".to_string(),
                     },
-                )
+                );
             }
         }
     }

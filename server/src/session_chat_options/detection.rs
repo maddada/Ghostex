@@ -334,6 +334,58 @@ pub fn detect_session_chat_terminal_state(
     session_id: &str,
     agent_id: Option<&str>,
 ) -> SessionChatTerminalDetection {
+    // An ACP-mode session reports its live model, effort, and mode directly through `ghostex acp-host`
+    // without terminal screen scraping (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
+    if let Some(acp_state) = crate::acp::channel::channel_state(project_id, session_id) {
+        let model = acp_state
+            .get("model")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(|value| SessionChatDetectedChoice {
+                value: value.to_string(),
+                label: crate::agent_model_catalog::catalog_model(
+                    agent_id.unwrap_or("antigravity"),
+                    value,
+                )
+                .and_then(|entry| {
+                    entry
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .unwrap_or_else(|| value.to_string()),
+                source: SessionChatOptionEvidence::Terminal,
+            });
+        let effort = acp_state
+            .get("effort")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(|value| SessionChatDetectedChoice {
+                value: value.to_string(),
+                label: value.to_string(),
+                source: SessionChatOptionEvidence::Terminal,
+            });
+        let mode = acp_state
+            .get("mode")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(|value| SessionChatDetectedChoice {
+                value: value.to_string(),
+                label: value.to_string(),
+                source: SessionChatOptionEvidence::Terminal,
+            });
+        let selection = SessionChatDetectedSelection {
+            model,
+            effort,
+            mode,
+            ..SessionChatDetectedSelection::default()
+        };
+        let options = Some(SessionChatDetectedOptions::new(selection));
+        let options = with_checkout_status(repository, project_id, session_id, agent_id, options);
+        let mut detection = SessionChatTerminalDetection::default();
+        detection.options = options;
+        return detection;
+    }
     // DeepSeek Harness reports its model and effort through Ghostex's dsh-tui plugin, in the Pi
     // channel's state shape (CDXC:DshChatChannel 2026-11-05 in dsh_chat_plugin.rs).
     if agent_id == Some("dsh") {

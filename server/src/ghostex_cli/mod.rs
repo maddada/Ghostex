@@ -409,6 +409,7 @@ fn is_known_command(name: &str) -> bool {
         "fme",
         "editor-daemon",
         "extensions",
+        "acp-host",
         "prompt-editor",
         "state",
         "dump-state",
@@ -441,8 +442,8 @@ fn is_known_command(name: &str) -> bool {
         "lookup-repository",
         "clone-repository",
         "remove-project",
-        "rename-project",
         "relocate-project",
+        "rename-project",
         "move-project-folder",
         "restore-recent-project",
         "read-sidebar-project-collections",
@@ -597,8 +598,8 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
     let routed = computers::args_for_session_on_another_computer(name, args);
     let args: &[String] = routed.as_deref().unwrap_or(args);
     use actions::{
-        run_bridge_action, run_message_bridge_action, run_resolved_session_bridge_action,
-        BridgeOptions, Parser,
+        BridgeOptions, Parser, run_bridge_action, run_message_bridge_action,
+        run_resolved_session_bridge_action,
     };
     let plain = BridgeOptions {
         fail_on_not_ok: false,
@@ -661,6 +662,14 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "floating-monaco-editor" | "fme" => editors::floating_monaco_editor_command(args),
         "editor-daemon" => editors::editor_daemon_command(args),
         "extensions" => extensions::extensions_command(args),
+        "acp-host" => {
+            let code = crate::acp::host::run(args);
+            if code == 0 {
+                Ok(())
+            } else {
+                std::process::exit(code);
+            }
+        }
         "prompt-editor" => editors::prompt_editor_command(args),
         "state" => run_bridge_action("state", Parser::None, plain, args),
         "dump-state" => run_bridge_action("dumpState", Parser::None, plain, args),
@@ -748,12 +757,12 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "remove-project" => {
             run_bridge_action("removeProject", Parser::Project, fail_on_not_ok, args)
         }
-        "rename-project" => actions::run_rename_project(args),
         // A project whose folder is missing pointed at where it is now, its sessions moved with it
         // (the phone's Use on a missing folder's sheet; server/src/project_folder_problem.rs).
         "relocate-project" => {
             run_bridge_action("relocateProject", Parser::Project, fail_on_not_ok, args)
         }
+        "rename-project" => actions::run_rename_project(args),
         "move-project-folder" => move_project_folder::run(args),
         "restore-recent-project" => run_bridge_action(
             "restoreRecentProject",

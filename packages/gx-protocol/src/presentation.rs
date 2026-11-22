@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::de::{null_as_default, Rows};
+use crate::de::{Rows, null_as_default};
 use crate::side_state::{
     CustomSessionTagsState, SidebarProjectCollectionsState, SidebarSpacesState,
     SidebarWorkspacesState, WorkspaceSessionGroupsState,
@@ -1250,6 +1250,10 @@ pub struct PresentationSession {
     /// (gx-core `SessionRow::is_chief`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub is_chief: bool,
+    /// The session runs through Ghostex's structured ACP host (`server/src/acp/`) rather than an
+    /// interactive terminal CLI. Absent for CLI sessions and from an older gxserver.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub acp_mode: bool,
     /// Its project's main coordinator on this computer (server/src/coordinators/main_coordinator.rs):
     /// the one agents contact by default. Absent from an older gxserver.
     #[serde(default, skip_serializing_if = "is_false")]

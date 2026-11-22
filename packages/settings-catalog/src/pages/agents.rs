@@ -1,5 +1,5 @@
 use crate::data::*;
-use crate::rows::{row, section, Page, Section};
+use crate::rows::{Page, Section, row, section};
 
 pub(crate) fn page() -> Page {
     Page {
@@ -42,10 +42,26 @@ pub(crate) fn home_folder() -> Section {
         "homeFolder",
         "Home folder",
         vec![
-            row("chiefShowOnAllSpaces", "Show Main Hub on all Spaces", "Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to."),
-            row("chiefConfirmNewChat", "Ask before New Chat", "Ask before New Chat or Change Agent starts a new chat with Ghostex AI. Your earlier chats stay in Main Hub either way."),
-            row("gbotsChiefAddsOnItsOwn", "Ghostex AI may add GBots on its own", "With GBots on, Ghostex AI adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one."),
-            row("homeSecretFolders", "Folders agents can't read in your home folder", "Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not."),
+            row(
+                "chiefShowOnAllSpaces",
+                "Show Main Hub on all Spaces",
+                "Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.",
+            ),
+            row(
+                "chiefConfirmNewChat",
+                "Ask before New Chat",
+                "Ask before New Chat or Change Agent starts a new chat with Ghostex AI. Your earlier chats stay in Main Hub either way.",
+            ),
+            row(
+                "gbotsChiefAddsOnItsOwn",
+                "Ghostex AI may add GBots on its own",
+                "With GBots on, Ghostex AI adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one.",
+            ),
+            row(
+                "homeSecretFolders",
+                "Folders agents can't read in your home folder",
+                "Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not.",
+            ),
         ],
     )
 }
@@ -65,6 +81,7 @@ pub(crate) fn agent_list() -> Section {
             row("claudeOneHourPromptCache", "Use a 1-hour prompt cache", "Ask for Claude's 1-hour prompt cache on an API key, Bedrock, Vertex or Foundry, which otherwise get 5 minutes, so idle compaction runs there too. 1-hour cache writes cost more than 5-minute ones. A subscription already gets 1 hour."),
             // OMP's and Pi's row panels, and every custom agent that works like one of them (apps/desktop settings_modal/tabs/agents/pi_messages.rs).
             row("piMessagesWhileWorking", "Messages sent while it works", "What a message you send to a working OMP or Pi does. Steer hands it over at the agent's next step, as Enter does in its own terminal. After yield waits until it finishes its turn. In the row of OMP, Pi and every agent that works like them; one setting for all of them.").options(PI_MESSAGES_WHILE_WORKING_OPTIONS),
+            row("agentAcpMode", "Use ACP mode", "Run this agent through its structured Agent Client Protocol instead of driving its interactive terminal. Switching to Terminal asks first and interrupts any active turn. Applies to sessions started or resumed after you change it."),
             row("preferredAgentInterfaceOverrides", "Default view per agent", "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting."),
         ],
     )
@@ -93,9 +110,18 @@ pub(crate) fn advanced() -> Section {
     section(
         "agentsAdvanced",
         "Agent configs",
-        vec![advanced(row("readAgentLiveStatus", "Read live status from Claude Code and Cursor", "Claude Code and Cursor hand their live model, effort, fast mode, context, cost and 5h / 7d limits only to a status line command, so the chat needs this to show them. Ghostex adds a small one to their settings: it keeps your own status line, draws nothing of its own in Claude, and does nothing outside Ghostex. It also adds the model to Codex's footer when you listed your own footer items. Off, Ghostex removes it and puts your own command back: the chat's model and effort update only after the next reply, fast mode, cost and More details stay empty, and limits show only for saved accounts.")),
+        vec![
+            advanced(row(
+                "readAgentLiveStatus",
+                "Read live status from Claude Code and Cursor",
+                "Claude Code and Cursor hand their live model, effort, fast mode, context, cost and 5h / 7d limits only to a status line command, so the chat needs this to show them. Ghostex adds a small one to their settings: it keeps your own status line, draws nothing of its own in Claude, and does nothing outside Ghostex. It also adds the model to Codex's footer when you listed your own footer items. Off, Ghostex removes it and puts your own command back: the chat's model and effort update only after the next reply, fast mode, cost and More details stay empty, and limits show only for saved accounts.",
+            )),
             // CDXC:AgentHooks 2026-11-19 DECISION: the user moved Use agent hooks here from Settings > Debugging, under Read live status (Q4170: only this row moves into Agents > Advanced, every other row stays where it is). Same switch, same behaviour, off by default (server/src/agent_hooks/hook_free.rs). It came to Debugging from Settings > Agents > Session resume hooks (Q3040).
-            advanced(row("useAgentHooks", "Use agent hooks", "Install hooks for Claude, Codex and OpenCode and follow them through their hooks. Ghostex follows these three without hooks, so turn this on only if it can't follow them on this computer. When off, a session Ghostex can't follow asks in its chat before turning that agent's hook on. Other agents always use their hooks.")),
+            advanced(row(
+                "useAgentHooks",
+                "Use agent hooks",
+                "Install hooks for Claude, Codex and OpenCode and follow them through their hooks. Ghostex follows these three without hooks, so turn this on only if it can't follow them on this computer. When off, a session Ghostex can't follow asks in its chat before turning that agent's hook on. Other agents always use their hooks.",
+            )),
         ],
     )
 }

@@ -101,6 +101,8 @@ impl Scanner {
             };
             self.records.push(Record {
                 agent: Agent::Droid,
+                kind: RecordKind::User,
+                interrupted: false,
                 title: title.clone(),
                 text,
                 project: project.clone(),

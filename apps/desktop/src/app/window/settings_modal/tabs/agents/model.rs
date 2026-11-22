@@ -217,6 +217,15 @@ pub(super) fn supports_chat_view(agent_id: &str, icon: Option<&str>) -> bool {
     ghostex_gx_chat_core::extras::agents::transcript_agent([Some(agent_id), icon]).is_some()
 }
 
+/// Canonical ACP family for agents that support Ghostex's structured ACP host (`server/src/acp/`).
+pub(super) fn acp_mode_family(agent_id: &str, icon: Option<&str>) -> Option<&'static str> {
+    let check = |value: &str| match value.trim().to_ascii_lowercase().as_str() {
+        "antigravity" | "agy" => Some("antigravity"),
+        _ => None,
+    };
+    check(agent_id).or_else(|| icon.and_then(check))
+}
+
 /// `getPreferredAgentInterfaceOverrideOptions(global)`: Inherit (the global choice's label), then
 /// every interface.
 pub(super) fn preferred_interface_override_options(global: &str) -> Vec<SettingOption> {

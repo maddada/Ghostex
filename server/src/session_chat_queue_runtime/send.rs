@@ -250,10 +250,9 @@ fn coordinator_playbook_note(
         crate::coordinators::coordinator_drift_delivery(&db, &state.paths, &key, session)
     });
     let coordinator_compaction_noted = drift.as_ref().is_some_and(|drift| {
-        drift
-            .notes
-            .iter()
-            .any(|note| note == ghostex_gx_chat_core::session::appended_notes::CONTEXT_COMPACTED_NOTE)
+        drift.notes.iter().any(|note| {
+            note == ghostex_gx_chat_core::session::appended_notes::CONTEXT_COMPACTED_NOTE
+        })
     });
     let standing_role = session.as_ref().and_then(|session| {
         crate::agents::standing_role::standing_role_compaction_delivery(
@@ -271,13 +270,13 @@ fn coordinator_playbook_note(
         || standing_role.is_some()
         || open_questions.is_some()
         || dismissed.is_some())
-        .then_some(CoordinatorNotes {
-            playbook,
-            drift,
-            standing_role,
-            open_questions,
-            dismissed,
-        })
+    .then_some(CoordinatorNotes {
+        playbook,
+        drift,
+        standing_role,
+        open_questions,
+        dismissed,
+    })
 }
 
 /// The note under a user's message to a coordinator that names the questions still waiting on the
@@ -979,6 +978,52 @@ async fn send_session_chat_message_locked(
             std::borrow::Cow::Borrowed(_) => agent_text,
         };
     let text = agent_text.as_ref();
+    // An ACP-mode session running inside `ghostex acp-host` takes messages directly over ACP
+    // (`session/prompt`) without typing into a terminal (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
+    if crate::acp::session_is_acp(&target.session) {
+        return match crate::acp::channel::send(&target, text, image_paths, interrupt).await {
+            Ok(_) => {
+                crate::telemetry::prompt_sent(
+                    &target.session,
+                    match source {
+                        SessionChatMessageSource::Composer => "chat",
+                        _ => "queue",
+                    },
+                );
+                promote_draft_session_after_send(state, &target.project_id, &target.session_id);
+                unpark_session_after_send(state, &target.project_id, &target.session_id);
+                crate::session_chat_returned_prompt::record_session_chat_send_submitted(
+                    &target.project_id,
+                    &target.session_id,
+                );
+                if let Some(version) = draft_version {
+                    if let Ok(db) = open_gxserver_database(&state.paths) {
+                        let _ = crate::session_chat_draft_versions::consume(
+                            &db,
+                            &target.project_id,
+                            &target.session_id,
+                            version,
+                        );
+                    }
+                    broadcast_session_chat_queue_state(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                    );
+                } else if source == SessionChatMessageSource::Composer {
+                    retire_sent_session_chat_draft(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                        drafted_text,
+                        draft_before_send.as_ref(),
+                    );
+                }
+                Ok(text.len())
+            }
+            Err(error) => Err(error),
+        };
+    }
     // A Pi or OMP whose Ghostex extension has its chat channel open takes the message through Pi's
     // own API, without the screen checks and typing below (CDXC:PiChatChannel 2026-11-05).
     if matches!(terminal_agent.as_deref(), Some("pi" | "omp")) {

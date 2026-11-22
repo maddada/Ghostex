@@ -1,14 +1,14 @@
 use std::path::Path;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use super::*;
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::presentation::project_session_title_projection;
 use crate::session_status::{
-    compute_activity_update, is_stale_activity_event, normalize_agent_activity_value, parse_iso_ms,
-    ActivityUpdate, TURN_COMPLETE_ATTENTION_SOURCE,
+    ActivityUpdate, TURN_COMPLETE_ATTENTION_SOURCE, compute_activity_update,
+    is_stale_activity_event, normalize_agent_activity_value, parse_iso_ms,
 };
 
 pub(crate) const FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY: &str =
@@ -365,6 +365,30 @@ pub(crate) fn ingest_agent_hook_event(
                 }
                 session = repository.update_session(&session_update)?;
                 changed = true;
+            }
+            if next_activity_name == "idle"
+                && is_session_chat_working_activity(&update.previous_activity)
+            {
+                if let Some(path) = transcript_path.as_deref() {
+                    let agent_name =
+                        crate::session_chat_follower::session_chat_agent_for_session(&session)
+                            .or_else(|| read_text_value(&session, "agentId"))
+                            .unwrap_or_default();
+                    let sid = session
+                        .pointer("/runtimeSettings/agentSessionId")
+                        .and_then(Value::as_str);
+                    let cwd = session.get("cwd").and_then(Value::as_str);
+                    let title = session.get("title").and_then(Value::as_str);
+                    let paths = crate::paths::get_gxserver_paths(None);
+                    crate::agent_prompt_search::nudge_transcript_file(
+                        &paths,
+                        &agent_name,
+                        std::path::Path::new(path),
+                        sid,
+                        cwd,
+                        title,
+                    );
+                }
             }
             activity_reason = if activity_changed {
                 "activity-updated".to_string()

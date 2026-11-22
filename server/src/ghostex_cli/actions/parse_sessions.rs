@@ -1,6 +1,6 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::ghostex_cli::args::{parse_boolean, FlagValue, Flags};
+use crate::ghostex_cli::args::{FlagValue, Flags, parse_boolean};
 use crate::ghostex_cli::rpc::{self, CliError, CliResult};
 
 use super::*;
@@ -96,10 +96,28 @@ pub(super) fn parse_rename_request(rest: &[String], flags: &Flags) -> Value {
 /// User: Include starts off on every client, and the phone reaches gxserver only through this verb, which took no include options, so its file always held commands and file changes.
 pub(super) fn parse_export_transcript(rest: &[String], flags: &Flags) -> Value {
     let mut map = parse_session_selector(rest, flags);
-    for name in ["includeCommands", "includePatches", "includeReasoning"] {
+    for name in [
+        "includeCommands",
+        "includePatches",
+        "includeReasoning",
+        "finalAnswerOnly",
+    ] {
         if let Some(raw) = flags.0.get(name) {
             map.insert(name.to_string(), Value::Bool(parse_boolean(raw)));
         }
+    }
+    if let Some(preset) = flag_json(flags, "preset") {
+        map.insert("preset".to_string(), preset);
+    }
+    if let Some(skip) = flag_json(flags, "skipTurns")
+        .and_then(|value| {
+            value
+                .as_u64()
+                .or_else(|| value.as_str()?.trim().parse().ok())
+        })
+        .filter(|skip| *skip > 0)
+    {
+        map.insert("skipTurns".to_string(), json!(skip));
     }
     // `--last-turns N` limits the file to the last N turns; anything not a positive number is all of it.
     if let Some(turns) = flag_json(flags, "lastTurns")

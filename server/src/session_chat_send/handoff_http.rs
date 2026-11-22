@@ -140,7 +140,7 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
                 Some(endpoint_path),
                 StatusCode::OK,
                 rpc_success(request_id, result),
-            )
+            );
         }
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
         Ok(None) => {}
@@ -173,6 +173,14 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
     // chat box as well, so the message showed twice and the card's Start had nothing to send from
     // the box. The box is the card's, so nothing is moved.
     if first_message_in_box(state, &target) {
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "content": "", "transferred": false })),
+        );
+    }
+    // ACP-mode sessions do not run an interactive TUI editor inside the PTY; skip Ctrl+G capture.
+    if crate::acp::session_is_acp(&target.session) {
         return routed_json(
             Some(endpoint_path),
             StatusCode::OK,

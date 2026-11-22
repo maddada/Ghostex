@@ -122,6 +122,8 @@ fn dedup_keeps_the_most_recent_occurrence_per_agent_and_text() {
     let mut s = scanner();
     let mk = |agent, text: &str, ts| Record {
         agent,
+        kind: RecordKind::User,
+        interrupted: false,
         title: String::new(),
         text: text.to_string(),
         project: String::new(),

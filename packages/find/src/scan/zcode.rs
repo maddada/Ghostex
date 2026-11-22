@@ -88,6 +88,8 @@ impl Scanner {
         };
         self.records.push(Record {
             agent: Agent::Zcode,
+            kind: RecordKind::User,
+            interrupted: false,
             title: clean_title(&row.title).unwrap_or_default(),
             text,
             project: row.cwd,

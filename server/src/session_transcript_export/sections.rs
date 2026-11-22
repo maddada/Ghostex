@@ -104,6 +104,12 @@ pub struct SessionTranscriptExportSelection {
     /// Only the conversation's last turns, counted from the end; `None` is all of it. A turn is
     /// one of your messages and everything up to your next one (`render::RenderedParts`).
     pub last_turns: Option<usize>,
+    /// When true, keep only the final non-empty `AgentMessage` of each turn (dropping mid-turn
+    /// commentary while preserving every user prompt and closing answer).
+    pub final_answer_only: bool,
+    /// Number of leading turns already transferred in an earlier handover (used for delta
+    /// handovers into an existing session).
+    pub skip_turns: usize,
 }
 
 impl Default for SessionTranscriptExportSelection {
@@ -112,6 +118,8 @@ impl Default for SessionTranscriptExportSelection {
             sections: DEFAULT_EXPORT_SECTIONS.to_vec(),
             terminal_output_tail_lines: DEFAULT_TERMINAL_OUTPUT_TAIL_LINES,
             last_turns: None,
+            final_answer_only: false,
+            skip_turns: 0,
         }
     }
 }
@@ -119,6 +127,22 @@ impl Default for SessionTranscriptExportSelection {
 impl SessionTranscriptExportSelection {
     pub fn includes(&self, section: TranscriptExportSection) -> bool {
         self.sections.contains(&section)
+    }
+
+    /// Compact handover preset: session metadata, every user prompt, and only the closing answer
+    /// of each agent turn.
+    pub fn prompts_and_answers() -> Self {
+        Self {
+            sections: vec![
+                TranscriptExportSection::SessionMeta,
+                TranscriptExportSection::UserMessage,
+                TranscriptExportSection::AgentMessage,
+            ],
+            terminal_output_tail_lines: DEFAULT_TERMINAL_OUTPUT_TAIL_LINES,
+            last_turns: None,
+            final_answer_only: true,
+            skip_turns: 0,
+        }
     }
 
     /// Builds the selection the export dialog's include-toggles describe. The
@@ -149,12 +173,26 @@ impl SessionTranscriptExportSelection {
             sections,
             terminal_output_tail_lines: DEFAULT_TERMINAL_OUTPUT_TAIL_LINES,
             last_turns: None,
+            final_answer_only: false,
+            skip_turns: 0,
         }
     }
 
     /// The same selection, limited to the conversation's last `turns` (`None`: all of it).
     pub fn with_last_turns(mut self, turns: Option<usize>) -> Self {
         self.last_turns = turns.filter(|turns| *turns > 0);
+        self
+    }
+
+    /// Keep only the turn-ending closing agent answer in each turn.
+    pub fn with_final_answer_only(mut self, final_answer_only: bool) -> Self {
+        self.final_answer_only = final_answer_only;
+        self
+    }
+
+    /// Skip the first `skip_turns` turns (already handed off in an earlier delta handover).
+    pub fn with_skip_turns(mut self, skip_turns: usize) -> Self {
+        self.skip_turns = skip_turns;
         self
     }
 }

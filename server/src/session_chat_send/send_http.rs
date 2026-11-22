@@ -528,6 +528,20 @@ pub(crate) async fn handle_interrupt_session_chat_http(
             Err(error) => domain_error_response(endpoint_path, request_id, error),
         };
     }
+    // An ACP-mode session cancels its active turn via ACP `session/cancel` (acp/channel.rs).
+    if crate::acp::session_is_acp(&target.session) {
+        return match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
+            Ok(()) => {
+                record_session_chat_interrupt(state, &target, &request_id);
+                routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, json!({ "interrupted": true })),
+                )
+            }
+            Err(error) => domain_error_response(endpoint_path, request_id, error),
+        };
+    }
     // Pi and OMP (OMP shares Pi's transcript family) stop through the chat channel when their
     // Ghostex extension has it open (CDXC:PiChatChannel 2026-11-05 in pi_chat_channel.rs).
     if session_chat_agent_for_session(&target.session).as_deref() == Some("pi") {

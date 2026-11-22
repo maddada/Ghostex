@@ -1,5 +1,5 @@
-use crate::agent::{Agent, ALL_AGENTS};
-use crate::index::{day_key, Hit, QueryOptions, SearchIndex};
+use crate::agent::{ALL_AGENTS, Agent};
+use crate::index::{Hit, QueryOptions, SearchIndex, day_key};
 use crate::scan::Record;
 
 use super::*;
@@ -137,6 +137,7 @@ impl<'a> Tui<'a> {
         let options = QueryOptions {
             query: String::from_utf8_lossy(&self.query).to_string(),
             agents,
+            kinds: Vec::new(),
             project: self.project_filter.clone(),
             group_by_day: self.group_by_day,
             offset: 0,

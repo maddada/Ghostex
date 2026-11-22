@@ -112,6 +112,10 @@ impl GhostexGpuiApp {
                     "includeReasoning".to_string(),
                     serde_json::json!(include.reasoning),
                 );
+                message.insert(
+                    "finalAnswerOnly".to_string(),
+                    serde_json::json!(include.final_answer_only),
+                );
                 self.forward_gpui_export_transcript_modal_command_to_sidebar(
                     "runExportSessionTranscript",
                     &message,
@@ -130,6 +134,10 @@ impl GhostexGpuiApp {
                 message.insert(
                     "includeReasoning".to_string(),
                     serde_json::json!(include.reasoning),
+                );
+                message.insert(
+                    "finalAnswerOnly".to_string(),
+                    serde_json::json!(include.final_answer_only),
                 );
                 self.forward_gpui_export_transcript_modal_command_to_sidebar(
                     "countExportSessionTranscriptTurns",

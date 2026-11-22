@@ -60,6 +60,8 @@ impl Scanner {
         let ts = timestamp_value(field(&v, "ts"));
         self.records.push(Record {
             agent: Agent::Opencode,
+            kind: RecordKind::User,
+            interrupted: false,
             title: title_from_object(&v).unwrap_or_default(),
             text,
             project: string_field(&v, "project").unwrap_or("").to_string(),

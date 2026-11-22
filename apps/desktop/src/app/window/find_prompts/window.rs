@@ -15,8 +15,8 @@
 //! the arrows) and a text field binding would otherwise consume several of them.
 use super::model::{
     FIND_PROMPT_AGENTS, FIND_PROMPT_FORK_AGENT_COUNT, FIND_PROMPTS_PAGE_SIZE, FindAction, FindMode,
-    FindRow, ProjectFacet, SearchPage, ViewRow, build_view_rows, delete_word_backward,
-    delete_word_forward, parse_search_page, resolve_find_action,
+    FindRow, FindSearchScope, ProjectFacet, SearchPage, ViewRow, build_view_rows,
+    delete_word_backward, delete_word_forward, parse_search_page, resolve_find_action,
 };
 use super::palette::FindPalette;
 use crate::app::gx_store::gx_rpc;
@@ -34,9 +34,9 @@ use std::time::Duration;
 
 /// Keystroke settle time before re-querying (`FIND_PROMPTS_QUERY_DEBOUNCE_MS`).
 /// The query field's placeholder (the phone's Find says the same).
-pub(super) const FIND_PLACEHOLDER: &str = "Search every prompt you have sent";
+pub(super) const FIND_PLACEHOLDER: &str = "Search prompts and agent answers";
 /// What the placeholder shortens to when the window is too narrow for the long one.
-pub(super) const FIND_PLACEHOLDER_SHORT: &str = "Search your prompts";
+pub(super) const FIND_PLACEHOLDER_SHORT: &str = "Search prompts & answers";
 const FIND_PROMPTS_QUERY_DEBOUNCE: Duration = Duration::from_millis(120);
 /// Full prompt texts kept for the preview, so walking back over a long prompt does not fetch it again.
 const FULL_TEXT_CACHE_LIMIT: usize = 64;
@@ -97,6 +97,7 @@ pub(crate) struct GpuiFindPromptsModalWindow {
     debounced_query: String,
     query_generation: u64,
     pub(super) agents: [bool; FIND_PROMPT_AGENTS.len()],
+    pub(super) scope: FindSearchScope,
     pub(super) project: Option<String>,
     pub(super) group_by_day: bool,
     pub(super) rows: Vec<FindRow>,
@@ -259,6 +260,7 @@ impl GpuiFindPromptsModalWindow {
             debounced_query: String::new(),
             query_generation: 0,
             agents: [false; FIND_PROMPT_AGENTS.len()],
+            scope: FindSearchScope::All,
             project: None,
             group_by_day: true,
             rows: Vec::new(),
@@ -369,6 +371,7 @@ impl GpuiFindPromptsModalWindow {
             "agents": agents,
             "groupByDay": self.group_by_day,
             "includeFacets": true,
+            "kinds": self.scope.kinds(),
             "limit": FIND_PROMPTS_PAGE_SIZE,
             "offset": offset,
             "query": self.debounced_query,
@@ -750,6 +753,11 @@ impl GpuiFindPromptsModalWindow {
             self.search.update(cx, |input, cx| input.focus(window, cx));
             cx.notify();
         }
+    }
+
+    pub(super) fn cycle_scope(&mut self, cx: &mut Context<Self>) {
+        self.scope = self.scope.cycle();
+        self.filter_changed(cx);
     }
 
     pub(super) fn toggle_agent(&mut self, index: usize, cx: &mut Context<Self>) {

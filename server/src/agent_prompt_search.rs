@@ -17,15 +17,18 @@ hand the host a cwd plus the exact command to run — and the host performs it w
 the session-creation path it already has.
 */
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use ghostex_find::agent::{Agent, ALL_AGENTS};
-use ghostex_find::index::{day_key, QueryOptions, SearchIndex};
-use ghostex_find::{favorites, index as zehn_index};
+use ghostex_find::agent::{ALL_AGENTS, Agent};
+use ghostex_find::favorites::{self, FavoriteSet};
+use ghostex_find::index::{self as zehn_index, QueryOptions, SearchIndex, day_key};
+use ghostex_find::scan::RecordKind;
+use ghostex_find::store::SearchStore;
 
 /// Rows carry a bounded slice of the prompt so a keystroke never ships megabytes
 /// of pasted transcripts — a full page of 60 pasted AGENTS.md prompts is a
@@ -36,23 +39,29 @@ const DEFAULT_TEXT_LIMIT: usize = 1_200;
 const MAX_TEXT_LIMIT: usize = 200_000;
 const DEFAULT_ROW_LIMIT: usize = 60;
 const MAX_ROW_LIMIT: usize = 500;
+const MAX_CANDIDATES_PER_QUERY: usize = 4_000;
 
-/// How long a built index is served before the next query rebuilds it. Agent
-/// history files only change when a prompt is sent, and a rebuild reads ~25k
-/// records in about a second, so this trades a little staleness for not
-/// re-scanning on every keystroke.
-const INDEX_MAX_AGE: Duration = Duration::from_secs(90);
+/// How long a synced prompt store is served before the next query runs a quick
+/// incremental catch-up pass.
+const INDEX_MAX_AGE: Duration = Duration::from_secs(60);
+const FOREGROUND_ANSWER_BUDGET_FILES: usize = 40;
+const FOREGROUND_ANSWER_BUDGET_MS: u64 = 250;
 
-struct CachedIndex {
-    index: SearchIndex,
+struct CachedStore {
+    store: SearchStore,
+    favorites: FavoriteSet,
+    favorites_path: PathBuf,
+    opencode_error: Option<String>,
+    empryo_error: Option<String>,
     epoch: u64,
-    built_at: Instant,
-    built_at_unix: i64,
+    synced_at: Instant,
+    synced_at_unix: i64,
 }
 
-static CACHE: OnceLock<Mutex<Option<CachedIndex>>> = OnceLock::new();
+static CACHE: OnceLock<Mutex<Option<CachedStore>>> = OnceLock::new();
+static BACKFILL_RUNNING: AtomicBool = AtomicBool::new(false);
 
-fn cache() -> &'static Mutex<Option<CachedIndex>> {
+fn cache() -> &'static Mutex<Option<CachedStore>> {
     CACHE.get_or_init(|| Mutex::new(None))
 }
 
@@ -109,67 +118,202 @@ fn resolve_search_paths(paths: &crate::paths::GxserverPaths) -> (String, PathBuf
     (home, cache_root, favorites_path)
 }
 
-fn build_index(paths: &crate::paths::GxserverPaths) -> SearchIndex {
-    let (home, cache_root, favorites_path) = resolve_search_paths(paths);
-    SearchIndex::build(&home, &cache_root, favorites_path)
+fn spawn_answer_backfill(home: PathBuf, cache_root: PathBuf) {
+    if BACKFILL_RUNNING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+    std::thread::Builder::new()
+        .name("ghostex-find-backfill".to_string())
+        .spawn(move || {
+            let _guard = BackfillGuard;
+            let Some(mut store) = SearchStore::open(&cache_root) else {
+                return;
+            };
+            loop {
+                let stats =
+                    store.sync_answer_sources_budgeted(&home, 50, Duration::from_millis(400));
+                if stats.remaining_files == 0 || stats.files_indexed == 0 {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(500));
+            }
+        })
+        .ok();
 }
 
-/// Run `action` against the warm index, rebuilding first when it is missing,
-/// stale, or the caller explicitly asked for a refresh.
-fn with_index<T>(
+struct BackfillGuard;
+impl Drop for BackfillGuard {
+    fn drop(&mut self) {
+        BACKFILL_RUNNING.store(false, Ordering::Release);
+    }
+}
+
+fn sync_store(
+    paths: &crate::paths::GxserverPaths,
+    existing: Option<CachedStore>,
+) -> Result<CachedStore, PromptSearchError> {
+    let (home, cache_root, favorites_path) = resolve_search_paths(paths);
+    let next_epoch = existing.as_ref().map(|prev| prev.epoch + 1).unwrap_or(1);
+    let mut store = match existing {
+        Some(prev) => prev.store,
+        None => SearchStore::open(&cache_root).ok_or_else(|| PromptSearchError {
+            code: "internalError",
+            message: "Could not open the rebuildable search index database.".to_string(),
+        })?,
+    };
+    let built = SearchIndex::build(&home, &cache_root, favorites_path.clone());
+    store.sync_user_records(&built.records);
+    let home_path = PathBuf::from(&home);
+    let stats = store.sync_answer_sources_budgeted(
+        &home_path,
+        FOREGROUND_ANSWER_BUDGET_FILES,
+        Duration::from_millis(FOREGROUND_ANSWER_BUDGET_MS),
+    );
+    if stats.remaining_files > 0 {
+        spawn_answer_backfill(home_path, cache_root);
+    }
+    Ok(CachedStore {
+        store,
+        favorites: built.favorites,
+        favorites_path,
+        opencode_error: built.opencode_error,
+        empryo_error: built.empryo_error,
+        epoch: next_epoch,
+        synced_at: Instant::now(),
+        synced_at_unix: now_unix(),
+    })
+}
+
+/// Run `action` against the SQLite search store, catching up incrementally when
+/// missing, stale, or refreshed.
+fn with_store<T>(
     paths: &crate::paths::GxserverPaths,
     force_refresh: bool,
-    action: impl FnOnce(&mut CachedIndex) -> Result<T, PromptSearchError>,
+    action: impl FnOnce(&mut CachedStore) -> Result<T, PromptSearchError>,
 ) -> Result<T, PromptSearchError> {
-    with_index_policy(paths, force_refresh, true, action)
+    with_store_policy(paths, force_refresh, true, action)
 }
 
-/// Run `action` against whatever index is warm, building one only when none exists.
+/// Run `action` against whatever store is open without triggering a sync pass.
 ///
 /// CDXC:PromptSearch 2026-09-21 WHY:
 /// Opening a result acts on a row the warm index already served, addressed by a key that survives rebuilds. Letting that call rebuild an index older than `INDEX_MAX_AGE` put a full history scan between Enter and the modal closing whenever the user had browsed for more than 90 seconds.
-fn with_warm_index<T>(
+fn with_warm_store<T>(
     paths: &crate::paths::GxserverPaths,
-    action: impl FnOnce(&mut CachedIndex) -> Result<T, PromptSearchError>,
+    action: impl FnOnce(&mut CachedStore) -> Result<T, PromptSearchError>,
 ) -> Result<T, PromptSearchError> {
-    with_index_policy(paths, false, false, action)
+    with_store_policy(paths, false, false, action)
 }
 
-fn with_index_policy<T>(
+fn with_store_policy<T>(
     paths: &crate::paths::GxserverPaths,
     force_refresh: bool,
-    rebuild_when_stale: bool,
-    action: impl FnOnce(&mut CachedIndex) -> Result<T, PromptSearchError>,
+    sync_when_stale: bool,
+    action: impl FnOnce(&mut CachedStore) -> Result<T, PromptSearchError>,
 ) -> Result<T, PromptSearchError> {
     let mut guard = cache().lock().map_err(|_| PromptSearchError {
         code: "internalError",
         message: "The prompt index lock was poisoned.".to_string(),
     })?;
-    let needs_build = match guard.as_ref() {
+    let needs_sync = match guard.as_ref() {
         None => true,
         Some(cached) => {
-            force_refresh || (rebuild_when_stale && cached.built_at.elapsed() > INDEX_MAX_AGE)
+            force_refresh || (sync_when_stale && cached.synced_at.elapsed() > INDEX_MAX_AGE)
         }
     };
-    if needs_build {
-        let next_epoch = guard.as_ref().map(|cached| cached.epoch + 1).unwrap_or(1);
-        *guard = Some(CachedIndex {
-            index: build_index(paths),
-            epoch: next_epoch,
-            built_at: Instant::now(),
-            built_at_unix: now_unix(),
-        });
+    if needs_sync {
+        let prev = guard.take();
+        let refreshed = sync_store(paths, prev)?;
+        *guard = Some(refreshed);
     }
-    let cached = guard.as_mut().expect("index built above");
+    let cached = guard.as_mut().expect("store opened above");
     action(cached)
 }
 
-/// Drop the warm index so the next call rebuilds. Used after an action that is
-/// known to change history on disk.
+/// Drop the warm store handle so the next call re-syncs.
 pub fn invalidate_index() {
     if let Ok(mut guard) = cache().lock() {
         *guard = None;
     }
+}
+
+/// Nudge the search index to immediately parse turn-ending answers from one
+/// changed transcript file (for example when a hook or ACP turn completes).
+pub fn nudge_transcript_file(
+    paths: &crate::paths::GxserverPaths,
+    agent_name: &str,
+    transcript_path: &Path,
+    session_id: Option<&str>,
+    project: Option<&str>,
+    title: Option<&str>,
+) {
+    let Some(agent) = Agent::parse(agent_name) else {
+        return;
+    };
+    let (_, cache_root, _) = resolve_search_paths(paths);
+    let path_owned = transcript_path.to_path_buf();
+    let sid = session_id.map(str::to_string);
+    let proj = project.map(str::to_string);
+    let ttl = title.map(str::to_string);
+    std::thread::Builder::new()
+        .name("ghostex-find-nudge".to_string())
+        .spawn(move || {
+            let Some(mut store) = SearchStore::open(&cache_root) else {
+                return;
+            };
+            let _ = store.index_single_transcript(
+                agent,
+                &path_owned,
+                sid.as_deref(),
+                proj.as_deref(),
+                ttl.as_deref(),
+            );
+        })
+        .ok();
+}
+
+fn read_kinds(params: &Map<String, Value>) -> Result<Vec<RecordKind>, PromptSearchError> {
+    if let Some(value) = params.get("kinds") {
+        let Some(items) = value.as_array() else {
+            return Err(PromptSearchError::invalid(
+                "kinds must be an array of record kinds (user, agent_answer).",
+            ));
+        };
+        let mut kinds = Vec::new();
+        for item in items {
+            let Some(name) = item.as_str() else {
+                return Err(PromptSearchError::invalid(
+                    "kinds must be an array of record kinds (user, agent_answer).",
+                ));
+            };
+            let Some(kind) = RecordKind::parse(name) else {
+                return Err(PromptSearchError::invalid(format!(
+                    "Unknown search kind \"{name}\"."
+                )));
+            };
+            if !kinds.contains(&kind) {
+                kinds.push(kind);
+            }
+        }
+        return Ok(kinds);
+    }
+    if let Some(scope) = params.get("scope").and_then(Value::as_str) {
+        return match scope.trim().to_ascii_lowercase().as_str() {
+            "all" | "both" => Ok(vec![RecordKind::User, RecordKind::AgentAnswer]),
+            "user" | "prompt" | "prompts" => Ok(vec![RecordKind::User]),
+            "agent_answer" | "agent-answer" | "answer" | "answers" | "agent" => {
+                Ok(vec![RecordKind::AgentAnswer])
+            }
+            other => Err(PromptSearchError::invalid(format!(
+                "Unknown search scope \"{other}\"."
+            ))),
+        };
+    }
+    // Older clients (including phones on 11.2.1+) omit `kinds` and expect user prompts only.
+    Ok(vec![RecordKind::User])
 }
 
 fn read_agents(params: &Map<String, Value>) -> Result<Vec<Agent>, PromptSearchError> {
@@ -256,6 +400,7 @@ pub fn search_agent_prompts(
         .unwrap_or("")
         .to_string();
     let agents = read_agents(params)?;
+    let kinds = read_kinds(params)?;
     let project = params
         .get("project")
         .and_then(Value::as_str)
@@ -278,21 +423,30 @@ pub fn search_agent_prompts(
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
-    with_index(paths, refresh, |cached| {
+    with_store(paths, refresh, |cached| {
+        let candidates = cached.store.query_candidates(
+            &query,
+            &kinds,
+            &agents,
+            project.as_deref(),
+            MAX_CANDIDATES_PER_QUERY,
+        );
         let options = QueryOptions {
             query,
             agents,
+            kinds: kinds.clone(),
             project,
             group_by_day,
             offset,
             limit,
         };
-        let result = cached.index.query(&options);
+        let result = zehn_index::rank_records(&candidates, &cached.favorites, &options);
+        let total = cached.store.total_count(&kinds);
         let rows: Vec<Value> = result
             .hits
             .iter()
             .map(|hit| {
-                let rec = &cached.index.records[hit.index];
+                let rec = &candidates[hit.index];
                 let (text, highlights, truncated) =
                     prompt_row_excerpt(&rec.text, &hit.positions, text_limit);
                 json!({
@@ -300,6 +454,8 @@ pub fn search_agent_prompts(
                     "index": hit.index,
                     "agent": rec.agent.label(),
                     "agentColor": rec.agent.hex_color(),
+                    "kind": rec.kind.as_str(),
+                    "interrupted": rec.interrupted,
                     "text": text,
                     "textLength": rec.text.len(),
                     "truncated": truncated,
@@ -335,36 +491,39 @@ pub fn search_agent_prompts(
 
         let mut payload = json!({
             "indexEpoch": cached.epoch,
-            "indexedAt": cached.built_at_unix,
-            "total": result.total,
+            "indexedAt": cached.synced_at_unix,
+            "total": total,
             "matched": result.matched,
             "offset": offset,
             "rows": rows,
         });
-        if let Some(error) = &cached.index.opencode_error {
+        if let Some(error) = &cached.opencode_error {
             payload["opencodeError"] = json!(error);
         }
-        if let Some(error) = &cached.index.empryo_error {
+        if let Some(error) = &cached.empryo_error {
             payload["empryoError"] = json!(error);
         }
         if include_facets {
-            payload["projects"] = json!(cached
-                .index
-                .projects()
-                .into_iter()
-                .map(|path| json!({
-                    "path": path,
-                    "name": ghostex_find::scan::project_display_name(path),
-                }))
-                .collect::<Vec<_>>());
-            payload["agents"] = json!(ALL_AGENTS
-                .into_iter()
-                .map(|agent| json!({
-                    "agent": agent.label(),
-                    "color": agent.hex_color(),
-                    "present": cached.index.present_agents().contains(&agent),
-                }))
-                .collect::<Vec<_>>());
+            let (projects, present_agents) = cached.store.facets(&kinds);
+            payload["projects"] = json!(
+                projects
+                    .into_iter()
+                    .map(|path| json!({
+                        "name": ghostex_find::scan::project_display_name(&path),
+                        "path": path,
+                    }))
+                    .collect::<Vec<_>>()
+            );
+            payload["agents"] = json!(
+                ALL_AGENTS
+                    .into_iter()
+                    .map(|agent| json!({
+                        "agent": agent.label(),
+                        "color": agent.hex_color(),
+                        "present": present_agents.contains(&agent),
+                    }))
+                    .collect::<Vec<_>>()
+            );
         }
         Ok(payload)
     })
@@ -379,27 +538,28 @@ fn parse_prompt_key(params: &Map<String, Value>) -> Result<u64, PromptSearchErro
         .map_err(|_| PromptSearchError::invalid("key must be a 16-digit hex prompt key."))
 }
 
-fn resolve_record_index(
-    cached: &CachedIndex,
+fn resolve_record(
+    cached: &CachedStore,
     params: &Map<String, Value>,
-) -> Result<usize, PromptSearchError> {
+) -> Result<ghostex_find::scan::Record, PromptSearchError> {
     let key = parse_prompt_key(params)?;
+    let key_hex = format!("{key:016x}");
     cached
-        .index
-        .find_by_key(key)
+        .store
+        .find_by_key(&key_hex)
         .ok_or_else(PromptSearchError::unknown_prompt)
 }
 
-/// `POST /api/readAgentPromptText` — the untruncated prompt for one row.
+/// `POST /api/readAgentPromptText` — the untruncated text for one row.
 pub fn read_agent_prompt_text(
     paths: &crate::paths::GxserverPaths,
     params: &Map<String, Value>,
 ) -> Result<Value, PromptSearchError> {
-    with_index(paths, false, |cached| {
-        let index = resolve_record_index(cached, params)?;
-        let rec = &cached.index.records[index];
+    with_warm_store(paths, |cached| {
+        let rec = resolve_record(cached, params)?;
         Ok(json!({
-            "key": format!("{:016x}", zehn_index::record_key(rec)),
+            "key": format!("{:016x}", zehn_index::record_key(&rec)),
+            "kind": rec.kind.as_str(),
             "text": rec.text,
         }))
     })
@@ -410,12 +570,20 @@ pub fn toggle_agent_prompt_favorite(
     paths: &crate::paths::GxserverPaths,
     params: &Map<String, Value>,
 ) -> Result<Value, PromptSearchError> {
-    with_index(paths, false, |cached| {
-        let index = resolve_record_index(cached, params)?;
-        let rec = cached.index.records[index].clone();
+    with_warm_store(paths, |cached| {
+        let rec = resolve_record(cached, params)?;
+        let fav_key = favorites::key_for_kind(rec.agent.label(), rec.kind, &rec.text);
         let favorite = match params.get("favorite").and_then(Value::as_bool) {
-            Some(next) => cached.index.set_favorite(rec.agent, &rec.text, next),
-            None => cached.index.toggle_favorite(rec.agent, &rec.text),
+            Some(next) => {
+                cached.favorites.set(fav_key, next);
+                cached.favorites.save(&cached.favorites_path);
+                next
+            }
+            None => {
+                let next = cached.favorites.toggle(fav_key);
+                cached.favorites.save(&cached.favorites_path);
+                next
+            }
         };
         Ok(json!({
             "key": format!("{:016x}", zehn_index::record_key(&rec)),
@@ -578,9 +746,8 @@ pub fn resolve_agent_prompt_launch(
         None => None,
     };
 
-    with_warm_index(paths, |cached| {
-        let index = resolve_record_index(cached, params)?;
-        let rec = cached.index.records[index].clone();
+    with_warm_store(paths, |cached| {
+        let rec = resolve_record(cached, params)?;
         let plan = match action {
             "resume" => {
                 if rec.session.is_empty() {
@@ -635,7 +802,7 @@ pub fn resolve_agent_prompt_launch(
             other => {
                 return Err(PromptSearchError::invalid(format!(
                     "Unknown action \"{other}\"; expected \"resume\" or \"fork\"."
-                )))
+                )));
             }
         };
         Ok(launch_plan_payload(

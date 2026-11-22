@@ -1,4 +1,4 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::*;
 use crate::domain::DomainStateError;
@@ -647,6 +647,67 @@ pub(crate) fn create_agent_session_params_for_project(
                         plan.insert("command".to_string(), Value::String(command));
                     }
                 }
+                // Opt-in per-agent ACP transport (CDXC:AgentProviders 2026-11-22 in acp/mod.rs):
+                // wrap the local launch inside `ghostex acp-host` so the agent stays alive inside
+                // `zmx` across `gxserver` reloads and can switch in-place to the CLI terminal.
+                let explicit_acp = params
+                    .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+                    .and_then(Value::as_bool);
+                let runtime_acp_off = runtime_settings
+                    .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+                    .and_then(Value::as_bool)
+                    == Some(false);
+                let use_acp = agentbox_provider.is_none()
+                    && !runtime_acp_off
+                    && family.as_deref().is_some_and(|fam| {
+                        crate::acp::supports_acp(fam)
+                            && match explicit_acp {
+                                Some(flag) => flag,
+                                None => {
+                                    crate::acp::agent_acp_enabled(&settings, fam)
+                                        || crate::acp::agent_acp_enabled_in_shared_settings(fam)
+                                }
+                            }
+                    });
+                if use_acp {
+                    if let Some(fam) = family.as_deref() {
+                        let base_cli_cmd = plan
+                            .get("command")
+                            .and_then(Value::as_str)
+                            .map(str::to_string);
+                        let resume_id = read_text_from_map(&runtime_settings, "agentSessionId");
+                        let accept_all_effective =
+                            read_text_from_map(&agent_config, "acceptAllMode")
+                                .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
+                                .as_deref()
+                                .map(|m| m == "acceptAll")
+                                .unwrap_or_else(|| {
+                                    settings
+                                        .get("agentAcceptAllEnabled")
+                                        .and_then(Value::as_bool)
+                                        .unwrap_or(false)
+                                });
+                        let req_model = read_text(params, "agentModel");
+                        let req_effort = read_text(params, "agentEffort");
+                        let acp_cmd = crate::acp::spec::build_acp_host_launch_command(
+                            fam,
+                            base_cli_cmd.as_deref(),
+                            resume_id.as_deref(),
+                            accept_all_effective,
+                            req_model.as_deref(),
+                            req_effort.as_deref(),
+                        );
+                        runtime_settings
+                            .insert(crate::acp::SESSION_ACP_ACTIVE_KEY.to_string(), json!(true));
+                        runtime_settings
+                            .insert(crate::acp::SESSION_ACP_FAMILY_KEY.to_string(), json!(fam));
+                        plan.insert(
+                            "startupText".to_string(),
+                            Value::String(as_atuin_ignored_shell_input(&acp_cmd)),
+                        );
+                        plan.insert("command".to_string(), Value::String(acp_cmd));
+                    }
+                }
             }
             plan
         }
@@ -1110,8 +1171,8 @@ fn pin_remembered_agent_model(
     runtime_settings: &mut Map<String, Value>,
 ) -> Result<Option<String>, DomainStateError> {
     use crate::agent_model_pins::{
-        launch_default, pin_family, session_marker, ModelPin, ORIGIN_DEFAULT, ORIGIN_LEARN,
-        ORIGIN_SESSION, SESSION_PIN_KEY,
+        ModelPin, ORIGIN_DEFAULT, ORIGIN_LEARN, ORIGIN_SESSION, SESSION_PIN_KEY, launch_default,
+        pin_family, session_marker,
     };
     let Some(family) =
         resume_agent_family_id(Some(agent_id.to_string()), agent_config, launch_settings)
@@ -1484,7 +1545,7 @@ pub(crate) fn requested_agent_model_option(
         _ => {
             return Err(DomainStateError::bad_request(format!(
                 "{key} needs a non-empty string value."
-            )))
+            )));
         }
     };
     // `@` names a pinned model version in some Pi providers (`vertex/<model>@<date>`); a value
@@ -1573,18 +1634,26 @@ mod launch_choice_tests {
             refusal.contains("takes a launch model but no effort"),
             "{refusal}"
         );
-        assert!(launch("opencode", Some("opencode/big-pickle"), None)
-            .unwrap_err()
-            .contains("An OpenCode thread keeps its configured model"));
-        assert!(launch("dsh", Some("deepseek-v4"), None)
-            .unwrap_err()
-            .contains("Cursor CLI takes a model only"));
-        assert!(launch("copilot", None, Some("hgih"))
-            .unwrap_err()
-            .contains("A Copilot effort is one of"));
-        assert!(launch("omp", None, Some("ultra"))
-            .unwrap_err()
-            .contains("A OMP effort"));
+        assert!(
+            launch("opencode", Some("opencode/big-pickle"), None)
+                .unwrap_err()
+                .contains("An OpenCode thread keeps its configured model")
+        );
+        assert!(
+            launch("dsh", Some("deepseek-v4"), None)
+                .unwrap_err()
+                .contains("Cursor CLI takes a model only")
+        );
+        assert!(
+            launch("copilot", None, Some("hgih"))
+                .unwrap_err()
+                .contains("A Copilot effort is one of")
+        );
+        assert!(
+            launch("omp", None, Some("ultra"))
+                .unwrap_err()
+                .contains("A OMP effort")
+        );
         assert!(launch("hermes-agent", None, Some("ultra")).is_ok());
     }
 }

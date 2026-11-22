@@ -566,12 +566,58 @@ pub(super) async fn route_chat_http(
                 )
             },
         ),
+        "/api/switchSessionAcpToCli" => {
+            let params = match read_domain_rpc_params(&body_json) {
+                Ok(params) => params,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            let project_id = match read_project_id(&params) {
+                Ok(id) => id,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            let session_id = match read_session_id(&params) {
+                Ok(id) => id,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            let interrupt = params
+                .get("interrupt")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            match crate::acp::channel::switch_to_cli(&state, &project_id, &session_id, interrupt)
+                .await
+            {
+                Ok(result) => routed_json(
+                    Some(endpoint.path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result),
+                ),
+                Err(error) => domain_error_response(endpoint.path, request_id, error),
+            }
+        }
         "/api/exportSessionTranscript" => {
             handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
                 .await
         }
         "/api/countSessionTranscriptTurns" => {
             crate::session_transcript_export::handle_count_session_transcript_turns_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
+        "/api/handoffToExistingSession" => {
+            crate::session_handovers::handle_handoff_to_existing_session_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
+        "/api/listSessionHandovers" => {
+            crate::session_handovers::handle_list_session_handovers_http(
                 &state,
                 endpoint.path,
                 request_id,
@@ -694,7 +740,7 @@ pub(super) async fn route_chat_http(
                 body_json,
                 token_extension_id,
                 caller,
-            })
+            });
         }
     })
 }

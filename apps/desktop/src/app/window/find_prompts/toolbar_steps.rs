@@ -5,7 +5,8 @@
 use super::window::{FIND_PLACEHOLDER, FIND_PLACEHOLDER_SHORT};
 use gpui::{TextRun, Window, font, px};
 
-/// The Agents and Projects dropdown triggers keep these fixed widths (CDXC:PromptSearch 2026-09-16).
+/// The Scope, Agents and Projects triggers keep these fixed widths (CDXC:PromptSearch 2026-09-16).
+pub(super) const FILTER_SCOPE_WIDTH: f32 = 82.0;
 pub(super) const FILTER_AGENTS_WIDTH: f32 = 128.0;
 pub(super) const FILTER_PROJECTS_WIDTH: f32 = 160.0;
 /// The query row's own padding on each side and the gap between its children.
@@ -92,6 +93,7 @@ fn buttons_width(layout: ToolbarLayout, metrics: &ToolbarMetrics) -> f32 {
         } else {
             BUTTON_ICON_ONLY_WIDTH
         },
+        FILTER_SCOPE_WIDTH,
         FILTER_AGENTS_WIDTH,
         FILTER_PROJECTS_WIDTH,
     ];

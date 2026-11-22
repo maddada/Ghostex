@@ -1388,4 +1388,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0084_lead_links",
         sql: include_str!("migrations/0084_lead_links.sql"),
     },
+    Migration {
+        id: "0085_session_handovers",
+        sql: include_str!("migrations/0085_session_handovers.sql"),
+    },
 ];

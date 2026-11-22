@@ -105,6 +105,24 @@ pub fn key(agent_label: &str, text: &str) -> u64 {
     h.finish()
 }
 
+/// Stable key for any search record. User prompts keep the exact legacy hash so
+/// existing favorites and older clients stay compatible; agent answers use a
+/// distinct namespace so an identical reply never collides with a prompt.
+pub fn key_for_kind(agent_label: &str, kind: crate::scan::RecordKind, text: &str) -> u64 {
+    match kind {
+        crate::scan::RecordKind::User => key(agent_label, text),
+        crate::scan::RecordKind::AgentAnswer => {
+            let mut h = Wyhash::new(0);
+            h.update(agent_label.as_bytes());
+            h.update(&[0]);
+            h.update(b"agent_answer");
+            h.update(&[0]);
+            h.update(text.as_bytes());
+            h.finish()
+        }
+    }
+}
+
 /// `$XDG_CONFIG_HOME/zehn/favorites`, or `~/.config/zehn/favorites`.
 pub fn path_for(home: &str, xdg: Option<&str>) -> PathBuf {
     if let Some(x) = xdg {

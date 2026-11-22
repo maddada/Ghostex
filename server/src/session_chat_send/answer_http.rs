@@ -178,7 +178,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                             code: "internalError",
                             message: "Could not check the relayed answer.".to_string(),
                         },
-                    )
+                    );
                 }
             }
         }
@@ -575,7 +575,7 @@ async fn answer_session_chat_prompt(
                     endpoint_path,
                     request_id,
                     crate::session_chat_opencode::error("OpenCode answer task failed."),
-                )
+                );
             }
         }
         schedule_session_chat_option_redetect(
@@ -660,7 +660,7 @@ async fn answer_session_chat_prompt(
                             _ => "Could not read Codex's question.".into(),
                         },
                     },
-                )
+                );
             }
         };
         if let Some(answer) = answer {
@@ -805,7 +805,7 @@ async fn answer_session_chat_prompt(
                         code: "invalidParams",
                         message: "This agent does not offer terminal dialogs.".to_string(),
                     },
-                )
+                );
             }
         };
         crate::session_chat_options::SessionChatOptionDetector::new(state)
@@ -859,6 +859,44 @@ async fn answer_session_chat_prompt(
     let mut denied_permission_row = false;
     let steps = match kind {
         "approval" => {
+            // An ACP-mode session answers pending `session/request_permission` requests directly
+            // through `ghostex acp-host` without typing keystrokes into the PTY.
+            if crate::acp::session_is_acp(&target.session) {
+                let decision = params
+                    .get("approvalSend")
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| params.get("decision").and_then(Value::as_str))
+                    .unwrap_or("allow");
+                let option_id = params.get("optionId").and_then(Value::as_str);
+                return match crate::acp::channel::answer_permission(
+                    &target.project_id,
+                    &target.session_id,
+                    decision,
+                    option_id,
+                )
+                .await
+                {
+                    Ok(_) => {
+                        let agent =
+                            crate::session_chat_follower::session_chat_display_agent_for_session(
+                                &target.session,
+                            );
+                        schedule_session_chat_option_redetect(
+                            state,
+                            &target.project_id,
+                            &target.session_id,
+                            agent.as_deref(),
+                        );
+                        routed_json(
+                            Some(endpoint_path),
+                            StatusCode::OK,
+                            rpc_success(request_id, json!({ "queued": false })),
+                        )
+                    }
+                    Err(error) => domain_error_response(endpoint_path, request_id, error),
+                };
+            }
             // Allow → the option's raw send byte ("1"); Deny/empty → ESC.
             // Raw, no bracketed paste, no delayed Enter (upstream chat spec §8.3).
             let approval_send = params
@@ -1062,7 +1100,7 @@ async fn answer_session_chat_prompt(
                 {
                     Some(Ok(())) => true,
                     Some(Err(error)) => {
-                        return domain_error_response(endpoint_path, request_id, error)
+                        return domain_error_response(endpoint_path, request_id, error);
                     }
                     None => false,
                 }
@@ -1390,7 +1428,7 @@ async fn answer_session_chat_prompt(
                                     code: "invalidState",
                                     message: format!("Hermes did not take the answer: {reason}"),
                                 },
-                            )
+                            );
                         }
                         other => {
                             if let Some(Err(reason)) = other {

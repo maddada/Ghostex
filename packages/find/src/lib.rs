@@ -6,6 +6,7 @@ pub mod favorites;
 pub mod fuzzy;
 pub mod index;
 pub mod scan;
+pub mod store;
 pub mod tui;
 pub mod unicode;
 pub mod wyhash;

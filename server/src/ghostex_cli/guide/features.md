@@ -4044,7 +4044,21 @@ this computer. Custom agents can be turned off, or deleted from their
 expanded row; built-in agents are only turned off. Expand an agent row to edit
 its name, command, permission mode and default view, duplicate it as a custom
 agent, install or update its CLI, see its installed version (and the newer one
-when available) and command output, or open its Install docs link. Claude Code, Codex, Cursor Agent
+when available) and command output, or open its Install docs link. For agents
+that support Ghostex's structured Agent Client Protocol (currently Antigravity
+CLI), the row also offers **Use ACP mode** (`agentAcpMode`, off by default):
+sessions started or resumed with it on run through `ghostex acp-host` inside
+their normal `zmx` session so they survive Ghostex reloads without terminal
+scraping. Switching an ACP session to Terminal asks first and explains that
+switching is not instant and interrupts any active turn before handing the
+session over to the interactive CLI.
+
+Prompt history search (**Find**, `ghostex f`) indexes both your prompts and each
+agent turn's closing answer in a rebuildable local SQLite FTS5 store, with a
+scope toggle for **All**, **Prompts**, or **Answers**. Session Handoff / Export
+also offers a **Final answers only** toggle (and `preset: "prompts_and_answers"`
+plus `/api/handoffToExistingSession` delta handovers tracked in
+`session_handovers`) for compact transfers between CLI and ACP sessions. Claude Code, Codex, Cursor Agent
 and Grok Build install through their official installers (PowerShell on
 Windows; Claude Code doesn't need Git for Windows to install). Pi installs with
 its official installer too, which needs Node.js 22.19 or newer and npm (Ghostex

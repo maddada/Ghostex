@@ -60,6 +60,8 @@ impl Scanner {
             };
             self.records.push(Record {
                 agent: Agent::Grok,
+                kind: RecordKind::User,
+                interrupted: false,
                 title: info.title.clone(),
                 text,
                 project: info.project.clone(),

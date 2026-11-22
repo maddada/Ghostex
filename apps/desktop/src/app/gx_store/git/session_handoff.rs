@@ -327,6 +327,7 @@ async fn export_transcript(
         "includeCommands": include.commands,
         "includePatches": include.patches,
         "includeReasoning": include.reasoning,
+        "finalAnswerOnly": include.final_answer_only,
         "projectId": session.project_id,
         "sessionId": session.session_id,
     });

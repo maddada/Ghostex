@@ -66,13 +66,17 @@ const BRANCH_NOTICE_SUBTITLE: &str =
 const EXPORT_HINT: &str = "The file is saved in the Ghostex exports folder.";
 const INCLUDE: &str = "Include";
 const INCLUDE_NOTHING: &str = "Messages only";
-const INCLUDE_ROWS: [(&str, &str); 3] = [
+const INCLUDE_ROWS: [(&str, &str); 4] = [
     (
         "Commands & output",
         "Terminal commands the agent ran, with the tail of their output.",
     ),
     ("File changes", "The patches the agent applied to files."),
     ("Reasoning", "The agent's own reasoning sections."),
+    (
+        "Final answers only",
+        "Keep only your prompts and each turn's closing answer, omitting mid-turn chatter.",
+    ),
 ];
 const HISTORY: &str = "History";
 const WHOLE_CONVERSATION: &str = "Whole conversation";
@@ -104,6 +108,7 @@ pub(crate) struct ExportTranscriptIncludeOptions {
     pub(crate) commands: bool,
     pub(crate) patches: bool,
     pub(crate) reasoning: bool,
+    pub(crate) final_answer_only: bool,
 }
 
 /// What the dialog remembers between opens. A per-client UI preference, so repeat exports reopen
@@ -131,6 +136,7 @@ impl ExportTranscriptModalPrefs {
                 commands: saved.include.commands,
                 patches: saved.include.patches,
                 reasoning: saved.include.reasoning,
+                final_answer_only: saved.include.final_answer_only,
             },
             include_open: saved.include_open,
             agent_id: saved.agent_id,
@@ -155,6 +161,7 @@ impl ExportTranscriptModalPrefs {
                 commands: self.include.commands,
                 patches: self.include.patches,
                 reasoning: self.include.reasoning,
+                final_answer_only: self.include.final_answer_only,
             },
             include_open: self.include_open,
             agent_id: self.agent_id.clone(),
@@ -1028,7 +1035,8 @@ impl GpuiExportTranscriptModalWindow {
         match index {
             0 => self.include.commands = !self.include.commands,
             1 => self.include.patches = !self.include.patches,
-            _ => self.include.reasoning = !self.include.reasoning,
+            2 => self.include.reasoning = !self.include.reasoning,
+            _ => self.include.final_answer_only = !self.include.final_answer_only,
         }
         self.persist_prefs();
         self.ask_turn_count(cx);
@@ -1613,6 +1621,7 @@ impl GpuiExportTranscriptModalWindow {
             self.include.commands,
             self.include.patches,
             self.include.reasoning,
+            self.include.final_answer_only,
         ];
         let chosen: Vec<&str> = INCLUDE_ROWS
             .iter()
@@ -2265,6 +2274,7 @@ mod tests {
                 commands: true,
                 patches: false,
                 reasoning: true,
+                final_answer_only: false,
             },
             include_open: true,
             agent_id: Some("codex".to_string()),

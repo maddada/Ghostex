@@ -61,13 +61,13 @@ impl Scanner {
         self.dedup();
     }
 
-    /// Collapse identical (agent, text) prompts, keeping the most recent
+    /// Collapse identical (agent, kind, text) records, keeping the most recent
     /// occurrence (highest ts). Preserves first-seen ordering otherwise.
     pub fn dedup(&mut self) {
-        let mut seen: HashMap<(Agent, String), usize> = HashMap::new();
+        let mut seen: HashMap<(Agent, RecordKind, String), usize> = HashMap::new();
         let mut out: Vec<Record> = Vec::with_capacity(self.records.len());
         for rec in std::mem::take(&mut self.records) {
-            let key = (rec.agent, rec.text.clone());
+            let key = (rec.agent, rec.kind, rec.text.clone());
             match seen.get(&key) {
                 Some(&pos) => {
                     if rec.ts > out[pos].ts {

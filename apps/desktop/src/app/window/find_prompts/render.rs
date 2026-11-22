@@ -18,8 +18,8 @@ use super::model::{
     format_last_active_compact,
 };
 use super::toolbar_steps::{
-    ActionsStep, FILTER_AGENTS_WIDTH, FILTER_PROJECTS_WIDTH, ToolbarLayout, ToolbarMetrics,
-    toolbar_layout,
+    ActionsStep, FILTER_AGENTS_WIDTH, FILTER_PROJECTS_WIDTH, FILTER_SCOPE_WIDTH, ToolbarLayout,
+    ToolbarMetrics, toolbar_layout,
 };
 use super::window::{
     FIND_PLACEHOLDER, FIND_PLACEHOLDER_SHORT, FindMenu, FindNoticeKind, GpuiFindPromptsModalWindow,
@@ -183,6 +183,7 @@ impl GpuiFindPromptsModalWindow {
             FindAction::ToggleDayGrouping,
             cx,
         ));
+        buttons.push(self.scope_trigger(cx));
         buttons.push(self.filter_trigger(FindMenu::Agent, cx));
         buttons.push(self.filter_trigger(FindMenu::Project, cx));
         if menu_actions {
@@ -506,6 +507,51 @@ impl GpuiFindPromptsModalWindow {
             .into_any_element()
     }
 
+    fn scope_trigger(&self, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.p;
+        let active = self.scope != super::model::FindSearchScope::All;
+        let label = self.scope.label();
+        let tooltip = self.scope.tooltip().to_string();
+        let text = if active { p.foreground } else { p.muted };
+        h_flex()
+            .id("find-scope-filter")
+            .w(px(FILTER_SCOPE_WIDTH))
+            .h(px(36.0))
+            .px(px(10.0))
+            .items_center()
+            .justify_center()
+            .rounded(px(10.0))
+            .border_1()
+            .border_color(hsla(if active {
+                p.foreground_at(0.35)
+            } else {
+                p.border
+            }))
+            .bg(hsla(if active {
+                p.foreground_at(0.09)
+            } else {
+                p.button
+            }))
+            .text_size(px(13.0))
+            .line_height(px(18.2))
+            .text_color(hsla(text))
+            .cursor_pointer()
+            .hover(move |this| {
+                let this = this.text_color(hsla(p.foreground));
+                if active {
+                    this
+                } else {
+                    this.bg(hsla(p.button_hover))
+                }
+            })
+            .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
+                this.cycle_scope(cx);
+            }))
+            .tooltip(move |window, cx| quick_access_tooltip(tooltip.clone(), window, cx))
+            .child(label)
+            .into_any_element()
+    }
+
     /// The results, virtualized, with the matched/total pill over their bottom-right corner.
     fn render_results(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.p;
@@ -724,6 +770,28 @@ impl GpuiFindPromptsModalWindow {
                                     .text_color(hsla(row.agent_color))
                                     .child(row.agent.clone()),
                             )
+                            .when(row.is_agent_answer, |this| {
+                                let badge_label = if row.interrupted {
+                                    "Answer · Stopped"
+                                } else {
+                                    "Answer"
+                                };
+                                this.child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .mt(px(3.0))
+                                        .px(px(6.0))
+                                        .py(px(1.0))
+                                        .rounded(px(5.0))
+                                        .border_1()
+                                        .border_color(hsla(p.border))
+                                        .bg(hsla(p.foreground_at(0.06)))
+                                        .text_size(px(11.0))
+                                        .line_height(px(15.0))
+                                        .text_color(hsla(p.muted))
+                                        .child(badge_label),
+                                )
+                            })
                             .child(
                                 div()
                                     .flex_1()
