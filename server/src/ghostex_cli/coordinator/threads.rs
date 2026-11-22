@@ -403,6 +403,9 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
                 compact[key] = value.clone();
             }
         }
+        if crate::ghostex_cli::args::named_body_file(parsed.flags.string_value("bodyFile")) {
+            compact["message"] = json!(task);
+        }
         if status == "pending" {
             compact["note"] = json!(note);
         }

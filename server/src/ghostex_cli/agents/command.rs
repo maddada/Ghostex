@@ -158,10 +158,18 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             }
         }
         "send" if args.main_coordinator => {
-            delivery::print_send_receipt(&main_coordinator::send(&args)?, args.json);
+            delivery::print_send_receipt(
+                &main_coordinator::send(&args)?,
+                args.json,
+                args.body_file.as_deref(),
+            );
         }
         "send" => {
-            delivery::print_send_receipt(&delivery::send(&args)?, args.json);
+            delivery::print_send_receipt(
+                &delivery::send(&args)?,
+                args.json,
+                args.body_file.as_deref(),
+            );
         }
         "held" => {
             print_json(&delivery::held(&args)?);

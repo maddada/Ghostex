@@ -12,9 +12,9 @@ use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 /// Compact receipt for both direct sends and sends that start a missing coordinator or session.
-/// CDXC:AgentMessaging 2026-11-22 DECISION: User chose Q4393 B: agents send prints one JSON line without the message by default; --json keeps the full receipt. This supersedes the 2026-11-13 full-JSON default.
+/// CDXC:AgentMessaging 2026-11-22 DECISION: User chose Q4393 B: agents send prints one JSON line by default; --json keeps the full receipt. A later request adds the message when --body-file names a file, so the chat card can show it. This supersedes the 2026-11-13 full-JSON default.
 /// CDXC:SessionChat 2026-11-22 WHY: Phones already installed parse `recipient` and `sendRequestId` from this output, so the short line keeps those fields alongside Q4393 B until those phones have updated.
-pub(super) fn print_send_receipt(result: &Value, full: bool) {
+pub(super) fn print_send_receipt(result: &Value, full: bool, body_file: Option<&str>) {
     if full {
         crate::ghostex_cli::output::print_json(result);
         return;
@@ -34,6 +34,11 @@ pub(super) fn print_send_receipt(result: &Value, full: bool) {
         "req": text(result, "sendRequestId"),
         "sendRequestId": text(result, "sendRequestId"),
         "recipient": {"globalRef": reference, "title": text(recipient, "title"), "agentId": text(recipient, "agentId")}});
+    if crate::ghostex_cli::args::named_body_file(body_file) {
+        if let Some(message) = result.get("message").or_else(|| result.get("task")) {
+            compact["message"] = message.clone();
+        }
+    }
     if result["duplicate"] == true {
         compact["duplicate"] = json!(true);
     }

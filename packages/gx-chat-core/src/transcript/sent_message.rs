@@ -374,6 +374,7 @@ fn cli_send(shell: &ShellCommand, at: usize, script: &Script<'_>) -> Option<Sent
     let create = start_thread || shell.words[start + 2] == "create";
     let mut positional: Vec<&str> = Vec::new();
     let mut body_file: Option<&str> = None;
+    let mut main_coordinator = false;
     let mut task: Option<&str> = None;
     let mut title: Option<&str> = None;
     let mut words = shell.words[start + 3..].iter();
@@ -384,9 +385,11 @@ fn cli_send(shell: &ShellCommand, at: usize, script: &Script<'_>) -> Option<Sent
                 break;
             }
             "--body-file" => body_file = words.next().map(String::as_str),
+            "--main-coordinator" => main_coordinator = true,
             "--task" => task = words.next().map(String::as_str),
             "--title" => title = words.next().map(String::as_str),
-            "--server" | "--project-id" | "--request-id" => {
+            "--server" | "--project-id" | "--request-id" | "--computer" | "--path"
+            | "--if-none" => {
                 words.next();
             }
             "--agent" | "--model" | "--effort" | "--base-branch" | "--coordinator"
@@ -401,7 +404,7 @@ fn cli_send(shell: &ShellCommand, at: usize, script: &Script<'_>) -> Option<Sent
     }
     // A reference the script does not show (`$t` outside a loop it can read) is no reference at
     // all, so the card names nobody rather than the raw word.
-    let target = if start_thread {
+    let target = if start_thread || main_coordinator {
         String::new()
     } else {
         match script.value(positional.first()?, at, shell) {
@@ -411,6 +414,8 @@ fn cli_send(shell: &ShellCommand, at: usize, script: &Script<'_>) -> Option<Sent
     };
     let body = if create {
         task
+    } else if main_coordinator {
+        positional.first().copied()
     } else {
         positional.get(1).copied()
     };

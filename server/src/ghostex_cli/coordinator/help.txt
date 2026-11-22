@@ -10,10 +10,12 @@ USAGE
   ghostex coordinator make-main <session-ref> [--computer <name>] [--json]
   ghostex coordinator options [--json]
   ghostex coordinator list [--project-id <id>] [--json]
-  ghostex coordinator status [--coordinator <ref> | --project-id <id> [--computer <name>]] [--all] [--json]
+  ghostex coordinator status [--coordinator <ref> | --project-id <id> [--computer <name>]] [--full] [--json]
+  ghostex coordinator status threads [--sleeping | --all] | thread <ref> | memory | usage
+  ghostex coordinator thread <ref>      Brief state and latest report headline
   ghostex coordinator start-thread --title <title> (--task <text> | --body-file <path|->)
                               [--agent <agent-id> [--allow-hidden]] [--model <m>] [--effort <e>]
-                              [--account <number|email|hub>] [--worktree [--base-branch <branch>]]
+                              [--account <number|email|hub> [--user-named]] [--worktree [--base-branch <branch>]]
                               [--project-id <id> | --path <folder>] [--computer <name>]
                               [--read-only] [--coordinator <ref>] [--json]
   ghostex coordinator link <session-ref> [--task <text>] [--coordinator <ref>]
@@ -25,7 +27,7 @@ USAGE
   ghostex coordinator reopen <thread-ref> [--json]
   ghostex coordinator sleep-inactive-threads [<coordinator-ref>] [--coordinator <ref>] [--json]
   ghostex coordinator acknowledge-threads [<coordinator-ref>] [--coordinator <ref>] [--json]
-  ghostex coordinator item list [<W7>] [--all] [--json] [--coordinator <ref>]
+  ghostex coordinator item list [<W7>] [--all | --check] [--json] [--coordinator <ref>]
   ghostex coordinator item add "<line of work>" [--thread <thread-ref>]... [--now "<line>"]
                               [--later next|held|parked|backlog] [--link <url|path>]
                               [--release <name>] [--json]
@@ -182,6 +184,7 @@ THREADS
   --account starts a Claude or Codex thread on that saved account (its number or email, as
   `ghostex accounts` lists them) instead of the Account for new sessions rule; an account that
   needs signing in or is turned off is refused, with the accounts that would work. A
+  manual-only account also needs --user-named, only when the user named it. A
   CLIProxyAPI hub's name or host (or `hub` when there is one) starts it On the hub.
   --read-only starts the thread's agent in its read-only mode, for a reviewer
   or a researcher that should not change anything: Codex in its read-only
@@ -202,7 +205,8 @@ THREADS
   the brief and prints a one-line JSON receipt with status `started` or
   `pending` and its reason (still starting, or
   its screen shows a question only a person can answer). --json prints the full
-  receipt. A brief whose send
+  receipt. A named --body-file adds its text to the short receipt for the chat
+  card. A brief whose send
   failed is retried once; a second failure is an error. Only `started` means
   the thread has the work. Do not resend a pending brief: if it never
   arrives, Ghostex sends the coordinator "Ghostex thread report: your message

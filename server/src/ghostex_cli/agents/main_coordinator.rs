@@ -167,6 +167,9 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
                 "title": result["title"],
                 "created": true,
             });
+            if crate::ghostex_cli::args::named_body_file(args.body_file.as_deref()) {
+                result["message"] = json!(body);
+            }
             result["note"] = json!(format!(
                 "{} had no main coordinator: this new coordinator is its main one now, and your message is its first request.",
                 where_(args, &project_label)

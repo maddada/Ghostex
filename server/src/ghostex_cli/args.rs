@@ -231,6 +231,10 @@ pub fn parse_json_value(value: &str) -> Option<Value> {
     serde_json::from_str(value).ok()
 }
 
+pub(super) fn named_body_file(path: Option<&str>) -> bool {
+    path.is_some_and(|path| !matches!(path, "-" | "/dev/stdin" | "/dev/fd/0"))
+}
+
 /// The text a message or task `--body-file` names, `what` saying what it is in an error ("message",
 /// "task"); `-` reads standard input to its end. A leading byte order mark is dropped.
 ///

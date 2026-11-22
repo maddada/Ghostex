@@ -20,7 +20,8 @@ USAGE
   ghostex agents unhold <session-ref> (<request-id>... | --all)
   ghostex agents close <session-ref>
   ghostex agents switch-account <session-ref> --account <number|email>
-                               [--force] [--json]
+                               [--force] [--user-named] [--json]
+  --user-named permits a manual-only account only when the user named it.
   ghostex agents reload <session-ref> [--json]
   ghostex agents wait-reply <session-ref> [--contains <text>] [--timeout <seconds>]
                           [--after <message-id> | now] [--json]
@@ -224,8 +225,9 @@ DELIVERY
   Blocking prompts can prevent delivery. Inspect chat and queue before retrying.
 
   RETRYING THE SAME MESSAGE
-  By default send prints one JSON line without the message; --json prints the
-  full receipt. Every send has a request id: req in the short result
+  Send prints one JSON line. A named --body-file adds its text for the chat
+  card; inline text and stdin are not echoed. --json prints the full receipt.
+  Every send has a request id: req in the short result
   (sendRequestId in the full receipt), and in the error
   text when a send fails. To retry that same message, pass the id back with
   --request-id <id>. Ghostex delivers one request id at most once: a retry of
