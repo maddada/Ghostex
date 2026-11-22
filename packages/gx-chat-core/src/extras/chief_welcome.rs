@@ -1,5 +1,5 @@
 //! Ask Ghostex AI's welcome card: what its empty chat shows instead of the agent mark, the
-//! headline, the tips card and Try a Boost. A new user gets First steps, ticked off from Ghostex's
+//! headline and the tips card. A new user gets First steps, ticked off from Ghostex's
 //! own state; once they have a project and have started an agent, a live status line and prompts
 //! about their work and about Ghostex. Every prompt only fills the chat box.
 //!

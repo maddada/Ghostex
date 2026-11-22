@@ -1,7 +1,7 @@
 //! Boosts in the chat (gx-chat-core `extras/boosts.rs` has the user's decisions and the rules): the
 //! Boost pill at the right of the pill strip; its menu, one 460px list in Show, Actions, Work and
 //! Custom sections with section chips and Edit at its bottom, and a preview card beside it; the one-time callout bubble
-//! above the pill; the Boost pills' hover and double click; "Try a Boost" on a new chat; and Save as
+//! above the pill on a new chat; the Boost pills' hover and double click; and Save as
 //! Boost. Editing is Settings > Boosts (window/settings_modal/tabs/boosts.rs), which the menu's
 //! Edit button, a pill's double click and Save as Boost open.
 //!
@@ -37,9 +37,6 @@ pub(super) const BOOST_MENU: &str = "boostMenu";
 pub(super) const BOOST_PREVIEW: &str = "boostPreview";
 pub(super) const BOOST_MENU_WIDTH: f32 = 460.0;
 pub(super) const BOOST_PREVIEW_WIDTH: f32 = 236.0;
-/// The Boosts "Try a Boost" offers on a new chat, in order (the phone's `TRY_A_BOOST` in
-/// cards/Boosts.tsx is the same list).
-const TRY_A_BOOST: [&str; 4] = ["live-page", "chart", "compare", "computer-use"];
 /// The preview card's content height: its title, the picture, the description (up to
 /// three lines) and what a click does.
 const PREVIEW_HEIGHT: f32 = 228.0;
@@ -182,14 +179,17 @@ impl NativeChatView {
         let active = pill["active"] == true;
         let bounds: Rc<Cell<Bounds<Pixels>>> = self.boost_pill_bounds.clone();
         let measured = bounds.clone();
-        // The callout, while it has not been seen, carries visible copy, no compact prompt sits
-        // above the composer, and nothing covers the pane.
-        let hint_wanted = boost_hint_visible(&boosts["hint"])
+        // The callout, while it has not been seen, this chat has no messages sent yet, carries
+        // visible copy, no compact prompt sits above the composer, and nothing covers the pane.
+        let hint_wanted = self.list.item_count() == 0
+            && !self.pending_send
+            && boost_hint_visible(&boosts["hint"])
             && !self.compact_prompt_open()
             && !self.frosted_overlay_covered(
                 super::frosted_overlay_window::FrostedOverlay::BoostHint,
                 cx,
             );
+        let above_top = self.composer_above_top.clone();
         let chat = cx.weak_entity();
         Some(
             div()
@@ -238,9 +238,13 @@ impl NativeChatView {
                     canvas(
                         move |bounds, window, cx| {
                             measured.set(bounds);
+                            let anchor_top = match above_top.get() {
+                                Some(top) if top < bounds.top() => top,
+                                _ => bounds.top(),
+                            };
                             let frame = (hint_wanted
                                 && super::child_window::bounds_inside_content_mask(window, bounds))
-                            .then(|| callout_frame(bounds, s));
+                            .then(|| callout_frame(bounds, anchor_top, s));
                             let chat = chat.clone();
                             cx.defer(move |cx| {
                                 let _ = chat.update(cx, |chat, cx| {
@@ -731,172 +735,6 @@ impl NativeChatView {
         )
     }
 
-    /// "Try a Boost" just above a new chat's chat box: a chip per featured Boost, on one row; a
-    /// click puts it in the message. Only while the new chat's welcome shows its headline.
-    /// CDXC:Boosts 2026-11-20 DECISION: User: the chips wrapping onto a second row under the
-    /// headline "looks very ugly", then: "don't show the Try a Boost chips under the new-chat
-    /// headline at all; on a new chat they belong just above the chat box", and "'Ask me in a form'
-    /// is a bad one to highlight: feature 'Computer & Browser use' instead". The row never wraps:
-    /// the chips that fit show, and the rest fold into a "+N" chip whose menu lists them.
-    pub(super) fn render_try_a_boost(
-        &self,
-        p: &ChatAppearance,
-        cx: &Context<Self>,
-    ) -> Option<AnyElement> {
-        let welcome = &self.snapshot["newSessionWelcome"];
-        if !welcome.is_object() || welcome["showTitle"] == false {
-            return None;
-        }
-        let rows = self.boosts()?["list"].as_array()?;
-        let all: Vec<Value> = TRY_A_BOOST
-            .iter()
-            .filter_map(|id| rows.iter().find(|row| row["id"] == *id).cloned())
-            .collect();
-        if all.is_empty() {
-            return None;
-        }
-        // The box's width on the last frame (the pane's, less its margins, before the first).
-        let box_width = self.composer_bounds.get().size.width.as_f32();
-        let room = if box_width > 0.0 {
-            box_width
-        } else {
-            (self.bounds.get().size.width.as_f32() - 48.0 * p.scale).max(0.0)
-        } - 16.0 * p.scale;
-        let s = p.scale;
-        let tone = accent(p.light);
-        // Widths as the row lays them out, from the text's length (13px, about 0.5em a glyph as
-        // measured in the web build): padding, border, icon and gap around each label, 6px between.
-        let glyphs = |label: &str| label.chars().count() as f32 * 13.0 * 0.5 * s;
-        let chip_width = |label: &str| glyphs(label) + (18.0 + 2.0 + 14.0 + 5.0) * s;
-        let gap = 6.0 * s;
-        let lead = glyphs("Try a Boost") + 18.0 * s;
-        let more_width = |hidden: usize| glyphs(&format!("+{hidden}")) + 20.0 * s;
-        let mut used = lead;
-        let mut shown = 0;
-        for (index, row) in all.iter().enumerate() {
-            let width = gap + chip_width(&text(row, "label"));
-            let left = all.len() - index - 1;
-            let reserve = if left > 0 {
-                gap + more_width(left)
-            } else {
-                0.0
-            };
-            if used + width + reserve > room {
-                break;
-            }
-            used += width;
-            shown += 1;
-        }
-        let hidden: Vec<Value> = all[shown..].to_vec();
-        let list: Vec<Value> = all[..shown].to_vec();
-        let more = (!hidden.is_empty()).then(|| {
-            let count = hidden.len();
-            div()
-                .id("try-a-boost-more")
-                .role(gpui::Role::Button)
-                .aria_label(format!("{count} more Boosts"))
-                .flex_shrink_0()
-                .px(px(9.0 * s))
-                .py(px(3.0 * s))
-                .rounded_full()
-                .border(px(s))
-                .border_color(p.foreground.opacity(0.1))
-                .text_color(p.muted)
-                .chat_cursor_pointer()
-                .hover(|style| style.bg(p.foreground.opacity(0.06)))
-                .child(format!("+{count}"))
-                .on_click(cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-                    let rows: Vec<Value> = hidden
-                        .iter()
-                        .map(|row| {
-                            json!({
-                                "label": text(row, "label"),
-                                "iconPath": text(row, "iconPath"),
-                                "command": {"type": "toggleBoost", "id": text(row, "id"), "text": this.draft},
-                            })
-                        })
-                        .collect();
-                    this.show_chat_menu_at(rows, event.position(), 240.0, window, cx);
-                }))
-        });
-        Some(
-            div()
-                .id("try-a-boost")
-                .role(gpui::Role::Group)
-                .aria_label("Try a Boost")
-                .w_full()
-                .max_w(px(room.max(0.0) + 16.0 * s))
-                .overflow_hidden()
-                .flex()
-                .flex_nowrap()
-                .justify_start()
-                .px(px(8.0 * s))
-                .items_center()
-                .gap(px(6.0 * s))
-                .text_size(px(13.0 * s))
-                .child(
-                    div()
-                        .flex()
-                        .flex_shrink_0()
-                        .whitespace_nowrap()
-                        .items_center()
-                        .gap(px(5.0 * s))
-                        .text_color(p.muted)
-                        .child(
-                            svg()
-                                .path("titlebar/sparkles.svg")
-                                .size(px(13.0 * s))
-                                .text_color(tone),
-                        )
-                        .child("Try a Boost"),
-                )
-                .children(list.into_iter().map(|row| {
-                    let id = text(&row, "id");
-                    let in_draft = row["inDraft"] == true;
-                    let description = text(&row, "description");
-                    div()
-                        .id(gpui::ElementId::Name(format!("try-boost-{id}").into()))
-                        .role(gpui::Role::Button)
-                        .aria_label(text(&row, "label"))
-                        .flex()
-                        .items_center()
-                        .gap(px(5.0 * s))
-                        .px(px(9.0 * s))
-                        .py(px(3.0 * s))
-                        .flex_shrink_0()
-                        .whitespace_nowrap()
-                        .rounded_full()
-                        .border(px(s))
-                        .border_color(if in_draft {
-                            tone.opacity(0.6)
-                        } else {
-                            p.foreground.opacity(0.1)
-                        })
-                        .when(in_draft, |chip| chip.bg(tone.opacity(0.14)))
-                        .text_color(p.foreground)
-                        .chat_cursor_pointer()
-                        .hover(|style| style.bg(p.foreground.opacity(0.06)))
-                        .tooltip(move |window, cx| {
-                            gpui_component::tooltip::Tooltip::new(description.clone())
-                                .build(window, cx)
-                        })
-                        .child(
-                            svg()
-                                .path(text(&row, "iconPath"))
-                                .size(px(14.0 * s))
-                                .text_color(tone),
-                        )
-                        .child(text(&row, "label"))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            let draft = this.draft.clone();
-                            this.invoke(json!({"type": "toggleBoost", "id": id, "text": draft}), cx)
-                        }))
-                }))
-                .children(more)
-                .into_any_element(),
-        )
-    }
-
     /// The words selected in the chat box, trimmed, while Boosts are on and some are selected.
     pub(super) fn composer_selection_for_boost(&self, cx: &gpui::App) -> Option<String> {
         self.boosts()?;
@@ -957,13 +795,14 @@ impl NativeChatView {
     }
 }
 
-/// Where the callout bubble goes for the pill painted at `pill`: above it, its right edge on the
-/// pill's.
-fn callout_frame(pill: Bounds<Pixels>, s: f32) -> Bounds<Pixels> {
+/// Where the callout bubble goes for the pill painted at `pill`: right-aligned with the pill,
+/// above `anchor_top` (the pill's top, or the top of any card/bar stacked above the chat box so it
+/// never overlaps them).
+fn callout_frame(pill: Bounds<Pixels>, anchor_top: Pixels, s: f32) -> Bounds<Pixels> {
     let size = gpui::size(px(CALLOUT_WIDTH * s), px(CALLOUT_HEIGHT * s));
     let origin = gpui::point(
         (pill.right() - size.width).max(px(8.0 * s)),
-        pill.top() - size.height - px(10.0 * s),
+        (anchor_top - size.height - px(10.0 * s)).max(px(8.0 * s)),
     );
     Bounds::new(origin, size)
 }

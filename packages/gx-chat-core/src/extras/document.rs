@@ -154,7 +154,6 @@ pub fn document_with_board(
     into.session_details =
         crate::extras::session_details::document::document(state, context, meter);
     into.where_pill = crate::extras::where_pill::document(state);
-    into.boosts = crate::extras::boosts::document(state);
 
     // The copy comes from the view, not the agent status, as React picked it.
     let view_kind = into.view.kind.as_str();
@@ -177,6 +176,22 @@ pub fn document_with_board(
     if box_asleep {
         into.empty_state = crate::session::cloud_box::asleep_empty_state();
     }
+    // The one-time Boosts callout shows only in a chat with no messages sent yet; once the first
+    // message is sent it steps away without marking the hint dismissed forever.
+    let no_messages_yet = !box_asleep
+        && shows_new_session_welcome(view_kind)
+        && state.messages.list.is_empty()
+        && state.messages.composed.is_empty()
+        && state.pending.sends.is_empty()
+        && state.composer.submitting.is_none()
+        && state.composer.waiting.is_empty()
+        && !state.messages.has_more
+        && state
+            .session
+            .queue_prompts
+            .as_deref()
+            .is_none_or(<[_]>::is_empty);
+    into.boosts = crate::extras::boosts::document(state, no_messages_yet);
     let show_welcome = !box_asleep
         && (shows_new_session_welcome(view_kind)
             || (view_kind == "loading" && state.session.available_agents.is_some()));
@@ -198,7 +213,7 @@ pub fn document_with_board(
             icon: welcome_agent_icon(state.session.agent.as_deref(), None),
             // The welcome drops its headline once a notice or question card takes the space below
             // it; both cards are family c's, so the flag reads their published state. Ask Ghostex
-            // AI's card replaces the headline, the tips and Try a Boost, which follow this flag.
+            // AI's card replaces the headline and the tips, which follow this flag.
             show_title: !bottom_card_visible(into)
                 && !coordinator_threads::is_chief(state.session.coordinator_threads.as_deref()),
             agent_name,

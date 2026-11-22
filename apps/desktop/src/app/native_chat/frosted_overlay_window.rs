@@ -143,7 +143,9 @@ impl NativeChatView {
         !self.pane_hidden
             && !self.frosted_overlay_covered(overlay, cx)
             && (overlay != FrostedOverlay::BoostHint
-                || super::boosts::boost_hint_visible(&self.snapshot["boosts"]["hint"]))
+                || (self.list.item_count() == 0
+                    && !self.pending_send
+                    && super::boosts::boost_hint_visible(&self.snapshot["boosts"]["hint"])))
     }
 
     /// Whether something else sits over the pane, so a control's own window (which would float
@@ -346,11 +348,15 @@ impl Render for FrostedOverlayView {
         };
         match self.overlay {
             FrostedOverlay::BoostHint => {
-                let (hidden, hint) = {
+                let (hidden, has_messages, hint) = {
                     let chat = chat.read(cx);
-                    (chat.pane_hidden, chat.snapshot["boosts"]["hint"].clone())
+                    (
+                        chat.pane_hidden,
+                        chat.list.item_count() > 0 || chat.pending_send,
+                        chat.snapshot["boosts"]["hint"].clone(),
+                    )
                 };
-                if hidden || !super::boosts::boost_hint_visible(&hint) {
+                if hidden || has_messages || !super::boosts::boost_hint_visible(&hint) {
                     let weak = self.chat.clone();
                     cx.defer(move |cx| {
                         let _ = weak.update(cx, |chat, cx| {

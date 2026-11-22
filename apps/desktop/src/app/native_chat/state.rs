@@ -327,6 +327,9 @@ pub(crate) struct NativeChatView {
     pub(super) boost_menu_requested: bool,
     /// Where the strip's Boost pill was painted, which its menu lines up with (boosts.rs).
     pub(super) boost_pill_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    /// Top edge of any bar or card stacked above the chat box (`composer.rs`), so floating
+    /// callouts anchored to the Boost pill sit above the stack and never overlap it.
+    pub(super) composer_above_top: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
     /// The note and text boxes of the open question forms, by `<form id>:<question>`.
     pub(super) form_inputs: std::collections::HashMap<String, super::question_form::FormInput>,
     /// Transcript search (Cmd+F): the field, and the navigation it last scrolled to.
@@ -728,6 +731,7 @@ impl NativeChatView {
             boost_scroll: gpui::ScrollHandle::new(),
             boost_menu_requested: false,
             boost_pill_bounds: Default::default(),
+            composer_above_top: Default::default(),
             form_inputs: Default::default(),
             search_input: None,
             search_subscription: None,

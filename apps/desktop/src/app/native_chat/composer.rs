@@ -125,6 +125,9 @@ impl NativeChatView {
         };
         self.close_maximized(cx);
         self.pending_send = true;
+        // Once the first message is sent, drop the new-chat Boost callout at once without
+        // recording it as dismissed forever.
+        self.hide_frosted_overlay(super::frosted_overlay_window::FrostedOverlay::BoostHint, cx);
         let mut submission = json!({"type":mode,"text":self.draft,"interrupt":interrupt,
             "sendRequestId":send_request_id,
             "draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision.max(1)}});
@@ -428,6 +431,7 @@ impl NativeChatView {
         };
         let stack_top = super::suggestions::StackTop::default();
         let mut footer = div()
+            .relative()
             .w_full()
             .flex()
             .flex_col()
@@ -807,13 +811,6 @@ impl NativeChatView {
                     .when(!collapsed, |this| this.child(measurement)),
             )
             .when(!maximized, |this| this.child(content_measure));
-        // "Try a Boost" on a new chat, above the run-location and worktree bar (boosts.rs).
-        if !maximized
-            && !self.collab_guest()
-            && let Some(row) = self.render_try_a_boost(p, cx)
-        {
-            waiting.push(row);
-        }
         if !maximized && let Some(run_location) = self.render_run_location(p, cx) {
             waiting.push(run_location.into_any_element());
         }
@@ -831,7 +828,20 @@ impl NativeChatView {
         } else {
             8.0
         };
-        footer = footer.children(waiting);
+        let has_above_box = !maximized && (dock_shown || card_above_box || !waiting.is_empty());
+        let above_top = self.composer_above_top.clone();
+        let above_top_offset = if card_above_box { 0.0 } else { 8.0 * s };
+        let above_box_measure = gpui::canvas(
+            move |bounds, _, _| {
+                above_top.set(has_above_box.then_some(bounds.top()));
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .top(px(above_top_offset))
+        .left_0()
+        .size_0();
+        footer = footer.children(waiting).child(above_box_measure);
         // CDXC:SessionChat 2026-09-18 WHY: React's inline composer had a zero-height notification section before its field, contributing one grid gap even while idle. Reserve that same gap here when nothing stacks above the box.
         // The chat's pills ride in a strip along the box's top edge, inside its border
         // (pills_strip.rs); what the box holds under it is unchanged.

@@ -818,8 +818,9 @@ pub const BOOST_PILL: &str = "boost";
 ///   the open one.
 /// - `list`: every Boost with `id`, `label`, `iconPath`, `category`, `description`, `preview`,
 ///   `prompt`, `edited`, `custom`, `tooltip` and `inDraft`.
-/// - `hint`: the one-time callout's `{title, text}` while it has not been seen, or `null`.
-pub fn document(state: &ChatState) -> Value {
+/// - `hint`: the one-time callout's `{title, text}` while it has not been seen and this chat has
+///   no messages sent yet (`allow_hint`), or `null`.
+pub fn document(state: &ChatState, allow_hint: bool) -> Value {
     let boosts = &state.extras.boosts;
     if boosts.unsupported || boosts.off || boosts.hint_seen.is_none() {
         return Value::Null;
@@ -873,7 +874,7 @@ pub fn document(state: &ChatState) -> Value {
         "tabs": tabs,
         "tab": tab,
         "list": list,
-        "hint": (boosts.hint_seen == Some(false)).then(|| json!({
+        "hint": (allow_hint && boosts.hint_seen == Some(false)).then(|| json!({
             "title": "New: Boosts",
             "text": "Pages, charts, maps and more.",
         })),

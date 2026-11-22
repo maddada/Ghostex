@@ -557,10 +557,12 @@ impl NativeChatView {
         )
     }
 
-    /// Whether the strip shows: a draft is offered, or the transcript has rows and a pill, timer or
+    /// Whether the strip shows: a draft is offered, a page is hidden, Boosts are on (so the Boost
+    /// pill is reachable on a new chat too), or the transcript has rows and another pill, timer or
     /// view chip calls for it.
     pub(super) fn pills_strip_shown(&self) -> bool {
-        if self.saved_draft_offered() || !self.minimized_pages.is_empty() {
+        if self.saved_draft_offered() || !self.minimized_pages.is_empty() || self.boost_pill_shown()
+        {
             return true;
         }
         let armed = self
@@ -576,7 +578,6 @@ impl NativeChatView {
                 || self.where_pill().is_some()
                 || chips
                 || self.links_pill.is_some()
-                || self.boost_pill_shown()
                 || !self.strip_pill_ids().is_empty()
                 || self.open_question_pill_text().is_some())
     }

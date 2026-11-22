@@ -435,7 +435,7 @@ pub struct Document {
     pub simple_override: Option<bool>,
     pub empty_state: EmptyState,
     pub new_session_welcome: Option<NewSessionWelcome>,
-    /// Ask Ghostex AI's welcome card in place of the welcome's headline, tips and Try a Boost
+    /// Ask Ghostex AI's welcome card in place of the welcome's headline and tips
     /// (`extras::chief_welcome`); `null` in every other chat.
     #[serde(default)]
     pub chief_welcome: Option<crate::extras::chief_welcome::ChiefWelcome>,
