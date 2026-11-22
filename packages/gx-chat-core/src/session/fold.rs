@@ -233,6 +233,9 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .unavailable_modes
         .clone()
         .or_else(|| previous_side.and_then(|state| state.unavailable_modes.clone()));
+    folded.result.state.non_cli_mode = side
+        .non_cli_mode
+        .or_else(|| previous_side.and_then(|state| state.non_cli_mode));
 
     folded.result.state.resource_index = carried(
         side.resource_index.as_ref(),

@@ -38,6 +38,8 @@ pub struct SessionState {
     pub later_question_ids: crate::state::Stamped<Vec<String>>,
     /// The modes this session's agent cannot use, as gxserver keeps them. Absent means unchanged.
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
+    /// True while this session runs through a Non-CLI (ACP) host. Absent means unchanged.
+    pub non_cli_mode: bool,
     /// The question forms and pages the user removed without answering, as gxserver keeps them
     /// (`crate::questions::later`). Absent means unchanged.
     pub removed_question_ids: crate::state::Stamped<Vec<String>>,
@@ -202,6 +204,7 @@ impl Default for SessionState {
             retired_async_question_ids: Vec::new(),
             later_question_ids: Default::default(),
             unavailable_modes: Vec::new(),
+            non_cli_mode: false,
             removed_question_ids: Default::default(),
             retired_page_ids: Vec::new(),
             starred_page_ids: Vec::new(),

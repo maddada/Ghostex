@@ -824,6 +824,7 @@ pub(super) fn decide_prompt(
                 tool,
                 summary,
                 tool_use_id,
+                ..
             } => {
                 let text = summary.clone().unwrap_or_default();
                 let saw = format!("It asked to run {tool}: {}", short(&text, 160));

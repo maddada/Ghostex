@@ -22,6 +22,10 @@ use crate::constants::{
     GXSERVER_LOCAL_API_HOST, GXSERVER_PROTOCOL_HEADER, GXSERVER_PROTOCOL_VERSION,
 };
 
+use super::approval::{
+    AcpApprovalLevel, AcpPermissionOption, PermissionDecision, canonicalize_writable_roots,
+    evaluate_permission, find_advertised_auto_mode_id, find_advertised_default_mode_id,
+};
 use super::spec::{
     AcpAgentSpec, build_acp_server_argv, build_cli_switch_argv, spec_for_family,
     transcript_path_for_session,
@@ -73,7 +77,8 @@ struct HostArgs {
     family: String,
     cli_command: Option<String>,
     resume_session_id: Option<String>,
-    accept_all: bool,
+    approval_level: AcpApprovalLevel,
+    writable_roots: Vec<PathBuf>,
     model: Option<String>,
     effort: Option<String>,
 }
@@ -82,7 +87,8 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
     let mut family = String::new();
     let mut cli_command = None;
     let mut resume_session_id = None;
-    let mut accept_all = false;
+    let mut approval_level = AcpApprovalLevel::Ask;
+    let mut writable_roots = Vec::new();
     let mut model = None;
     let mut effort = None;
     let mut i = 0;
@@ -100,7 +106,19 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
                 i += 1;
                 resume_session_id = args.get(i).cloned();
             }
-            "--accept-all" => accept_all = true,
+            "--accept-all" => approval_level = AcpApprovalLevel::FullAccess,
+            "--approval-level" => {
+                i += 1;
+                let raw = args.get(i).map(String::as_str).unwrap_or_default();
+                approval_level = AcpApprovalLevel::parse(raw)
+                    .ok_or_else(|| format!("Unknown --approval-level value: {raw}"))?;
+            }
+            "--writable-root" => {
+                i += 1;
+                if let Some(root) = args.get(i).map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                    writable_roots.push(PathBuf::from(root));
+                }
+            }
             "--model" => {
                 i += 1;
                 model = args.get(i).cloned();
@@ -120,7 +138,8 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
         family,
         cli_command,
         resume_session_id,
-        accept_all,
+        approval_level,
+        writable_roots,
         model,
         effort,
     })
@@ -246,6 +265,9 @@ impl GxserverEndpoint {
             params["toolInput"] = json!({ "command": perm.summary });
             if let Some(tool_use_id) = perm.tool_use_id.as_deref().filter(|s| !s.is_empty()) {
                 params["toolUseId"] = json!(tool_use_id);
+            }
+            if let Some(reason) = perm.reason.as_deref().filter(|s| !s.trim().is_empty()) {
+                params["approvalReason"] = json!(reason);
             }
             params["sessionChatPrompt"] = perm.to_ghostex_prompt();
         }
@@ -421,19 +443,13 @@ struct PendingPermission {
     tool_name: String,
     summary: String,
     tool_use_id: Option<String>,
-    options: Vec<PermissionOption>,
-}
-
-#[derive(Clone, Debug)]
-struct PermissionOption {
-    option_id: String,
-    name: String,
-    kind: String,
+    reason: Option<String>,
+    options: Vec<AcpPermissionOption>,
 }
 
 impl PendingPermission {
     fn to_ghostex_prompt(&self) -> Value {
-        json!({
+        let mut prompt = json!({
             "kind": "approval",
             "tool": self.tool_name,
             "summary": self.summary,
@@ -443,7 +459,11 @@ impl PendingPermission {
                 "label": opt.name,
                 "kind": opt.kind,
             })).collect::<Vec<_>>(),
-        })
+        });
+        if let Some(reason) = self.reason.as_deref().filter(|s| !s.trim().is_empty()) {
+            prompt["reason"] = json!(reason);
+        }
+        prompt
     }
 
     fn resolve_option_id(
@@ -487,7 +507,11 @@ struct HostState {
     native_session_id: Option<String>,
     working: bool,
     turn_generation: u64,
-    accept_all: bool,
+    approval_level: AcpApprovalLevel,
+    default_native_mode: Option<String>,
+    native_auto_active: bool,
+    cwd: PathBuf,
+    writable_roots: Vec<PathBuf>,
     current_model: Option<String>,
     current_effort: Option<String>,
     current_mode: Option<String>,
@@ -499,13 +523,22 @@ struct HostState {
 }
 
 impl HostState {
-    fn new(family: &str, accept_all: bool) -> Self {
+    fn new(
+        family: &str,
+        approval_level: AcpApprovalLevel,
+        cwd: PathBuf,
+        writable_roots: Vec<PathBuf>,
+    ) -> Self {
         Self {
             family: family.to_string(),
             native_session_id: None,
             working: false,
             turn_generation: 0,
-            accept_all,
+            approval_level,
+            default_native_mode: None,
+            native_auto_active: false,
+            cwd,
+            writable_roots,
             current_model: None,
             current_effort: None,
             current_mode: None,
@@ -529,7 +562,12 @@ impl HostState {
             "working": self.working,
             "model": self.current_model,
             "effort": self.current_effort,
-            "mode": self.current_mode,
+            "mode": self.approval_level.as_str(),
+            "modeLabel": self.approval_level.label(),
+            "approvalLevel": self.approval_level.as_str(),
+            "nativeMode": self.current_mode,
+            "nativeAutoActive": self.native_auto_active,
+            "nativeAutoAvailable": find_advertised_auto_mode_id(&self.available_modes).is_some(),
             "availableModels": self.available_models,
             "availableModes": self.available_modes,
             "configOptions": self.config_options,
@@ -697,8 +735,9 @@ fn apply_session_metadata(state: &mut HostState, result: &Value) {
 fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission {
     let tool_call = params.get("toolCall").unwrap_or(&Value::Null);
     let tool_name = tool_call
-        .get("title")
+        .get("name")
         .or_else(|| tool_call.get("kind"))
+        .or_else(|| tool_call.get("title"))
         .and_then(Value::as_str)
         .unwrap_or("Tool")
         .to_string();
@@ -709,13 +748,37 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
     let summary = tool_call
         .get("rawInput")
         .and_then(|v| {
-            v.get("command")
-                .or_else(|| v.get("CommandLine"))
-                .or_else(|| v.get("path"))
-                .or_else(|| v.get("Path"))
+            [
+                "command",
+                "CommandLine",
+                "file_path",
+                "filePath",
+                "path",
+                "Path",
+                "target_path",
+                "targetPath",
+                "TargetFile",
+                "AbsolutePath",
+            ]
+            .iter()
+            .find_map(|key| v.get(*key).and_then(Value::as_str))
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                tool_call
+                    .pointer("/locations/0/path")
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.trim().is_empty())
+                    .map(str::to_string)
+            })
+            .or_else(|| serde_json::to_string(v).ok())
+        })
+        .or_else(|| {
+            tool_call
+                .pointer("/locations/0/path")
                 .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
                 .map(str::to_string)
-                .or_else(|| serde_json::to_string(v).ok())
         })
         .unwrap_or_else(|| tool_name.clone());
     let options = params
@@ -730,12 +793,14 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
                         .and_then(Value::as_str)
                         .unwrap_or(&option_id)
                         .to_string();
+                    // Never assume an omitted `kind` is `allow_once`: auto-approval only picks
+                    // options explicitly marked `allow_once`.
                     let kind = item
                         .get("kind")
                         .and_then(Value::as_str)
-                        .unwrap_or("allow_once")
+                        .unwrap_or("")
                         .to_string();
-                    Some(PermissionOption {
+                    Some(AcpPermissionOption {
                         option_id,
                         name,
                         kind,
@@ -749,6 +814,7 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
         tool_name,
         summary,
         tool_use_id,
+        reason: None,
         options,
     }
 }
@@ -777,50 +843,72 @@ fn build_prompt_blocks(
     Ok(blocks)
 }
 
-fn pick_accept_all_mode_id(available_modes: &Value) -> Option<String> {
-    let modes = available_modes.as_array()?;
-    let candidates: Vec<(String, String)> = modes
-        .iter()
-        .filter_map(|item| {
-            let id = item
-                .get("id")
-                .or_else(|| item.get("modeId"))
-                .and_then(Value::as_str)
-                .filter(|s| !s.is_empty())?;
-            let label = item
-                .get("name")
-                .or_else(|| item.get("label"))
-                .and_then(Value::as_str)
-                .unwrap_or(id);
-            Some((id.to_string(), format!("{id} {label}").to_ascii_lowercase()))
-        })
-        .collect();
-    for keyword in ["bypass", "yolo", "accept_all", "acceptall", "full_auto", "full-auto"] {
-        if let Some((id, _)) = candidates.iter().find(|(_, hay)| hay.contains(keyword)) {
-            return Some(id.clone());
+/// Keep the underlying ACP server in its advertised `auto` mode only while `approval_level` is
+/// `Auto` (and the agent advertises one), and in its default/ask mode for `Ask`, `Auto-edits`, and
+/// `Full access` so `acp-host` evaluates every `session/request_permission` live with `allow_once`.
+fn sync_native_mode(transport: &AcpTransport, state: &Mutex<HostState>) {
+    let (sid, level, current_mode, target_mode, is_auto_target) = {
+        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+        let auto_id = find_advertised_auto_mode_id(&s.available_modes);
+        let default_id = s.default_native_mode.clone().or_else(|| {
+            find_advertised_default_mode_id(&s.available_modes, s.current_mode.as_deref())
+        });
+        let (target, is_auto) = match level_target(s.approval_level, auto_id, default_id) {
+            Some((id, is_auto)) => (Some(id), is_auto),
+            None => (None, false),
+        };
+        (
+            s.native_session_id.clone(),
+            s.approval_level,
+            s.current_mode.clone(),
+            target,
+            is_auto,
+        )
+    };
+    let Some(sid) = sid else {
+        return;
+    };
+    let Some(target_mode) = target_mode else {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.native_auto_active = false;
+        return;
+    };
+    if current_mode.as_deref() == Some(target_mode.as_str()) {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.native_auto_active = level == AcpApprovalLevel::Auto && is_auto_target;
+        return;
+    }
+    match transport.call(
+        "session/set_mode",
+        json!({ "sessionId": sid, "modeId": target_mode }),
+        ACP_RPC_TIMEOUT,
+    ) {
+        Ok(_) => {
+            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            s.current_mode = Some(target_mode);
+            s.native_auto_active = level == AcpApprovalLevel::Auto && is_auto_target;
+        }
+        Err(_) => {
+            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            s.native_auto_active = false;
         }
     }
-    candidates
-        .into_iter()
-        .find(|(_, hay)| hay.contains("auto") && !hay.contains("ask") && !hay.contains("manual"))
-        .map(|(id, _)| id)
 }
 
-fn mode_implies_accept_all(mode: &str) -> Option<bool> {
-    let lower = mode.trim().to_ascii_lowercase();
-    if ["bypass", "yolo", "accept_all", "acceptall", "full_auto", "full-auto"]
-        .iter()
-        .any(|kw| lower.contains(kw))
-    {
-        return Some(true);
+fn level_target(
+    level: AcpApprovalLevel,
+    auto_id: Option<String>,
+    default_id: Option<String>,
+) -> Option<(String, bool)> {
+    match level {
+        AcpApprovalLevel::Auto => match auto_id {
+            Some(id) => Some((id, true)),
+            None => default_id.map(|id| (id, false)),
+        },
+        AcpApprovalLevel::Ask | AcpApprovalLevel::AutoEdits | AcpApprovalLevel::FullAccess => {
+            default_id.map(|id| (id, false))
+        }
     }
-    if ["ask", "manual", "plan", "default", "safe", "read"]
-        .iter()
-        .any(|kw| lower.contains(kw))
-    {
-        return Some(false);
-    }
-    None
 }
 
 fn stop_child_gracefully(transport: &AcpTransport, child: &mut Child, child_pid: &AtomicU32) {
@@ -896,9 +984,9 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("Agent `{}` does not support ACP mode yet.", parsed.family);
         return 2;
     };
-    let cwd = env::current_dir()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| ".".to_string());
+    let cwd_path = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let cwd = cwd_path.to_string_lossy().to_string();
+    let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);
     let endpoint = GxserverEndpoint::from_env();
     let spool_session_id = endpoint
         .as_ref()
@@ -945,7 +1033,12 @@ pub fn run(args: &[String]) -> i32 {
     let stderr = child.stderr.take();
 
     let transport = Arc::new(AcpTransport::new(stdin, &spool_session_id));
-    let state = Arc::new(Mutex::new(HostState::new(spec.family, parsed.accept_all)));
+    let state = Arc::new(Mutex::new(HostState::new(
+        spec.family,
+        parsed.approval_level,
+        cwd_path.clone(),
+        writable_roots,
+    )));
     let shutting_down = Arc::new(AtomicBool::new(false));
 
     // Watch for SIGTERM/SIGHUP/SIGINT so the ACP subprocess is stopped promptly even while the
@@ -1054,16 +1147,24 @@ pub fn run(args: &[String]) -> i32 {
                     let rpc_id = msg.get("id").cloned().unwrap_or(Value::Null);
                     let params = msg.get("params").cloned().unwrap_or(Value::Null);
                     if method == "session/request_permission" {
-                        let perm = parse_permission_request(rpc_id, &params);
-                        let auto_approve = st_out
-                            .lock()
-                            .unwrap_or_else(|p| p.into_inner())
-                            .accept_all;
-                        if auto_approve {
-                            if let Some(opt_id) = perm.resolve_option_id(None, "allow_always") {
+                        let mut perm = parse_permission_request(rpc_id, &params);
+                        let (level, roots, session_cwd) = {
+                            let s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            (s.approval_level, s.writable_roots.clone(), s.cwd.clone())
+                        };
+                        match evaluate_permission(
+                            level,
+                            &params,
+                            &perm.options,
+                            &roots,
+                            &session_cwd,
+                        ) {
+                            PermissionDecision::AutoApprove { option_id } => {
                                 println!(
-                                    "\r\n[ACP] Auto-approved (--accept-all): {} ({})",
-                                    perm.tool_name, perm.summary
+                                    "\r\n[ACP] Auto-approved ({}): {} ({})",
+                                    level.label(),
+                                    perm.tool_name,
+                                    perm.summary
                                 );
                                 let _ = std::io::stdout().flush();
                                 let _ = t_out.respond_to_agent(
@@ -1071,11 +1172,14 @@ pub fn run(args: &[String]) -> i32 {
                                     json!({
                                         "outcome": {
                                             "outcome": "selected",
-                                            "optionId": opt_id,
+                                            "optionId": option_id,
                                         }
                                     }),
                                 );
                                 continue;
+                            }
+                            PermissionDecision::AskUser { reason } => {
+                                perm.reason = reason;
                             }
                         }
                         println!(
@@ -1201,30 +1305,15 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
 
-    let (native_session_id, accept_all_mode_id) = {
+    let native_session_id = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         apply_session_metadata(&mut s, &session_result);
-        let auto_mode = parsed
-            .accept_all
-            .then(|| pick_accept_all_mode_id(&s.available_modes))
-            .flatten();
-        (s.native_session_id.clone(), auto_mode)
+        s.default_native_mode =
+            find_advertised_default_mode_id(&s.available_modes, s.current_mode.as_deref());
+        s.native_session_id.clone()
     };
 
-    if let (Some(sid), Some(mode_id)) = (native_session_id.as_deref(), accept_all_mode_id.as_deref())
-    {
-        if transport
-            .call(
-                "session/set_mode",
-                json!({ "sessionId": sid, "modeId": mode_id }),
-                ACP_RPC_TIMEOUT,
-            )
-            .is_ok()
-        {
-            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-            s.current_mode = Some(mode_id.to_string());
-        }
-    }
+    sync_native_mode(&transport, &state);
 
     if let Some(model) = parsed.model.as_deref().filter(|m| !m.is_empty()) {
         if let Some(sid) = native_session_id.as_deref() {
@@ -1488,38 +1577,26 @@ pub fn run(args: &[String]) -> i32 {
                     let mode = params
                         .get("mode")
                         .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_string();
-                    let sid = state
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .native_session_id
-                        .clone();
-                    let Some(sid) = sid else {
+                        .unwrap_or_default();
+                    let Some(level) = AcpApprovalLevel::parse(mode) else {
                         ep.ack(
                             id,
                             false,
                             Value::Null,
-                            Some("ACP session not initialized yet."),
+                            Some(&format!("Unsupported approval level: {mode}")),
                         );
                         continue;
                     };
-                    match transport.call(
-                        "session/set_mode",
-                        json!({ "sessionId": sid, "modeId": mode }),
-                        ACP_RPC_TIMEOUT,
-                    ) {
-                        Ok(_) => {
-                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                            if let Some(implies_accept_all) = mode_implies_accept_all(&mode) {
-                                s.accept_all = implies_accept_all;
-                            }
-                            s.current_mode = Some(mode);
-                            let snap = s.snapshot_json();
-                            ep.ack(id, true, snap, None);
-                        }
-                        Err(err) => ep.ack(id, false, Value::Null, Some(&err)),
+                    {
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        s.approval_level = level;
                     }
+                    sync_native_mode(&transport, &state);
+                    let snap = state
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .snapshot_json();
+                    ep.ack(id, true, snap, None);
                 }
                 "send" => {
                     let text = params
@@ -1723,7 +1800,10 @@ pub fn run(args: &[String]) -> i32 {
         drop(signal_guard);
         let (sid, accept_all) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
-            (s.native_session_id.clone(), s.accept_all)
+            (
+                s.native_session_id.clone(),
+                s.approval_level.implies_cli_accept_all(),
+            )
         };
         return exec_interactive_cli(
             spec,

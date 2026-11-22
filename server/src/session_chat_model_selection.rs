@@ -38,21 +38,33 @@ impl SelectionOptions {
 
 pub(crate) fn read_options(
     provider: &str,
+    is_acp: bool,
     params: &Map<String, Value>,
 ) -> Result<SelectionOptions, DomainStateError> {
-    let options: SelectionOptions =
+    let mut options: SelectionOptions =
         serde_json::from_value(params.get("options").cloned().unwrap_or_else(|| json!({})))
             .map_err(|_| DomainStateError {
                 code: "invalidParams",
                 message: "Invalid chat option selection.".into(),
             })?;
-    let valid_mode = options.mode.as_deref().is_none_or(|mode| match provider {
-        "opencode" => !mode.trim().is_empty() && mode.len() <= 160,
-        "codex" => matches!(mode, "plan" | "default"),
-        "claude" => matches!(mode, "bypass" | "auto" | "manual" | "accept-edits" | "plan"),
-        "antigravity" => matches!(mode, "default" | "accept-edits" | "auto" | "plan"),
-        _ => false,
-    });
+    if is_acp {
+        if let Some(mode) = options.mode.as_deref() {
+            let level =
+                crate::acp::AcpApprovalLevel::parse(mode).ok_or_else(|| DomainStateError {
+                    code: "invalidParams",
+                    message: "That approval level is not available for this agent.".into(),
+                })?;
+            options.mode = Some(level.as_str().to_string());
+        }
+    }
+    let valid_mode = is_acp
+        || options.mode.as_deref().is_none_or(|mode| match provider {
+            "opencode" => !mode.trim().is_empty() && mode.len() <= 160,
+            "codex" => matches!(mode, "plan" | "default"),
+            "claude" => matches!(mode, "bypass" | "auto" | "manual" | "accept-edits" | "plan"),
+            "antigravity" => matches!(mode, "default" | "accept-edits" | "auto" | "plan"),
+            _ => false,
+        });
     let valid_permissions = options.permissions.as_deref().is_none_or(|value| {
         provider == "codex"
             && crate::session_chat_options::codex_permissions_command(value).is_some()
@@ -305,14 +317,17 @@ fn enqueue_selection(
         .get("effort")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let incoming_options = read_options(&provider, params)?;
+    let is_acp = crate::acp::session_is_acp(&session);
+    let incoming_options = read_options(&provider, is_acp, params)?;
     let scope = read_scope(&provider, params)?;
     if !model.is_empty() || incoming_options.is_empty() {
         validate_selection(&provider, model, effort)?;
-    } else if !matches!(
-        provider.as_str(),
-        "codex" | "claude" | "opencode" | "antigravity"
-    ) || !effort.is_empty()
+    } else if (!is_acp
+        && !matches!(
+            provider.as_str(),
+            "codex" | "claude" | "opencode" | "antigravity"
+        ))
+        || !effort.is_empty()
     {
         return Err(DomainStateError {
             code: "invalidParams",

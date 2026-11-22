@@ -6,7 +6,7 @@ pub(crate) fn select(id: &str, params: &Map<String, Value>) -> Result<Value, Dom
     let client = Client::discover()?;
     let model = params.get("model").and_then(Value::as_str).unwrap_or("");
     let effort = params.get("effort").and_then(Value::as_str).unwrap_or("");
-    let options = crate::session_chat_model_selection::read_options("opencode", params)?;
+    let options = crate::session_chat_model_selection::read_options("opencode", false, params)?;
     let scope = crate::session_chat_model_selection::read_scope("opencode", params)?;
     if !model.is_empty() {
         let (provider, name) = model

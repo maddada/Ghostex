@@ -1002,28 +1002,51 @@ pub(crate) fn detect_session_chat_stored_options(
     session_id: &str,
     agent_id: Option<&str>,
 ) -> Option<SessionChatDetectedOptions> {
-    let agent = session_chat_option_agent(agent_id)?;
-    let (transcript, statusline, _, _) = read_session_chat_stored_selections(
-        repository,
-        hook_state_directory,
-        project_id,
-        session_id,
-        Some(agent),
-    );
-    let launch =
-        read_session_chat_launch_selection(repository, project_id, session_id, Some(agent));
-    let remembered =
-        read_session_chat_remembered_selection(repository, project_id, session_id, agent);
-    merge_session_chat_option_selections(launch, transcript, statusline, None)
-        .map(|mut selection| {
-            if let Some(remembered) = remembered {
-                overlay_session_chat_option_selection(&mut selection, remembered);
+    let acp_mode_choice = repository
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten()
+        .filter(crate::acp::session_is_acp)
+        .map(|session| {
+            let level = crate::acp::approval::stored_session_approval_level(&session)
+                .unwrap_or_default();
+            SessionChatDetectedChoice {
+                value: level.as_str().to_string(),
+                label: level.label().to_string(),
+                source: SessionChatOptionEvidence::Launch,
             }
-            selection
-        })
-        .map(|mut selection| {
-            crate::session_chat_hermes_status::restore_hermes_model_id(&mut selection);
-            selection
-        })
-        .map(SessionChatDetectedOptions::new)
+        });
+    let agent = session_chat_option_agent(agent_id);
+    let mut selection = if let Some(agent) = agent {
+        let (transcript, statusline, _, _) = read_session_chat_stored_selections(
+            repository,
+            hook_state_directory,
+            project_id,
+            session_id,
+            Some(agent),
+        );
+        let launch =
+            read_session_chat_launch_selection(repository, project_id, session_id, Some(agent));
+        let remembered =
+            read_session_chat_remembered_selection(repository, project_id, session_id, agent);
+        merge_session_chat_option_selections(launch, transcript, statusline, None)
+            .map(|mut selection| {
+                if let Some(remembered) = remembered {
+                    overlay_session_chat_option_selection(&mut selection, remembered);
+                }
+                selection
+            })
+            .map(|mut selection| {
+                crate::session_chat_hermes_status::restore_hermes_model_id(&mut selection);
+                selection
+            })
+    } else {
+        None
+    };
+    if let Some(mode_choice) = acp_mode_choice {
+        selection
+            .get_or_insert_with(SessionChatDetectedSelection::default)
+            .mode = Some(mode_choice);
+    }
+    selection.map(SessionChatDetectedOptions::new)
 }

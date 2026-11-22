@@ -95,6 +95,7 @@ async fn verify_answer_targets_shown_prompt(
                 tool,
                 summary,
                 tool_use_id,
+                ..
             }) => {
                 tool == shown_tool
                     && summary.as_deref() == shown_summary
