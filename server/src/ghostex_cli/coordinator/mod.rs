@@ -5,6 +5,7 @@ mod delivery;
 mod item;
 mod playbook;
 mod sleep_threads;
+mod status;
 mod threads;
 mod usage_room;
 

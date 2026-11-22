@@ -7,7 +7,10 @@ use ghostex_gx_chat_core::protocol::{
 };
 use serde_json::{json, Value};
 
-use super::{acknowledge_threads, board, item, playbook, sleep_threads, threads, usage_room};
+use super::{
+    acknowledge_threads, board, item, playbook, sleep_threads, status as status_parts, threads,
+    usage_room,
+};
 use crate::coordinators::{
     coordinator_launcher_family as agent_family,
     default_coordinator_launcher as default_coordinator_agent, DEFAULT_CLAUDE_COORDINATOR_MODEL,
@@ -70,6 +73,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "options" => options(&parsed),
         "list" => list(&parsed),
         "status" => status(&parsed),
+        "thread" => status_parts::thread_brief(&parsed, parsed.rest.first().map(String::as_str)),
         "next-tag" => next_tag(&parsed),
         "start-thread" => threads::start_thread(&parsed),
         "link" => threads::link(&parsed),
@@ -752,7 +756,21 @@ fn only_main_coordinator(base: &Flags) -> CliResult<(Value, Flags)> {
 /// `picked` with `--json`) that it picked that one. The "You have not read your playbook yet" notice
 /// is the coordinator's own instruction; another reader (Grok Bot, a thread, your terminal) could
 /// follow it, so it goes only to that coordinator.
+///
+/// CDXC:Coordinators 2026-11-22 DECISION: a plain `status` prints the compact snapshot (the user
+/// picked A on the context-bloat page); `status threads|memory|usage` and `status thread <ref>`
+/// print one part, `--full` (or `--all`) today's whole output, `--json` the complete view
+/// (status.rs).
 fn status(parsed: &ParsedArgs) -> CliResult<()> {
+    let part = parsed.rest.first().map(String::as_str);
+    if matches!(part, Some("thread")) {
+        return status_parts::thread_brief(parsed, parsed.rest.get(1).map(String::as_str));
+    }
+    if let Some(other) = part.filter(|part| !matches!(*part, "threads" | "memory" | "usage")) {
+        return Err(CliError::Other(format!(
+            "Unknown status part: {other}. Parts: threads [--sleeping|--all], thread <ref>, memory, usage; --full prints everything."
+        )));
+    }
     let (session, flags, picked) = status_target(parsed)?;
     let mut view = read_view(&session, &flags)?;
     view["usageRoom"] = usage_room::read(&view, &flags);
@@ -786,7 +804,15 @@ fn status(parsed: &ParsedArgs) -> CliResult<()> {
     if let Some(picked) = &picked {
         println!("{picked}");
     }
-    print_status(&view, parsed.flags.truthy("all"));
+    match part {
+        Some("threads") => status_parts::print_threads(&view, parsed),
+        Some("memory") => status_parts::print_memory(&view),
+        Some("usage") => usage_room::print(&view["usageRoom"]),
+        _ if parsed.flags.truthy("full") || parsed.flags.truthy("all") => {
+            print_status(&view, parsed.flags.truthy("all"))
+        }
+        _ => status_parts::print_compact(&view, &flags),
+    }
     Ok(())
 }
 
