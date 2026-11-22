@@ -9,8 +9,8 @@
 use super::super::native_modal_kit::*;
 use super::catalog::settings_catalog;
 use super::fields::{
-    ColorSaver, FieldStates, SettingsPage, SliderBinding, SliderSaver, open_tint_picker,
-    set_color_saver, settings_icon, step_slider, tooltip_text, trigger_tint_picker,
+    ColorSaver, FieldStates, SettingsPage, SliderBinding, SliderSaver, centered_tint_picker_overlay,
+    open_tint_picker, set_color_saver, settings_icon, step_slider, tooltip_text,
 };
 use super::model::SettingsModalHost;
 use super::palette::{SETTINGS_FONT, SettingsPalette};
@@ -44,7 +44,8 @@ use gpui::{
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
-use std::collections::HashMap;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -130,6 +131,11 @@ fn rgb_hex(hex: &str) -> gpui::Rgba {
     gpui::rgb(parsed)
 }
 
+enum UndoEntry {
+    Patch(Map<String, Value>),
+    ThemeRpc(String),
+}
+
 pub(crate) struct GpuiThemeEditorWindow {
     store: Entity<SettingsStore>,
     fields: FieldStates,
@@ -145,8 +151,8 @@ pub(crate) struct GpuiThemeEditorWindow {
     more_roles: bool,
     more_glass: bool,
     busy_theme: Option<String>,
-    undo_stack: Vec<Map<String, Value>>,
-    last_theme_change_id: Option<String>,
+    undo_stack: Vec<UndoEntry>,
+    slider_undo_armed: Rc<RefCell<HashSet<&'static str>>>,
     drag_press: Option<Point<Pixels>>,
     posters: HashMap<String, Arc<Image>>,
     _subscriptions: Vec<Subscription>,
@@ -188,6 +194,21 @@ impl GpuiThemeEditorWindow {
         let split_areas = sidebar != values.f64("themeWorkAreaContrast")
             || colourfulness_step_index(&values).is_none();
         let store_sub = cx.observe(&store, |_, _, cx| cx.notify());
+        let appearance_sub = cx.observe_window_appearance(window, |editor, window, cx| {
+            let next_dark = !matches!(
+                window.appearance(),
+                WindowAppearance::Light | WindowAppearance::VibrantLight
+            );
+            if editor.scheme_dark != next_dark {
+                editor.scheme_dark = next_dark;
+                cx.notify();
+            }
+        });
+        let close_store = store.clone();
+        window.on_window_should_close(cx, move |_window, cx| {
+            close_store.update(cx, |store, cx| store.close(cx));
+            true
+        });
         let focus_handle = cx.focus_handle();
         window.focus(&focus_handle, cx);
         Self {
@@ -206,10 +227,10 @@ impl GpuiThemeEditorWindow {
             more_glass: false,
             busy_theme: None,
             undo_stack: Vec::new(),
-            last_theme_change_id: None,
+            slider_undo_armed: Rc::new(RefCell::new(HashSet::new())),
             drag_press: None,
             posters: HashMap::new(),
-            _subscriptions: vec![store_sub],
+            _subscriptions: vec![store_sub, appearance_sub],
         }
     }
 
@@ -229,15 +250,14 @@ impl GpuiThemeEditorWindow {
         store.update(cx, |store, cx| store.receive_host_payload(payload, cx));
     }
 
-    pub(crate) fn receive_system_color(
+    #[allow(dead_code)]
+    pub(crate) fn open_custom_color_picker_for_demo(
         &mut self,
-        key: &str,
-        hex: String,
+        dark: bool,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mut patch = Map::new();
-        patch.insert(key.to_string(), json!(hex));
-        self.apply_tracked_patch(patch, cx);
+        self.pick_custom_colour(dark, window, cx);
     }
 
     fn close_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -246,18 +266,59 @@ impl GpuiThemeEditorWindow {
         store.update(cx, |store, cx| store.close(cx));
     }
 
+    fn push_undo(&mut self, entry: UndoEntry) {
+        if self.undo_stack.len() >= 25 {
+            self.undo_stack.remove(0);
+        }
+        self.undo_stack.push(entry);
+    }
+
     fn record_undo(&mut self, keys: &[&str], values: &SettingsValues) {
         let mut snapshot = Map::new();
         for key in keys {
             snapshot.insert((*key).to_string(), values.value(key));
         }
         if !snapshot.is_empty() {
-            if self.undo_stack.len() >= 25 {
-                self.undo_stack.remove(0);
-            }
-            self.undo_stack.push(snapshot);
+            self.push_undo(UndoEntry::Patch(snapshot));
         }
-        self.last_theme_change_id = None;
+    }
+
+    fn tracked_slider_saver(
+        &self,
+        slider_id: &'static str,
+        undo_keys: &'static [&'static str],
+        apply: impl Fn(&mut SettingsStore, f64, bool, &mut Context<SettingsStore>) + 'static,
+        cx: &mut Context<Self>,
+    ) -> SliderSaver {
+        let armed = self.slider_undo_armed.clone();
+        let editor = cx.weak_entity();
+        Rc::new(move |store, value, commit, cx| {
+            let mut armed_set = armed.borrow_mut();
+            let first_of_gesture = !armed_set.contains(slider_id);
+            if first_of_gesture {
+                let values = store.read(cx).values();
+                let mut snapshot = Map::new();
+                for key in undo_keys {
+                    snapshot.insert((*key).to_string(), values.value(key));
+                }
+                if !snapshot.is_empty() {
+                    let editor = editor.clone();
+                    cx.defer(move |cx| {
+                        let _ = editor.update(cx, |editor, cx| {
+                            editor.push_undo(UndoEntry::Patch(snapshot));
+                            cx.notify();
+                        });
+                    });
+                }
+                if !commit {
+                    armed_set.insert(slider_id);
+                }
+            } else if commit {
+                armed_set.remove(slider_id);
+            }
+            drop(armed_set);
+            store.update(cx, |store, cx| apply(store, value, commit, cx));
+        })
     }
 
     fn apply_tracked_patch(&mut self, patch: Map<String, Value>, cx: &mut Context<Self>) {
@@ -280,24 +341,27 @@ impl GpuiThemeEditorWindow {
     }
 
     fn undo(&mut self, cx: &mut Context<Self>) {
-        if let Some(change_id) = self.last_theme_change_id.take()
-            && self.store.read(cx).request().gxserver_rpc_available
-        {
-            self.theme_rpc(
-                "undo",
-                json!({ "op": "undo", "change": change_id }),
-                "Couldn't undo the theme",
-                cx,
-            );
-            return;
-        }
-        let Some(snapshot) = self.undo_stack.pop() else {
+        let Some(entry) = self.undo_stack.pop() else {
             return;
         };
-        let store = self.store.clone();
-        store.update(cx, |store, cx| {
-            store.apply_patch(snapshot, "settings:control", cx)
-        });
+        match entry {
+            UndoEntry::ThemeRpc(change_id) => {
+                if self.store.read(cx).request().gxserver_rpc_available {
+                    self.theme_rpc(
+                        "undo",
+                        json!({ "op": "undo", "change": change_id }),
+                        "Couldn't undo the theme",
+                        cx,
+                    );
+                }
+            }
+            UndoEntry::Patch(snapshot) => {
+                let store = self.store.clone();
+                store.update(cx, |store, cx| {
+                    store.apply_patch(snapshot, "settings:control", cx)
+                });
+            }
+        }
     }
 
     fn reset_to_default(&mut self, cx: &mut Context<Self>) {
@@ -328,13 +392,13 @@ impl GpuiThemeEditorWindow {
                 let _ = this.update(cx, |editor, cx| {
                     editor.busy_theme = None;
                     match result {
-                        Ok(_) if is_undo => editor.last_theme_change_id = None,
+                        Ok(_) if is_undo => {}
                         Ok(answer) => {
                             if let Some(change_id) = answer["change"]["changeId"]
                                 .as_str()
                                 .filter(|id| !id.is_empty())
                             {
-                                editor.last_theme_change_id = Some(change_id.to_string());
+                                editor.push_undo(UndoEntry::ThemeRpc(change_id.to_string()));
                             }
                         }
                         Err(message) => {
@@ -539,10 +603,60 @@ impl GpuiThemeEditorWindow {
     }
 
     fn pick_custom_colour(&mut self, dark: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.select_colour_square(dark, "custom".to_string(), cx);
         let tint_key = custom_tint_key(dark);
-        let tint = self.store.read(cx).values().string(tint_key);
+        let values = self.store.read(cx).values();
+        let tint = values.string(tint_key);
+        let own_key = if dark {
+            "darkThemePreset"
+        } else {
+            "lightThemePreset"
+        };
+        if values.string(own_key) != "custom" {
+            let mut snapshot = Map::new();
+            snapshot.insert(own_key.to_string(), values.value(own_key));
+            snapshot.insert(tint_key.to_string(), values.value(tint_key));
+            self.push_undo(UndoEntry::Patch(snapshot));
+            let mut patch = Map::new();
+            patch.insert(own_key.to_string(), json!("custom"));
+            if dark {
+                self.picked_dark = true;
+            } else {
+                self.picked_light = true;
+            }
+            let store = self.store.clone();
+            store.update(cx, |store, cx| {
+                store.apply_patch(patch, "settings:control", cx)
+            });
+        }
         open_tint_picker(self, tint_key, &tint, window, cx);
+        let pre_tint = self.store.read(cx).values().value(tint_key);
+        let recorded = Rc::new(Cell::new(false));
+        let editor = cx.weak_entity();
+        let saver: ColorSaver = Rc::new(move |store, picked_hex, commit, cx| {
+            let current = store.read(cx).values().string(tint_key);
+            if current.eq_ignore_ascii_case(picked_hex) && !commit {
+                return;
+            }
+            if !recorded.replace(true) && !current.eq_ignore_ascii_case(picked_hex) {
+                let mut snapshot = Map::new();
+                snapshot.insert(tint_key.to_string(), pre_tint.clone());
+                let editor = editor.clone();
+                cx.defer(move |cx| {
+                    let _ = editor.update(cx, |editor, cx| {
+                        editor.push_undo(UndoEntry::Patch(snapshot));
+                        cx.notify();
+                    });
+                });
+            }
+            store.update(cx, |store, cx| {
+                if commit {
+                    store.update_setting(tint_key, json!(picked_hex), cx);
+                } else {
+                    store.update_setting_debounced(tint_key, json!(picked_hex), cx);
+                }
+            });
+        });
+        set_color_saver(self, tint_key, saver);
     }
 
     fn set_accent(&mut self, hex: &str, light: bool, cx: &mut Context<Self>) {
@@ -577,11 +691,14 @@ impl GpuiThemeEditorWindow {
     ) {
         let key = role_picker_key(role, light);
         open_tint_picker(self, key, hex, window, cx);
+        let pre_roles = self.store.read(cx).values().value(THEME_ROLES_SETTING);
+        let recorded = Rc::new(Cell::new(false));
+        let editor = cx.weak_entity();
         let saver: ColorSaver = Rc::new(move |store, picked_hex, commit, cx| {
             let Ok(RoleValue::Colour { rgb, .. }) = parse_role_value(picked_hex) else {
                 return;
             };
-            store.update(cx, |store, cx| {
+            let changed = store.update(cx, |store, cx| {
                 let current = store.values().value(THEME_ROLES_SETTING);
                 let alpha = saved_role(&current, light, role)
                     .or(default)
@@ -593,14 +710,26 @@ impl GpuiThemeEditorWindow {
                     Some(format_role_value(RoleValue::Colour { rgb, alpha })),
                 );
                 if next == current {
-                    return;
+                    return false;
                 }
                 if commit {
                     store.update_setting(THEME_ROLES_SETTING, next, cx);
                 } else {
                     store.update_setting_debounced(THEME_ROLES_SETTING, next, cx);
                 }
+                true
             });
+            if changed && !recorded.replace(true) {
+                let mut snapshot = Map::new();
+                snapshot.insert(THEME_ROLES_SETTING.to_string(), pre_roles.clone());
+                let editor = editor.clone();
+                cx.defer(move |cx| {
+                    let _ = editor.update(cx, |editor, cx| {
+                        editor.push_undo(UndoEntry::Patch(snapshot));
+                        cx.notify();
+                    });
+                });
+            }
         });
         set_color_saver(self, key, saver);
     }
@@ -610,13 +739,12 @@ impl GpuiThemeEditorWindow {
         if ghostex_settings_catalog::artwork_by_id(&values.string(art_key)).is_some() {
             return "art";
         }
-        if values.string("windowGlass") == "opaque" {
-            return "solid";
+        match values.string("windowGlass").as_str() {
+            "opaque" => "solid",
+            "auto" if !dark => "solid",
+            _ if values.string("windowGlassSource") == "live" => "live",
+            _ => "transparent",
         }
-        if values.string("windowGlassSource") == "live" {
-            return "live";
-        }
-        "transparent"
     }
 
     fn cached_picture(
@@ -883,7 +1011,7 @@ impl GpuiThemeEditorWindow {
 
     fn header(&self, p: &SettingsPalette, cx: &mut Context<Self>) -> AnyElement {
         let hover_bg = hsla(p.foreground_alpha(0.08));
-        let can_undo = self.last_theme_change_id.is_some() || !self.undo_stack.is_empty();
+        let can_undo = !self.undo_stack.is_empty();
         let icon_btn = |id: &'static str, icon_path: &'static str, tip: &'static str, enabled: bool| {
             div()
                 .id(id)
@@ -1270,15 +1398,18 @@ impl GpuiThemeEditorWindow {
                 );
             }
             let dim = values.f64("windowArtDim");
-            let dim_saver: SliderSaver = Rc::new(|store, value, commit, cx| {
-                store.update(cx, |store, cx| {
+            let dim_saver = self.tracked_slider_saver(
+                "float-art-dim",
+                &["windowArtDim"],
+                |store, value, commit, cx| {
                     if commit {
                         store.update_setting("windowArtDim", json!(value.round()), cx);
                     } else {
                         store.update_setting_debounced("windowArtDim", json!(value.round()), cx);
                     }
-                });
-            });
+                },
+                cx,
+            );
             content.push(self.compact_slider_row(
                 p,
                 "Art dimming",
@@ -1295,15 +1426,18 @@ impl GpuiThemeEditorWindow {
                 cx,
             ));
             let blur = values.f64("windowArtBlur");
-            let blur_saver: SliderSaver = Rc::new(|store, value, commit, cx| {
-                store.update(cx, |store, cx| {
+            let blur_saver = self.tracked_slider_saver(
+                "float-art-blur",
+                &["windowArtBlur"],
+                |store, value, commit, cx| {
                     if commit {
                         store.update_setting("windowArtBlur", json!(value.round()), cx);
                     } else {
                         store.update_setting_debounced("windowArtBlur", json!(value.round()), cx);
                     }
-                });
-            });
+                },
+                cx,
+            );
             content.push(self.compact_slider_row(
                 p,
                 "Art blur",
@@ -1439,7 +1573,6 @@ impl GpuiThemeEditorWindow {
             .collect();
         let tint_key = custom_tint_key(dark);
         let tint = values.string(tint_key);
-        let picker = trigger_tint_picker(self, p, tint_key, &tint, window, cx);
         let custom_selected = selected == "custom";
         squares.push(
             div()
@@ -1477,7 +1610,6 @@ impl GpuiThemeEditorWindow {
                         p.muted
                     },
                 ))
-                .children(picker)
                 .into_any_element(),
         );
         let mut content = vec![
@@ -1499,16 +1631,25 @@ impl GpuiThemeEditorWindow {
         ];
         let cf_pos = colourfulness_step_index(values).unwrap_or(step);
         let cf_name = colourfulness_name(colourfulness_points(cf_pos)).to_string();
-        let cf_saver: SliderSaver = Rc::new(|store, value, _commit, cx| {
-            let pos = value
-                .round()
-                .clamp(0.0, COLOURFULNESS_LAST_POSITION as f64) as usize;
-            store.update(cx, |store, cx| {
+        let cf_saver = self.tracked_slider_saver(
+            "float-colourfulness",
+            &[
+                "themeSidebarContrast",
+                "themeWorkAreaContrast",
+                "customSidebarTitlebarBackgroundDarknessPercent",
+                "customSidebarTitlebarLightBackgroundLightnessPercent",
+            ],
+            |store, value, _commit, cx| {
+                let pos = value
+                    .round()
+                    .clamp(0.0, COLOURFULNESS_LAST_POSITION as f64)
+                    as usize;
                 if colourfulness_step_index(&store.values()) != Some(pos) {
                     store.apply_patch(colourfulness_patch(pos), "settings:control", cx);
                 }
-            });
-        });
+            },
+            cx,
+        );
         content.push(self.compact_slider_row(
             p,
             "Colourfulness",
@@ -1561,22 +1702,34 @@ impl GpuiThemeEditorWindow {
                 cx,
             ));
             if split {
-                for (key, slider_key, label) in [
-                    ("themeSidebarContrast", "float-sb-contrast", "Sidebar contrast"),
+                for (key, slider_key, label, undo_keys) in [
+                    (
+                        "themeSidebarContrast",
+                        "float-sb-contrast",
+                        "Sidebar contrast",
+                        &[
+                            "themeSidebarContrast",
+                            "customSidebarTitlebarBackgroundDarknessPercent",
+                            "customSidebarTitlebarLightBackgroundLightnessPercent",
+                        ][..],
+                    ),
                     (
                         "themeWorkAreaContrast",
                         "float-wa-contrast",
                         "Work area contrast",
+                        &["themeWorkAreaContrast"][..],
                     ),
                 ] {
                     let pos = colourfulness_display_step(values.f64(key));
                     let name = colourfulness_name(colourfulness_points(pos)).to_string();
-                    let saver: SliderSaver = Rc::new(move |store, value, _commit, cx| {
-                        let position = value
-                            .round()
-                            .clamp(0.0, COLOURFULNESS_LAST_POSITION as f64)
-                            as usize;
-                        store.update(cx, |store, cx| {
+                    let saver = self.tracked_slider_saver(
+                        slider_key,
+                        undo_keys,
+                        move |store, value, _commit, cx| {
+                            let position = value
+                                .round()
+                                .clamp(0.0, COLOURFULNESS_LAST_POSITION as f64)
+                                as usize;
                             if store.values().f64(key) != colourfulness_points(position) {
                                 store.apply_patch(
                                     area_colourfulness_patch(key, position),
@@ -1584,8 +1737,9 @@ impl GpuiThemeEditorWindow {
                                     cx,
                                 );
                             }
-                        });
-                    });
+                        },
+                        cx,
+                    );
                     content.push(self.compact_slider_row(
                         p,
                         label,
@@ -1612,7 +1766,7 @@ impl GpuiThemeEditorWindow {
         p: &SettingsPalette,
         values: &SettingsValues,
         light: bool,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let saved_roles = values.value(THEME_ROLES_SETTING);
@@ -1648,17 +1802,6 @@ impl GpuiThemeEditorWindow {
                     .into_any_element()
             })
             .collect();
-        let accent_key = role_picker_key("accent", light);
-        let accent_picker_open = self
-            .fields
-            .colors
-            .get(accent_key)
-            .is_some_and(|state| state.picker.open);
-        let accent_picker = if accent_picker_open {
-            trigger_tint_picker(self, p, accent_key, &current_accent, window, cx)
-        } else {
-            None
-        };
         let accent_hex_for_click = current_accent.clone();
         dots.push(
             div()
@@ -1678,7 +1821,6 @@ impl GpuiThemeEditorWindow {
                     editor.open_role_picker("accent", light, &accent_hex_for_click, None, window, cx);
                 }))
                 .child(settings_icon(ICON_PLUS, 10.0, p.muted))
-                .children(accent_picker)
                 .into_any_element(),
         );
         let mut content = vec![
@@ -1718,17 +1860,6 @@ impl GpuiThemeEditorWindow {
                 let display_text = value
                     .map(format_role_value)
                     .unwrap_or_else(|| "default".to_string());
-                let key = role_picker_key(role_id, light);
-                let picker_open = self
-                    .fields
-                    .colors
-                    .get(key)
-                    .is_some_and(|state| state.picker.open);
-                let picker = if picker_open {
-                    trigger_tint_picker(self, p, key, &hex, window, cx)
-                } else {
-                    None
-                };
                 let click_hex = hex.clone();
                 let is_set = value.is_some();
                 let muted = hsla(p.muted);
@@ -1743,12 +1874,20 @@ impl GpuiThemeEditorWindow {
                             div()
                                 .flex_1()
                                 .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
                                 .text_size(px(11.5))
                                 .text_color(fg)
                                 .child(label),
                         )
                         .child(
                             div()
+                                .flex_shrink_0()
+                                .max_w(px(96.0))
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
                                 .text_size(px(10.5))
                                 .text_color(muted)
                                 .child(display_text),
@@ -1757,6 +1896,7 @@ impl GpuiThemeEditorWindow {
                             this.child(
                                 div()
                                     .id(SharedString::from(format!("float-role-reset-{role_id}")))
+                                    .flex_shrink_0()
                                     .size(px(18.0))
                                     .rounded(px(4.0))
                                     .flex()
@@ -1775,6 +1915,7 @@ impl GpuiThemeEditorWindow {
                         .child(
                             div()
                                 .id(SharedString::from(format!("float-role-sw-{role_id}")))
+                                .flex_shrink_0()
                                 .relative()
                                 .size(px(18.0))
                                 .rounded(px(4.0))
@@ -1792,14 +1933,94 @@ impl GpuiThemeEditorWindow {
                                             role_id, light, &click_hex, default, window, cx,
                                         );
                                     },
-                                ))
-                                .children(picker),
+                                )),
                         )
                         .into_any_element(),
                 );
             }
         }
         Self::section_box(p, content)
+    }
+
+    /// Renders whichever Pick Color dialog is currently open (custom tint, accent, or fine-tune
+    /// role) centered inside the floating Theme Editor window with zero clipping.
+    fn active_color_picker_overlay(
+        &mut self,
+        p: &SettingsPalette,
+        values: &SettingsValues,
+        dark: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let light = !dark;
+        let tint_key = custom_tint_key(dark);
+        if self
+            .fields
+            .colors
+            .get(tint_key)
+            .is_some_and(|state| state.picker.open)
+        {
+            let tint = values.string(tint_key);
+            return centered_tint_picker_overlay(
+                self,
+                p,
+                tint_key,
+                &tint,
+                THEME_EDITOR_WIDTH,
+                window,
+                cx,
+            );
+        }
+        let saved_roles = values.value(THEME_ROLES_SETTING);
+        let base_rgb = ghostex_settings_catalog::theme_colours::work_area_background_for_variant(
+            values.map(),
+            light,
+        );
+        let accent_key = role_picker_key("accent", light);
+        if self
+            .fields
+            .colors
+            .get(accent_key)
+            .is_some_and(|state| state.picker.open)
+        {
+            let hex = saved_role(&saved_roles, light, "accent")
+                .or_else(|| role_default(&saved_roles, "accent", light))
+                .map(|val| hex_of(val, light, base_rgb))
+                .unwrap_or_else(|| "#86d3f8".to_string());
+            return centered_tint_picker_overlay(
+                self,
+                p,
+                accent_key,
+                &hex,
+                THEME_EDITOR_WIDTH,
+                window,
+                cx,
+            );
+        }
+        for &(role_id, _) in &FINE_TUNE_ROLES {
+            let key = role_picker_key(role_id, light);
+            if self
+                .fields
+                .colors
+                .get(key)
+                .is_some_and(|state| state.picker.open)
+            {
+                let hex = saved_role(&saved_roles, light, role_id)
+                    .or_else(|| role_default(&saved_roles, role_id, light))
+                    .map(|val| hex_of(val, light, base_rgb))
+                    .unwrap_or_else(|| "#808080".to_string());
+                return centered_tint_picker_overlay(
+                    self,
+                    p,
+                    key,
+                    &hex,
+                    THEME_EDITOR_WIDTH,
+                    window,
+                    cx,
+                );
+            }
+        }
+        None
     }
 
     fn glass_section(
@@ -1832,12 +2053,20 @@ impl GpuiThemeEditorWindow {
             } else {
                 format!("~{}", strength.round() as i64)
             };
-            let strength_saver: SliderSaver = Rc::new(|store, value, _commit, cx| {
-                store.update(cx, |store, cx| {
+            let strength_saver = self.tracked_slider_saver(
+                "float-glass-strength",
+                &[
+                    "windowGlassSidebarOpacityDark",
+                    "windowGlassWorkAreaTintDark",
+                    "windowGlassSidebarOpacityLight",
+                    "windowGlassWorkAreaTintLight",
+                ],
+                |store, value, _commit, cx| {
                     let gaps = strength_gaps(&store.values());
                     store.apply_patch(strength_patch(value, gaps), "settings:control", cx);
-                });
-            });
+                },
+                cx,
+            );
             content.push(self.compact_slider_row(
                 p,
                 "Glass strength",
@@ -1854,8 +2083,10 @@ impl GpuiThemeEditorWindow {
                 cx,
             ));
             let blur = values.f64("windowGlassBlurRadius");
-            let blur_saver: SliderSaver = Rc::new(|store, value, commit, cx| {
-                store.update(cx, |store, cx| {
+            let blur_saver = self.tracked_slider_saver(
+                "float-glass-blur",
+                &["windowGlassBlurRadius"],
+                |store, value, commit, cx| {
                     if commit {
                         store.update_setting("windowGlassBlurRadius", json!(value.round()), cx);
                     } else {
@@ -1865,8 +2096,9 @@ impl GpuiThemeEditorWindow {
                             cx,
                         );
                     }
-                });
-            });
+                },
+                cx,
+            );
             content.push(self.compact_slider_row(
                 p,
                 "Blur",
@@ -1896,9 +2128,11 @@ impl GpuiThemeEditorWindow {
             ));
             if more_open {
                 let speed = values.f64("windowGlassLiveSpeed");
-                let speed_saver: SliderSaver = Rc::new(|store, value, commit, cx| {
-                    let rounded = (value * 10.0).round() / 10.0;
-                    store.update(cx, |store, cx| {
+                let speed_saver = self.tracked_slider_saver(
+                    "float-live-speed",
+                    &["windowGlassLiveSpeed"],
+                    |store, value, commit, cx| {
+                        let rounded = (value * 10.0).round() / 10.0;
                         if commit {
                             store.update_setting("windowGlassLiveSpeed", json!(rounded), cx);
                         } else {
@@ -1908,8 +2142,9 @@ impl GpuiThemeEditorWindow {
                                 cx,
                             );
                         }
-                    });
-                });
+                    },
+                    cx,
+                );
                 content.push(self.compact_slider_row(
                     p,
                     "Live speed",
@@ -1926,8 +2161,10 @@ impl GpuiThemeEditorWindow {
                     cx,
                 ));
                 let bright = values.f64("windowGlassLiveBrightness");
-                let bright_saver: SliderSaver = Rc::new(|store, value, commit, cx| {
-                    store.update(cx, |store, cx| {
+                let bright_saver = self.tracked_slider_saver(
+                    "float-live-brightness",
+                    &["windowGlassLiveBrightness"],
+                    |store, value, commit, cx| {
                         if commit {
                             store.update_setting(
                                 "windowGlassLiveBrightness",
@@ -1941,8 +2178,9 @@ impl GpuiThemeEditorWindow {
                                 cx,
                             );
                         }
-                    });
-                });
+                    },
+                    cx,
+                );
                 content.push(self.compact_slider_row(
                     p,
                     "Live brightness",
@@ -1970,8 +2208,10 @@ impl GpuiThemeEditorWindow {
                     cx,
                 ));
                 let menu_blur = values.f64("windowGlassMenuBlurRadius");
-                let menu_blur_saver: SliderSaver = Rc::new(|store, value, commit, cx| {
-                    store.update(cx, |store, cx| {
+                let menu_blur_saver = self.tracked_slider_saver(
+                    "float-menu-blur",
+                    &["windowGlassMenuBlurRadius"],
+                    |store, value, commit, cx| {
                         if commit {
                             store.update_setting(
                                 "windowGlassMenuBlurRadius",
@@ -1985,8 +2225,9 @@ impl GpuiThemeEditorWindow {
                                 cx,
                             );
                         }
-                    });
-                });
+                    },
+                    cx,
+                );
                 content.push(self.compact_slider_row(
                     p,
                     "Menu blur",
@@ -2089,6 +2330,10 @@ impl Focusable for GpuiThemeEditorWindow {
 
 impl Render for GpuiThemeEditorWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.scheme_dark = !matches!(
+            window.appearance(),
+            WindowAppearance::Light | WindowAppearance::VibrantLight
+        );
         let (p, values) = {
             let store = self.store.read(cx);
             (store.palette(), store.values())
@@ -2119,8 +2364,11 @@ impl Render for GpuiThemeEditorWindow {
         let accent_section = self.accent_and_roles_section(&p, &values, !dark, window, cx);
         let glass_section = self.glass_section(&p, &values, window, cx);
         let chat_term_section = self.chat_and_terminal_section(&p, &values, cx);
+        let color_picker_overlay =
+            self.active_color_picker_overlay(&p, &values, dark, window, cx);
         v_flex()
             .id("ghostex-floating-theme-editor")
+            .relative()
             .track_focus(&self.focus_handle)
             .size_full()
             .bg(hsla(p.surface))
@@ -2152,5 +2400,6 @@ impl Render for GpuiThemeEditorWindow {
                     ),
             )
             .child(self.footer(&p, cx))
+            .children(color_picker_overlay)
     }
 }

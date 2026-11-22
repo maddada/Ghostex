@@ -173,6 +173,7 @@ impl GhostexGpuiApp {
         open_message: &serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.clear_theme_editor_queued_after_add_project();
         let kind = GpuiAppModalKind::ThemeEditor;
         crate::app::window::settings_modal::tabs::theme::role_defaults::set_role_default_resolver(
             crate::app::helpers::theme_role_defaults::theme_role_default_rgba,

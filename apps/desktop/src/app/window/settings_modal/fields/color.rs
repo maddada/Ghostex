@@ -588,9 +588,13 @@ enum PickerPlacement {
     /// Down and to the left of the square that opened it (the Theme page's "+" square, at the end
     /// of its row), so the dialog never covers the square; the dialog is a child of that square.
     BesideTrigger,
+    /// Centered inside a narrow floating parent container (such as the 320px Theme Editor) with a
+    /// soft dim backdrop so it never clips horizontally or vertically.
+    ParentCenter,
 }
 
-/// The dialog: title, the 294px saturation square and hue bar, HEX/R/G/B, and Done.
+/// The dialog: title, the saturation square and hue bar, HEX/R/G/B, and Done. Adapts its width
+/// cleanly when `max_width` or the window viewport is narrower than `DIALOG_WIDTH + 16px`.
 #[allow(clippy::too_many_arguments)]
 fn pick_color_dialog<V: SettingsPage>(
     page: &mut V,
@@ -599,6 +603,7 @@ fn pick_color_dialog<V: SettingsPage>(
     kind: ColorFieldKind,
     fallback: &'static str,
     placement: PickerPlacement,
+    max_width: Option<f32>,
     window: &mut Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
@@ -606,6 +611,12 @@ fn pick_color_dialog<V: SettingsPage>(
     if !state.picker.open {
         return None;
     }
+    let viewport = window.viewport_size();
+    let viewport_w = f32::from(viewport.width);
+    let bound_w = max_width.map_or(viewport_w, |limit| limit.min(viewport_w));
+    let dialog_width = (bound_w - 16.0).clamp(240.0, DIALOG_WIDTH);
+    let pad = if dialog_width < DIALOG_WIDTH { 12.0 } else { 16.0 };
+    let picker_size = (dialog_width - pad * 2.0).min(PICKER_SIZE).max(200.0);
     let (hue, saturation, value) = (
         state.picker.hue,
         state.picker.saturation,
@@ -623,7 +634,7 @@ fn pick_color_dialog<V: SettingsPage>(
     let square = div()
         .id(SharedString::from(format!("{key}-picker-square")))
         .relative()
-        .size(px(PICKER_SIZE))
+        .size(px(picker_size))
         .cursor_pointer()
         .on_mouse_down(
             MouseButton::Left,
@@ -672,8 +683,8 @@ fn pick_color_dialog<V: SettingsPage>(
         )
         .child(
             picker_handle(None)
-                .left(px(saturation * PICKER_SIZE - HANDLE_SIZE / 2.0))
-                .top(px((1.0 - value) * PICKER_SIZE - HANDLE_SIZE / 2.0)),
+                .left(px(saturation * picker_size - HANDLE_SIZE / 2.0))
+                .top(px((1.0 - value) * picker_size - HANDLE_SIZE / 2.0)),
         );
     const HUE_STOPS: [u32; 7] = [
         0xff0000, 0xffff00, 0x00ff00, 0x00ffff, 0x0000ff, 0xff00ff, 0xff0000,
@@ -688,7 +699,7 @@ fn pick_color_dialog<V: SettingsPage>(
     let hue_bar = div()
         .id(SharedString::from(format!("{key}-picker-hue")))
         .relative()
-        .w(px(PICKER_SIZE))
+        .w(px(picker_size))
         .h(px(HUE_BAR_HEIGHT))
         .cursor_pointer()
         .on_mouse_down(
@@ -731,16 +742,23 @@ fn pick_color_dialog<V: SettingsPage>(
         )
         .child(
             picker_handle(Some(pure_hue))
-                .left(px((hue / 360.0) * (PICKER_SIZE - HANDLE_SIZE)))
+                .left(px((hue / 360.0) * (picker_size - HANDLE_SIZE)))
                 .top(px(-2.0)),
         );
+    let (hex_w, ch_w) = if picker_size >= PICKER_SIZE {
+        (76.0, 67.0)
+    } else {
+        let hex_w = (picker_size * 0.28).floor().max(64.0);
+        let ch_w = ((picker_size - hex_w - 12.0) / 3.0).floor().max(48.0);
+        (hex_w, ch_w)
+    };
     let inputs = h_flex()
-        .w(px(PICKER_SIZE))
+        .w(px(picker_size))
         .justify_between()
-        .child(picker_input(&hex_input, 76.0, "HEX"))
-        .child(picker_input(&channels[0], 67.0, "R"))
-        .child(picker_input(&channels[1], 67.0, "G"))
-        .child(picker_input(&channels[2], 67.0, "B"));
+        .child(picker_input(&hex_input, hex_w, "HEX"))
+        .child(picker_input(&channels[0], ch_w, "R"))
+        .child(picker_input(&channels[1], ch_w, "G"))
+        .child(picker_input(&channels[2], ch_w, "B"));
     let done = settings_button(
         p,
         SharedString::from(format!("{key}-picker-done")),
@@ -757,9 +775,10 @@ fn pick_color_dialog<V: SettingsPage>(
         .id(SharedString::from(format!("{key}-picker-dialog")))
         .track_focus(&focus)
         .occlude()
-        .w(px(DIALOG_WIDTH))
-        .p(px(16.0))
-        .gap(px(16.0))
+        .w(px(dialog_width))
+        .p(px(pad))
+        .gap(px(if dialog_width < DIALOG_WIDTH { 12.0 } else { 16.0 }))
+        .rounded(px(if dialog_width < DIALOG_WIDTH { 10.0 } else { 0.0 }))
         .bg(hsla(dialog_bg))
         .shadow(vec![gpui::BoxShadow {
             color: hsla(p.foreground_alpha(0.1)),
@@ -793,10 +812,10 @@ fn pick_color_dialog<V: SettingsPage>(
         .child(
             // The picker's own body: `#202020` behind the square, the hue bar and the inputs.
             v_flex()
-                .w(px(PICKER_SIZE))
+                .w(px(picker_size))
                 .mx_auto()
                 .bg(gpui::rgb(0x202020))
-                .gap(px(17.0))
+                .gap(px(if dialog_width < DIALOG_WIDTH { 13.0 } else { 17.0 }))
                 .child(
                     div()
                         .on_children_prepainted(capture_child_bounds(square_bounds, 0))
@@ -804,7 +823,7 @@ fn pick_color_dialog<V: SettingsPage>(
                 )
                 .child(
                     v_flex()
-                        .gap(px(18.0))
+                        .gap(px(if dialog_width < DIALOG_WIDTH { 14.0 } else { 18.0 }))
                         .child(
                             div()
                                 .on_children_prepainted(capture_child_bounds(hue_bounds, 0))
@@ -814,8 +833,25 @@ fn pick_color_dialog<V: SettingsPage>(
                 ),
         )
         .child(h_flex().w_full().justify_end().child(done));
-    if let PickerPlacement::BesideTrigger = placement {
-        return Some(
+    match placement {
+        PickerPlacement::ParentCenter => Some(
+            div()
+                .id(SharedString::from(format!("{key}-picker-overlay")))
+                .absolute()
+                .inset_0()
+                .bg(gpui::Rgba {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.28,
+                })
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(dialog)
+                .into_any_element(),
+        ),
+        PickerPlacement::BesideTrigger if viewport_w >= DIALOG_WIDTH + 16.0 => Some(
             deferred(
                 anchored()
                     .anchor(gpui::Anchor::TopRight)
@@ -825,27 +861,26 @@ fn pick_color_dialog<V: SettingsPage>(
             )
             .with_priority(2)
             .into_any_element(),
-        );
+        ),
+        PickerPlacement::WindowCenter | PickerPlacement::BesideTrigger => Some(
+            deferred(
+                anchored()
+                    .position_mode(AnchoredPositionMode::Window)
+                    .position(point(px(0.0), px(0.0)))
+                    .child(
+                        div()
+                            .w(viewport.width)
+                            .h(viewport.height)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(dialog),
+                    ),
+            )
+            .with_priority(2)
+            .into_any_element(),
+        ),
     }
-    let viewport = window.viewport_size();
-    Some(
-        deferred(
-            anchored()
-                .position_mode(AnchoredPositionMode::Window)
-                .position(point(px(0.0), px(0.0)))
-                .child(
-                    div()
-                        .w(viewport.width)
-                        .h(viewport.height)
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(dialog),
-                ),
-        )
-        .with_priority(2)
-        .into_any_element(),
-    )
 }
 
 /// The Pick Color dialog of a tint key whose trigger the page draws itself (the Theme page's "+"
@@ -867,6 +902,33 @@ pub(crate) fn trigger_tint_picker<V: SettingsPage>(
         ColorFieldKind::Tint,
         DEFAULT_TINT_COLOR,
         PickerPlacement::BesideTrigger,
+        None,
+        window,
+        cx,
+    )
+}
+
+/// The Pick Color dialog rendered as a centered overlay inside a compact floating panel of
+/// `max_width` (such as the 320px Theme Editor), sized to fit with zero horizontal clipping.
+pub(crate) fn centered_tint_picker_overlay<V: SettingsPage>(
+    page: &mut V,
+    p: &SettingsPalette,
+    key: &'static str,
+    value: &str,
+    max_width: f32,
+    window: &mut Window,
+    cx: &mut Context<V>,
+) -> Option<AnyElement> {
+    let saved = normalize_color_input_value(value, DEFAULT_TINT_COLOR);
+    FieldStates::color_state(page, key, &saved, ColorFieldKind::Tint, window, cx);
+    pick_color_dialog(
+        page,
+        p,
+        key,
+        ColorFieldKind::Tint,
+        DEFAULT_TINT_COLOR,
+        PickerPlacement::ParentCenter,
+        Some(max_width),
         window,
         cx,
     )
@@ -999,6 +1061,7 @@ pub(crate) fn color_field<V: SettingsPage>(
         ColorFieldKind::Plain,
         "#121212",
         PickerPlacement::WindowCenter,
+        None,
         window,
         cx,
     );
@@ -1084,6 +1147,7 @@ pub(crate) fn toggle_color_field<V: SettingsPage>(
             ColorFieldKind::Plain,
             "#95d7f6",
             PickerPlacement::WindowCenter,
+            None,
             window,
             cx,
         );
@@ -1188,6 +1252,7 @@ pub(crate) fn web_color_picker_field<V: SettingsPage>(
         ColorFieldKind::Tint,
         DEFAULT_TINT_COLOR,
         PickerPlacement::WindowCenter,
+        None,
         window,
         cx,
     );

@@ -1,5 +1,6 @@
-//! Native GPUI Onboarding: the five-panel first-run flow (Welcome, Agents, Workspace, Mobile, Get
-//! started), the desktop twin of the React `OnboardingModal` in packages/core-ui/onboarding/.
+//! Native GPUI Onboarding: the six-panel first-run flow (Welcome, Make it yours, Agents,
+//! Workspace, Mobile, Get started), the desktop twin of the React `OnboardingModal` in
+//! packages/core-ui/onboarding/.
 //!
 //! CDXC:AppModal 2026-09-28 DECISION:
 //! User: migrate every React modal to GPUI with GPUI-Kit components, looking and working exactly as
@@ -58,7 +59,7 @@ use workspace::WorkspaceState;
 pub(crate) const ONBOARDING_MODAL_WIDTH: f32 = 1400.0;
 pub(crate) const ONBOARDING_MODAL_HEIGHT: f32 = 788.0;
 
-/// Panel shown when the window opens (1-5).
+/// Panel shown when the window opens (1-6).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum InitialPanel {
     Panel(usize),

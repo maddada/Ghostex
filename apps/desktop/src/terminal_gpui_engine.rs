@@ -834,9 +834,12 @@ mod theme_preset_palette_tests {
     }
 
     /// The phone's copy of the presets (`src/theme/presets/<id>.json` in the ghostex-mobile
-    /// checkout) must match the host's: the same presets, colours, palettes and the settings each
-    /// one writes, with light mode following and with light mode picked on purpose. Run it with
-    /// the phone checkout at hand:
+    /// checkout) must match the host's: the same presets, palettes and non-tint patch settings,
+    /// with light mode following and with light mode picked on purpose. The base `.json` files'
+    /// SHA-256 hashes are pinned in `apps/mobile/app/scripts/notices/pinned.ts`, so Stage 1's
+    /// subtle OKLCH-capped `background`/`tintColor` overrides live in `STAGE1_PRESET_TINTS` inside
+    /// `src/theme/presets.ts`; when present there, this test also checks exact tint parity.
+    /// Run it with the phone checkout at hand:
     /// `GHOSTEX_MOBILE_DIR=<ghostex-mobile> cargo test theme_preset_parity -- --ignored`
     /// (without the variable it reads the `apps/mobile/app` submodule).
     #[test]
@@ -855,6 +858,7 @@ mod theme_preset_palette_tests {
             "no phone presets at {}: set GHOSTEX_MOBILE_DIR to a ghostex-mobile checkout that has them",
             dir.display()
         );
+        let stage1_phone_tints = parse_phone_stage1_preset_tints(&mobile.join("src/theme/presets.ts"));
         let presets = theme_presets();
         let mut phone_ids: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()
@@ -870,6 +874,21 @@ mod theme_preset_palette_tests {
             phone_ids, host_ids,
             "the phone and the host offer different presets"
         );
+        let strip_stage1_tints = |mut value: Value| -> Value {
+            if let Some(obj) = value.as_object_mut() {
+                obj.remove("background");
+                obj.remove("tintColor");
+                if let Some(patches) = obj.get_mut("patches").and_then(Value::as_object_mut) {
+                    for patch_key in ["lightFollows", "lightPickedOnPurpose"] {
+                        if let Some(patch) = patches.get_mut(patch_key).and_then(Value::as_object_mut) {
+                            patch.remove("customSidebarTitlebarBackgroundTintColor");
+                            patch.remove("customSidebarTitlebarLightBackgroundTintColor");
+                        }
+                    }
+                }
+            }
+            value
+        };
         for preset in &presets {
             let path = dir.join(format!("{}.json", preset.id));
             let phone: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap())
@@ -901,8 +920,107 @@ mod theme_preset_palette_tests {
                     "lightPickedOnPurpose": theme_preset_choice(&preset.id, true).unwrap().1,
                 },
             });
-            assert_eq!(phone, expected, "{} differs from the host", path.display());
+            // Compare all pinned identity, palette and non-tint patch fields strictly.
+            assert_eq!(
+                strip_stage1_tints(phone.clone()),
+                strip_stage1_tints(expected),
+                "{} differs from the host on pinned fields",
+                path.display()
+            );
+            // If the phone checkout has Stage 1 subtle tints layered in presets.ts, verify them too.
+            if let Some(phone_tints) = &stage1_phone_tints {
+                let effective_tint = phone_tints
+                    .get(&preset.id)
+                    .and_then(|(tint, _)| tint.as_deref())
+                    .or_else(|| phone["tintColor"].as_str())
+                    .unwrap_or_default();
+                assert_eq!(
+                    effective_tint.to_lowercase(),
+                    preset.tint.to_lowercase(),
+                    "{}: STAGE1_PRESET_TINTS tintColor differs from host",
+                    preset.id
+                );
+                if let Some(effective_bg) = phone_tints
+                    .get(&preset.id)
+                    .and_then(|(_, bg)| bg.as_deref())
+                {
+                    assert_eq!(
+                        effective_bg.to_lowercase(),
+                        entry["background"].as_str().unwrap_or_default().to_lowercase(),
+                        "{}: STAGE1_PRESET_TINTS background differs from host",
+                        preset.id
+                    );
+                }
+            }
         }
+    }
+
+    /// Parses `STAGE1_PRESET_TINTS` from `apps/mobile/app/src/theme/presets.ts` when present.
+    /// Supports both `'id': '#hex'` and `'id': { background: '#hex', tintColor: '#hex' }` entries.
+    fn parse_phone_stage1_preset_tints(
+        presets_ts: &Path,
+    ) -> Option<std::collections::HashMap<String, (Option<String>, Option<String>)>> {
+        let source = std::fs::read_to_string(presets_ts).ok()?;
+        let marker = source.find("STAGE1_PRESET_TINTS")?;
+        let after = &source[marker..];
+        let eq = after.find('=')?;
+        let body_start = after[eq..].find('{')? + eq + 1;
+        let rest = &after[body_start..];
+        let mut depth = 1usize;
+        let mut end = rest.len();
+        for (idx, ch) in rest.char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = idx;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let block = &rest[..end];
+        let mut out = std::collections::HashMap::new();
+        for line in block.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("//") {
+                continue;
+            }
+            let Some((raw_key, raw_val)) = trimmed.split_once(':') else {
+                continue;
+            };
+            let id = raw_key
+                .trim()
+                .trim_matches(|c| c == '\'' || c == '"')
+                .to_string();
+            if id.is_empty() {
+                continue;
+            }
+            let extract_hex = |s: &str| -> Option<String> {
+                let hash = s.find('#')?;
+                let candidate = s.get(hash..hash + 7)?;
+                candidate[1..]
+                    .chars()
+                    .all(|c| c.is_ascii_hexdigit())
+                    .then(|| candidate.to_lowercase())
+            };
+            if raw_val.contains('{') {
+                let tint = raw_val
+                    .find("tintColor")
+                    .and_then(|pos| extract_hex(&raw_val[pos..]));
+                let bg = raw_val
+                    .find("background")
+                    .and_then(|pos| extract_hex(&raw_val[pos..]));
+                if tint.is_some() || bg.is_some() {
+                    out.insert(id, (tint, bg));
+                }
+            } else if let Some(hex_val) = extract_hex(raw_val) {
+                out.insert(id, (Some(hex_val), None));
+            }
+        }
+        Some(out)
     }
 
     fn settings_catalog_preset(id: &str) -> serde_json::Value {

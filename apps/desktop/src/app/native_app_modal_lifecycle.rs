@@ -378,7 +378,7 @@ impl GhostexGpuiApp {
             GpuiAppModalKind::Worktree => {
                 self.receive_gpui_create_worktree_modal_message(message, cx)
             }
-            kind if kind.is_settings_modal_entry() => {
+            kind if kind.is_settings_modal_entry() || kind == GpuiAppModalKind::ThemeEditor => {
                 self.receive_native_settings_modal_payload(message, cx)
             }
             // NATIVE-MODAL-MESSAGE-ARMS: one arm per modal kind that receives host messages.

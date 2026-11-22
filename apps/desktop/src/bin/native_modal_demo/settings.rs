@@ -710,11 +710,18 @@ pub(super) fn open_theme_editor(demo: &super::DemoEnv, cx: &mut App) {
         .parse::<f32>()
         .unwrap_or(962.0);
     let light = demo.palette.light;
+    let open_picker = state == "picker" || state == "theme-editor-picker";
     let _ = super::open_modal_window(
         width,
         height,
         move |window, cx| {
-            let editor = cx.new(|cx| GpuiThemeEditorWindow::new(config, host, window, cx));
+            let editor = cx.new(|cx| {
+                let mut view = GpuiThemeEditorWindow::new(config, host, window, cx);
+                if open_picker {
+                    view.open_custom_color_picker_for_demo(!light, window, cx);
+                }
+                view
+            });
             cx.new(|_| FloatingThemeEditorStage { editor, light })
         },
         cx,

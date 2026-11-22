@@ -582,7 +582,7 @@ impl GhostexGpuiApp {
             self.with_gpui_command_pane_sidebar_indicators(base_sidebar_state);
         // CDXC:Onboarding 2026-09-15 DECISION:
         // User: "i want to switch to using the new modal when a new user starts the app instead of the
-        // old one", so the automatic first run opens the five-panel Onboarding modal
+        // old one", so the automatic first run opens the six-panel Onboarding modal
         // (packages/core-ui/onboarding), the same one the Tips dropdown's "Setup" button and the Quick
         // Access "Setup" command open (titlebar/settings_and_action_state.rs, delayed_send/app_modal_sidebar_command/hotkey_action.rs). Only this
         // path adds `"firstRun": true` to the open message: the user decided only the first run ever

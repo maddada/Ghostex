@@ -8489,7 +8489,7 @@ text, accent, link, status, message, code and selection colours. Every tile is a
 Ghostex in that theme.
 Every theme has a **Background**, picked under the row after the theme: **Art** (its own
 artwork behind a solid window; every theme has one), **Live** (its calm animation behind the
-glass, for Default and the agent-made looks), **Transparent** (your desktop through the glass) or
+glass, for Default and the agent-made looks), **Glass** (your desktop through the glass) or
 **Solid** (nothing behind). A theme starts with its own: Art for the art themes, Live for Default
 and the agent-made looks, and a preset keeps whatever background you had. **Backgrounds**, under
 it, is a gallery of every theme's artwork: pick any of them to go behind any theme (in the

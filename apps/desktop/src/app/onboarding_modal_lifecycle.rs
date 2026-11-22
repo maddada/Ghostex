@@ -398,6 +398,9 @@ impl GhostexGpuiApp {
                     FinishTarget::None => {
                         // CDXC:Onboarding 2026-11-11 WHY: setup no longer asks for a folder (DECISION in window/onboarding/get_started.rs), so it can end with no project; Add Project opens then, so the app is never an empty shell.
                         if !has_projects {
+                            if after.open_theme_editor {
+                                self.queue_theme_editor_after_add_project();
+                            }
                             self.open_app_modal_from_bridge(
                                 GpuiAppModalKind::AddProject.open_message(),
                                 cx,

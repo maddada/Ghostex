@@ -646,7 +646,7 @@ impl ThemeTab {
         }
     }
 
-    /// Background, under the themes row: the applied theme's Art, Live, Transparent and Solid
+    /// Background, under the themes row: the applied theme's Art, Live, Glass and Solid
     /// (those it has), the one showing now picked.
     ///
     /// CDXC:Theming 2026-11-21 DECISION:

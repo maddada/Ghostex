@@ -34,7 +34,7 @@ pub(crate) enum GpuiAppModalKind {
     ConfigureActions,
     OpenTargets,
     /// CDXC:Onboarding 2026-09-27 SEE-ALSO:
-    /// `onboarding` is the five-panel modal that the automatic first run, Tips > Setup and Quick Access > Setup open (user decision, see modals/modal_window.rs `open_gpui_first_launch_setup_with_sidebar_state`). The older first-launch setup modal was deleted on 2026-09-27 (user: "delete old setup one not new one that's active").
+    /// `onboarding` is the six-panel modal that the automatic first run, Tips > Setup and Quick Access > Setup open (user decision, see modals/modal_window.rs `open_gpui_first_launch_setup_with_sidebar_state`). The older first-launch setup modal was deleted on 2026-09-27 (user: "delete old setup one not new one that's active").
     /// The guards that treat Onboarding as "setup in progress" (no-projects close guard, completion on close, `completeFirstLaunchSetup`) have a React twin, `isFirstLaunchSetupModalKind` in apps/desktop/views/modal-host/settings-routing.ts (deleted 2026-10-01), and the component contract is packages/core-ui/onboarding/contract.ts (deleted 2026-10-01).
     Onboarding,
     RemoteGxserverInstall,

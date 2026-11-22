@@ -13,10 +13,12 @@ use super::model::{
 use super::primitives::*;
 use super::stage::*;
 use super::welcome::foot_actions;
+use super::super::settings_modal::tabs::theme::colours::swatch_paint;
 use super::super::settings_modal::tabs::theme::gallery::poster as live_poster;
 use super::super::settings_modal::tabs::theme::prompt_gallery::{
     GalleryTheme, artwork_thumbnail_bytes, gallery_themes, preview_bytes,
 };
+use super::super::settings_modal::tabs::theme::swatches::swatch_colour;
 use ghostex_settings_catalog::theme_roles::{
     RoleValue, THEME_ROLES_SETTING, appearance_key, parse_role_value,
 };
@@ -24,7 +26,8 @@ use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, Image, ImageFormat, InteractiveElement as _, IntoElement, ObjectFit,
-    ParentElement as _, SharedString, Styled as _, div, img,
+    ParentElement as _, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _,
+    div, img,
 };
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
@@ -56,7 +59,6 @@ const LIVE_STRIP_IDS: [(&str, &str); 6] = [
     ("silk", "Silk"),
 ];
 
-#[derive(Default)]
 pub(crate) struct LookState {
     pub(crate) show_more_themes: bool,
     pub(crate) show_custom_bar: bool,
@@ -64,6 +66,21 @@ pub(crate) struct LookState {
     pub(crate) picked_light: bool,
     pub(crate) active_theme_id: Option<String>,
     pub(crate) posters: HashMap<String, Arc<Image>>,
+    pub(crate) scroll: ScrollHandle,
+}
+
+impl Default for LookState {
+    fn default() -> Self {
+        Self {
+            show_more_themes: false,
+            show_custom_bar: false,
+            picked_dark: false,
+            picked_light: false,
+            active_theme_id: None,
+            posters: HashMap::new(),
+            scroll: ScrollHandle::new(),
+        }
+    }
 }
 
 fn parse_rgb(hex_str: &str, fallback: u32) -> u32 {
@@ -110,13 +127,61 @@ impl GpuiOnboardingWindow {
         if ghostex_settings_catalog::artwork_by_id(art).is_some() {
             return "art";
         }
-        if self.settings.window_glass == "opaque" {
-            return "solid";
+        match self.settings.window_glass.as_str() {
+            "opaque" => "solid",
+            "auto" if !dark => "solid",
+            _ if self.settings.window_glass_source == "live" => "live",
+            _ => "transparent",
         }
-        if self.settings.window_glass_source == "live" {
-            return "live";
+    }
+
+    fn detect_onboarding_active_theme_id(&self, themes: &[GalleryTheme]) -> Option<String> {
+        if let Some(active) = &self.look.active_theme_id {
+            return Some(active.clone());
         }
-        "transparent"
+        let dark = self.look_is_dark();
+        let art = if dark {
+            self.settings.window_art.as_str()
+        } else {
+            self.settings.window_art_light.as_str()
+        };
+        if let Some(art_theme) = themes
+            .iter()
+            .find(|theme| theme.kind == "art" && theme.id == art)
+        {
+            return Some(art_theme.id.clone());
+        }
+        let custom_tint = if dark {
+            self.settings.custom_dark_tint.trim().to_lowercase()
+        } else {
+            self.settings.custom_light_tint.trim().to_lowercase()
+        };
+        let preset_val = if dark {
+            self.settings.dark_theme_preset.as_str()
+        } else {
+            self.settings.light_theme_preset.as_str()
+        };
+        if preset_val == "custom" {
+            let tint_key = if dark {
+                "customSidebarTitlebarBackgroundTintColor"
+            } else {
+                "customSidebarTitlebarLightBackgroundTintColor"
+            };
+            if let Some(matched) = themes.iter().find(|theme| {
+                theme.id != "default"
+                    && theme
+                        .changes
+                        .get(tint_key)
+                        .and_then(Value::as_str)
+                        .is_some_and(|hex| hex.eq_ignore_ascii_case(&custom_tint))
+            }) {
+                return Some(matched.id.clone());
+            }
+        }
+        if preset_val == "gray" && self.settings.window_art == "none" {
+            return Some("default".to_string());
+        }
+        None
     }
 
     fn look_cached_image(
@@ -149,20 +214,31 @@ impl GpuiOnboardingWindow {
             return;
         };
         let mut changes = theme.changes.clone();
-        if let Some(background) = &theme.default_background {
-            changes.extend(theme.background_patch(background, true));
+        let partner = theme.kind == "preset" && (!theme.dark || !self.look.picked_light);
+        if partner {
+            changes.extend(theme.partner_changes.clone());
         }
-        if theme.kind != "preset" && !self.look_is_dark() {
+        if let Some(background) = &theme.default_background {
+            changes.extend(theme.background_patch(background, partner));
+        }
+        if theme.kind == "preset" {
+            if theme.dark {
+                self.look.picked_dark = true;
+            } else {
+                self.look.picked_light = true;
+            }
+        } else if !self.look_is_dark() {
             changes.insert("sidebarTheme".into(), json!("dark-2"));
         }
         let mut patch = Map::new();
-        let mut roles = self
+        // Reset previous themes' role overrides so switching themes never leaks stale role keys.
+        let prev_roles_non_empty = self
             .settings
             .theme_roles
             .as_object()
-            .cloned()
-            .unwrap_or_default();
-        let mut touched_roles = false;
+            .is_some_and(|obj| !obj.is_empty());
+        let mut roles = Map::new();
+        let mut touched_roles = prev_roles_non_empty;
         for (key, value) in changes {
             if let Some(rest) = key.strip_prefix("role.") {
                 touched_roles = true;
@@ -170,15 +246,14 @@ impl GpuiOnboardingWindow {
                     Some((m @ ("dark" | "light"), r)) => (m, r),
                     _ => ("dark", rest),
                 };
+                if value.as_str() == Some("default") {
+                    continue;
+                }
                 let obj = roles
                     .entry(mode.to_string())
                     .or_insert_with(|| Value::Object(Map::new()));
                 if let Some(map) = obj.as_object_mut() {
-                    if value.as_str() == Some("default") {
-                        map.remove(role_id);
-                    } else {
-                        map.insert(role_id.to_string(), value);
-                    }
+                    map.insert(role_id.to_string(), value);
                 }
                 continue;
             }
@@ -188,6 +263,12 @@ impl GpuiOnboardingWindow {
                         && let Ok(num) = text.parse::<f64>()
                     {
                         patch.insert(key, json!(num));
+                        continue;
+                    }
+                    if matches!(default, ghostex_settings_catalog::json::J::Bool(_))
+                        && let Ok(flag) = text.parse::<bool>()
+                    {
+                        patch.insert(key, json!(flag));
                         continue;
                     }
                 }
@@ -387,9 +468,16 @@ impl GpuiOnboardingWindow {
                     }),
             );
 
-        // ---- Theme tiles (4 columns, 7 themes + All themes toggle, or 12 expanded) ----
-        let active_theme_id = self.look.active_theme_id.clone();
-        let tile_limit = if self.look.show_more_themes { 11 } else { 7 };
+        // ---- Theme tiles (4 columns, 7 initial themes + "+N More themes" expanding all themes) ----
+        const INITIAL_TILES: usize = 7;
+        let active_theme_id = self.detect_onboarding_active_theme_id(&themes);
+        let expanded = self.look.show_more_themes;
+        let tile_limit = if expanded {
+            themes.len()
+        } else {
+            INITIAL_TILES.min(themes.len())
+        };
+        let remaining = themes.len().saturating_sub(INITIAL_TILES);
         let mut theme_tiles: Vec<AnyElement> = Vec::with_capacity(tile_limit + 1);
         for theme in themes.iter().take(tile_limit) {
             let id = theme.id.clone();
@@ -401,15 +489,14 @@ impl GpuiOnboardingWindow {
                     .unwrap_or(&theme.name)
                     .to_string()
             });
-            let selected = active_theme_id.as_deref() == Some(id.as_str())
-                || (active_theme_id.is_none() && id == "default" && self.settings.dark_theme_preset == "gray");
+            let selected = active_theme_id.as_deref() == Some(id.as_str());
             let pic = self.look_cached_image("theme-preview", &id, preview_bytes);
             let key = SharedString::from(format!("look-theme-{id}"));
             theme_tiles.push(self.control(
                 s,
                 div()
                     .id(key.clone())
-                    .w(s.px(176.0))
+                    .w(s.px(174.0))
                     .flex()
                     .flex_col()
                     .gap(s.px(5.0))
@@ -451,50 +538,50 @@ impl GpuiOnboardingWindow {
                 move |this, _, cx| this.apply_onboarding_gallery_theme(&id, cx),
             ).into_any_element());
         }
-        let expanded = self.look.show_more_themes;
-        let more_count = themes.len();
-        theme_tiles.push(self.control(
-            s,
-            div()
-                .id("look-theme-more")
-                .w(s.px(176.0))
-                .flex()
-                .flex_col()
-                .gap(s.px(5.0))
-                .cursor_pointer()
-                .child(
-                    div()
-                        .w_full()
-                        .h(s.px(66.0))
-                        .rounded(s.px(9.0))
-                        .bg(rgba(27, 35, 64, 0.78))
-                        .border_1()
-                        .border_color(rgba(160, 180, 255, 0.22))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            sans(s, 15.0, 600.0, hex(0xdbe2f5)).child(if expanded {
-                                "Fewer".to_string()
-                            } else {
-                                format!("+{more_count}")
-                            }),
-                        ),
-                )
-                .child(sans(s, 12.5, 400.0, hex(0x9aa3b8)).child(if expanded {
-                    "Show fewer"
-                } else {
-                    "More themes"
-                })),
-            "look-theme-more",
-            interact::Ring::new(9.0, 1.0),
-            interact::Keys::EnterSpace,
-            cx,
-            move |this, _, cx| {
-                this.look.show_more_themes = !expanded;
-                cx.notify();
-            },
-        ).into_any_element());
+        if remaining > 0 {
+            theme_tiles.push(self.control(
+                s,
+                div()
+                    .id("look-theme-more")
+                    .w(s.px(174.0))
+                    .flex()
+                    .flex_col()
+                    .gap(s.px(5.0))
+                    .cursor_pointer()
+                    .child(
+                        div()
+                            .w_full()
+                            .h(s.px(66.0))
+                            .rounded(s.px(9.0))
+                            .bg(rgba(27, 35, 64, 0.78))
+                            .border_1()
+                            .border_color(rgba(160, 180, 255, 0.22))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                sans(s, 15.0, 600.0, hex(0xdbe2f5)).child(if expanded {
+                                    "Fewer".to_string()
+                                } else {
+                                    format!("+{remaining}")
+                                }),
+                            ),
+                    )
+                    .child(sans(s, 12.5, 400.0, hex(0x9aa3b8)).child(if expanded {
+                        "Show fewer"
+                    } else {
+                        "More themes"
+                    })),
+                "look-theme-more",
+                interact::Ring::new(9.0, 1.0),
+                interact::Keys::EnterSpace,
+                cx,
+                move |this, _, cx| {
+                    this.look.show_more_themes = !expanded;
+                    cx.notify();
+                },
+            ).into_any_element());
+        }
 
         // ---- Background segmented + Accent dots row ----
         let bg_bar = div()
@@ -692,20 +779,11 @@ impl GpuiOnboardingWindow {
             self.settings.light_theme_preset.clone()
         };
         let preset_list = if dark { &DARK_PRESETS } else { &LIGHT_PRESETS };
-        let table_presets = if dark {
-            self.theme.dark.clone()
-        } else {
-            self.theme.light.clone()
-        };
         let cf_pos = colourfulness_display_step(self.settings.sidebar_contrast);
         let mut squares: Vec<AnyElement> = Vec::with_capacity(17);
         for &(preset_id, _preset_name) in preset_list {
             let is_selected = selected_preset == preset_id;
-            let chrome = table_presets
-                .iter()
-                .find(|entry| entry.value == preset_id)
-                .and_then(|entry| entry.chrome.get(cf_pos).or(entry.chrome.last()).copied())
-                .unwrap_or(if dark { 0x1a1c22 } else { 0xe8eaef });
+            let colour = swatch_colour(&swatch_paint(dark, preset_id, cf_pos));
             let key = SharedString::from(format!("look-sq-{preset_id}"));
             let value = preset_id.to_string();
             squares.push(self.control(
@@ -715,11 +793,11 @@ impl GpuiOnboardingWindow {
                     .size(s.px(32.0))
                     .rounded(s.px(7.0))
                     .cursor_pointer()
-                    .bg(hex(chrome))
+                    .bg(gpui::Hsla::from(colour.gpui()))
                     .border_color(if is_selected {
                         hex(0xeef1f7)
                     } else {
-                        white(0.16)
+                        white(0.18)
                     })
                     .when(is_selected, |this| this.border_2())
                     .when(!is_selected, |this| this.border_1()),
@@ -815,6 +893,11 @@ impl GpuiOnboardingWindow {
         );
 
         let controls_col = abs(s, left_x, 248.0, Some(left_w), Some(582.0))
+            .id("look-controls-scroll")
+            .overflow_y_scroll()
+            .track_scroll(&self.look.scroll)
+            .pr(s.px(6.0))
+            .pb(s.px(12.0))
             .flex()
             .flex_col()
             .gap(s.px(12.0))
@@ -884,21 +967,42 @@ impl GpuiOnboardingWindow {
                 .rounded(s.px(9.0))
                 .flex()
                 .items_center()
-                .gap(s.px(7.0))
+                .gap(s.px(8.0))
                 .cursor_pointer()
+                .border_1()
                 .when(queued, |this| {
-                    this.bg(rgba(44, 56, 102, 0.55))
-                        .border_1()
-                        .border_color(rgba(124, 148, 232, 0.5))
+                    this.bg(rgba(44, 56, 102, 0.58))
+                        .border_color(rgba(124, 148, 232, 0.58))
                 })
+                .when(!queued, |this| {
+                    this.bg(rgba(22, 29, 46, 0.65))
+                        .border_color(rgba(160, 180, 255, 0.24))
+                })
+                .child(
+                    div()
+                        .size(s.px(15.0))
+                        .rounded(s.px(4.0))
+                        .border_1()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .when(queued, |this| {
+                            this.bg(hex(0x86d3f8))
+                                .border_color(hex(0x86d3f8))
+                                .child(sans(s, 10.5, 700.0, hex(0x0f1420)).child("✓"))
+                        })
+                        .when(!queued, |this| {
+                            this.border_color(rgba(180, 198, 240, 0.45))
+                        }),
+                )
                 .child(sans(
                     s,
-                    14.5,
+                    14.0,
                     if queued { 500.0 } else { 400.0 },
-                    if queued { hex(0xeef1f7) } else { hex(0x9aa3b8) },
+                    if queued { hex(0xeef1f7) } else { hex(0xc9d2e6) },
                 )
                 .child(if queued {
-                    "Theme editor after setup ✓"
+                    "Theme editor after setup"
                 } else {
                     "All options"
                 })),
@@ -1187,10 +1291,27 @@ impl GpuiOnboardingWindow {
                                                         div()
                                                             .px(s.px(8.0))
                                                             .py(s.px(3.0))
-                                                            .rounded(s.px(5.0))
-                                                            .bg(ctl_bg)
+                                                            .rounded(s.px(6.0))
+                                                            .bg(rgb_to_hsla(
+                                                                accent_rgb,
+                                                                if dark { 0.22 } else { 0.16 },
+                                                            ))
+                                                            .border_1()
+                                                            .border_color(rgb_to_hsla(
+                                                                accent_rgb,
+                                                                if dark { 0.45 } else { 0.36 },
+                                                            ))
+                                                            .flex()
+                                                            .items_center()
+                                                            .gap(s.px(5.0))
                                                             .child(
-                                                                sans(s, 11.0, 500.0, hex(accent_rgb))
+                                                                div()
+                                                                    .size(s.px(6.0))
+                                                                    .rounded(s.px(3.0))
+                                                                    .bg(hex(accent_rgb)),
+                                                            )
+                                                            .child(
+                                                                sans(s, 11.0, 600.0, fg)
                                                                     .child("Ready"),
                                                             ),
                                                     ),

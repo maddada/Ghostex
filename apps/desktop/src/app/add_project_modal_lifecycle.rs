@@ -182,6 +182,10 @@ impl GhostexGpuiApp {
                 self.release_native_app_modal_window(kind, cx);
                 // Opened from a handoff's destination: Handoff / Export comes back now.
                 self.git_export_add_project_closed(cx);
+                // First-run onboarding queued "All options" while Add Project opened first.
+                if self.native_app_modal.is_none() {
+                    self.open_theme_editor_queued_after_add_project(cx);
+                }
             }
         }
     }

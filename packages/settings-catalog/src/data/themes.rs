@@ -248,7 +248,7 @@ pub const ARTWORKS: &[Artwork] = &[
 pub const BACKGROUNDS: &[(&str, &str)] = &[
     ("art", "Art"),
     ("live", "Live"),
-    ("transparent", "Transparent"),
+    ("transparent", "Glass"),
     ("solid", "Solid"),
 ];
 

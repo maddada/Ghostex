@@ -686,8 +686,32 @@ impl GhostexGpuiApp {
             self.open_app_modal_from_bridge(GpuiAppModalKind::AddProject.open_message(), cx);
         }
     }
+
+    /// Setup ended on first run with no project and "All options" toggled: open the compact
+    /// floating Theme Editor once Add Project completes or closes.
+    pub(crate) fn queue_theme_editor_after_add_project(&mut self) {
+        THEME_EDITOR_AFTER_ADD_PROJECT.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub(crate) fn clear_theme_editor_queued_after_add_project(&mut self) {
+        THEME_EDITOR_AFTER_ADD_PROJECT.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Add Project just closed: open the floating Theme Editor, when setup queued it.
+    pub(crate) fn open_theme_editor_queued_after_add_project(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if THEME_EDITOR_AFTER_ADD_PROJECT.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            self.open_gpui_theme_editor_modal(&serde_json::Value::Null, cx);
+        }
+    }
 }
 
 /// Setup ended in Settings with no project: Add Project follows when Settings closes.
 static ADD_PROJECT_AFTER_SETTINGS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// First-run setup ended with "All options" queued while Add Project opened first.
+static THEME_EDITOR_AFTER_ADD_PROJECT: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
