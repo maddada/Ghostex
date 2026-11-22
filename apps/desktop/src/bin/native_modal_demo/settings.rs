@@ -469,6 +469,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         || settings_secrets::owns(&state)
         || settings_grok_bot::owns(&state)
         || settings_voice::owns(&state)
+        || state.starts_with("theme")
     {
         true
     } else if settings_cloud_boxes::owns(&state) {

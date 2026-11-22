@@ -8571,8 +8571,13 @@ window is solid and **Strength** (how much of it shows through the sidebar and t
 transparency is paused, with **Use transparency** to take the artwork off. Clicking a tile sets the whole look as one theme change, the same as
 `ghostex theme apply <theme> [--background art|live|transparent|solid]` (`ghostex theme list` lists them in the row's order, with their backgrounds; `ghostex theme background list` and `ghostex theme background set <image|art|live|transparent|solid>` pick a background); the line under the row then names it, with **Undo** (`ghostex theme undo`
 works too) and Change them. Hovering a look shows **Make it your own**, which opens a Help chat
-with the prompt that describes it as the draft, to change and send. **Describe a look**, under
-the row, has **Ask an agent**, which opens a Help chat with a starter prompt as its draft. The
+with the prompt that describes it as the draft, to change and send. **Design a theme with Ask
+Ghostex AI**, under Artwork, opens Ask Ghostex AI and starts a guided custom-theme flow (available
+when a Codex account is added in Settings > Accounts): it asks what mood, colours and artwork you
+want, generates a custom artwork image with Codex, applies it with
+`ghostex theme background image <path>` together with matching theme colours, and offers to tweak
+it or save it to **Your themes** (`ghostex theme save <name>`). **Describe a look**, under
+that, has **Ask an agent**, which opens a Help chat with a starter prompt as its draft. The
 looks are dark mode looks: applying one while the app shows light mode switches Appearance to
 Dark. A look never changes your fonts (nor does a preset). The looks share Inkstone's calm way:
 a deep, muted colour, paper-white text, a muted accent, faint borders and an Animated
@@ -8597,7 +8602,7 @@ line under the themes row says which one and how many colours it set, and Change
 computer's own window and the web app; the phone keeps its own look. When a colour makes text hard
 to read (under 4.5:1 for text, 3:1 for grey text, the accent, links and status colours, the text
 on a fill) or a border or divider all but vanish, the change is saved and the card says so.
-Commands: `ghostex theme list`, `ghostex theme apply <theme> [--background ...]`, `ghostex theme background list|set`, `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`. Settings: `themeRoles`, `windowArt`, `windowArtLight`, `windowArtDim`, `windowArtBlur`, `windowArtImage`, `windowArtImageLight`, `savedThemes`.
+Commands: `ghostex theme list`, `ghostex theme apply <theme> [--background ...]`, `ghostex theme background list|set|image`, `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme save <name>`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`. Settings: `themeRoles`, `windowArt`, `windowArtLight`, `windowArtDim`, `windowArtBlur`, `windowArtImage`, `windowArtImageLight`, `savedThemes`.
 
 Settings has an **Interface** group in its sidebar, right under Experience, with four pages
 (`ghostex settings open --tab interface` lists their settings):

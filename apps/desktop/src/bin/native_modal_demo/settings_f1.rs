@@ -264,7 +264,7 @@ fn accounts_rpc(state: &str, params: &Value) -> Answer {
         return Answer::Reply(Err("cswap list failed: permission denied".to_string()));
     }
     let mut data = accounts();
-    if state == "accounts-empty" {
+    if state == "accounts-empty" || state == "theme-no-codex" {
         data["accounts"] = json!([]);
     }
     if state == "accounts-swap-missing" {

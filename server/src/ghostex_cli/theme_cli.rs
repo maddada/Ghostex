@@ -17,8 +17,10 @@ Usage:
   gx theme background list [--json]
   gx theme background set <image-id|none> [--light] [--json]
   gx theme background set art|live|transparent|solid [--json]
+  gx theme background image <path> [--light] [--json]
   gx theme [read] [--json]
   gx theme set <key>=<value> [<key>=<value> ...] [--dark|--light] [--json]
+  gx theme save <name> [--json]
   gx theme undo [<change-id>] [--json]
   gx theme redo [<change-id>] [--json]
   gx theme history [--json]
@@ -42,6 +44,10 @@ background set <image-id>
          light mode with --light); none takes it away. It downloads now and is
          kept; offline the window stays solid until it can. With art, live,
          transparent or solid it switches the applied theme's background.
+background image <path>
+         Copies a local picture (PNG, JPEG, WebP, GIF, BMP or TIFF, up to 64 MB)
+         into Ghostex's folder and shows it behind the window as Your image
+         (dark mode, or light mode with --light), as one change Undo puts back.
 read     The themes, then every look setting on the Settings > Interface
          pages, grouped, with its current value and what it does, and
          anything the current look makes hard to read.
@@ -51,6 +57,8 @@ set      Changes one or more look settings or theme colours as one change, saved
          Prints what changed and anything it made hard to read; the change is
          saved either way. In an agent's chat it shows a Theme changed card
          with Undo.
+save     Saves the current look (colours, artwork and transparency) into Your
+         themes under <name>, so one click in Settings > Themes switches back.
 undo     Puts back what the newest change (or <change-id>) replaced. Refused
          when one of its settings was changed again since.
 redo     Applies the newest undone change (or <change-id>) again.
@@ -84,12 +92,14 @@ Examples:
   gx theme apply moonwater
   gx theme apply mocha --background art
   gx theme background set glasshouse
+  gx theme background image ~/Pictures/twilight.png
   gx theme background set transparent
   gx theme set windowArtDim=40
   gx theme apply default
   gx theme set darkThemePreset=blue themeSidebarContrast=-6
   gx theme set --dark border=4% divider=3%
   gx theme set light.mutedText=#6b7280 accent=default
+  gx theme save \"Twilight Lake\"
   gx theme undo
 ";
 
@@ -345,6 +355,71 @@ fn background_list(flags: &Flags) -> CliResult<()> {
             text(artwork, "name")
         );
     }
+    let mut yours_marks = Vec::new();
+    if answer["dark"].as_str() == Some(ghostex_settings_catalog::YOUR_IMAGE_ART_ID) {
+        yours_marks.push("dark mode");
+    }
+    if answer["light"].as_str() == Some(ghostex_settings_catalog::YOUR_IMAGE_ART_ID) {
+        yours_marks.push("light mode");
+    }
+    if !yours_marks.is_empty() {
+        println!(
+            "  {:<18} {:<18} (shows in {})",
+            ghostex_settings_catalog::YOUR_IMAGE_ART_ID,
+            "Your image",
+            yours_marks.join(" and ")
+        );
+    }
+    Ok(())
+}
+
+/// `background image <path> [--light]`: validates and copies a local image into Ghostex's folder
+/// and shows it behind the window as Your image.
+fn background_image(rest: &[String], flags: &Flags, appearance: Option<&str>) -> CliResult<()> {
+    let raw = rest.join(" ").trim().to_string();
+    if raw.is_empty() {
+        return Err(CliError::Other(
+            "ghostex theme background image needs a picture file path (PNG, JPEG, WebP, GIF, BMP or TIFF).".to_string(),
+        ));
+    }
+    let path = std::path::PathBuf::from(&raw);
+    let resolved = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(&path))
+            .unwrap_or(path)
+    };
+    let answer = theme(
+        with_caller(json!({
+            "op": "setYourImage",
+            "path": resolved.to_string_lossy(),
+            "light": appearance == Some("light"),
+        })),
+        flags,
+    )?;
+    print_change(answer, flags, "Background Your image")
+}
+
+/// `save <name>`: snapshots the current look into Your themes (`savedThemes`).
+fn save_theme(rest: &[String], flags: &Flags) -> CliResult<()> {
+    let name = rest.join(" ").trim().to_string();
+    if name.is_empty() {
+        return Err(CliError::Other(
+            "ghostex theme save needs a name. Example: ghostex theme save \"Midnight Lake\""
+                .to_string(),
+        ));
+    }
+    let answer = theme(with_caller(json!({ "op": "save", "name": name })), flags)?;
+    if flags.truthy("json") {
+        print_json(&answer);
+        return Ok(());
+    }
+    println!(
+        "Saved \"{}\" to Your themes ({} saved).",
+        text(&answer["saved"], "name"),
+        answer["count"].as_u64().unwrap_or(1)
+    );
     Ok(())
 }
 
@@ -386,8 +461,9 @@ fn background(rest: &[String], flags: &Flags, appearance: Option<&str>) -> CliRe
     match rest.first().map(String::as_str).unwrap_or("list") {
         "list" => background_list(flags),
         "set" => background_set(rest.get(1..).unwrap_or_default(), flags, appearance),
+        "image" => background_image(rest.get(1..).unwrap_or_default(), flags, appearance),
         other => Err(CliError::Other(format!(
-            "Unknown theme background command: {other}. Use `ghostex theme background list` or `set <image-id>`."
+            "Unknown theme background command: {other}. Use `ghostex theme background list`, `set <image-id>` or `image <path>`."
         ))),
     }
 }
@@ -526,6 +602,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "apply" | "use" => apply(tail, &flags),
         "background" | "backgrounds" => background(tail, &flags, appearance),
         "set" => set(tail, &flags, appearance),
+        "save" => save_theme(tail, &flags),
         "undo" => undo_or_redo("undo", tail, &flags),
         "redo" => undo_or_redo("redo", tail, &flags),
         "history" | "changes" => history(&flags),

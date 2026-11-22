@@ -1,11 +1,12 @@
-//! `/api/chief`: `{ op: "status" | "guide" | "open" | "newChat" | "setAgent", agentId? }`.
+//! `/api/chief`: `{ op: "status" | "guide" | "open" | "newChat" | "setAgent" | "prompt", agentId?, prompt? }`.
 //!
 //! - `status` (any caller): whether Chief is on, its record, the agents it can run on, and the
 //!   one its first open starts on (`defaultAgentId`, the user's default agent).
 //! - `guide` (any caller): Chief's playbook.
-//! - `open { agentId? }` (no agent: the default one), `newChat`, `setAgent { agentId }`: only the owner's devices and the
-//!   user's own terminal (the token file). No session may create or move Chief, Chief included,
-//!   and none of them while Chief is turned off.
+//! - `open { agentId? }` (no agent: the default one), `newChat`, `setAgent { agentId }`,
+//!   `prompt { prompt, agentId? }` (opens Chief if needed and sends `prompt`): only the owner's
+//!   devices and the user's own terminal (the token file). No session may create or move Chief,
+//!   Chief included, and none of them while Chief is turned off.
 
 use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
@@ -44,7 +45,7 @@ pub(crate) async fn handle_chief_http(
         .and_then(Value::as_str)
         .unwrap_or("status")
         .to_string();
-    let changes = matches!(op.as_str(), "open" | "newChat" | "setAgent");
+    let changes = matches!(op.as_str(), "open" | "newChat" | "setAgent" | "prompt");
     if changes && !may_change_chief(caller) {
         return error_response(
             endpoint_path,
@@ -64,6 +65,16 @@ pub(crate) async fn handle_chief_http(
                 message: super::chief_off_message(),
             },
         );
+    }
+    if op == "prompt" {
+        return match prompt_chief(state, &params).await {
+            Ok(result) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, result),
+            ),
+            Err(error) => error_response(endpoint_path, request_id, error),
+        };
     }
     let worker = state.clone();
     let outcome = tokio::task::spawn_blocking(move || run(&worker, &op, &params)).await;
@@ -122,9 +133,87 @@ fn run(state: &AppState, op: &str, params: &Map<String, Value>) -> Result<Value,
             replace_chief(state, agent_id)
         }
         other => Err(DomainStateError::bad_request(format!(
-            "Unknown Ghostex AI op {other}: use status, guide, open, newChat or setAgent."
+            "Unknown Ghostex AI op {other}: use status, guide, open, newChat, setAgent or prompt."
         ))),
     }
+}
+
+/// Opens Ask Ghostex AI (creating its session on the default agent when needed) and sends `prompt`.
+///
+/// When Chief still holds its unstarted first message (just created or never started), the held
+/// greeting is replaced with a single startup prompt that keeps Chief's coordinator/guide intro
+/// and hands it `prompt` directly, avoiding an extra Getting Started form turn. When Chief already
+/// has an ongoing conversation, `prompt` is sent right away (waking it if asleep).
+async fn prompt_chief(
+    state: &AppState,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let prompt = params
+        .get("prompt")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .ok_or_else(|| DomainStateError::bad_request("Pass the prompt to send to Ghostex AI."))?
+        .to_string();
+    let agent_id = params
+        .get("agentId")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let worker = state.clone();
+    let mut result =
+        tokio::task::spawn_blocking(move || open_chief(&worker, agent_id.as_deref()))
+            .await
+            .map_err(|error| DomainStateError {
+                code: "internalError",
+                message: format!("Ghostex AI could not answer: {error}"),
+            })??;
+    let (project_id, session_id) = result["chief"]["projectId"]
+        .as_str()
+        .zip(result["chief"]["sessionId"].as_str())
+        .map(|(project, session)| (project.to_string(), session.to_string()))
+        .ok_or_else(|| DomainStateError {
+            code: "internalError",
+            message: "Ghostex AI opened without a session.".to_string(),
+        })?;
+    if let Some(first_message) =
+        crate::session_chat_first_message::edit(state, &project_id, &session_id).await?
+    {
+        const GREETING_TAIL: &str =
+            "Then greet the user as its \"Your first reply\" section says.";
+        let replacement = format!(
+            "Skip the getting-started greeting and handle this request from the user right away:\n\n{prompt}"
+        );
+        let combined = if first_message.contains(GREETING_TAIL) {
+            first_message.replacen(GREETING_TAIL, &replacement, 1)
+        } else {
+            format!("{first_message}\n\n{replacement}")
+        };
+        crate::server::queue_session_chat_prompt(state, &project_id, &session_id, &combined, true)?;
+    } else {
+        let body = json!({
+            "params": {
+                "projectId": project_id,
+                "sessionId": session_id,
+                "text": prompt,
+                "sendRequestId": uuid::Uuid::new_v4().to_string(),
+            }
+        });
+        let routed = crate::session_chat_send::handle_send_session_chat_message_http(
+            state,
+            "/api/sendSessionChatMessage".to_string(),
+            uuid::Uuid::new_v4().to_string(),
+            &body,
+        )
+        .await;
+        if !routed.response.status().is_success() {
+            return Err(DomainStateError {
+                code: "internalError",
+                message: "Ghostex AI opened, but the prompt could not be sent.".to_string(),
+            });
+        }
+    }
+    result["sent"] = json!(true);
+    Ok(result)
 }
 
 fn status(state: &AppState) -> Result<Value, DomainStateError> {

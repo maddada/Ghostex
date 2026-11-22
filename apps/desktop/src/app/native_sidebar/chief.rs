@@ -1021,7 +1021,21 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    /// `open` (first open with the picked agent), `newChat` or `setAgent`, then opens the chat.
+    /// Opens Ask Ghostex AI (creating its chat on the default agent if needed), focuses it, and
+    /// sends `prompt` right away (used by Settings > Themes' "Design a theme with Ask Ghostex AI").
+    pub(crate) fn open_chief_with_prompt(&mut self, prompt: String, cx: &mut gpui::Context<Self>) {
+        if prompt.trim().is_empty() {
+            return;
+        }
+        let machine = ghostex_gx_core::LOCAL_MACHINE_ID.to_string();
+        self.change_native_sidebar_chief(
+            &machine,
+            json!({ "op": "prompt", "prompt": prompt }),
+            cx,
+        );
+    }
+
+    /// `open` (first open with the picked agent), `newChat`, `setAgent` or `prompt`, then opens the chat.
     fn change_native_sidebar_chief(
         &mut self,
         machine_id: &str,

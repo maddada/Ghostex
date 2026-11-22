@@ -260,6 +260,9 @@ impl ThemeTab {
         if separately {
             page.more_open[MoreGroup::Size.index()] = true;
         }
+        if page.page == SettingsTabId::Theme {
+            page.load_codex_account(cx);
+        }
         page.apply_preview_state(window, cx);
         page
     }
@@ -1032,6 +1035,7 @@ impl ThemeTab {
             rows.extend(self.artwork_rows(t, window, cx));
         }
         if !t.searching {
+            rows.push(self.design_theme_with_ai_row(&p, cx));
             rows.push(self.describe_look_row(&p, cx));
         }
         settings_section(&t.p, "Themes", None, None, rows).map(IntoElement::into_any_element)

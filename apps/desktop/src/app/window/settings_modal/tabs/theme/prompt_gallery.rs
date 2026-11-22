@@ -33,6 +33,29 @@ const DESCRIBE_TITLE: &str = "Describe a look";
 const DESCRIBE_COPY: &str = "An agent sets the colours and glass from your words, like \u{201c}a calm, dark look with frosted glass\u{201d}. Your fonts stay as they are.";
 /// The draft Ask an agent stages in the Help chat.
 const STARTER_PROMPT: &str = "Give Ghostex a calm, dark look with soft colours and frosted glass.";
+const DESIGN_AI_TITLE: &str = "Design a theme with Ask Ghostex AI";
+const DESIGN_AI_COPY: &str = "Describe the artwork and mood you want in Ask Ghostex AI. It generates the image with Codex and applies it with matching colours right away.";
+const DESIGN_AI_NEEDS_CODEX: &str = "Add a Codex account in Settings > Accounts to generate custom theme artwork.";
+/// The prompt sent straight to Ask Ghostex AI when the user clicks "Design a theme with Ask Ghostex AI".
+const DESIGN_THEME_PROMPT: &str = "I want to design a custom Ghostex theme with generated artwork and matching colours.\n\nBefore generating anything, ask me a couple of short questions about what I want (mood, colour palette, light or dark mode, and what the artwork should show). Keep it brief so I can answer in a line or two.\n\nOnce I reply:\n1. Generate a 16:9 landscape wallpaper artwork from my description with no text or watermarks, using Codex's built-in image_gen tool:\n   - If you are running on Codex, call your built-in image_gen tool directly (it saves a PNG under $CODEX_HOME/generated_images/...).\n   - If you are running on another agent, run Codex through Ghostex's Codex account with `xswap run --share-history -- exec --ephemeral --skip-git-repo-check --enable image_generation \"<prompt asking Codex to generate the 16:9 artwork with its built-in image_gen tool and reply with ONLY the saved PNG path>\"`.\n2. Apply the generated artwork right away with `ghostex theme background image \"<path>\"` (add `--light` for light mode; Ghostex validates and keeps its own copy).\n3. Apply matching theme colours right away with `ghostex theme set` (appearance, custom base tint, dimming/blur, sidebar and work area tints, and matching theme colour roles like accent, text, mutedText, border, divider, userMessage, chatBox). Leave my fonts unchanged unless I ask.\n4. Tell me what you applied, and offer to tweak the artwork or colours, or save the theme into \"Your themes\" with `ghostex theme save \"<name>\"`.";
+/// Whether `/api/agentAccounts` reports an added, enabled local Codex account.
+fn has_codex_account(state: &Value) -> bool {
+    state
+        .get("accounts")
+        .and_then(Value::as_array)
+        .is_some_and(|accounts| {
+            accounts.iter().any(|account| {
+                account.get("provider").and_then(Value::as_str) == Some("codex")
+                    && account.get("registered").and_then(Value::as_bool) == Some(true)
+                    && account.get("userDisabled").and_then(Value::as_bool) != Some(true)
+                    && account
+                        .get("syncedFrom")
+                        .and_then(Value::as_str)
+                        .is_none_or(|from| from.trim().is_empty())
+                    && account.get("status").and_then(Value::as_str) != Some("unavailable")
+            })
+        })
+}
 /// The captions over the first art theme and the first agent-made look in the themes row.
 const ART_CAPTION: &str = "Art";
 const LOOKS_CAPTION: &str = "Agent-made";
@@ -204,6 +227,8 @@ pub(super) struct PromptGallery {
     /// it is laid out.
     pub(super) artworks_revealed: Option<bool>,
     pub(super) artworks_reveal: std::rc::Rc<std::cell::Cell<Option<usize>>>,
+    /// Whether this computer has an added, enabled Codex account (`None` while reading).
+    pub(super) codex_account: Option<bool>,
 }
 
 /// One short line of a failed theme call for its notice: the first sentence of the answer's first
@@ -629,6 +654,97 @@ impl ThemeTab {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         applied_line(p, &gallery_themes(), values, &self.prompt_gallery, cx)
+    }
+
+    /// Checks `/api/agentAccounts` (cached read) for an added Codex account so the
+    /// "Design a theme with Ask Ghostex AI" button enables when artwork generation is available.
+    pub(super) fn load_codex_account(&mut self, cx: &mut Context<Self>) {
+        if !self.store.read(cx).request().gxserver_rpc_available {
+            self.prompt_gallery.codex_account = Some(false);
+            return;
+        }
+        let this = cx.weak_entity();
+        store_gxserver_rpc(
+            &self.store,
+            "/api/agentAccounts",
+            json!({ "operation": "list", "cachedOnly": true }),
+            Duration::from_secs(15),
+            move |result, cx| {
+                let has_codex = result.ok().is_some_and(|state| has_codex_account(&state));
+                let _ = this.update(cx, |page, cx| {
+                    page.prompt_gallery.codex_account = Some(has_codex);
+                    cx.notify();
+                });
+            },
+            cx,
+        );
+    }
+
+    /// Opens Ask Ghostex AI, sends the theme-design prompt, and closes Settings so the chat shows.
+    fn design_theme_with_chief(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        post_store_message(
+            &self.store,
+            json!({ "type": "designThemeWithChief", "prompt": DESIGN_THEME_PROMPT }),
+            cx,
+        );
+        window.remove_window();
+        let store = self.store.clone();
+        store.update(cx, |store, cx| store.close(cx));
+    }
+
+    /// Design a theme with Ask Ghostex AI: enabled when a Codex account is added in Ghostex;
+    /// disabled with a short note when none is added yet (and disabled quietly while loading).
+    pub(super) fn design_theme_with_ai_row(
+        &mut self,
+        p: &SettingsPalette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let enabled = self.prompt_gallery.codex_account == Some(true);
+        let copy = if self.prompt_gallery.codex_account == Some(false) {
+            DESIGN_AI_NEEDS_CODEX
+        } else {
+            DESIGN_AI_COPY
+        };
+        h_flex()
+            .w_full()
+            .gap(px(12.0))
+            .px(px(16.0))
+            .py(px(12.0))
+            .child(settings_icon("modals/settings/sparkles.svg", 14.0, p.muted).flex_shrink_0())
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(2.0))
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .line_height(px(19.0))
+                            .text_color(hsla(p.foreground))
+                            .child(DESIGN_AI_TITLE),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .line_height(px(18.57))
+                            .text_color(hsla(p.muted))
+                            .child(copy),
+                    ),
+            )
+            .child(settings_sized_button(
+                p,
+                "theme-design-with-ai",
+                "Design with Ask Ghostex AI",
+                Some("modals/settings/sparkles.svg"),
+                None,
+                SizedButtonVariant::Secondary,
+                SizedButtonSize::Sm,
+                !enabled,
+                None,
+                |page: &mut Self, window, cx| page.design_theme_with_chief(window, cx),
+                cx,
+            ))
+            .into_any_element()
     }
 
     /// Describe a look: what an agent can do, and Ask an agent.

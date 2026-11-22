@@ -10,13 +10,15 @@ use std::sync::OnceLock;
 use serde_json::{Map, Value};
 
 /// Keys the API may write although the catalog lists them as JSON: the hotkey maps `ghostex
-/// settings hotkeys` saves whole (ghostex_cli/settings_hotkeys.rs).
-fn api_writable_json_keys() -> [&'static str; 3] {
+/// settings hotkeys` saves whole (ghostex_cli/settings_hotkeys.rs), theme roles, and saved themes.
+fn api_writable_json_keys() -> [&'static str; 4] {
     [
         "hotkeys",
         ghostex_settings_catalog::TERMINAL_HOTKEYS_SETTING_KEY,
         // The theme roles `ghostex theme set` saves whole (server/src/theme/).
         ghostex_settings_catalog::theme_roles::THEME_ROLES_SETTING,
+        // The saved themes `ghostex theme save` appends to (server/src/theme/).
+        "savedThemes",
     ]
 }
 

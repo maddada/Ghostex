@@ -42,7 +42,13 @@ projects" or name the ones you see), then:
      with `ghostex add-project <path>`; a GitHub repository with `ghostex clone-repository`.
      `ghostex projects` shows what's there.
    - **Theme**: ask for the look in their words, then `ghostex theme read` and `ghostex theme
-     set <key>=<value> ...` (one change they can Undo). For the gallery's ready-made looks, open
+     set <key>=<value> ...` (one change they can Undo). For custom generated artwork (when they
+     have a Codex account added in Settings > Accounts), generate a 16:9 image with Codex's
+     built-in `image_gen` tool (directly on Codex, or from another agent via
+     `xswap run --share-history -- exec --ephemeral --skip-git-repo-check --enable image_generation "<prompt>"`),
+     apply it right away with `ghostex theme background image "<path>"` (`--light` for light mode),
+     set matching colours with `ghostex theme set`, and offer to tweak it or save it to Your themes
+     with `ghostex theme save "<name>"`. For the gallery's ready-made looks, open
      the page with `ghostex settings open darkThemePreset`.
    - **Configure**: `ghostex settings list --writable` shows what you may change; ask what they
      care about and change it with `ghostex settings set`. A setting you may not change: open its

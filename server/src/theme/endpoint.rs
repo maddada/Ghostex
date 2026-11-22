@@ -320,13 +320,40 @@ async fn set(
                 continue;
             }
         };
-        let after = match catalog::parse_value(entry, &raw_value(raw)) {
+        let mut after = match catalog::parse_value(entry, &raw_value(raw)) {
             Ok(value) => value,
             Err(failure) => {
                 problems.push(failure.to_string());
                 continue;
             }
         };
+        // Any non-empty `windowArtImage` / `windowArtImageLight` passed via `theme set` is
+        // validated and copied into Ghostex's own `theme-art/yours/` folder, just like
+        // `setYourImage`, so `art` can always serve it.
+        if matches!(entry.key.as_str(), "windowArtImage" | "windowArtImageLight") {
+            if let Some(raw_path) = after
+                .as_str()
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+            {
+                if super::art::kept_your_image(raw_path).is_err() {
+                    let source = raw_path.to_string();
+                    match tokio::task::spawn_blocking(move || {
+                        super::art::keep_your_image(Path::new(&source))
+                    })
+                    .await
+                    .map_err(|join| join.to_string())
+                    .and_then(|res| res)
+                    {
+                        Ok(kept) => after = json!(kept.to_string_lossy()),
+                        Err(message) => {
+                            problems.push(message);
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
         let before = look::current(&settings, &entry.key);
         if catalog::values_equal(&before, &after) {
             continue;
@@ -595,7 +622,83 @@ async fn set_your_image(
             ghostex_settings_catalog::your_image_key(light): kept.to_string_lossy(),
         }),
     );
-    set(state, caller, &params).await
+    let mut answer = set(state, caller, &params).await?;
+    answer["keptPath"] = json!(kept.to_string_lossy());
+    Ok(answer)
+}
+
+/// Themes page settings a saved theme leaves out (matches `NOT_IN_A_THEME` in
+/// apps/desktop/src/app/window/settings_modal/tabs/theme/user_themes.rs).
+const SAVED_THEME_EXCLUDED: &[&str] = &[
+    "savedThemes",
+    "windowGlassImageDark",
+    "windowGlassImageLight",
+    "windowGlassVideoDark",
+    "windowGlassVideoLight",
+    "terminalBackgroundImage",
+];
+
+/// Settings a look is made of that have no row of their own (matches `WITHOUT_ROWS` in
+/// user_themes.rs).
+const SAVED_THEME_EXTRA_KEYS: &[&str] = &[
+    "customSidebarTitlebarBackgroundDarknessPercent",
+    "customSidebarTitlebarLightBackgroundLightnessPercent",
+];
+
+/// `save`: snapshots the current Themes settings into `savedThemes` ("Your themes") under `name`.
+async fn save_current_theme(
+    state: &AppState,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let name = text(params, "name").trim().to_string();
+    if name.is_empty() {
+        return Err(error("badRequest", "Give a name for the saved theme."));
+    }
+    if name.chars().count() > 80 {
+        return Err(error(
+            "badRequest",
+            "Keep the theme name to 80 characters or fewer.",
+        ));
+    }
+    let settings = read_settings(state)?;
+    let mut keys: Vec<String> = ghostex_settings_catalog::general_sections(
+        ghostex_settings_catalog::Platform::current(),
+    )
+    .into_iter()
+    .find(|section| section.id == "theming")
+    .map(|section| {
+        section
+            .settings
+            .into_iter()
+            .map(|row| row.key.to_string())
+            .collect()
+    })
+    .unwrap_or_default();
+    keys.retain(|key| !SAVED_THEME_EXCLUDED.contains(&key.as_str()));
+    keys.extend(SAVED_THEME_EXTRA_KEYS.iter().map(|key| (*key).to_string()));
+    let mut snapshot = Map::new();
+    for key in keys {
+        let value = look::current(&settings, &key);
+        if !value.is_null() {
+            snapshot.insert(key, value);
+        }
+    }
+    let now = chrono::Utc::now();
+    let entry = json!({
+        "id": format!("theme-{}", now.timestamp_millis()),
+        "name": name,
+        "savedAt": now.to_rfc3339(),
+        "settings": snapshot,
+    });
+    let mut list = look::current(&settings, "savedThemes")
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    list.push(entry.clone());
+    let mut patch = Map::new();
+    patch.insert("savedThemes".into(), Value::Array(list.clone()));
+    save(state, patch).await?;
+    Ok(json!({ "saved": entry, "count": list.len() }))
 }
 
 fn history(state: &AppState) -> Result<Value, DomainStateError> {
@@ -642,6 +745,7 @@ pub(crate) async fn handle_theme_http(
         "artworks" => artworks(&state),
         "setArtwork" => set_artwork(&state, &caller, &params).await,
         "setYourImage" => set_your_image(&state, &caller, &params).await,
+        "save" => save_current_theme(&state, &params).await,
         "undo" => undo_or_redo(&state, &caller, &params, true).await,
         "redo" => undo_or_redo(&state, &caller, &params, false).await,
         other => Err(error(

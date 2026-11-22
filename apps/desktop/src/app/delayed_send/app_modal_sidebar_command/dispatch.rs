@@ -163,6 +163,15 @@ impl GhostexGpuiApp {
                     .to_string();
                 self.ask_ghostex_help(question, cx);
             }
+            // Settings > Themes' "Design a theme with Ask Ghostex AI" (settings_modal/tabs/theme/prompt_gallery.rs).
+            "designThemeWithChief" => {
+                let prompt = command
+                    .get("prompt")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                self.open_chief_with_prompt(prompt, cx);
+            }
             "openWorkspaceWelcome" | "runGhostexHotkeyAction" => {
                 self.handle_gpui_app_modal_hotkey_action_command(command_type, command, window, cx);
             }

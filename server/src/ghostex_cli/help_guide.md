@@ -57,9 +57,11 @@ they ask for one.
    ghostex theme apply moonwater               # one of them, as one change (default puts Ghostex's own look back)
    ghostex theme apply mocha --background art  # with a background: art, live, transparent or solid
    ghostex theme background set glasshouse     # any theme's artwork behind any theme
+   ghostex theme background image /path/art.png # your own image (copied and validated by Ghostex; --light for light mode)
    ghostex theme read                          # every look setting, grouped, with what it does
    ghostex theme set darkThemePreset=blue themeSidebarContrast=-6
    ghostex theme set --dark border=4% divider=3%   # a theme colour, here for dark mode
+   ghostex theme save "Midnight Lake"          # saves the current look to Your themes
    ghostex theme undo                          # puts the last change back; redo applies it again
    ghostex theme history                       # the last 20 changes, who made them, what changed
    ```
