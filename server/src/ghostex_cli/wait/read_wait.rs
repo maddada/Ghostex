@@ -45,12 +45,12 @@ pub fn read_session_text_command(args: &[String]) -> CliResult<()> {
         })));
     }
     let text = js_string_or_empty(result.get("text"));
-    // flags.lines === undefined and Number(non-numeric) = NaN both leave the
-    // text unlimited in limitTextLines; flags.number covers both as None.
     let lines = if flags.contains("lines") {
         flags.number("lines")
-    } else {
+    } else if flags.truthy("all") {
         None
+    } else {
+        Some(40.0)
     };
     let limited = limit_text_lines(&text, lines);
     if flags.truthy("json") {
@@ -62,8 +62,11 @@ pub fn read_session_text_command(args: &[String]) -> CliResult<()> {
         return Ok(());
     }
     print!("{limited}");
-    if !text.ends_with('\n') {
+    if !limited.ends_with('\n') {
         println!();
+    }
+    if !flags.contains("lines") && !flags.truthy("all") && limited.len() < text.len() {
+        eprintln!("Showing the last 40 lines. Use --lines <n> or --all for more.");
     }
     Ok(())
 }

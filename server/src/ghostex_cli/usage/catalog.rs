@@ -528,7 +528,7 @@ pub fn usage() -> String {
         format_help_command("send-enter <selector>", "Send Enter to a session by id or quoted title"),
         format_help_command("send-key <selector> <key>", "Send enter, ctrl-c, escape, tab, or arrow keys"),
         format_help_command("send-message <selector> <text>", "Type text and Enter into an existing session"),
-        format_help_command("read-text <selector> [--lines n] [--visible] [--json]", "Read terminal text by id or quoted title"),
+        format_help_command("read-text <selector> [--lines n | --all] [--visible] [--json]", "Read the last 40 terminal lines by id or quoted title"),
         format_help_command("search-agent-prompts [--query text] [--agents a,b] [--project path] [--group-by-day] [--limit n] [--offset n] --json", "Search every prompt this machine has sent to an agent (the GUI behind gx f)"),
         format_help_command("read-agent-prompt-text --key <key> --json", "Read one prompt's full text by the key a search row reported"),
         format_help_command("toggle-agent-prompt-favorite --key <key> [--favorite true|false] --json", "Star or unstar a prompt; shares gx f's favorites file"),

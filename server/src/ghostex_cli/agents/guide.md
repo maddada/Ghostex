@@ -102,7 +102,7 @@ narrow or widen it (see "Read another thread" below). Reading never wakes a
 sleeping session.
 
 Read the terminal screen only when the chat cannot answer (a stuck prompt, a
-dialog, an agent that writes no transcript): `ghostex read-text <ref>` shows the
+dialog, an agent that writes no transcript): `ghostex read-text <ref>` shows the last 40 lines (use `--lines <n>` or `--all` for more) of the
 screen now. Claude Code draws a faint guess at the user's next message in an
 empty input box; newer versions label it "(faint suggestion from Claude, not
 typed: the input box is empty)". Never treat it as a typed message or submit it.
