@@ -67,6 +67,7 @@ pub fn transcript_path_for_session(family: &str, native_session_id: &str) -> Opt
     }
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn shell_single_quote(value: &str) -> String {
     if !value.is_empty()
         && value.bytes().all(|b| {
@@ -79,7 +80,15 @@ fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
-/// Build the command that `zmx` runs inside the session PTY to start `ghostex acp-host`.
+fn quote_acp_launch_arg(value: &str, windows: bool) -> String {
+    if windows {
+        crate::platform::shell::powershell_native_arg(value)
+    } else {
+        shell_single_quote(value)
+    }
+}
+
+/// Build the command that `zmx`/`wmx` runs inside the session PTY to start `ghostex acp-host`.
 pub fn build_acp_host_launch_command(
     family: &str,
     cli_command: Option<&str>,
@@ -88,48 +97,212 @@ pub fn build_acp_host_launch_command(
     model: Option<&str>,
     effort: Option<&str>,
 ) -> String {
-    let mut parts = vec![
-        "\"${GHOSTEX_CLI_EXECUTABLE:-ghostex}\"".to_string(),
-        "acp-host".to_string(),
-        "--agent".to_string(),
-        shell_single_quote(family),
-    ];
+    build_acp_host_launch_command_for_platform(
+        family,
+        cli_command,
+        resume_session_id,
+        accept_all,
+        model,
+        effort,
+        cfg!(windows),
+    )
+}
+
+fn build_acp_host_launch_command_for_platform(
+    family: &str,
+    cli_command: Option<&str>,
+    resume_session_id: Option<&str>,
+    accept_all: bool,
+    model: Option<&str>,
+    effort: Option<&str>,
+    windows: bool,
+) -> String {
+    let mut parts = if windows {
+        vec![
+            "& $(if ($env:GHOSTEX_CLI_EXECUTABLE) { $env:GHOSTEX_CLI_EXECUTABLE } else { 'ghostex' })"
+                .to_string(),
+            "acp-host".to_string(),
+            "--agent".to_string(),
+            quote_acp_launch_arg(family, true),
+        ]
+    } else {
+        vec![
+            "\"${GHOSTEX_CLI_EXECUTABLE:-ghostex}\"".to_string(),
+            "acp-host".to_string(),
+            "--agent".to_string(),
+            quote_acp_launch_arg(family, false),
+        ]
+    };
     if let Some(cmd) = cli_command.map(str::trim).filter(|s| !s.is_empty()) {
         parts.push("--cli-command".to_string());
-        parts.push(shell_single_quote(cmd));
+        parts.push(quote_acp_launch_arg(cmd, windows));
     }
     if let Some(id) = resume_session_id.map(str::trim).filter(|s| !s.is_empty()) {
         parts.push("--resume".to_string());
-        parts.push(shell_single_quote(id));
+        parts.push(quote_acp_launch_arg(id, windows));
     }
     if accept_all {
         parts.push("--accept-all".to_string());
     }
     if let Some(m) = model.map(str::trim).filter(|s| !s.is_empty()) {
         parts.push("--model".to_string());
-        parts.push(shell_single_quote(m));
+        parts.push(quote_acp_launch_arg(m, windows));
     }
     if let Some(e) = effort.map(str::trim).filter(|s| !s.is_empty()) {
         parts.push("--effort".to_string());
-        parts.push(shell_single_quote(e));
+        parts.push(quote_acp_launch_arg(e, windows));
     }
     parts.join(" ")
 }
 
-/// Build the argv to exec in-place inside `zmx` when the user switches an ACP session
-/// to the interactive CLI terminal.
+/// Shell-aware tokenizer for a stored CLI command line (handles single/double quotes, escaped
+/// spaces on POSIX, PowerShell doubled single quotes, and preserves Windows paths with spaces).
+pub(crate) fn tokenize_cli_command(command: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_token = false;
+    let mut chars = command.trim().chars().peekable();
+    let is_windows = cfg!(windows);
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\'' => {
+                in_token = true;
+                while let Some(inner) = chars.next() {
+                    if inner == '\'' {
+                        // PowerShell escapes a literal single quote inside '...' by doubling it (`''`),
+                        // whereas POSIX closes and reopens; if the next char is also `'` and the
+                        // token looks PowerShell-quoted (on Windows), emit one `'`.
+                        if is_windows && chars.peek() == Some(&'\'') {
+                            chars.next();
+                            current.push('\'');
+                        } else {
+                            break;
+                        }
+                    } else {
+                        current.push(inner);
+                    }
+                }
+            }
+            '"' => {
+                in_token = true;
+                while let Some(inner) = chars.next() {
+                    match inner {
+                        '"' => {
+                            if is_windows && chars.peek() == Some(&'"') {
+                                chars.next();
+                                current.push('"');
+                            } else {
+                                break;
+                            }
+                        }
+                        '\\' => match chars.peek().copied() {
+                            Some('"') => {
+                                chars.next();
+                                current.push('"');
+                            }
+                            Some('\\') if !is_windows => {
+                                chars.next();
+                                current.push('\\');
+                            }
+                            Some(esc @ ('$' | '`')) if !is_windows => {
+                                chars.next();
+                                current.push(esc);
+                            }
+                            _ => current.push('\\'),
+                        },
+                        other => current.push(other),
+                    }
+                }
+            }
+            '\\' if !is_windows => {
+                in_token = true;
+                if let Some(escaped) = chars.next() {
+                    current.push(escaped);
+                } else {
+                    current.push('\\');
+                }
+            }
+            ch if ch.is_whitespace() => {
+                if in_token {
+                    tokens.push(std::mem::take(&mut current));
+                    in_token = false;
+                }
+            }
+            other => {
+                in_token = true;
+                current.push(other);
+            }
+        }
+    }
+    if in_token {
+        tokens.push(current);
+    }
+    // Drop a leading PowerShell call operator (`& 'C:\Program Files\...\agy.exe'`).
+    if tokens.len() >= 2 && tokens[0] == "&" {
+        tokens.remove(0);
+    }
+    tokens
+}
+
+fn split_leading_env_assignments(tokens: Vec<String>) -> (Vec<(String, String)>, Vec<String>) {
+    let mut envs = Vec::new();
+    let mut idx = 0;
+    while idx < tokens.len() {
+        let token = &tokens[idx];
+        let is_env = token
+            .split_once('=')
+            .filter(|(k, _)| {
+                !k.is_empty()
+                    && k.chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                    && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            })
+            .map(|(k, v)| (k.to_string(), v.to_string()));
+        if let Some(pair) = is_env {
+            envs.push(pair);
+            idx += 1;
+        } else {
+            break;
+        }
+    }
+    (envs, tokens[idx..].to_vec())
+}
+
+/// Build `(envs, program, args)` to launch the agent's stdio ACP subprocess, respecting any custom
+/// executable configured via `cli_command`.
+pub fn build_acp_server_argv(
+    spec: &AcpAgentSpec,
+    cli_command: Option<&str>,
+) -> Option<(Vec<(String, String)>, String, Vec<String>)> {
+    let (default_prog, acp_args) = spec.acp_argv.split_first()?;
+    let (envs, base_tokens) = cli_command
+        .map(tokenize_cli_command)
+        .map(split_leading_env_assignments)
+        .unwrap_or_default();
+    let program = base_tokens
+        .first()
+        .filter(|s| !s.is_empty())
+        .cloned()
+        .unwrap_or_else(|| (*default_prog).to_string());
+    let args = acp_args.iter().map(|s| (*s).to_string()).collect();
+    Some((envs, program, args))
+}
+
+/// Build `(envs, program, args)` to exec in-place inside `zmx`/`wmx` when the user switches an ACP
+/// session to the interactive CLI terminal.
 pub fn build_cli_switch_argv(
     spec: &AcpAgentSpec,
     cli_command: Option<&str>,
     native_session_id: Option<&str>,
     accept_all: bool,
-) -> (String, Vec<String>) {
-    let base_tokens: Vec<String> = cli_command
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| s.split_whitespace().map(str::to_string).collect())
-        .filter(|tokens: &Vec<String>| !tokens.is_empty())
-        .unwrap_or_else(|| vec![spec.default_cli_bin.to_string()]);
+) -> (Vec<(String, String)>, String, Vec<String>) {
+    let (envs, base_tokens) = cli_command
+        .map(tokenize_cli_command)
+        .map(split_leading_env_assignments)
+        .filter(|(_, tokens)| !tokens.is_empty())
+        .unwrap_or_else(|| (Vec::new(), vec![spec.default_cli_bin.to_string()]));
     let program = base_tokens[0].clone();
     let mut args = base_tokens[1..].to_vec();
     if accept_all {
@@ -145,5 +318,5 @@ pub fn build_cli_switch_argv(
             args.push(id.to_string());
         }
     }
-    (program, args)
+    (envs, program, args)
 }

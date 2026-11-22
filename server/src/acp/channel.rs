@@ -76,11 +76,13 @@ pub(crate) fn channel_state(project_id: &str, session_id: &str) -> Option<Value>
 
 /// Send a user prompt (text + optional image file paths) to an ACP session.
 pub(crate) async fn send(
+    paths: &crate::paths::GxserverPaths,
     target: &SessionChatSendTarget,
     text: &str,
     image_paths: &[String],
     interrupt: bool,
 ) -> Result<Value, DomainStateError> {
+    let validated_images = super::validate_acp_image_paths(paths, image_paths)?;
     if live(&target.project_id, &target.session_id, "send").is_none() {
         return Err(DomainStateError {
             code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
@@ -89,7 +91,7 @@ pub(crate) async fn send(
     }
     let params = json!({
         "text": text,
-        "images": image_paths,
+        "images": validated_images,
         "interrupt": interrupt,
     });
     match request(
@@ -231,6 +233,79 @@ pub(crate) async fn set_mode(
     })
 }
 
+/// Cycle to the next available ACP mode (equivalent of Shift+Tab in a CLI session).
+pub(crate) async fn cycle_mode(
+    project_id: &str,
+    session_id: &str,
+) -> Result<Value, DomainStateError> {
+    if live(project_id, session_id, "mode").is_none() {
+        return Err(DomainStateError {
+            code: "dependencyUnavailable",
+            message: "The ACP host is not connected yet.".to_string(),
+        });
+    }
+    let snap = request(
+        project_id,
+        session_id,
+        "state",
+        json!({}),
+        Duration::from_secs(5),
+    )
+    .await
+    .map_err(|error| DomainStateError {
+        code: "dependencyUnavailable",
+        message: format!("Could not read ACP modes: {error}"),
+    })?;
+    let current = snap.get("mode").and_then(Value::as_str).unwrap_or_default();
+    let mode_ids: Vec<String> = snap
+        .get("availableModes")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| {
+                    item.get("id")
+                        .or_else(|| item.get("modeId"))
+                        .and_then(Value::as_str)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if mode_ids.len() < 2 {
+        return Err(DomainStateError {
+            code: "invalidState",
+            message: "This ACP session does not expose multiple modes to cycle.".to_string(),
+        });
+    }
+    let next_index = mode_ids
+        .iter()
+        .position(|id| id == current)
+        .map(|idx| (idx + 1) % mode_ids.len())
+        .unwrap_or(0);
+    set_mode(project_id, session_id, &mode_ids[next_index]).await
+}
+
+/// Probe whether the session's `zmx`/`wmx` provider is confirmed missing on disk.
+/// Returns `true` only when the probe explicitly confirms the session does not exist (`exit_code == 1`).
+fn zmx_session_confirmed_missing(session: &Value) -> bool {
+    let Ok(zmx_name) = crate::zmx::provider_zmx_session_name(session) else {
+        return false;
+    };
+    let Ok(zmx) = crate::zmx::require_zmx() else {
+        return false;
+    };
+    crate::zmx::run_zmx_probe_script(
+        crate::zmx::build_zmx_exists_command(&zmx_name, &zmx.executable_path),
+        crate::zmx::ZmxCommandOptions {
+            timeout_ms: Some(1_500),
+            ..crate::zmx::ZmxCommandOptions::default()
+        },
+    )
+    .map(|result| result.exit_code == 1)
+    .unwrap_or(false)
+}
+
 /// Switch a running ACP session in-place into its interactive CLI terminal inside the same `zmx` PTY.
 /// Cancels any active turn if `interrupt` is true, shuts down the ACP stdio server, execs the CLI
 /// with `--conversation <id>`, and marks `runtimeSettings.acpMode = false` in `state.db`.
@@ -240,10 +315,9 @@ pub(crate) async fn switch_to_cli(
     session_id: &str,
     interrupt: bool,
 ) -> Result<Value, DomainStateError> {
-    let mut native_session_id: Option<String> = None;
-    let mut switched_live = false;
-
-    if live(project_id, session_id, "switch_to_cli").is_some() {
+    let (native_session_id, switched_live) = if live(project_id, session_id, "switch_to_cli")
+        .is_some()
+    {
         let reply = request(
             project_id,
             session_id,
@@ -256,13 +330,69 @@ pub(crate) async fn switch_to_cli(
             code: "sessionInputFailed",
             message: format!("Could not switch ACP session to Terminal: {error}"),
         })?;
-        native_session_id = reply
+        let native_id = reply
             .get("nativeSessionId")
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
             .map(str::to_string);
-        switched_live = true;
-    }
+        (native_id, true)
+    } else {
+        // Refuse an offline flip while `acp-host` may still be starting or reconnecting inside the
+        // live PTY; only allow flipping `acpMode = false` when the session is already non-ACP or
+        // confirmed stopped/sleeping/draft with no live zmx provider.
+        let paths = state.paths.clone();
+        let server_id = state.metadata.server_id.clone();
+        let pid = project_id.to_string();
+        let sid = session_id.to_string();
+        let precheck = tokio::task::spawn_blocking(move || {
+            let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
+                code: "internalError",
+                message: format!("SQLite gxserver state error: {error}"),
+            })?;
+            let repository = DomainRepository::new(&db, server_id.as_str());
+            let session = repository
+                .get_session(&pid, &sid)?
+                .ok_or_else(|| DomainStateError {
+                    code: "notFound",
+                    message: "The session no longer exists.".to_string(),
+                })?;
+            if !super::session_is_acp(&session) {
+                let existing_native = session
+                    .pointer("/runtimeSettings/agentSessionId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                return Ok((true, existing_native));
+            }
+            let lifecycle = crate::presentation::effective_lifecycle_state(&session);
+            let inactive_state = matches!(lifecycle.as_str(), "stopped" | "sleeping")
+                || crate::agents::session_is_draft(&session);
+            if inactive_state && zmx_session_confirmed_missing(&session) {
+                let existing_native = session
+                    .pointer("/runtimeSettings/agentSessionId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                return Ok((false, existing_native));
+            }
+            Err(DomainStateError {
+                code: "dependencyUnavailable",
+                message: "The ACP host is starting or reconnecting. Wait a moment and try switching to Terminal again.".to_string(),
+            })
+        })
+        .await
+        .map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("Could not inspect ACP session state: {error}"),
+        })??;
+        let (already_switched, existing_native) = precheck;
+        if already_switched {
+            return Ok(json!({
+                "switched": true,
+                "switchedLive": false,
+                "nativeSessionId": existing_native,
+            }));
+        }
+        (existing_native, false)
+    };
 
     // Persist `acpMode = false` so subsequent sends, model picks, and resumes use the CLI path.
     let paths = state.paths.clone();

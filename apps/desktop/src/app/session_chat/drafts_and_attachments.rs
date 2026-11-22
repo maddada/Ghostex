@@ -231,6 +231,34 @@ impl GhostexGpuiApp {
         true
     }
 
+    fn start_session_chat_draft_handoff_for_terminal(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let Some(view) = self.native_chat_views.get(&session_id).cloned()
+            && !view.read(cx).draft.is_empty()
+        {
+            if !ghostex_gx_chat_core::composer::secret_like::has_key_fragment(&view.read(cx).draft)
+            {
+                self.pending_session_chat_draft_handoffs.insert(session_id);
+            }
+            view.update(cx, |view, cx| {
+                view.invoke(
+                    serde_json::json!({
+                        "type": "handoff",
+                        "text": view.draft,
+                        "draftVersion": {
+                            "draftId": view.draft_id,
+                            "revision": view.draft_revision
+                        }
+                    }),
+                    cx,
+                )
+            });
+        }
+    }
+
     fn confirm_switch_session_acp_to_terminal(
         &mut self,
         session_id: TerminalSessionId,
@@ -239,16 +267,6 @@ impl GhostexGpuiApp {
     ) {
         if !self.agents_chat_mode_sessions.contains(&session_id) {
             return;
-        }
-        if handoff_draft
-            && let Some(view) = self.native_chat_views.get(&session_id).cloned()
-            && !view.read(cx).draft.is_empty()
-        {
-            if !ghostex_gx_chat_core::composer::secret_like::has_key_fragment(&view.read(cx).draft)
-            {
-                self.pending_session_chat_draft_handoffs.insert(session_id);
-            }
-            view.update(cx, |view, cx| view.invoke(serde_json::json!({"type":"handoff","text":view.draft,"draftVersion":{"draftId":view.draft_id,"revision":view.draft_revision}}), cx));
         }
         let request = if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
             let params = serde_json::json!({
@@ -280,19 +298,27 @@ impl GhostexGpuiApp {
                 )
             })
         } else {
+            if handoff_draft {
+                self.start_session_chat_draft_handoff_for_terminal(session_id, cx);
+            }
             self.toggle_agents_session_chat_mode(session_id, cx);
             return;
         };
+        // Defer the composer draft handoff until `/api/switchSessionAcpToCli` succeeds so the
+        // async handoff never bounces back while the session is still in Chat mode, and a failed
+        // switch leaves the draft untouched in the composer.
         cx.spawn(async move |this, cx| {
             let result = request.await;
             let _ = this.update(cx, |this, cx| match result {
                 Ok(_) => {
                     if this.agents_chat_mode_sessions.contains(&session_id) {
+                        if handoff_draft {
+                            this.start_session_chat_draft_handoff_for_terminal(session_id, cx);
+                        }
                         this.toggle_agents_session_chat_mode(session_id, cx);
                     }
                 }
                 Err(error) => {
-                    this.pending_session_chat_draft_handoffs.remove(&session_id);
                     this.dispatch_gpui_workspace_action_toast(
                         "error",
                         "Could not switch to Terminal",

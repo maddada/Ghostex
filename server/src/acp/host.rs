@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -23,12 +23,51 @@ use crate::constants::{
 };
 
 use super::spec::{
-    AcpAgentSpec, build_cli_switch_argv, spec_for_family, transcript_path_for_session,
+    AcpAgentSpec, build_acp_server_argv, build_cli_switch_argv, spec_for_family,
+    transcript_path_for_session,
 };
 
 const ACP_LOAD_TIMEOUT: Duration = Duration::from_secs(90);
 const ACP_RPC_TIMEOUT: Duration = Duration::from_secs(30);
 const POLL_RETRY_DELAY: Duration = Duration::from_millis(300);
+const SPOOL_MAX_BYTES: u64 = 16 * 1024 * 1024;
+const SPOOL_RETENTION: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
+#[cfg(unix)]
+static SIGNAL_TERMINATE: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+extern "C" fn handle_termination_signal(_signal: libc::c_int) {
+    SIGNAL_TERMINATE.store(true, Ordering::SeqCst);
+}
+
+struct TerminationSignalGuard;
+
+impl TerminationSignalGuard {
+    fn install() -> Self {
+        #[cfg(unix)]
+        unsafe {
+            SIGNAL_TERMINATE.store(false, Ordering::SeqCst);
+            let handler = handle_termination_signal as extern "C" fn(libc::c_int);
+            libc::signal(libc::SIGTERM, handler as libc::sighandler_t);
+            libc::signal(libc::SIGHUP, handler as libc::sighandler_t);
+            libc::signal(libc::SIGINT, handler as libc::sighandler_t);
+        }
+        Self
+    }
+}
+
+impl Drop for TerminationSignalGuard {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        unsafe {
+            libc::signal(libc::SIGTERM, libc::SIG_DFL);
+            libc::signal(libc::SIGHUP, libc::SIG_DFL);
+            libc::signal(libc::SIGINT, libc::SIG_DFL);
+            SIGNAL_TERMINATE.store(false, Ordering::SeqCst);
+        }
+    }
+}
 
 struct HostArgs {
     family: String,
@@ -181,7 +220,7 @@ impl GxserverEndpoint {
         family: &str,
         activity: &str,
         native_session_id: Option<&str>,
-        pending_prompt: Option<Value>,
+        pending_permission: Option<&PendingPermission>,
     ) {
         let event_name = match activity {
             "working" => "UserPromptSubmit",
@@ -202,8 +241,13 @@ impl GxserverEndpoint {
                 params["agentSessionPath"] = json!(path.to_string_lossy().to_string());
             }
         }
-        if let Some(prompt) = pending_prompt {
-            params["sessionChatPrompt"] = prompt;
+        if let Some(perm) = pending_permission {
+            params["toolName"] = json!(perm.tool_name);
+            params["toolInput"] = json!({ "command": perm.summary });
+            if let Some(tool_use_id) = perm.tool_use_id.as_deref().filter(|s| !s.is_empty()) {
+                params["toolUseId"] = json!(tool_use_id);
+            }
+            params["sessionChatPrompt"] = perm.to_ghostex_prompt();
         }
         let body = json!({
             "requestId": format!("acp-act-{}", now_ms()),
@@ -244,16 +288,69 @@ impl GxserverEndpoint {
 }
 
 struct SpoolWriter {
+    path: PathBuf,
     file: Option<File>,
+    bytes_written: u64,
     seq: u64,
 }
 
 impl SpoolWriter {
+    fn open_private_file(path: &PathBuf, truncate: bool) -> Option<File> {
+        let mut options = OpenOptions::new();
+        options.create(true).write(true);
+        if truncate {
+            options.truncate(true);
+        } else {
+            options.append(true);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options.open(path).ok()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = file.set_permissions(fs::Permissions::from_mode(0o600));
+        }
+        Some(file)
+    }
+
+    fn sweep_stale_spools(dir: &PathBuf) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        let now = SystemTime::now();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !(name.ends_with(".jsonl") || name.ends_with(".jsonl.1")) {
+                continue;
+            }
+            if let Ok(meta) = entry.metadata() {
+                if let Ok(modified) = meta.modified() {
+                    if now.duration_since(modified).unwrap_or_default() > SPOOL_RETENTION {
+                        let _ = fs::remove_file(&path);
+                    }
+                }
+            }
+        }
+    }
+
     fn open(session_id: &str) -> Self {
         let dir = crate::paths::get_gxserver_paths(None)
             .root_dir
             .join("acp-spool");
         let _ = fs::create_dir_all(&dir);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o700));
+        }
+        Self::sweep_stale_spools(&dir);
         let safe_id: String = session_id
             .chars()
             .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
@@ -264,22 +361,57 @@ impl SpoolWriter {
             format!("{safe_id}.jsonl")
         };
         let path = dir.join(name);
-        let file = OpenOptions::new().create(true).append(true).open(path).ok();
-        Self { file, seq: 0 }
+        let file = Self::open_private_file(&path, false);
+        let bytes_written = file
+            .as_ref()
+            .and_then(|f| f.metadata().ok())
+            .map(|m| m.len())
+            .unwrap_or(0);
+        Self {
+            path,
+            file,
+            bytes_written,
+            seq: 0,
+        }
+    }
+
+    fn rotate(&mut self) {
+        self.file = None;
+        let rotated = PathBuf::from(format!("{}.1", self.path.display()));
+        let _ = fs::remove_file(&rotated);
+        let _ = fs::rename(&self.path, &rotated);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&rotated, fs::Permissions::from_mode(0o600));
+        }
+        self.file = Self::open_private_file(&self.path, true);
+        self.bytes_written = 0;
     }
 
     fn append(&mut self, event: &Value) {
         self.seq += 1;
-        let Some(file) = self.file.as_mut() else {
-            return;
-        };
         let line = json!({
             "seq": self.seq,
             "tsMs": now_ms(),
             "event": event,
         });
-        let _ = writeln!(file, "{line}");
-        let _ = file.flush();
+        let Ok(encoded) = serde_json::to_string(&line) else {
+            return;
+        };
+        let write_len = (encoded.len() + 1) as u64;
+        if self.bytes_written.saturating_add(write_len) > SPOOL_MAX_BYTES {
+            self.rotate();
+        }
+        let Some(file) = self.file.as_mut() else {
+            return;
+        };
+        if file.write_all(encoded.as_bytes()).is_ok()
+            && file.write_all(b"\n").is_ok()
+            && file.flush().is_ok()
+        {
+            self.bytes_written = self.bytes_written.saturating_add(write_len);
+        }
     }
 }
 
@@ -324,21 +456,29 @@ impl PendingPermission {
                 return Some(id.to_string());
             }
         }
-        let wanted_kinds: &[&str] = match decision.trim().to_ascii_lowercase().as_str() {
-            "allow" | "allow_once" | "1" | "y" | "yes" => &["allow_once", "allow_always"],
-            "always" | "allow_always" | "2" => &["allow_always", "allow_once"],
-            "deny" | "reject" | "reject_once" | "escape" | "n" | "no" => {
-                &["reject_once", "reject_always"]
+        let normalized = decision.trim().to_ascii_lowercase();
+        let (is_deny, wanted_kinds): (bool, &[&str]) = match normalized.as_str() {
+            "allow" | "allow_once" | "1" | "y" | "yes" => (false, &["allow_once", "allow_always"]),
+            "always" | "allow_always" | "2" => (false, &["allow_always", "allow_once"]),
+            "deny" | "reject" | "reject_once" | "escape" | "cancel" | "\x1b" | "n" | "no" => {
+                (true, &["reject_once", "reject_always"])
             }
-            "reject_always" => &["reject_always", "reject_once"],
-            _ => &["allow_once"],
+            "reject_always" => (true, &["reject_always", "reject_once"]),
+            _ => (false, &["allow_once"]),
         };
         for kind in wanted_kinds {
             if let Some(opt) = self.options.iter().find(|opt| opt.kind == *kind) {
                 return Some(opt.option_id.clone());
             }
         }
-        self.options.first().map(|opt| opt.option_id.clone())
+        if is_deny {
+            // Never fall back to an allow option on deny/reject; caller responds with `cancelled`.
+            return None;
+        }
+        self.options
+            .iter()
+            .find(|opt| !opt.kind.starts_with("reject"))
+            .map(|opt| opt.option_id.clone())
     }
 }
 
@@ -346,6 +486,8 @@ struct HostState {
     family: String,
     native_session_id: Option<String>,
     working: bool,
+    turn_generation: u64,
+    accept_all: bool,
     current_model: Option<String>,
     current_effort: Option<String>,
     current_mode: Option<String>,
@@ -357,11 +499,13 @@ struct HostState {
 }
 
 impl HostState {
-    fn new(family: &str) -> Self {
+    fn new(family: &str, accept_all: bool) -> Self {
         Self {
             family: family.to_string(),
             native_session_id: None,
             working: false,
+            turn_generation: 0,
+            accept_all,
             current_model: None,
             current_effort: None,
             current_mode: None,
@@ -609,32 +753,20 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
     }
 }
 
-fn image_mime_for_path(path: &Path) -> &'static str {
-    match path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|s| s.to_ascii_lowercase())
-        .as_deref()
-    {
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("webp") => "image/webp",
-        Some("gif") => "image/gif",
-        _ => "image/png",
-    }
-}
-
-fn build_prompt_blocks(text: &str, image_paths: &[String]) -> Vec<Value> {
+fn build_prompt_blocks(
+    paths: &crate::paths::GxserverPaths,
+    text: &str,
+    image_paths: &[String],
+) -> Result<Vec<Value>, String> {
     let mut blocks = Vec::new();
     for raw in image_paths {
-        let path = PathBuf::from(raw);
-        if let Ok(bytes) = fs::read(&path) {
-            let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-            blocks.push(json!({
-                "type": "image",
-                "data": encoded,
-                "mimeType": image_mime_for_path(&path),
-            }));
-        }
+        let (bytes, mime) = super::read_validated_acp_image(paths, raw)?;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+        blocks.push(json!({
+            "type": "image",
+            "data": encoded,
+            "mimeType": mime,
+        }));
     }
     if !text.trim().is_empty() || blocks.is_empty() {
         blocks.push(json!({
@@ -642,24 +774,77 @@ fn build_prompt_blocks(text: &str, image_paths: &[String]) -> Vec<Value> {
             "text": text,
         }));
     }
-    blocks
+    Ok(blocks)
 }
 
-fn stop_child_gracefully(transport: &AcpTransport, child: &mut Child) {
+fn pick_accept_all_mode_id(available_modes: &Value) -> Option<String> {
+    let modes = available_modes.as_array()?;
+    let candidates: Vec<(String, String)> = modes
+        .iter()
+        .filter_map(|item| {
+            let id = item
+                .get("id")
+                .or_else(|| item.get("modeId"))
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty())?;
+            let label = item
+                .get("name")
+                .or_else(|| item.get("label"))
+                .and_then(Value::as_str)
+                .unwrap_or(id);
+            Some((id.to_string(), format!("{id} {label}").to_ascii_lowercase()))
+        })
+        .collect();
+    for keyword in ["bypass", "yolo", "accept_all", "acceptall", "full_auto", "full-auto"] {
+        if let Some((id, _)) = candidates.iter().find(|(_, hay)| hay.contains(keyword)) {
+            return Some(id.clone());
+        }
+    }
+    candidates
+        .into_iter()
+        .find(|(_, hay)| hay.contains("auto") && !hay.contains("ask") && !hay.contains("manual"))
+        .map(|(id, _)| id)
+}
+
+fn mode_implies_accept_all(mode: &str) -> Option<bool> {
+    let lower = mode.trim().to_ascii_lowercase();
+    if ["bypass", "yolo", "accept_all", "acceptall", "full_auto", "full-auto"]
+        .iter()
+        .any(|kw| lower.contains(kw))
+    {
+        return Some(true);
+    }
+    if ["ask", "manual", "plan", "default", "safe", "read"]
+        .iter()
+        .any(|kw| lower.contains(kw))
+    {
+        return Some(false);
+    }
+    None
+}
+
+fn stop_child_gracefully(transport: &AcpTransport, child: &mut Child, child_pid: &AtomicU32) {
     transport.close_stdin();
     let deadline = SystemTime::now() + Duration::from_secs(2);
     loop {
         match child.try_wait() {
-            Ok(Some(_)) => return,
+            Ok(Some(_)) => {
+                child_pid.store(0, Ordering::Release);
+                return;
+            }
             Ok(None) => {
                 if SystemTime::now() >= deadline {
                     let _ = child.kill();
                     let _ = child.wait();
+                    child_pid.store(0, Ordering::Release);
                     return;
                 }
                 thread::sleep(Duration::from_millis(50));
             }
-            Err(_) => return,
+            Err(_) => {
+                child_pid.store(0, Ordering::Release);
+                return;
+            }
         }
     }
 }
@@ -670,7 +855,8 @@ fn exec_interactive_cli(
     native_session_id: Option<&str>,
     accept_all: bool,
 ) -> i32 {
-    let (program, args) = build_cli_switch_argv(spec, cli_command, native_session_id, accept_all);
+    let (envs, program, args) =
+        build_cli_switch_argv(spec, cli_command, native_session_id, accept_all);
     println!(
         "\r\nSwitching to interactive {} terminal...",
         spec.display_name
@@ -680,14 +866,14 @@ fn exec_interactive_cli(
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        let err = Command::new(&program).args(&args).exec();
+        let err = Command::new(&program).envs(envs).args(&args).exec();
         eprintln!("Failed to launch {program}: {err}");
         1
     }
 
     #[cfg(not(unix))]
     {
-        match Command::new(&program).args(&args).status() {
+        match Command::new(&program).envs(envs).args(&args).status() {
             Ok(status) => status.code().unwrap_or(0),
             Err(err) => {
                 eprintln!("Failed to launch {program}: {err}");
@@ -725,12 +911,17 @@ pub fn run(args: &[String]) -> i32 {
     );
     let _ = std::io::stdout().flush();
 
-    let Some((prog, argv)) = spec.acp_argv.split_first() else {
+    let gx_paths = crate::paths::get_gxserver_paths(None);
+    let signal_guard = TerminationSignalGuard::install();
+
+    let Some((acp_envs, prog, argv)) = build_acp_server_argv(spec, parsed.cli_command.as_deref())
+    else {
         eprintln!("Invalid ACP server command for {}", spec.family);
         return 1;
     };
-    let mut child = match Command::new(prog)
-        .args(argv)
+    let mut child = match Command::new(&prog)
+        .envs(acp_envs)
+        .args(&argv)
         .current_dir(&cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -739,10 +930,11 @@ pub fn run(args: &[String]) -> i32 {
     {
         Ok(child) => child,
         Err(err) => {
-            eprintln!("Failed to start `{}`: {err}", spec.acp_argv.join(" "));
+            eprintln!("Failed to start `{prog} {}`: {err}", argv.join(" "));
             return 1;
         }
     };
+    let child_pid = Arc::new(AtomicU32::new(child.id()));
     let Some(stdin) = child.stdin.take() else {
         eprintln!("Failed to open stdin pipe to ACP server.");
         let _ = child.kill();
@@ -756,8 +948,50 @@ pub fn run(args: &[String]) -> i32 {
     let stderr = child.stderr.take();
 
     let transport = Arc::new(AcpTransport::new(stdin, &spool_session_id));
-    let state = Arc::new(Mutex::new(HostState::new(spec.family)));
+    let state = Arc::new(Mutex::new(HostState::new(spec.family, parsed.accept_all)));
     let shutting_down = Arc::new(AtomicBool::new(false));
+
+    // Watch for SIGTERM/SIGHUP/SIGINT so the ACP subprocess is stopped promptly even while the
+    // main thread is blocked in `/api/agentChatChannel` long-poll.
+    #[cfg(unix)]
+    {
+        let t_sig = transport.clone();
+        let pid_sig = child_pid.clone();
+        let down_sig = shutting_down.clone();
+        let ep_sig = endpoint.clone();
+        thread::spawn(move || {
+            while !down_sig.load(Ordering::Acquire) {
+                if SIGNAL_TERMINATE.load(Ordering::Acquire) {
+                    down_sig.store(true, Ordering::Release);
+                    t_sig.close_stdin();
+                    let pid = pid_sig.swap(0, Ordering::AcqRel);
+                    if pid != 0 {
+                        unsafe {
+                            libc::kill(pid as libc::pid_t, libc::SIGTERM);
+                        }
+                        let deadline = SystemTime::now() + Duration::from_secs(1);
+                        while SystemTime::now() < deadline {
+                            let alive = unsafe { libc::kill(pid as libc::pid_t, 0) == 0 };
+                            if !alive {
+                                break;
+                            }
+                            thread::sleep(Duration::from_millis(50));
+                        }
+                        unsafe {
+                            if libc::kill(pid as libc::pid_t, 0) == 0 {
+                                libc::kill(pid as libc::pid_t, libc::SIGKILL);
+                            }
+                        }
+                    }
+                    if let Some(ep) = ep_sig.as_ref() {
+                        ep.close_channel();
+                    }
+                    std::process::exit(143);
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+        });
+    }
 
     // Drain stderr into spool so pipe never blocks.
     if let Some(stderr) = stderr {
@@ -814,12 +1048,35 @@ pub fn run(args: &[String]) -> i32 {
                     let params = msg.get("params").cloned().unwrap_or(Value::Null);
                     if method == "session/request_permission" {
                         let perm = parse_permission_request(rpc_id, &params);
+                        let auto_approve = st_out
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .accept_all;
+                        if auto_approve {
+                            if let Some(opt_id) = perm.resolve_option_id(None, "allow_always") {
+                                println!(
+                                    "\r\n[ACP] Auto-approved (--accept-all): {} ({})",
+                                    perm.tool_name, perm.summary
+                                );
+                                let _ = std::io::stdout().flush();
+                                let _ = t_out.respond_to_agent(
+                                    perm.rpc_id,
+                                    json!({
+                                        "outcome": {
+                                            "outcome": "selected",
+                                            "optionId": opt_id,
+                                        }
+                                    }),
+                                );
+                                continue;
+                            }
+                        }
                         println!(
                             "\r\n[ACP] Waiting for approval: {} ({})",
                             perm.tool_name, perm.summary
                         );
                         let _ = std::io::stdout().flush();
-                        let prompt_json = perm.to_ghostex_prompt();
+                        let perm_for_report = perm.clone();
                         let native_id = {
                             let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                             s.pending_permission = Some(perm);
@@ -828,9 +1085,9 @@ pub fn run(args: &[String]) -> i32 {
                         if let Some(ep) = ep_out.as_ref() {
                             ep.report_activity(
                                 &fam,
-                                "waiting",
+                                "attention",
                                 native_id.as_deref(),
-                                Some(prompt_json),
+                                Some(&perm_for_report),
                             );
                         }
                     } else {
@@ -889,7 +1146,7 @@ pub fn run(args: &[String]) -> i32 {
     });
     if let Err(err) = transport.call("initialize", init_params, ACP_RPC_TIMEOUT) {
         eprintln!("ACP initialize failed: {err}");
-        stop_child_gracefully(&transport, &mut child);
+        stop_child_gracefully(&transport, &mut child, &child_pid);
         return 1;
     }
 
@@ -932,16 +1189,35 @@ pub fn run(args: &[String]) -> i32 {
         Ok(res) => res,
         Err(err) => {
             eprintln!("ACP session open failed: {err}");
-            stop_child_gracefully(&transport, &mut child);
+            stop_child_gracefully(&transport, &mut child, &child_pid);
             return 1;
         }
     };
 
-    let native_session_id = {
+    let (native_session_id, accept_all_mode_id) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         apply_session_metadata(&mut s, &session_result);
-        s.native_session_id.clone()
+        let auto_mode = parsed
+            .accept_all
+            .then(|| pick_accept_all_mode_id(&s.available_modes))
+            .flatten();
+        (s.native_session_id.clone(), auto_mode)
     };
+
+    if let (Some(sid), Some(mode_id)) = (native_session_id.as_deref(), accept_all_mode_id.as_deref())
+    {
+        if transport
+            .call(
+                "session/set_mode",
+                json!({ "sessionId": sid, "modeId": mode_id }),
+                ACP_RPC_TIMEOUT,
+            )
+            .is_ok()
+        {
+            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            s.current_mode = Some(mode_id.to_string());
+        }
+    }
 
     if let Some(model) = parsed.model.as_deref().filter(|m| !m.is_empty()) {
         if let Some(sid) = native_session_id.as_deref() {
@@ -1022,22 +1298,18 @@ pub fn run(args: &[String]) -> i32 {
                 if reconnecting {
                     reconnecting = false;
                     // Re-sync live state after a gxserver reload.
-                    let (act, sid, prompt) = {
+                    let (act, sid, perm) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
                         let act = if s.pending_permission.is_some() {
-                            "waiting"
+                            "attention"
                         } else if s.working {
                             "working"
                         } else {
                             "idle"
                         };
-                        (
-                            act,
-                            s.native_session_id.clone(),
-                            s.pending_permission.as_ref().map(|p| p.to_ghostex_prompt()),
-                        )
+                        (act, s.native_session_id.clone(), s.pending_permission.clone())
                     };
-                    ep.report_activity(spec.family, act, sid.as_deref(), prompt);
+                    ep.report_activity(spec.family, act, sid.as_deref(), perm.as_ref());
                 }
                 resp
             }
@@ -1232,6 +1504,9 @@ pub fn run(args: &[String]) -> i32 {
                     ) {
                         Ok(_) => {
                             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                            if let Some(implies_accept_all) = mode_implies_accept_all(&mode) {
+                                s.accept_all = implies_accept_all;
+                            }
                             s.current_mode = Some(mode);
                             let snap = s.snapshot_json();
                             ep.ack(id, true, snap, None);
@@ -1281,7 +1556,25 @@ pub fn run(args: &[String]) -> i32 {
                         );
                         continue;
                     }
+                    let blocks = match build_prompt_blocks(&gx_paths, &text, &images) {
+                        Ok(blocks) => blocks,
+                        Err(err) => {
+                            ep.ack(id, false, Value::Null, Some(&err));
+                            continue;
+                        }
+                    };
                     if is_working && interrupt {
+                        let pending = state
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .pending_permission
+                            .take();
+                        if let Some(perm) = pending {
+                            let _ = transport.respond_to_agent(
+                                perm.rpc_id,
+                                json!({ "outcome": { "outcome": "cancelled" } }),
+                            );
+                        }
                         let _ = transport.notify("session/cancel", json!({ "sessionId": sid }));
                         let wait_until = SystemTime::now() + Duration::from_secs(4);
                         while SystemTime::now() < wait_until {
@@ -1291,12 +1584,13 @@ pub fn run(args: &[String]) -> i32 {
                             thread::sleep(Duration::from_millis(50));
                         }
                     }
-                    let blocks = build_prompt_blocks(&text, &images);
-                    {
+                    let turn_gen = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        s.turn_generation = s.turn_generation.wrapping_add(1);
                         s.working = true;
                         s.pending_permission = None;
-                    }
+                        s.turn_generation
+                    };
                     ep.report_activity(spec.family, "working", Some(&sid), None);
                     ep.ack(
                         id,
@@ -1330,19 +1624,54 @@ pub fn run(args: &[String]) -> i32 {
                         };
                         println!("[ACP] Turn finished ({stop_reason}).");
                         let _ = std::io::stdout().flush();
-                        {
+                        let is_current_turn = {
                             let mut s = st_turn.lock().unwrap_or_else(|p| p.into_inner());
-                            s.working = false;
-                            s.pending_permission = None;
+                            if s.turn_generation == turn_gen {
+                                s.working = false;
+                                s.pending_permission = None;
+                                true
+                            } else {
+                                false
+                            }
+                        };
+                        if is_current_turn {
+                            ep_turn.report_activity(&fam, "idle", Some(&sid), None);
                         }
-                        ep_turn.report_activity(&fam, "idle", Some(&sid), None);
                     });
                 }
                 "switch_to_cli" => {
-                    let (is_working, sid) = {
+                    let interrupt = params
+                        .get("interrupt")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true);
+                    let (is_working, has_pending_perm, sid) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        (s.working, s.native_session_id.clone())
+                        (
+                            s.working,
+                            s.pending_permission.is_some(),
+                            s.native_session_id.clone(),
+                        )
                     };
+                    if (is_working || has_pending_perm) && !interrupt {
+                        ep.ack(
+                            id,
+                            false,
+                            Value::Null,
+                            Some("The ACP agent is currently working on a turn. Interrupt it or wait for it to finish before switching to Terminal."),
+                        );
+                        continue;
+                    }
+                    let pending = state
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .pending_permission
+                        .take();
+                    if let Some(perm) = pending {
+                        let _ = transport.respond_to_agent(
+                            perm.rpc_id,
+                            json!({ "outcome": { "outcome": "cancelled" } }),
+                        );
+                    }
                     if is_working {
                         if let Some(sid_ref) = sid.as_deref() {
                             let _ =
@@ -1357,7 +1686,7 @@ pub fn run(args: &[String]) -> i32 {
                         }
                     }
                     shutting_down.store(true, Ordering::Release);
-                    stop_child_gracefully(&transport, &mut child);
+                    stop_child_gracefully(&transport, &mut child, &child_pid);
                     ep.ack(
                         id,
                         true,
@@ -1384,22 +1713,24 @@ pub fn run(args: &[String]) -> i32 {
     }
 
     if switch_to_cli_requested {
-        let sid = state
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .native_session_id
-            .clone();
+        drop(signal_guard);
+        let (sid, accept_all) = {
+            let s = state.lock().unwrap_or_else(|p| p.into_inner());
+            (s.native_session_id.clone(), s.accept_all)
+        };
         return exec_interactive_cli(
             spec,
             parsed.cli_command.as_deref(),
             sid.as_deref(),
-            parsed.accept_all,
+            accept_all,
         );
     }
 
-    stop_child_gracefully(&transport, &mut child);
+    shutting_down.store(true, Ordering::Release);
+    stop_child_gracefully(&transport, &mut child, &child_pid);
     if let Some(ep) = endpoint.as_ref() {
         ep.close_channel();
     }
+    drop(signal_guard);
     0
 }

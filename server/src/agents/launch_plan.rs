@@ -663,10 +663,10 @@ pub(crate) fn create_agent_session_params_for_project(
                         crate::acp::supports_acp(fam)
                             && match explicit_acp {
                                 Some(flag) => flag,
-                                None => {
-                                    crate::acp::agent_acp_enabled(&settings, fam)
-                                        || crate::acp::agent_acp_enabled_in_shared_settings(fam)
-                                }
+                                None => crate::acp::agent_acp_setting(&settings, fam)
+                                    .unwrap_or_else(|| {
+                                        crate::acp::agent_acp_enabled_in_shared_settings(fam)
+                                    }),
                             }
                     });
                 if use_acp {
@@ -676,17 +676,20 @@ pub(crate) fn create_agent_session_params_for_project(
                             .and_then(Value::as_str)
                             .map(str::to_string);
                         let resume_id = read_text_from_map(&runtime_settings, "agentSessionId");
-                        let accept_all_effective =
-                            read_text_from_map(&agent_config, "acceptAllMode")
-                                .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
-                                .as_deref()
-                                .map(|m| m == "acceptAll")
-                                .unwrap_or_else(|| {
-                                    settings
-                                        .get("agentAcceptAllEnabled")
-                                        .and_then(Value::as_bool)
-                                        .unwrap_or(false)
-                                });
+                        let accept_all_effective = match read_text_from_map(
+                            &agent_config,
+                            "acceptAllMode",
+                        )
+                        .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
+                        .as_deref()
+                        {
+                            Some("enabled" | "acceptAll") => true,
+                            Some("disabled") => false,
+                            _ => settings
+                                .get("agentAcceptAllEnabled")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(false),
+                        };
                         let req_model = read_text(params, "agentModel");
                         let req_effort = read_text(params, "agentEffort");
                         let acp_cmd = crate::acp::spec::build_acp_host_launch_command(

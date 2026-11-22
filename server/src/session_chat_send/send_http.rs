@@ -131,6 +131,57 @@ pub(super) async fn send_session_chat_message_attempt(
                 },
             );
         }
+        // An ACP session does not run an interactive TUI in its PTY, so raw keystrokes cannot be
+        // typed into zmx; route supported keys through the structured ACP channel instead.
+        if crate::acp::session_is_acp(&target.session) {
+            return match key {
+                "escape" => match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
+                    Ok(()) => {
+                        record_session_chat_interrupt(state, &target, &request_id);
+                        routed_json(
+                            Some(endpoint_path),
+                            StatusCode::OK,
+                            rpc_success(request_id, json!({ "queued": true, "textBytes": 0 })),
+                        )
+                    }
+                    Err(error) => domain_error_response(endpoint_path, request_id, error),
+                },
+                "shift-tab" => {
+                    match crate::acp::channel::cycle_mode(&target.project_id, &target.session_id)
+                        .await
+                    {
+                        Ok(_) => {
+                            let agent =
+                                crate::session_chat_follower::session_chat_display_agent_for_session(
+                                    &target.session,
+                                );
+                            schedule_session_chat_option_redetect(
+                                state,
+                                &target.project_id,
+                                &target.session_id,
+                                agent.as_deref(),
+                            );
+                            routed_json(
+                                Some(endpoint_path),
+                                StatusCode::OK,
+                                rpc_success(request_id, json!({ "queued": true, "textBytes": 0 })),
+                            )
+                        }
+                        Err(error) => domain_error_response(endpoint_path, request_id, error),
+                    }
+                }
+                _ => domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "invalidParams",
+                        message: format!(
+                            "ACP sessions do not accept raw terminal key \"{key}\"; switch to Terminal first."
+                        ),
+                    },
+                ),
+            };
+        }
         let steps = if key == "escape" {
             let requested_at = Instant::now();
             let session = target.session.clone();
@@ -245,6 +296,11 @@ pub(super) async fn send_session_chat_message_attempt(
                 message: "sendSessionChatMessage requires text or imagePaths.".to_string(),
             },
         );
+    }
+    if crate::acp::session_is_acp(&target.session) && !image_paths.is_empty() {
+        if let Err(error) = crate::acp::validate_acp_image_paths(&state.paths, &image_paths) {
+            return domain_error_response(endpoint_path, request_id, error);
+        }
     }
     if text.len() > crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES {
         return domain_error_response(

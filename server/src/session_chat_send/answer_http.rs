@@ -862,13 +862,42 @@ async fn answer_session_chat_prompt(
             // An ACP-mode session answers pending `session/request_permission` requests directly
             // through `ghostex acp-host` without typing keystrokes into the PTY.
             if crate::acp::session_is_acp(&target.session) {
-                let decision = params
-                    .get("approvalSend")
+                let option_id = params
+                    .get("optionId")
                     .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty());
+                let approval_send = params.get("approvalSend").and_then(Value::as_str);
+                let decision = match params
+                    .get("decision")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
                     .filter(|s| !s.is_empty())
-                    .or_else(|| params.get("decision").and_then(Value::as_str))
-                    .unwrap_or("allow");
-                let option_id = params.get("optionId").and_then(Value::as_str);
+                {
+                    Some(explicit) => explicit,
+                    None => match approval_send {
+                        // In Ghostex's approval card contract, an empty `approvalSend` or ESC is
+                        // Deny (never Allow).
+                        Some("") => "deny",
+                        Some(send) if send == crate::session_chat_send::SESSION_CHAT_INTERRUPT => {
+                            "escape"
+                        }
+                        Some(send) => send,
+                        None if option_id.is_some() => "allow",
+                        None => "deny",
+                    },
+                };
+                let is_deny = matches!(
+                    decision.trim().to_ascii_lowercase().as_str(),
+                    "deny" | "reject" | "reject_once" | "reject_always" | "escape" | "cancel" | "n" | "no"
+                );
+                if !is_deny {
+                    if let Err(error) =
+                        verify_answer_targets_shown_prompt(state, &target, &params).await
+                    {
+                        return domain_error_response(endpoint_path, request_id, error);
+                    }
+                }
                 return match crate::acp::channel::answer_permission(
                     &target.project_id,
                     &target.session_id,

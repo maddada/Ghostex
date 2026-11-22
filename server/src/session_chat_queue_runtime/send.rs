@@ -981,7 +981,9 @@ async fn send_session_chat_message_locked(
     // An ACP-mode session running inside `ghostex acp-host` takes messages directly over ACP
     // (`session/prompt`) without typing into a terminal (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
     if crate::acp::session_is_acp(&target.session) {
-        return match crate::acp::channel::send(&target, text, image_paths, interrupt).await {
+        return match crate::acp::channel::send(&state.paths, &target, text, image_paths, interrupt)
+            .await
+        {
             Ok(_) => {
                 crate::telemetry::prompt_sent(
                     &target.session,

@@ -496,11 +496,12 @@ pub fn derive_session_chat_prompt(
         && !is_post_tool_hook_event(event_name)
         && tool_input.is_some_and(|value| !value.is_null())
     {
-        let questions = parse_session_chat_questions(Some(tool_name), tool_input?)?;
-        return Some(SessionChatInteractivePrompt::Question {
-            questions,
-            tool_use_id: None,
-        });
+        if let Some(questions) = parse_session_chat_questions(Some(tool_name), tool_input?) {
+            return Some(SessionChatInteractivePrompt::Question {
+                questions,
+                tool_use_id: None,
+            });
+        }
     }
     if event_name == Some("PermissionRequest") {
         let summary = summarize_approval_input(tool_input);
