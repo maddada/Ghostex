@@ -17,16 +17,17 @@ hand the host a cwd plus the exact command to run — and the host performs it w
 the session-creation path it already has.
 */
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use ghostex_find::agent::{ALL_AGENTS, Agent};
+use ghostex_find::agent::{Agent, ALL_AGENTS};
 use ghostex_find::favorites::{self, FavoriteSet};
-use ghostex_find::index::{self as zehn_index, QueryOptions, SearchIndex, day_key};
+use ghostex_find::index::{self as zehn_index, day_key, QueryOptions, SearchIndex};
 use ghostex_find::scan::RecordKind;
 use ghostex_find::store::SearchStore;
 
@@ -40,12 +41,18 @@ const MAX_TEXT_LIMIT: usize = 200_000;
 const DEFAULT_ROW_LIMIT: usize = 60;
 const MAX_ROW_LIMIT: usize = 500;
 const MAX_CANDIDATES_PER_QUERY: usize = 4_000;
+const MAX_DEEP_CANDIDATES: usize = 20_000;
 
 /// How long a synced prompt store is served before the next query runs a quick
 /// incremental catch-up pass.
 const INDEX_MAX_AGE: Duration = Duration::from_secs(60);
 const FOREGROUND_ANSWER_BUDGET_FILES: usize = 40;
 const FOREGROUND_ANSWER_BUDGET_MS: u64 = 250;
+
+/// Debounce and queue bounds for the single background transcript nudge worker.
+const NUDGE_DEBOUNCE: Duration = Duration::from_secs(3);
+const MAX_PENDING_NUDGES: usize = 64;
+const NUDGE_WORKER_IDLE_CLOSE: Duration = Duration::from_secs(30);
 
 struct CachedStore {
     store: SearchStore,
@@ -59,10 +66,37 @@ struct CachedStore {
 }
 
 static CACHE: OnceLock<Mutex<Option<CachedStore>>> = OnceLock::new();
+static SYNC_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static BACKFILL_RUNNING: AtomicBool = AtomicBool::new(false);
 
 fn cache() -> &'static Mutex<Option<CachedStore>> {
     CACHE.get_or_init(|| Mutex::new(None))
+}
+
+fn sync_lock() -> &'static Mutex<()> {
+    SYNC_LOCK.get_or_init(|| Mutex::new(()))
+}
+
+struct NudgeJob {
+    cache_root: PathBuf,
+    agent: Agent,
+    transcript_path: PathBuf,
+    session_id: Option<String>,
+    project: Option<String>,
+    title: Option<String>,
+    ready_at: Instant,
+}
+
+#[derive(Default)]
+struct NudgeQueue {
+    pending: HashMap<(PathBuf, PathBuf), NudgeJob>,
+    worker_started: bool,
+}
+
+static NUDGE_QUEUE: OnceLock<(Mutex<NudgeQueue>, Condvar)> = OnceLock::new();
+
+fn nudge_queue() -> &'static (Mutex<NudgeQueue>, Condvar) {
+    NUDGE_QUEUE.get_or_init(|| (Mutex::new(NudgeQueue::default()), Condvar::new()))
 }
 
 #[derive(Debug)]
@@ -153,17 +187,13 @@ impl Drop for BackfillGuard {
 
 fn sync_store(
     paths: &crate::paths::GxserverPaths,
-    existing: Option<CachedStore>,
+    prev_epoch: u64,
 ) -> Result<CachedStore, PromptSearchError> {
     let (home, cache_root, favorites_path) = resolve_search_paths(paths);
-    let next_epoch = existing.as_ref().map(|prev| prev.epoch + 1).unwrap_or(1);
-    let mut store = match existing {
-        Some(prev) => prev.store,
-        None => SearchStore::open(&cache_root).ok_or_else(|| PromptSearchError {
-            code: "internalError",
-            message: "Could not open the rebuildable search index database.".to_string(),
-        })?,
-    };
+    let mut store = SearchStore::open(&cache_root).ok_or_else(|| PromptSearchError {
+        code: "internalError",
+        message: "Could not open the rebuildable search index database.".to_string(),
+    })?;
     let built = SearchIndex::build(&home, &cache_root, favorites_path.clone());
     store.sync_user_records(&built.records);
     let home_path = PathBuf::from(&home);
@@ -175,13 +205,16 @@ fn sync_store(
     if stats.remaining_files > 0 {
         spawn_answer_backfill(home_path, cache_root);
     }
+    // Reload favorites right before installing so any star toggled while syncing survives.
+    let mut favorites = FavoriteSet::new();
+    favorites.load(&favorites_path);
     Ok(CachedStore {
         store,
-        favorites: built.favorites,
+        favorites,
         favorites_path,
         opencode_error: built.opencode_error,
         empryo_error: built.empryo_error,
-        epoch: next_epoch,
+        epoch: prev_epoch + 1,
         synced_at: Instant::now(),
         synced_at_unix: now_unix(),
     })
@@ -214,21 +247,53 @@ fn with_store_policy<T>(
     sync_when_stale: bool,
     action: impl FnOnce(&mut CachedStore) -> Result<T, PromptSearchError>,
 ) -> Result<T, PromptSearchError> {
+    {
+        let mut guard = cache().lock().map_err(|_| PromptSearchError {
+            code: "internalError",
+            message: "The prompt index lock was poisoned.".to_string(),
+        })?;
+        let fresh = match guard.as_ref() {
+            None => false,
+            Some(cached) => {
+                !force_refresh && (!sync_when_stale || cached.synced_at.elapsed() <= INDEX_MAX_AGE)
+            }
+        };
+        if fresh {
+            let cached = guard.as_mut().expect("checked Some above");
+            return action(cached);
+        }
+    }
+
+    // Serialize syncs without holding `CACHE` across scanning or SQLite writes, so
+    // warm reads (`readAgentPromptText`, favorites, concurrent queries) never stall.
+    let _sync_guard = sync_lock().lock().map_err(|_| PromptSearchError {
+        code: "internalError",
+        message: "The prompt sync lock was poisoned.".to_string(),
+    })?;
+    let prev_epoch = {
+        let mut guard = cache().lock().map_err(|_| PromptSearchError {
+            code: "internalError",
+            message: "The prompt index lock was poisoned.".to_string(),
+        })?;
+        if !force_refresh {
+            let fresh = match guard.as_ref() {
+                None => false,
+                Some(cached) => !sync_when_stale || cached.synced_at.elapsed() <= INDEX_MAX_AGE,
+            };
+            if fresh {
+                let cached = guard.as_mut().expect("checked Some above");
+                return action(cached);
+            }
+        }
+        guard.as_ref().map(|prev| prev.epoch).unwrap_or(0)
+    };
+
+    let refreshed = sync_store(paths, prev_epoch)?;
     let mut guard = cache().lock().map_err(|_| PromptSearchError {
         code: "internalError",
         message: "The prompt index lock was poisoned.".to_string(),
     })?;
-    let needs_sync = match guard.as_ref() {
-        None => true,
-        Some(cached) => {
-            force_refresh || (sync_when_stale && cached.synced_at.elapsed() > INDEX_MAX_AGE)
-        }
-    };
-    if needs_sync {
-        let prev = guard.take();
-        let refreshed = sync_store(paths, prev)?;
-        *guard = Some(refreshed);
-    }
+    *guard = Some(refreshed);
     let cached = guard.as_mut().expect("store opened above");
     action(cached)
 }
@@ -240,8 +305,90 @@ pub fn invalidate_index() {
     }
 }
 
-/// Nudge the search index to immediately parse turn-ending answers from one
-/// changed transcript file (for example when a hook or ACP turn completes).
+fn run_nudge_worker() {
+    let (lock, cv) = nudge_queue();
+    let mut cached_store: Option<(PathBuf, SearchStore)> = None;
+    loop {
+        let next_job = {
+            let mut state = match lock.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            loop {
+                if state.pending.is_empty() {
+                    if cached_store.is_some() {
+                        let (next_state, wait_res) =
+                            match cv.wait_timeout(state, NUDGE_WORKER_IDLE_CLOSE) {
+                                Ok(pair) => pair,
+                                Err(poisoned) => poisoned.into_inner(),
+                            };
+                        state = next_state;
+                        if state.pending.is_empty() && wait_res.timed_out() {
+                            cached_store = None;
+                        }
+                    } else {
+                        state = match cv.wait(state) {
+                            Ok(guard) => guard,
+                            Err(poisoned) => poisoned.into_inner(),
+                        };
+                    }
+                    continue;
+                }
+
+                let earliest_key = state
+                    .pending
+                    .iter()
+                    .min_by_key(|(_, job)| job.ready_at)
+                    .map(|(k, job)| (k.clone(), job.ready_at));
+                let Some((key, ready_at)) = earliest_key else {
+                    continue;
+                };
+                let now = Instant::now();
+                if ready_at > now {
+                    let (next_state, _) = match cv.wait_timeout(state, ready_at - now) {
+                        Ok(pair) => pair,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    state = next_state;
+                    continue;
+                }
+                break state.pending.remove(&key);
+            }
+        };
+
+        let Some(job) = next_job else {
+            continue;
+        };
+        if !SearchStore::exists(&job.cache_root) {
+            if cached_store
+                .as_ref()
+                .is_some_and(|(root, _)| *root == job.cache_root)
+            {
+                cached_store = None;
+            }
+            continue;
+        }
+        let needs_open = cached_store
+            .as_ref()
+            .is_none_or(|(root, _)| *root != job.cache_root);
+        if needs_open {
+            cached_store = SearchStore::open(&job.cache_root).map(|s| (job.cache_root.clone(), s));
+        }
+        if let Some((_, store)) = cached_store.as_mut() {
+            let _ = store.index_single_transcript(
+                job.agent,
+                &job.transcript_path,
+                job.session_id.as_deref(),
+                job.project.as_deref(),
+                job.title.as_deref(),
+            );
+        }
+    }
+}
+
+/// Queue a debounced, deduplicated index catch-up for one changed transcript
+/// file. Stays completely lazy (no worker thread, no SQLite open, no file parse)
+/// until Find has actually created `search_index.sqlite3`.
 pub fn nudge_transcript_file(
     paths: &crate::paths::GxserverPaths,
     agent_name: &str,
@@ -254,25 +401,94 @@ pub fn nudge_transcript_file(
         return;
     };
     let (_, cache_root, _) = resolve_search_paths(paths);
-    let path_owned = transcript_path.to_path_buf();
-    let sid = session_id.map(str::to_string);
-    let proj = project.map(str::to_string);
-    let ttl = title.map(str::to_string);
-    std::thread::Builder::new()
-        .name("ghostex-find-nudge".to_string())
-        .spawn(move || {
-            let Some(mut store) = SearchStore::open(&cache_root) else {
-                return;
-            };
-            let _ = store.index_single_transcript(
-                agent,
-                &path_owned,
-                sid.as_deref(),
-                proj.as_deref(),
-                ttl.as_deref(),
-            );
+    if !SearchStore::exists(&cache_root) {
+        return;
+    }
+    let key = (cache_root.clone(), transcript_path.to_path_buf());
+    let job = NudgeJob {
+        cache_root,
+        agent,
+        transcript_path: transcript_path.to_path_buf(),
+        session_id: session_id.map(str::to_string),
+        project: project.map(str::to_string),
+        title: title.map(str::to_string),
+        ready_at: Instant::now() + NUDGE_DEBOUNCE,
+    };
+
+    let (lock, cv) = nudge_queue();
+    let mut state = match lock.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if !state.pending.contains_key(&key) && state.pending.len() >= MAX_PENDING_NUDGES {
+        if let Some(oldest_key) = state
+            .pending
+            .iter()
+            .min_by_key(|(_, item)| item.ready_at)
+            .map(|(k, _)| k.clone())
+        {
+            state.pending.remove(&oldest_key);
+        }
+    }
+    state.pending.insert(key, job);
+    if !state.worker_started {
+        if std::thread::Builder::new()
+            .name("ghostex-find-nudge".to_string())
+            .spawn(run_nudge_worker)
+            .is_ok()
+        {
+            state.worker_started = true;
+        }
+    }
+    cv.notify_one();
+}
+
+/// Observe a committed `/api/ingestAgentHookEvent` result and enqueue a lazy
+/// debounced Find catch-up when a turn ends, using the daemon's `GxserverPaths`.
+pub(crate) fn observe_hook_turn_end(
+    paths: &crate::paths::GxserverPaths,
+    params: &Map<String, Value>,
+    result: &Value,
+) {
+    let ended_turn = crate::session_status::result_ended_turn(result)
+        || (result.pointer("/activity/activity").and_then(Value::as_str) == Some("idle")
+            && result.get("previousActivity").and_then(Value::as_str) == Some("working"));
+    if !ended_turn {
+        return;
+    }
+    let Some(session) = result.get("session") else {
+        return;
+    };
+    let Some(path) = params
+        .get("agentSessionPath")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            session
+                .pointer("/runtimeSettings/agentSessionPath")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
         })
-        .ok();
+    else {
+        return;
+    };
+    let agent_name = crate::session_chat_follower::session_chat_agent_for_session(session)
+        .or_else(|| {
+            session
+                .get("agentId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    if agent_name.is_empty() {
+        return;
+    }
+    let sid = session
+        .pointer("/runtimeSettings/agentSessionId")
+        .and_then(Value::as_str);
+    let cwd = session.get("cwd").and_then(Value::as_str);
+    let title = session.get("title").and_then(Value::as_str);
+    nudge_transcript_file(paths, &agent_name, Path::new(path), sid, cwd, title);
 }
 
 fn read_kinds(params: &Map<String, Value>) -> Result<Vec<RecordKind>, PromptSearchError> {
@@ -388,6 +604,55 @@ fn prompt_row_excerpt(text: &str, highlights: &[u16], limit: usize) -> (String, 
     (text[start..end].to_string(), visible_highlights, true)
 }
 
+fn build_prompt_row(
+    open_sessions: &[PromptLaunchSession],
+    rec: &ghostex_find::scan::Record,
+    index: usize,
+    favorite: bool,
+    score: i32,
+    positions: &[u16],
+    text_limit: usize,
+) -> Value {
+    let (text, highlights, truncated) = prompt_row_excerpt(&rec.text, positions, text_limit);
+    json!({
+        "key": format!("{:016x}", zehn_index::record_key(rec)),
+        "index": index,
+        "agent": rec.agent.label(),
+        "agentColor": rec.agent.hex_color(),
+        "kind": rec.kind.as_str(),
+        "interrupted": rec.interrupted,
+        "text": text,
+        "textLength": rec.text.len(),
+        "truncated": truncated,
+        "title": open_session_title(open_sessions, rec)
+            .unwrap_or_else(|| rec.display_title()),
+        "project": rec.project,
+        "projectName": rec.project_display_name(),
+        "sessionId": rec.session,
+        "ts": rec.ts,
+        "dayKey": day_key(rec.ts),
+        "favorite": favorite,
+        "score": score,
+        "highlights": highlights,
+        "meta": {
+            "provider": rec.meta.provider,
+            "model": rec.meta.model,
+            "thinking": rec.meta.thinking,
+            "plan": rec.meta.plan,
+            "usage": {
+                "input": rec.meta.usage.input,
+                "output": rec.meta.usage.output,
+                "cacheRead": rec.meta.usage.cache_read,
+                "cacheWrite": rec.meta.usage.cache_write,
+                "total": rec.meta.usage.total,
+                "contextWindow": rec.meta.usage.context_window,
+                "ratePercent": rec.meta.usage.rate_percent,
+                "cost": rec.meta.usage.cost,
+            },
+        },
+    })
+}
+
 /// `POST /api/searchAgentPrompts`
 pub fn search_agent_prompts(
     paths: &crate::paths::GxserverPaths,
@@ -424,76 +689,79 @@ pub fn search_agent_prompts(
         .unwrap_or(false);
 
     with_store(paths, refresh, |cached| {
-        let candidates = cached.store.query_candidates(
-            &query,
-            &kinds,
-            &agents,
-            project.as_deref(),
-            MAX_CANDIDATES_PER_QUERY,
-        );
-        let options = QueryOptions {
-            query,
-            agents,
-            kinds: kinds.clone(),
-            project,
-            group_by_day,
-            offset,
-            limit,
-        };
-        let result = zehn_index::rank_records(&candidates, &cached.favorites, &options);
-        let total = cached.store.total_count(&kinds);
-        let rows: Vec<Value> = result
-            .hits
-            .iter()
-            .map(|hit| {
-                let rec = &candidates[hit.index];
-                let (text, highlights, truncated) =
-                    prompt_row_excerpt(&rec.text, &hit.positions, text_limit);
-                json!({
-                    "key": format!("{:016x}", zehn_index::record_key(rec)),
-                    "index": hit.index,
-                    "agent": rec.agent.label(),
-                    "agentColor": rec.agent.hex_color(),
-                    "kind": rec.kind.as_str(),
-                    "interrupted": rec.interrupted,
-                    "text": text,
-                    "textLength": rec.text.len(),
-                    "truncated": truncated,
-                    "title": open_session_title(open_sessions, rec)
-                        .unwrap_or_else(|| rec.display_title()),
-                    "project": rec.project,
-                    "projectName": rec.project_display_name(),
-                    "sessionId": rec.session,
-                    "ts": rec.ts,
-                    "dayKey": day_key(rec.ts),
-                    "favorite": hit.favorite,
-                    "score": hit.score,
-                    "highlights": highlights,
-                    "meta": {
-                        "provider": rec.meta.provider,
-                        "model": rec.meta.model,
-                        "thinking": rec.meta.thinking,
-                        "plan": rec.meta.plan,
-                        "usage": {
-                            "input": rec.meta.usage.input,
-                            "output": rec.meta.usage.output,
-                            "cacheRead": rec.meta.usage.cache_read,
-                            "cacheWrite": rec.meta.usage.cache_write,
-                            "total": rec.meta.usage.total,
-                            "contextWindow": rec.meta.usage.context_window,
-                            "ratePercent": rec.meta.usage.rate_percent,
-                            "cost": rec.meta.usage.cost,
-                        },
-                    },
+        let (rows, matched, total) = if query.is_empty() {
+            let page =
+                cached
+                    .store
+                    .query_empty_page(&kinds, &agents, project.as_deref(), offset, limit);
+            let total = if agents.is_empty() && project.is_none() {
+                page.matched
+            } else {
+                cached.store.total_count(&kinds)
+            };
+            let rows: Vec<Value> = page
+                .records
+                .iter()
+                .enumerate()
+                .map(|(idx, rec)| {
+                    let favorite = cached.favorites.contains(zehn_index::record_key(rec));
+                    build_prompt_row(
+                        open_sessions,
+                        rec,
+                        offset.saturating_add(idx),
+                        favorite,
+                        0,
+                        &[],
+                        text_limit,
+                    )
                 })
-            })
-            .collect();
+                .collect();
+            (rows, page.matched, total)
+        } else {
+            let candidate_limit =
+                MAX_CANDIDATES_PER_QUERY.max(offset.saturating_add(limit).min(MAX_DEEP_CANDIDATES));
+            let candidates = cached.store.query_candidates(
+                &query,
+                &kinds,
+                &agents,
+                project.as_deref(),
+                candidate_limit,
+            );
+            let options = QueryOptions {
+                query,
+                agents,
+                kinds: kinds.clone(),
+                project,
+                group_by_day,
+                offset,
+                limit,
+            };
+            let result = zehn_index::rank_records(&candidates, &cached.favorites, &options);
+            let total = cached.store.total_count(&kinds);
+            let rows: Vec<Value> = result
+                .hits
+                .iter()
+                .map(|hit| {
+                    let rec = &candidates[hit.index];
+                    build_prompt_row(
+                        open_sessions,
+                        rec,
+                        hit.index,
+                        hit.favorite,
+                        hit.score,
+                        &hit.positions,
+                        text_limit,
+                    )
+                })
+                .collect();
+            (rows, result.matched, total)
+        };
 
         let mut payload = json!({
             "indexEpoch": cached.epoch,
             "indexedAt": cached.synced_at_unix,
             "total": total,
-            "matched": result.matched,
+            "matched": matched,
             "offset": offset,
             "rows": rows,
         });
@@ -505,25 +773,21 @@ pub fn search_agent_prompts(
         }
         if include_facets {
             let (projects, present_agents) = cached.store.facets(&kinds);
-            payload["projects"] = json!(
-                projects
-                    .into_iter()
-                    .map(|path| json!({
-                        "name": ghostex_find::scan::project_display_name(&path),
-                        "path": path,
-                    }))
-                    .collect::<Vec<_>>()
-            );
-            payload["agents"] = json!(
-                ALL_AGENTS
-                    .into_iter()
-                    .map(|agent| json!({
-                        "agent": agent.label(),
-                        "color": agent.hex_color(),
-                        "present": present_agents.contains(&agent),
-                    }))
-                    .collect::<Vec<_>>()
-            );
+            payload["projects"] = json!(projects
+                .into_iter()
+                .map(|path| json!({
+                    "name": ghostex_find::scan::project_display_name(&path),
+                    "path": path,
+                }))
+                .collect::<Vec<_>>());
+            payload["agents"] = json!(ALL_AGENTS
+                .into_iter()
+                .map(|agent| json!({
+                    "agent": agent.label(),
+                    "color": agent.hex_color(),
+                    "present": present_agents.contains(&agent),
+                }))
+                .collect::<Vec<_>>());
         }
         Ok(payload)
     })

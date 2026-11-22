@@ -11,9 +11,12 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
+use rusqlite::{
+    Connection, ErrorCode, OptionalExtension, TransactionBehavior, params, params_from_iter,
+};
 
 use crate::agent::{ALL_AGENTS, Agent};
 use crate::favorites;
@@ -24,6 +27,21 @@ use crate::scan::{Meta, Record, RecordKind};
 
 const SEARCH_DB_FILE_NAME: &str = "search_index.sqlite3";
 const SCHEMA_VERSION: i64 = 1;
+const BUSY_TIMEOUT_SECS: u64 = 10;
+const USER_SYNC_BATCH_SIZE: usize = 500;
+const MAX_SUBSEQUENCE_LIKE_CHARS: usize = 16;
+
+/// Serializes in-process SQLite writers (foreground user sync batches,
+/// foreground/background answer sync, debounced nudges, and schema init/recreate)
+/// so concurrent daemon threads never fight over SQLite's single writer lock.
+static WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn write_lock() -> MutexGuard<'static, ()> {
+    WRITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 const SCHEMA_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS indexed_files (
@@ -89,9 +107,39 @@ pub struct AnswerSyncStats {
     pub remaining_files: usize,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct EmptyPageResult {
+    pub matched: usize,
+    pub records: Vec<Record>,
+}
+
 pub struct SearchStore {
     conn: Connection,
     db_path: PathBuf,
+}
+
+enum InitError {
+    SchemaVersionMismatch,
+    Corrupt,
+    Other,
+}
+
+fn is_corruption_error(err: &rusqlite::Error) -> bool {
+    matches!(
+        err,
+        rusqlite::Error::SqliteFailure(e, _)
+            if matches!(e.code, ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase)
+    )
+}
+
+impl From<rusqlite::Error> for InitError {
+    fn from(err: rusqlite::Error) -> Self {
+        if is_corruption_error(&err) {
+            Self::Corrupt
+        } else {
+            Self::Other
+        }
+    }
 }
 
 fn now_unix() -> i64 {
@@ -109,19 +157,31 @@ fn remove_db_files(path: &Path) {
     let _ = fs::remove_file(shm);
 }
 
-fn configure_and_init(conn: &Connection) -> rusqlite::Result<()> {
-    conn.busy_timeout(Duration::from_secs(5))?;
-    conn.pragma_update(None, "journal_mode", "WAL")?;
+fn configure_and_init(conn: &mut Connection) -> Result<(), InitError> {
+    conn.busy_timeout(Duration::from_secs(BUSY_TIMEOUT_SECS))?;
+    let journal_mode: String = conn.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
+    if !journal_mode.eq_ignore_ascii_case("wal") {
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+    }
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "temp_store", "MEMORY")?;
     let user_version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if user_version == 0 {
-        let _ = conn.pragma_update(None, "auto_vacuum", "INCREMENTAL");
-        conn.execute_batch(SCHEMA_SQL)?;
-        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-    } else if user_version != SCHEMA_VERSION {
-        return Err(rusqlite::Error::InvalidQuery);
+    if user_version == SCHEMA_VERSION {
+        return Ok(());
     }
+    if user_version != 0 {
+        return Err(InitError::SchemaVersionMismatch);
+    }
+    let _ = conn.pragma_update(None, "auto_vacuum", "INCREMENTAL");
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let tx_version: i64 = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if tx_version == 0 {
+        tx.execute_batch(SCHEMA_SQL)?;
+        tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    } else if tx_version != SCHEMA_VERSION {
+        return Err(InitError::SchemaVersionMismatch);
+    }
+    tx.commit()?;
     Ok(())
 }
 
@@ -130,18 +190,31 @@ impl SearchStore {
         cache_root.join(SEARCH_DB_FILE_NAME)
     }
 
+    pub fn exists(cache_root: &Path) -> bool {
+        Self::db_path_for(cache_root).is_file()
+    }
+
     /// Open (or cleanly recreate if corrupted/outdated) the rebuildable search store.
+    /// Never unlinks the database on transient lock/busy errors.
     pub fn open(cache_root: &Path) -> Option<Self> {
         let _ = fs::create_dir_all(cache_root);
         let db_path = Self::db_path_for(cache_root);
-        if let Ok(conn) = Connection::open(&db_path) {
-            if configure_and_init(&conn).is_ok() {
-                return Some(Self { conn, db_path });
-            }
+        let _guard = write_lock();
+        let should_recreate = match Connection::open(&db_path) {
+            Ok(mut conn) => match configure_and_init(&mut conn) {
+                Ok(()) => return Some(Self { conn, db_path }),
+                Err(InitError::Corrupt | InitError::SchemaVersionMismatch) => true,
+                Err(InitError::Other) => return None,
+            },
+            Err(err) if is_corruption_error(&err) => true,
+            Err(_) => return None,
+        };
+        if !should_recreate {
+            return None;
         }
         remove_db_files(&db_path);
-        let conn = Connection::open(&db_path).ok()?;
-        configure_and_init(&conn).ok()?;
+        let mut conn = Connection::open(&db_path).ok()?;
+        configure_and_init(&mut conn).ok()?;
         Some(Self { conn, db_path })
     }
 
@@ -149,61 +222,71 @@ impl SearchStore {
         &self.db_path
     }
 
-    /// Upsert user prompt records, skipping rows whose key and metadata are unchanged.
+    /// Upsert user prompt records in bounded transactions so writers and readers
+    /// never block for seconds, skipping rows whose key and metadata are unchanged.
     pub fn sync_user_records(&mut self, records: &[Record]) -> usize {
         if records.is_empty() {
             return 0;
         }
-        let Ok(tx) = self.conn.transaction() else {
-            return 0;
-        };
         let mut written = 0usize;
-        {
-            let Ok(mut stmt) = tx.prepare_cached(
-                r#"
-                INSERT INTO search_items (
-                    item_key, agent, kind, session_id, project, title, text, ts, interrupted, meta_json, source_path
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                ON CONFLICT(item_key) DO UPDATE SET
-                    session_id = CASE WHEN excluded.session_id <> '' THEN excluded.session_id ELSE search_items.session_id END,
-                    project = CASE WHEN excluded.project <> '' THEN excluded.project ELSE search_items.project END,
-                    title = CASE WHEN excluded.title <> '' THEN excluded.title ELSE search_items.title END,
-                    ts = MAX(search_items.ts, excluded.ts),
-                    meta_json = excluded.meta_json
-                WHERE
-                    excluded.ts > search_items.ts
-                    OR (excluded.title <> '' AND excluded.title <> search_items.title)
-                    OR (excluded.project <> '' AND excluded.project <> search_items.project)
-                    OR (excluded.session_id <> '' AND excluded.session_id <> search_items.session_id)
-                "#,
-            ) else {
-                return 0;
+        for chunk in records.chunks(USER_SYNC_BATCH_SIZE) {
+            let _guard = write_lock();
+            let Ok(tx) = self
+                .conn
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+            else {
+                break;
             };
-            for rec in records {
-                let item_key = format!(
-                    "{:016x}",
-                    favorites::key_for_kind(rec.agent.label(), rec.kind, &rec.text)
-                );
-                let meta_json =
-                    serde_json::to_string(&rec.meta).unwrap_or_else(|_| "{}".to_string());
-                if let Ok(changed) = stmt.execute(params![
-                    item_key,
-                    rec.agent.label(),
-                    rec.kind.as_str(),
-                    rec.session,
-                    rec.project,
-                    rec.title,
-                    rec.text,
-                    rec.ts,
-                    i32::from(rec.interrupted),
-                    meta_json,
-                    "",
-                ]) {
-                    written += changed;
+            let mut batch_written = 0usize;
+            {
+                let Ok(mut stmt) = tx.prepare_cached(
+                    r#"
+                    INSERT INTO search_items (
+                        item_key, agent, kind, session_id, project, title, text, ts, interrupted, meta_json, source_path
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                    ON CONFLICT(item_key) DO UPDATE SET
+                        session_id = CASE WHEN excluded.session_id <> '' THEN excluded.session_id ELSE search_items.session_id END,
+                        project = CASE WHEN excluded.project <> '' THEN excluded.project ELSE search_items.project END,
+                        title = CASE WHEN excluded.title <> '' THEN excluded.title ELSE search_items.title END,
+                        ts = MAX(search_items.ts, excluded.ts),
+                        meta_json = excluded.meta_json
+                    WHERE
+                        excluded.ts > search_items.ts
+                        OR (excluded.title <> '' AND excluded.title <> search_items.title)
+                        OR (excluded.project <> '' AND excluded.project <> search_items.project)
+                        OR (excluded.session_id <> '' AND excluded.session_id <> search_items.session_id)
+                    "#,
+                ) else {
+                    break;
+                };
+                for rec in chunk {
+                    let item_key = format!(
+                        "{:016x}",
+                        favorites::key_for_kind(rec.agent.label(), rec.kind, &rec.text)
+                    );
+                    let meta_json =
+                        serde_json::to_string(&rec.meta).unwrap_or_else(|_| "{}".to_string());
+                    if let Ok(changed) = stmt.execute(params![
+                        item_key,
+                        rec.agent.label(),
+                        rec.kind.as_str(),
+                        rec.session,
+                        rec.project,
+                        rec.title,
+                        rec.text,
+                        rec.ts,
+                        i32::from(rec.interrupted),
+                        meta_json,
+                        "",
+                    ]) {
+                        batch_written += changed;
+                    }
                 }
             }
+            if tx.commit().is_ok() {
+                written += batch_written;
+            }
         }
-        let _ = tx.commit();
         written
     }
 
@@ -223,15 +306,60 @@ impl SearchStore {
     fn write_source_answers(&mut self, source: &TranscriptSource, answers: &[Record]) -> usize {
         let path_str = source.path.to_string_lossy().to_string();
         let now = now_unix();
-        let Ok(tx) = self.conn.transaction() else {
+        let prepared_answers: Vec<(String, &Record)> = answers
+            .iter()
+            .map(|rec| {
+                let item_key = format!(
+                    "{:016x}",
+                    favorites::key_for_kind(rec.agent.label(), RecordKind::AgentAnswer, &rec.text)
+                );
+                (item_key, rec)
+            })
+            .collect();
+        let new_keys: HashSet<&str> = prepared_answers
+            .iter()
+            .map(|(key, _)| key.as_str())
+            .collect();
+
+        let _guard = write_lock();
+        let Ok(tx) = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+        else {
             return 0;
         };
-        let _ = tx.execute(
-            "DELETE FROM search_items WHERE source_path = ?1 AND kind = 'agent_answer'",
-            [&path_str],
-        );
+        if new_keys.is_empty() {
+            let _ = tx.execute(
+                "DELETE FROM search_items WHERE source_path = ?1 AND kind = 'agent_answer'",
+                [&path_str],
+            );
+        } else {
+            let mut stale_keys = Vec::new();
+            if let Ok(mut select_stmt) = tx.prepare_cached(
+                "SELECT item_key FROM search_items WHERE source_path = ?1 AND kind = 'agent_answer'",
+            ) {
+                if let Ok(rows) =
+                    select_stmt.query_map([&path_str], |row| row.get::<_, String>(0))
+                {
+                    for key in rows.flatten() {
+                        if !new_keys.contains(key.as_str()) {
+                            stale_keys.push(key);
+                        }
+                    }
+                }
+            }
+            if !stale_keys.is_empty() {
+                if let Ok(mut delete_stmt) = tx.prepare_cached(
+                    "DELETE FROM search_items WHERE source_path = ?1 AND kind = 'agent_answer' AND item_key = ?2",
+                ) {
+                    for key in &stale_keys {
+                        let _ = delete_stmt.execute(params![&path_str, key]);
+                    }
+                }
+            }
+        }
         let mut written = 0usize;
-        {
+        if !prepared_answers.is_empty() {
             let Ok(mut stmt) = tx.prepare_cached(
                 r#"
                 INSERT INTO search_items (
@@ -244,15 +372,18 @@ impl SearchStore {
                     ts = MAX(search_items.ts, excluded.ts),
                     interrupted = excluded.interrupted,
                     source_path = excluded.source_path
+                WHERE
+                    excluded.ts > search_items.ts
+                    OR excluded.interrupted <> search_items.interrupted
+                    OR excluded.source_path <> search_items.source_path
+                    OR (excluded.title <> '' AND excluded.title <> search_items.title)
+                    OR (excluded.project <> '' AND excluded.project <> search_items.project)
+                    OR (excluded.session_id <> '' AND excluded.session_id <> search_items.session_id)
                 "#,
             ) else {
                 return 0;
             };
-            for rec in answers {
-                let item_key = format!(
-                    "{:016x}",
-                    favorites::key_for_kind(rec.agent.label(), RecordKind::AgentAnswer, &rec.text)
-                );
+            for (item_key, rec) in &prepared_answers {
                 let meta_json =
                     serde_json::to_string(&rec.meta).unwrap_or_else(|_| "{}".to_string());
                 if let Ok(changed) = stmt.execute(params![
@@ -289,8 +420,7 @@ impl SearchStore {
                 now,
             ],
         );
-        let _ = tx.commit();
-        written
+        if tx.commit().is_ok() { written } else { 0 }
     }
 
     /// Incrementally index newest changed transcript files within `max_files` and `max_duration`.
@@ -366,7 +496,7 @@ impl SearchStore {
         self.write_source_answers(&source, &answers)
     }
 
-    /// Build a safe FTS5 trigram query expression for queries where every token is >= 3 chars.
+    /// Build a safe FTS5 trigram query expression for queries that contain at least one >= 3-char token.
     fn fts5_trigram_query(raw: &str) -> Option<String> {
         let tokens: Vec<String> = raw
             .split_whitespace()
@@ -378,6 +508,130 @@ impl SearchStore {
         } else {
             Some(tokens.join(" "))
         }
+    }
+
+    fn escape_like_literal(text: &str) -> String {
+        let mut out = String::with_capacity(text.len());
+        for ch in text.chars() {
+            match ch {
+                '\\' | '%' | '_' => {
+                    out.push('\\');
+                    out.push(ch);
+                }
+                other => out.push(other),
+            }
+        }
+        out
+    }
+
+    /// Ordered literal token LIKE pattern, e.g. `"go db"` -> `"%go%db%"`.
+    fn like_tokens_pattern(raw: &str) -> Option<String> {
+        if raw.is_empty() || raw.contains('\0') {
+            return None;
+        }
+        let tokens: Vec<&str> = raw.split_whitespace().collect();
+        if tokens.is_empty() {
+            return Some(format!("%{}%", Self::escape_like_literal(raw)));
+        }
+        let mut pat = String::from("%");
+        for tok in tokens {
+            pat.push_str(&Self::escape_like_literal(tok));
+            pat.push('%');
+        }
+        Some(pat)
+    }
+
+    /// Character-level subsequence LIKE pattern (e.g. `"rfp"` -> `"%r%f%p%"`)
+    /// matching every possible fuzzy subsequence in `fuzzy::Matcher`.
+    fn like_subsequence_pattern(raw: &str) -> Option<String> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() || trimmed.contains('\0') {
+            return None;
+        }
+        let chars: Vec<char> = trimmed.chars().collect();
+        if chars.len() < 2 || chars.len() > MAX_SUBSEQUENCE_LIKE_CHARS {
+            return None;
+        }
+        let mut pat = String::with_capacity(chars.len() * 2 + 1);
+        pat.push('%');
+        for ch in chars {
+            match ch {
+                '\\' | '%' | '_' => {
+                    pat.push('\\');
+                    pat.push(ch);
+                }
+                other => pat.push(other),
+            }
+            pat.push('%');
+        }
+        Some(pat)
+    }
+
+    /// Subsequence LIKE patterns for short (< 3 char) tokens alongside >= 3-char FTS5 tokens.
+    fn short_token_like_patterns(raw: &str) -> Vec<String> {
+        raw.split_whitespace()
+            .filter(|t| {
+                let len = t.chars().count();
+                (1..3).contains(&len) && !t.contains('\0')
+            })
+            .take(3)
+            .map(|tok| {
+                let mut pat = String::with_capacity(tok.len() * 2 + 1);
+                pat.push('%');
+                for ch in tok.chars() {
+                    match ch {
+                        '\\' | '%' | '_' => {
+                            pat.push('\\');
+                            pat.push(ch);
+                        }
+                        other => pat.push(other),
+                    }
+                    pat.push('%');
+                }
+                pat
+            })
+            .collect()
+    }
+
+    fn build_filter_clause(
+        kinds: &[RecordKind],
+        agents: &[Agent],
+        project: Option<&str>,
+        params: &mut Vec<rusqlite::types::Value>,
+        prefix: &str,
+    ) -> String {
+        let effective_kinds: Vec<&str> = if kinds.is_empty() {
+            vec![RecordKind::User.as_str(), RecordKind::AgentAnswer.as_str()]
+        } else {
+            kinds.iter().map(|k| k.as_str()).collect()
+        };
+
+        let mut clauses = Vec::new();
+        let placeholders = effective_kinds
+            .iter()
+            .map(|k| {
+                params.push(rusqlite::types::Value::Text((*k).to_string()));
+                "?".to_string()
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        clauses.push(format!("{prefix}kind IN ({placeholders})"));
+        if !agents.is_empty() {
+            let agent_ph = agents
+                .iter()
+                .map(|a| {
+                    params.push(rusqlite::types::Value::Text(a.label().to_string()));
+                    "?".to_string()
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            clauses.push(format!("{prefix}agent IN ({agent_ph})"));
+        }
+        if let Some(proj) = project.filter(|p| !p.is_empty()) {
+            params.push(rusqlite::types::Value::Text(proj.to_string()));
+            clauses.push(format!("{prefix}project = ?"));
+        }
+        clauses.join(" AND ")
     }
 
     fn row_to_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<Option<Record>> {
@@ -408,8 +662,73 @@ impl SearchStore {
         }))
     }
 
-    /// Pull candidate records using FTS5 trigram search (for >= 3-char tokens) plus
-    /// recent-row fallback so fuzzy subsequence matching stays identical to Find.
+    /// Direct SQL pagination for empty queries: exact filtered `COUNT(*)` and
+    /// reverse-chronological `LIMIT`/`OFFSET` with no candidate cap.
+    pub fn query_empty_page(
+        &self,
+        kinds: &[RecordKind],
+        agents: &[Agent],
+        project: Option<&str>,
+        offset: usize,
+        limit: usize,
+    ) -> EmptyPageResult {
+        let mut count_params = Vec::new();
+        let count_where = Self::build_filter_clause(kinds, agents, project, &mut count_params, "");
+        let count_sql = format!("SELECT COUNT(*) FROM search_items WHERE {count_where}");
+        let matched = self
+            .conn
+            .query_row(&count_sql, params_from_iter(count_params.iter()), |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap_or(0)
+            .max(0) as usize;
+
+        if matched == 0 || offset >= matched {
+            return EmptyPageResult {
+                matched,
+                records: Vec::new(),
+            };
+        }
+
+        let mut page_params = Vec::new();
+        let page_where = Self::build_filter_clause(kinds, agents, project, &mut page_params, "");
+        let sql = if limit == 0 {
+            page_params.push(rusqlite::types::Value::Integer(offset as i64));
+            format!(
+                "SELECT agent, kind, session_id, project, title, text, ts, interrupted, meta_json \
+                 FROM search_items \
+                 WHERE {page_where} \
+                 ORDER BY ts DESC, doc_id ASC \
+                 LIMIT -1 OFFSET ?"
+            )
+        } else {
+            page_params.push(rusqlite::types::Value::Integer(limit as i64));
+            page_params.push(rusqlite::types::Value::Integer(offset as i64));
+            format!(
+                "SELECT agent, kind, session_id, project, title, text, ts, interrupted, meta_json \
+                 FROM search_items \
+                 WHERE {page_where} \
+                 ORDER BY ts DESC, doc_id ASC \
+                 LIMIT ? OFFSET ?"
+            )
+        };
+
+        let mut records = Vec::new();
+        if let Ok(mut stmt) = self.conn.prepare(&sql) {
+            if let Ok(rows) =
+                stmt.query_map(params_from_iter(page_params.iter()), Self::row_to_record)
+            {
+                for rec in rows.flatten().flatten() {
+                    records.push(rec);
+                }
+            }
+        }
+        EmptyPageResult { matched, records }
+    }
+
+    /// Pull candidate records using FTS5 trigram search (for >= 3-char tokens),
+    /// full-table `LIKE` search (for 1-2 char tokens), and subsequence `LIKE`
+    /// fallback so older short/fuzzy matches remain reachable across large histories.
     pub fn query_candidates(
         &self,
         query: &str,
@@ -418,56 +737,62 @@ impl SearchStore {
         project: Option<&str>,
         max_candidates: usize,
     ) -> Vec<Record> {
+        if query.is_empty() {
+            return self
+                .query_empty_page(kinds, agents, project, 0, max_candidates)
+                .records;
+        }
+
         let mut results = Vec::new();
         let mut seen_keys: HashSet<String> = HashSet::new();
 
-        let effective_kinds: Vec<&str> = if kinds.is_empty() {
-            vec![RecordKind::User.as_str(), RecordKind::AgentAnswer.as_str()]
-        } else {
-            kinds.iter().map(|k| k.as_str()).collect()
-        };
-
-        let build_filter_clause =
-            |params: &mut Vec<rusqlite::types::Value>, prefix: &str| -> String {
-                let mut clauses = Vec::new();
-                let placeholders = effective_kinds
-                    .iter()
-                    .map(|k| {
-                        params.push(rusqlite::types::Value::Text((*k).to_string()));
-                        "?".to_string()
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                clauses.push(format!("{prefix}kind IN ({placeholders})"));
-                if !agents.is_empty() {
-                    let agent_ph = agents
-                        .iter()
-                        .map(|a| {
-                            params.push(rusqlite::types::Value::Text(a.label().to_string()));
-                            "?".to_string()
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    clauses.push(format!("{prefix}agent IN ({agent_ph})"));
-                }
-                if let Some(proj) = project.filter(|p| !p.is_empty()) {
-                    params.push(rusqlite::types::Value::Text(proj.to_string()));
-                    clauses.push(format!("{prefix}project = ?"));
-                }
-                clauses.join(" AND ")
-            };
-
         let trimmed = query.trim();
-        if let Some(fts_expr) = Self::fts5_trigram_query(trimmed) {
-            let mut params = vec![rusqlite::types::Value::Text(fts_expr)];
-            let where_clause = build_filter_clause(&mut params, "s.");
+        let fts_expr = Self::fts5_trigram_query(trimmed);
+
+        if let Some(ref expr) = fts_expr {
+            let mut params = vec![rusqlite::types::Value::Text(expr.clone())];
+            let where_clause = Self::build_filter_clause(kinds, agents, project, &mut params, "s.");
+            let short_patterns = Self::short_token_like_patterns(trimmed);
+            let mut extra_likes = String::new();
+            for pat in short_patterns {
+                params.push(rusqlite::types::Value::Text(pat));
+                extra_likes.push_str(r" AND s.text LIKE ? ESCAPE '\'");
+            }
             params.push(rusqlite::types::Value::Integer(max_candidates as i64));
             let sql = format!(
                 "SELECT s.agent, s.kind, s.session_id, s.project, s.title, s.text, s.ts, s.interrupted, s.meta_json, s.item_key \
                  FROM search_items_fts f \
                  JOIN search_items s ON s.doc_id = f.rowid \
-                 WHERE search_items_fts MATCH ? AND {where_clause} \
+                 WHERE search_items_fts MATCH ? AND {where_clause}{extra_likes} \
                  ORDER BY s.ts DESC \
+                 LIMIT ?"
+            );
+            if let Ok(mut stmt) = self.conn.prepare(&sql) {
+                if let Ok(rows) = stmt.query_map(params_from_iter(params.iter()), |row| {
+                    let key: String = row.get(9)?;
+                    Ok((Self::row_to_record(row)?, key))
+                }) {
+                    for item in rows.flatten() {
+                        if let (Some(rec), key) = item {
+                            if seen_keys.insert(key) {
+                                results.push(rec);
+                            }
+                        }
+                    }
+                }
+            }
+        } else if let Some(like_pat) = Self::like_tokens_pattern(query) {
+            // Short queries (< 3-char tokens, e.g. "ci", "go", "db", "a", or whitespace):
+            // scan the full index with SQL LIKE rather than stopping at the newest N rows.
+            let mut params = Vec::new();
+            let where_clause = Self::build_filter_clause(kinds, agents, project, &mut params, "");
+            params.push(rusqlite::types::Value::Text(like_pat));
+            params.push(rusqlite::types::Value::Integer(max_candidates as i64));
+            let sql = format!(
+                "SELECT agent, kind, session_id, project, title, text, ts, interrupted, meta_json, item_key \
+                 FROM search_items \
+                 WHERE {where_clause} AND text LIKE ? ESCAPE '\\' \
+                 ORDER BY ts DESC \
                  LIMIT ?"
             );
             if let Ok(mut stmt) = self.conn.prepare(&sql) {
@@ -486,24 +811,36 @@ impl SearchStore {
             }
         }
 
-        // For empty queries, very short queries (<3 chars), or sparse fuzzy acronym queries,
-        // pull newest filtered rows so non-contiguous fuzzy matches still work.
-        let need_recent_supplement = trimmed.is_empty()
-            || Self::fts5_trigram_query(trimmed).is_none()
-            || results.len() < 250;
-        if need_recent_supplement {
+        // For sparse acronym / fuzzy queries with few literal hits, pull full-table
+        // subsequence LIKE matches (for <= 16-char queries) so older fuzzy hits are not lost.
+        // Single-character queries have no non-literal fuzzy matches beyond Stage 2.
+        let single_char_query = trimmed.chars().count() <= 1;
+        if !single_char_query && results.len() < 250 {
             let remaining = max_candidates.saturating_sub(results.len());
             if remaining > 0 {
                 let mut params = Vec::new();
-                let where_clause = build_filter_clause(&mut params, "");
-                params.push(rusqlite::types::Value::Integer(remaining as i64));
-                let sql = format!(
-                    "SELECT agent, kind, session_id, project, title, text, ts, interrupted, meta_json, item_key \
-                     FROM search_items \
-                     WHERE {where_clause} \
-                     ORDER BY ts DESC \
-                     LIMIT ?"
-                );
+                let where_clause =
+                    Self::build_filter_clause(kinds, agents, project, &mut params, "");
+                let sql = if let Some(subseq_pat) = Self::like_subsequence_pattern(trimmed) {
+                    params.push(rusqlite::types::Value::Text(subseq_pat));
+                    params.push(rusqlite::types::Value::Integer(remaining as i64));
+                    format!(
+                        "SELECT agent, kind, session_id, project, title, text, ts, interrupted, meta_json, item_key \
+                         FROM search_items \
+                         WHERE {where_clause} AND text LIKE ? ESCAPE '\\' \
+                         ORDER BY ts DESC \
+                         LIMIT ?"
+                    )
+                } else {
+                    params.push(rusqlite::types::Value::Integer(remaining as i64));
+                    format!(
+                        "SELECT agent, kind, session_id, project, title, text, ts, interrupted, meta_json, item_key \
+                         FROM search_items \
+                         WHERE {where_clause} \
+                         ORDER BY ts DESC \
+                         LIMIT ?"
+                    )
+                };
                 if let Ok(mut stmt) = self.conn.prepare(&sql) {
                     if let Ok(rows) = stmt.query_map(params_from_iter(params.iter()), |row| {
                         let key: String = row.get(9)?;
@@ -606,6 +943,6 @@ impl SearchStore {
     }
 
     pub fn load_recent_records(&self, kinds: &[RecordKind], limit: usize) -> Vec<Record> {
-        self.query_candidates("", kinds, &[], None, limit)
+        self.query_empty_page(kinds, &[], None, 0, limit).records
     }
 }

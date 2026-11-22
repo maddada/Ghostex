@@ -120,6 +120,9 @@ pub(crate) fn dispatch_agent_http_blocking(
             crate::session_chat_question_resend::observe_turn_end(state, &params, &result);
             crate::session_chat_claude_feedback_card::observe_turn_end(state, &params, &result);
             crate::session_chat_open_questions::observe_activity(state, &params, &result);
+            if endpoint_path == "/api/ingestAgentHookEvent" {
+                crate::agent_prompt_search::observe_hook_turn_end(&state.paths, &params, &result);
+            }
             if endpoint_path == "/api/ingestAgentHookEvent"
                 && result
                     .get("sessionChatActivityChanged")
