@@ -132,18 +132,25 @@ pub fn chat_pills(
             aria_label: format!("Workers, {meta}"),
             meta,
             dots: {
-                // Waiting threads are in flight and not working: those needing an approval, and the
-                // rest waiting on an answer.
-                let approval = threads
+                // Waiting threads are in flight and not working or paused on a usage limit:
+                // those needing an approval, and the rest waiting on an answer.
+                let rows = threads
                     .get("rows")
                     .and_then(Value::as_array)
-                    .map_or(0, |rows| {
-                        rows.iter()
-                            .filter(|row| row.get("needsApproval") == Some(&Value::Bool(true)))
-                            .count() as u64
-                    });
+                    .map_or(&[][..], Vec::as_slice);
+                let approval = rows
+                    .iter()
+                    .filter(|row| row.get("needsApproval") == Some(&Value::Bool(true)))
+                    .count() as u64;
+                let paused = rows
+                    .iter()
+                    .filter(|row| text(row, "status") == "paused")
+                    .count() as u64;
                 let working = count(threads, "working");
-                let question = in_flight.saturating_sub(working).saturating_sub(approval);
+                let question = in_flight
+                    .saturating_sub(working)
+                    .saturating_sub(approval)
+                    .saturating_sub(paused);
                 pill_dots(working, approval, question)
             },
         });
