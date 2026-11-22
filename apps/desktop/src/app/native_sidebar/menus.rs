@@ -299,6 +299,15 @@ impl GhostexGpuiApp {
                 }
             }
         }
+        // The user's links and Add link…, read as the menu opens (app/custom_links/). A page in a
+        // browser has no link page to open them in.
+        #[cfg(not(ghostex_web))]
+        if let Some(rows) = items.as_array_mut() {
+            ghostex_gx_core::custom_links::insert_custom_link_rows(
+                rows,
+                crate::app::custom_links::custom_link_menu_rows_now(),
+            );
+        }
         items
     }
 
@@ -624,8 +633,10 @@ impl GhostexGpuiApp {
         else {
             return;
         };
-        let items = self
-            .unified_filter_row_menu(&row_menu)
+        // A link row's Edit… and Remove (packages/gx-core/src/custom_links.rs), else the Unified
+        // filter's rows.
+        let items = ghostex_gx_core::custom_links::custom_link_row_menu(&row_menu)
+            .or_else(|| self.unified_filter_row_menu(&row_menu))
             .and_then(|items| items.as_array().cloned())
             .filter(|items| !items.is_empty());
         let Some(menu) = self.native_sidebar.menu.as_mut() else {

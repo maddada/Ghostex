@@ -288,6 +288,9 @@ impl GhostexGpuiApp {
                         Some(self.claude_web_profile(&profile, cx)?)
                     } else if slot_key.titlebar_mode().is_grok_web() {
                         Some(self.grok_web_profile())
+                    } else if slot_key.titlebar_mode().is_link_web() {
+                        // Every link's page shares one profile of its own (app/custom_links/).
+                        Some(crate::app::custom_links::CUSTOM_LINK_BROWSER_PROFILE.to_string())
                     } else {
                         None
                     };
@@ -312,6 +315,11 @@ impl GhostexGpuiApp {
                             .map(|remote| remote.remote_machine_id)
                     };
                     let popup_handler = self.browser_popup_open_handler(popup_remote, None, cx);
+                    // A link's page reports its address and loading to its address bar.
+                    let page_metadata_handler = slot_key
+                        .titlebar_mode()
+                        .is_link_web()
+                        .then(|| self.custom_link_page_metadata_handler(cx));
                     CefSurface::try_new(
                         surface_id,
                         parent_ns_view,
@@ -324,7 +332,7 @@ impl GhostexGpuiApp {
                         true,
                         Some(popup_handler),
                         None,
-                        None,
+                        page_metadata_handler,
                         None,
                         None,
                         None,

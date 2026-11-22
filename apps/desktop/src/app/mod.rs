@@ -56,6 +56,8 @@ pub(crate) mod coordinator_details_modal_lifecycle;
 pub(crate) mod crash_report_modal_lifecycle;
 pub(crate) mod create_linear_ticket_modal_lifecycle;
 pub(crate) mod create_worktree_modal_lifecycle;
+pub(crate) mod custom_link_modal_lifecycle;
+pub(crate) mod custom_links;
 pub(crate) mod delayed_send;
 pub(crate) mod delayed_send_modal_lifecycle;
 pub(crate) mod delayed_send_sessions;

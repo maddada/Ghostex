@@ -11,15 +11,18 @@ use crate::*;
 pub(crate) enum WebPlace {
     Claude,
     Grok,
+    /// A link of the sidebar's ⋯ menu (app/custom_links/): one page for whichever link was opened.
+    Link,
 }
 
 impl WebPlace {
-    pub(crate) const ALL: [Self; 2] = [Self::Claude, Self::Grok];
+    pub(crate) const ALL: [Self; 3] = [Self::Claude, Self::Grok, Self::Link];
 
     pub(crate) fn view_id_str(self) -> &'static str {
         match self {
             Self::Claude => CLAUDE_WEB_VIEW_ID,
             Self::Grok => GROK_WEB_VIEW_ID,
+            Self::Link => LINK_WEB_VIEW_ID,
         }
     }
 
@@ -35,6 +38,7 @@ impl WebPlace {
         match self {
             Self::Claude => "Claude",
             Self::Grok => "Grok Bot",
+            Self::Link => "The link",
         }
     }
 
@@ -42,6 +46,7 @@ impl WebPlace {
         match self {
             Self::Claude => "agent-icons/claude.svg",
             Self::Grok => "agent-icons/grok-build.svg",
+            Self::Link => TITLEBAR_ICON_WORLD,
         }
     }
 
@@ -51,6 +56,8 @@ impl WebPlace {
         match self {
             Self::Claude => settings.claude_web_enabled(),
             Self::Grok => settings.grok_web_enabled(),
+            // Needs no extension: it is on while a link is picked (app/custom_links/).
+            Self::Link => crate::app::custom_links::custom_link_page_link().is_some(),
         }
     }
 
@@ -72,6 +79,7 @@ impl WebPlace {
         match self {
             Self::Claude => "claude",
             Self::Grok => "grok",
+            Self::Link => "link",
         }
     }
 

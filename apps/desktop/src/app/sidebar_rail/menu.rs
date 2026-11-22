@@ -96,6 +96,15 @@ impl GhostexGpuiApp {
                 rows.push(row);
             }
         }
+        // The user's links and Add link… under their own heading (app/custom_links/). A page in a
+        // browser has no link page to open them in.
+        #[cfg(not(ghostex_web))]
+        {
+            rows.push(
+                json!({ "label": "Links", "heading": true, "checked": false, "disabled": false }),
+            );
+            rows.extend(crate::app::custom_links::custom_link_menu_rows_now());
+        }
         Value::Array(rows)
     }
 

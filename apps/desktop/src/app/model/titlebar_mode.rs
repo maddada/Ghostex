@@ -73,6 +73,8 @@ pub(crate) enum TitlebarMode {
 pub(crate) const CLAUDE_WEB_VIEW_ID: &str = "claude-web";
 /// The built-in Grok view's tab identity (app/claude_web/grok.rs on the desktop).
 pub(crate) const GROK_WEB_VIEW_ID: &str = "grok-web";
+/// The built-in page a link of the sidebar's ⋯ menu opens in (app/custom_links/ on the desktop).
+pub(crate) const LINK_WEB_VIEW_ID: &str = "custom-link-web";
 
 impl TitlebarMode {
     pub(crate) fn from_slug(value: &str) -> Option<Self> {
@@ -162,6 +164,7 @@ impl TitlebarMode {
             mode if mode.is_storybook() => TITLEBAR_ICON_LAYOUT_BOARD_SPLIT,
             mode if mode.is_claude_web() => "agent-icons/claude.svg",
             mode if mode.is_grok_web() => "agent-icons/grok-build.svg",
+            mode if mode.is_link_web() => TITLEBAR_ICON_WORLD,
             Self::Agents => TITLEBAR_ICON_LAYOUT_COLUMNS,
             Self::Source => "titlebar/brand-vscode.svg",
             Self::Browser => TITLEBAR_ICON_WORLD,
@@ -198,10 +201,15 @@ impl TitlebarMode {
         matches!(self, Self::Extension(id) if id.as_str() == GROK_WEB_VIEW_ID)
     }
 
-    /// Claude or Grok: a built-in view that takes the sessions column's place instead of opening
-    /// in the side panel (app/claude_web/place.rs on the desktop).
+    /// The page a link of the sidebar's ⋯ menu opens in (app/custom_links/ on the desktop).
+    pub(crate) fn is_link_web(self) -> bool {
+        matches!(self, Self::Extension(id) if id.as_str() == LINK_WEB_VIEW_ID)
+    }
+
+    /// Claude, Grok or a link's page: a built-in view that takes the sessions column's place
+    /// instead of opening in the side panel (app/claude_web/place.rs on the desktop).
     pub(crate) fn is_web_place(self) -> bool {
-        self.is_claude_web() || self.is_grok_web()
+        self.is_claude_web() || self.is_grok_web() || self.is_link_web()
     }
 
     /// A view backed by a CEF page, with the awake/sleep lifecycle that implies. The Terminal view

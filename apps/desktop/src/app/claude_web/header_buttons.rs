@@ -47,7 +47,8 @@ impl GhostexGpuiApp {
                 self.web_place_on() == Some(*place)
                     || self.header_slot_pinned(match place {
                         WebPlace::Claude => HeaderSlot::Claude,
-                        WebPlace::Grok => HeaderSlot::GrokBot,
+                        // A link's page has no header button: it is not in the list above.
+                        WebPlace::Grok | WebPlace::Link => HeaderSlot::GrokBot,
                     })
             })
             .map(|place| WebBotButton {

@@ -4,7 +4,7 @@ Standalone preview of the native GPUI app modals so their look can be checked
 against the React Storybook stories without launching Ghostex. Run with:
     cargo run --release --bin native-modal-demo
 Environment:
-    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|go-back|header-more|crash-report|updates-menu|start-menu|chief-row|notice-modal|gbot-team|new-gbot|new-bot|rail-intro|... (which modal; default export-transcript)
+    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|go-back|header-more|custom-links|custom-link-dialog|crash-report|updates-menu|start-menu|chief-row|notice-modal|gbot-team|new-gbot|new-bot|rail-intro|... (which modal; default export-transcript)
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_SIDEBAR_THEME=dark-green|...    (a dark theme's text colours)
     GHOSTEX_NATIVE_MODAL_DEMO_CHROME=<rrggbb>                 (tint the modal from a theme chrome)
@@ -84,6 +84,10 @@ mod coordinator_details_modal;
 mod create_worktree_demo;
 #[path = "../app/window/create_worktree_modal.rs"]
 mod create_worktree_modal;
+#[path = "../app/window/custom_link_modal.rs"]
+mod custom_link_modal;
+#[path = "native_modal_demo/custom_links.rs"]
+mod custom_links_demo;
 #[path = "native_modal_demo/delayed_send.rs"]
 mod delayed_send_demo;
 #[path = "../app/window/delayed_send_modal.rs"]
@@ -888,6 +892,8 @@ fn main() {
                 "chief-row" => chief_row_demo::open(&demo, cx),
                 "extension-menu" => extension_menu_demo::open(&demo, cx),
                 "header-more" => header_more_demo::open(&demo, cx),
+                "custom-links" => custom_links_demo::open(&demo, cx),
+                "custom-link-dialog" => custom_links_demo::open_dialog(&demo, cx),
                 "voice-panel" => voice_panel_demo::open(&demo, cx),
                 "permission-guide" => permission_guide_demo::open(&demo, cx),
                 "install-hooks" => agent_hooks_required_demo::open(&demo, cx),

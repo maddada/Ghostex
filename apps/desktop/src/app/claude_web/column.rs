@@ -54,6 +54,10 @@ impl GhostexGpuiApp {
                     // A login renamed away or removed in Settings moves the page to another.
                     self.sync_grok_web_page_if_moved(cx);
                 }
+                if place == WebPlace::Link {
+                    // The address bar's text field needs the window to be made.
+                    self.ensure_custom_link_address_input(window, cx);
+                }
                 return self.render_claude_column(place, layout, window, cx);
             }
             // Its extension was switched off in Settings: the layout it replaced comes back.
@@ -198,7 +202,8 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// The bar above Claude's or Grok's page: Claude's accounts or Grok's logins.
+    /// The bar above Claude's, Grok's or a link's page: Claude's accounts, Grok's logins or the
+    /// link page's address bar.
     pub(crate) fn render_web_place_bar(
         &self,
         place: WebPlace,
@@ -207,6 +212,7 @@ impl GhostexGpuiApp {
         match place {
             WebPlace::Claude => self.render_claude_web_account_bar(cx),
             WebPlace::Grok => self.render_grok_web_login_bar(cx),
+            WebPlace::Link => self.render_custom_link_bar(cx),
         }
     }
 }

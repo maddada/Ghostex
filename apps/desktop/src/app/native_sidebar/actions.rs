@@ -221,6 +221,10 @@ impl GhostexGpuiApp {
         if self.run_sidebar_rail_command(&command, cx) {
             return;
         }
+        // A link of either ⋯ menu, Add link… and a link's Edit… and Remove (app/custom_links/).
+        if self.run_custom_link_command(&command, cx) {
+            return;
+        }
         // The workspace tile's menu and a project's Move to workspace (gx_store/workspaces.rs).
         if self.gx_store_run_workspaces(&command, cx) {
             return;

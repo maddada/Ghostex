@@ -27,6 +27,7 @@ pub mod cloud_boxes;
 pub mod computer_icons;
 mod connection;
 mod core;
+pub mod custom_links;
 mod doc_sync;
 mod focus;
 pub mod git_menu;

@@ -79,6 +79,8 @@ pub(crate) enum GpuiAppModalKind {
     /// Link a PR, an issue or a Linear ticket to a session by hand, from its links list's +
     /// (add_session_link_modal_lifecycle.rs).
     AddSessionLink,
+    /// The sidebar ⋯ menu's Add link… and a link's Edit… (custom_link_modal_lifecycle.rs).
+    CustomLink,
     /// "Paste potentially unsafe text?" for terminal paste protection (terminal_input/paste_and_shortcuts.rs).
     TerminalPasteConfirm,
     CloseSessionsConfirm,
@@ -143,6 +145,7 @@ impl GpuiAppModalKind {
             "createLinearTicket" => Some(Self::CreateLinearTicket),
             "workLinkPicker" => Some(Self::WorkLinkPicker),
             "addSessionLink" => Some(Self::AddSessionLink),
+            "customLink" => Some(Self::CustomLink),
             "terminalPasteConfirm" => Some(Self::TerminalPasteConfirm),
             "closeSessionsConfirm" => Some(Self::CloseSessionsConfirm),
             "chiefNewChat" => Some(Self::ChiefNewChat),
@@ -200,6 +203,7 @@ impl GpuiAppModalKind {
             Self::CreateLinearTicket => "createLinearTicket",
             Self::WorkLinkPicker => "workLinkPicker",
             Self::AddSessionLink => "addSessionLink",
+            Self::CustomLink => "customLink",
             Self::TerminalPasteConfirm => "terminalPasteConfirm",
             Self::CloseSessionsConfirm => "closeSessionsConfirm",
             Self::ChiefNewChat => "chiefNewChat",
@@ -254,6 +258,7 @@ impl GpuiAppModalKind {
             Self::CreateLinearTicket => "Ghostex Create Linear Ticket",
             Self::WorkLinkPicker => "Ghostex Link Session",
             Self::AddSessionLink => "Ghostex Add a Link",
+            Self::CustomLink => "Ghostex Add Link",
             Self::TerminalPasteConfirm => "Ghostex Paste",
             Self::CloseSessionsConfirm => "Ghostex Close",
             Self::ChiefNewChat => "Ghostex New Chat",
@@ -466,6 +471,9 @@ impl GpuiAppModalKind {
                 px(crate::app::window::ADD_SESSION_LINK_MODAL_WIDTH),
                 px(crate::app::window::ADD_SESSION_LINK_MODAL_INITIAL_HEIGHT),
             ),
+            // `CUSTOM_LINK_MODAL_WIDTH` / `_INITIAL_HEIGHT` in window/custom_link_modal.rs (the web
+            // build has no such dialog).
+            Self::CustomLink => size(px(440.0), px(300.0)),
             Self::Extension(id) => extension_modal_window_size(id),
             // `TERMINAL_PASTE_CONFIRM_MODAL_WIDTH` / `_INITIAL_HEIGHT` in window/terminal_paste_confirm_modal.rs.
             Self::TerminalPasteConfirm => size(px(440.0), px(180.0)),
@@ -618,7 +626,8 @@ impl GpuiAppModalKind {
             | Self::GbotTeam
             | Self::CreateLinearTicket
             | Self::WorkLinkPicker
-            | Self::AddSessionLink => serde_json::Value::Null,
+            | Self::AddSessionLink
+            | Self::CustomLink => serde_json::Value::Null,
             Self::UpdateAvailable => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",

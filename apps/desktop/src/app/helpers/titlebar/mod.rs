@@ -7,6 +7,7 @@
 
 pub(crate) mod chrome_colors;
 pub(crate) mod chrome_tints;
+pub(crate) mod custom_link_bar_look;
 pub(crate) mod extension_menu_row;
 pub(crate) mod header_pins_look;
 pub(crate) mod mode_switcher;
@@ -22,6 +23,7 @@ pub(crate) mod window_caption;
 
 pub(crate) use chrome_colors::*;
 pub(crate) use chrome_tints::*;
+pub(crate) use custom_link_bar_look::*;
 pub(crate) use extension_menu_row::*;
 pub(crate) use header_pins_look::*;
 pub(crate) use mode_switcher::*;
