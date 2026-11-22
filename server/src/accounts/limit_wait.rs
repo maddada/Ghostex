@@ -1,27 +1,87 @@
 //! CDXC:AgentProviders 2026-10-11 DECISION:
 //! User, about a session that sat quietly at its usage limit while every account was full: "dont know what u mean but fix this best way i trust u". While recovery waits with no account that has room (`NO_ROOM`), the session's usage-limit card says so in plain words (which limit, every account is full, and when work continues: the soonest reset among the accounts, or as soon as one has room), and the bell gets one row per wait, never one per pass. Both go away when the session switches, resumes or is stopped. The card's wording is gx-chat-core's (`questions/account_wait.rs`); gxserver only carries the facts on the notice as `accountWait`.
 //! SEE-ALSO: server/src/session_chat_notice/watchdog_store.rs (`resolve_session_chat_terminal_notice` attaches the wait), server/src/session_chat_read.rs (the long-poll fingerprint), packages/gx-chat-core/src/questions/account_wait.rs.
-use super::{endpoint, model::*};
+use super::{endpoint, launch, model::*};
 use crate::{
-    domain::DomainRepository,
+    domain::{DomainRepository, DomainStateError},
     notification_feed::{
         broadcast_notification_feed_changed,
         store::{
-            dismiss_notification, insert_notification_feed_row, notification_agent_icon,
-            NewNotificationFeedRow, NOTIFICATION_FEED_KIND_CUSTOM,
+            account_notification_session_id, dismiss_notification, insert_notification_feed_row,
+            mark_notification_read, notification_agent_icon, NewNotificationFeedRow,
+            ACCOUNT_NOTIFICATION_PROJECT_ID, NOTIFICATION_FEED_KIND_CUSTOM,
+            NOTIFICATION_FEED_KIND_FAILED,
         },
     },
     server::AppState,
 };
 use chrono::{DateTime, Utc};
+use rusqlite::{Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::{Mutex, OnceLock},
 };
 
 /// The recovery reason of a usage-limit wait with no account that has room.
 pub(super) const NO_ROOM: &str = "Waiting for an eligible account to have capacity.";
+
+/// `blockedAlertedBy` stamped on sessions blocked by an exhausted account pool: the pool's own
+/// single notification alerts once, so clients draw each session's red dot without firing a
+/// separate sound and banner per chat (Q4472).
+pub(crate) const POOL_BLOCKED_ALERTED_BY: &str = "accountPool";
+
+const POOL_EPISODES_KEY: &str = "accounts.poolLimitEpisodes.v1";
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PoolEpisode {
+    #[serde(default)]
+    resets_at: Option<String>,
+    #[serde(default)]
+    account_name: Option<String>,
+    #[serde(default)]
+    notification_id: Option<String>,
+    since: String,
+    #[serde(default)]
+    acknowledged_at: Option<String>,
+}
+
+fn read_pool_episodes(db: &Connection) -> BTreeMap<String, PoolEpisode> {
+    db.query_row(
+        "SELECT value FROM metadata WHERE key = ?1",
+        [POOL_EPISODES_KEY],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .ok()
+    .flatten()
+    .and_then(|raw| serde_json::from_str::<BTreeMap<String, PoolEpisode>>(&raw).ok())
+    .unwrap_or_default()
+}
+
+fn write_pool_episodes(db: &Connection, episodes: &BTreeMap<String, PoolEpisode>) {
+    let Ok(raw) = serde_json::to_string(episodes) else {
+        return;
+    };
+    let _ = db.execute(
+        "INSERT INTO metadata (key, value, updatedAt) VALUES (?1, ?2, ?3) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt",
+        rusqlite::params![POOL_EPISODES_KEY, raw, Utc::now().to_rfc3339()],
+    );
+}
+
+fn provider_title_name(provider: Provider) -> &'static str {
+    match provider {
+        Provider::Claude => "Claude",
+        Provider::Codex => "Codex",
+    }
+}
+
+fn pool_notification_session_id(provider: Provider) -> String {
+    account_notification_session_id(&format!("pool:{}", provider.id()))
+}
 
 /// The waits in progress, by session, as saved in `accountRecovery.accountWait`: the card's facts plus the bell row's id.
 fn waits() -> &'static Mutex<HashMap<(String, String), Value>> {
@@ -135,6 +195,7 @@ pub(super) fn describe(
         })
         .collect();
     json!({
+        "provider": provider.id(),
         "limit": limit,
         "resetsAt": soonest.as_ref().map(|(at, _, _)| at.to_rfc3339()),
         "account": soonest.as_ref().map(|(_, name, _)| name.clone()),
@@ -155,72 +216,121 @@ fn window_name(window: &UsageWindow) -> String {
         .unwrap_or_else(|| window.label.clone())
 }
 
-/// Enters or refreshes the wait on `recovery` (saved by the caller). The first entry of a wait posts its bell row; later passes keep that row.
+/// Enters or refreshes the wait on `recovery` (saved by the caller). Emits ONE per-pool bell row
+/// and push notification per exhaustion episode (Q4472), never one per chat and never repeated on
+/// later passes or restarts.
 pub(super) fn enter(
     state: &AppState,
     repo: &DomainRepository<'_>,
     session: &Value,
     recovery: &mut Value,
     mut wait: Value,
+    provider: Provider,
 ) {
     let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
     else {
         return;
     };
-    let posted = recovery
-        .pointer("/accountWait/notificationId")
+    let provider_key = provider.id().to_string();
+    let mut episodes = read_pool_episodes(repo.db);
+    let session_ack = recovery
+        .pointer("/accountWait/acknowledgedAt")
         .and_then(Value::as_str)
         .map(str::to_string);
-    // When the wait began, kept across passes: the blocked red dot's `blockedSince`.
-    let since = recovery
-        .pointer("/accountWait/since")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .unwrap_or_else(|| Utc::now().to_rfc3339());
-    let first = posted.is_none();
-    let notification = posted.or_else(|| {
-        let subtitle = repo
-            .get_project(pid)
-            .ok()
-            .flatten()
-            .and_then(|p| p["name"].as_str().map(str::to_string))
-            .unwrap_or_default();
-        let item = insert_notification_feed_row(
-            repo.db,
-            NewNotificationFeedRow {
-                project_id: pid.to_string(),
-                session_id: sid.to_string(),
-                kind: NOTIFICATION_FEED_KIND_CUSTOM,
-                title: session["title"]
-                    .as_str()
-                    .map(str::trim)
-                    .filter(|t| !t.is_empty())
-                    .unwrap_or("Session")
-                    .to_string(),
-                subtitle,
-                body: bell_body(&wait),
-                agent_name: notification_agent_icon(session),
-                attention_event_id: None,
-            },
-        )
-        .ok()?;
-        broadcast_notification_feed_changed(state);
-        item["id"].as_str().map(str::to_string)
-    });
-    if first {
-        if let Some(id) = notification.as_deref() {
-            crate::push::announce_blocked(
-                state,
-                repo,
-                session,
-                id,
-                crate::push::BlockedWhy::Usage,
-                crate::push::PushRoute::default(),
-            );
+    let mut episodes_dirty = false;
+    let episode = match episodes.get_mut(&provider_key) {
+        Some(existing) => {
+            if let Some(next_resets) = wait["resetsAt"].as_str() {
+                let now = Utc::now();
+                let next_at = DateTime::parse_from_rfc3339(next_resets)
+                    .ok()
+                    .map(|at| at.with_timezone(&Utc));
+                let existing_at = existing
+                    .resets_at
+                    .as_deref()
+                    .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+                    .map(|at| at.with_timezone(&Utc));
+                let replace_reset = match (existing_at, next_at) {
+                    (None, Some(_)) => true,
+                    (Some(cur), Some(next)) if cur <= now && next > now => true,
+                    (Some(cur), Some(next)) if next > now && next < cur => true,
+                    (None, None) if existing.resets_at.is_none() => true,
+                    _ => false,
+                };
+                if replace_reset {
+                    existing.resets_at = Some(next_resets.to_string());
+                    if let Some(name) = wait["account"].as_str() {
+                        existing.account_name = Some(name.to_string());
+                    }
+                    episodes_dirty = true;
+                }
+            }
+            if existing.account_name.is_none() {
+                if let Some(name) = wait["account"].as_str() {
+                    existing.account_name = Some(name.to_string());
+                    episodes_dirty = true;
+                }
+            }
+            if existing.acknowledged_at.is_none() {
+                if let Some(ack) = session_ack.clone() {
+                    existing.acknowledged_at = Some(ack);
+                    episodes_dirty = true;
+                }
+            }
+            existing.clone()
         }
+        None => {
+            let since = recovery
+                .pointer("/accountWait/since")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| Utc::now().to_rfc3339());
+            let pool_session_id = pool_notification_session_id(provider);
+            let notification_id = insert_notification_feed_row(
+                repo.db,
+                NewNotificationFeedRow {
+                    project_id: ACCOUNT_NOTIFICATION_PROJECT_ID.to_string(),
+                    session_id: pool_session_id.clone(),
+                    kind: NOTIFICATION_FEED_KIND_FAILED,
+                    title: format!("{} accounts at limit", provider_title_name(provider)),
+                    subtitle: pool_subtitle(&wait),
+                    body: pool_body(&wait),
+                    agent_name: Some(provider.id().to_string()),
+                    attention_event_id: None,
+                },
+            )
+            .ok()
+            .and_then(|item| item["id"].as_str().map(str::to_string));
+            if let Some(id) = notification_id.as_deref() {
+                broadcast_notification_feed_changed(state);
+                crate::push::announce_pool_blocked(
+                    state,
+                    provider_title_name(provider),
+                    &pool_session_id,
+                    id,
+                );
+            }
+            let created = PoolEpisode {
+                resets_at: wait["resetsAt"].as_str().map(str::to_string),
+                account_name: wait["account"].as_str().map(str::to_string),
+                notification_id,
+                since,
+                acknowledged_at: session_ack.clone(),
+            };
+            episodes.insert(provider_key, created.clone());
+            episodes_dirty = true;
+            created
+        }
+    };
+    if episodes_dirty {
+        write_pool_episodes(repo.db, &episodes);
     }
-    wait["notificationId"] = json!(notification);
-    wait["since"] = json!(since);
+    wait["provider"] = json!(provider.id());
+    wait["notificationId"] = json!(episode.notification_id);
+    wait["since"] = json!(episode.since);
+    if let Some(ack) = episode.acknowledged_at.or(session_ack) {
+        wait["acknowledgedAt"] = json!(ack);
+    }
     recovery["accountWait"] = wait.clone();
     waits()
         .lock()
@@ -228,7 +338,9 @@ pub(super) fn enter(
         .insert(key(pid, sid), wait);
 }
 
-/// Ends the wait once the saved recovery no longer waits for room: a switch, a resume, Stop, or another state. Removes its bell row if still there.
+/// Ends the wait once the saved recovery no longer waits for room: a switch, a resume, Stop, or
+/// another state. Legacy per-session bell rows (without `provider`) are dismissed here; shared
+/// per-pool rows are settled in `settle_pools`.
 pub(super) fn settle(state: &AppState, repo: &DomainRepository<'_>, pid: &str, sid: &str) {
     let Some(wait) = waits()
         .lock()
@@ -253,11 +365,191 @@ pub(super) fn settle(state: &AppState, repo: &DomainRepository<'_>, pid: &str, s
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(&key(pid, sid));
-    if let Some(id) = wait["notificationId"].as_str() {
-        if dismiss_notification(repo.db, id).is_ok_and(|removed| removed > 0) {
+    if wait["provider"].is_null() {
+        if let Some(id) = wait["notificationId"].as_str() {
+            if dismiss_notification(repo.db, id).is_ok_and(|removed| removed > 0) {
+                broadcast_notification_feed_changed(state);
+            }
+        }
+    }
+}
+
+/// Settles per-pool exhaustion episodes once the provider has an eligible account with room again
+/// or no session is waiting on that pool anymore. Dismisses the shared pool bell row so a future
+/// exhaustion starts a fresh red episode.
+pub(super) fn settle_pools(
+    state: &AppState,
+    repo: &DomainRepository<'_>,
+    registry: &Registry,
+    snapshot: &Snapshot,
+) {
+    // Never settle persisted episodes before the first live usage discovery completes: an
+    // unfetched snapshot treats every provider as having room and would wipe the episode and
+    // re-fire bell/sound/banner/push on the next pass.
+    if snapshot.fetched_at.is_none() {
+        return;
+    }
+    let mut episodes = read_pool_episodes(repo.db);
+    if episodes.is_empty() {
+        return;
+    }
+    let mut active_providers: std::collections::HashSet<String> = waits()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .values()
+        .filter_map(|wait| wait["provider"].as_str().map(str::to_string))
+        .collect();
+    // Also check persisted non-stopped sessions waiting or paused on a usage limit (including
+    // `afterRestart` waits) so a restart never prematurely clears an active pool episode.
+    if let Ok(sessions) = repo.list_sessions_excluding_stopped(None) {
+        for session in sessions {
+            let Some(recovery) = session.pointer("/runtimeSettings/accountRecovery") else {
+                continue;
+            };
+            if recovery["trigger"] != crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT {
+                continue;
+            }
+            if !matches!(recovery["status"].as_str(), Some("waiting" | "paused")) {
+                continue;
+            }
+            if let Some(provider_id) = recovery
+                .pointer("/accountWait/provider")
+                .and_then(Value::as_str)
+            {
+                active_providers.insert(provider_id.to_string());
+                continue;
+            }
+            if let Some(pid) = session["projectId"].as_str() {
+                if let Some(provider) = repo
+                    .get_project(pid)
+                    .ok()
+                    .flatten()
+                    .and_then(|project| launch::provider(&project, &session))
+                {
+                    active_providers.insert(provider.id().to_string());
+                }
+            }
+        }
+    }
+    let mut removed_any = false;
+    let mut dismissed_any = false;
+    episodes.retain(|provider_id, episode| {
+        let provider = match provider_id.as_str() {
+            "claude" => Some(Provider::Claude),
+            "codex" => Some(Provider::Codex),
+            _ => None,
+        };
+        let has_room = provider
+            .is_some_and(|p| super::autopilot::provider_has_eligible_room(registry, snapshot, p));
+        let still_waiting = active_providers.contains(provider_id);
+        if !has_room && still_waiting {
+            return true;
+        }
+        removed_any = true;
+        if let Some(id) = episode.notification_id.as_deref() {
+            if dismiss_notification(repo.db, id).is_ok_and(|removed| removed > 0) {
+                dismissed_any = true;
+            }
+        }
+        false
+    });
+    if removed_any {
+        write_pool_episodes(repo.db, &episodes);
+    }
+    if dismissed_any {
+        broadcast_notification_feed_changed(state);
+    }
+}
+
+/// User clicked Wait or Dismiss on an every-account-full card (Q4472): clears the red blocked dot
+/// into the calm amber waiting clock across the pool's waiting chats and marks the pool bell row
+/// read, while keeping automatic resume at reset active.
+pub(crate) fn acknowledge(
+    state: &AppState,
+    repo: &DomainRepository<'_>,
+    provider: Provider,
+    clicked: &Value,
+) -> Result<(), DomainStateError> {
+    let now = Utc::now().to_rfc3339();
+    let provider_key = provider.id().to_string();
+    let mut episodes = read_pool_episodes(repo.db);
+    let mut notification_to_read: Option<String> = None;
+    let mut episodes_dirty = false;
+    if let Some(episode) = episodes.get_mut(&provider_key) {
+        if episode.acknowledged_at.is_none() {
+            episode.acknowledged_at = Some(now.clone());
+            episodes_dirty = true;
+        }
+        notification_to_read = episode.notification_id.clone();
+    }
+    if episodes_dirty {
+        write_pool_episodes(repo.db, &episodes);
+    }
+    if let Some(id) = notification_to_read.as_deref() {
+        if mark_notification_read(repo.db, id).is_ok_and(|changed| changed > 0) {
             broadcast_notification_feed_changed(state);
         }
     }
+    let mut to_update: Vec<Value> = Vec::new();
+    let clicked_key = (
+        clicked["projectId"].as_str().unwrap_or_default().to_string(),
+        clicked["sessionId"].as_str().unwrap_or_default().to_string(),
+    );
+    for session in repo.list_sessions_excluding_stopped(None)? {
+        let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
+        else {
+            continue;
+        };
+        if waiting(&session).is_none() {
+            continue;
+        }
+        let same_clicked = pid == clicked_key.0 && sid == clicked_key.1;
+        let same_pool = session
+            .pointer("/runtimeSettings/accountRecovery/accountWait/provider")
+            .and_then(Value::as_str)
+            == Some(provider.id())
+            || repo
+                .get_project(pid)
+                .ok()
+                .flatten()
+                .and_then(|project| launch::provider(&project, &session))
+                == Some(provider);
+        if same_clicked || same_pool {
+            to_update.push(session);
+        }
+    }
+    for session in to_update {
+        let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
+        else {
+            continue;
+        };
+        let mut runtime = session["runtimeSettings"]
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        let Some(recovery) = runtime
+            .get_mut("accountRecovery")
+            .and_then(Value::as_object_mut)
+        else {
+            continue;
+        };
+        let Some(wait) = recovery.get_mut("accountWait").and_then(Value::as_object_mut) else {
+            continue;
+        };
+        if wait.get("acknowledgedAt").and_then(Value::as_str).is_some() {
+            continue;
+        }
+        wait.insert("acknowledgedAt".to_string(), json!(now));
+        let wait_value = Value::Object(wait.clone());
+        waits()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(key(pid, sid), wait_value);
+        let updated = endpoint::update_session_members(repo, &session, &runtime, &["accountRecovery"])?;
+        endpoint::publish(state, repo, &updated)?;
+        crate::session_chat_options::session_chat_terminal_notice_publisher(state, pid, sid)();
+    }
+    Ok(())
 }
 
 /// A usage-limit wait that no every-account-full card covers (Wait for reset, or a login Ghostex
@@ -296,7 +588,8 @@ pub(super) fn enter_reset(
     changed
 }
 
-/// Drops the session's wait and its bell row, before its recovery is replaced at startup.
+/// Drops the session's wait (and any legacy per-session bell row), before its recovery is replaced
+/// at startup. Shared per-pool rows are settled in `settle_pools`.
 pub(super) fn forget(state: &AppState, repo: &DomainRepository<'_>, session: &Value) {
     let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
     else {
@@ -306,12 +599,18 @@ pub(super) fn forget(state: &AppState, repo: &DomainRepository<'_>, session: &Va
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(&key(pid, sid));
-    if let Some(id) = session
-        .pointer("/runtimeSettings/accountRecovery/accountWait/notificationId")
+    let is_pool = session
+        .pointer("/runtimeSettings/accountRecovery/accountWait/provider")
         .and_then(Value::as_str)
-    {
-        if dismiss_notification(repo.db, id).is_ok_and(|removed| removed > 0) {
-            broadcast_notification_feed_changed(state);
+        .is_some();
+    if !is_pool {
+        if let Some(id) = session
+            .pointer("/runtimeSettings/accountRecovery/accountWait/notificationId")
+            .and_then(Value::as_str)
+        {
+            if dismiss_notification(repo.db, id).is_ok_and(|removed| removed > 0) {
+                broadcast_notification_feed_changed(state);
+            }
         }
     }
 }
@@ -395,9 +694,14 @@ pub(crate) const LIMIT_GAVE_UP_REASON: &str =
     "Blocked: it hit its usage limit and Ghostex couldn't move it to an account with room.";
 
 /// Since when the session waits with every account out of usage: the blocked red dot
-/// (CDXC:Notifications 2026-11-08 in packages/gx-core/src/alert_rule.rs).
+/// (CDXC:Notifications 2026-11-08 in packages/gx-core/src/alert_rule.rs). Cleared once the user
+/// clicks Wait or Dismiss (Q4472), turning the red dot into the calm amber waiting clock while
+/// keeping automatic resume active.
 pub(crate) fn blocked_since(session: &Value) -> Option<String> {
     let wait = waiting(session)?;
+    if wait["acknowledgedAt"].is_string() {
+        return None;
+    }
     wait["since"]
         .as_str()
         .or_else(|| {
@@ -406,6 +710,41 @@ pub(crate) fn blocked_since(session: &Value) -> Option<String> {
                 .and_then(Value::as_str)
         })
         .map(str::to_string)
+}
+
+/// Whether this session's red blocked dot is already announced by the per-pool notification, so
+/// clients draw the red dot without firing a separate sound and banner per chat (Q4472).
+pub(crate) fn is_pool_blocked(session: &Value) -> bool {
+    waiting(session)
+        .is_some_and(|wait| wait["provider"].is_string() && !wait["acknowledgedAt"].is_string())
+}
+
+/// Additive sidebar presentation fields `(quotaResetsAt, quotaWaitState)` for sessions waiting on
+/// an exhausted account pool or a reset wait (Q4472, harmonious with Antigravity Q4460/Q4461):
+/// `"blocked"` while unacknowledged (red dot + amber countdown), `"waiting"` after Wait/Dismiss
+/// or for a Wait-for-reset session (calm amber clock + countdown, no red dot).
+pub(crate) fn presentation_fields(session: &Value) -> Option<(Option<String>, &'static str)> {
+    if let Some(wait) = waiting(session) {
+        let resets_at = wait["resetsAt"]
+            .as_str()
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let state = if wait["acknowledgedAt"].is_string() {
+            "waiting"
+        } else {
+            "blocked"
+        };
+        return Some((resets_at, state));
+    }
+    let recovery = session.pointer("/runtimeSettings/accountRecovery")?;
+    if recovery["status"] == "waiting" && recovery["accountWait"]["mode"] == "reset" {
+        let resets_at = recovery["accountWait"]["resetsAt"]
+            .as_str()
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        return Some((resets_at, "waiting"));
+    }
+    None
 }
 
 /// The saved wait while the limit card should still show it: every account full, a wait for the
@@ -429,38 +768,50 @@ fn waiting(session: &Value) -> Option<Value> {
         .filter(Value::is_object)
 }
 
-fn bell_body(wait: &Value) -> String {
-    let limit = wait["limit"]
+fn pool_subtitle(wait: &Value) -> String {
+    match wait["resetsAt"]
         .as_str()
-        .map(|l| l.to_lowercase())
-        .unwrap_or_else(|| "usage limit".to_string());
-    let when = match (
-        wait["resetsAt"]
-            .as_str()
-            .and_then(|t| DateTime::parse_from_rfc3339(t).ok()),
-        wait["account"].as_str(),
-    ) {
-        (Some(at), Some(account)) => format!(
-            "It continues automatically {}, when {account}'s limit resets.",
-            local_time(at.with_timezone(&Utc))
-        ),
-        _ => "It continues automatically as soon as an account has room.".to_string(),
-    };
-    match wait["model"].as_str().filter(|model| !model.is_empty()) {
-        Some(model) => format!("No account has room for {model}. {when}"),
-        None => format!("Hit its {limit}, and every account is full. {when}"),
+        .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+    {
+        Some(at) => format!("Paused until {}", local_clock_short(at.with_timezone(&Utc))),
+        None => "Waiting to resume".to_string(),
     }
 }
 
-fn local_time(at: DateTime<Utc>) -> String {
+fn pool_body(wait: &Value) -> String {
+    match (
+        wait["resetsAt"]
+            .as_str()
+            .and_then(|t| DateTime::parse_from_rfc3339(t).ok()),
+        wait["account"]
+            .as_str()
+            .map(str::trim)
+            .filter(|name| !name.is_empty()),
+    ) {
+        (Some(at), Some(account)) => format!(
+            "Paused until {} when {account} resets. Waiting to resume automatically.",
+            local_clock_short(at.with_timezone(&Utc))
+        ),
+        (Some(at), None) => format!(
+            "Paused until {}. Waiting to resume automatically.",
+            local_clock_short(at.with_timezone(&Utc))
+        ),
+        (None, _) => {
+            "Every automatic account is full. Waiting to resume automatically when one resets."
+                .to_string()
+        }
+    }
+}
+
+fn local_clock_short(at: DateTime<Utc>) -> String {
     let local = at.with_timezone(&chrono::Local);
     let today = chrono::Local::now().date_naive();
     let clock = local.format("%-I:%M %p");
     if local.date_naive() == today {
-        format!("at {clock}")
+        format!("{clock}")
     } else if Some(local.date_naive()) == today.succ_opt() {
-        format!("tomorrow at {clock}")
+        format!("tomorrow {clock}")
     } else {
-        format!("on {} at {clock}", local.format("%b %-d"))
+        format!("{} {clock}", local.format("%b %-d"))
     }
 }

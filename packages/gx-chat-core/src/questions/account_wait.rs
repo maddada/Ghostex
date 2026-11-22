@@ -44,7 +44,25 @@ pub fn decorate(
     let words = wait_words(&wait, hide_account_emails, now_ms, utc_offset_minutes);
     object.insert("title".to_string(), json!(words.title));
     object.insert("detail".to_string(), json!(words.detail));
-    object.insert("tone".to_string(), json!("warning"));
+    let has_provider = wait
+        .get("provider")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty());
+    let mode = wait.get("mode").and_then(Value::as_str);
+    let acknowledged = wait
+        .get("acknowledgedAt")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty());
+    let tone = if has_provider && mode.is_none() {
+        if acknowledged {
+            "wait"
+        } else {
+            "error"
+        }
+    } else {
+        "warning"
+    };
+    object.insert("tone".to_string(), json!(tone));
     // The card's main button (Q2977/Q2978 in model_fallback.rs): ahead of the notice's own
     // actions, and `primary` so the renderers draw it filled and Switch account beside it.
     // A limit that already reset has the agent's own Continue on the card (it presses Enter), so a
@@ -53,7 +71,8 @@ pub fn decorate(
         .get("actions")
         .and_then(Value::as_array)
         .is_some_and(|actions| actions.iter().any(|action| action["id"] == "continueNow"));
-    let paused = wait.get("mode").and_then(Value::as_str) == Some("afterRestart");
+    let paused = mode == Some("afterRestart");
+    let has_primary_action = words.action.as_ref().filter(|_| !(paused && own_continue)).is_some();
     if let Some(action) = words.action.filter(|_| !(paused && own_continue)) {
         let mut actions = object
             .get("actions")
@@ -68,6 +87,28 @@ pub fn decorate(
                 "kind": action.answer["kind"].clone(),
                 "primary": true,
                 "answer": action.answer,
+            }),
+        );
+        object.insert("actions".to_string(), Value::Array(actions));
+    }
+    // Q4472: while an exhausted account pool is unacknowledged (red blocked dot showing), offer
+    // Wait so the user can clear the red dot into the calm amber waiting clock while keeping
+    // automatic resume on reset active.
+    if has_provider && mode.is_none() && !acknowledged {
+        let mut actions = object
+            .get("actions")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let insert_at = if has_primary_action { 1 } else { 0 };
+        actions.insert(
+            insert_at,
+            json!({
+                "id": "acknowledgeLimitWait",
+                "label": "Wait",
+                "kind": "acknowledgeLimitWait",
+                "primary": !has_primary_action,
+                "answer": { "kind": "acknowledgeLimitWait" },
             }),
         );
         object.insert("actions".to_string(), Value::Array(actions));
@@ -302,11 +343,81 @@ pub fn wait_words(
         }
         _ => {}
     }
+    let provider = text("provider");
+    let acknowledged = text("acknowledgedAt").is_some();
     let model = text("model");
     let limit = text("limit").unwrap_or("Usage limit");
     let reset = text("resetsAt")
         .and_then(|at| parse_iso_millis(at, utc_offset_minutes))
         .filter(|at| *at > now_ms);
+    if let Some(provider) = provider {
+        let provider_label = match provider {
+            "claude" => "Claude",
+            "codex" => "Codex",
+            other => other,
+        };
+        let action = alternative_action(wait, model.unwrap_or_default(), &name);
+        if acknowledged {
+            let title = match reset {
+                Some(at) => format!(
+                    "Waiting until {}",
+                    local_clock_short(at, now_ms, utc_offset_minutes)
+                ),
+                None => "Waiting for limit reset".to_string(),
+            };
+            let detail = match (reset, text("account")) {
+                (Some(at), Some(account)) => format!(
+                    "Work continues automatically {}, when {}\u{2019}s limit resets. Switch accounts now to keep going sooner.",
+                    local_time(at, now_ms, utc_offset_minutes),
+                    name(account)
+                ),
+                (Some(at), None) => format!(
+                    "Work continues automatically {}. Switch accounts now to keep going sooner.",
+                    local_time(at, now_ms, utc_offset_minutes)
+                ),
+                (None, _) => "Work continues automatically as soon as an account has room. Switch accounts now to keep going sooner.".to_string(),
+            };
+            return WaitWords {
+                title,
+                detail,
+                action,
+            };
+        }
+        let when = match (reset, text("account"), model) {
+            (Some(at), Some(account), Some(_)) => format!(
+                "Work continues automatically {}, when {}\u{2019}s {}resets.",
+                local_time(at, now_ms, utc_offset_minutes),
+                name(account),
+                text("accountLimit")
+                    .map_or_else(|| "limit ".to_string(), |limit| format!("{limit} limit "))
+            ),
+            (Some(at), Some(account), None) => format!(
+                "Work continues automatically {}, when {}\u{2019}s limit resets.",
+                local_time(at, now_ms, utc_offset_minutes),
+                name(account)
+            ),
+            (Some(at), None, _) => format!(
+                "Work continues automatically {}.",
+                local_time(at, now_ms, utc_offset_minutes)
+            ),
+            (None, _, _) => "Work continues automatically as soon as an account has room.".to_string(),
+        };
+        let reasons = blocked_reasons(wait, &name);
+        let why = match reasons.as_slice() {
+            [] => "Every automatic account is full.".to_string(),
+            [only] => format!("{only}."),
+            [rest @ .., last] => format!("{} and {last}.", rest.join(", ")),
+        };
+        let title = match model {
+            Some(model) => format!("No account has room for {model}"),
+            None => format!("{provider_label} accounts at limit"),
+        };
+        return WaitWords {
+            title,
+            detail: format!("{why} {when}"),
+            action,
+        };
+    }
     let when = match (reset, text("account"), model) {
         (Some(at), Some(account), Some(_)) => format!(
             "It continues {}, when {}\u{2019}s {}resets.",
@@ -332,8 +443,22 @@ pub fn wait_words(
             action: None,
         };
     };
-    let reasons: Vec<String> = wait
-        .get("blocked")
+    let reasons = blocked_reasons(wait, &name);
+    let why = match reasons.as_slice() {
+        [] => "No other account can take it.".to_string(),
+        [only] => format!("{only}."),
+        [rest @ .., last] => format!("{} and {last}.", rest.join(", ")),
+    };
+    let action = alternative_action(wait, model, &name);
+    WaitWords {
+        title: format!("No account has room for {model}"),
+        detail: format!("{why} {when}"),
+        action,
+    }
+}
+
+fn blocked_reasons(wait: &Map<String, Value>, name: &impl Fn(&str) -> String) -> Vec<String> {
+    wait.get("blocked")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
@@ -349,14 +474,15 @@ pub fn wait_words(
                 _ => None,
             }
         })
-        .collect();
-    let why = match reasons.as_slice() {
-        [] => "No other account can take it.".to_string(),
-        [only] => format!("{only}."),
-        [rest @ .., last] => format!("{} and {last}.", rest.join(", ")),
-    };
-    let action = wait
-        .get("alternative")
+        .collect()
+}
+
+fn alternative_action(
+    wait: &Map<String, Value>,
+    model: &str,
+    name: &impl Fn(&str) -> String,
+) -> Option<ContinueAction> {
+    wait.get("alternative")
         .and_then(Value::as_object)
         .and_then(|alternative| {
             let field = |key: &str| {
@@ -379,11 +505,33 @@ pub fn wait_words(
                     "fromModel": model,
                 }),
             })
-        });
-    WaitWords {
-        title: format!("No account has room for {model}"),
-        detail: format!("{why} {when}"),
-        action,
+        })
+}
+
+/// `12:00 PM`, `tomorrow 12:00 PM` or `Oct 18 2:00 PM`, for compact card titles.
+fn local_clock_short(at_ms: f64, now_ms: f64, utc_offset_minutes: i32) -> String {
+    let offset = f64::from(utc_offset_minutes) * 60_000.0;
+    let local = at_ms + offset;
+    let day = (local / 86_400_000.0).floor() as i64;
+    let today = ((now_ms + offset) / 86_400_000.0).floor() as i64;
+    let minute_of_day = ((local - day as f64 * 86_400_000.0) / 60_000.0).floor() as i64;
+    let (hour, minute) = (minute_of_day / 60, minute_of_day % 60);
+    let clock = format!(
+        "{}:{minute:02} {}",
+        if hour % 12 == 0 { 12 } else { hour % 12 },
+        if hour < 12 { "AM" } else { "PM" }
+    );
+    if day == today {
+        clock
+    } else if day == today + 1 {
+        format!("tomorrow {clock}")
+    } else {
+        let (_, month, date) = civil_from_days(day);
+        let month = MONTHS
+            .get(usize::try_from(month - 1).unwrap_or_default())
+            .copied()
+            .unwrap_or_default();
+        format!("{month} {date} {clock}")
     }
 }
 

@@ -97,22 +97,101 @@ pub(crate) fn switch_at_limit(
     Ok(AutopilotSwitch::Moved(name))
 }
 
-/// Whether an agent (`claude`, `codex`) has an account to start on: no saved account at all (it
-/// runs on the plain login), or a ready one with every usage window under its limit. The supervisor
-/// starts on the user's pick when it has room, else on the other choice.
-pub(crate) fn agent_has_room(agent: &str) -> bool {
-    let snapshot = super::runtime::current_snapshot();
-    let accounts: Vec<_> = snapshot
+/// Whether a usage window applies to `model`: shared windows (`window.model.is_none()`) always
+/// apply; model-specific windows (e.g. `seven_day_sonnet`) apply only when `model` is known and
+/// names that model, so a full Sonnet window never poisons Opus or provider-wide checks.
+pub(super) fn window_applies_to_model(window: &UsageWindow, model: Option<&str>) -> bool {
+    let Some(window_model) = window
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return true;
+    };
+    let Some(model) = model.map(str::trim).filter(|value| !value.is_empty()) else {
+        return false;
+    };
+    let model_lower = model.to_lowercase();
+    let window_lower = window_model.to_lowercase();
+    model_lower.contains(&window_lower) || window_lower.contains(&model_lower)
+}
+
+/// Whether `provider` has at least one auto-switchable account (`eligible && !user_disabled`,
+/// signed in, with a ready reading and every applicable usage window under 100%).
+///
+/// CDXC:Autopilot 2026-11-22 WHY:
+/// `agent_has_room` used to read only the raw discovered snapshot and ignore `SavedAccount::auto_switchable()`, so a manual-only account at 0% tricked Autopilot into thinking Claude still had room while every eligible account was at 100%.
+pub(crate) fn provider_has_eligible_room(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+) -> bool {
+    provider_has_eligible_room_for_model(registry, snapshot, provider, None)
+}
+
+/// Like `provider_has_eligible_room`, scoped to `model` when known (shared windows always count;
+/// model-specific windows count only when `model` matches them).
+pub(super) fn provider_has_eligible_room_for_model(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    model: Option<&str>,
+) -> bool {
+    // Before the first accounts discovery completes, assume room so startup does not park early.
+    if snapshot.fetched_at.is_none() {
+        return true;
+    }
+    let has_window_room = |account: &DiscoveredAccount| {
+        account.status == "ready"
+            && account.usage_error.is_none()
+            && account
+                .usage
+                .iter()
+                .filter(|window| window_applies_to_model(window, model))
+                .all(|window| window.used_percent < 100.0)
+    };
+    let saved: Vec<_> = registry
         .accounts
         .iter()
-        .filter(|account| account.provider.id() == agent)
+        .filter(|account| account.provider == provider)
         .collect();
-    accounts.is_empty()
-        || accounts.iter().any(|account| {
-            account.status == "ready"
-                && account
-                    .usage
-                    .iter()
-                    .all(|window| window.used_percent < 100.0)
+    if saved.is_empty() {
+        let discovered: Vec<_> = snapshot
+            .accounts
+            .iter()
+            .filter(|account| account.provider == provider)
+            .collect();
+        return discovered.is_empty() || discovered.iter().any(|account| has_window_room(account));
+    }
+    saved
+        .into_iter()
+        .filter(|account| account.auto_switchable())
+        .any(|saved| {
+            snapshot.accounts.iter().any(|discovered| {
+                super::endpoint::account_id(discovered) == saved.id && has_window_room(discovered)
+            })
         })
+}
+
+/// Whether an agent (`claude`, `codex`) has an eligible auto-switchable account with room to start
+/// or wake on: no saved account at all (it runs on the plain login), or an `auto_switchable()`
+/// ready one with every usage window under its limit. Never counts manual-only or disabled accounts.
+pub(crate) fn agent_has_room(paths: &crate::paths::GxserverPaths, agent: &str) -> bool {
+    let provider = match crate::agents::identity::normalize_agent_id(Some(agent)).as_deref() {
+        Some("claude" | "openclaude") => Provider::Claude,
+        Some("codex") => Provider::Codex,
+        _ => return true,
+    };
+    let snapshot = super::runtime::current_snapshot();
+    if snapshot.fetched_at.is_none() {
+        return true;
+    }
+    let Ok(db) = crate::storage::open_gxserver_database(paths) else {
+        return true;
+    };
+    let Ok(registry) = store::read(&db) else {
+        return true;
+    };
+    provider_has_eligible_room(&registry, &snapshot, provider)
 }

@@ -327,6 +327,7 @@ fn notify_feed_and_phones(
                 occurred_at_ms,
                 worker: false,
                 open_session_id: None,
+                url: None,
             });
             true
         }

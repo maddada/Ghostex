@@ -181,6 +181,7 @@ fn alert_event(
         occurred_at_ms,
         worker: false,
         open_session_id: None,
+        url: None,
     }
 }
 

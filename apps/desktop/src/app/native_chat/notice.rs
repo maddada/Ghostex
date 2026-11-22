@@ -600,9 +600,17 @@ impl NativeChatView {
             }
         }
         // A card with rows or a dialog is answered, not closed, until an answer on it is refused
-        // (`dismiss_notice` in the chat core's questions/actions.rs).
+        // or it is an unacknowledged every-account-full usage-limit wait (Q4472; `dismiss_notice`
+        // in the chat core's questions/actions.rs).
+        let unacknowledged_pool_wait = notice["kind"].as_str() == Some("usageLimit")
+            && notice["accountWait"].as_object().is_some_and(|wait| {
+                wait.get("provider").and_then(Value::as_str).is_some()
+                    && wait.get("mode").and_then(Value::as_str).is_none()
+                    && wait.get("acknowledgedAt").and_then(Value::as_str).is_none()
+            });
         if (notice["choices"].is_null() && notice["dialog"].is_null())
             || snapshot["noticeError"].is_string()
+            || unacknowledged_pool_wait
         {
             footer_end.push(
                 self.tone_button(

@@ -47,6 +47,7 @@ pub(crate) fn start(
         super::switch_progress::set_phase(&mut runtime, "success", None);
         endpoint::update_session_changes(repo, &session, &runtime, Map::new())?;
         super::switch_progress::publish(state, &session);
+        crate::server::request_report_retry(&(project, id));
         return Ok(());
     }
     let claim = uuid::Uuid::new_v4();
@@ -166,12 +167,13 @@ async fn deliver(state: Arc<AppState>, project: String, session_id: String, clai
         .as_object()
         .cloned()
         .unwrap_or_default();
+    let ok = result.is_ok();
     super::switch_progress::set_phase(
         &mut runtime,
-        if result.is_ok() { "success" } else { "failed" },
+        if ok { "success" } else { "failed" },
         result.as_ref().err().map(|error| error.message.as_str()),
     );
-    runtime["accountRecovery"]["status"] = json!(if result.is_ok() {
+    runtime["accountRecovery"]["status"] = json!(if ok {
         "resumed"
     } else {
         "needsAttention"
@@ -183,5 +185,9 @@ async fn deliver(state: Arc<AppState>, project: String, session_id: String, clai
     runtime["accountRecovery"]["updatedAt"] = json!(chrono::Utc::now().to_rfc3339());
     if endpoint::update_session_changes(&repo, &row, &runtime, Map::new()).is_ok() {
         let _ = endpoint::publish(&state, &repo, &row);
+    }
+    if ok {
+        // Flush any coordinator reports held while this coordinator waited on its old account's limit.
+        crate::server::request_report_retry(&(project, session_id));
     }
 }

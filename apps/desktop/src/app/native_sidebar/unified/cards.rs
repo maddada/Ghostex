@@ -90,7 +90,7 @@ pub(super) fn status_slot(
         row.quota_wait_state.as_deref(),
         scale,
     );
-    // Calm amber clock + countdown alone once the user clicked Wait for reset (red dot dismissed).
+    // Calm amber clock + countdown alone once the user clicked Wait / Wait for reset or Dismiss (red dot cleared).
     if status == UnifiedStatus::Waiting && row.quota_wait_state.as_deref() == Some("waiting") {
         if let Some(badge) = quota_badge {
             return Some(

@@ -67,8 +67,9 @@ pub(crate) fn approval_indicator(scale: f32) -> AnyElement {
         .into_any_element()
 }
 
-/// Compact muted-amber clock + countdown (`12m`, `3h 12m`, `45s`) for a session on a quota limit
-/// (Q4460/Q4461). Drawn beside the red dot while `blocked`, and alone while `waiting`.
+/// Compact muted-amber clock + countdown (`12m`, `3h 12m`, `45s`) for a session on a usage or
+/// quota limit (Q4460/Q4461, Q4472). Drawn beside the red dot while `blocked`, and alone while
+/// `waiting`.
 pub(crate) fn quota_countdown_badge(
     quota_resets_at: Option<&str>,
     quota_wait_state: Option<&str>,

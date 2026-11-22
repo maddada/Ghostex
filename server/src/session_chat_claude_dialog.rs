@@ -92,17 +92,39 @@ fn first_run_content(content: &[String]) -> Vec<String> {
     lines
 }
 
-/// Whether a chooser is Claude's own usage-limit menu ("You've reached your Fable limit"), which
-/// must stay a usage-limit notice so account switching and queued-delivery holds still see it.
+/// Whether a chooser is Claude's own usage-limit menu ("You've reached your Fable limit", or
+/// "What do you want to do?" with Claude's limit-wait options), which must stay a usage-limit
+/// notice so account switching and queued-delivery holds still see it.
 pub(crate) fn is_claude_usage_limit_chooser(dialog: &TerminalDialog) -> bool {
-    !dialog.rows.is_empty()
-        && [
-            "You've reached your",
-            "You've hit your",
-            "You're out of usage credits",
-        ]
-        .iter()
-        .any(|lead| dialog.title.starts_with(lead))
+    if dialog.rows.is_empty() {
+        return false;
+    }
+    if [
+        "You've reached your",
+        "You've hit your",
+        "You're out of usage credits",
+    ]
+    .iter()
+    .any(|lead| dialog.title.starts_with(lead))
+    {
+        return true;
+    }
+    if dialog.title.starts_with("What do you want to do?") {
+        let has_limit_row = dialog.rows.iter().any(|row| {
+            row.label.contains("Stop and wait for limit to reset")
+                || row.label.contains("Wait here, then continue automatically")
+                || row.label.contains("Switch to usage credits")
+                || row.label.contains("Switch to extra usage")
+        });
+        let body_lower = dialog.body.to_ascii_lowercase();
+        let has_limit_body = body_lower.contains("you've hit your")
+            || body_lower.contains("you've reached your")
+            || body_lower.contains("usage limit")
+            || body_lower.contains("out of extra usage")
+            || body_lower.contains("limit resets");
+        return has_limit_row || has_limit_body;
+    }
+    false
 }
 
 /// "No, keep planning  shift+tab to approve with this feedback": a key the chat card has no use

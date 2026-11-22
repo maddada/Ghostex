@@ -143,6 +143,31 @@ pub(crate) fn announce_blocked(
     enqueue_row_alert(state, repository, session, &row, why.kind(), route);
 }
 
+/// One per-pool push when every eligible account for a provider (Claude or Codex) is out of usage
+/// (Q4472). Uses the pool's own title (never the first individual chat's title) and carries
+/// `ghostex://accounts` in `data.url` so tapping on v11.2.1+ phones never tries to open the
+/// synthetic `account:pool:<provider>` id as a session.
+pub(crate) fn announce_pool_blocked(
+    state: &AppState,
+    provider_label: &str,
+    pool_session_id: &str,
+    notification_id: &str,
+) {
+    state.push.enqueue_alert(AlertEvent {
+        kind: AlertKind::Blocked,
+        project_id: crate::notification_feed::store::ACCOUNT_NOTIFICATION_PROJECT_ID.to_string(),
+        session_id: pool_session_id.to_string(),
+        notification_id: notification_id.to_string(),
+        agent_name: format!("{provider_label} accounts at limit"),
+        project_name: String::new(),
+        session_title: String::new(),
+        occurred_at_ms: chrono::Utc::now().timestamp_millis(),
+        worker: false,
+        open_session_id: None,
+        url: Some("ghostex://accounts".to_string()),
+    });
+}
+
 impl BlockedWhy {
     pub(crate) fn kind(self) -> AlertKind {
         match self {
@@ -219,6 +244,7 @@ fn enqueue_row_alert(
         occurred_at_ms,
         worker: route.worker,
         open_session_id: route.open_session_id,
+        url: None,
     });
 }
 

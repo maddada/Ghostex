@@ -477,23 +477,27 @@ pub(crate) fn is_claude_code_agents_screen(screen_text: &str) -> bool {
 
 /// CDXC:AgentScreenDetection 2026-09-22 WHY:
 /// Claude's usage-limit choice dialog covers its composer and blocks /exit during account switching. Escape cancels the dialog without selecting paid usage credits.
+/// CDXC:AgentScreenDetection 2026-11-22 WHY:
+/// Claude Code changed the dialog footer from "Enter to confirm · Esc to cancel" to "Enter to confirm · n to cancel", which caused Ghostex to classify the usage-limit menu as a generic claudeInputBlocked dialog instead of usageLimit. Match any "Enter to confirm ... to cancel" footer near the bottom alongside the menu heading and distinctive limit choices.
 pub(crate) fn is_claude_usage_limit_dialog(screen_text: &str) -> bool {
     let lines = composer_lines(screen_text);
-    lines
-        .last()
-        .is_some_and(|line| line.trim() == "Enter to confirm · Esc to cancel")
+    let has_footer = lines.iter().rev().take(2).any(|line| {
+        let trimmed = line.trim();
+        trimmed.starts_with("Enter to confirm") && trimmed.contains("to cancel")
+    });
+    let has_limit_choices = lines
+        .iter()
+        .any(|line| line.contains("Stop and wait for limit to reset"))
+        && lines.iter().any(|line| {
+            line.contains("Wait here, then continue automatically")
+                || line.contains("Switch to usage credits")
+                || line.contains("Switch to extra usage")
+        });
+    has_footer
         && lines
             .iter()
             .any(|line| line.trim() == "What do you want to do?")
-        && lines
-            .iter()
-            .any(|line| line.contains("1. Stop and wait for limit to reset"))
-        && lines
-            .iter()
-            .any(|line| line.contains("2. Wait here, then continue automatically"))
-        && lines
-            .iter()
-            .any(|line| line.contains("3. Switch to usage credits"))
+        && has_limit_choices
 }
 
 /*

@@ -509,7 +509,10 @@ fn checkup(
         let Some(pilot) = memory.pilots.get_mut(&key) else {
             continue;
         };
-        if pilot.busy || pilot.count(Kind::Checkup, now) >= Kind::Checkup.cap() {
+        if pilot.busy
+            || pilot.count(Kind::Checkup, now) >= Kind::Checkup.cap()
+            || crate::accounts::reset_used::waits_at_usage_limit(state, session)
+        {
             continue;
         }
         let found = super::autopilot_checkup::look(
@@ -741,22 +744,41 @@ fn decide(
         );
     }
     let running = lifecycle == "running";
-    // A usage limit the session's own policy waits out.
-    if running {
-        let at_limit = crate::accounts::reset_used::waits_at_usage_limit(state, session);
-        if !at_limit {
-            pilot.limit_parked = false;
-        } else {
-            if !pilot.limit_parked {
-                return plan(
-                    "limit",
-                    "It reached its account's usage limit.".to_string(),
-                    Act::Switch,
-                );
-            }
-            // Never fall through to hung / TurnCutOff retries while parked on a usage limit.
+    // CDXC:Autopilot 2026-11-22 FIX (Q4470/Q4471, Q4460/Q4461):
+    // When a session is waiting at a usage or quota limit (on screen, persisted in accountRecovery
+    // or quota_wait, or blocked while its provider's auto-switchable pool is empty), park
+    // immediately instead of falling through into update-prompt, frozen, hung, or carry-on rules.
+    // Persisted recovery/quota state keeps it parked across gxserver restarts too.
+    let at_limit = crate::accounts::reset_used::waits_at_usage_limit(state, session);
+    if !at_limit {
+        pilot.limit_parked = false;
+    } else {
+        let persisted_wait = crate::accounts::quota_wait::is_quota_paused(session)
+            || session
+                .pointer("/runtimeSettings/accountRecovery")
+                .is_some_and(|recovery| {
+                    recovery["trigger"]
+                        == crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT
+                        && matches!(
+                            recovery["status"].as_str(),
+                            Some("waiting" | "paused" | "needsAttention")
+                        )
+                });
+        if pilot.limit_parked || persisted_wait || !running {
+            pilot.limit_parked = true;
             return None;
         }
+        return plan(
+            "limit",
+            "It reached its account's usage limit.".to_string(),
+            Act::Switch,
+        );
+    }
+    // If this session's bound account is at 100% and zero eligible auto-switchable accounts have
+    // room for its provider, park quietly until an account resets rather than sending blind
+    // carry-on or interrupt prompts into a 100% wall.
+    if crate::accounts::reset_used::session_pool_exhausted(state, session) {
+        return None;
     }
     // A CLI's own update prompt holds the agent before it can take anything: pick Skip.
     if running && shows_update_prompt(session) {
@@ -959,8 +981,9 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
                     "Moved it to {account} and sent \".\" so it carries on."
                 )),
                 Ok(Ok(crate::accounts::autopilot::AutopilotSwitch::PolicySwitches)) => {
-                    // Its own account policy switches it; nothing for Autopilot to log.
-                    finish(&memory, &key, None, now, |_| {});
+                    // Its own account policy switches or parks it; mark limit_parked so Autopilot
+                    // does not fall through or re-run Act::Switch while recovery handles the limit.
+                    finish(&memory, &key, None, now, |pilot| pilot.limit_parked = true);
                     return;
                 }
                 Ok(Ok(crate::accounts::autopilot::AutopilotSwitch::NoRoom)) => {

@@ -283,6 +283,19 @@ pub(crate) fn insert_coordinator_reports_notice(
     insert_row_superseding_nothing(db, row)
 }
 
+/// Whether this coordinator already has an unread "stopped getting reports" row in the feed.
+pub(crate) fn has_unread_coordinator_reports_notice(
+    db: &Connection,
+    session_id: &str,
+) -> DomainResult<bool> {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM notification_feed WHERE sessionId = ?1 AND readAt IS NULL AND attentionEventId = ?2)",
+        params![session_id, COORDINATOR_REPORTS_NOTICE_MARK],
+        |row| row.get::<_, bool>(0),
+    )
+    .map_err(sql_error)
+}
+
 /// The coordinator's reports went out again: its "stopped getting reports" row goes read.
 /// Returns how many rows changed.
 pub(crate) fn mark_coordinator_reports_notice_read(

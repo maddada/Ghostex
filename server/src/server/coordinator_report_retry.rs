@@ -61,19 +61,187 @@ pub(super) struct FailureStreak {
     gave_up: bool,
 }
 
-/// The coordinators Ghostex gave up on, shared with the send route so a new message to one asks
-/// for its reports again.
+const GIVEN_UP_METADATA_KEY: &str = "coordinators.reportsGaveUp.v1";
+
+fn retry_paths() -> &'static std::sync::OnceLock<crate::paths::GxserverPaths> {
+    static PATHS: std::sync::OnceLock<crate::paths::GxserverPaths> = std::sync::OnceLock::new();
+    &PATHS
+}
+
+/// The coordinators Ghostex gave up on, shared with the send route so a new message to one (or an
+/// account switch/reset) asks for its reports again. Persisted across restarts in SQLite metadata
+/// so a stuck coordinator does not re-fire duplicate `coordinatorReportsGaveUp` alerts on restart.
 fn given_up() -> &'static Mutex<HashSet<SessionKey>> {
     static GIVEN_UP: std::sync::OnceLock<Mutex<HashSet<SessionKey>>> = std::sync::OnceLock::new();
     GIVEN_UP.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
-/// A new message was accepted for this session (the `/api/sendSessionChatMessage` route, never
-/// gxserver's own sends or a replay): when it is a coordinator Ghostex gave up on, its reports
-/// are tried again on the next tick.
+/// Coordinators explicitly asked to flush held reports right away (after a user message or an
+/// account reset/switch), clearing any pending retry backoff. Only populated for coordinators
+/// currently tracked in `retry_tracked()` or `given_up()` so non-coordinators never leak entries.
+fn flush_requested() -> &'static Mutex<HashSet<SessionKey>> {
+    static FLUSH: std::sync::OnceLock<Mutex<HashSet<SessionKey>>> = std::sync::OnceLock::new();
+    FLUSH.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// Mirror of coordinator keys currently holding an active entry in `SupervisorMemory::retry`, so
+/// `request_report_retry` ignores non-coordinators and coordinators with no active backoff.
+fn retry_tracked() -> &'static Mutex<HashSet<SessionKey>> {
+    static TRACKED: std::sync::OnceLock<Mutex<HashSet<SessionKey>>> = std::sync::OnceLock::new();
+    TRACKED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn load_persisted_given_up(paths: &crate::paths::GxserverPaths) -> HashSet<SessionKey> {
+    use rusqlite::OptionalExtension;
+    let Ok(db) = open_gxserver_database(paths) else {
+        return HashSet::new();
+    };
+    db.query_row(
+        "SELECT value FROM metadata WHERE key = ?1",
+        [GIVEN_UP_METADATA_KEY],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .ok()
+    .flatten()
+    .and_then(|raw| serde_json::from_str::<Vec<SessionKey>>(&raw).ok())
+    .map(|items| items.into_iter().collect())
+    .unwrap_or_default()
+}
+
+fn persist_given_up(keys: &HashSet<SessionKey>) {
+    let Some(paths) = retry_paths().get() else {
+        return;
+    };
+    let Ok(db) = open_gxserver_database(paths) else {
+        return;
+    };
+    let mut sorted: Vec<&SessionKey> = keys.iter().collect();
+    sorted.sort();
+    let Ok(raw) = serde_json::to_string(&sorted) else {
+        return;
+    };
+    let _ = db.execute(
+        "INSERT INTO metadata (key, value, updatedAt) VALUES (?1, ?2, ?3) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt",
+        rusqlite::params![GIVEN_UP_METADATA_KEY, raw, chrono::Utc::now().to_rfc3339()],
+    );
+}
+
+/// Loads persisted give-up episodes at coordinator supervisor startup so restarts do not re-fire
+/// duplicate "Coordinator stopped getting reports" alerts for the same stuck episode. Prunes
+/// entries whose sessions no longer exist or are stopped.
+pub(super) fn init_report_retry(
+    paths: crate::paths::GxserverPaths,
+    server_id: &str,
+    retry: &mut HashMap<SessionKey, FailureStreak>,
+) {
+    let _ = retry_paths().set(paths.clone());
+    let persisted = load_persisted_given_up(&paths);
+    if persisted.is_empty() {
+        return;
+    }
+    let active: HashSet<SessionKey> = match open_gxserver_database(&paths) {
+        Ok(db) => {
+            let repo = DomainRepository::new(&db, server_id);
+            let mut kept = HashSet::new();
+            for key in &persisted {
+                let keep = repo
+                    .get_session(&key.0, &key.1)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|session| session["lifecycleState"].as_str() != Some("stopped"));
+                if keep {
+                    kept.insert(key.clone());
+                }
+            }
+            if kept.len() != persisted.len() {
+                persist_given_up(&kept);
+            }
+            kept
+        }
+        Err(_) => persisted,
+    };
+    if active.is_empty() {
+        return;
+    }
+    let now = now_ms();
+    if let Ok(mut set) = given_up().lock() {
+        for key in &active {
+            set.insert(key.clone());
+        }
+    }
+    if let Ok(mut tracked) = retry_tracked().lock() {
+        for key in &active {
+            tracked.insert(key.clone());
+        }
+    }
+    for key in active {
+        retry.insert(
+            key,
+            FailureStreak {
+                failures: MIN_FAILED_ATTEMPTS_TO_GIVE_UP,
+                retry_at: now,
+                failing_since: now,
+                attempts: MIN_FAILED_ATTEMPTS_TO_GIVE_UP,
+                last_failed_at: now,
+                gave_up: true,
+            },
+        );
+    }
+}
+
+/// Removes a coordinator's retry streak (after a clean round) and updates `retry_tracked()`.
+pub(super) fn clear_retry(
+    retry: &mut HashMap<SessionKey, FailureStreak>,
+    coordinator: &SessionKey,
+) {
+    if retry.remove(coordinator).is_some() {
+        if let Ok(mut tracked) = retry_tracked().lock() {
+            tracked.remove(coordinator);
+        }
+    }
+}
+
+/// A new message was accepted for this session (or its account switched/reset and resumed):
+/// clear any give-up or retry backoff so held reports flush on the next tick.
 pub(crate) fn request_report_retry(key: &SessionKey) {
-    if let Ok(mut given_up) = given_up().lock() {
-        given_up.remove(key);
+    let removed = given_up()
+        .lock()
+        .ok()
+        .map(|mut set| {
+            let changed = set.remove(key);
+            if changed {
+                persist_given_up(&set);
+            }
+            changed
+        })
+        .unwrap_or(false);
+    let is_tracked = retry_tracked()
+        .lock()
+        .ok()
+        .is_some_and(|tracked| tracked.contains(key));
+    if removed || is_tracked {
+        if let Ok(mut flush) = flush_requested().lock() {
+            flush.insert(key.clone());
+        }
+    }
+}
+
+/// Pauses the 10-minute retry/give-up clock while a coordinator waits at a usage limit (Q4470),
+/// so usage-limit waits never count toward "Coordinator stopped getting reports".
+pub(super) fn pause_for_usage_limit(
+    retry: &mut HashMap<SessionKey, FailureStreak>,
+    coordinator: &SessionKey,
+    now: i64,
+) {
+    if let Some(streak) = retry.get_mut(coordinator) {
+        if !streak.gave_up {
+            streak.failures = 0;
+            streak.failing_since = now;
+            streak.attempts = 0;
+            streak.retry_at = now;
+        }
     }
 }
 
@@ -96,6 +264,14 @@ pub(super) fn waits_for_retry(
     coordinator: &SessionKey,
     now: i64,
 ) -> bool {
+    let flush_now = flush_requested()
+        .lock()
+        .ok()
+        .is_some_and(|mut flush| flush.remove(coordinator));
+    if flush_now {
+        clear_retry(retry, coordinator);
+        return false;
+    }
     if let Some(streak) = retry.get(coordinator) {
         if streak.gave_up {
             let still_given_up = given_up()
@@ -106,7 +282,7 @@ pub(super) fn waits_for_retry(
                 return true;
             }
             // Asked to try again: a fresh run.
-            retry.remove(coordinator);
+            clear_retry(retry, coordinator);
         } else if now < streak.retry_at {
             return true;
         }
@@ -126,6 +302,9 @@ pub(super) fn record_failed_round(
 ) -> Option<(usize, i64)> {
     let mut gave_up = None;
     let now = now_ms();
+    if let Ok(mut tracked) = retry_tracked().lock() {
+        tracked.insert(coordinator.clone());
+    }
     let streak = retry.entry(coordinator.clone()).or_insert(FailureStreak {
         failures: 0,
         retry_at: now,
@@ -148,8 +327,10 @@ pub(super) fn record_failed_round(
         && crate::network_status::offline_since().is_none()
     {
         streak.gave_up = true;
-        if let Ok(mut given_up) = given_up().lock() {
-            given_up.insert(coordinator.clone());
+        if let Ok(mut set) = given_up().lock() {
+            if set.insert(coordinator.clone()) {
+                persist_given_up(&set);
+            }
         }
         gave_up = Some((streak.failures, now - streak.failing_since));
     }
@@ -184,12 +365,20 @@ pub(super) async fn announce_round(
 }
 
 /// Ghostex gave up on a coordinator's reports: one row in Notifications and one warning line.
+/// Deduplicated across restarts if an unread row for this episode already exists.
 fn post_reports_notice(
     state: &AppState,
     coordinator: &SessionKey,
     failures: usize,
     failing_ms: i64,
 ) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    use crate::notification_feed::store as feed;
+    if feed::has_unread_coordinator_reports_notice(&db, &coordinator.1).unwrap_or(false) {
+        return;
+    }
     let _ = state.logger.log(GxserverLogInput {
         level: LogLevel::Warn,
         event: "coordinatorReportsGaveUp".to_string(),
@@ -205,9 +394,6 @@ fn post_reports_notice(
             "failingMs": failing_ms,
         })),
     });
-    let Ok(db) = open_gxserver_database(&state.paths) else {
-        return;
-    };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let Some(session) = repository
         .get_session(&coordinator.0, &coordinator.1)
@@ -233,7 +419,6 @@ fn post_reports_notice(
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" · ");
-    use crate::notification_feed::store as feed;
     let inserted = feed::insert_coordinator_reports_notice(
         &db,
         feed::NewNotificationFeedRow {
@@ -252,8 +437,14 @@ fn post_reports_notice(
     }
 }
 
-/// The coordinator's reports go out again: its "stopped getting reports" row, if any, goes read.
+/// The coordinator's reports go out again: its "stopped getting reports" row, if any, goes read,
+/// and any persisted give-up marker is cleared.
 fn clear_reports_notice(state: &AppState, coordinator: &SessionKey) {
+    if let Ok(mut set) = given_up().lock() {
+        if set.remove(coordinator) {
+            persist_given_up(&set);
+        }
+    }
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };

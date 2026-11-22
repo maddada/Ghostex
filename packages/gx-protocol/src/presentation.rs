@@ -1124,15 +1124,18 @@ pub struct PresentationSession {
     /// Who already alerted for this blocked state, so clients draw the red dot without their own
     /// sound and banner: `memoryGuard` for a session the memory guard stopped, which notifies under
     /// its own switch; `restart` for a thread a restart cut off; `coordinator` for a coordinator's
-    /// thread blocked on an error its coordinator handles. Absent otherwise and on older daemons.
+    /// thread blocked on an error its coordinator handles; `accountPool` for a session blocked on
+    /// an exhausted account pool whose single pool notification already alerted. Absent otherwise
+    /// and on older daemons.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_alerted_by: Option<String>,
-    /// When a non-account-switched usage quota resets (RFC3339, e.g. Antigravity CLI), for the
-    /// sidebar countdown badge (Q4460/Q4461). Absent otherwise and on older daemons.
+    /// When an active usage-limit or quota wait resets (RFC3339, e.g. Antigravity CLI or an
+    /// exhausted account pool), for the sidebar countdown badge (Q4460/Q4461, Q4472). Absent
+    /// otherwise and on older daemons.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quota_resets_at: Option<String>,
-    /// Non-account-switched quota wait state (`"blocked"` while red dot shows, `"waiting"` after
-    /// Wait for reset). Absent otherwise and on older daemons.
+    /// Usage-limit or quota wait state (`"blocked"` while red dot shows, `"waiting"` after Wait /
+    /// Wait for reset or Dismiss). Absent otherwise and on older daemons.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quota_wait_state: Option<String>,
     /// A running session holds a question card (an ask-user tool call) only the user can answer,

@@ -76,28 +76,158 @@ fn login_of(
     }
 }
 
-/// Whether the session is stopped on a usage limit: its screen shows one, or its recovery waits
-/// on one.
+/// Resolves the saved-account provider (`claude` or `codex`) directly from a session row.
+fn session_provider(session: &Value) -> Option<Provider> {
+    if let Some(provider) = session
+        .pointer("/runtimeSettings/accountProvider")
+        .and_then(Value::as_str)
+    {
+        return match provider {
+            "claude" => Some(Provider::Claude),
+            "codex" => Some(Provider::Codex),
+            _ => None,
+        };
+    }
+    let agent = crate::session_chat_follower::session_chat_agent_for_session(session)?;
+    match crate::agents::identity::normalize_agent_id(Some(&agent)).as_deref() {
+        Some("claude" | "openclaude") => Some(Provider::Claude),
+        Some("codex") => Some(Provider::Codex),
+        _ => None,
+    }
+}
+
+/// Resolves the session's configured model name if known (for filtering model-specific windows).
+fn session_model(session: &Value) -> Option<&str> {
+    session
+        .pointer("/runtimeSettings/agentModel")
+        .or_else(|| session.pointer("/runtimeSettings/model"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+/// Whether `discovered` has a live reading showing at least one applicable usage window at 100%
+/// whose reset time has not passed yet. Model-specific windows (e.g. `seven_day_sonnet`) are
+/// skipped unless `model` matches them so they never false-block healthy sessions on other models.
+fn account_is_at_limit(
+    discovered: &super::model::DiscoveredAccount,
+    model: Option<&str>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    discovered.status == "ready"
+        && discovered.usage_error.is_none()
+        && discovered.usage.iter().any(|window| {
+            super::autopilot::window_applies_to_model(window, model)
+                && window.used_percent >= 100.0
+                && window
+                    .resets_at
+                    .as_deref()
+                    .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+                    .is_none_or(|at| at.with_timezone(&chrono::Utc) > now)
+        })
+}
+
+/// Account-pool safety net: true when the session runs on Claude or Codex (not its own login), its
+/// bound account is at 100% usage for its applicable windows, AND zero auto-switchable accounts in
+/// that provider's pool have room. When `allow_unbound_fallback` is false, sessions without a
+/// resolved `display_account_id` return false so healthy unbound sessions are never false-blocked.
+fn session_pool_exhausted_inner(
+    state: &AppState,
+    session: &Value,
+    allow_unbound_fallback: bool,
+) -> bool {
+    let Some(provider) = session_provider(session) else {
+        return false;
+    };
+    if launch::session_uses_own_login(provider, session) {
+        return false;
+    }
+    let snapshot = super::runtime::current_snapshot();
+    if snapshot.fetched_at.is_none() {
+        return false;
+    }
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return false;
+    };
+    let Ok(registry) = store::read(&db) else {
+        return false;
+    };
+    if !registry
+        .accounts
+        .iter()
+        .any(|account| account.provider == provider)
+    {
+        return false;
+    }
+    let model = session_model(session);
+    if super::autopilot::provider_has_eligible_room_for_model(&registry, &snapshot, provider, model)
+    {
+        return false;
+    }
+    let now = chrono::Utc::now();
+    if let Some(current_id) =
+        session_identity::display_account_id(&registry, provider, session, &state.paths.home_dir)
+    {
+        return snapshot.accounts.iter().any(|discovered| {
+            super::endpoint::account_id(discovered) == current_id
+                && account_is_at_limit(discovered, model, now)
+        });
+    }
+    if !allow_unbound_fallback {
+        return false;
+    }
+    // Only when the session's screen is already input-blocked: treat pool as exhausted if at least
+    // one auto-switchable account of this provider is explicitly confirmed at 100%.
+    registry
+        .accounts
+        .iter()
+        .filter(|account| account.provider == provider && account.auto_switchable())
+        .any(|saved| {
+            snapshot.accounts.iter().any(|discovered| {
+                super::endpoint::account_id(discovered) == saved.id
+                    && account_is_at_limit(discovered, model, now)
+            })
+        })
+}
+
+/// Account-pool safety net for sessions with a resolved bound account at 100% and zero eligible
+/// room in the pool.
+pub(crate) fn session_pool_exhausted(state: &AppState, session: &Value) -> bool {
+    session_pool_exhausted_inner(state, session, false)
+}
+
+/// Whether the session is stopped on a usage limit: its screen shows one, its recovery waits on
+/// one, or (account-pool safety net) it shows an input-blocked notice (`claudeInputBlocked` or
+/// `codexInputBlocked`, never permission/trust/resume prompts) while its account pool is exhausted.
 pub(crate) fn waits_at_usage_limit(state: &AppState, session: &Value) -> bool {
     let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
     else {
         return false;
     };
-    let on_screen =
-        crate::session_chat_options::cached_session_chat_terminal_notice(state, pid, sid)
-            .is_some_and(|notice| {
-                notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT
-            });
+    let cached = crate::session_chat_options::cached_session_chat_terminal_notice(state, pid, sid);
+    let on_screen = cached.as_ref().is_some_and(|notice| {
+        notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT
+    });
     let recovery = session
         .pointer("/runtimeSettings/accountRecovery")
         .unwrap_or(&Value::Null);
-    on_screen
-        || super::quota_wait::is_quota_paused(session)
-        || (recovery["trigger"] == crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT
-            && matches!(
-                recovery["status"].as_str(),
-                Some("waiting" | "paused" | "needsAttention")
-            ))
+    let in_recovery = recovery["trigger"]
+        == crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT
+        && matches!(
+            recovery["status"].as_str(),
+            Some("waiting" | "paused" | "needsAttention")
+        );
+    if on_screen || super::quota_wait::is_quota_paused(session) || in_recovery {
+        return true;
+    }
+    let input_blocked = cached.as_ref().is_some_and(|notice| {
+        matches!(
+            notice.kind.as_str(),
+            crate::session_chat_notice::SESSION_CHAT_NOTICE_CLAUDE_INPUT_BLOCKED
+                | crate::session_chat_notice::SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED
+        )
+    });
+    input_blocked && session_pool_exhausted_inner(state, session, true)
 }
 
 /// Continues the sessions waiting on `login` in the background (the Redeem and the reading).

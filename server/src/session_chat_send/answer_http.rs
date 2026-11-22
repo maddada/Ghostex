@@ -280,11 +280,12 @@ async fn answer_session_chat_prompt(
             Err(error) => domain_error_response(endpoint_path, request_id, error),
         };
     }
-    // The limit card's Continue (a wait a restart paused), Not now and Stop (CDXC:AgentProviders
-    // 2026-11-14 in server/src/accounts/recovery.rs): the same steps as `agentAccounts`.
+    // The limit card's Continue (a wait a restart paused), Wait (acknowledge pool limit), Not now
+    // and Stop (CDXC:AgentProviders 2026-11-14 in server/src/accounts/recovery.rs, Q4472): the
+    // same steps as `agentAccounts`.
     if matches!(
         kind,
-        "continueWithModel" | "resumeRecovery" | "stopRecovery"
+        "continueWithModel" | "resumeRecovery" | "stopRecovery" | "acknowledgeLimitWait"
     ) {
         let mut request = params.clone();
         request.insert("operation".to_string(), json!(kind));

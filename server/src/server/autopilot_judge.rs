@@ -27,6 +27,12 @@ const WAKE_GAP_MS: i64 = 60_000;
 const WAKE_STALE_MS: i64 = 20 * 60_000;
 /// `wake`'s answer while the supervisor is still on an earlier wake: no failure.
 const BUSY: &str = "busy";
+/// `wake`'s answer while every eligible supervisor account pool is at 100%: park quietly without
+/// spamming failure logs or notifications until an account resets (Q4471).
+const PARKED_NO_USAGE: &str = "parkedNoUsage";
+/// How long to wait between quiet checks when every supervisor pool is empty (a reset resets this
+/// immediately via `setup_key`).
+const NO_USAGE_RETRY_MS: i64 = 2 * 60_000;
 /// The supervisor's context at and above which Ghostex compacts it between wakes, in tokens.
 const COMPACT_AT_TOKENS: u64 = 120_000;
 /// Least time between two looks at its context, and after a compaction before the next.
@@ -70,6 +76,8 @@ struct Judge {
     compacted_ms: i64,
     /// Its context is too big and its agent can't compact: the next wake starts a new session.
     start_fresh: bool,
+    /// Already logged once that every supervisor account pool is at its usage limit.
+    parked_no_usage: bool,
 }
 
 fn judge() -> &'static Mutex<Judge> {
@@ -164,19 +172,12 @@ fn live_supervisor(state: &AppState) -> Option<(SupervisorRecord, Value)> {
     (session["lifecycleState"].as_str() != Some("stopped")).then_some((record, session))
 }
 
-/// Starts the supervisor: the user's model when its agent has an account with room, else the
-/// other one.
-async fn start_supervisor(
+/// Starts a supervisor session on `pick`.
+async fn start_supervisor_for(
     state: &Arc<AppState>,
-    config: &AutopilotConfig,
+    pick: SupervisorModel,
 ) -> std::result::Result<SupervisorRecord, String> {
     let dir = autopilot::ensure_notes(&state.paths).map_err(|error| error.to_string())?;
-    let mut pick = config.supervisor;
-    if !crate::accounts::autopilot::agent_has_room(pick.launch().0)
-        && crate::accounts::autopilot::agent_has_room(pick.other().launch().0)
-    {
-        pick = pick.other();
-    }
     let (agent, model, effort) = SupervisorModel::launch(pick);
     let project = internal_rpc(
         state,
@@ -219,7 +220,7 @@ async fn start_supervisor(
 pub(super) async fn maybe_wake(state: Arc<AppState>) {
     let config = autopilot::read_config(&state.paths);
     let now = chrono::Utc::now().timestamp_millis();
-    let items = {
+    let should_check_setup = {
         let Ok(mut judge) = judge().lock() else {
             return;
         };
@@ -231,11 +232,31 @@ pub(super) async fn maybe_wake(state: Arc<AppState>) {
         if crate::network_status::is_offline() {
             return;
         }
-        let setup = setup_key(&config);
+        !judge.queue.is_empty() && !judge.waking
+    };
+    if !should_check_setup {
+        return;
+    }
+    let setup = {
+        let paths = state.paths.clone();
+        let config_for_key = config.clone();
+        tokio::task::spawn_blocking(move || setup_key(&paths, &config_for_key))
+            .await
+            .unwrap_or_default()
+    };
+    let items = {
+        let Ok(mut judge) = judge().lock() else {
+            return;
+        };
+        if !config.enabled {
+            judge.queue.clear();
+            return;
+        }
         if judge.setup != setup {
             judge.setup = setup;
             judge.failures = 0;
             judge.retry_at_ms = 0;
+            judge.parked_no_usage = false;
         }
         if judge.queue.is_empty()
             || judge.waking
@@ -259,9 +280,37 @@ pub(super) async fn maybe_wake(state: Arc<AppState>) {
             judge.failure = None;
             judge.failures = 0;
             judge.retry_at_ms = 0;
+            judge.parked_no_usage = false;
             for item in &items {
                 judge.handed.insert((item.key.clone(), item.why.clone()));
             }
+        }
+        // Every supervisor agent's eligible account pool is full: park quietly until an account
+        // resets (`setup_key` flips as soon as room returns).
+        Err(error) if error == PARKED_NO_USAGE => {
+            judge.retry_at_ms = now + NO_USAGE_RETRY_MS;
+            if !judge.parked_no_usage {
+                judge.parked_no_usage = true;
+                autopilot::append_log(
+                    &state.paths,
+                    &autopilot::LogEntry {
+                        at: crate::coordinators::iso_from_ms(now).unwrap_or_default(),
+                        project_id: String::new(),
+                        session_id: String::new(),
+                        title: SUPERVISOR_TITLE.to_string(),
+                        project: "Autopilot".to_string(),
+                        saw: "Every auto-switchable supervisor account is at its usage limit."
+                            .to_string(),
+                        did: "Paused supervisor wakes until an eligible account resets."
+                            .to_string(),
+                        rule: "supervisor-limit".to_string(),
+                        outcome: autopilot::Outcome::Waited,
+                    },
+                );
+            }
+            let mut items = items;
+            items.append(&mut judge.queue);
+            judge.queue = items;
         }
         // Busy, or it could not start: the items wait for the next try.
         Err(error) => {
@@ -293,20 +342,95 @@ async fn wake(
         .lock()
         .map(|mut judge| std::mem::take(&mut judge.start_fresh))
         .unwrap_or(false);
+    let preferred = config.supervisor;
+    let other = preferred.other();
     let record = match live_supervisor(state).filter(|_| !fresh) {
         Some((record, session)) => {
-            restore_title(state, &record, &session);
-            let busy =
-                presentation_activity(&session, &crate::presentation::now_iso()) == "working";
-            let last = judge().lock().map(|judge| judge.last_wake_ms).unwrap_or(0);
-            if busy && now - last < WAKE_STALE_MS {
+            let provider_has_room =
+                crate::accounts::autopilot::agent_has_room(&state.paths, &record.agent);
+            let session_at_limit =
+                crate::accounts::reset_used::waits_at_usage_limit(state, &session);
+            if session_at_limit && provider_has_room {
+                // Another eligible account of this provider still has room: wait for account
+                // recovery to switch the live supervisor rather than abandoning its agent or
+                // parking as if the whole pool were empty.
                 return Err(BUSY.to_string());
             }
-            record
+            if provider_has_room {
+                restore_title(state, &record, &session);
+                let busy =
+                    presentation_activity(&session, &crate::presentation::now_iso()) == "working";
+                let last = judge().lock().map(|judge| judge.last_wake_ms).unwrap_or(0);
+                if busy && now - last < WAKE_STALE_MS {
+                    return Err(BUSY.to_string());
+                }
+                record
+            } else {
+                // CDXC:Autopilot 2026-11-22 DECISION (Q4471):
+                // When the live supervisor's eligible account pool is empty (or it sits at a
+                // usage limit), switch the Autopilot supervisor to another configured agent with
+                // room (e.g. Codex) instead of waking a 100%-limited supervisor repeatedly. If no
+                // supervisor agent has room, park quietly without spamming notifications.
+                let fallback = [preferred, other].into_iter().find(|candidate| {
+                    let candidate_agent = candidate.launch().0;
+                    candidate_agent != record.agent
+                        && crate::accounts::autopilot::agent_has_room(&state.paths, candidate_agent)
+                });
+                let Some(fallback) = fallback else {
+                    return Err(PARKED_NO_USAGE.to_string());
+                };
+                let old_agent = record.agent.clone();
+                if presentation_activity(&session, &crate::presentation::now_iso()) != "working" {
+                    let _ = internal_rpc(
+                        state,
+                        "/api/sleepSession",
+                        json!({
+                            "projectId": record.project_id,
+                            "sessionId": record.session_id,
+                        }),
+                    )
+                    .await;
+                }
+                let switched = start_supervisor_for(state, fallback)
+                    .await
+                    .map_err(|error| format!("Couldn't switch the supervisor: {error}"))?;
+                autopilot::append_log(
+                    &state.paths,
+                    &autopilot::LogEntry {
+                        at: crate::coordinators::iso_from_ms(now).unwrap_or_default(),
+                        project_id: switched.project_id.clone(),
+                        session_id: switched.session_id.clone(),
+                        title: SUPERVISOR_TITLE.to_string(),
+                        project: "Autopilot".to_string(),
+                        saw: format!(
+                            "The {old_agent} supervisor's auto-switchable accounts are at their usage limit."
+                        ),
+                        did: format!(
+                            "Switched the Autopilot supervisor to {} while {old_agent} waits for reset.",
+                            switched.agent
+                        ),
+                        rule: "supervisor-switch".to_string(),
+                        outcome: autopilot::Outcome::Done,
+                    },
+                );
+                switched
+            }
         }
-        None => start_supervisor(state, config)
-            .await
-            .map_err(|error| format!("Couldn't start the supervisor: {error}"))?,
+        None => {
+            let pick = if crate::accounts::autopilot::agent_has_room(
+                &state.paths,
+                preferred.launch().0,
+            ) {
+                preferred
+            } else if crate::accounts::autopilot::agent_has_room(&state.paths, other.launch().0) {
+                other
+            } else {
+                return Err(PARKED_NO_USAGE.to_string());
+            };
+            start_supervisor_for(state, pick)
+                .await
+                .map_err(|error| format!("Couldn't start the supervisor: {error}"))?
+        }
     };
     let dir = autopilot::ensure_notes(&state.paths).map_err(|error| error.to_string())?;
     let n = autopilot::next_wake_number(&dir);
@@ -383,7 +507,10 @@ pub(super) async fn maybe_compact(state: Arc<AppState>) {
     let Some((record, session)) = live_supervisor(&state) else {
         return;
     };
-    if presentation_activity(&session, &crate::presentation::now_iso()) == "working" {
+    if presentation_activity(&session, &crate::presentation::now_iso()) == "working"
+        || !crate::accounts::autopilot::agent_has_room(&state.paths, &record.agent)
+        || crate::accounts::reset_used::waits_at_usage_limit(&state, &session)
+    {
         return;
     }
     let (tokens, command) = {
@@ -504,12 +631,12 @@ pub(super) fn restore_title_at_start(state: &AppState) {
 
 /// What a failed start or wake depends on: the Autopilot settings and whether each agent has an
 /// account with room (a sign-in, a limit reset or a switch of model).
-fn setup_key(config: &AutopilotConfig) -> String {
+fn setup_key(paths: &crate::paths::GxserverPaths, config: &AutopilotConfig) -> String {
     format!(
         "{}|{}|{}",
         serde_json::to_string(config).unwrap_or_default(),
-        crate::accounts::autopilot::agent_has_room("claude"),
-        crate::accounts::autopilot::agent_has_room("codex"),
+        crate::accounts::autopilot::agent_has_room(paths, "claude"),
+        crate::accounts::autopilot::agent_has_room(paths, "codex"),
     )
 }
 

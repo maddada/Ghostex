@@ -107,7 +107,21 @@ fn pause_after_restart(repo: &DomainRepository<'_>, session: &Value, recovery: &
     recovery["reason"] = json!(PAUSED_AFTER_RESTART);
     recovery["nextAttemptAt"] = Value::Null;
     recovery["updatedAt"] = json!(now);
+    let prior_provider = recovery
+        .pointer("/accountWait/provider")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            session["projectId"]
+                .as_str()
+                .and_then(|pid| repo.get_project(pid).ok().flatten())
+                .and_then(|project| launch::provider(&project, session))
+                .map(|provider| provider.id().to_string())
+        });
     let mut wait = json!({ "mode": "afterRestart", "since": now });
+    if let Some(provider) = prior_provider {
+        wait["provider"] = json!(provider);
+    }
     if crate::carry_on_compaction::compact_command(session).is_some() {
         let tokens = crate::carry_on_compaction::context_tokens(repo, session);
         let checked =
@@ -451,6 +465,7 @@ pub(crate) fn collect(
                 super::limit_wait::settle(state, &repo, &pid, &sid);
             }
         }
+        super::limit_wait::settle_pools(state, &repo, &registry, &snapshot);
     }
     Ok(plans)
 }
@@ -785,6 +800,7 @@ pub(crate) fn plan_session(
         recovery["nextAttemptAt"] = Value::Null;
         recovery["updatedAt"] = json!(now.to_rfc3339());
         save(state, repo, &session, recovery.clone())?;
+        crate::server::request_report_retry(&(pid.to_string(), sid.to_string()));
     }
     // CDXC:AgentProviders 2026-09-11 WHY:
     // The screen keeps the finished turn's rows, and the activity detector still classifies them: the last `⏺` message, the tool gutter that holds the limit text itself, a "done" status row.
@@ -1225,7 +1241,7 @@ pub(crate) fn plan_session(
                         alternative.as_ref(),
                         now,
                     );
-                    super::limit_wait::enter(state, repo, &session, &mut recovery, wait);
+                    super::limit_wait::enter(state, repo, &session, &mut recovery, wait, provider);
                 }
                 save(state, repo, &session, recovery)?;
                 return Ok(None);
@@ -1665,6 +1681,7 @@ pub(super) async fn deliver(state: Arc<AppState>, plan: Plan) {
             recovery["status"] = json!("resumed");
             recovery["reason"] =
                 json!("Continuation sent. Ghostex is watching for further errors.");
+            crate::server::request_report_retry(&(plan.project.clone(), plan.session.clone()));
         }
         Err(error) => {
             if matches!(

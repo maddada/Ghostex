@@ -281,10 +281,16 @@ pub(crate) fn project_presentation_session(
                 "blockedAlertedBy".to_string(),
                 Value::String(crate::coordinators::STOPPED_BY_RESTART_ALERTED_BY.to_string()),
             );
+        } else if crate::accounts::limit_wait::is_pool_blocked(session) {
+            output.insert(
+                "blockedAlertedBy".to_string(),
+                Value::String(crate::accounts::limit_wait::POOL_BLOCKED_ALERTED_BY.to_string()),
+            );
         }
     }
-    // Additive quota wait fields for the sidebar countdown badge (Q4460/Q4461).
-    if let Some((resets_at, wait_state)) = crate::accounts::quota_wait::presentation_fields(session)
+    // Additive quota/usage wait fields for the sidebar countdown badge (Q4460/Q4461, Q4472).
+    if let Some((resets_at, wait_state)) = crate::accounts::limit_wait::presentation_fields(session)
+        .or_else(|| crate::accounts::quota_wait::presentation_fields(session))
     {
         if let Some(resets_at) = resets_at {
             output.insert("quotaResetsAt".to_string(), Value::String(resets_at));

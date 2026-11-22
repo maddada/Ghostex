@@ -587,7 +587,12 @@ pub(crate) fn dispatch(
             )?;
             changed_sessions.push(session);
         }
-        "sessionPolicy" | "select" | "stopRecovery" | "resumeRecovery" | "compactFirst" => {
+        "sessionPolicy"
+        | "select"
+        | "stopRecovery"
+        | "resumeRecovery"
+        | "compactFirst"
+        | "acknowledgeLimitWait" => {
             let session = get_session(&repository, params)?;
             let project = repository
                 .get_project(required(params, "projectId")?)?
@@ -663,6 +668,8 @@ pub(crate) fn dispatch(
                     required(params, "projectId")?,
                     required(params, "sessionId")?,
                 );
+            } else if operation == "acknowledgeLimitWait" {
+                super::limit_wait::acknowledge(state, &repository, provider, &session)?;
             } else if operation == "stopRecovery" {
                 runtime.remove("accountRecovery");
                 runtime.insert("accountRecoverySuppressed".into(), json!(true));
@@ -723,7 +730,11 @@ pub(crate) fn dispatch(
                     store::write(&db, &registry)?;
                 }
             }
-            changed_sessions.push(session);
+            // `limit_wait::acknowledge` already published every mutated session; avoid re-publishing
+            // the stale pre-mutation `session` snapshot here.
+            if operation != "acknowledgeLimitWait" {
+                changed_sessions.push(session);
+            }
         }
         _ => return Err(DomainStateError::bad_request("Unknown account operation.")),
     }

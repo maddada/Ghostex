@@ -510,9 +510,11 @@ export interface GxserverPresentationSession {
   blockedSince?: string;
   /** Why it is blocked, in a few plain words; present with `blockedSince`. */
   blockedReason?: string;
-  /** When a non-account-switched usage quota resets (RFC3339, e.g. Antigravity CLI). */
+  /** Who already alerted for this blocked state (`memoryGuard`, `restart`, `coordinator`, `accountPool`). */
+  blockedAlertedBy?: string;
+  /** When an active usage-limit or quota wait resets (RFC3339, e.g. Antigravity CLI or an exhausted account pool). */
   quotaResetsAt?: string;
-  /** Non-account-switched quota wait state (`blocked` or `waiting`). */
+  /** Usage-limit or quota wait state (`blocked` while red dot shows, `waiting` after Wait / Wait for reset or Dismiss). */
   quotaWaitState?: string;
   /** A running session holds a question card only the user can answer, also while the agent works; absent when not. Independent of pendingQuestionCount. */
   awaitingAnswer?: boolean;

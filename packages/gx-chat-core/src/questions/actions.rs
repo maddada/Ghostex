@@ -422,8 +422,18 @@ pub fn dismiss_send_failure(
     dismiss_notice(state, notice.as_ref(), context)
 }
 
+fn is_unacknowledged_pool_wait(notice: &TerminalNotice) -> bool {
+    notice.kind == "usageLimit"
+        && notice.account_wait.as_ref().is_some_and(|wait| {
+            wait.get("provider").and_then(Value::as_str).is_some()
+                && wait.get("mode").and_then(Value::as_str).is_none()
+                && wait.get("acknowledgedAt").and_then(Value::as_str).is_none()
+        })
+}
+
 /// Closing a notice that only describes a state. A notice with a picker or a dialog has to be
-/// answered instead, so the button does nothing there, unless an answer on it was refused.
+/// answered instead, so the button does nothing there, unless an answer on it was refused or it is
+/// an unacknowledged every-account-full usage-limit wait (Q4472).
 fn dismiss_notice(
     state: &mut ChatState,
     notice: Option<&TerminalNotice>,
@@ -434,9 +444,10 @@ fn dismiss_notice(
     };
     let answerable =
         notice.choices.as_ref().is_some_and(|rows| !rows.is_empty()) || notice.dialog.is_some();
+    let pool_wait = is_unacknowledged_pool_wait(notice);
     // CDXC:SessionChat 2026-11-07 WHY: a card whose answer gxserver refused ("Codex's dialog changed", GitHub #458) could be neither answered nor closed, and it covered the chat until the agent's screen moved on. Once a pick on it was refused (the card shows why), its Dismiss closes it like any notice and it stops holding the composer, as a refused plain picker already does in `answer_settled`; gxserver still refuses a message the agent's screen cannot take.
     let refused = state.questions.notice_error.is_some();
-    if answerable && !refused {
+    if answerable && !refused && !pool_wait {
         return Vec::new();
     }
     if answerable {
@@ -478,6 +489,14 @@ fn dismiss_notice(
         effects.extend(answer_prompt(
             state,
             &serde_json::json!({ "kind": "restartAgent", "actionId": "dismissUsageLimit" }),
+        ));
+    }
+    // Dismissing an unacknowledged pool-exhausted limit card (Q4472) clears the red sidebar dot
+    // into the calm amber waiting clock on gxserver while keeping automatic resume at reset active.
+    if pool_wait {
+        effects.extend(answer_prompt(
+            state,
+            &serde_json::json!({ "kind": "acknowledgeLimitWait" }),
         ));
     }
     effects

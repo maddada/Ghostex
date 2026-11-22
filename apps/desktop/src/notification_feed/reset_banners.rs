@@ -40,44 +40,72 @@ impl GhostexGpuiApp {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |elapsed| elapsed.as_secs() as i64);
-        let fresh = {
+        let (fresh_reset, fresh_pool) = {
             let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
             let first_read = seen.is_none();
             let seen = seen.get_or_insert_with(HashSet::new);
-            let fresh = state
-                .items
-                .iter()
+            let mut fresh_reset = Vec::new();
+            let mut fresh_pool = Vec::new();
+            for item in state.items.iter() {
                 // A remote computer's accounts are not this computer's to warn about.
-                .filter(|item| item.machine.is_local())
-                .filter(|item| seen.insert(item.id.clone()))
-                .filter(|item| {
-                    !item.read && item.kind == super::GpuiNotificationFeedKind::ResetExpiring
-                })
-                .filter(|item| {
-                    !first_read
-                        || item
+                if !item.machine.is_local() || !seen.insert(item.id.clone()) || item.read {
+                    continue;
+                }
+                let is_reset = item.kind == super::GpuiNotificationFeedKind::ResetExpiring;
+                let is_pool = item.kind == super::GpuiNotificationFeedKind::Failed
+                    && item
+                        .account_id
+                        .as_deref()
+                        .is_some_and(|id| id.starts_with("pool:"));
+                if !is_reset && !is_pool {
+                    continue;
+                }
+                // On the first feed snapshot after app launch, do not replay pool-limit sound or
+                // OS banners for rows that were already in the feed before this process started
+                // (their bell row and red sidebar dot are already visible). Banked reset warnings
+                // keep the recent-first-read window.
+                if first_read
+                    && (is_pool
+                        || !item
                             .created_at_epoch_secs
-                            .is_some_and(|at| now - at <= FIRST_READ_RECENT_SECS)
-                })
-                .filter_map(|item| {
-                    Some(GpuiSessionAttentionNotificationCandidate {
-                        session_id: format!(
-                            "{ACCOUNT_RESET_BANNER_PREFIX}{}",
-                            item.account_id.as_deref()?
-                        ),
-                        title: item.title.clone(),
-                        body: if item.subtitle.is_empty() {
-                            item.body.clone()
-                        } else {
-                            format!("{}: {}", item.subtitle, item.body)
-                        },
-                        icon_data_url: None,
-                    })
-                })
-                .collect::<Vec<_>>();
+                            .is_some_and(|at| now - at <= FIRST_READ_RECENT_SECS))
+                {
+                    continue;
+                }
+                let Some(account_id) = item.account_id.as_deref() else {
+                    continue;
+                };
+                let candidate = GpuiSessionAttentionNotificationCandidate {
+                    session_id: format!("{ACCOUNT_RESET_BANNER_PREFIX}{account_id}"),
+                    title: item.title.clone(),
+                    body: if item.subtitle.is_empty() {
+                        item.body.clone()
+                    } else {
+                        format!("{}: {}", item.subtitle, item.body)
+                    },
+                    icon_data_url: None,
+                };
+                if is_reset {
+                    fresh_reset.push(candidate);
+                } else {
+                    fresh_pool.push(candidate);
+                }
+            }
             seen.retain(|id| state.items.iter().any(|item| &item.id == id));
-            fresh
+            (fresh_reset, fresh_pool)
         };
+        // Q4472: one per-pool sound and OS banner when an agent's auto-switchable pool hits 0%
+        // (affected sessions carry `blockedAlertedBy: "accountPool"` so they do not fire per chat).
+        // Respects both sound settings (inside `gpui_play_not_moving_sound`) and system attention
+        // notification settings (`gpui_macos_attention_notifications_enabled`).
+        if !fresh_pool.is_empty() {
+            crate::app::helpers::gpui_play_not_moving_sound();
+            if gpui_macos_attention_notifications_enabled() {
+                for candidate in fresh_pool {
+                    self.deliver_gpui_macos_session_attention_notification(candidate, cx);
+                }
+            }
+        }
         let enabled = shared_settings::shared_sidebar_settings_snapshot()
             .object()
             .get(RESET_EXPIRY_SYSTEM_NOTIFICATIONS_SETTINGS_KEY)
@@ -86,7 +114,7 @@ impl GhostexGpuiApp {
         if !enabled {
             return;
         }
-        for candidate in fresh {
+        for candidate in fresh_reset {
             self.deliver_gpui_macos_session_attention_notification(candidate, cx);
         }
     }

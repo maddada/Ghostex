@@ -145,10 +145,10 @@ pub(crate) struct NativeSidebarSession {
     /// red dot, like a failure.
     #[serde(default)]
     pub(crate) stuck: bool,
-    /// RFC3339 reset time when a session is on a quota limit (Q4460/Q4461).
+    /// RFC3339 reset time when a session is on a usage or quota limit (Q4460/Q4461, Q4472).
     #[serde(default)]
     pub(crate) quota_resets_at: Option<String>,
-    /// Quota wait state (`"blocked"` or `"waiting"`).
+    /// Usage or quota wait state (`"blocked"` or `"waiting"`).
     #[serde(default)]
     pub(crate) quota_wait_state: Option<String>,
     pub(crate) agent_icon: Option<String>,

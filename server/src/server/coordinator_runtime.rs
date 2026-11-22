@@ -17,7 +17,8 @@ use crate::presentation::effective_lifecycle_state;
 use crate::session_chat_queue_runtime::SessionChatTranscriptGate;
 
 use super::coordinator_report_retry::{
-    announce_round, pause_for_outage, record_failed_round, waits_for_retry, FailureStreak,
+    announce_round, clear_retry, init_report_retry, pause_for_outage, pause_for_usage_limit,
+    record_failed_round, waits_for_retry, FailureStreak,
 };
 
 const TICK: Duration = Duration::from_secs(2);
@@ -261,7 +262,13 @@ struct Delivery {
 
 pub(crate) fn start_coordinator_runtime(state: Arc<AppState>) {
     let _ = coordinators::ensure_coordinator_role_file(&state.paths);
-    let memory = Arc::new(Mutex::new(SupervisorMemory::default()));
+    let mut initial_memory = SupervisorMemory::default();
+    init_report_retry(
+        state.paths.clone(),
+        state.metadata.server_id.as_str(),
+        &mut initial_memory.retry,
+    );
+    let memory = Arc::new(Mutex::new(initial_memory));
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
         let mut clock = crate::ticks::steady_interval(TICK);
@@ -935,7 +942,10 @@ fn supervise(
         // CDXC:Coordinators 2026-11-17 WHY: a coordinator at its own usage limit cannot read a
         // report, and one asleep in its turn on the limit's Retry-After took 206 of them in one
         // night. Its reports wait, worked out again on each tick as during an outage
-        // (CDXC:OfflineHold above), and go out once a reset continued it (accounts/reset_used.rs).
+        // (CDXC:OfflineHold above), and go out once a reset or account switch continues it.
+        // CDXC:Coordinators 2026-11-22 FIX (Q4470): also pause the 10-minute give-up clock here
+        // and check the account-pool safety net so a CLI dialog change never fires a false
+        // "Coordinator stopped getting reports" alarm.
         if repository
             .get_session(&coordinator.0, &coordinator.1)
             .ok()
@@ -959,6 +969,7 @@ fn supervise(
                 crate::accounts::reset_used::waits_at_usage_limit(state, &session)
             })
         {
+            pause_for_usage_limit(&mut memory.retry, &coordinator, now);
             continue;
         }
         if waits_for_retry(&mut memory.retry, &coordinator, now) {
@@ -1532,9 +1543,37 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             }
         }
     }
+    let paused_for_limit = if failed {
+        let check_state = state.clone();
+        let check_key = coordinator.clone();
+        tokio::task::spawn_blocking(move || {
+            let Ok(db) = open_gxserver_database(&check_state.paths) else {
+                return false;
+            };
+            let repository = DomainRepository::new(&db, check_state.metadata.server_id.as_str());
+            repository
+                .get_session(&check_key.0, &check_key.1)
+                .ok()
+                .flatten()
+                .is_some_and(|session| {
+                    crate::accounts::reset_used::waits_at_usage_limit(&check_state, &session)
+                        || crate::accounts::reset_used::session_pool_exhausted(
+                            &check_state,
+                            &session,
+                        )
+                })
+        })
+        .await
+        .unwrap_or(false)
+    } else {
+        false
+    };
     let gave_up = memory.lock().ok().and_then(|mut memory| {
         memory.in_flight.remove(&coordinator);
-        if failed {
+        if failed && paused_for_limit {
+            pause_for_usage_limit(&mut memory.retry, &coordinator, now_ms());
+            None
+        } else if failed {
             record_failed_round(
                 &mut memory.retry,
                 &coordinator,
@@ -1542,7 +1581,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                 round_started,
             )
         } else {
-            memory.retry.remove(&coordinator);
+            clear_retry(&mut memory.retry, &coordinator);
             memory
                 .report_send_ids
                 .retain(|(owner, _), _| owner != &coordinator);

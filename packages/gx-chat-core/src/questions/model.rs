@@ -131,6 +131,9 @@ pub struct TerminalNotice {
     /// server/src/accounts/quota_wait.rs).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quota_wait: Option<Value>,
+    /// Account-pool wait facts attached to a usage-limit notice (`server/src/accounts/limit_wait.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_wait: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dialog: Option<TerminalDialog>,
     /// The whole plan Claude's "Ready to code?" asks to approve, as Markdown from its plan file

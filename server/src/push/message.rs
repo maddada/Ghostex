@@ -131,6 +131,10 @@ pub(crate) struct AlertEvent {
     /// coordinator, where the card is relayed (`openSessionId`; an older phone ignores it and
     /// opens the thread).
     pub(crate) open_session_id: Option<String>,
+    /// Optional deep-link URL carried in `data.url` (e.g. `ghostex://accounts` for pool-level
+    /// alerts that have no single session behind them; v11.2.1+ phones pass `data.url` to
+    /// `handleDeepLink` instead of trying to open `sessionId` as a session).
+    pub(crate) url: Option<String>,
 }
 
 impl AlertEvent {
@@ -194,6 +198,9 @@ pub(crate) fn alert_message(
         });
         if let Some(open) = event.open_session_id.as_deref().filter(|id| !id.is_empty()) {
             data["openSessionId"] = json!(open);
+        }
+        if let Some(url) = event.url.as_deref().filter(|value| !value.is_empty()) {
+            data["url"] = json!(url);
         }
         // A worker's news, which the phone shows by its Workers choice as it came.
         if event.worker {
