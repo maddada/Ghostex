@@ -3,15 +3,15 @@
 //! remembered last conversation. A key is never sent back.
 
 use axum::http::StatusCode;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::keys::{self, KeyCheck, KeyState};
 use super::memory;
 use super::provider::Provider;
 use super::registry;
-use crate::domain::{DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainStateError};
 use crate::protocol::rpc_success;
-use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
+use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
 
 fn failure(code: &'static str, message: impl Into<String>) -> DomainStateError {
     DomainStateError {
@@ -142,10 +142,10 @@ async fn set_key(state: &AppState, body: &Value) -> Result<Value, DomainStateErr
                     return Err(failure(
                         "badKey",
                         keys::refused_message(provider, "your ChatGPT sign-in", reason.as_deref()),
-                    ));
+                    ))
                 }
                 KeyCheck::Unreachable(message) => {
-                    return Err(failure("providerUnavailable", message));
+                    return Err(failure("providerUnavailable", message))
                 }
             }
             keys::use_chatgpt_signin(&paths).map_err(|message| failure("internalError", message))
@@ -178,10 +178,10 @@ async fn set_key(state: &AppState, body: &Value) -> Result<Value, DomainStateErr
                             "the key 1Password gave",
                             reason.as_deref(),
                         ),
-                    ));
+                    ))
                 }
                 KeyCheck::Unreachable(message) => {
-                    return Err(failure("providerUnavailable", message));
+                    return Err(failure("providerUnavailable", message))
                 }
             }
             keys::write_key_reference(&paths, provider, &reference)
@@ -205,7 +205,7 @@ async fn set_key(state: &AppState, body: &Value) -> Result<Value, DomainStateErr
                 return Err(failure(
                     "badKey",
                     keys::refused_message(provider, "that API key", reason.as_deref()),
-                ));
+                ))
             }
             KeyCheck::Unreachable(message) => return Err(failure("providerUnavailable", message)),
         }

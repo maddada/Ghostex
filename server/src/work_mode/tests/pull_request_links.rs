@@ -2,7 +2,7 @@
 //! selector of `gh pr view`, so it is exactly `https://github.com/<owner>/<repo>/pull/<number>`:
 //! a real link is trimmed to that, and anything else stays out of `pullRequestUrls`.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::paths::get_gxserver_paths;
 

@@ -6,12 +6,12 @@
 
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::events::NO_RENDERER_MESSAGE;
-use crate::ghostex_cli::args::{FlagValue, Flags, parse_args};
+use crate::ghostex_cli::args::{parse_args, FlagValue, Flags};
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
-use crate::ghostex_cli::rpc::{self, CliError, CliResult, call_gxserver_rpc};
+use crate::ghostex_cli::rpc::{self, call_gxserver_rpc, CliError, CliResult};
 use crate::ghostex_cli::selector;
 
 /// The sidebar's id for a user-made group: `gpui-wsg:<project id>:<group id>`.

@@ -5,16 +5,16 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::{AppState, schedule_presentation_project_delta, schedule_presentation_session_delta};
+use super::{schedule_presentation_project_delta, schedule_presentation_session_delta, AppState};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::storage::open_gxserver_database;
 use crate::work_mode::{
-    PublishedProjectWork, issues_workflow_settings, presentation_session_work, project_work_mode,
-    published_project_work, refresh_issues_workflow_setup, refresh_work_caches,
-    remember_issues_workflow_linear_setup, work_display_title,
+    issues_workflow_settings, presentation_session_work, project_work_mode, published_project_work,
+    refresh_issues_workflow_setup, refresh_work_caches, remember_issues_workflow_linear_setup,
+    work_display_title, PublishedProjectWork,
 };
 
 /// What each project last published of Issues Workflow (which parts it has, its tracker and its

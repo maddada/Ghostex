@@ -1,6 +1,6 @@
 use std::process::Stdio;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 /*
@@ -178,5 +178,9 @@ pub(crate) fn read_first_line(program: &str, args: &[&str]) -> Option<String> {
     }
     let text = String::from_utf8_lossy(&output.stdout);
     let line = text.lines().next().unwrap_or_default().trim().to_string();
-    if line.is_empty() { None } else { Some(line) }
+    if line.is_empty() {
+        None
+    } else {
+        Some(line)
+    }
 }

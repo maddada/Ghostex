@@ -10,14 +10,14 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use rusqlite::{Transaction, TransactionBehavior};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use tokio::sync::oneshot;
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::session_chat_interactive::{
-    SessionChatInteractivePrompt, SessionChatQuestion, SessionChatQuestionOption,
-    parse_stored_session_chat_prompt,
+    parse_stored_session_chat_prompt, SessionChatInteractivePrompt, SessionChatQuestion,
+    SessionChatQuestionOption,
 };
 use crate::storage::open_gxserver_database;
 

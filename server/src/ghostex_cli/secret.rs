@@ -3,11 +3,11 @@
 
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::ghostex_cli::args::{Flags, ParsedArgs, parse_args};
+use crate::ghostex_cli::args::{parse_args, Flags, ParsedArgs};
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
-use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
+use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 use crate::ghostex_cli::{notify, selector, set_exit_code, skills, usage};
 
 const DEFAULT_MINUTES: f64 = 10.0;
@@ -218,15 +218,9 @@ fn describe(outcome: &Value) -> Value {
         .and_then(Value::as_str)
         .unwrap_or("unknown");
     let next = match status {
-        "saved" => {
-            "The secret is in this owner-only file (deleted after 24 hours). Read it only inside the command that needs it, e.g. TOKEN=\"$(cat '<file>')\" some-cli …, or `sudo -k -S -p '' <command> < '<file>'` after `sudo -n <command>` failed for lack of a password. Never print, echo, copy or commit it, and never repeat it in chat."
-        }
-        "declined" => {
-            "The user chose not to give it. Do not ask again unless they say so; carry on without it or ask how they want to proceed."
-        }
-        "timedOut" => {
-            "The user did not answer in time and the card closed. Ask again only if it is still needed."
-        }
+        "saved" => "The secret is in this owner-only file (deleted after 24 hours). Read it only inside the command that needs it, e.g. TOKEN=\"$(cat '<file>')\" some-cli …, or `sudo -k -S -p '' <command> < '<file>'` after `sudo -n <command>` failed for lack of a password. Never print, echo, copy or commit it, and never repeat it in chat.",
+        "declined" => "The user chose not to give it. Do not ask again unless they say so; carry on without it or ask how they want to proceed.",
+        "timedOut" => "The user did not answer in time and the card closed. Ask again only if it is still needed.",
         "cancelled" => "The request ended before it was answered.",
         _ => "The request ended without an answer.",
     };
@@ -297,7 +291,7 @@ fn providers_command(args: &[String]) -> CliResult<()> {
             return Err(CliError::Other(format!(
                 "Unknown secret providers command: {other}\n\n{}",
                 usage::secret_usage()
-            )));
+            )))
         }
     };
     print_json(&result);

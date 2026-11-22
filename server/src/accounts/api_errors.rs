@@ -10,12 +10,12 @@ use crate::{
     domain::{DomainRepository, DomainStateError},
     server::AppState,
     session_chat_notice::{
-        SESSION_CHAT_NOTICE_STREAM_ERROR, SessionChatTerminalNotice,
-        SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
+        SessionChatTerminalNotice, SessionChatTerminalNoticeSeverity,
+        SessionChatTerminalNoticeSource, SESSION_CHAT_NOTICE_STREAM_ERROR,
     },
 };
 use chrono::{DateTime, Utc};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::{
     collections::HashMap,
     sync::{Mutex, OnceLock},
@@ -1231,9 +1231,8 @@ mod failure_notice_tests {
         session.save(state("retrying", QUICK_TRIES + 2));
         let mut restarted = session.stored()["runtimeSettings"]["accountRecovery"].clone();
         restarted["status"] = json!("needsAttention");
-        restarted["reason"] = json!(
-            "Ghostex restarted during a recovery attempt. Check the conversation before continuing."
-        );
+        restarted["reason"] =
+            json!("Ghostex restarted during a recovery attempt. Check the conversation before continuing.");
         session.save(restarted);
         assert_eq!(
             session.failed_rows(),

@@ -4,7 +4,7 @@
 
 use super::*;
 
-use crate::open_conversation::{OpenConversationRequest, open_conversation};
+use crate::open_conversation::{open_conversation, OpenConversationRequest};
 
 /// A fork starts a provider and can take a while.
 const STEP_TIMEOUT_MS: u64 = 60_000;

@@ -319,12 +319,10 @@ mod tests {
             }]
         );
         assert_eq!(messages[3].blocks, vec![text_block("DONE")]);
-        assert!(
-            messages
-                .iter()
-                .skip(1)
-                .all(|message| message.turn_id.as_deref() == Some("turn-1"))
-        );
+        assert!(messages
+            .iter()
+            .skip(1)
+            .all(|message| message.turn_id.as_deref() == Some("turn-1")));
     }
 
     #[test]

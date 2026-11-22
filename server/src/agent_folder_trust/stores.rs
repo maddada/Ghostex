@@ -9,12 +9,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use toml_edit::{DocumentMut, Item, Table};
 
 use super::files::{
-    JsonFile, dedupe_files, env_folder_or, existing_files_in_subfolders, read_json_object,
-    read_text, write_atomically, write_json_object,
+    dedupe_files, env_folder_or, existing_files_in_subfolders, read_json_object, read_text,
+    write_atomically, write_json_object, JsonFile,
 };
 
 /// The agents whose own folder-trust record Ghostex writes.

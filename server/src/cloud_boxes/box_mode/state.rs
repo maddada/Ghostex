@@ -4,8 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
-use ghostex_gx_protocol::cloud_box::{BoxBootTicket, CloudProviderId, box_private_dir};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use ghostex_gx_protocol::cloud_box::{box_private_dir, BoxBootTicket, CloudProviderId};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 /// `~/.ghostex-box/`.
 pub(crate) fn state_dir() -> PathBuf {

@@ -45,7 +45,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::resume_lookup::home_dir;
 use crate::session_chat::{extract_string, parse_json_object};

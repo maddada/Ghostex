@@ -90,9 +90,7 @@ fn focused_instructions(scope: &FocusScope, today: &str) -> String {
         ));
     }
     let threads = if scope.is_orchestrator {
-        format!(
-            "\n- \"{title}\" is a coordinator: it runs threads (other sessions) for the user, listed in the briefing. You may read a thread and answer its questions and approvals when the user asks, but prompts and drafts go only to \"{title}\" itself, which hands work to its threads. Name a thread with the session argument; leave the argument out for \"{title}\"."
-        )
+        format!("\n- \"{title}\" is a coordinator: it runs threads (other sessions) for the user, listed in the briefing. You may read a thread and answer its questions and approvals when the user asks, but prompts and drafts go only to \"{title}\" itself, which hands work to its threads. Name a thread with the session argument; leave the argument out for \"{title}\".")
     } else {
         String::new()
     };

@@ -10,11 +10,11 @@ use ghostex_gx_protocol::beads_view::{
     BeadsSyncInfo, BeadsSyncRemote, BeadsSyncResult, BeadsSyncRunning,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::typed_operations::{
-    ProcessCommand, TypedOperationContext, TypedOperationError, beads_action_command,
-    run_process_command_with_timeout,
+    beads_action_command, run_process_command_with_timeout, ProcessCommand, TypedOperationContext,
+    TypedOperationError,
 };
 
 use super::cache::WorkspaceEntry;

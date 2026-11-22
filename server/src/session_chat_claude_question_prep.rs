@@ -3,9 +3,9 @@
 
 use crate::session_chat::SessionChatQuestion;
 use crate::session_chat_question_liveness::{
-    ClaudeQuestionSelectorPosition, claude_question_selector_position, claude_question_tab_and_rows,
+    claude_question_selector_position, claude_question_tab_and_rows, ClaudeQuestionSelectorPosition,
 };
-use crate::session_chat_question_row_align::{CLEAR_LINE_KEYS, write_keys_and_await_repaint};
+use crate::session_chat_question_row_align::{write_keys_and_await_repaint, CLEAR_LINE_KEYS};
 use crate::session_chat_send::capture_session_terminal_text;
 
 const PREVIOUS_ROW: &str = "\u{1b}[A"; // Up

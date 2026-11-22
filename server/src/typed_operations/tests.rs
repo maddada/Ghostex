@@ -656,11 +656,9 @@ fn beads_board_rejects_explicit_row_and_response_limits() {
     )
     .unwrap_err();
     assert_eq!(response_error.code, "badRequest");
-    assert!(
-        response_error
-            .message
-            .contains("16-byte serialized JSON limit")
-    );
+    assert!(response_error
+        .message
+        .contains("16-byte serialized JSON limit"));
     assert_eq!(
         response_error
             .details

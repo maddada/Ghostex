@@ -4,13 +4,13 @@
 //! a temporary state database.
 
 use super::*;
-use crate::notification_feed::NOTIFICATION_FEED_FAILED_BODY;
 use crate::notification_feed::store::{
+    account_notification_session_id, defer_session_notification, dismiss_notification,
+    insert_notification_feed_row, read_notification_feed_state, NewNotificationFeedRow,
     ACCOUNT_NOTIFICATION_PROJECT_ID, NOTIFICATION_FEED_KIND_RESET_EXPIRING,
-    NOTIFICATION_FEED_RETENTION_LIMIT, NewNotificationFeedRow, account_notification_session_id,
-    defer_session_notification, dismiss_notification, insert_notification_feed_row,
-    read_notification_feed_state,
+    NOTIFICATION_FEED_RETENTION_LIMIT,
 };
+use crate::notification_feed::NOTIFICATION_FEED_FAILED_BODY;
 
 struct Fixture {
     state: Arc<AppState>,
@@ -513,11 +513,9 @@ fn failed_rows_keep_one_live_row_retention_deferral_and_account_rows() {
         state["items"].as_array().unwrap().len(),
         NOTIFICATION_FEED_RETENTION_LIMIT
     );
-    assert!(
-        state["items"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|item| item["kind"] == "failed")
-    );
+    assert!(state["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|item| item["kind"] == "failed"));
 }

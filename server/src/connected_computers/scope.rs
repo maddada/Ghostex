@@ -97,7 +97,7 @@ pub(crate) fn is_peer_allowed(path: &str) -> bool {
 #[cfg(test)]
 mod scope_tests {
     use super::*;
-    use crate::protocol::{ApiPermission, Transport, endpoint_for};
+    use crate::protocol::{endpoint_for, ApiPermission, Transport};
 
     #[test]
     fn every_endpoint_another_computer_may_use_is_a_remote_allowed_http_endpoint() {

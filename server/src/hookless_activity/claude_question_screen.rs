@@ -6,7 +6,7 @@
 //! Several questions are drawn one tab at a time under `←  ☐ Color  ☐ Size  ✔ Submit  →`, so the other tabs are not on screen. With hooks the card showed every question, so the observer walks the tabs the way the answer path does: Right arrows to the Review tab ("Review your answers", which tells which tab it started on), Left arrows back over every tab, reading each, then Right arrows to the tab it started on. Arrows only move between tabs; they choose nothing, and a multi-select tab keeps its ticks. Each step waits for the screen to change and stops at once if the dialog is gone (answered or cancelled in the terminal meanwhile), so a key never lands anywhere else. The terminal shows the tabs flick past for about a second, once per question (drive.rs keeps the result).
 //! SEE-ALSO: server/src/session_chat_question_liveness.rs and session_chat_send/ask_answer_keys.rs (the answer path reads and drives the same dialog), server/src/hookless_activity/drive.rs (where the card is sent).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// Right arrow: the next tab.
 pub(super) const NEXT_TAB: &str = "\u{1b}[C";
@@ -265,18 +265,10 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     fn tabs() -> Vec<String> {
         let rule = "──────────────────────────────";
         vec![
-            format!(
-                "{CHIPS}\nRed or blue?\n❯ 1. Red\n     Choose red\n  2. Blue\n     Choose blue\n  3. Type something.\n{rule}\n  4. Chat about this\n{HINTS}\n"
-            ),
-            format!(
-                "{CHIPS}\nWhich size do you want?\n❯ 1. Small\n     Small size\n  2. Medium\n     Medium size\n  3. Large\n     Large size\n  4. Type something.\n{rule}\n  5. Chat about this\n{HINTS}\n"
-            ),
-            format!(
-                "{CHIPS}\nWhich toppings?\n❯ 1. [ ] Cheese\n         Add cheese\n  2. [ ] Olives\n         Add olives\n  3. [ ] Type something\n     Submit\n{rule}\n  4. Chat about this\n{HINTS}\n"
-            ),
-            format!(
-                "{CHIPS}\nReview your answers\n⚠ You have not answered all questions\nReady to submit your answers?\n❯ 1. Submit answers\n  2. Cancel\n"
-            ),
+            format!("{CHIPS}\nRed or blue?\n❯ 1. Red\n     Choose red\n  2. Blue\n     Choose blue\n  3. Type something.\n{rule}\n  4. Chat about this\n{HINTS}\n"),
+            format!("{CHIPS}\nWhich size do you want?\n❯ 1. Small\n     Small size\n  2. Medium\n     Medium size\n  3. Large\n     Large size\n  4. Type something.\n{rule}\n  5. Chat about this\n{HINTS}\n"),
+            format!("{CHIPS}\nWhich toppings?\n❯ 1. [ ] Cheese\n         Add cheese\n  2. [ ] Olives\n         Add olives\n  3. [ ] Type something\n     Submit\n{rule}\n  4. Chat about this\n{HINTS}\n"),
+            format!("{CHIPS}\nReview your answers\n⚠ You have not answered all questions\nReady to submit your answers?\n❯ 1. Submit answers\n  2. Cancel\n"),
         ]
     }
 

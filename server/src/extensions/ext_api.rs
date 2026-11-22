@@ -32,15 +32,15 @@ use std::{
 
 use axum::{
     body::Body,
-    http::{HeaderMap, HeaderValue, Method, Response, StatusCode, header},
+    http::{header, HeaderMap, HeaderValue, Method, Response, StatusCode},
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use tokio::sync::broadcast;
 
 use super::{
     ChecklistEdit, ExtensionError, ExtensionPermission, PanelSurface, PanelWriter, SidebarExtension,
 };
-use crate::server::{AppState, RoutedResponse, routed_json};
+use crate::server::{routed_json, AppState, RoutedResponse};
 
 /// Every route of the scoped extension API starts with this.
 pub(crate) const EXT_API_ROUTE_PREFIX: &str = "/api/ext/v1/";
@@ -193,14 +193,14 @@ pub(crate) async fn serve_ext_api(
                 StatusCode::METHOD_NOT_ALLOWED,
                 "methodNotAllowed",
                 format!("{} {path} is not an extension API route.", method.as_str()),
-            );
+            )
         }
         _ => {
             return refuse(
                 StatusCode::NOT_FOUND,
                 "notFound",
                 format!("{path} is not an extension API route."),
-            );
+            )
         }
     }
     let body = if matches!(method, Method::GET) {
@@ -215,7 +215,7 @@ pub(crate) async fn serve_ext_api(
                         StatusCode::BAD_REQUEST,
                         "badRequest",
                         "The body must be a JSON object.",
-                    );
+                    )
                 }
             },
             Err(_) => {
@@ -223,7 +223,7 @@ pub(crate) async fn serve_ext_api(
                     StatusCode::PAYLOAD_TOO_LARGE,
                     "payloadTooLarge",
                     format!("The body is over {BODY_MAX_BYTES} bytes."),
-                );
+                )
             }
         }
     };
@@ -924,7 +924,7 @@ async fn events(state: Arc<AppState>, caller: Caller, query: Option<String>) -> 
             Err(error) => {
                 return refuse_error(ExtensionError::internal(format!(
                     "Extension API task failed: {error}"
-                )));
+                )))
             }
         };
     let is_extension = matches!(caller, Caller::Extension(_));

@@ -64,9 +64,7 @@ pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<Session
             .unwrap_or_default()
     );
     let Some(_step) = crate::crash_report::step(&subject, "codexFleetRead") else {
-        anyhow::bail!(
-            "Reading this Codex session's subagents crashed gxserver before and is skipped on this build"
-        );
+        anyhow::bail!("Reading this Codex session's subagents crashed gxserver before and is skipped on this build");
     };
     let rollout = Path::new(rollout);
     let home = rollout

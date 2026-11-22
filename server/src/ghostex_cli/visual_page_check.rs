@@ -18,8 +18,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
-use serde_json::{Value, json};
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::visual_pages::prepare_page;
@@ -1247,9 +1247,7 @@ mod tests {
         let report = json!({"page":true,"fit":{"stacked":[{"element":"div.grid"}],"nowrap":[],"scroll":[],
             "overflow":[{"element":"div.phone","text":"","right":612}]}});
         let findings = page_findings(390, &report);
-        assert!(
-            findings[0].starts_with("Reaches past the 390px screen: div.phone (ends at 612px)")
-        );
+        assert!(findings[0].starts_with("Reaches past the 390px screen: div.phone (ends at 612px)"));
         assert!(findings[1].contains("div.grid"));
     }
 
@@ -1281,10 +1279,8 @@ mod tests {
         assert!(
             screenshot_path(page, None, 1280, 1.0, true).ends_with("ghostex-visuals/mock-1280.png")
         );
-        assert!(
-            screenshot_path(page, None, 900, 1.3, true)
-                .ends_with("ghostex-visuals/mock-900-text130.png")
-        );
+        assert!(screenshot_path(page, None, 900, 1.3, true)
+            .ends_with("ghostex-visuals/mock-900-text130.png"));
     }
 
     /// The kit's phone fit (visual_pages/fit.rs) in a real browser: a fixed two-column grid, pills
@@ -1504,11 +1500,9 @@ mod tests {
             "{page}"
         );
         // Each button is the last thing in its heading's row.
-        assert!(
-            picks
-                .iter()
-                .all(|pick| pick["last"] == true && pick["tag"] == "H3")
-        );
+        assert!(picks
+            .iter()
+            .all(|pick| pick["last"] == true && pick["tag"] == "H3"));
         // The messages name the questions.
         let report = json!({ "kit": kit });
         let findings = pick_findings(&report);

@@ -4,9 +4,9 @@
 //! The user's "Stop installing the hooks and remove Ghostex's own" (hook_free.rs): on every gxserver start while Use agent hooks is off (the first start after the update does the real work, later ones find nothing), and when the setting is turned off, Ghostex takes out of every config it installs into (`~/.claude`, `~/.codex`, OpenCode's folder, every cswap profile, the Windows folders, through `provider_hook_paths`) only what it wrote: its hook commands and Codex's trust records for them, its OpenCode plugin file and registration. The user's own hooks and every other setting stay, and so does Ghostex's Claude `statusLine` and OpenCode theme, which are not hooks (the statusLine names the model, effort and rate limits in the chat). An agent whose hook the safety net put back keeps it, a portable copy never touches another Ghostex's hooks, and a Claude before 2.1.172 keeps its hook. The installer keeps no backups of the files it changes, so neither does this.
 //! SEE-ALSO: server/src/agent_hooks/install/uninstall.rs (the same removal Uninstall all runs), server/src/hookless_activity/task.rs (when it runs).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::config::{HOOK_DEFINITIONS, HookPaths};
+use super::config::{HookPaths, HOOK_DEFINITIONS};
 use super::foreign_owner::hooks_belong_to_another_ghostex;
 use super::hook_free;
 use super::install::{inspect_agent_hook_installation, uninstall_agent_hook_entries};
@@ -233,11 +233,9 @@ mod tests {
         .unwrap();
         std::fs::write(&settings_path, &text).expect("settings");
         hook_free::record_fallback(&paths, "claude", "P1", "G1", "test");
-        assert!(
-            remove_hook_free_agent_hooks(&paths)
-                .removed_paths
-                .is_empty()
-        );
+        assert!(remove_hook_free_agent_hooks(&paths)
+            .removed_paths
+            .is_empty());
         assert_eq!(std::fs::read_to_string(&settings_path).unwrap(), text);
 
         hook_free::clear_fallbacks(&paths);
@@ -247,11 +245,9 @@ mod tests {
         )
         .expect("settings");
         hook_free::forget_cached_setting();
-        assert!(
-            remove_hook_free_agent_hooks(&paths)
-                .removed_paths
-                .is_empty()
-        );
+        assert!(remove_hook_free_agent_hooks(&paths)
+            .removed_paths
+            .is_empty());
         assert_eq!(std::fs::read_to_string(&settings_path).unwrap(), text);
     }
 }

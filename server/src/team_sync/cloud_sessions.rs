@@ -3,7 +3,7 @@
 //! session is (`packages/team-sync/convex/workCloudSessions.ts`), so teammates see it on the ticket
 //! and a later Slack request for the ticket goes to it.
 
-use serde_json::{Map, json};
+use serde_json::{json, Map};
 
 use crate::paths::GxserverPaths;
 

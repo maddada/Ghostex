@@ -11,7 +11,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::domain::DomainRepository;
 use crate::paths::GxserverPaths;

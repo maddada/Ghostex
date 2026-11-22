@@ -749,7 +749,8 @@ fn needs_a_read(why: &str) -> String {
 }
 
 /// Why Start refuses a ticket id before anything runs. Quotes nothing it was sent.
-pub(crate) const START_ID_SPELLS_CREDENTIAL: &str = "That ticket ID contains the value of a credential this workspace keeps, which Ghostex can't hide in a branch or a link.";
+pub(crate) const START_ID_SPELLS_CREDENTIAL: &str =
+    "That ticket ID contains the value of a credential this workspace keeps, which Ghostex can't hide in a branch or a link.";
 
 /// What the workspace stores, read strictly under the store's writer lock, as a change reads it.
 fn start_stored_values(paths: &GxserverPaths, workspace_id: &str) -> Result<StoredValues, String> {

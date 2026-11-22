@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn ultra_composer_is_ready_but_advanced_picker_is_not() {
     use crate::session_chat_composer::{
-        SessionChatComposerState, detect_session_chat_composer_ready,
+        detect_session_chat_composer_ready, SessionChatComposerState,
     };
     assert_eq!(
         detect_session_chat_composer_ready(
@@ -100,7 +100,7 @@ async fn live_zmx_effort_round_trip() {
 #[test]
 fn a_shell_prompt_or_blank_screen_is_a_missing_input_box() {
     use crate::session_chat_composer::{
-        SessionChatComposerState, detect_session_chat_composer_readiness,
+        detect_session_chat_composer_readiness, SessionChatComposerState,
     };
     let unrun = "Last login: Fri Oct 24 12:59:01 on ttys004\n~/dev/app ❯  codex --no-daemon --model gpt-6.1-sol -c model_reasoning_effort=low^G^G";
     for (agent, screen) in [
@@ -126,7 +126,7 @@ fn a_shell_prompt_or_blank_screen_is_a_missing_input_box() {
 #[test]
 fn a_dialog_in_front_of_the_input_box_is_busy_not_missing() {
     use crate::session_chat_composer::{
-        SessionChatComposerState, detect_session_chat_composer_readiness,
+        detect_session_chat_composer_readiness, SessionChatComposerState,
     };
     const RULE: &str = "────────────────────────────────────────";
     let dashboard = [
@@ -145,7 +145,7 @@ fn a_dialog_in_front_of_the_input_box_is_busy_not_missing() {
 #[test]
 fn the_agents_own_input_box_is_ready() {
     use crate::session_chat_composer::{
-        SessionChatComposerState, detect_session_chat_composer_readiness,
+        detect_session_chat_composer_readiness, SessionChatComposerState,
     };
     let codex = ">_ OpenAI Codex (v0.164.0)\n\n› Ask Codex to do anything\n\n  GPT-6.1-Sol low · 01a16e25 · Ghostex · main · Context 0% used\n  ? for shortcuts";
     assert_eq!(

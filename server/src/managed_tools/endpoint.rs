@@ -1,6 +1,6 @@
 //! `POST /api/managedTools`: the tools Ghostex installs for the user, their state and their jobs.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::{
     path::{Path, PathBuf},
     sync::LazyLock,
@@ -283,7 +283,7 @@ fn run_operation(tool: ToolId, operation: &str, home: &Path, log: &Log) -> Resul
         (ToolId::PowerShell, false) => return Err("Ghostex does not remove PowerShell 7.".into()),
         (ToolId::Hex, true) => hex::install(home, log)?,
         (ToolId::Hex, false) => {
-            return Err("Ghostex does not remove Hex. Remove it the way you installed it.".into());
+            return Err("Ghostex does not remove Hex. Remove it the way you installed it.".into())
         }
         (ToolId::Trycua | ToolId::Spaceo, _) => {
             desktop_control::run_operation(tool, operation, home, log)?

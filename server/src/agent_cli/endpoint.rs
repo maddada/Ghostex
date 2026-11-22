@@ -1,9 +1,9 @@
 use super::{
-    catalog::{self, CATALOG, Definition},
+    catalog::{self, Definition, CATALOG},
     latest, mise, mise_keep, npm_age, path_setup, process, update_check,
 };
 use crate::{domain::DomainStateError, paths::GxserverPaths};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::{
     collections::{BTreeMap, HashMap},
     path::{Path, PathBuf},
@@ -157,7 +157,7 @@ async fn run_and_wait(
                 });
             }
             _ if std::time::Instant::now() > deadline => {
-                return Err(format!("The {operation} did not finish within 20 minutes."));
+                return Err(format!("The {operation} did not finish within 20 minutes."))
             }
             _ => {}
         }
@@ -762,11 +762,9 @@ async fn read_state_with(
     }
     if let Some(latest_version) = latest_version {
         let current = state["version"].as_str().and_then(latest::version_in);
-        state["updateAvailable"] = json!(
-            current
-                .as_deref()
-                .is_some_and(|current| latest::is_newer(&latest_version, current))
-        );
+        state["updateAvailable"] = json!(current
+            .as_deref()
+            .is_some_and(|current| latest::is_newer(&latest_version, current)));
         state["latestVersion"] = json!(latest_version);
     }
     if let Some(version) = state["version"].as_str().map(str::to_string) {

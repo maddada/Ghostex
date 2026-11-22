@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use serde_json::Value;
 #[cfg(test)]
 use serde_json::json;
+use serde_json::Value;
 
 #[cfg(test)]
 use crate::ghostex_cli::args::Flags;
@@ -797,11 +797,9 @@ mod tests {
         assert!(off.get("dimSleepingSessions").is_none());
         let mut settings = serde_json::Map::new();
         settings.insert("dimSleepingSessions".to_string(), json!(false));
-        assert!(
-            to_mobile_session_list(&result, &settings)
-                .get("dimSleepingSessions")
-                .is_none()
-        );
+        assert!(to_mobile_session_list(&result, &settings)
+            .get("dimSleepingSessions")
+            .is_none());
         settings.insert("dimSleepingSessions".to_string(), json!(true));
         assert_eq!(
             to_mobile_session_list(&result, &settings)["dimSleepingSessions"],
@@ -936,11 +934,9 @@ mod tests {
         assert!(unset.get("sidebarSessionLinks").is_none());
         let mut settings = serde_json::Map::new();
         settings.insert("sidebarSessionLinks".to_string(), json!("badge"));
-        assert!(
-            to_mobile_session_list(&result, &settings)
-                .get("sidebarSessionLinks")
-                .is_none()
-        );
+        assert!(to_mobile_session_list(&result, &settings)
+            .get("sidebarSessionLinks")
+            .is_none());
         // A person who picked Always keeps it on the phone too.
         settings.insert("sidebarSessionLinks".to_string(), json!("always"));
         assert_eq!(

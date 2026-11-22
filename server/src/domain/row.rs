@@ -1,12 +1,12 @@
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{
-    DomainResult, DomainStateError, bool_field, insert_optional_string,
-    insert_optional_trimmed_string, insert_optional_value, insert_parsed_optional_object,
-    normalize_domain_lifecycle_state, normalize_optional_session_tag, normalize_session_kind,
-    normalize_settled_override, normalize_zmx_provider_state, optional_string, parse_object,
-    parse_object_array, parse_object_map, parse_string_array, required_string, resolve_surface,
-    stringify_domain_json_field,
+    bool_field, insert_optional_string, insert_optional_trimmed_string, insert_optional_value,
+    insert_parsed_optional_object, normalize_domain_lifecycle_state,
+    normalize_optional_session_tag, normalize_session_kind, normalize_settled_override,
+    normalize_zmx_provider_state, optional_string, parse_object, parse_object_array,
+    parse_object_map, parse_string_array, required_string, resolve_surface,
+    stringify_domain_json_field, DomainResult, DomainStateError,
 };
 use crate::ids::{create_global_session_ref, create_zmx_session_name};
 

@@ -1,19 +1,19 @@
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
 use crate::domain::{
-    DomainRepository, DomainResult, DomainStateError, optional_trimmed_string_param,
-    read_unvalidated_project_lookup_id, read_unvalidated_session_lookup_id,
+    optional_trimmed_string_param, read_unvalidated_project_lookup_id,
+    read_unvalidated_session_lookup_id, DomainRepository, DomainResult, DomainStateError,
 };
 use crate::server::AppState;
 
 use super::store::{
-    NOTIFICATION_FEED_KIND_CUSTOM, NewNotificationFeedRow, bounded_notification_body,
-    clear_notification_feed, defer_session_notification, dismiss_notification,
-    insert_notification_feed_row, mark_all_notifications_read, mark_finished_notifications_seen,
-    mark_notification_read, mark_notification_unread, mark_session_notifications_read,
-    notification_agent_icon, notification_exists, read_notification_feed_state,
-    unread_notification_session_ids,
+    bounded_notification_body, clear_notification_feed, defer_session_notification,
+    dismiss_notification, insert_notification_feed_row, mark_all_notifications_read,
+    mark_finished_notifications_seen, mark_notification_read, mark_notification_unread,
+    mark_session_notifications_read, notification_agent_icon, notification_exists,
+    read_notification_feed_state, unread_notification_session_ids, NewNotificationFeedRow,
+    NOTIFICATION_FEED_KIND_CUSTOM,
 };
 use super::thread_read::acknowledge_read_notification_sessions;
 
@@ -84,12 +84,12 @@ pub(crate) fn update_notification_feed_endpoint(
         "" => {
             return Err(DomainStateError::bad_request(
                 "action is required.".to_string(),
-            ));
+            ))
         }
         other => {
             return Err(DomainStateError::bad_request(format!(
                 "Unknown notification feed action \"{other}\"."
-            )));
+            )))
         }
     }
     let feed = read_notification_feed_state(db)?;

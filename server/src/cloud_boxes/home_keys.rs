@@ -29,7 +29,7 @@ use ghostex_gx_protocol::cloud_box::{CloudBoxState, CloudProviderId};
 use super::store;
 use crate::paths::GxserverPaths;
 use crate::remote_access::computer_link_keys::{
-    LINK_KEY_PURPOSE_APP, LINK_KEY_PURPOSE_SERVER, make_client_key,
+    make_client_key, LINK_KEY_PURPOSE_APP, LINK_KEY_PURPOSE_SERVER,
 };
 
 const PURPOSES: [&str; 2] = [LINK_KEY_PURPOSE_APP, LINK_KEY_PURPOSE_SERVER];
@@ -122,7 +122,9 @@ pub(crate) fn own_box_key(paths: &GxserverPaths, address: &str, purpose: &str) -
         .ok()?
         .into_iter()
         .map(|stored| stored.row)
-        .filter(|row| row.state != CloudBoxState::Deleted && row.provider != CloudProviderId::Local)
+        .filter(|row| {
+            row.state != CloudBoxState::Deleted && row.provider != CloudProviderId::Local
+        })
         .collect();
     let row = rows
         .iter()

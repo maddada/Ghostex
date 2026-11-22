@@ -3,7 +3,7 @@
 
 use super::provider::Provider;
 use super::recordings::Problem;
-use super::transcribe::{Outcome, multipart_body, request_fields, status_problem};
+use super::transcribe::{multipart_body, request_fields, status_problem, Outcome};
 
 fn refused(provider: Provider, status: u16, body: &str) -> (bool, Problem) {
     match status_problem(provider, status, body) {

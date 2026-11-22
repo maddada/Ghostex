@@ -41,7 +41,11 @@ pub(super) fn content_text(v: &Value) -> Option<String> {
                 }
                 buf.push_str(txt);
             }
-            if buf.is_empty() { None } else { Some(buf) }
+            if buf.is_empty() {
+                None
+            } else {
+                Some(buf)
+            }
         }
         _ => None,
     }
@@ -51,9 +55,17 @@ pub(super) fn int_val(v: Option<&Value>) -> u64 {
     match v {
         Some(Value::Number(n)) => {
             if let Some(i) = n.as_i64() {
-                if i > 0 { i as u64 } else { 0 }
+                if i > 0 {
+                    i as u64
+                } else {
+                    0
+                }
             } else if let Some(f) = n.as_f64() {
-                if f > 0.0 { f as u64 } else { 0 }
+                if f > 0.0 {
+                    f as u64
+                } else {
+                    0
+                }
             } else {
                 0
             }
@@ -129,7 +141,11 @@ pub(super) fn normalize_timestamp(n: i64) -> i64 {
     if n <= 0 {
         return 0;
     }
-    if n > 10_000_000_000 { n / 1000 } else { n }
+    if n > 10_000_000_000 {
+        n / 1000
+    } else {
+        n
+    }
 }
 
 fn parse_timestamp_string(s: &str) -> i64 {

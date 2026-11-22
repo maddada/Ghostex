@@ -9,8 +9,8 @@ mod api;
 pub(crate) mod one_password;
 mod store;
 
-pub(crate) use api::{SECRET_PROVIDER_ENDPOINTS, handle_secret_providers_http};
-pub(crate) use store::{SecretReference, resolve};
+pub(crate) use api::{handle_secret_providers_http, SECRET_PROVIDER_ENDPOINTS};
+pub(crate) use store::{resolve, SecretReference};
 
 use crate::paths::GxserverPaths;
 

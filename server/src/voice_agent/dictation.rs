@@ -9,7 +9,7 @@
 
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt as _, StreamExt as _};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 use super::provider::{self, ConnectError, Provider};

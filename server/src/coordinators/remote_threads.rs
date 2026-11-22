@@ -2,10 +2,10 @@
 //! the supervisor's bookkeeping, the endpoints the CLI calls, and the coordinator field the
 //! sidebar nests them by. The supervisor's clock is `server/coordinator_remote_runtime.rs`.
 
-use rusqlite::{Connection, OptionalExtension, Row, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{params, Connection, OptionalExtension, Row};
+use serde_json::{json, Map, Value};
 
-use super::records::{SessionKey, now_iso, read_coordinator, sql_error};
+use super::records::{now_iso, read_coordinator, sql_error, SessionKey};
 use crate::domain::DomainStateError;
 
 /// A thread's computer, project and session.
@@ -429,7 +429,7 @@ pub fn handle_remote_thread_endpoint(
                 _ => {
                     return Err(DomainStateError::bad_request(
                         "Linking a thread needs coordinatorProjectId and coordinatorSessionId.",
-                    ));
+                    ))
                 }
             };
             let key = thread_key(params)?;
@@ -478,7 +478,7 @@ pub fn handle_remote_thread_endpoint(
                 _ => {
                     return Err(DomainStateError::bad_request(
                         "action must be resolve, reopen or unlink.",
-                    ));
+                    ))
                 }
             };
             Ok(RemoteThreadEndpointOutput {
@@ -646,17 +646,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(not_coordinator.result["linked"], false);
-        assert!(
-            handle_remote_thread_endpoint(
-                "/api/linkRemoteCoordinatorThread",
-                &db,
-                "S9l",
-                &params(json!({
-                    "coordinatorProjectId": "P1", "coordinatorSessionId": "G1",
-                    "serverId": "S9l", "projectId": "P7", "sessionId": "G2",
-                })),
-            )
-            .is_err()
-        );
+        assert!(handle_remote_thread_endpoint(
+            "/api/linkRemoteCoordinatorThread",
+            &db,
+            "S9l",
+            &params(json!({
+                "coordinatorProjectId": "P1", "coordinatorSessionId": "G1",
+                "serverId": "S9l", "projectId": "P7", "sessionId": "G2",
+            })),
+        )
+        .is_err());
     }
 }

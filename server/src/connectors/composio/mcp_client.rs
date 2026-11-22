@@ -8,12 +8,12 @@ use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use serde_json::{Value, json};
-use ureq::Body;
+use serde_json::{json, Value};
 use ureq::http::Response;
+use ureq::Body;
 
-use super::http::{HttpError, agent, send};
-use super::oauth::{BearerChallenge, MCP_PROTOCOL_VERSION, parse_bearer_challenge};
+use super::http::{agent, send, HttpError};
+use super::oauth::{parse_bearer_challenge, BearerChallenge, MCP_PROTOCOL_VERSION};
 
 /// Versions the SDK accepts back from `initialize` (`SUPPORTED_PROTOCOL_VERSIONS`).
 const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &[

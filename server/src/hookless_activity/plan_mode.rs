@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::claude::{ClaudeObserver, transcript_path};
+use super::claude::{transcript_path, ClaudeObserver};
 use crate::server::AppState;
 
 const TOOL: &str = "EnterPlanMode";
@@ -164,14 +164,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("t.jsonl");
         let call = |id: &str| {
-            format!(
-                "{{\"type\":\"assistant\",\"message\":{{\"content\":[{{\"type\":\"tool_use\",\"id\":\"{id}\",\"name\":\"EnterPlanMode\",\"input\":{{}}}}]}}}}\n"
-            )
+            format!("{{\"type\":\"assistant\",\"message\":{{\"content\":[{{\"type\":\"tool_use\",\"id\":\"{id}\",\"name\":\"EnterPlanMode\",\"input\":{{}}}}]}}}}\n")
         };
         let result = |id: &str, error: bool| {
-            format!(
-                "{{\"type\":\"user\",\"message\":{{\"content\":[{{\"type\":\"tool_result\",\"tool_use_id\":\"{id}\",\"is_error\":{error}}}]}}}}\n"
-            )
+            format!("{{\"type\":\"user\",\"message\":{{\"content\":[{{\"type\":\"tool_result\",\"tool_use_id\":\"{id}\",\"is_error\":{error}}}]}}}}\n")
         };
         // An old call, written before the pane was first seen.
         std::fs::write(&path, format!("{}{}", call("old"), result("old", false))).unwrap();

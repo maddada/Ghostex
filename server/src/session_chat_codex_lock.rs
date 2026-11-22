@@ -9,11 +9,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::server::{AppState, read_runtime_text, schedule_presentation_session_delta};
+use crate::server::{read_runtime_text, schedule_presentation_session_delta, AppState};
 use crate::session_chat_notice::*;
 use crate::session_chat_send::{
-    SessionChatSendStep, capture_session_terminal_text, capture_session_terminal_text_vt,
-    execute_session_chat_send, resolve_session_chat_send_target, write_session_chat_payload,
+    capture_session_terminal_text, capture_session_terminal_text_vt, execute_session_chat_send,
+    resolve_session_chat_send_target, write_session_chat_payload, SessionChatSendStep,
 };
 use crate::storage::open_gxserver_database;
 
@@ -165,9 +165,7 @@ pub(crate) fn enrich_notice(
         } else {
             "those sessions"
         };
-        notice.detail = Some(format!(
-            "Close {count} other Ghostex {noun} using this conversation and continue here. This stops any work running in {reference}. Your draft stays here."
-        ));
+        notice.detail = Some(format!("Close {count} other Ghostex {noun} using this conversation and continue here. This stops any work running in {reference}. Your draft stays here."));
         notice.actions[0].label = "Continue here".into();
     }
 }

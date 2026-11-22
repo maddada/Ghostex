@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use crate::ghostex_cli::args::{Flags, multi_value_flag, parse_args};
+use crate::ghostex_cli::args::{multi_value_flag, parse_args, Flags};
 use crate::ghostex_cli::launchers;
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::ghostex_cli::usage;

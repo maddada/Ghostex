@@ -2,13 +2,13 @@ use std::{fs, path::PathBuf};
 
 use axum::{
     body::Body,
-    http::{HeaderValue, Response, StatusCode, header},
+    http::{header, HeaderValue, Response, StatusCode},
     response::IntoResponse,
 };
 
 use crate::server::RoutedResponse;
 
-use super::{ExtensionRegistry, validate_extension_id};
+use super::{validate_extension_id, ExtensionRegistry};
 
 pub(crate) async fn serve_extension_static(
     registry: ExtensionRegistry,
@@ -74,10 +74,10 @@ fn serve_extension_static_sync(registry: &ExtensionRegistry, request_path: &str)
                 }
             }
             Err(error) if error.code == "notFound" => {
-                return status_response(StatusCode::NOT_FOUND);
+                return status_response(StatusCode::NOT_FOUND)
             }
             Err(error) if error.code == "badRequest" => {
-                return status_response(StatusCode::FORBIDDEN);
+                return status_response(StatusCode::FORBIDDEN)
             }
             Err(_) => return status_response(StatusCode::INTERNAL_SERVER_ERROR),
         },

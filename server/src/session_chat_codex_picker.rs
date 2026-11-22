@@ -28,24 +28,24 @@ mod codex_permissions;
 #[path = "session_chat_selection_options.rs"]
 mod selection_options;
 use claude_model_list::{
-    CLAUDE_ARROW_RIGHT, CLAUDE_EFFORT_STEP_LIMIT, CLAUDE_PICKER_TAIL_LINES,
-    CLAUDE_SESSION_ONLY_KEY, claude_model_picker_open, screen_lines_spaced,
+    claude_model_picker_open, screen_lines_spaced, CLAUDE_ARROW_RIGHT, CLAUDE_EFFORT_STEP_LIMIT,
+    CLAUDE_PICKER_TAIL_LINES, CLAUDE_SESSION_ONLY_KEY,
 };
 
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::domain::{DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainStateError};
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::protocol::rpc_success;
-use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
+use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
 use crate::session_chat_options::{
-    CODEX_EFFORTS, SessionChatOptionAgent, detect_session_chat_selection,
+    detect_session_chat_selection, SessionChatOptionAgent, CODEX_EFFORTS,
 };
 use crate::session_chat_send::{
-    SESSION_CHAT_INTERRUPT, SESSION_CHAT_SHIFT_DOWN, SESSION_CHAT_SHIFT_UP, SessionChatSendStep,
     capture_session_terminal_text, execute_session_chat_send, resolve_session_chat_send_target,
-    write_session_chat_payload,
+    write_session_chat_payload, SessionChatSendStep, SESSION_CHAT_INTERRUPT,
+    SESSION_CHAT_SHIFT_DOWN, SESSION_CHAT_SHIFT_UP,
 };
 
 /// Typed as literal keystrokes so the composer's slash popup runs it.
@@ -361,7 +361,7 @@ fn advanced_effort_picker_rows(screen: &str) -> Option<Vec<PickerRow>> {
 /// current model…"), answered with its "Yes, switch to …" row.
 fn claude_switch_warning_answer(screen: &str) -> Option<String> {
     use crate::session_chat_resume_prompt::{
-        SessionChatTerminalPickerKind, detect_session_chat_terminal_picker,
+        detect_session_chat_terminal_picker, SessionChatTerminalPickerKind,
     };
     let picker = detect_session_chat_terminal_picker(screen)?;
     if !matches!(
@@ -590,7 +590,7 @@ fn claude_switch_confirmation(
     value: &str,
 ) -> Option<crate::session_chat_resume_prompt::SessionChatTerminalPicker> {
     use crate::session_chat_resume_prompt::{
-        SessionChatTerminalPickerKind, detect_session_chat_terminal_picker,
+        detect_session_chat_terminal_picker, SessionChatTerminalPickerKind,
     };
     let picker = detect_session_chat_terminal_picker(screen)?;
     let expected = if field == "model" {

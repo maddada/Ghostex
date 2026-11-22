@@ -3,8 +3,8 @@ use super::*;
 use std::sync::OnceLock;
 
 use ghostex_gx_protocol::cloud_box::{
-    CLOUD_BOX_RUNTIME_SETTINGS_KEY, CloudBox, CloudBoxRemember, CloudBoxState, DraftCloudBox,
-    cloud_box_machine_id,
+    cloud_box_machine_id, CloudBox, CloudBoxRemember, CloudBoxState, DraftCloudBox,
+    CLOUD_BOX_RUNTIME_SETTINGS_KEY,
 };
 
 /*
@@ -531,7 +531,7 @@ pub(crate) fn forget_cloud_move(project_id: &str, session_id: &str) {
 
 #[cfg(test)]
 mod offer_tests {
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     #[test]
     fn the_bar_offers_cloud_box_once_cloud_boxes_is_in_use() {

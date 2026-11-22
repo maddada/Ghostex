@@ -1,10 +1,10 @@
 //! The box half of `/api/createAgentSession`: which agent runs, the box it runs in, and the launch.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::command::{box_agent_args, box_launch_command, box_launch_plan};
 use super::first_prompt::LAUNCH_PROMPT_KEY;
-use super::location::{AGENTBOX_AGENTS, new_box_name};
+use super::location::{new_box_name, AGENTBOX_AGENTS};
 use super::session::SessionAgentbox;
 use crate::domain::DomainStateError;
 

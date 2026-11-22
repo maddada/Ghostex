@@ -3,18 +3,18 @@
 //! counted in the file's `leftOut` and in the answer.
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::format::{
-    FORMAT, FileBot, FileDepartment, FileRoutine, Kind, MAX_FILE_BYTES, NOTES_MEMORY_MAX_BYTES,
-    NOTES_TOPIC_MAX_BYTES, NOTES_TOPICS_MAX, StarterNotes, TeamFile, VERSION, slug, unique_key,
+    slug, unique_key, FileBot, FileDepartment, FileRoutine, Kind, StarterNotes, TeamFile, FORMAT,
+    MAX_FILE_BYTES, NOTES_MEMORY_MAX_BYTES, NOTES_TOPICS_MAX, NOTES_TOPIC_MAX_BYTES, VERSION,
 };
 use crate::coordinators::now_iso;
 use crate::domain::DomainStateError;
-use crate::gbots::departments::{Department, list_departments, require_department};
-use crate::gbots::folder::{MEMORY_FILE, bot_folder};
+use crate::gbots::departments::{list_departments, require_department, Department};
+use crate::gbots::folder::{bot_folder, MEMORY_FILE};
 use crate::gbots::memory::{read_memory_file, redact, topic_list};
-use crate::gbots::record::{Bot, list_bots, require_bot};
+use crate::gbots::record::{list_bots, require_bot, Bot};
 use crate::paths::GxserverPaths;
 
 /// What is redacted, counted by where it was.

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::loopback;
 use super::sessions::{self, ProjectInfo, SessionInfo};
@@ -213,9 +213,7 @@ pub(super) fn route(computer: Option<&Computer>, path: &str) -> Result<String, S
 
 /// What the model hears when a tool can't do its job on another computer.
 pub(super) fn not_on_another_computer(name: &str) -> String {
-    format!(
-        "That can't be done on {name} from here: on another computer you can read sessions, send prompts, answer approvals and question cards, stop a turn and start agents, but not more. The user can do it in Ghostex on {name}."
-    )
+    format!("That can't be done on {name} from here: on another computer you can read sessions, send prompts, answer approvals and question cards, stop a turn and start agents, but not more. The user can do it in Ghostex on {name}.")
 }
 
 /// POSTs `params` to `path` on `computer` (this computer when `None`) and answers the result, or

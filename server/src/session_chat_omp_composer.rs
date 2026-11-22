@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use unicode_width::UnicodeWidthStr;
 
-use super::{StyledLine, is_horizontal_rule, is_titled_horizontal_rule};
+use super::{is_horizontal_rule, is_titled_horizontal_rule, StyledLine};
 
 /// CDXC:AgentScreenDetection 2026-10-01 WHY:
 /// OMP's box composer draws its statusline into the top border, and that line changes with the symbol preset (`π >` with Unicode symbols, `󰵗` and powerline glyphs with Nerd Font) and turns into a spinner mid-turn. Requiring `π` and `>` there read a Nerd Font OMP as never ready, so its first chat message waited in the queue forever.
@@ -338,7 +338,11 @@ fn omp_tail_start(lines: &[String], end: usize) -> usize {
         .iter()
         .take_while(|line| omp_list_row(line))
         .any(|line| omp_list_cursor_row(line));
-    if list { below } else { end }
+    if list {
+        below
+    } else {
+        end
+    }
 }
 
 /// Whether the list run holding `row` starts under the last row of a box, band, field, rail or sandwich input: directly, or, for the band, after the blank rows of its empty draft lines.

@@ -24,9 +24,9 @@ Nothing here ever touches that flag.
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
 use crate::{
@@ -870,7 +870,7 @@ async fn deliver_once(
     send: &SessionChatQueueSender,
 ) -> Result<(), DomainStateError> {
     use crate::session_chat_send_requests::{
-        Begin, SendRequestKey, begin, begin_again, interrupted_send_arrived, mark_sent,
+        begin, begin_again, interrupted_send_arrived, mark_sent, Begin, SendRequestKey,
     };
     const ENDPOINT: &str = "queuedPromptDelivery";
     let key = SendRequestKey::new(project_id, session_id, &format!("queuedPrompt:{prompt_id}"));

@@ -19,11 +19,11 @@ use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use ghostex_gx_protocol::collab_component::{
-    COLLAB_PROTOCOL_VERSION, OwnerCall, OwnerReply, SIDECAR_EVENT_PATH, SIDECAR_OWNER_PATH,
-    SidecarEvent, SidecarHello, SidecarReady,
+    OwnerCall, OwnerReply, SidecarEvent, SidecarHello, SidecarReady, COLLAB_PROTOCOL_VERSION,
+    SIDECAR_EVENT_PATH, SIDECAR_OWNER_PATH,
 };
 use rand::Rng as _;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use subtle::ConstantTimeEq;
 
 use crate::server::AppState;
@@ -129,15 +129,13 @@ pub(crate) fn start_supervisor(state: Arc<AppState>) {
         });
     let _ = std::thread::Builder::new()
         .name("collab-supervisor".to_string())
-        .spawn(move || {
-            loop {
-                if SHUTTING_DOWN.load(Ordering::SeqCst) {
-                    return;
-                }
-                let _runtime = RUNTIME.get().map(tokio::runtime::Handle::enter);
-                supervise_once(&state);
-                std::thread::sleep(TICK);
+        .spawn(move || loop {
+            if SHUTTING_DOWN.load(Ordering::SeqCst) {
+                return;
             }
+            let _runtime = RUNTIME.get().map(tokio::runtime::Handle::enter);
+            supervise_once(&state);
+            std::thread::sleep(TICK);
         });
 }
 

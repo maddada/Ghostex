@@ -131,11 +131,9 @@ fn an_icon_that_could_reach_outside_itself_is_dropped() {
         let answer = sanitize_icon(&icon);
         assert_eq!(answer, Err(why.to_string()), "{name}");
     }
-    assert!(
-        sanitize_icon("not xml <")
-            .unwrap_err()
-            .starts_with("it isn't valid XML")
-    );
+    assert!(sanitize_icon("not xml <")
+        .unwrap_err()
+        .starts_with("it isn't valid XML"));
     let long_tag = sanitize_icon(&svg(&format!("<{}></g>", "a".repeat(5000)))).unwrap_err();
     assert!(
         long_tag.starts_with("it isn't valid XML (expected 'aaaa"),

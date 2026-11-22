@@ -1,6 +1,6 @@
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::ghostex_cli::args::{FlagValue, Flags, parse_boolean};
+use crate::ghostex_cli::args::{parse_boolean, FlagValue, Flags};
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 
 use super::*;

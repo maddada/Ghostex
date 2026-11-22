@@ -69,7 +69,11 @@ fn usable_project(project: &str) -> Option<&Path> {
         return None;
     }
     let path = Path::new(project);
-    if path.is_dir() { Some(path) } else { None }
+    if path.is_dir() {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 /// Fork the prompt into a fresh session in `agent` (possibly different from the
@@ -165,7 +169,7 @@ pub fn resume_session(rec: &Record, accept_all: bool) -> Result<(), String> {
             return Err(
                 "Ghostex could not focus the live agent session; not starting a duplicate writer."
                     .to_string(),
-            );
+            )
         }
     }
 

@@ -9,7 +9,7 @@
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::accounts::model::UsageWindow;
 
@@ -35,9 +35,7 @@ struct Answer {
 
 fn answer(result: Result<ureq::http::Response<ureq::Body>, ureq::Error>) -> Result<Answer, String> {
     let mut response = result.map_err(|error| {
-        format!(
-            "The hub can't be reached ({error}). Check that it is running and its address is right."
-        )
+        format!("The hub can't be reached ({error}). Check that it is running and its address is right.")
     })?;
     let status = response.status().as_u16();
     let text = response

@@ -4,9 +4,9 @@
 
 use rusqlite::{Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::coordinators::{COORDINATOR_INSTRUCTIONS_MAX_CHARS, now_iso};
+use crate::coordinators::{now_iso, COORDINATOR_INSTRUCTIONS_MAX_CHARS};
 use crate::domain::DomainStateError;
 
 pub(crate) const NAME_MAX_CHARS: usize = 60;
@@ -73,7 +73,8 @@ pub(crate) struct Bot {
     pub updated_at: String,
 }
 
-const COLUMNS: &str = "botId, name, title, description, soul, icon, color, agentId, model, effort, \
+const COLUMNS: &str =
+    "botId, name, title, description, soul, icon, color, agentId, model, effort, \
      approval, departmentId, isLead, computer, projectId, workFolder, memoryEnabled, pausedAt, \
      createdBy, createdAt, updatedAt";
 

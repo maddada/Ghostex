@@ -168,7 +168,8 @@ pub(crate) fn with_rejected_resume_reference(
 mod tests {
     use super::*;
 
-    const OMP_SCREEN: &str = "PS C:\\Users\\me\\proj> omp --session '01a1aad2-1111-4000-8000-000000000000'\n\
+    const OMP_SCREEN: &str =
+        "PS C:\\Users\\me\\proj> omp --session '01a1aad2-1111-4000-8000-000000000000'\n\
 Error: Session \"01a1aad2-1111-4000-8000-000000000000\" not found.\n\
 Run `omp --resume` without an argument to pick from recent sessions, or `omp` to start a new one.\n\
 PS C:\\Users\\me\\proj> \n\n";

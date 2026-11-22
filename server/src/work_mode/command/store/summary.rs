@@ -3,7 +3,7 @@
 //! the command's mask, whatever field it is, so nothing the record keeps can show a secret.
 
 use base64::Engine;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::paths::GxserverPaths;
 

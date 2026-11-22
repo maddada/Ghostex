@@ -32,13 +32,13 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 
 use super::live::classify_thread_live;
-use super::records::{SessionKey, list_threads_for, read_coordinator};
+use super::records::{list_threads_for, read_coordinator, SessionKey};
 use super::remote_threads::list_remote_threads_for;
 use super::state::{ThreadProgress, ThreadState};
-use super::work::{WorkItem, list_work_items};
+use super::work::{list_work_items, WorkItem};
 use crate::domain::DomainRepository;
 use crate::session_status::{
-    ActivityUpdate, settle_entered_turn_end_as_seen, update_enters_turn_complete_attention,
+    settle_entered_turn_end_as_seen, update_enters_turn_complete_attention, ActivityUpdate,
 };
 
 /// Stores a finished turn as already seen when nobody should hear of it: a coordinator's while its

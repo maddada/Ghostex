@@ -55,25 +55,23 @@ fn transcript_prompt_state_detects_and_retires_question_cards() {
     let answered = scan_transcript_prompt_state(&[ask(input.clone()), result.clone()]);
     assert!(answered.answered());
     assert!(resolve_session_chat_prompt(None, &answered).is_none());
-    assert!(
-        resolve_session_chat_prompt(
-            Some(SessionChatInteractivePrompt::Question {
-                questions: vec![SessionChatQuestion {
-                    question: "Which approach?".to_string(),
-                    header: None,
-                    multi_select: false,
-                    allow_custom: None,
-                    tool_name: None,
-                    recommended: None,
-                    preview_layout: false,
-                    options: Vec::new(),
-                }],
-                tool_use_id: None,
-            }),
-            &answered,
-        )
-        .is_none()
-    );
+    assert!(resolve_session_chat_prompt(
+        Some(SessionChatInteractivePrompt::Question {
+            questions: vec![SessionChatQuestion {
+                question: "Which approach?".to_string(),
+                header: None,
+                multi_select: false,
+                allow_custom: None,
+                tool_name: None,
+                recommended: None,
+                preview_layout: false,
+                options: Vec::new(),
+            }],
+            tool_use_id: None,
+        }),
+        &answered,
+    )
+    .is_none());
 
     // Hook-derived approvals stay authoritative regardless.
     let approval = SessionChatInteractivePrompt::Approval {
@@ -253,23 +251,19 @@ fn prompt_derivation_matches_canonical_shapes() {
 
     // The SAME tool on a post-tool event derives nothing (card would
     // linger after answering otherwise).
-    assert!(
-        derive_session_chat_prompt(
-            Some("AskUserQuestion"),
-            Some(&tool_input),
-            Some("PostToolUse"),
-        )
-        .is_none()
-    );
+    assert!(derive_session_chat_prompt(
+        Some("AskUserQuestion"),
+        Some(&tool_input),
+        Some("PostToolUse"),
+    )
+    .is_none());
     // Codex 0.145 spelling matches too.
-    assert!(
-        derive_session_chat_prompt(
-            Some("request_user_input"),
-            Some(&tool_input),
-            Some("PreToolUse"),
-        )
-        .is_some()
-    );
+    assert!(derive_session_chat_prompt(
+        Some("request_user_input"),
+        Some(&tool_input),
+        Some("PreToolUse"),
+    )
+    .is_some());
 
     // PermissionRequest + tool name → approval with direct-field summary.
     let approval = derive_session_chat_prompt(

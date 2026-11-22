@@ -10,9 +10,9 @@
 use std::{fs::File, io::Read, path::Path};
 
 use rusqlite::{
-    Connection, OpenFlags,
     config::DbConfig,
     hooks::{AuthAction, AuthContext, Authorization},
+    Connection, OpenFlags,
 };
 
 /// Opens the SQLite database at `path`, which belongs to another program, for reading. Errors when
@@ -100,7 +100,7 @@ fn is_wal_mode(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::open_agent_store;
-    use rusqlite::{Connection, config::DbConfig};
+    use rusqlite::{config::DbConfig, Connection};
     use std::{fs, path::Path};
 
     fn count(connection: &Connection) -> i64 {
@@ -137,11 +137,9 @@ mod tests {
 
         let store = open_agent_store(&path).expect("the store opens");
         assert_eq!(count(&store), 1);
-        assert!(
-            store
-                .execute("INSERT INTO rows VALUES ('two')", [])
-                .is_err()
-        );
+        assert!(store
+            .execute("INSERT INTO rows VALUES ('two')", [])
+            .is_err());
         assert!(store.execute_batch("PRAGMA journal_mode = DELETE").is_err());
         assert!(store.execute_batch("PRAGMA query_only = OFF").is_err());
         assert!(store.execute_batch("ATTACH 'other.db' AS other").is_err());
@@ -211,11 +209,9 @@ mod tests {
 
         let store = open_agent_store(&path).unwrap();
         assert_eq!(count(&store), 1);
-        assert!(
-            store
-                .execute("INSERT INTO rows VALUES ('two')", [])
-                .is_err()
-        );
+        assert!(store
+            .execute("INSERT INTO rows VALUES ('two')", [])
+            .is_err());
         drop(store);
 
         assert_eq!(fs::read(&path).unwrap(), before);

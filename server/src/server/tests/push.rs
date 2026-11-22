@@ -1,10 +1,11 @@
 use super::*;
 use crate::{
-    protocol::{ApiPermission, endpoint_for},
+    protocol::{endpoint_for, ApiPermission},
     push::REGISTER_PUSH_TOKEN_ENDPOINT,
     remote_access::{
+        remove_paired_device_using, replace_earlier_pairings_of_same_phone,
         AdministratorApprovalDeclined, RemotePairedDeviceRecord, RemotePairingRepository,
-        StoredDeviceKey, remove_paired_device_using, replace_earlier_pairings_of_same_phone,
+        StoredDeviceKey,
     },
     storage::open_gxserver_database,
 };
@@ -444,13 +445,11 @@ async fn push_token_store_rotation_and_unregistration_are_phone_scoped() {
         assert_eq!(status.expect("task"), StatusCode::OK);
     }
     assert_eq!(stored(&reopened).len(), 13);
-    assert!(
-        !state
-            .paths
-            .auth_dir
-            .join("push-registrations.json.tmp")
-            .exists()
-    );
+    assert!(!state
+        .paths
+        .auth_dir
+        .join("push-registrations.json.tmp")
+        .exists());
 }
 
 #[tokio::test]

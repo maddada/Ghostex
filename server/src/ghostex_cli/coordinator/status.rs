@@ -15,7 +15,7 @@
 //! SEE-ALSO: server/src/coordinators/playbook.md ("Start of a request", "While threads run"),
 //! server/src/ghostex_cli/coordinator/item.rs (`turn_problems`), usage_room.rs.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::command::{flag_text, read_view, resolve_thread_session, server_flags};
 use super::{item, usage_room};
@@ -23,7 +23,7 @@ use crate::ghostex_cli::{
     agents,
     args::{Flags, ParsedArgs},
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 /// The thread states the compact snapshot lists one by one, in this order; the rest are counted.
@@ -226,9 +226,7 @@ pub(super) fn print_compact(view: &Value, flags: &Flags) {
     }
     let threads = threads_of(view);
     if threads.is_empty() {
-        println!(
-            "Threads: none yet. Start one with: ghostex coordinator start-thread --title \"<title>\" --task \"<brief>\""
-        );
+        println!("Threads: none yet. Start one with: ghostex coordinator start-thread --title \"<title>\" --task \"<brief>\"");
     } else {
         let counts: Vec<String> = LIVE
             .iter()
@@ -276,9 +274,7 @@ pub(super) fn print_compact(view: &Value, flags: &Flags) {
             .map(|at| format!(", newest {at}"))
             .unwrap_or_default()
     );
-    println!(
-        "More: status threads [--sleeping] · status thread <ref> · status memory · status usage · item list --check · accounts status · --full"
-    );
+    println!("More: status threads [--sleeping] · status thread <ref> · status memory · status usage · item list --check · accounts status · --full");
 }
 
 /// `status memory`: the goal, the standing instructions and every memory note.

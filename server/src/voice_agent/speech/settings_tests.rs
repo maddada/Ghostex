@@ -2,7 +2,7 @@
 //! and then kept, a client's patch is checked before it is saved (settings older clients still
 //! send are ignored), and a computer whose engine was our retired local model moves to Hex.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::settings::{self, DictateSettings, Engine};
 
@@ -114,10 +114,8 @@ fn hex_is_an_engine_with_its_own_model_choice() {
         .patched(&patch(json!({"hexModel": null})))
         .expect("valid");
     assert_eq!(cleared.hex_model, None);
-    assert!(
-        settings
-            .patched(&patch(json!({"hexModel": "a b&c"})))
-            .is_err()
-    );
+    assert!(settings
+        .patched(&patch(json!({"hexModel": "a b&c"})))
+        .is_err());
     assert!(settings.patched(&patch(json!({"hexModel": ""}))).is_err());
 }

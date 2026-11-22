@@ -164,7 +164,7 @@ pub(crate) fn sealed_in(manifest: &Value, name: &str, platform: &str) -> Option<
 /// tests) `GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY`.
 pub(crate) fn signing_public_key() -> Option<[u8; 32]> {
     use ghostex_gx_protocol::component_signing::{
-        COMPONENT_SIGNING_PUBLIC_KEY_HEX, decode_public_key,
+        decode_public_key, COMPONENT_SIGNING_PUBLIC_KEY_HEX,
     };
     if cfg!(debug_assertions) {
         if let Ok(hex) = std::env::var("GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY") {

@@ -10,8 +10,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use ghostex_gx_chat_core::transcript::question_forms::{form_fences, parse_form, resend_form_id};
-use ghostex_gx_visual::questions::{QuestionForm, resend_message};
-use serde_json::{Map, Value, json};
+use ghostex_gx_visual::questions::{resend_message, QuestionForm};
+use serde_json::{json, Map, Value};
 
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::presentation::read_runtime_text;

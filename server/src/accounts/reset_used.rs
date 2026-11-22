@@ -12,7 +12,7 @@ use crate::{
     server::AppState,
     storage::open_gxserver_database,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::{
     collections::BTreeMap,
     path::PathBuf,

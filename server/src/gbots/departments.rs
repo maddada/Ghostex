@@ -12,9 +12,9 @@
 
 use rusqlite::{Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::record::{Bot, find_bot, list_bots, new_id};
+use super::record::{find_bot, list_bots, new_id, Bot};
 use crate::coordinators::now_iso;
 use crate::domain::DomainStateError;
 

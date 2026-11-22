@@ -2,14 +2,14 @@
 
 use std::{sync::Arc, time::Duration};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::{
     domain::DomainRepository,
     logging::{GxserverLogInput, LogLevel},
     paths::GxserverPaths,
-    server::{AppState, read_session_persistence_provider, read_session_text},
-    session_chat_send_wake::{WakeOutcome, wake_session},
+    server::{read_session_persistence_provider, read_session_text, AppState},
+    session_chat_send_wake::{wake_session, WakeOutcome},
     storage::open_gxserver_database,
 };
 

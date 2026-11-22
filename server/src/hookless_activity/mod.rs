@@ -20,20 +20,20 @@ mod surfaces;
 mod task;
 
 pub(crate) use comparison::{note_session_closed, note_session_slept};
-pub(crate) use drive::{OBSERVER_MARK, hook_superseded};
+pub(crate) use drive::{hook_superseded, OBSERVER_MARK};
 pub(crate) use hook::observe_hook_event;
 pub(crate) use hook_free_fallback::{
-    ACTION_RESTART_FOR_HOOK, ACTION_TURN_ON_HOOK, ACTION_UPDATE_CODEX, answer_ask_notice,
-    answer_codex_update, answer_fallback_notice, codex_update_notice, fallback_notice,
+    answer_ask_notice, answer_codex_update, answer_fallback_notice, codex_update_notice,
+    fallback_notice, ACTION_RESTART_FOR_HOOK, ACTION_TURN_ON_HOOK, ACTION_UPDATE_CODEX,
 };
 pub(crate) use opencode::{
-    OBSERVED_PROMPT, observe_stream_event as observe_opencode_stream_event,
-    observe_terminal_title as observe_opencode_terminal_title,
+    observe_stream_event as observe_opencode_stream_event,
+    observe_terminal_title as observe_opencode_terminal_title, OBSERVED_PROMPT,
 };
 #[cfg(test)]
 pub(crate) use process_starts::ClaudeStartSource;
 pub(crate) use process_starts::{
-    ClaudeProcessStart, ProcessStartCursor, hook_line_start as claude_hook_line_start,
-    read_claude_process_starts,
+    hook_line_start as claude_hook_line_start, read_claude_process_starts, ClaudeProcessStart,
+    ProcessStartCursor,
 };
 pub(crate) use task::{read_comparison, spawn_hookless_activity_task};

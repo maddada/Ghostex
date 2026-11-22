@@ -7,7 +7,7 @@ use crate::{
     server::AppState,
 };
 use chrono::{DateTime, Utc};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},

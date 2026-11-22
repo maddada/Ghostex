@@ -16,13 +16,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::args::Flags;
 use crate::ghostex_cli::mcp_stdio::McpStdio;
 use crate::ghostex_cli::rpc::{
-    CliError, CliResult, GXSERVER_PROTOCOL_VERSION, Target, request_gxserver_envelope,
-    resolve_local_gxserver_target,
+    request_gxserver_envelope, resolve_local_gxserver_target, CliError, CliResult, Target,
+    GXSERVER_PROTOCOL_VERSION,
 };
 
 /// Longer than the 30 minutes a card may wait.

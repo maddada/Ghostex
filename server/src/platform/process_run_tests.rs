@@ -1,7 +1,7 @@
 //! What `run_bounded` adds to a time-boxed run: input on stdin, a stdout cap that fails instead of
 //! cutting, the end of stderr, and a hook between the start and the wait.
 
-use super::{Keep, RunLimits, Unfinished, run_bounded, run_bounded_after_spawn};
+use super::{run_bounded, run_bounded_after_spawn, Keep, RunLimits, Unfinished};
 use std::{
     process::Command,
     time::{Duration, Instant},

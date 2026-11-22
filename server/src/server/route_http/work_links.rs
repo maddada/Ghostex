@@ -4,14 +4,14 @@
 //! folder (`/api/setSessionWorkLinks`, which a pick in the picker writes through).
 
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::protocol::rpc_success;
 use crate::work_mode::{
-    WorkLinkKind, list_work_link_candidates, offers_work_cleanup, presentation_session_work,
-    project_work_mode, work_cleanup_pull_request_key, work_cleanup_worktree_path,
-    write_work_cleanup_answer,
+    list_work_link_candidates, offers_work_cleanup, presentation_session_work, project_work_mode,
+    work_cleanup_pull_request_key, work_cleanup_worktree_path, write_work_cleanup_answer,
+    WorkLinkKind,
 };
 
 use super::*;
@@ -109,7 +109,7 @@ pub(super) async fn route_work_links_http(
                 body_json,
                 token_extension_id,
                 caller,
-            });
+            })
         }
     })
 }

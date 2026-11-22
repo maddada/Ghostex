@@ -36,7 +36,7 @@
 //! SEE-ALSO: server/src/session_chat_send/sender_mark.rs, server/src/server/security_gates.rs,
 //! server/src/ghostex_cli/clear_command.rs.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::security::Principal;
@@ -276,7 +276,7 @@ fn prepare_clear(
         let owned = state.clone();
         let (pid, sid) = (project_id.to_string(), session_id.to_string());
         tokio::spawn(async move {
-            use crate::session_chat_send_wake::{WakeOutcome, wake_session};
+            use crate::session_chat_send_wake::{wake_session, WakeOutcome};
             if let WakeOutcome::Blocked(reason) | WakeOutcome::Failed(reason) =
                 wake_session(&owned, &pid, &sid).await
             {

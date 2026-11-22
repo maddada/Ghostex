@@ -15,12 +15,12 @@
 
 use std::{fs, path::Path};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::{ExtensionError, ExtensionResult, ExtensionSkillManifest, validate_relative_path};
+use super::{validate_relative_path, ExtensionError, ExtensionResult, ExtensionSkillManifest};
 use crate::agent_skills::{
-    CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_AGENT_SKILL_NAMES, RETIRED_GHOSTEX_AGENT_SKILL_NAMES,
-    read_frontmatter_name,
+    read_frontmatter_name, CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_AGENT_SKILL_NAMES,
+    RETIRED_GHOSTEX_AGENT_SKILL_NAMES,
 };
 
 /// The file in the installed copy that says which extension put it there.

@@ -6,7 +6,7 @@
 use std::fs;
 
 use super::*;
-use tokio::time::{Duration, timeout};
+use tokio::time::{timeout, Duration};
 
 const DARK_DEPTH: &str = "customSidebarTitlebarBackgroundDarknessPercent";
 const LIGHT_DEPTH: &str = "customSidebarTitlebarLightBackgroundLightnessPercent";

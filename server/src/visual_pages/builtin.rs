@@ -6,7 +6,7 @@
 use super::{
     fit::{FIT_SCRIPT, FIT_STYLE},
     kit::{KIT_SCRIPT, KIT_STYLE},
-    prepare::{PAGE_CONTENT_SECURITY_POLICY, read_prologue},
+    prepare::{read_prologue, PAGE_CONTENT_SECURITY_POLICY},
     theme::{PAGE_API, PAGE_BOOTSTRAP, PAGE_STATE_MARKER, THEME_STYLE},
 };
 

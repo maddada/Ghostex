@@ -1,5 +1,5 @@
-use anyhow::{Context, Result, anyhow};
-use axum::{Router, routing::any};
+use anyhow::{anyhow, Context, Result};
+use axum::{routing::any, Router};
 use serde_json::json;
 use std::{
     collections::HashMap,
@@ -41,7 +41,7 @@ use crate::{
     storage::{
         create_gxserver_migration_status, initialize_gxserver_storage, open_gxserver_database,
     },
-    tailcat::{TailcatRuntime, start_tailcat_from_persisted_state},
+    tailcat::{start_tailcat_from_persisted_state, TailcatRuntime},
     zmx::cycle_wire_incompatible_zmx_session_daemons,
 };
 

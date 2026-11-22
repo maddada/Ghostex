@@ -6,7 +6,7 @@
 
 use super::*;
 
-use crate::coordinators::{RemoteThreadRecord, list_remote_threads_for, read_thread};
+use crate::coordinators::{list_remote_threads_for, read_thread, RemoteThreadRecord};
 
 pub(crate) async fn handle_open_coordinator_thread_http(
     state: &AppState,

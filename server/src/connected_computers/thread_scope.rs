@@ -97,11 +97,7 @@ fn standing_role_refusal(
     }
     let op = serde_json::from_slice::<Value>(body)
         .ok()
-        .and_then(|body| {
-            body.pointer("/params/op")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
+        .and_then(|body| body.pointer("/params/op").and_then(Value::as_str).map(str::to_string))
         .unwrap_or_default();
     let Principal::Session {
         project_id: caller_project,

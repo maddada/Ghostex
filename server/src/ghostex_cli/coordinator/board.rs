@@ -10,14 +10,14 @@
 //! the work item with the same number (B7 is W7) and prints the `ghostex coordinator item` command
 //! that does the same, so the coordinator learns the new verbs as it goes.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::command::{flag_text, resolve_thread_session, server_flags, target_coordinator};
 use crate::ghostex_cli::{
     agents,
     args::ParsedArgs,
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 const USAGE: &str =
@@ -131,7 +131,7 @@ pub(super) fn board(parsed: &ParsedArgs) -> CliResult<()> {
         other => {
             return Err(CliError::Other(format!(
                 "Unknown board command: {other}. {USAGE}"
-            )));
+            )))
         }
     }
     params.insert("op".into(), json!(verb));

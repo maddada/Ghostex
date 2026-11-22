@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::session_chat_send::{
-    SESSION_CHAT_INTERRUPT, SessionChatSendError, SessionChatSendFailure,
-    write_session_chat_payload,
+    write_session_chat_payload, SessionChatSendError, SessionChatSendFailure,
+    SESSION_CHAT_INTERRUPT,
 };
 
 /// Why an account switch's exit gave up: the agent kept the terminal past the time limit.
@@ -14,7 +14,8 @@ pub(crate) const AGENT_DID_NOT_EXIT: &str =
 
 /// Why an account switch's exit gave up: the session's processes could not be read, so whether the
 /// shell had the terminal back was never known.
-pub(crate) const AGENT_NOT_INSPECTED: &str = "Ghostex could not check the session's processes while exiting the agent, so the resume command was not typed.";
+pub(crate) const AGENT_NOT_INSPECTED: &str =
+    "Ghostex could not check the session's processes while exiting the agent, so the resume command was not typed.";
 
 /// Consecutive failed reads of the session's processes the exit sits out before it gives up.
 const FAILED_READS_LIMIT: u32 = 10;

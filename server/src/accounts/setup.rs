@@ -1,12 +1,12 @@
 use super::{
     codex_blockers, endpoint, helpers,
     model::Provider,
-    setup_terminal::{COLS, LoginTerminal, ROWS},
+    setup_terminal::{LoginTerminal, COLS, ROWS},
     store,
 };
 use crate::{domain::DomainStateError, server::AppState};
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use serde_json::{Map, Value, json};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use serde_json::{json, Map, Value};
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -311,9 +311,7 @@ pub(crate) fn dispatch(
                     Err(error) => {
                         job.view["status"] = json!("failed");
                         if let Some(blockers) = blockers {
-                            job.view["error"] = json!(
-                                "Codex is still running and has to stop before this login can finish."
-                            );
+                            job.view["error"] = json!("Codex is still running and has to stop before this login can finish.");
                             job.view["blockers"] = blockers;
                         } else if let Some(signed_in) = wrong_account {
                             job.view["error"] =
@@ -422,7 +420,8 @@ fn device_code(screen: &str) -> Option<String> {
 /// Where `ghostex account-login --result-file` reports, inside the job's own temporary folder.
 const RESULT_FILE: &str = "result.json";
 const LOGIN_INCOMPLETE: &str = "Login did not complete. Check the terminal details and try again.";
-const HELPER_SILENT: &str = "The sign-in finished, but the account wasn't saved. Update it in Settings > Accounts and try again.";
+const HELPER_SILENT: &str =
+    "The sign-in finished, but the account wasn't saved. Update it in Settings > Accounts and try again.";
 
 /// A login's outcome from the result file `ghostex account-login` writes: the saved slot, or the reason it
 /// failed. The terminal screen is never read for it.

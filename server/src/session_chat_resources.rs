@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use ghostex_gx_chat_core::questions::resource_index::{ResourceEntry, ThreadRef, merge};
+use ghostex_gx_chat_core::questions::resource_index::{merge, ResourceEntry, ThreadRef};
 use rusqlite::OptionalExtension;
 use serde_json::Value;
 
@@ -691,8 +691,8 @@ mod tests {
     #[test]
     fn a_resource_is_read_back_by_its_offset_past_a_long_transcript() {
         use crate::session_chat::{
-            SessionChatIncrementalState, SessionChatTranscriptAgent,
             read_incremental_transcript_messages, session_chat_line_decoder,
+            SessionChatIncrementalState, SessionChatTranscriptAgent,
         };
         let form = "```questions\n{\"title\":\"Pick\",\"questions\":[{\"tag\":\"Q1\",\"title\":\"Which?\",\"choices\":[\"A\",\"B\"]}]}\n```";
         let temp = tempfile::tempdir().unwrap();
@@ -763,12 +763,10 @@ mod tests {
         let body = serde_json::to_value(&holder).unwrap().to_string();
         assert!(body.contains("Which?"));
         let answered = read_record_at(&path, decode, answers_at).expect("the answers");
-        assert!(
-            serde_json::to_value(&answered)
-                .unwrap()
-                .to_string()
-                .contains("ghostex-page-answers")
-        );
+        assert!(serde_json::to_value(&answered)
+            .unwrap()
+            .to_string()
+            .contains("ghostex-page-answers"));
         // A position in the middle of a record reads nothing that decodes.
         assert!(read_record_at(&path, decode, at + 7).is_none());
     }

@@ -4,7 +4,7 @@
 //! CDXC:Coordinators 2026-11-18 WHY:
 //! A Claude thread (G1ur9, 2026-11-17) ended its turn at 23:39:51Z with "1 shell" in its footer; its Stop listed the shell, so the session stayed working and was marked background only, which the stall watches skip. At 23:51:01Z, with no new row in its transcript and nothing typed into it, the mark was gone and the coordinator's stall watch nudged a finished thread 8 minutes later. Any event that asks for working (a hook such as PreToolUse, PostToolUse or UserPromptSubmit, a terminal-title spinner, a program's status report) rebuilds the stored activity without the mark (session_status/transition.rs), and gxserver keeps no record of which one came, so this line names it: the trigger, the hook event and the working source. It is written only while the Agent activity diagnostic log is on.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 #[cfg(not(test))]
 use crate::logging::{DiagnosticLogScenario, GxserverLogInput, GxserverLogger, LogLevel};

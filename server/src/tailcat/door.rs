@@ -18,7 +18,7 @@ use crate::paths::GxserverPaths;
 
 use super::binary::*;
 use super::keys::*;
-use super::supervisor::{TAILCAT_ALLOW_NONE, TailcatLane, TailcatRuntime};
+use super::supervisor::{TailcatLane, TailcatRuntime, TAILCAT_ALLOW_NONE};
 
 /// The most new keys one helper lets in on a knock while one pairing window is open.
 const KNOCKS_PER_WINDOW: usize = 4;
@@ -177,7 +177,7 @@ fn saved_door_address(key_file: &std::path::Path) -> Option<String> {
 
 /// Whether `address` is an address of the key in `key_file`: its bytes hold the key's public half.
 fn address_names_key(address: &str, key_file: &std::path::Path) -> bool {
-    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     let public = std::fs::read_to_string(key_file)
         .ok()
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())

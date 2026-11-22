@@ -10,8 +10,8 @@
 //! captured.
 
 use crate::session_chat_composer::{
-    SessionChatComposerReadiness, SessionChatComposerState, detect_session_chat_composer_readiness,
-    session_chat_composer_input,
+    detect_session_chat_composer_readiness, session_chat_composer_input,
+    SessionChatComposerReadiness, SessionChatComposerState,
 };
 use crate::session_chat_notice::classify_session_chat_terminal_notice;
 use crate::session_chat_omp_blocking::detect_omp_blocking_screen;
@@ -55,7 +55,9 @@ const HOOK_STATUSES: [&str; 3] = ["lint clean", "2 jobs queued", "deploy watcher
 /// The input with its chrome, after the gap row OMP keeps above it.
 fn composer(shape: Shape, draft: &str) -> String {
     match shape {
-        Shape::Box => format!("\n╭── π  gpt-5 ──────────────────────────╮\n╰─ {draft:<34} ─╯\n"),
+        Shape::Box => format!(
+            "\n╭── π  gpt-5 ──────────────────────────╮\n╰─ {draft:<34} ─╯\n"
+        ),
         Shape::Band => format!("\nπ  gpt-5 · ~/work/app · main\n╰─ {draft}\n"),
         Shape::Claude => format!(
             "\n─────────────────────────────── main ─\n❯ {draft}\n──────────────────────────────────────\n"

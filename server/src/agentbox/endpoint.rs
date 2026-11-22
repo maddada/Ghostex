@@ -3,9 +3,9 @@
 
 use std::path::Path;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::cli::{STOP_TIMEOUT, URL_TIMEOUT, resolve_agentbox_binary, run_agentbox};
+use super::cli::{resolve_agentbox_binary, run_agentbox, STOP_TIMEOUT, URL_TIMEOUT};
 use super::command::terminal_command;
 use super::location::is_valid_box_name;
 use super::session::session_agentbox;

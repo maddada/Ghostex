@@ -1,9 +1,10 @@
-use rusqlite::{OptionalExtension, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{params, OptionalExtension};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{
-    DomainRepository, DomainResult, DomainStateError, now_iso, optional_trimmed_string_param,
-    read_unvalidated_project_lookup_id, read_unvalidated_session_lookup_id, sql_error,
+    now_iso, optional_trimmed_string_param, read_unvalidated_project_lookup_id,
+    read_unvalidated_session_lookup_id, sql_error, DomainRepository, DomainResult,
+    DomainStateError,
 };
 use crate::presentation::read_runtime_text;
 

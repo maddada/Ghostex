@@ -633,7 +633,7 @@ pub(crate) fn codex_windows(out: &mut Vec<UsageWindow>, model: &str, value: &Val
 #[cfg(test)]
 mod account_message_tests {
     use super::*;
-    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use serde_json::json;
 
     #[test]

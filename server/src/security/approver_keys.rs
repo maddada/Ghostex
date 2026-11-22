@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use ghostex_gx_protocol::approval::{ApproverKey, ApproverKeyAlgorithm};
 use sha2::{Digest, Sha256};
 
@@ -54,7 +54,7 @@ pub fn verify_approval_signature(
     payload: &[u8],
     signature_b64: &str,
 ) -> Result<(), ApproverKeyError> {
-    use ring::signature::{ECDSA_P256_SHA256_ASN1, RSA_PKCS1_2048_8192_SHA256, UnparsedPublicKey};
+    use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_ASN1, RSA_PKCS1_2048_8192_SHA256};
 
     let public_key = STANDARD
         .decode(&key.public_key)
@@ -71,7 +71,7 @@ pub fn verify_approval_signature(
                 .verify(payload, &signature)
         }
         ApproverKeyAlgorithm::Other(name) => {
-            return Err(ApproverKeyError::UnsupportedAlgorithm(name.clone()));
+            return Err(ApproverKeyError::UnsupportedAlgorithm(name.clone()))
         }
     };
     result.map_err(|_| ApproverKeyError::SignatureMismatch)
@@ -135,7 +135,7 @@ impl ApproverKeys {
                 }
             }
             ApproverKeyAlgorithm::Other(name) => {
-                return Err(ApproverKeyError::UnsupportedAlgorithm(name.clone()));
+                return Err(ApproverKeyError::UnsupportedAlgorithm(name.clone()))
             }
         }
         key.key_id = approver_key_id(&public_key);

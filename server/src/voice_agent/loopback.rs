@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use ghostex_gx_protocol::approval::{APPROVAL_ID_PARAM, APPROVAL_REQUIRED_ERROR};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
 use crate::server::AppState;

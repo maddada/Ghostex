@@ -10,9 +10,9 @@ use crate::{
     notification_feed::{
         broadcast_notification_feed_changed,
         store::{
-            ACCOUNT_NOTIFICATION_PROJECT_ID, NOTIFICATION_FEED_KIND_RESET_EXPIRING,
-            NOTIFICATION_FEED_KIND_RESET_REDEEMED, NewNotificationFeedRow,
             account_notification_session_id, insert_notification_feed_row, mark_notification_read,
+            NewNotificationFeedRow, ACCOUNT_NOTIFICATION_PROJECT_ID,
+            NOTIFICATION_FEED_KIND_RESET_EXPIRING, NOTIFICATION_FEED_KIND_RESET_REDEEMED,
         },
     },
     server::AppState,
@@ -20,7 +20,7 @@ use crate::{
 use chrono::{DateTime, Duration as Span, Utc};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
@@ -684,9 +684,7 @@ fn post_warning(
         format!("{} banked resets", decision.count)
     };
     let plan = if auto_redeem == Some(true) {
-        format!(
-            "Auto-redeem uses it when you hit a usage limit, or {LAST_CALL_MINUTES} minutes before it expires."
-        )
+        format!("Auto-redeem uses it when you hit a usage limit, or {LAST_CALL_MINUTES} minutes before it expires.")
     } else if auto_redeem == Some(false) {
         format!("Auto-redeem uses it {LAST_CALL_MINUTES} minutes before it expires.")
     } else if decision.requires_limit {
@@ -745,7 +743,10 @@ fn notify_redeem(
         "failed" => (
             NOTIFICATION_FEED_KIND_RESET_EXPIRING,
             format!("Couldn't use an expiring {provider} reset"),
-            format!("{message} It expires {}.", local_time(decision.expires_at)),
+            format!(
+                "{message} It expires {}.",
+                local_time(decision.expires_at)
+            ),
         ),
         _ => return Ok(false),
     };

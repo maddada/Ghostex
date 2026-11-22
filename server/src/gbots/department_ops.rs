@@ -6,10 +6,10 @@
 //! department instructions changed.
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::departments::{self, department_summary, require_department, require_manager};
-use super::record::{Bot, list_bots, require_bot};
+use super::record::{list_bots, require_bot, Bot};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 

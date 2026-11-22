@@ -9,12 +9,12 @@ SEE-ALSO: packages/gx-chat-core/src/questions/terminal_picker.rs, apps/desktop/s
 */
 
 use serde::Serialize;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::session_chat_send::{
-    SESSION_CHAT_INTERRUPT, SessionChatSendStep, SessionChatSendTarget,
-    capture_session_terminal_text, execute_session_chat_send,
+    capture_session_terminal_text, execute_session_chat_send, SessionChatSendStep,
+    SessionChatSendTarget, SESSION_CHAT_INTERRUPT,
 };
 use crate::session_chat_terminal_dialog::TerminalDialog;
 

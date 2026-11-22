@@ -1,8 +1,8 @@
 use std::{path::Path, process::Command};
 
 use chrono::Utc;
-use rusqlite::{Connection, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{params, Connection};
+use serde_json::{json, Map, Value};
 
 use crate::{
     agents::{
@@ -10,7 +10,7 @@ use crate::{
         create_agent_session_params_for_project, read_agent_settings,
     },
     domain::{DomainRepository, DomainStateError},
-    zmx::{ZmxServerContext, dispatch_zmx_lifecycle_endpoint},
+    zmx::{dispatch_zmx_lifecycle_endpoint, ZmxServerContext},
 };
 
 use super::*;

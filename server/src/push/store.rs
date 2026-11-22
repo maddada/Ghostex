@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::paths::GxserverPaths;
 
 use super::limiter::PhoneBudget;
-use super::registration::{DEVICE_ID_MAX, MACHINE_ID_MAX, is_expo_push_token, is_printable_id};
+use super::registration::{is_expo_push_token, is_printable_id, DEVICE_ID_MAX, MACHINE_ID_MAX};
 
 const STORE_FILE_NAME: &str = "push-registrations.json";
 const STORE_TEMP_FILE_NAME: &str = "push-registrations.json.tmp";
@@ -221,7 +221,7 @@ impl PushRegistrationStore {
         let bytes = match fs::read(&self.file) {
             Ok(bytes) => bytes,
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                return Ok(PushStoreData::default());
+                return Ok(PushStoreData::default())
             }
             Err(error) => return Err(PushStoreError::Unreadable(error)),
         };

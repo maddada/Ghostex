@@ -10,8 +10,8 @@
 //! packages/gx-core/src/cloud_boxes.rs (the merge and the badge).
 
 use ghostex_gx_protocol::cloud_box::{
-    CLOUD_BOX_RUNTIME_SETTINGS_KEY, CloudBoxState, DraftCloudBox, PresentationCloudBox,
-    SessionCloudBoxRuntime,
+    CloudBoxState, DraftCloudBox, PresentationCloudBox, SessionCloudBoxRuntime,
+    CLOUD_BOX_RUNTIME_SETTINGS_KEY,
 };
 use serde_json::Value;
 

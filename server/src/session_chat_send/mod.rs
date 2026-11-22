@@ -7,19 +7,19 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::{
-        Arc, Mutex, OnceLock,
         atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
     },
     time::{Duration, Instant},
 };
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::protocol::rpc_success;
 use crate::server::{
-    AppState, RoutedResponse, domain_error_response, read_runtime_text, routed_json,
+    domain_error_response, read_runtime_text, routed_json, AppState, RoutedResponse,
 };
 use crate::session_chat::{SessionChatQuestion, SessionChatQuestionSelection};
 use crate::session_chat_follower::session_chat_agent_for_session;
@@ -28,7 +28,7 @@ use crate::session_chat_question_row_align::QuestionRowAction;
 use crate::session_chat_queue_runtime::SessionChatMessageSource;
 use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 /*
 CDXC:SessionChat 2026-07-31:

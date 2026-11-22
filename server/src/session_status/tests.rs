@@ -330,10 +330,11 @@ fn claude_agents_view_title_gives_no_status() {
             "{title}"
         );
     }
-    assert!(
-        title_classify::classify_terminal_title_status(Some("· Fixing the tests"), Some("claude"))
-            .is_some()
-    );
+    assert!(title_classify::classify_terminal_title_status(
+        Some("· Fixing the tests"),
+        Some("claude")
+    )
+    .is_some());
 }
 
 #[test]

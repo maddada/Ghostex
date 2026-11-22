@@ -8,13 +8,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::agents::{
     default_agent_icon_to_id, default_agent_session_title_name,
     infer_agent_id_from_command_executable, quote_shell_arg,
 };
-use crate::paths::{GxserverPaths, get_gxserver_paths};
+use crate::paths::{get_gxserver_paths, GxserverPaths};
 
 /// The MCP server's name in Claude and Codex: its tools read `mcp__ghostex-connectors__<tool>`.
 pub(crate) const CONNECTORS_MCP_SERVER_NAME: &str = "ghostex-connectors";

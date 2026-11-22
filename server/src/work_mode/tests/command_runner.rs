@@ -6,7 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::*;
 
@@ -99,11 +99,10 @@ fn a_good_source_answers_every_verb() {
         vec![("mode", false, false), ("token", true, true)]
     );
     assert!(info.can_create);
-    assert!(
-        info.icon
-            .as_ref()
-            .is_some_and(|icon| icon.as_ref().is_ok_and(|svg| svg.contains("currentColor")))
-    );
+    assert!(info
+        .icon
+        .as_ref()
+        .is_some_and(|icon| icon.as_ref().is_ok_and(|svg| svg.contains("currentColor"))));
     assert_eq!(fixture.recorded("argv.txt"), "info\n--json\n");
 
     let projects = [app_project()];
@@ -729,11 +728,10 @@ fn a_field_turning_secret_is_masked_in_that_same_info() {
     let env = env_with_open_token("flip-secret");
     let info = command_info(&fixture.call(CommandVerb::Info, None, &env)).expect("info");
     assert_eq!(info.name, "Fixture ••••");
-    assert!(
-        info.credentials
-            .iter()
-            .any(|field| field.name == "token" && field.secret)
-    );
+    assert!(info
+        .credentials
+        .iter()
+        .any(|field| field.name == "token" && field.secret));
 }
 
 #[test]

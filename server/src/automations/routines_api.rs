@@ -1,8 +1,8 @@
 //! What GBots (server/src/gbots/routines.rs) ask of Automations: save, read, pause, remove and run
 //! a GBot's routine, which is an automation in the bot's project with an owner.
 
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 

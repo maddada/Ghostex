@@ -17,7 +17,7 @@ use std::sync::{Mutex, OnceLock};
 
 use chrono::{SecondsFormat, TimeZone, Utc};
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 

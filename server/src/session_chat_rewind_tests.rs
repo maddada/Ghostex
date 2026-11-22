@@ -2,12 +2,8 @@ use super::*;
 
 #[test]
 fn identical_prompts_move_when_the_picker_scrolls() {
-    let before = screen_lines(
-        "Rewind\nRestore the code and/or conversation to the point before…\n↑ 2 more above\nRepeated prompt\nNo code changes\n❯ Repeated prompt\nNo code changes\n↓ 1 more below",
-    );
-    let after = screen_lines(
-        "Rewind\nRestore the code and/or conversation to the point before…\n↑ 1 more above\nEarlier prompt\nNo code changes\n❯ Repeated prompt\nNo code changes\n↓ 2 more below",
-    );
+    let before = screen_lines("Rewind\nRestore the code and/or conversation to the point before…\n↑ 2 more above\nRepeated prompt\nNo code changes\n❯ Repeated prompt\nNo code changes\n↓ 1 more below");
+    let after = screen_lines("Rewind\nRestore the code and/or conversation to the point before…\n↑ 1 more above\nEarlier prompt\nNo code changes\n❯ Repeated prompt\nNo code changes\n↓ 2 more below");
     let before = highlighted_row(&before).unwrap();
     let after = highlighted_row(&after).unwrap();
     assert_eq!(before.text, after.text);

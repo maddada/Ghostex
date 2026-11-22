@@ -1,11 +1,11 @@
 //! `ghostex security log`: read this computer's security log and check that nobody changed it
 //! (`/api/securityLog`, server/src/audit/).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::args::Flags;
 use super::output::print_json;
-use super::rpc::{CliError, CliResult, call_gxserver_rpc};
+use super::rpc::{call_gxserver_rpc, CliError, CliResult};
 
 const HELP: &str = "Usage: ghostex security log [--last <n>] [--json]
 

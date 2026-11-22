@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::paths::get_gxserver_paths;
 
@@ -10,8 +10,8 @@ use super::api::{
     uninstall_agent_hooks,
 };
 use super::config::{
-    AMP_PLUGIN_MARKER, HookDefinition, HookPaths, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
-    OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER, all_hook_events,
+    all_hook_events, HookDefinition, HookPaths, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER,
+    NOTIFY_HOOK_VERSION, OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER,
 };
 use super::event_mapping::activity_for_hook_event;
 use super::install::{
@@ -39,13 +39,11 @@ fn hook_status_uses_home_scoped_paths() {
     )
     .expect("status");
     assert_eq!(status.get("type"), Some(&json!("agentHookStatus")));
-    assert!(
-        status
-            .get("notifyHookPath")
-            .and_then(Value::as_str)
-            .expect("notify path")
-            .starts_with(temp.path().to_str().expect("temp path"))
-    );
+    assert!(status
+        .get("notifyHookPath")
+        .and_then(Value::as_str)
+        .expect("notify path")
+        .starts_with(temp.path().to_str().expect("temp path")));
 }
 
 #[test]
@@ -124,12 +122,11 @@ fn hook_status_reports_profile_only_provider_hook_paths() {
     assert_eq!(row.get("status"), Some(&json!("installed")));
     assert_eq!(row.get("hookInstalled"), Some(&json!(true)));
     assert_eq!(row.get("paths"), Some(&json!(expected_paths)));
-    assert!(
-        row.get("paths")
-            .and_then(Value::as_array)
-            .expect("paths")
-            .contains(&json!(path_string(&profile_path)))
-    );
+    assert!(row
+        .get("paths")
+        .and_then(Value::as_array)
+        .expect("paths")
+        .contains(&json!(path_string(&profile_path))));
 }
 
 #[test]
@@ -161,12 +158,11 @@ fn hook_status_detects_stale_profile_only_provider_hook() {
         .expect("codex row");
     assert_eq!(row.get("status"), Some(&json!("updateRequired")));
     assert_eq!(row.get("hookInstalled"), Some(&json!(false)));
-    assert!(
-        row.get("paths")
-            .and_then(Value::as_array)
-            .expect("paths")
-            .contains(&json!(path_string(&profile_path)))
-    );
+    assert!(row
+        .get("paths")
+        .and_then(Value::as_array)
+        .expect("paths")
+        .contains(&json!(path_string(&profile_path))));
 }
 
 #[test]
@@ -227,12 +223,11 @@ fn hook_status_uses_pi_agent_extension_before_legacy_root_paths() {
         .expect("pi row");
     assert_eq!(row.get("status"), Some(&json!("installed")));
     assert_eq!(row.get("hookInstalled"), Some(&json!(true)));
-    assert!(
-        row.get("paths")
-            .and_then(Value::as_array)
-            .expect("paths")
-            .contains(&json!(path_string(&legacy_root_extension_path)))
-    );
+    assert!(row
+        .get("paths")
+        .and_then(Value::as_array)
+        .expect("paths")
+        .contains(&json!(path_string(&legacy_root_extension_path))));
 }
 
 #[test]
@@ -1233,11 +1228,9 @@ fn hermes_hooks_cover_every_profile_config() {
     assert!(
         inspect_agent_hook_installation(&hermes, &hook_paths, &hermes_paths).current_hook_installed
     );
-    assert!(
-        repair_installed_agent_hook_paths(&paths)
-            .expect("repair again")
-            .is_empty()
-    );
+    assert!(repair_installed_agent_hook_paths(&paths)
+        .expect("repair again")
+        .is_empty());
 
     uninstall_agent_hooks(
         &paths,
@@ -1277,8 +1270,8 @@ fn write_test_executable(path: &Path) {
 
 #[test]
 fn an_install_on_first_run_launcher_is_not_an_installed_cli() {
-    use super::on_demand::{Kind, classify};
-    use super::probing::{CliPresence, cli_presence_with};
+    use super::on_demand::{classify, Kind};
+    use super::probing::{cli_presence_with, CliPresence};
     let temp = tempfile::tempdir().expect("tempdir");
     let home = temp.path();
     // Omarchy's ~/.local/bin/gemini: installs the agent with mise the first time it runs.

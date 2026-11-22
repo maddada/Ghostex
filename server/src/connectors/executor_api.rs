@@ -5,7 +5,7 @@
 //! CDXC:Connectors 2026-10-15 DECISION:
 //! User: Executor is a first-class connector next to Composio, on its v2 beta now, and Ghostex downloads it the first time a workspace turns it on rather than shipping it inside the app.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::server::AppState;

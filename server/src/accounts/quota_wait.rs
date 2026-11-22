@@ -21,7 +21,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::{endpoint, launch, recovery, store};
 use crate::{
@@ -29,9 +29,8 @@ use crate::{
     logging::{GxserverLogInput, LogLevel},
     server::AppState,
     session_chat_notice::{
-        SESSION_CHAT_NOTICE_USAGE_LIMIT, SessionChatTerminalNotice,
-        SessionChatTerminalNoticeAction, SessionChatTerminalNoticeActionKind,
-        parse_notice_reset_duration,
+        parse_notice_reset_duration, SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
+        SessionChatTerminalNoticeActionKind, SESSION_CHAT_NOTICE_USAGE_LIMIT,
     },
     storage::open_gxserver_database,
 };
@@ -360,7 +359,10 @@ pub(crate) fn is_suppressed_notice(
     let Some(record) = current_cached(project_id, session_id) else {
         return false;
     };
-    if !matches!(record["status"].as_str(), Some("dismissed" | "suppressed")) {
+    if !matches!(
+        record["status"].as_str(),
+        Some("dismissed" | "suppressed")
+    ) {
         return false;
     }
     let same_detected = record["detectedAt"]
@@ -497,7 +499,12 @@ pub(crate) fn attach_to_notice(
     }));
     // Include Wait for reset as a standard `restartAgent` action on the notice when blocked, so
     // even older v11.2.1+ phones that ignore `quotaWait` can arm automatic continuation.
-    if mode == "quotaBlocked" && !notice.actions.iter().any(|a| a.id == ACTION_WAIT_FOR_RESET) {
+    if mode == "quotaBlocked"
+        && !notice
+            .actions
+            .iter()
+            .any(|a| a.id == ACTION_WAIT_FOR_RESET)
+    {
         notice.actions.insert(
             0,
             SessionChatTerminalNoticeAction {
@@ -529,9 +536,7 @@ pub(crate) fn blocked_state(session: &Value) -> Option<(String, String)> {
             "Blocked: quota reached (resets in {}). Open to wait for reset, switch model, or dismiss.",
             short_countdown(at - Utc::now())
         ),
-        _ => {
-            "Blocked: quota reached. Open to wait for reset, switch model, or dismiss.".to_string()
-        }
+        _ => "Blocked: quota reached. Open to wait for reset, switch model, or dismiss.".to_string(),
     };
     Some((since, reason))
 }
@@ -590,9 +595,8 @@ pub(crate) fn restore(state: &AppState, repo: &DomainRepository<'_>, session: &V
             let now = Utc::now();
             let lifecycle = session["lifecycleState"].as_str().unwrap_or_default();
             let stale = lifecycle != "running"
-                || parse_rfc3339(record.get("resumeAt")).is_some_and(|at| {
-                    now - at > chrono::Duration::minutes(STALE_WAIT_DROP_MINUTES)
-                });
+                || parse_rfc3339(record.get("resumeAt"))
+                    .is_some_and(|at| now - at > chrono::Duration::minutes(STALE_WAIT_DROP_MINUTES));
             if stale {
                 let _ = save_state(state, repo, session, None);
             } else {

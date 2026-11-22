@@ -10,7 +10,7 @@ use crate::session_chat_follower::{
     session_chat_agent_for_session, session_chat_display_agent_for_session,
 };
 use crate::session_chat_options::{
-    SESSION_CHAT_OPTION_CACHE_TTL, SessionChatOptionAgent, session_chat_option_agent,
+    session_chat_option_agent, SessionChatOptionAgent, SESSION_CHAT_OPTION_CACHE_TTL,
 };
 use crate::storage::open_gxserver_database;
 
@@ -21,7 +21,7 @@ pub(crate) fn record_agent_start(
     session: &serde_json::Value,
     params: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<Option<serde_json::Value>, crate::domain::DomainStateError> {
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
     let agent = params.get("agentName").and_then(Value::as_str);
     if !matches!(agent, Some("codex" | "claude"))
         || !params

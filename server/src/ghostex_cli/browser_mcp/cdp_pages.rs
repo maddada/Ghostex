@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 

@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::fs_ops;
 use super::journal::{Journal, JournalWorktree, Phase};
-use super::path_match::{MovedRoot, split_parts};
+use super::path_match::{split_parts, MovedRoot};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::paths::GxserverPaths;
 
@@ -88,9 +88,7 @@ pub(crate) fn plan(
     if project.get("worktree").is_some_and(|worktree| {
         worktree.is_object() && !worktree.as_object().is_some_and(|map| map.is_empty())
     }) {
-        return Err(refuse(
-            "This project is a worktree. Rename it with Rename Worktree in the sidebar, which moves its folder and branch.",
-        ));
+        return Err(refuse("This project is a worktree. Rename it with Rename Worktree in the sidebar, which moves its folder and branch."));
     }
     if text(&project, "systemKind").is_some() {
         return Err(refuse(
@@ -102,14 +100,10 @@ pub(crate) fn plan(
         .to_string();
     let old = PathBuf::from(&old_path);
     if fs_ops::is_link(&old) {
-        return Err(refuse(format!(
-            "{old_path} is a link to another folder. Move the folder it points to instead, then point the project at it."
-        )));
+        return Err(refuse(format!("{old_path} is a link to another folder. Move the folder it points to instead, then point the project at it.")));
     }
     if !old.is_dir() {
-        return Err(refuse(format!(
-            "{old_path} isn't there any more. Locate the folder first (the project's Locate folder), then move it."
-        )));
+        return Err(refuse(format!("{old_path} isn't there any more. Locate the folder first (the project's Locate folder), then move it.")));
     }
     let new = read_new_path(new_path_raw)?;
     let new_path = new.to_string_lossy().to_string();
@@ -210,9 +204,7 @@ pub(crate) fn plan(
         )));
     }
     if !fs_ops::same_volume(&old, &new_parent) {
-        return Err(refuse(
-            "The new folder is on another drive. Ghostex only moves a folder within one drive; copy it yourself and add the copy as a project instead.",
-        ));
+        return Err(refuse("The new folder is on another drive. Ghostex only moves a folder within one drive; copy it yourself and add the copy as a project instead."));
     }
 
     // Projects the move touches, and who is registered where.
@@ -374,9 +366,7 @@ pub(crate) fn plan(
         _ => false,
     };
     if !same_sync {
-        return Err(refuse(
-            "The folder would move into or out of a cloud-synced folder (iCloud, OneDrive, Dropbox, Google Drive). Move it within the same synced folder, or let the sync app move it.",
-        ));
+        return Err(refuse("The folder would move into or out of a cloud-synced folder (iCloud, OneDrive, Dropbox, Google Drive). Move it within the same synced folder, or let the sync app move it."));
     }
     if old_sync.is_some() {
         match fs_ops::first_placeholder(&old, std::time::Duration::from_secs(15)) {
@@ -410,9 +400,7 @@ pub(crate) fn plan(
         let checkout_path = PathBuf::from(&checkout);
         let dot_git = checkout_path.join(".git");
         if dot_git.is_file() && checkout == old_path {
-            return Err(refuse(
-                "This folder is a git worktree of another checkout. Move it with git worktree move, then point the project at it.",
-            ));
+            return Err(refuse("This folder is a git worktree of another checkout. Move it with git worktree move, then point the project at it."));
         }
         if !dot_git.is_dir() {
             continue;
@@ -428,9 +416,7 @@ pub(crate) fn plan(
                 current = Some(path.to_string());
             } else if line.starts_with("locked") {
                 if let (Some(path), false) = (&current, first) {
-                    return Err(refuse(format!(
-                        "The worktree {path} is locked (git worktree lock). Unlock it with git worktree unlock first."
-                    )));
+                    return Err(refuse(format!("The worktree {path} is locked (git worktree lock). Unlock it with git worktree unlock first.")));
                 }
             } else if line.is_empty() {
                 if let Some(path) = current.take() {

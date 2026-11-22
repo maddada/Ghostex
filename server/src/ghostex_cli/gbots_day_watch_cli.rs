@@ -1,11 +1,11 @@
 //! `ghostex gbots day-watch …`: "keep an eye on my day" (server/src/gbots/day_watch/).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::{
     args::Flags,
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 /// The day-watch verbs' lines in `ghostex gbots --help`.
@@ -56,7 +56,7 @@ pub(crate) fn run_day_watch(rest: &[String], flags: &Flags) -> CliResult<()> {
         other => {
             return Err(CliError::Other(format!(
                 "Unknown day-watch verb {other}: use status, on or off."
-            )));
+            )))
         }
     };
     if let Some(time) = flags.string_value("briefTime") {
@@ -91,9 +91,7 @@ pub(crate) fn run_day_watch(rest: &[String], flags: &Flags) -> CliResult<()> {
                     missing.join(" or ")
                 );
             }
-            println!(
-                "  Briefs and heads-ups land in Ghostex AI's chat. Turn it off with `ghostex gbots day-watch off`."
-            );
+            println!("  Briefs and heads-ups land in Ghostex AI's chat. Turn it off with `ghostex gbots day-watch off`.");
             if let Some(change) = answer["changeId"].as_str() {
                 println!("  Undo: ghostex gbots undo {change}");
             }
@@ -103,9 +101,7 @@ pub(crate) fn run_day_watch(rest: &[String], flags: &Flags) -> CliResult<()> {
                 println!("Nothing keeps an eye on your day.");
             } else {
                 println!("Paused: {bot} no longer briefs you or watches your mail and calendar.");
-                println!(
-                    "  Turn it back on with `ghostex gbots day-watch on`, or remove {bot} with `ghostex gbots remove \"{bot}\"`."
-                );
+                println!("  Turn it back on with `ghostex gbots day-watch on`, or remove {bot} with `ghostex gbots remove \"{bot}\"`.");
             }
         }
         _ => {

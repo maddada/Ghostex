@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use tokio::{process::Command, time::timeout};
 
 use crate::{
@@ -710,7 +710,11 @@ fn read_account_token(text: &str) -> Option<String> {
         .chars()
         .take_while(|character| !character.is_whitespace() && *character != '(')
         .collect();
-    if token.is_empty() { None } else { Some(token) }
+    if token.is_empty() {
+        None
+    } else {
+        Some(token)
+    }
 }
 
 fn percent_encode_path_segment(value: &str) -> String {

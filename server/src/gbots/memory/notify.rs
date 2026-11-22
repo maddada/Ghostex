@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::domain::DomainRepository;
 use crate::gbots::record::Bot;
-use crate::server::{AppState, queue_session_chat_prompt};
+use crate::server::{queue_session_chat_prompt, AppState};
 
 pub(crate) const CHANGED_LINE: &str =
     "Your memory or instructions changed; run `ghostex gbots brief` before you go on.";

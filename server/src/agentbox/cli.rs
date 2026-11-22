@@ -5,7 +5,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::Stdio,
-    sync::{Mutex, OnceLock, mpsc},
+    sync::{mpsc, Mutex, OnceLock},
     thread,
     time::{Duration, Instant},
 };

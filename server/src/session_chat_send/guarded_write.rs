@@ -567,12 +567,8 @@ pub(crate) fn clear_refused_message_when_prompt_closes(
                     &project_id,
                     &session_id,
                     match &cleared {
-                        Ok(()) => {
-                            "The prompt closed; the held message was cleared from the input box until it is sent again."
-                        }
-                        Err(_) => {
-                            "The prompt closed; clearing the held message from the input box did not go through, the next try clears it."
-                        }
+                        Ok(()) => "The prompt closed; the held message was cleared from the input box until it is sent again.",
+                        Err(_) => "The prompt closed; clearing the held message from the input box did not go through, the next try clears it.",
                     },
                     &[],
                 );
@@ -596,9 +592,7 @@ pub(crate) fn clear_refused_message_when_prompt_closes(
                     &session_id,
                     match &sent {
                         Ok(()) => "The prompt closed; the message was typed again and sent.",
-                        Err(error) if error.prompt_waiting() => {
-                            "The prompt closed; the message was typed again, and another prompt held it."
-                        }
+                        Err(error) if error.prompt_waiting() => "The prompt closed; the message was typed again, and another prompt held it.",
                         Err(_) => "The prompt closed; typing the message again did not go through.",
                     },
                     &[],

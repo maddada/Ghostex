@@ -1,4 +1,4 @@
-use super::{Conversation, project_key};
+use super::{project_key, Conversation};
 use crate::{
     bot_projects::{bots_enabled, discover_bot_profiles},
     domain::{DomainRepository, DomainStateError},
@@ -250,7 +250,7 @@ mod tests {
         storage::{initialize_gxserver_storage, open_gxserver_database},
     };
     use rusqlite::Connection;
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
     use std::{fs, path::Path};
 
     /// A WAL-mode Hermes store with one session per `(id, source)`, each opened in `cwd` with the

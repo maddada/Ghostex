@@ -5,11 +5,11 @@ use crate::{
     server::AppState,
     session_chat_notice::SessionChatTerminalNotice,
     session_chat_options::SessionChatOptionDetector,
-    session_chat_queue_runtime::{SessionChatMessageSource, send_session_chat_message_internal},
+    session_chat_queue_runtime::{send_session_chat_message_internal, SessionChatMessageSource},
     storage::open_gxserver_database,
 };
 use chrono::{DateTime, Utc};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},
@@ -624,9 +624,7 @@ fn restore_session(
     {
         let mut recovery = session["runtimeSettings"]["accountRecovery"].clone();
         recovery["status"] = json!("needsAttention");
-        recovery["reason"] = json!(
-            "Ghostex restarted during a recovery attempt. Check the conversation before continuing."
-        );
+        recovery["reason"] = json!("Ghostex restarted during a recovery attempt. Check the conversation before continuing.");
         recovery["updatedAt"] = json!(Utc::now().to_rfc3339());
         save(state, repo, &session, recovery)?;
     } else if session
@@ -1220,17 +1218,15 @@ pub(crate) fn plan_session(
                 );
             }
             recovery["reason"] = json!(reason);
-            recovery["nextAttemptAt"] = json!(
-                reset
-                    .filter(|t| *t > now)
-                    .map(|t| if policy.at_limit == LimitAction::Switch {
-                        t.min(now + chrono::Duration::minutes(2))
-                    } else {
-                        t
-                    })
-                    .unwrap_or(now + backoff(attempts))
-                    .to_rfc3339()
-            );
+            recovery["nextAttemptAt"] = json!(reset
+                .filter(|t| *t > now)
+                .map(|t| if policy.at_limit == LimitAction::Switch {
+                    t.min(now + chrono::Duration::minutes(2))
+                } else {
+                    t
+                })
+                .unwrap_or(now + backoff(attempts))
+                .to_rfc3339());
             // An untracked default login has no trustworthy quota reading. Retry it conservatively rather than inventing an available percentage.
             if current_id.is_some() {
                 // Not the every-account-full card: an account has room, it only needs a newer reading.
@@ -1660,13 +1656,7 @@ pub(super) async fn deliver(state: Arc<AppState>, plan: Plan) {
         .map(|_| ())
     };
     if plan.quota_wait {
-        super::quota_wait::finish_delivery(
-            &state,
-            &plan.project,
-            &plan.session,
-            &plan.claim,
-            result,
-        );
+        super::quota_wait::finish_delivery(&state, &plan.project, &plan.session, &plan.claim, result);
         return;
     }
     let _gate = state.accounts.mutation_gate();

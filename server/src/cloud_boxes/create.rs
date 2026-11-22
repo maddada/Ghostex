@@ -7,10 +7,10 @@ use std::sync::{Arc, OnceLock};
 
 use ghostex_gx_cloud::metadata::BoxMetadata;
 use ghostex_gx_protocol::cloud_box::{
-    BoxBootTicket, CloudBox, CloudBoxBootStep as Step, CloudBoxCreatedBy, CloudBoxDraftRef,
-    CloudBoxSessionRow, CloudBoxState, CloudBoxStepState as StepState,
+    error_codes, BoxBootTicket, CloudBox, CloudBoxBootStep as Step, CloudBoxCreatedBy,
+    CloudBoxDraftRef, CloudBoxSessionRow, CloudBoxState, CloudBoxStepState as StepState,
     CloudProviderConnectionState, CloudProviderId, CloudSnapshot, CreateParams, CreateResult,
-    ProjectCloudBoxSettings, error_codes,
+    ProjectCloudBoxSettings,
 };
 use rand::Rng;
 
@@ -856,10 +856,8 @@ mod tests {
             "{message}"
         );
         let deleting = row("box-del", CloudBoxState::Deleting, true, "P1");
-        assert!(
-            refusal(&[deleting])
-                .unwrap()
-                .contains("Try again once it is done")
-        );
+        assert!(refusal(&[deleting])
+            .unwrap()
+            .contains("Try again once it is done"));
     }
 }

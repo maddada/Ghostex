@@ -18,7 +18,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::paths::GxserverPaths;
 
@@ -52,9 +52,7 @@ pub(crate) fn read_credentials_strictly(
     let unreadable = |detail: String| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!(
-                "{CREDENTIALS_FILE_NAME} can't be read ({detail}); fix it or remove it, and try again"
-            ),
+            format!("{CREDENTIALS_FILE_NAME} can't be read ({detail}); fix it or remove it, and try again"),
         )
     };
     let text = match fs::read_to_string(credentials_path(paths)) {

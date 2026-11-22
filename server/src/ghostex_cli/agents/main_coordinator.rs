@@ -6,13 +6,13 @@
 //! User: the main coordinator "should be default one to contact in cli tool basically when any agent wants to reach out to another project basically or chief of staff wants to send something to be done in a thread in a project on a specific machine. (if there's no main coordinator on a [project] and user asked for main coordinator then create one, otherwise if user requested just some work to be done then it can be a regular thread to be created in that [project] to do this work and this thread gets communicated with by chief of staff or whoever launched it". With no main coordinator the caller picks one of two explicit choices, never a guess from its wording: `--if-none create` starts the project's coordinator (the agent and model `ghostex coordinator create` picks) with the message as its first request; `--if-none session` starts a regular session there with the message as its task, which reports to the caller (a coordinator's thread when the caller is a coordinator, else a session whose message says whom to reply to). Without `--if-none` it stops and names both.
 //! SEE-ALSO: server/src/coordinators/main_coordinator.rs (which coordinator is main).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::arguments::{Arguments, IfNone};
 use super::identity::{self, text};
 use crate::ghostex_cli::{
     args::parse_args,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 /// The project the message is for: `--project-id`, or the project whose folder is `--path` on
@@ -147,7 +147,10 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
             let mut argv = vec!["--task".to_string(), task, "--start".to_string()];
             match &project_id {
                 Some(project_id) => argv.extend(["--project-id".to_string(), project_id.clone()]),
-                None => argv.extend(["--path".to_string(), args.path.clone().unwrap_or_default()]),
+                None => argv.extend([
+                    "--path".to_string(),
+                    args.path.clone().unwrap_or_default(),
+                ]),
             }
             for key in ["computer", "server"] {
                 if let Some(value) = args.flags.string_value(key) {

@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::*;
 use crate::domain::DomainRepository;
@@ -391,22 +391,18 @@ fn resume_and_fork_plans_shape_agent_commands() {
             "codex resume \"12345678-1234-1234-1234-123456789abc\""
         ))
     );
-    assert!(
-        resume
-            .get("fallbackCommand")
-            .and_then(Value::as_str)
-            .is_some_and(|command| command.contains("--title"))
-    );
+    assert!(resume
+        .get("fallbackCommand")
+        .and_then(Value::as_str)
+        .is_some_and(|command| command.contains("--title")));
     let startup_text = resume
         .get("startupText")
         .and_then(Value::as_str)
         .expect("startup text");
     assert!(startup_text.starts_with(' '));
     assert!(startup_text.contains("Restoring session..."));
-    assert!(
-        startup_text
-            .contains("__ghostex_restore_resume_primary || __ghostex_restore_resume_status=$?")
-    );
+    assert!(startup_text
+        .contains("__ghostex_restore_resume_primary || __ghostex_restore_resume_status=$?"));
     assert!(startup_text.contains("Exact resume failed; trying saved fallback resume command."));
     assert!(startup_text.contains("codex resume \"12345678-1234-1234-1234-123456789abc\""));
     let fork = build_agent_fork_plan(&project, &session, &settings);
@@ -555,11 +551,8 @@ fn attach_startup_text_uses_agent_resume_plan_and_settings() {
     assert!(startup_text.starts_with(' '));
     assert!(startup_text.ends_with('\r'));
     assert!(startup_text.contains("Restoring session..."));
-    assert!(
-        startup_text.contains(
-            "printf '> %s\\n\\n' 'codex resume \"12345678-1234-1234-1234-123456789abc\"'"
-        )
-    );
+    assert!(startup_text
+        .contains("printf '> %s\\n\\n' 'codex resume \"12345678-1234-1234-1234-123456789abc\"'"));
     assert!(startup_text.contains("codex resume \"12345678-1234-1234-1234-123456789abc\""));
 }
 
@@ -614,7 +607,7 @@ fn cursor_pins_replace_its_model_and_take_no_effort_flag() {
 
 #[test]
 fn a_coordinator_offered_low_gets_it_in_every_agents_launch_command() {
-    use crate::coordinators::{CoordinatorLaunch, coordinator_create_params};
+    use crate::coordinators::{coordinator_create_params, CoordinatorLaunch};
     use ghostex_gx_chat_core::menus::orchestrator_effort::orchestrator_efforts;
 
     let claude = ["low", "medium", "high", "xhigh", "max", "ultracode"];

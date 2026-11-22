@@ -7,7 +7,7 @@ use std::{
 
 use serde_json::Value;
 #[cfg(test)]
-use serde_json::{Map, json};
+use serde_json::{json, Map};
 #[cfg(test)]
 use tokio::{sync::Mutex, time::sleep};
 
@@ -313,12 +313,10 @@ mod tests {
             preview.get("destinationBlocked").and_then(Value::as_bool),
             Some(true)
         );
-        assert!(
-            preview
-                .get("warning")
-                .and_then(Value::as_str)
-                .is_some_and(|warning| warning.starts_with("A directory already exists at "))
-        );
+        assert!(preview
+            .get("warning")
+            .and_then(Value::as_str)
+            .is_some_and(|warning| warning.starts_with("A directory already exists at ")));
     }
 
     #[test]
@@ -429,13 +427,11 @@ mod tests {
             preview.get("destinationExists").and_then(Value::as_bool),
             Some(true)
         );
-        assert!(
-            preview
-                .get("warning")
-                .and_then(Value::as_str)
-                .unwrap()
-                .contains("already exists")
-        );
+        assert!(preview
+            .get("warning")
+            .and_then(Value::as_str)
+            .unwrap()
+            .contains("already exists"));
     }
 
     #[test]

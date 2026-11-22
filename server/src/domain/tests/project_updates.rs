@@ -6,8 +6,8 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use crate::domain::repository::project::{
-    PLACEMENT_CHANGE_IN_TRANSACTION, PROJECT_CHANGED_DURING_UPDATE, hold_project_placement,
-    pause_project_update,
+    hold_project_placement, pause_project_update, PLACEMENT_CHANGE_IN_TRANSACTION,
+    PROJECT_CHANGED_DURING_UPDATE,
 };
 use serde_json::json;
 

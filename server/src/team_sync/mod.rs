@@ -18,8 +18,8 @@ mod slack_request;
 mod slack_requirements;
 mod work_page;
 
-pub(crate) use cloud_sessions::{TeamCloudSession, record_team_cloud_session};
-pub(crate) use deploy::{DeployOptions, deploy_team_functions};
+pub(crate) use cloud_sessions::{record_team_cloud_session, TeamCloudSession};
+pub(crate) use deploy::{deploy_team_functions, DeployOptions};
 pub(crate) use flow_steps::*;
 pub(crate) use invite_link::site_url;
 pub(crate) use linear_keys::*;

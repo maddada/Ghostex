@@ -5,16 +5,16 @@ use axum::{
     http::{Method, Request, StatusCode},
     response::IntoResponse,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::{
     auth::{bearer_token, hash_device_api_token, is_authorized_headers},
-    connected_computers::{PeerAuthorization, authorize_peer_token},
+    connected_computers::{authorize_peer_token, PeerAuthorization},
     extensions::serve_extension_static,
     protocol::{
-        EndpointDescriptor, ListenerKind, MinimalHealthResponse, Transport, endpoint_for,
-        is_remote_endpoint_allowed, protocol_mismatch_error, rpc_error,
+        endpoint_for, is_remote_endpoint_allowed, protocol_mismatch_error, rpc_error,
+        EndpointDescriptor, ListenerKind, MinimalHealthResponse, Transport,
     },
     security::Principal,
 };
@@ -333,9 +333,7 @@ pub(in crate::server) async fn route_http(
             let this = crate::connected_computers::this_computer_name();
             return crate::connected_computers::peer_refusal(
                 "agentAccessOff",
-                format!(
-                    "{this} has Agent access for this computer turned off. Turn on Agent access for {name} in {this}'s Settings > Remote > Remote machines."
-                ),
+                format!("{this} has Agent access for this computer turned off. Turn on Agent access for {name} in {this}'s Settings > Remote > Remote machines."),
                 request_id,
             );
         }
@@ -440,12 +438,8 @@ pub(in crate::server) async fn route_http(
                     rpc_error(
                         "payloadTooLarge",
                         match size_bytes {
-                            Some(size) => format!(
-                                "Request body is {size} bytes; the limit is {body_limit_bytes} bytes."
-                            ),
-                            None => {
-                                format!("Request body exceeds the {body_limit_bytes} byte limit.")
-                            }
+                            Some(size) => format!("Request body is {size} bytes; the limit is {body_limit_bytes} bytes."),
+                            None => format!("Request body exceeds the {body_limit_bytes} byte limit."),
                         },
                         Some(request_id),
                     ),

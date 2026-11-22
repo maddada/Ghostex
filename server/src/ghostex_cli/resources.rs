@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::{
     actions::send_gxserver_cli_action,

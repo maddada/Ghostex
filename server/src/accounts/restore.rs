@@ -493,11 +493,9 @@ mod tests {
             Plan::SavedLoginSignedOut
         );
         assert!(notice(Plan::NoSavedLogin).unwrap().contains("no copy"));
-        assert!(
-            notice(Plan::SavedLoginSignedOut)
-                .unwrap()
-                .contains("only the saved copy")
-        );
+        assert!(notice(Plan::SavedLoginSignedOut)
+            .unwrap()
+            .contains("only the saved copy"));
         assert_eq!(notice(Plan::Restored), None);
     }
 

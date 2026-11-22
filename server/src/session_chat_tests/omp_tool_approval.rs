@@ -3,24 +3,24 @@
 //! the frame once the call is approved or denied. The card's keys must reach OMP as OMP, though its
 //! transcript reads as Pi's, and only while a screen that takes them is up.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::session_chat_composer::{
-    SessionChatComposerState, detect_session_chat_composer_readiness,
+    detect_session_chat_composer_readiness, SessionChatComposerState,
 };
 use crate::session_chat_follower::{
     omp_agent_for_pi_transcript, session_chat_agent_for_session,
     session_chat_display_agent_for_session,
 };
 use crate::session_chat_notice::{
-    SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED, SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
-    classify_session_chat_terminal_notice,
+    classify_session_chat_terminal_notice, SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED,
+    SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
 };
 use crate::session_chat_omp_blocking::{detect_omp_blocking_screen, detect_omp_permission_picker};
 use crate::session_chat_resume_picker::answer_terminal_key;
 use crate::session_chat_send::{
-    SESSION_CHAT_INTERRUPT, SessionChatSendTarget,
     test_terminal::{self, TestTerminal},
+    SessionChatSendTarget, SESSION_CHAT_INTERRUPT,
 };
 
 const PI: &str = include_str!("fixtures/omp-tool-approval-pi.txt");

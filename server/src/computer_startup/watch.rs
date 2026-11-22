@@ -4,10 +4,10 @@
 use std::{sync::Arc, time::Duration};
 
 use super::{
-    ComputerStartupSettings,
     boot_mark::note_this_boot,
     login_entry,
-    resume_after_restart::{SessionToResume, find_sessions_to_resume, resume_sessions},
+    resume_after_restart::{find_sessions_to_resume, resume_sessions, SessionToResume},
+    ComputerStartupSettings,
 };
 use crate::{paths::GxserverPaths, server::AppState};
 

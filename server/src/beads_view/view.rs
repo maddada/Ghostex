@@ -1,16 +1,16 @@
 //! The two endpoints the Beads view adds: `/api/beadsView` and `/api/beadsGenerateTitle`.
 
 use ghostex_gx_protocol::beads_view::{BeadsViewSnapshot, BeadsWorkspaceState};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::toolchain::require_system_bd;
 use crate::typed_operations::{
-    TypedOperationContext, TypedOperationError, resolve_beads_cwd,
-    resolve_project_operation_context,
+    resolve_beads_cwd, resolve_project_operation_context, TypedOperationContext,
+    TypedOperationError,
 };
 
 use super::cache;
-use super::discovery::{Discovered, discover, forget, last_known};
+use super::discovery::{discover, forget, last_known, Discovered};
 use super::snapshot::{read_snapshot, workspace_less_reply};
 use super::sync::load_saved;
 
@@ -44,7 +44,7 @@ pub(crate) async fn beads_view_snapshot(
             return Ok(workspace_less_reply(
                 BeadsWorkspaceState::NoBd,
                 Some(message),
-            ));
+            ))
         }
     };
     // One 1.5-second budget for the whole poll: discovery and the refresh share it.

@@ -5,12 +5,12 @@
 use std::time::{Duration, Instant};
 
 use crate::ghostex_cli::{
-    args::{Flags, parse_args},
+    args::{parse_args, Flags},
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
-use ghostex_gx_protocol::cloud_box::{CLOUD_BOXES_ROUTE, setting_keys};
-use serde_json::{Map, Value, json};
+use ghostex_gx_protocol::cloud_box::{setting_keys, CLOUD_BOXES_ROUTE};
+use serde_json::{json, Map, Value};
 
 const HELP: &str =
     "Run agent sessions on Cloud Boxes (Instabox, Boat, or the Local Docker provider).
@@ -231,7 +231,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             _ => {
                 return Err(CliError::Other(format!(
                     "ghostex cloud snapshot needs save, default or delete.\n\n{HELP}"
-                )));
+                )))
             }
         },
         "project" => {

@@ -1,17 +1,17 @@
 //! `/api/voice`: the WebSocket every client opens for a voice conversation or a dictation. Binary
 //! frames are 24 kHz mono PCM16 audio both ways; text frames are JSON control and events.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::State;
 use axum::extract::ws::{
-    Message, WebSocket, WebSocketUpgrade, rejection::WebSocketUpgradeRejection,
+    rejection::WebSocketUpgradeRejection, Message, WebSocket, WebSocketUpgrade,
 };
+use axum::extract::State;
 use axum::http::{HeaderMap, Response, StatusCode, Uri};
 use futures_util::{SinkExt as _, StreamExt as _};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
@@ -23,8 +23,8 @@ use super::{announcements, dictation, keys, prompt, registry, tools};
 use crate::auth::{is_authorized_session_client_headers, is_authorized_session_client_token};
 use crate::protocol::{protocol_mismatch_error, rpc_error};
 use crate::server::{
-    AppState, is_expected_protocol_version, json_response, query_value, read_protocol_version,
-    request_id,
+    is_expected_protocol_version, json_response, query_value, read_protocol_version, request_id,
+    AppState,
 };
 
 static NEXT_ATTACH: AtomicU64 = AtomicU64::new(1);

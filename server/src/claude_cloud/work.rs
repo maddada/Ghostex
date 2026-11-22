@@ -5,9 +5,9 @@
 //! CDXC:ClaudeCloud 2026-10-23 DECISION:
 //! User: Work page cloud sessions get "the same cloud row, with the ticket chip". Every cloud session Ghostex starts is a sidebar session; the Work page keeps listing it on the ticket from `work-cloud-sessions.json`, whose records now also name their sidebar session.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::record::{CloudState, RECORD_KEY, normalized_session_url, session_cloud_record};
+use super::record::{normalized_session_url, session_cloud_record, CloudState, RECORD_KEY};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::storage::open_gxserver_database;

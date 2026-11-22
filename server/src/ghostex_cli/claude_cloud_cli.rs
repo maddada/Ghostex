@@ -7,12 +7,12 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use crate::ghostex_cli::{
-    args::{Flags, parse_args},
+    args::{parse_args, Flags},
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
     selector, sessions,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 const HELP: &str =
     "Claude sessions that run in Claude's cloud (Claude Code on the web) and show in the sidebar.

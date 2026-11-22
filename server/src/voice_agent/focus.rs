@@ -16,7 +16,7 @@
 
 use std::collections::HashSet;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::conversation::Announcement;
 use super::sessions::SessionInfo;
@@ -500,10 +500,8 @@ mod tests {
         assert!(briefing.contains("\"state\":\"idle\""));
         let moved = briefing_message(&scope, &json!({}), true);
         assert!(moved.contains("moved this call"));
-        assert!(
-            widened_message(Some("Voice mode"))
-                .contains("all of the user's sessions now instead of only \"Voice mode\"")
-        );
+        assert!(widened_message(Some("Voice mode"))
+            .contains("all of the user's sessions now instead of only \"Voice mode\""));
         assert!(closed_message("Voice mode").contains("\"Voice mode\" was closed"));
     }
 }

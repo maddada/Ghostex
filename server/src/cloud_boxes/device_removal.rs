@@ -20,7 +20,7 @@
 //! SEE-ALSO: server/src/remote_access/paired_devices.rs (`remove_paired_device_using`, the caller),
 //! server/src/cloud_boxes/box_mode/boot.rs (`run_forget_devices`), server/src/tailcat/status.rs.
 
-use ghostex_gx_protocol::cloud_box::{BoxBootTicket, CloudBoxState, CloudProviderId, box_verbs};
+use ghostex_gx_protocol::cloud_box::{box_verbs, BoxBootTicket, CloudBoxState, CloudProviderId};
 
 use super::boot_steps;
 use super::ops::{Ops, Target};

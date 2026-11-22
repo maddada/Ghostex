@@ -89,22 +89,18 @@ fn select_remote_code_server_never_falls_through_to_monaco_or_machine_editor() {
     assert!(selection.command_args[0].contains("code-server"));
     assert_eq!(selection.command_args[1], "-e");
     assert!(selection.command_args[3].ends_with("vscodeSocket.js"));
-    assert!(
-        !selection
-            .command_args
-            .iter()
-            .any(|arg| arg == "--wait" || arg == "--reuse-window")
-    );
+    assert!(!selection
+        .command_args
+        .iter()
+        .any(|arg| arg == "--wait" || arg == "--reuse-window"));
     assert_eq!(
         selection.command_args.last().map(String::as_str),
         Some("/tmp/prompt.md")
     );
-    assert!(
-        !selection
-            .command_args
-            .iter()
-            .any(|arg| arg.contains("GhostexEditor"))
-    );
+    assert!(!selection
+        .command_args
+        .iter()
+        .any(|arg| arg.contains("GhostexEditor")));
     assert!(!selection.command_args.iter().any(|arg| arg == "nvim"));
     assert!(warnings.is_empty());
 }
@@ -386,10 +382,9 @@ fn base36_and_random_ids() {
     assert_eq!(to_base36(36), "10");
     let id = random_base36(6);
     assert_eq!(id.len(), 6);
-    assert!(
-        id.chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-    );
+    assert!(id
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
 }
 
 #[test]

@@ -12,12 +12,12 @@ use std::collections::BTreeMap;
 
 use crate::connected_computers::ConnectedComputer;
 use crate::coordinators::{
-    MessageSender, REMOTE_STALL_CHAT_ROWS, REMOTE_UNDELIVERED_CHECK_EVERY_MS, RemoteStallDue,
-    RemoteStallWatch, RemoteThreadKey, RemoteThreadRecord, RemoteUndelivered, StallNudge,
-    ThreadReport, agent_message, list_remote_threads, prompt_summary,
-    record_remote_thread_progress, record_remote_thread_report, remote_chat_last_row,
-    remote_chat_reading, remote_screen_fingerprint, remote_undelivered_messages, report_body,
-    set_remote_thread_resolved,
+    agent_message, list_remote_threads, prompt_summary, record_remote_thread_progress,
+    record_remote_thread_report, remote_chat_last_row, remote_chat_reading,
+    remote_screen_fingerprint, remote_undelivered_messages, report_body,
+    set_remote_thread_resolved, MessageSender, RemoteStallDue, RemoteStallWatch, RemoteThreadKey,
+    RemoteThreadRecord, RemoteUndelivered, StallNudge, ThreadReport, REMOTE_STALL_CHAT_ROWS,
+    REMOTE_UNDELIVERED_CHECK_EVERY_MS,
 };
 use crate::session_chat_interactive::SessionChatInteractivePrompt;
 

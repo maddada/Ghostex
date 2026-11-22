@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use axum::{
     body::Body,
-    http::{HeaderValue, Response, StatusCode, header},
+    http::{header, HeaderValue, Response, StatusCode},
     response::IntoResponse,
 };
 
@@ -139,9 +139,7 @@ pub(super) fn with_read_only(page: Vec<u8>, note: &str) -> Vec<u8> {
     };
     let script = format!(
         "<script>window.__gxReadOnly=true;{why}document.addEventListener('DOMContentLoaded',function(){{var n=document.createElement('div');n.textContent={};n.style.cssText='position:fixed;top:8px;right:8px;z-index:2147483647;max-width:280px;padding:6px 10px;border-radius:8px;font:12px/1.35 system-ui,sans-serif;background:rgba(236,236,240,.86);color:#1c1c1e;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 1px 6px rgba(0,0,0,.18);pointer-events:none';document.body.appendChild(n);}});</script>",
-        serde_json::Value::from(note)
-            .to_string()
-            .replace('<', "\\u003c")
+        serde_json::Value::from(note).to_string().replace('<', "\\u003c")
     );
     let Ok(html) = String::from_utf8(page) else {
         return Vec::new();

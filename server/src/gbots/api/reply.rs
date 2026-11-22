@@ -2,10 +2,10 @@
 //! (its message id) on its first line, so the reply is read from the chat's own transcript: the
 //! GBot's text after the message that carries the marker, once that turn has ended.
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 
-use crate::coordinators::{ThreadProgress, ThreadState, classify_thread_session};
+use crate::coordinators::{classify_thread_session, ThreadProgress, ThreadState};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::presentation::read_runtime_text;
 use crate::session_chat::{SessionChatBlock, SessionChatRole, SessionChatTailPage};

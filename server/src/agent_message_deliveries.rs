@@ -8,12 +8,12 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Map, Value};
 
-use crate::coordinators::{SessionKey, delivery_needles};
+use crate::coordinators::{delivery_needles, SessionKey};
 use crate::domain::DomainStateError;
-use ghostex_gx_protocol::agent_message_delivery::{SENDS_KEY, delivery_fingerprint};
+use ghostex_gx_protocol::agent_message_delivery::{delivery_fingerprint, SENDS_KEY};
 
 pub const WATCH_AGENT_MESSAGE_DELIVERY_ENDPOINT: &str = "/api/watchAgentMessageDelivery";
 

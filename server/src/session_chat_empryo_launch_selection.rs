@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;

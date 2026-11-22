@@ -1,6 +1,6 @@
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use crate::session_git_status::{SessionGitStatus, set_cached_session_git_status_for_test};
+use crate::session_git_status::{set_cached_session_git_status_for_test, SessionGitStatus};
 
 /// The `gh` login every test seeds, so tests that run at the same time agree on "me".
 pub(super) const VIEWER_LOGIN: &str = "octo-me";

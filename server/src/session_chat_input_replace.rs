@@ -1,14 +1,13 @@
 use std::time::{Duration, Instant};
 
 use super::{
-    AGENT_TUI_CLEAR_INPUT_LINE, AGENT_TUI_CLEAR_LINE_SLACK, AGENT_TUI_CLEAR_MAX_LINES,
-    SESSION_CHAT_CLEAR_INPUT_SETTLE_MS, SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS,
-    SESSION_CHAT_INTERRUPT, SESSION_CHAT_SEND_CANCELLED, SessionChatSendError,
-    SessionChatSendFailure, build_agent_tui_clear_input, capture_session_terminal_text_vt,
-    write_session_chat_payload,
+    build_agent_tui_clear_input, capture_session_terminal_text_vt, write_session_chat_payload,
+    SessionChatSendError, SessionChatSendFailure, AGENT_TUI_CLEAR_INPUT_LINE,
+    AGENT_TUI_CLEAR_LINE_SLACK, AGENT_TUI_CLEAR_MAX_LINES, SESSION_CHAT_CLEAR_INPUT_SETTLE_MS,
+    SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS, SESSION_CHAT_INTERRUPT, SESSION_CHAT_SEND_CANCELLED,
 };
 use crate::session_chat_composer::{
-    SessionChatComposerState, detect_session_chat_composer_readiness, session_chat_composer_input,
+    detect_session_chat_composer_readiness, session_chat_composer_input, SessionChatComposerState,
 };
 
 #[derive(Clone, Copy)]
@@ -365,7 +364,7 @@ pub(crate) async fn handle_replace_session_chat_draft_http(
     body: &serde_json::Value,
 ) -> crate::server::RoutedResponse {
     use crate::{
-        domain::{DomainStateError, read_domain_rpc_params},
+        domain::{read_domain_rpc_params, DomainStateError},
         server::{domain_error_response, routed_json},
     };
     let params = match read_domain_rpc_params(body) {
@@ -401,7 +400,7 @@ pub(crate) async fn handle_replace_session_chat_draft_http(
                     code: "internalError",
                     message: error.to_string(),
                 },
-            );
+            )
         }
     };
     let id = params
@@ -460,7 +459,7 @@ pub(crate) async fn handle_replace_session_chat_draft_http(
                 Some(endpoint_path),
                 axum::http::StatusCode::OK,
                 crate::protocol::rpc_success(request_id, result),
-            );
+            )
         }
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
         Ok(None) => {}

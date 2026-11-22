@@ -10,12 +10,12 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::ghostex_cli::args::{FlagValue, Flags, parse_args};
+use crate::ghostex_cli::args::{parse_args, FlagValue, Flags};
 use crate::ghostex_cli::launchers;
 use crate::ghostex_cli::rpc::{
-    self, CliError, CliResult, call_gxserver_rpc, unsupported_action_error,
+    self, call_gxserver_rpc, unsupported_action_error, CliError, CliResult,
 };
 use crate::logging::read_routine_diagnostic_enabled;
 

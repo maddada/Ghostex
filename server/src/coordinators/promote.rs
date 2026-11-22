@@ -2,12 +2,12 @@
 //! Make Coordinator, `ghostex coordinator promote`).
 
 use rusqlite::{Connection, Transaction, TransactionBehavior};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::endpoint::session_title_of;
 use super::records::{
-    COORDINATOR_GOAL_MAX_CHARS, SessionKey, insert_coordinator, read_coordinator, read_thread,
-    sql_error,
+    insert_coordinator, read_coordinator, read_thread, sql_error, SessionKey,
+    COORDINATOR_GOAL_MAX_CHARS,
 };
 use super::role::coordinator_skill_line;
 use crate::domain::{DomainRepository, DomainStateError};

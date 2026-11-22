@@ -75,9 +75,7 @@ pub fn coordinator_skill_renamed_line() -> String {
         .map(|name| format!("`{name}`"))
         .collect::<Vec<_>>()
         .join(" or ");
-    format!(
-        "Your playbook is this guide, `ghostex coordinator guide`. If your first message named a {old} skill, that skill is retired: follow this guide, and don't look for the skill."
-    )
+    format!("Your playbook is this guide, `ghostex coordinator guide`. If your first message named a {old} skill, that skill is retired: follow this guide, and don't look for the skill.")
 }
 
 /// The session runtime setting that marks an orchestrator as taking its role from the skill
@@ -142,9 +140,7 @@ pub fn coordinator_marked_reply_format(setting: MarkedHandovers) -> String {
         MarkedHandovers::Every => "Every session",
         _ => "Coordinators only",
     };
-    format!(
-        "Reply format: the user's Marked handovers setting is {picked}, so you mark your replies. {COORDINATOR_MARKED_REPLY_FORMAT}"
-    )
+    format!("Reply format: the user's Marked handovers setting is {picked}, so you mark your replies. {COORDINATOR_MARKED_REPLY_FORMAT}")
 }
 
 pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPaths) -> String {
@@ -215,7 +211,7 @@ pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPa
 /// A coordinator created just before the update keeps its first message in the queue until its agent takes it, and that message named `ghostex-orchestrator`, which the first start after the update removes (agent_skills_renamed.rs). A new coordinator gets no "playbook changed" note before its first guide read (playbook.rs `mark_new_coordinator`), so nothing else would tell it the name. gxserver rewrites such lines at startup, before any queue is sent.
 pub fn rename_queued_coordinator_skill_lines(db: &rusqlite::Connection) -> rusqlite::Result<usize> {
     use ghostex_gx_chat_core::composer::skill_invocation::{
-        COORDINATOR_GUIDE_LINE, SKILL_LINE_PREFIX, skill_invocation,
+        skill_invocation, COORDINATOR_GUIDE_LINE, SKILL_LINE_PREFIX,
     };
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let mut changed = 0;
@@ -279,7 +275,7 @@ pub fn rename_queued_coordinator_skill_lines(db: &rusqlite::Connection) -> rusql
 /// finding 3). That module rewrites held messages with this at startup and when Start sends one.
 pub fn with_current_coordinator_line(text: &str) -> Option<String> {
     use ghostex_gx_chat_core::composer::skill_invocation::{
-        COORDINATOR_GUIDE_LINE, SKILL_LINE_PREFIX, skill_invocation,
+        skill_invocation, COORDINATOR_GUIDE_LINE, SKILL_LINE_PREFIX,
     };
     let names = COORDINATOR_SKILL_OLD_NAMES
         .iter()
@@ -358,7 +354,7 @@ pub fn orchestrator_first_message(family: &str, first_request: &str) -> String {
 }
 
 pub use ghostex_gx_chat_core::protocol::{
-    COORDINATOR_AGENT_FAMILIES, coordinator_agent_families_text, coordinator_agent_family_supported,
+    coordinator_agent_families_text, coordinator_agent_family_supported, COORDINATOR_AGENT_FAMILIES,
 };
 
 /// The effort `ghostex orchestrator create` starts an orchestrator on when none is named, for the

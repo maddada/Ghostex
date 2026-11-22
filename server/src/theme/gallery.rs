@@ -4,9 +4,9 @@
 //! Transparent, Solid). Applying one is one `set` of its changes and its background's, so it lands
 //! in the history and `ghostex theme undo` puts back what it replaced.
 
-use ghostex_settings_catalog::Platform;
 use ghostex_settings_catalog::theme_roles::{format_role_value, parse_role_value};
-use serde_json::{Map, Value, json};
+use ghostex_settings_catalog::Platform;
+use serde_json::{json, Map, Value};
 
 use super::look;
 

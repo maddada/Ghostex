@@ -3,7 +3,8 @@
 
 pub(super) const BOT_NAME: &str = "Day Watcher";
 pub(super) const BOT_TITLE: &str = "Keeps an eye on your day";
-pub(super) const BOT_DESCRIPTION: &str = "Reads your Gmail and Google Calendar, briefs you every morning and tells you when a meeting is about to start or an important email comes in. It only reads.";
+pub(super) const BOT_DESCRIPTION: &str =
+    "Reads your Gmail and Google Calendar, briefs you every morning and tells you when a meeting is about to start or an important email comes in. It only reads.";
 pub(super) const BOT_ICON: &str = "eye";
 pub(super) const BOT_COLOR: &str = "gold";
 

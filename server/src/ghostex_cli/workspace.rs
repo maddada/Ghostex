@@ -2,9 +2,9 @@
 //! project into one (crate::workspaces). Workspaces and projects can be named by id or by name;
 //! gxserver resolves both.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::args::{Flags, parse_args};
+use super::args::{parse_args, Flags};
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 
@@ -24,7 +24,9 @@ pub(super) fn workspace_command(args: &[String]) -> CliResult<()> {
             if let Some(kind) = flags.string_value("kind") {
                 let kind = kind.trim().to_ascii_lowercase();
                 if kind != "work" && kind != "personal" {
-                    return Err(CliError::Other("--kind is work or personal.".to_string()));
+                    return Err(CliError::Other(
+                        "--kind is work or personal.".to_string(),
+                    ));
                 }
                 params.insert("kind".to_string(), json!(kind));
             }
@@ -63,10 +65,7 @@ pub(super) fn workspace_command(args: &[String]) -> CliResult<()> {
             call_and_print("/api/moveProjectToWorkspace", params, flags)
         }
         "delete" | "remove" => {
-            let workspace = joined(
-                rest,
-                "Pass the workspace: ghostex workspace delete <workspace>.",
-            )?;
+            let workspace = joined(rest, "Pass the workspace: ghostex workspace delete <workspace>.")?;
             let mut params = Map::new();
             params.insert("workspaceId".to_string(), json!(workspace));
             call_and_print("/api/deleteWorkspace", params, flags)

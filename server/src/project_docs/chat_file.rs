@@ -27,7 +27,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::*;
 
@@ -44,7 +44,8 @@ pub const CHAT_FILE_NOT_TEXT: &str =
     "This file is not plain text, so Files can't show it. Use Open in VS Code for it.";
 pub const CHAT_FILE_PICTURE_TOO_LARGE: &str =
     "This picture is larger than 12 MB, too large to open in Files.";
-pub const CHAT_FILE_NETWORK_PATH: &str = "Files can't open a file on a network share or a device path. Open it on the computer that has it.";
+pub const CHAT_FILE_NETWORK_PATH: &str =
+    "Files can't open a file on a network share or a device path. Open it on the computer that has it.";
 const CHAT_FILE_UNAVAILABLE: &str = "That file is not on the session computer any more.";
 /// The picture kinds Files draws (`DocsMediaKind::Image` on the desktop), by extension.
 const CHAT_PICTURE_EXTENSIONS: &[&str] = &[
@@ -171,7 +172,7 @@ pub fn run_chat_file_action(request: &ChatFileRequest, named: bool) -> Value {
             answer["file"] = file;
         }
         Ok(Served::Bytes(data)) => {
-            use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
+            use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
             answer["dataBase64"] = json!(BASE64_STANDARD.encode(data));
         }
         Err(error) => answer["error"] = json!(error),

@@ -1,6 +1,6 @@
 //! Bring back: what a side chat said, as one message for its main session.
 
-use ghostex_gx_chat_core::composer::side_chat::{SIDE_CHAT_NOTE_OPEN, without_side_chat_note};
+use ghostex_gx_chat_core::composer::side_chat::{without_side_chat_note, SIDE_CHAT_NOTE_OPEN};
 use serde_json::Value;
 
 /// The most a Bring back message carries; the oldest exchanges go first.

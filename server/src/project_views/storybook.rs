@@ -1,6 +1,6 @@
-use super::resolve::{Plan, SetupRequired, discover_packages};
+use super::resolve::{discover_packages, Plan, SetupRequired};
 use crate::platform::shell::shell_quote;
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 

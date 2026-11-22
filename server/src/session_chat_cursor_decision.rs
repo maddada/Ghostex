@@ -13,10 +13,9 @@
 //! SEE-ALSO: server/src/session_chat_send/answer_http.rs (the `terminalChoice` answer), server/src/session_chat_notice/classify.rs.
 
 use crate::session_chat_notice::{
-    SESSION_CHAT_NOTICE_CURSOR_INPUT_BLOCKED, SessionChatTerminalNotice,
-    SessionChatTerminalNoticeAction, SessionChatTerminalNoticeChoice,
-    SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
-    session_chat_terminal_screen_tail,
+    session_chat_terminal_screen_tail, SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
+    SessionChatTerminalNoticeChoice, SessionChatTerminalNoticeSeverity,
+    SessionChatTerminalNoticeSource, SESSION_CHAT_NOTICE_CURSOR_INPUT_BLOCKED,
 };
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
 

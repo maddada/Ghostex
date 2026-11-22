@@ -7,8 +7,8 @@ use serde_json::Value;
 
 use crate::session_chat::*;
 use crate::session_chat_branch::{
-    ActiveBranchScan, BranchVerdict, remember_session_chat_branch_boundary,
-    session_chat_branch_boundary,
+    remember_session_chat_branch_boundary, session_chat_branch_boundary, ActiveBranchScan,
+    BranchVerdict,
 };
 use crate::session_chat_decode_pi::{decode_pi_transcript_entry, decode_pi_turn_lifecycle};
 

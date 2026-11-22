@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 use super::*;
@@ -288,15 +288,11 @@ fn first_prompt_claim_clears_cancelled_metadata_for_repeated_explicit_prompt() {
         .expect("replacement attempt id");
     assert_ne!(replacement_attempt, "cancelled-attempt");
     assert!(Uuid::parse_str(replacement_attempt).is_ok());
-    assert!(
-        runtime
-            .get("gxserverFirstPromptAutoTitleCancelledAt")
-            .is_none()
-    );
-    assert!(
-        runtime
-            .get("gxserverFirstPromptAutoTitleCancelledPrompt")
-            .is_none()
-    );
+    assert!(runtime
+        .get("gxserverFirstPromptAutoTitleCancelledAt")
+        .is_none());
+    assert!(runtime
+        .get("gxserverFirstPromptAutoTitleCancelledPrompt")
+        .is_none());
     assert!(runtime.get("gxserverFirstPromptAutoTitleReason").is_none());
 }

@@ -1,10 +1,10 @@
 //! `ghostex side-chat start|list|bring-back|delete` (crate::side_chats): side chats from the CLI and
 //! the phone. Without `--session` it names the session the command runs in.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::actions::with_resolved_gxserver_session_params;
-use super::args::{Flags, parse_args};
+use super::args::{parse_args, Flags};
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 

@@ -8,4 +8,4 @@ mod journal;
 mod look;
 mod readability;
 
-pub(crate) use endpoint::{THEME_ENDPOINT, handle_theme_http};
+pub(crate) use endpoint::{handle_theme_http, THEME_ENDPOINT};

@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::session_chat::{MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES, SessionChatTranscriptAgent};
+use crate::session_chat::{SessionChatTranscriptAgent, MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -178,13 +178,7 @@ pub(super) fn resolve_fleet_selector(
                 && suffix[selection.index + 1][candidate + 1]
         })
         .collect();
-    anyhow::ensure!(
-        !candidates.is_empty(),
-        "This subagent's launch record is not available yet. Close the popup and try the current row again."
-    );
-    anyhow::ensure!(
-        candidates.len() == 1,
-        "This roster does not uniquely identify the subagent. Open its transcript from the agent's spawn message."
-    );
+    anyhow::ensure!(!candidates.is_empty(), "This subagent's launch record is not available yet. Close the popup and try the current row again.");
+    anyhow::ensure!(candidates.len() == 1, "This roster does not uniquely identify the subagent. Open its transcript from the agent's spawn message.");
     Ok(launches[candidates[0]].id.clone())
 }

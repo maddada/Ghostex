@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::launch::PARENT_KEY;
 use crate::domain::DomainRepository;

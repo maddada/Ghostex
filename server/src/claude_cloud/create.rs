@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::record::{CloudRecord, CloudState, RECORD_KEY};
 use super::{CLAUDE_CLOUD_AGENT_ID, CLAUDE_CLOUD_RUN_LOCATION};

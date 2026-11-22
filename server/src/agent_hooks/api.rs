@@ -1,11 +1,11 @@
 use std::fs;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::{domain::DomainStateError, paths::GxserverPaths};
 
-use super::codex_trust::{CodexHookTrustStatus, codex_hook_trust_status_for_paths};
-use super::config::{HOOK_DEFINITIONS, HookDefinition, HookFormat, HookPaths, hook_format};
+use super::codex_trust::{codex_hook_trust_status_for_paths, CodexHookTrustStatus};
+use super::config::{hook_format, HookDefinition, HookFormat, HookPaths, HOOK_DEFINITIONS};
 use super::foreign_owner::hooks_belong_to_another_ghostex;
 use super::install::{
     antigravity_ghostex_hook_disabled, claude_all_hooks_disabled, inspect_agent_hook_installation,
@@ -14,8 +14,8 @@ use super::install::{
 };
 use super::plugin_sources::command_for_agent;
 use super::probing::{
-    CliPresence, agent_cli_presence, display_path, io_error, now_iso, path_string,
-    push_unique_path, read_file_text,
+    agent_cli_presence, display_path, io_error, now_iso, path_string, push_unique_path,
+    read_file_text, CliPresence,
 };
 use super::resolution::{normalize_agent_ids, provider_hook_paths};
 use super::statusline::{

@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::hex::Failure;
 
@@ -27,7 +27,8 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 /// How often `read` is asked while Superwhisper transcribes.
 const RESULT_POLL: Duration = Duration::from_millis(200);
 
-const NOT_INSTALLED: &str = "Superwhisper isn't installed on this computer. Install it, or pick another engine for Dictate.";
+const NOT_INSTALLED: &str =
+    "Superwhisper isn't installed on this computer. Install it, or pick another engine for Dictate.";
 
 /// Where the user stands with Superwhisper on this computer.
 #[derive(Clone, Debug, PartialEq, Eq)]

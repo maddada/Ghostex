@@ -33,11 +33,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::agent_skills::{
-    CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_AGENT_SKILL_NAMES, RETIRED_GHOSTEX_AGENT_SKILL_NAMES,
-    path_string,
+    path_string, CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_AGENT_SKILL_NAMES,
+    RETIRED_GHOSTEX_AGENT_SKILL_NAMES,
 };
 use crate::paths::GxserverPaths;
 
@@ -330,11 +330,9 @@ mod tests {
             json!({"ghostex-coordinator": "user-invocable-only", "thread-brief": "off"})
         );
         // A second pass changes nothing.
-        assert!(
-            keep_ghostex_skills_manual_outside_ghostex(home.path())
-                .0
-                .is_empty()
-        );
+        assert!(keep_ghostex_skills_manual_outside_ghostex(home.path())
+            .0
+            .is_empty());
     }
 
     #[test]

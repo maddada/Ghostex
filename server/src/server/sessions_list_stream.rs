@@ -9,7 +9,7 @@
 
 use std::time::Duration;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 

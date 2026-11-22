@@ -5,24 +5,24 @@ use std::{
     fs,
     path::Path,
     sync::{
-        Arc,
         atomic::{AtomicI64, Ordering},
+        Arc,
     },
     time::{Duration, Instant},
 };
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::{
     domain::DomainRepository,
     logging::GxserverLogger,
-    paths::{GxserverPaths, get_gxserver_paths},
+    paths::{get_gxserver_paths, GxserverPaths},
     storage::{initialize_gxserver_storage, open_gxserver_database},
 };
 
 use super::{
     expo::ExpoClient,
-    fake_expo::{Captured, FakeExpo, RECEIPTS_PATH, Reply},
+    fake_expo::{Captured, FakeExpo, Reply, RECEIPTS_PATH},
     message::{AgentStartEvent, AlertEvent, AlertKind},
     runtime::{PushClock, PushRuntime, RECEIPT_DELAY_MS, RECEIPT_KEEP_MS},
     store::{PushKinds, PushRegistration, PushRegistrationStore, PushStoreData},
@@ -276,12 +276,10 @@ async fn push_send_finished_alert_carries_only_event_and_names() {
     // Every accepted ticket waits for its receipt in the private store.
     let stored = h.stored();
     assert_eq!(stored.receipts.len(), 4);
-    assert!(
-        stored
-            .receipts
-            .iter()
-            .all(|receipt| receipt.due_at == T0 + RECEIPT_DELAY_MS)
-    );
+    assert!(stored
+        .receipts
+        .iter()
+        .all(|receipt| receipt.due_at == T0 + RECEIPT_DELAY_MS));
     assert_no_token_outside_store(
         h.temp.path(),
         &h.paths.auth_dir.join("push-registrations.json"),
@@ -424,11 +422,9 @@ async fn push_send_start_is_silent_and_does_not_consume_alert_budget() {
     }
     let sends = h.sends();
     assert_eq!(sends.len(), 10);
-    assert!(
-        sends[2..]
-            .iter()
-            .all(|request| message(request)["data"]["kind"] == json!("finished"))
-    );
+    assert!(sends[2..]
+        .iter()
+        .all(|request| message(request)["data"]["kind"] == json!("finished")));
 
     // An alert never gets a second, background-only copy.
     assert_eq!(
@@ -529,11 +525,9 @@ async fn push_send_expiry_never_moves_on_retry() {
             .collect::<Vec<_>>(),
         [0, 1_000, 3_000]
     );
-    assert!(
-        sends
-            .iter()
-            .all(|request| message(request)["data"]["notificationId"] == json!("nf-1"))
-    );
+    assert!(sends
+        .iter()
+        .all(|request| message(request)["data"]["notificationId"] == json!("nf-1")));
     assert_eq!(
         sends
             .iter()
@@ -649,11 +643,10 @@ async fn push_send_receipts_remove_only_current_dead_token() {
     assert_eq!(h.sends().len(), 2);
 
     h.at(RECEIPT_DELAY_MS - 1);
-    assert!(
-        h.requests()
-            .iter()
-            .all(|request| request.path != RECEIPTS_PATH)
-    );
+    assert!(h
+        .requests()
+        .iter()
+        .all(|request| request.path != RECEIPTS_PATH));
 
     // Fifteen minutes on: one receipts request for both tickets. P's token is dead, Q's
     // receipt is not ready yet.

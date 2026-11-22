@@ -472,11 +472,9 @@ mod tests {
             json!({"type": "system", "subtype": "turn_duration", "timestamp": at(3_000)}),
             enqueue("from another session"),
         ]);
-        assert!(
-            cursor
-                .scan(lines.iter().map(String::as_str), true)
-                .is_empty()
-        );
+        assert!(cursor
+            .scan(lines.iter().map(String::as_str), true)
+            .is_empty());
     }
 
     #[test]
@@ -516,11 +514,9 @@ mod tests {
             enqueue(notice),
             queue_op("remove", Some(notice)),
         ]);
-        assert!(
-            cursor
-                .scan(lines.iter().map(String::as_str), true)
-                .is_empty()
-        );
+        assert!(cursor
+            .scan(lines.iter().map(String::as_str), true)
+            .is_empty());
     }
 
     #[test]

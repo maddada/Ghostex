@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::path_match::MovedRoot;
 use crate::domain::DomainStateError;
@@ -92,18 +92,9 @@ pub(crate) fn begin_moving(
             code: "conflict",
             message: format!(
                 "The move of {} to {} hasn't finished and touches this folder. Finish it with ghostex move-project-folder --project-id {} --resume (or --abandon) first.",
-                other
-                    .root
-                    .old_spellings
-                    .first()
-                    .map(String::as_str)
-                    .unwrap_or_default(),
+                other.root.old_spellings.first().map(String::as_str).unwrap_or_default(),
                 other.root.new_path,
-                other
-                    .project_ids
-                    .first()
-                    .map(String::as_str)
-                    .unwrap_or_default(),
+                other.project_ids.first().map(String::as_str).unwrap_or_default(),
             ),
         });
     }

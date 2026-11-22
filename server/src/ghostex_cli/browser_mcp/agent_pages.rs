@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::args::Flags;
 use crate::ghostex_cli::rpc::{self, CliError, CliResult};
@@ -303,14 +303,12 @@ mod tests {
             super::super::browser_open_in_session_project(&default_folder, true, Some("P1"))
                 .is_none()
         );
-        assert!(
-            super::super::browser_open_in_session_project(
-                &json!({ "projectId": "P9" }),
-                false,
-                Some("P1")
-            )
-            .is_none()
-        );
+        assert!(super::super::browser_open_in_session_project(
+            &json!({ "projectId": "P9" }),
+            false,
+            Some("P1")
+        )
+        .is_none());
         assert!(
             super::super::browser_open_in_session_project(&default_folder, false, None).is_none()
         );

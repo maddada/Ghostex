@@ -2,7 +2,7 @@
 //! page must be signed in as, and the usage-limit notice.
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::accounts::model::Provider;
 

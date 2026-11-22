@@ -2,7 +2,7 @@
 //! User: when Ghostex installs its Claude Code hooks, configure Claude Code so it stops deleting conversations after a month.
 //! Claude Code prunes transcripts under `~/.claude/projects` whose last activity is older than `cleanupPeriodDays` (30 by default), and a pruned transcript can neither be reopened in chat nor resumed.
 //! A value the user already set is kept as is, and uninstalling the hooks leaves the key in place because removing it would silently turn the deletion back on.
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// One hundred years: Claude Code has no documented "never" value, so the retention window is pushed past any realistic lifetime of the machine.
 pub(crate) const CLAUDE_TRANSCRIPT_RETENTION_DAYS: u64 = 36_500;

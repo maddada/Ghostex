@@ -1,6 +1,6 @@
 use serde_json::{Map, Value};
 
-use crate::domain::{DomainResult, DomainStateError, parse_object_map};
+use crate::domain::{parse_object_map, DomainResult, DomainStateError};
 
 pub(crate) fn normalize_required_text(value: Option<&Value>, field: &str) -> DomainResult<String> {
     read_optional_text(value).ok_or_else(|| {

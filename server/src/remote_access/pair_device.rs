@@ -2,40 +2,40 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use ghostex_gx_protocol::approval::{
     ApprovalRequester, ApprovalStatus, ApproverKey, ApproverKeyAlgorithm, ApproverPresence,
     SensitiveAction,
 };
 use ghostex_gx_protocol::pairing::{
-    DEVICE_KEY_ALGORITHM, DeviceKey, PairingStatus, device_token_renew_payload,
-    pairing_match_words, pairing_status_payload, pairing_words_input,
+    device_token_renew_payload, pairing_match_words, pairing_status_payload, pairing_words_input,
+    DeviceKey, PairingStatus, DEVICE_KEY_ALGORITHM,
 };
 use rusqlite::Connection;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::auth::{
-    DEVICE_API_TOKEN_TTL, DeviceApiTokens, hash_device_api_token, mint_device_api_token,
+    hash_device_api_token, mint_device_api_token, DeviceApiTokens, DEVICE_API_TOKEN_TTL,
 };
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::paths::GxserverPaths;
 use crate::security::{
-    ActionRequest, ApproverKeys, Principal, SecurityEvent, SecurityState, approver_key_id, now_ms,
+    approver_key_id, now_ms, ActionRequest, ApproverKeys, Principal, SecurityEvent, SecurityState,
 };
 use crate::tailcat::TailcatRuntime;
 
-use super::authorized_keys::{
-    AdministratorApprovalDeclined, ParsedSshPublicKey, parse_ssh_public_key,
-};
 pub use super::authorized_keys::{append_authorized_key, remove_authorized_key};
+use super::authorized_keys::{
+    parse_ssh_public_key, AdministratorApprovalDeclined, ParsedSshPublicKey,
+};
 use super::identity::read_remote_access_identity;
 use super::pairing_code::{
-    PendingPairing, PendingState, RemotePairingRuntime, hash_remote_pairing_secret,
+    hash_remote_pairing_secret, PendingPairing, PendingState, RemotePairingRuntime,
 };
 use super::repository::{
-    PairedDeviceStatus, RemotePairedDeviceRecord, RemotePairingRepository, StoredDeviceKey, now_iso,
+    now_iso, PairedDeviceStatus, RemotePairedDeviceRecord, RemotePairingRepository, StoredDeviceKey,
 };
 
 /*
@@ -360,7 +360,7 @@ pub fn match_words(nonce: &str, device_public_key: &str) -> Vec<String> {
 
 /// Checks a device key's ASN.1 DER P-256 signature (base64) over `payload`.
 pub fn verify_device_signature(public_key_b64: &str, payload: &[u8], signature_b64: &str) -> bool {
-    use ring::signature::{ECDSA_P256_SHA256_ASN1, UnparsedPublicKey};
+    use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_ASN1};
     let (Ok(public_key), Ok(signature)) = (
         STANDARD.decode(public_key_b64),
         STANDARD.decode(signature_b64.trim()),
@@ -429,11 +429,7 @@ fn approval_action(
             format!(
                 "Approve only if that computer shows the same three words: {}. Approving lets it reach this computer through Easy Connect and lets the agents on it start, message and read agents here (a server link), and the two computers keep your synced settings the same (Settings › Sync); it gets no sign-in to this computer. It says it is Ghostex server {}. It stays until you remove it in Settings › Remote.",
                 words.join(" · "),
-                params
-                    .server_link
-                    .as_ref()
-                    .map(|link| link.server_id.as_str())
-                    .unwrap_or_default()
+                params.server_link.as_ref().map(|link| link.server_id.as_str()).unwrap_or_default()
             ),
         ),
         PairingDeviceKind::Computer => (
@@ -1000,13 +996,13 @@ pub fn pairing_status(
             return Ok(PairingStatusAnswer {
                 status: PairingStatus::Approved,
                 approved: Some(answer.clone()),
-            });
+            })
         }
         PendingState::Finalizing => {
             return Ok(PairingStatusAnswer {
                 status: PairingStatus::Pending,
                 approved: None,
-            });
+            })
         }
         PendingState::Waiting => {}
     }
@@ -1114,9 +1110,7 @@ pub fn pairing_status(
                         .and_then(Value::as_str)
                     {
                         let verdict = if tunnel_only {
-                            Err(
-                                "It was approved in a terminal, so the computers were not linked. Approve it in the app or on your phone to link them.",
-                            )
+                            Err("It was approved in a terminal, so the computers were not linked. Approve it in the app or on your phone to link them.")
                         } else {
                             link_verdict
                         };

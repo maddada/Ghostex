@@ -4,13 +4,13 @@
 
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::args::{Flags, parse_args};
+use super::args::{parse_args, Flags};
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 use crate::paths::get_gxserver_paths;
-use crate::team_sync::{DeployOptions, deploy_team_functions, site_url};
+use crate::team_sync::{deploy_team_functions, site_url, DeployOptions};
 
 const PING_WAIT: Duration = Duration::from_secs(20);
 
@@ -29,12 +29,10 @@ pub(super) fn team_command(args: &[String]) -> CliResult<()> {
             params.insert("inviteLink".to_string(), json!(link));
             params.insert(
                 "name".to_string(),
-                json!(
-                    flags
-                        .string_value("name")
-                        .map(str::to_string)
-                        .unwrap_or_else(default_member_name)
-                ),
+                json!(flags
+                    .string_value("name")
+                    .map(str::to_string)
+                    .unwrap_or_else(default_member_name)),
             );
             if let Some(slack_user) = flags.string_value("slackUser") {
                 params.insert("slackUserId".to_string(), json!(slack_user));
@@ -46,8 +44,7 @@ pub(super) fn team_command(args: &[String]) -> CliResult<()> {
         }
         "status" => {
             let mut params = Map::new();
-            if flags.string_value("workspace").is_some()
-                || flags.string_value("workspaceId").is_some()
+            if flags.string_value("workspace").is_some() || flags.string_value("workspaceId").is_some()
             {
                 params = workspace_params(flags)?;
             }

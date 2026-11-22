@@ -8,12 +8,12 @@
 //! SEE-ALSO: server/src/session_chat_queue_runtime/send.rs (adds the notes and records them once delivered), packages/gx-chat-core/src/session/appended_notes.rs (the note texts every chat hides), server/src/coordinators/playbook.rs (`playbook_update_note`, the other note on the same seam).
 
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::records::{SessionKey, now_iso};
+use super::records::{now_iso, SessionKey};
 use crate::session_chat::{SessionChatBlock, SessionChatMessage, SessionChatRole};
 use ghostex_gx_chat_core::session::appended_notes::{
-    CONTEXT_COMPACTED_NOTE, DriftSlip, drift_reminder,
+    drift_reminder, DriftSlip, CONTEXT_COMPACTED_NOTE,
 };
 
 /// At most one drift reminder per this many of the coordinator's turns.

@@ -35,11 +35,11 @@ mod session_bin;
 pub mod session_glue;
 mod session_tree;
 pub(crate) use lost_folder_access::{
+    restart as restart_after_lost_folder_access, start_lost_folder_access_watch,
     ACTION_RESTART as LOST_FOLDER_ACCESS_ACTION_RESTART,
-    NOTICE_KIND as LOST_FOLDER_ACCESS_NOTICE_KIND, restart as restart_after_lost_folder_access,
-    start_lost_folder_access_watch,
+    NOTICE_KIND as LOST_FOLDER_ACCESS_NOTICE_KIND,
 };
-pub(crate) use session_tree::{SessionTree, read_zmx_session_tree};
+pub(crate) use session_tree::{read_zmx_session_tree, SessionTree};
 mod session_host;
 pub(crate) use session_host::{remove_unused_session_hosts, session_daemon_zmx};
 #[cfg(unix)]
@@ -54,7 +54,7 @@ mod zsh_startup;
 pub use endpoint::*;
 pub(crate) use env::*;
 pub(crate) use foreground_job::zmx_session_runs_foreground_command;
-pub(crate) use guarded_send::{ZmxCheckedSend, send_after_screen_check};
+pub(crate) use guarded_send::{send_after_screen_check, ZmxCheckedSend};
 pub(crate) use launch::*;
 pub use probe_cache::*;
 pub(crate) use process_identity::*;

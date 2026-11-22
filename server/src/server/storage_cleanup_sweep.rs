@@ -9,7 +9,7 @@
 
 use super::*;
 
-use crate::storage_cleanup::{CLOSED_SESSION_MAX_IDLE, Tally, expired_closed_sessions};
+use crate::storage_cleanup::{expired_closed_sessions, Tally, CLOSED_SESSION_MAX_IDLE};
 
 /// Let startup work (wake-on-open, transcript scans, clients reconnecting) finish first.
 const STARTUP_DELAY: Duration = Duration::from_secs(3 * 60);

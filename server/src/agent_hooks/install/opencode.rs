@@ -6,7 +6,7 @@
 
 use std::{fs, path::Path};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::domain::DomainStateError;
 

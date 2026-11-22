@@ -1,19 +1,19 @@
 use std::sync::Arc;
 
 use axum::http::StatusCode;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::{
-    domain::{DomainStateError, read_domain_rpc_params},
+    domain::{read_domain_rpc_params, DomainStateError},
     protocol::rpc_success,
-    server::{AppState, RoutedResponse, domain_error_response, routed_json},
+    server::{domain_error_response, routed_json, AppState, RoutedResponse},
 };
 
 use super::{
     serve::VISUAL_PAGE_ROUTE_PREFIX,
     store::{
-        VISUAL_PAGE_MAX_BYTES, VISUAL_PAGE_TITLE_MAX_CHARS, clip_chars, note_awaits_seen,
-        write_page,
+        clip_chars, note_awaits_seen, write_page, VISUAL_PAGE_MAX_BYTES,
+        VISUAL_PAGE_TITLE_MAX_CHARS,
     },
 };
 
@@ -100,7 +100,7 @@ pub(crate) fn handle_publish_visual_page_http(
                     code: "internalError",
                     message: format!("Could not save the page: {error}"),
                 },
-            );
+            )
         }
     };
     routed_json(

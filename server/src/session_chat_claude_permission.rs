@@ -20,7 +20,7 @@
 //!
 //! SEE-ALSO: server/src/session_chat_resume_prompt.rs (the rows and liveness), packages/gx-chat-core/src/questions/permission_card.rs (the card it becomes).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
 

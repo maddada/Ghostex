@@ -17,7 +17,7 @@ use std::time::SystemTime;
 
 use serde_json::Value;
 
-use super::{SessionLinkRef, parse_github_url, parse_linear_url};
+use super::{parse_github_url, parse_linear_url, SessionLinkRef};
 
 /// Transcript rows per page, the detail pager's own cap.
 const PAGE_ROWS: usize = 200;
@@ -460,12 +460,10 @@ mod tests {
         // A project with no GitHub remote is offered nothing from GitHub.
         assert!(suggested(text, &[]).is_empty());
         // Linear tickets keep working as before.
-        assert!(
-            SessionLinkRef::Linear {
-                identifier: "GHX-7".to_string()
-            }
-            .in_repos(&[])
-        );
+        assert!(SessionLinkRef::Linear {
+            identifier: "GHX-7".to_string()
+        }
+        .in_repos(&[]));
     }
 
     fn claude_row(kind: &str, content: Value, extra: Value) -> String {

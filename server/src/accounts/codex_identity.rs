@@ -1,5 +1,5 @@
 use super::model::Provider;
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde_json::Value;
 
 /// CDXC:AgentProviders 2026-10-26 WHY:

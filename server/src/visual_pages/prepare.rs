@@ -1,10 +1,10 @@
 use std::{collections::BTreeMap, fs, ops::Range, path::Path};
 
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 
 use super::{
     builtin::current_block,
-    store::{VISUAL_PAGE_MAX_BYTES, VISUAL_PAGE_TITLE_MAX_CHARS, clip_chars},
+    store::{clip_chars, VISUAL_PAGE_MAX_BYTES, VISUAL_PAGE_TITLE_MAX_CHARS},
 };
 
 const IMAGE_MAX_BYTES: u64 = 10 * 1024 * 1024;

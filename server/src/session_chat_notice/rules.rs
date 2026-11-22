@@ -195,9 +195,7 @@ const CODEX_RULES: &[NoticeRule] = &[
             // ...and when its title lookup found no conversation to resume.
             NoticeSignature {
                 scope: NoticeScope::Exit,
-                parts: &[NoticePart::Text(
-                    "Unable to find restorable Codex session id",
-                )],
+                parts: &[NoticePart::Text("Unable to find restorable Codex session id")],
                 corroborators: &[],
             },
             // CDXC:AgentScreenDetection 2026-11-13 WHY: GitHub #595: a Codex that quits before
@@ -341,9 +339,7 @@ const CODEX_RULES: &[NoticeRule] = &[
             // codex-rs/protocol/src/error.rs spells this one with a typographic apostrophe.
             NoticeSignature {
                 scope: NoticeScope::Banner,
-                parts: &[NoticePart::Text(
-                    "We\u{2019}re currently experiencing high demand",
-                )],
+                parts: &[NoticePart::Text("We\u{2019}re currently experiencing high demand")],
                 corroborators: &[],
             },
             NoticeSignature {
@@ -618,9 +614,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
             },
             NoticeSignature {
                 scope: NoticeScope::Banner,
-                parts: &[NoticePart::Text(
-                    "API Error: Connection closed mid-response",
-                )],
+                parts: &[NoticePart::Text("API Error: Connection closed mid-response")],
                 corroborators: &[],
             },
             NoticeSignature {
@@ -987,8 +981,11 @@ const ANTIGRAVITY_RESOURCE_EXHAUSTED_CORROBORATORS: &[&str] = &[
     "\"code\": 429",
 ];
 
-const ANTIGRAVITY_USAGE_LIMIT_STRICT_CORROBORATORS: &[&str] =
-    &["Error ID:", "upgrade your subscription", "Resets in"];
+const ANTIGRAVITY_USAGE_LIMIT_STRICT_CORROBORATORS: &[&str] = &[
+    "Error ID:",
+    "upgrade your subscription",
+    "Resets in",
+];
 
 const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
     kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,

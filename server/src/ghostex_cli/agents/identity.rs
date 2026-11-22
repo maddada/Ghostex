@@ -4,7 +4,7 @@ use crate::ghostex_cli::{
     rpc::{self, CliError, CliResult},
     sessions,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
 pub(crate) fn text<'a>(session: &'a Value, key: &str) -> &'a str {
@@ -263,12 +263,12 @@ fn live_session_rows(flags: &Flags, only: Option<&[(String, String)]>) -> CliRes
                     .get("sessions")
                     .and_then(Value::as_array)
                     .cloned()
-                    .unwrap_or_default());
+                    .unwrap_or_default())
             }
             Err(error) if Instant::now() >= deadline => {
                 return Err(CliError::Other(format!(
                     "gxserver did not answer, so your own identity for the message header could not be read: {error} It may be restarting; try again in a few seconds."
-                )));
+                )))
             }
             Err(_) => std::thread::sleep(CALLER_LIVE_POLL),
         }
@@ -371,14 +371,8 @@ fn header_value(row: &Value, key: &str) -> String {
 /// SEE-ALSO: packages/gx-chat-core/src/transcript/agent_message.rs parses the block in both positions (and the old dashed one) into the chat's message card; server/src/coordinators/brief.rs `agent_message` writes the same block.
 pub(crate) fn message(sender: &Value, body: &str) -> String {
     let sender = summary(sender);
-    let block = format!(
-        "Message from another agent\nAgent: {}\nSession: {}\nSession ID: {}\nAgent ID: {}\nAgent Session ID: {}\nReply to: {}",
-        header_value(&sender, "agentName"),
-        header_value(&sender, "title"),
-        header_value(&sender, "sessionId"),
-        header_value(&sender, "agentId"),
-        header_value(&sender, "agentSessionId"),
-        header_value(&sender, "globalRef")
-    );
+    let block = format!("Message from another agent\nAgent: {}\nSession: {}\nSession ID: {}\nAgent ID: {}\nAgent Session ID: {}\nReply to: {}",
+        header_value(&sender, "agentName"), header_value(&sender, "title"), header_value(&sender, "sessionId"),
+        header_value(&sender, "agentId"), header_value(&sender, "agentSessionId"), header_value(&sender, "globalRef"));
     crate::coordinators::place_agent_message_block(&block, body)
 }

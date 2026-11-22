@@ -6,7 +6,7 @@
 use std::{fs, io::Write as _, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::one_password;
 use crate::paths::GxserverPaths;

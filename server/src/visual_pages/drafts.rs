@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use axum::{body::Body, http::StatusCode};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::server::{AppState, RoutedResponse};
 
 use super::{
-    answers::{ANSWERS_BODY_MAX_BYTES, reply},
+    answers::{reply, ANSWERS_BODY_MAX_BYTES},
     serve::VISUAL_PAGE_ROUTE_PREFIX,
-    store::{StoreAnswersError, is_page_id, read_record, store_draft},
+    store::{is_page_id, read_record, store_draft, StoreAnswersError},
 };
 
 pub(crate) const VISUAL_PAGE_DRAFT_SUFFIX: &str = "/draft";
@@ -44,7 +44,7 @@ pub(crate) async fn save(state: Arc<AppState>, path: String, body: Body) -> Rout
             return reply(
                 StatusCode::BAD_REQUEST,
                 json!({"ok": false, "error": "Send {\"draft\": …} as JSON."}),
-            );
+            )
         }
     };
     let state_dir = state.paths.root_dir.clone();

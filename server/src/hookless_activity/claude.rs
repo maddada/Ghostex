@@ -10,9 +10,9 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::claude_turns::{CLOCK_SLACK_MS, TurnCursor, TurnMark};
+use super::claude_turns::{TurnCursor, TurnMark, CLOCK_SLACK_MS};
 use super::comparison::ActivityEvent;
 
 pub(crate) const OBSERVABLE_EVENTS: &[&str] = &[
@@ -786,7 +786,7 @@ fn last_turn_entry(path: &Path) -> Option<TurnTail> {
                 return Some(TurnTail::Compacted(trigger));
             }
             Some("assistant") if entry["isApiErrorMessage"] == true => {
-                return Some(TurnTail::Failed);
+                return Some(TurnTail::Failed)
             }
             Some("assistant") => return Some(TurnTail::Other),
             Some("user") => {

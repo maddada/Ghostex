@@ -122,13 +122,11 @@ async fn browse_project_directories_sorts_case_insensitively_and_swallows_permis
         .map(|entry| entry["name"].as_str().unwrap().to_string())
         .collect::<Vec<_>>();
     assert_eq!(names, vec!["apple", "Banana", "cherry", "Zebra"]);
-    assert!(
-        body["result"]["entries"][0]
-            .as_object()
-            .unwrap()
-            .get("sortKey")
-            .is_none()
-    );
+    assert!(body["result"]["entries"][0]
+        .as_object()
+        .unwrap()
+        .get("sortKey")
+        .is_none());
 
     let unreadable = paths.root_dir.join("browse-unreadable");
     fs::create_dir_all(unreadable.join("child")).expect("child");
@@ -195,16 +193,12 @@ async fn discover_source_control_reports_every_provider_with_a_hint() {
         .collect::<Vec<_>>();
     assert_eq!(names, vec!["github", "gitlab", "bitbucket", "azure-devops"]);
     for provider in &providers {
-        assert!(
-            provider["installHint"]
-                .as_str()
-                .is_some_and(|hint| !hint.is_empty())
-        );
-        assert!(
-            provider["label"]
-                .as_str()
-                .is_some_and(|label| !label.is_empty())
-        );
+        assert!(provider["installHint"]
+            .as_str()
+            .is_some_and(|hint| !hint.is_empty()));
+        assert!(provider["label"]
+            .as_str()
+            .is_some_and(|label| !label.is_empty()));
         assert!(provider["auth"]["status"].as_str().is_some());
         assert!(matches!(
             provider["status"].as_str(),
@@ -219,11 +213,9 @@ async fn discover_source_control_reports_every_provider_with_a_hint() {
     }) {
         assert_eq!(provider["status"], json!("unsupported"));
     }
-    assert!(
-        body["result"]["discovery"]["checkedAt"]
-            .as_str()
-            .is_some_and(|value| value.ends_with('Z'))
-    );
+    assert!(body["result"]["discovery"]["checkedAt"]
+        .as_str()
+        .is_some_and(|value| value.ends_with('Z')));
 }
 
 #[tokio::test]

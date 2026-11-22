@@ -9,9 +9,9 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 
 use axum::body::Body;
-use axum::http::{HeaderValue, header};
+use axum::http::{header, HeaderValue};
 use ghostex_gx_chat_core::transcript::output_cut;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::server::{AppState, RoutedResponse};
 

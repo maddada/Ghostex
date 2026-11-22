@@ -14,7 +14,7 @@ use std::{convert::Infallible, sync::Arc};
 
 use crate::{
     auth::bearer_token,
-    connected_computers::{PeerAuthorization, authorize_peer_token, is_peer_allowed},
+    connected_computers::{authorize_peer_token, is_peer_allowed, PeerAuthorization},
     protocol::rpc_error,
 };
 
@@ -47,9 +47,7 @@ pub(super) async fn handle_peer_http_request(
             return Ok(refuse(
                 StatusCode::FORBIDDEN,
                 "agentAccessOff",
-                format!(
-                    "{this} has Agent access for this computer turned off. Turn on Agent access for {name} in {this}'s Settings > Remote > Remote machines."
-                ),
+                format!("{this} has Agent access for this computer turned off. Turn on Agent access for {name} in {this}'s Settings > Remote > Remote machines."),
             ));
         }
         None => {

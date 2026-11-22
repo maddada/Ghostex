@@ -2,12 +2,12 @@
 //! milestone to its ticket's Slack working thread through the team's Convex project; `--final`
 //! also posts the text once in the threads the request came from.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::storage::open_gxserver_database;
-use crate::work_mode::{WorkSourceId, work_targets};
+use crate::work_mode::{work_targets, WorkSourceId};
 use crate::workspaces::{project_workspace_id, read_sidebar_workspaces};
 
 use super::connections::read_team_connection;
@@ -65,12 +65,10 @@ pub(crate) fn post_slack_working_thread(
     args.insert("text".to_string(), json!(text));
     args.insert(
         "final".to_string(),
-        json!(
-            params
-                .get("final")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        ),
+        json!(params
+            .get("final")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)),
     );
     member_call(
         &connection,

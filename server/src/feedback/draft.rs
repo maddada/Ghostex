@@ -2,7 +2,7 @@
 
 use std::sync::OnceLock;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// The relay's limits on the issue text (`LIMITS` in the relay's `src/validate.ts`), counted in
 /// UTF-16 code units like the relay's JavaScript `length`.

@@ -7,8 +7,8 @@ use std::sync::mpsc;
 use std::time::Instant;
 
 use super::cards::{
-    HANDSHAKE, calls, card_read, exact_read, log_lines, pin, plan_of, project_id, project_in,
-    release, store_values, token_of,
+    calls, card_read, exact_read, log_lines, pin, plan_of, project_id, project_in, release,
+    store_values, token_of, HANDSHAKE,
 };
 use super::published::command_source;
 use super::*;
@@ -249,11 +249,9 @@ fn a_token_the_details_echo_is_masked() {
     let ticket = open(&store.paths, &project, &workspace_id, "detail-masked").expect("details");
     let token = token_of("detail-masked");
     assert!(!ticket.to_string().contains(&token), "{ticket}");
-    assert!(
-        ticket["description"]
-            .as_str()
-            .is_some_and(|description| description.starts_with("Use "))
-    );
+    assert!(ticket["description"]
+        .as_str()
+        .is_some_and(|description| description.starts_with("Use ")));
 }
 
 /// Details the command answers for another ticket than the one asked for are no answer, and

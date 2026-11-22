@@ -24,8 +24,8 @@ use crate::domain::DomainRepository;
 use crate::server::AppState;
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
 use crate::session_chat_send::{
-    SESSION_CHAT_INTERRUPT, SessionChatSendError, SessionChatSendFailure, SessionChatSendStep,
     capture_session_terminal_text_vt, execute_session_chat_send, write_session_chat_payload,
+    SessionChatSendError, SessionChatSendFailure, SessionChatSendStep, SESSION_CHAT_INTERRUPT,
 };
 
 /// What Claude writes before " drafted: " for each report type (`$do` in its source; "Feedback"

@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use serde_json::json;
 
 use crate::{
-    domain::{DomainStateError, read_project_id},
+    domain::{read_project_id, DomainStateError},
     protocol::rpc_success,
 };
 
@@ -494,7 +494,7 @@ pub(super) async fn route_projects_http(
                 body_json,
                 token_extension_id,
                 caller,
-            });
+            })
         }
     })
 }

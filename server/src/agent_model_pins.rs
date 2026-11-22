@@ -12,7 +12,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::session_chat_options::{
     SessionChatDetectedChoice, SessionChatOptionEvidence, SessionChatTerminalDetection,

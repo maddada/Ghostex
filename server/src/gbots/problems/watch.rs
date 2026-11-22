@@ -15,8 +15,8 @@ use rusqlite::Connection;
 use serde_json::Value;
 
 use super::store::{
-    COULD_NOT_START, FAILED, NEEDS_YOU, Problem, STALLED, insert_problem, list_problems,
-    live_problem_for_chat, new_problem, save_problem,
+    insert_problem, list_problems, live_problem_for_chat, new_problem, save_problem, Problem,
+    COULD_NOT_START, FAILED, NEEDS_YOU, STALLED,
 };
 use crate::coordinators::{self, SessionKey, StallWatch, ThreadProgress, ThreadState};
 use crate::domain::DomainRepository;
@@ -24,8 +24,9 @@ use crate::gbots::session::chat_of;
 use crate::presentation::session_attributes::effective_lifecycle_state;
 use crate::server::AppState;
 use crate::session_chat_notice::{
-    SESSION_CHAT_NOTICE_ACTION_INSTALL_AGENT, SESSION_CHAT_NOTICE_AGENT_EXITED,
-    SESSION_CHAT_NOTICE_LOGIN_EXPIRED, SESSION_CHAT_NOTICE_USAGE_LIMIT, SessionChatTerminalNotice,
+    SessionChatTerminalNotice, SESSION_CHAT_NOTICE_ACTION_INSTALL_AGENT,
+    SESSION_CHAT_NOTICE_AGENT_EXITED, SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
+    SESSION_CHAT_NOTICE_USAGE_LIMIT,
 };
 use crate::storage::open_gxserver_database;
 
@@ -148,9 +149,7 @@ pub(super) fn start_trouble(notice: &SessionChatTerminalNotice) -> Option<(Strin
     let title = notice.title.trim();
     if notice.missing_login() {
         return Some((
-            format!(
-                "Its agent has no saved login on this computer, so it needs the user to sign in ({title})."
-            ),
+            format!("Its agent has no saved login on this computer, so it needs the user to sign in ({title})."),
             true,
         ));
     }

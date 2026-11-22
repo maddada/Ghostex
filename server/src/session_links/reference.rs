@@ -2,7 +2,7 @@
 //! workspace's ticket command, named by a key that stays the same whichever way the link was
 //! written (`#318` from the session's repo, a full URL, `ghx-142`).
 
-use crate::work_mode::{CommandSourceId, WorkSourceId, work_source};
+use crate::work_mode::{work_source, CommandSourceId, WorkSourceId};
 
 /// The kinds a session can be linked to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

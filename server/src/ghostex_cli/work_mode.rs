@@ -4,7 +4,7 @@
 
 use std::io::{BufRead, IsTerminal, Write};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::actions::with_resolved_gxserver_session_params;
 use super::args::parse_args;
@@ -56,10 +56,7 @@ pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
                 // `start --cloud SPX-1245`: the parser gave the ticket to the flag.
                 .or_else(|| flags.string_value("cloud"))
                 .ok_or_else(|| {
-                    CliError::Other(
-                        "Pass the ticket: ghostex issues start SPX-1245 (or #218, or --pr 412)."
-                            .to_string(),
-                    )
+                    CliError::Other("Pass the ticket: ghostex issues start SPX-1245 (or #218, or --pr 412).".to_string())
                 })?;
             let ticket = if flags.contains("pr") && !ticket.contains("/pull/") {
                 format!("pr:{}", ticket.trim_start_matches('#'))
@@ -349,7 +346,7 @@ fn answer_cleanup(rest: &[String], flags: &super::args::Flags) -> CliResult<()> 
         _ => {
             return Err(CliError::Other(
                 "The answer is clean-up or keep.".to_string(),
-            ));
+            ))
         }
     };
     let mut payload = Map::new();
@@ -599,8 +596,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        CREATE_WORK_TICKET_TIMEOUT_MS, command_source, created_ticket_id, linear_flag_refusal,
-        set_tracker_params, start_ticket_params, ticket_links_param,
+        command_source, created_ticket_id, linear_flag_refusal, set_tracker_params,
+        start_ticket_params, ticket_links_param, CREATE_WORK_TICKET_TIMEOUT_MS,
     };
 
     #[test]
@@ -624,10 +621,8 @@ mod tests {
             "detail": null,
             "mayHaveBeenCreated": true,
         });
-        assert!(
-            created_ticket_id(&timed_out)
-                .is_err_and(|error| error.to_string().contains("may have been created"))
-        );
+        assert!(created_ticket_id(&timed_out)
+            .is_err_and(|error| error.to_string().contains("may have been created")));
         assert_eq!(
             created_ticket_id(&json!({ "source": "fixture", "id": "ACM-41" })).unwrap(),
             "ACM-41"

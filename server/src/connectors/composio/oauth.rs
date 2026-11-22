@@ -3,14 +3,14 @@
 //! registration, a PKCE S256 authorization URL, the code exchange and refresh-token renewal.
 //! Storage and the order of the steps live in `account.rs`.
 
-use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine as _;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use super::http::{HttpError, agent, read_json, send};
+use super::http::{agent, read_json, send, HttpError};
 
 /// The MCP protocol version the SDK sends on discovery requests (`LATEST_PROTOCOL_VERSION`).
 pub(crate) const MCP_PROTOCOL_VERSION: &str = "2025-11-25";
@@ -132,7 +132,7 @@ impl OAuthError {
             });
             match code.as_deref() {
                 Some("invalid_client" | "unauthorized_client") => {
-                    return OAuthError::InvalidClient(error.message());
+                    return OAuthError::InvalidClient(error.message())
                 }
                 Some("invalid_grant") => return OAuthError::InvalidGrant(error.message()),
                 _ => {}
@@ -268,20 +268,20 @@ fn authorization_server_metadata(authorization_server_url: &str) -> Result<Optio
             Ok(response) => {
                 return read_json(response)
                     .map(Some)
-                    .map_err(|error| error.message());
+                    .map_err(|error| error.message())
             }
             Err(error)
                 if error
                     .status()
                     .is_some_and(|status| (400..500).contains(&status)) =>
             {
-                continue;
+                continue
             }
             Err(error) => {
                 return Err(format!(
                     "Couldn't read Composio's sign-in settings: {}",
                     error.message()
-                ));
+                ))
             }
         }
     }

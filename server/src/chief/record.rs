@@ -9,7 +9,7 @@ use std::sync::{Mutex, OnceLock};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use crate::coordinators::{SessionKey, now_iso};
+use crate::coordinators::{now_iso, SessionKey};
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 

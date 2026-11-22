@@ -4,14 +4,14 @@
 
 use std::time::{Duration, SystemTime};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::{
     capture::surface_opened_properties,
     client_events::surface_opened_details,
     extensions::{self, EnabledExtensions, ExtensionRef},
-    heartbeat::{HeartbeatSnapshot, heartbeat_properties},
-    taxonomy::{self, EVENT_HEARTBEAT, EVENT_SURFACE_OPENED, PropertyValue},
+    heartbeat::{heartbeat_properties, HeartbeatSnapshot},
+    taxonomy::{self, PropertyValue, EVENT_HEARTBEAT, EVENT_SURFACE_OPENED},
 };
 
 /// An id published by the official Store for these tests. The Store set is add-only and shared

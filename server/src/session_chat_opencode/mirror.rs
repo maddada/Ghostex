@@ -1,6 +1,6 @@
-use super::{Client, decode_messages, error, safe_id};
+use super::{decode_messages, error, safe_id, Client};
 use crate::{domain::DomainStateError, session_chat::*, session_chat_options::*};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     fs,
@@ -200,11 +200,11 @@ pub(crate) fn detect(session: &Value) -> SessionChatTerminalDetection {
                 attempted: true,
                 captured: true,
                 ..Default::default()
-            });
+            })
         }
         // The first send gives it a conversation (conversation.rs) when no terminal runs OpenCode.
         Err(_) if !terminal_running(session) => {
-            return problem(session).unwrap_or_else(awaiting_first_message);
+            return problem(session).unwrap_or_else(awaiting_first_message)
         }
         Err(e) => return problem(session).unwrap_or_else(|| unavailable(&e.message)),
     };
@@ -217,7 +217,7 @@ pub(crate) fn detect(session: &Value) -> SessionChatTerminalDetection {
                 } else {
                     unavailable(&e.message)
                 }
-            });
+            })
         }
     };
     let choice = |value: &str, label: &str| SessionChatDetectedChoice {

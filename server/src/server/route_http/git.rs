@@ -61,7 +61,7 @@ pub(super) async fn route_git_http(
                 body_json,
                 token_extension_id,
                 caller,
-            });
+            })
         }
     })
 }

@@ -1,7 +1,7 @@
 //! A short-lived Aqua LaunchAgent checks whether a gxserver that stayed alive through logout is
 //! still in the security session of the current desktop login.
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use std::{
     env, fs,
     path::PathBuf,

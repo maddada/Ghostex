@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 
 use crate::domain::{DomainRepository, DomainStateError};

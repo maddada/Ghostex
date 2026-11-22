@@ -11,10 +11,10 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock, mpsc};
+use std::sync::{mpsc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 /// How often an open panel's automatic ask may start a probe.
 const AUTO_INTERVAL: Duration = Duration::from_secs(10 * 60);
@@ -386,7 +386,7 @@ fn run_probe(target: &ProbeTarget) -> Result<(Value, Option<Value>), String> {
                     return Err(format!(
                         "Claude Code took longer than {} seconds to answer.",
                         PROBE_TIMEOUT.as_secs()
-                    ));
+                    ))
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             };

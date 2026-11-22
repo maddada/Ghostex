@@ -3,9 +3,9 @@
 //! already the report.
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::records::{ThreadRecord, read_thread};
+use super::records::{read_thread, ThreadRecord};
 use crate::domain::DomainStateError;
 
 /// The answer a thread gets when it tries to message or type into its own orchestrator.

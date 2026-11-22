@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet, hash_map::DefaultHasher},
+    collections::{hash_map::DefaultHasher, BTreeMap, HashMap, HashSet},
     fs::{self, File},
     hash::{Hash, Hasher},
     io::{self, BufRead, BufReader, Seek, SeekFrom},
@@ -9,7 +9,7 @@ use std::{
 };
 
 use chrono::{Local, NaiveDate};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::{
     helpers,

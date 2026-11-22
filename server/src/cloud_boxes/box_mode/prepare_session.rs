@@ -6,10 +6,10 @@
 use std::path::{Path, PathBuf};
 
 use ghostex_gx_protocol::cloud_box::{
-    BoxPrepareSessionRequest, BoxPrepareSessionResult, CLOUD_BOX_RUNTIME_SETTINGS_KEY,
-    SessionCloudBoxRuntime, box_files,
+    box_files, BoxPrepareSessionRequest, BoxPrepareSessionResult, SessionCloudBoxRuntime,
+    CLOUD_BOX_RUNTIME_SETTINGS_KEY,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::git::{default_branch, folder_name, git, has_origin, is_repository};
 use super::{logins, state};
@@ -579,7 +579,7 @@ mod tests {
     fn the_box_session_runs_and_shows_the_requested_model() {
         use crate::domain::DomainRepository;
         use crate::session_chat_options::{
-            SessionChatOptionAgent, read_session_chat_launch_selection,
+            read_session_chat_launch_selection, SessionChatOptionAgent,
         };
         let home = tempfile::tempdir().unwrap();
         let paths = crate::paths::get_gxserver_paths(Some(home.path().join("ghostex")));

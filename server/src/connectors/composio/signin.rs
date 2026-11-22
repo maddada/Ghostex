@@ -3,7 +3,7 @@
 
 use crate::paths::GxserverPaths;
 
-use super::account::{self, Connected, with_live};
+use super::account::{self, with_live, Connected};
 use super::oauth_route::redirect_uri;
 use super::tools;
 

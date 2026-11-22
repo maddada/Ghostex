@@ -11,7 +11,7 @@ use crate::{
     storage::open_gxserver_database,
 };
 use chrono::Utc;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::time::Duration;
 
 const DISABLED_REASON: &str = "Its organization disabled Claude subscription access.";
@@ -258,14 +258,7 @@ pub(crate) fn recover(
         })
     };
     let Some(target) = replacement(&registry, snapshot, &session, current.as_deref()) else {
-        super::recovery::save(
-            state,
-            repo,
-            &session,
-            attention(
-                "This account's organization disabled Claude subscription access, and no other account set to Automatic has usage left. Switch this session's account to continue.",
-            ),
-        )?;
+        super::recovery::save(state, repo, &session, attention("This account's organization disabled Claude subscription access, and no other account set to Automatic has usage left. Switch this session's account to continue."))?;
         return Ok(true);
     };
     match endpoint::select(

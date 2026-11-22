@@ -66,7 +66,7 @@ impl RelayClient {
             Ok(response) => response,
             Err(ureq::Error::Timeout(_)) => return failed("timeout", true),
             Err(error) if crate::http_agent::never_connected(&error) => {
-                return failed("connectFailed", true);
+                return failed("connectFailed", true)
             }
             Err(_) => return failed("transport", true),
         };

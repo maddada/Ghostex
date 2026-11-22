@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value};
 
-use super::comparison::{ActivityEvent, Side, record};
+use super::comparison::{record, ActivityEvent, Side};
 use crate::server::AppState;
 
 /// Hook params the activity mapping reads, copied so both sides map through the same rules.

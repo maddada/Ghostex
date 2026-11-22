@@ -15,10 +15,10 @@
 //! SEE-ALSO: server/src/accounts/exit.rs (the switch's exit loop), server/src/accounts/restart.rs
 //! (`plan`, the check before anything is stopped), process_table_macos.rs.
 
-use super::ZmxProcessIdentity;
 use super::process_identity::{
-    ProcessRow, group_processes_by_parent_pid, resolve_process_tree_agent_identity,
+    group_processes_by_parent_pid, resolve_process_tree_agent_identity, ProcessRow,
 };
+use super::ZmxProcessIdentity;
 
 /// Bounds the walk: a session tree wider or deeper than this is not one the switch can use.
 #[cfg(not(target_os = "macos"))]

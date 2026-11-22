@@ -30,12 +30,12 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use ghostex_gx_chat_core::transcript::message_numbers::{
-    QuotedMessage, is_own_prompt, message_ref, parse_message_ref, preview, quote_prefix,
-    quote_totals, referenced_messages, shown_text, with_quotes,
+    is_own_prompt, message_ref, parse_message_ref, preview, quote_prefix, quote_totals,
+    referenced_messages, shown_text, with_quotes, QuotedMessage,
 };
 use ghostex_gx_protocol::ChatMessage;
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Map, Value};
 
 use crate::paths::GxserverPaths;
 use crate::storage::open_gxserver_database;
@@ -775,7 +775,7 @@ pub(crate) async fn handle_chat_messages_http(
     let params = match crate::domain::read_domain_rpc_params(&body) {
         Ok(params) => params,
         Err(error) => {
-            return crate::server::domain_error_response(endpoint_path, request_id, error);
+            return crate::server::domain_error_response(endpoint_path, request_id, error)
         }
     };
     let answer = tokio::task::spawn_blocking(move || {

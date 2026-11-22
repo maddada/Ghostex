@@ -3,8 +3,8 @@
 use ghostex_gx_protocol::approval::{ApprovalRequest, ApprovalRequester};
 
 use super::{
-    Capability, Principal, SecurityEvent, SecurityState,
     approvals::{ActionRequest, ApprovalError},
+    Capability, Principal, SecurityEvent, SecurityState,
 };
 
 /// What the gate decided.

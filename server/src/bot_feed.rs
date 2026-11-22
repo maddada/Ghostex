@@ -19,10 +19,10 @@ use std::fs;
 use std::path::Path;
 
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::agents::helpers::read_text_value;
-use crate::bot_projects::{BotProfile, PublishedBotFacts, bot_profile_home, discover_bot_profiles};
+use crate::bot_projects::{bot_profile_home, discover_bot_profiles, BotProfile, PublishedBotFacts};
 use crate::paths::GxserverPaths;
 use crate::session_chat_hermes::is_safe_hermes_session_id;
 
@@ -356,9 +356,7 @@ mod tests {
     }
 
     fn script_run(run_time: &str, tail: &str) -> String {
-        format!(
-            "# Cron Job: Quota watchdog\n\n**Job ID:** ccc333\n**Run Time:** {run_time}\n**Mode:** no_agent (script)\n{tail}"
-        )
+        format!("# Cron Job: Quota watchdog\n\n**Job ID:** ccc333\n**Run Time:** {run_time}\n**Mode:** no_agent (script)\n{tail}")
     }
 
     /// A Hermes home with a default profile, Harry with three jobs, and Dobby with no cron folder.

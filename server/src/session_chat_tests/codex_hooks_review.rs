@@ -3,12 +3,12 @@
 //! an answer rechecks. The reporter's card showed this dialog's exact text and refused every pick
 //! with "Codex's dialog changed".
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::session_chat_codex_dialog::{answer_codex_dialog, detect_codex_dialog};
 use crate::session_chat_send::{
-    SessionChatSendTarget,
     test_terminal::{self, TestTerminal},
+    SessionChatSendTarget,
 };
 
 const VT: &str = include_str!("fixtures/codex-hooks-review.vt");
@@ -65,9 +65,7 @@ fn the_card_shows_codex_hooks_review_as_the_reporter_saw_it() {
     assert_eq!(notice.title, "Hooks need review");
     assert_eq!(
         notice.detail.as_deref(),
-        Some(
-            "2 hooks are new or changed.\n  Hooks can run outside the sandbox after you trust them."
-        )
+        Some("2 hooks are new or changed.\n  Hooks can run outside the sandbox after you trust them.")
     );
     let choices: Vec<(&str, bool)> = notice
         .choices

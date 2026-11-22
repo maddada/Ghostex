@@ -1,6 +1,6 @@
 use crate::platform::shell::shell_quote;
-use anyhow::{Context, Result, bail};
-use serde_json::{Value, json};
+use anyhow::{bail, Context, Result};
+use serde_json::{json, Value};
 use std::{
     collections::HashSet,
     fs,
@@ -77,9 +77,7 @@ pub(super) fn resolve(params: &Value) -> Result<Plan> {
                     let remote = if override_url.is_empty() {
                         let origin = text(params, "repositoryOriginUrl");
                         if origin.is_empty() {
-                            bail!(
-                                "This project's GitHub repository is not available yet. Set a repository URL in Projects settings if it has no origin remote."
-                            );
+                            bail!("This project's GitHub repository is not available yet. Set a repository URL in Projects settings if it has no origin remote.");
                         }
                         origin.to_string()
                     } else {
@@ -144,14 +142,7 @@ pub(super) fn resolve(params: &Value) -> Result<Plan> {
                 if plan.command.is_empty() && text(source, "discovery") == "storybook" {
                     let candidates = discover_storybook(&plan.cwd)?;
                     if candidates.len() != 1 {
-                        let message = format!(
-                            "Found {} Storybook scripts. Set a command and package directory in Projects settings.{}",
-                            candidates.len(),
-                            candidates
-                                .iter()
-                                .map(|c| format!("\n{}: {}", c.0.display(), c.1))
-                                .collect::<String>()
-                        );
+                        let message = format!("Found {} Storybook scripts. Set a command and package directory in Projects settings.{}", candidates.len(), candidates.iter().map(|c| format!("\n{}: {}", c.0.display(), c.1)).collect::<String>());
                         if candidates.len() > 1 {
                             return Err(SetupRequired(message).into());
                         }
@@ -282,9 +273,7 @@ pub(super) fn discover_packages(
     let mut found = Vec::new();
     while let Some(dir) = directories.pop() {
         if seen.len() >= 4096 {
-            bail!(
-                "Workspace discovery limit reached. Select a package directory in Projects settings."
-            );
+            bail!("Workspace discovery limit reached. Select a package directory in Projects settings.");
         }
         if !seen.insert(dir.clone()) {
             continue;

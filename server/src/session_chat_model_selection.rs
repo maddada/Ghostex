@@ -6,9 +6,9 @@
 //! User: effort, Plan mode, Fast mode and Claude permissions are always changeable from chat too; attempt immediately and retain the desired state for retry if delivery cannot succeed.
 
 use crate::{domain::DomainStateError, server::AppState, storage::open_gxserver_database};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::{
     collections::HashMap,
     future::Future,
@@ -791,9 +791,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
             // Claude refused the name: its other form once, then a final failure (never the same
             // name again).
             let result = match result {
-                Err(error)
-                    if error.code == crate::session_chat_codex_picker::MODEL_NOT_FOUND_CODE =>
-                {
+                Err(error) if error.code == crate::session_chat_codex_picker::MODEL_NOT_FOUND_CODE => {
                     match next_model_form(&pending.id, &pending.model) {
                         Some(next) => {
                             if let Ok(db) = open_gxserver_database(&state.paths) {

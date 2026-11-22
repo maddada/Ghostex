@@ -6,7 +6,7 @@
 //! Added to the command a launch or resume runs, never to the saved base command, only while Connectors is on and only for the tools the workspace signed in to, so a sign-in or sign-out reaches each session on its next start or resume. They go to the agent rather than the session's shell, whose environment comes from the session daemon's launch scripts; the user's own commands in that terminal keep their usual sign-in. A command that already names its own `--settings` is left alone, since Claude keeps only the last one.
 //! SEE-ALSO: server/src/agents/launch_plan.rs (`create_agent_session_params_for_project`), server/src/agents/resume_plan.rs (`to_agent_resume_input`).
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::agents::quote_shell_arg;
 use crate::paths::get_gxserver_paths;

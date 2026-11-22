@@ -8,7 +8,7 @@
 //! WHY: the size goes as `env` in the `--settings` JSON, not into the session's environment: Claude copies that `env` into its process environment at start, reads `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` from it each time idle compaction arms, and lists it among the variables settings may set (checked on Claude Code 2.1.325 with `claude -p --settings '{"env":{…}}'`, which printed the value from a shell command). Claude keeps only the last `--settings`, so these keys join the one the Connectors, Bypass and home-folder steps write (`with_claude_settings`).
 //! SEE-ALSO: packages/settings-catalog/src/data/defaults.rs (the three keys), apps/desktop/src/app/window/settings_modal/tabs/agents/claude_context.rs (the rows), server/src/session_chat_options/selection_sources.rs (`idleCompactAt` for the context panel's Cache card), server/src/agents/launch_plan.rs and resume_plan.rs (where it is applied).
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use ghostex_settings_catalog::J;
 
@@ -217,8 +217,7 @@ pub(crate) fn session_waiting_for_idle_compaction(
     else {
         return false;
     };
-    let hook_state_directory =
-        crate::session_chat_options::session_chat_hook_state_directory(paths);
+    let hook_state_directory = crate::session_chat_options::session_chat_hook_state_directory(paths);
     let Some((selection, _)) = crate::session_chat_options::read_claude_statusline_reading(
         &hook_state_directory,
         agent_session_id,

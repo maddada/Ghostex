@@ -3,13 +3,13 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
-use base64::{Engine, engine::general_purpose::STANDARD};
+use anyhow::{bail, Context, Result};
+use base64::{engine::general_purpose::STANDARD, Engine};
 
-use super::authorized_keys::{AdministratorApprovalDeclined, authorized_keys_path};
+use super::authorized_keys::{authorized_keys_path, AdministratorApprovalDeclined};
 use super::windows_elevation::{
-    EXIT_LAUNCH_FAILED, EXIT_NO_DESKTOP, EXIT_NO_EXIT_CODE, EXIT_NO_PROCESS, EXIT_UAC_CANCELLED,
-    run_elevated_powershell,
+    run_elevated_powershell, EXIT_LAUNCH_FAILED, EXIT_NO_DESKTOP, EXIT_NO_EXIT_CODE,
+    EXIT_NO_PROCESS, EXIT_UAC_CANCELLED,
 };
 
 /*
@@ -47,9 +47,7 @@ pub(crate) fn keys_file_for_this_account() -> Result<KeysFile> {
         },
     );
     let Some(first) = files.first() else {
-        bail!(
-            "SSH on this computer has key sign-in turned off (`AuthorizedKeysFile none` in sshd_config), so the phone's key cannot be added."
-        );
+        bail!("SSH on this computer has key sign-in turned off (`AuthorizedKeysFile none` in sshd_config), so the phone's key cannot be added.");
     };
     let user_file = authorized_keys_path();
     if files.iter().any(|file| same_windows_path(file, &user_file)) {
@@ -363,15 +361,9 @@ fn run_keys_script(path: &Path, mode: &str, value: &str) -> Result<bool> {
             keys_file: path.to_path_buf(),
         }
         .into()),
-        Some(EXIT_WRITE_FAILED) => bail!(detail(
-            &format!("Changing {} failed", path.display()),
-            &run.log
-        )),
+        Some(EXIT_WRITE_FAILED) => bail!(detail(&format!("Changing {} failed", path.display()), &run.log)),
         Some(EXIT_ACL_FAILED) => bail!(detail(
-            &format!(
-                "The key was written, but SSH will ignore {} until only SYSTEM and Administrators can change it, and setting that failed",
-                path.display()
-            ),
+            &format!("The key was written, but SSH will ignore {} until only SYSTEM and Administrators can change it, and setting that failed", path.display()),
             &run.log
         )),
         Some(EXIT_NOT_ELEVATED) => bail!(
@@ -381,20 +373,13 @@ fn run_keys_script(path: &Path, mode: &str, value: &str) -> Result<bool> {
         Some(EXIT_NO_DESKTOP) => bail!(
             "Windows cannot show the administrator prompt because Ghostex's background service is not running in your desktop session (it was started from an SSH or remote connection). Quit Ghostex together with its background service, open Ghostex from the Start menu, then try again."
         ),
-        Some(EXIT_LAUNCH_FAILED) => bail!(detail(
-            "Could not open the administrator prompt",
-            &run.stderr
-        )),
+        Some(EXIT_LAUNCH_FAILED) => bail!(detail("Could not open the administrator prompt", &run.stderr)),
         Some(EXIT_NO_PROCESS) | Some(EXIT_NO_EXIT_CODE) => {
             bail!("The elevated PowerShell did not report a result.")
         }
         Some(code) => bail!(detail(
             &format!("Changing {} failed with exit code {code}", path.display()),
-            if run.log.is_empty() {
-                &run.stderr
-            } else {
-                &run.log
-            }
+            if run.log.is_empty() { &run.stderr } else { &run.log }
         )),
         None => bail!("The elevated PowerShell was terminated."),
     }

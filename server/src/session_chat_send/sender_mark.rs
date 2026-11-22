@@ -37,9 +37,9 @@
 //! SEE-ALSO: server/src/ghostex_cli/agents/identity.rs `sender` (`--as-user`),
 //! server/src/session_chat_queue_runtime/send.rs `settle_work_replies`.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::coordinators::{AGENT_MESSAGE_OPENER, place_agent_message_block, split_agent_message};
+use crate::coordinators::{place_agent_message_block, split_agent_message, AGENT_MESSAGE_OPENER};
 use crate::paths::GxserverPaths;
 use crate::security::Principal;
 
@@ -653,9 +653,7 @@ mod tests {
     use super::*;
 
     fn block(reply_to: &str) -> String {
-        format!(
-            "{AGENT_MESSAGE_OPENER}\nAgent: codex\nSession: T\nSession ID: G1\nAgent ID: codex\nAgent Session ID: x\nReply to: {reply_to}"
-        )
+        format!("{AGENT_MESSAGE_OPENER}\nAgent: codex\nSession: T\nSession ID: G1\nAgent ID: codex\nAgent Session ID: x\nReply to: {reply_to}")
     }
 
     /// Fable's re-review of #677: a forged block never names the sender. G: a normal message with

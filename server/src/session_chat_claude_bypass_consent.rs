@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::session_chat_notice::SessionChatTerminalNotice;

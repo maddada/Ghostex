@@ -67,11 +67,9 @@ fn a_saved_record_is_published_with_its_ids_interned() {
     assert!(rules.branch_names("acm-12-spec", "ACM-12"));
     // Another workspace doesn't pin it: none of its keys, and the id as its name.
     let elsewhere = store.ws("ws-b");
-    assert!(
-        rules
-            .tickets_in_branch(&scope_in(&elsewhere), "acm-12-spec")
-            .is_empty()
-    );
+    assert!(rules
+        .tickets_in_branch(&scope_in(&elsewhere), "acm-12-spec")
+        .is_empty());
     assert_eq!(rules.name(&scope_in(&elsewhere)), "pub-keys");
     // Not read yet, and refused where it can't be used: the details only with the workspace's
     // credentials at hand.

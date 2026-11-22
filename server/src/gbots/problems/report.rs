@@ -13,16 +13,16 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::store::{
-    COULD_NOT_START, FAILED, MAX_ATTEMPTS, NEEDS_YOU, Problem, ROUTINE_FAILED, STALLED,
-    save_problem,
+    save_problem, Problem, COULD_NOT_START, FAILED, MAX_ATTEMPTS, NEEDS_YOU, ROUTINE_FAILED,
+    STALLED,
 };
-use crate::coordinators::{MessageSender, agent_message, now_iso};
+use crate::coordinators::{agent_message, now_iso, MessageSender};
 use crate::domain::DomainRepository;
-use crate::gbots::record::{Bot, read_bot};
-use crate::server::{AppState, queue_session_chat_prompt};
+use crate::gbots::record::{read_bot, Bot};
+use crate::server::{queue_session_chat_prompt, AppState};
 
 const HOUR_MS: i64 = 60 * 60_000;
 /// Problems one chat may report in an hour before it is muted.
@@ -179,19 +179,13 @@ fn report_body(
     let flag = problem.source.as_deref() == Some("flag");
     let heading = match problem.kind.as_str() {
         COULD_NOT_START => format!("Ghostex GBot problem {id}: {who} could not start."),
-        FAILED => format!(
-            "Ghostex GBot problem {id}: {who} stopped, and Ghostex could not keep it running."
-        ),
+        FAILED => format!("Ghostex GBot problem {id}: {who} stopped, and Ghostex could not keep it running."),
         STALLED => format!("Ghostex GBot problem {id}: {who} has shown no new output for a while."),
         ROUTINE_FAILED => match &routine {
-            Some(routine) => {
-                format!("Ghostex GBot problem {id}: {name}'s routine \"{routine}\" failed.")
-            }
+            Some(routine) => format!("Ghostex GBot problem {id}: {name}'s routine \"{routine}\" failed."),
             None => format!("Ghostex GBot problem {id}: a routine of {name}'s failed."),
         },
-        NEEDS_YOU if flag => format!(
-            "Ghostex GBot escalation {id}: {name} raised a flag: it needs something it can't get itself."
-        ),
+        NEEDS_YOU if flag => format!("Ghostex GBot escalation {id}: {name} raised a flag: it needs something it can't get itself."),
         _ => format!("Ghostex GBot escalation {id}: {who} is waiting for an answer."),
     };
     let mut lines = vec![heading, String::new()];

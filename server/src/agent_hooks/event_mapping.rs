@@ -1,6 +1,6 @@
 use std::env;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::notify_runtime::read_state_string;
 use super::probing::{normalize_prompt_text, now_iso};
@@ -524,10 +524,10 @@ pub(crate) fn payload_boolean(payload: &Value, keys: &[&str]) -> Option<bool> {
         match value {
             Some(Value::Bool(value)) => return Some(*value),
             Some(Value::String(value)) if matches!(value.as_str(), "true" | "1") => {
-                return Some(true);
+                return Some(true)
             }
             Some(Value::String(value)) if matches!(value.as_str(), "false" | "0") => {
-                return Some(false);
+                return Some(false)
             }
             _ => {}
         }

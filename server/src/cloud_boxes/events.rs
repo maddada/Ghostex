@@ -1,6 +1,6 @@
 //! `cloudBoxesChanged`: tells clients the registry changed.
 
-use ghostex_gx_protocol::cloud_box::{CLOUD_BOXES_CHANGED_EVENT_TYPE, CloudBox};
+use ghostex_gx_protocol::cloud_box::{CloudBox, CLOUD_BOXES_CHANGED_EVENT_TYPE};
 use serde_json::json;
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;

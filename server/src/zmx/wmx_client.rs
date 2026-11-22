@@ -5,9 +5,9 @@
 //! gxserver read every native session's screen (`wmx history … --scrollback 512 [--vt]`) and grid by starting `wmx.exe`, and each start also brought up a `conhost.exe` and a Defender scan of the image: about 1.4 starts a second with eight sessions open (measured 2026-11-03 on a Ryzen 9 5900X, half of all Ghostex process starts). The request those commands make is a single authenticated JSON line to the session host's loopback port, read from the host's registry record, so gxserver makes it itself, the way it reads a zmx daemon's Unix socket directly on macOS and Linux (`screen_capture.rs`). The answers and exit codes are the ones the wmx command would give, so every caller keeps its contract; verbs that need more than one request (`send`, `kill`, `list`, `start`) still run wmx.
 //! SEE-ALSO: .dependencies/wmx/src/protocol.rs (`Endpoint`, `path`, frames), .dependencies/wmx/src/client.rs (`request`), .dependencies/wmx/src/cli.rs (each verb's output).
 
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
     io::{BufRead, BufReader, Write},
@@ -17,8 +17,8 @@ use std::{
 };
 
 use super::types::{
-    GXSERVER_ZMX_COMMAND_STDOUT_LIMIT_BYTES, ZMX_LIFECYCLE_COMMAND_TIMEOUT_MS, ZmxCommandOptions,
-    ZmxCommandResult,
+    ZmxCommandOptions, ZmxCommandResult, GXSERVER_ZMX_COMMAND_STDOUT_LIMIT_BYTES,
+    ZMX_LIFECYCLE_COMMAND_TIMEOUT_MS,
 };
 
 /// `protocol::MAX_FRAME` in wmx.

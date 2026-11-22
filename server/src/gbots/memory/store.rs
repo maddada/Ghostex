@@ -11,7 +11,7 @@ use rusqlite::Connection;
 
 use super::journal::{self, FileChange, JournalEntry};
 use crate::domain::DomainStateError;
-use crate::gbots::folder::{MEMORY_FILE, bot_folder, write_atomic};
+use crate::gbots::folder::{bot_folder, write_atomic, MEMORY_FILE};
 use crate::gbots::record::Bot;
 use crate::paths::GxserverPaths;
 

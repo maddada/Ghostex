@@ -14,7 +14,7 @@
 
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::keys::{self, KeyState};
 use super::provider::{self, Provider};
@@ -167,10 +167,10 @@ async fn call_once(
         .or_else(|| recording.language.clone());
     let provider = match settings.engine {
         Engine::Hex => {
-            return transcribe_with_hex(paths, recording, settings, &audio_path, language).await;
+            return transcribe_with_hex(paths, recording, settings, &audio_path, language).await
         }
         Engine::Superwhisper => {
-            return transcribe_with_superwhisper(paths, recording, &audio_path).await;
+            return transcribe_with_superwhisper(paths, recording, &audio_path).await
         }
         Engine::Xai => Provider::Xai,
         Engine::OpenAi => Provider::OpenAi,
@@ -185,11 +185,9 @@ async fn call_once(
                     "The saved {} API key can't be read anymore. Paste it again in Settings, then transcribe again.",
                     provider.label()
                 ),
-            ));
+            ))
         }
-        KeyState::Missing => {
-            return Outcome::Final(problem("noKey", Some(provider), no_key(provider)));
-        }
+        KeyState::Missing => return Outcome::Final(problem("noKey", Some(provider), no_key(provider))),
     }
     let key = match keys::read_key_async(paths, provider).await {
         Ok(Some(key)) => key,
@@ -203,7 +201,7 @@ async fn call_once(
                 "audioMissing",
                 None,
                 "The recording's audio file is gone, so it can't be transcribed.",
-            ));
+            ))
         }
     };
     let file_name = recording.audio_file.clone();
@@ -269,7 +267,7 @@ async fn transcribe_with_hex(
                     "Ghostex couldn't reach Hex. Transcribe again.",
                 )
                 .with_detail(Some(error.to_string())),
-            );
+            )
         }
     };
     let problem = Problem {
@@ -311,7 +309,7 @@ async fn transcribe_with_superwhisper(
                     "Ghostex couldn't reach Superwhisper. Transcribe again.",
                 )
                 .with_detail(Some(error.to_string())),
-            );
+            )
         }
     };
     let problem = Problem {
@@ -370,10 +368,8 @@ pub(super) fn multipart_body(
     let mut body = Vec::with_capacity(audio.len() + 1024);
     for (name, value) in fields {
         body.extend_from_slice(
-            format!(
-                "--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"
-            )
-            .as_bytes(),
+            format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n")
+                .as_bytes(),
         );
     }
     let mime = if file_name.ends_with(".m4a") {

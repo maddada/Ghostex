@@ -5,11 +5,11 @@
 //! Coordinator brief (M11), on the user's behalf: the GBot API is "off by default, per GBot; only the user can turn it on, mint a key or turn it off (an owner-presence approval like other security-relaxing changes, and a security-log entry each time). The key is shown once and stored hashed; New key replaces it." So `apiOn` and `apiNewKey` are refused to every agent (Chief of Staff included) and ask your approval from your own computer, phone or terminal (server/src/server/security_gates.rs); `apiOff` is yours too but never asks, because closing something never does (`SensitiveAction`). Each writes a security-log entry. The key is in the answer of `apiOn` and `apiNewKey` only.
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::keys::{BotKey, LABEL_MAX_CHARS, add_key, key_summary, live_key, revoke};
+use super::keys::{add_key, key_summary, live_key, revoke, BotKey, LABEL_MAX_CHARS};
 use crate::domain::DomainStateError;
-use crate::gbots::record::{Bot, bot_summary, require_bot};
+use crate::gbots::record::{bot_summary, require_bot, Bot};
 use crate::security::Principal;
 use crate::server::AppState;
 

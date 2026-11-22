@@ -40,7 +40,7 @@ use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use ghostex_gx_protocol::pairing::server_link_payload;
@@ -289,18 +289,14 @@ pub fn link_approval(
 ) -> Result<(), &'static str> {
     let kind = request.decided_by_kind.as_deref().unwrap_or_default();
     if !matches!(kind, "owner" | "device") {
-        return Err(
-            "It was approved in a terminal, not in the Ghostex app or on your phone, so the computers were not linked. Approve it in the app or on your phone to link them.",
-        );
+        return Err("It was approved in a terminal, not in the Ghostex app or on your phone, so the computers were not linked. Approve it in the app or on your phone to link them.");
     }
     if !request
         .decided_understanding
         .iter()
         .any(|word| word == ghostex_gx_protocol::approval::UNDERSTANDS_SERVER_LINK)
     {
-        return Err(
-            "It was approved in an older Ghostex app or phone app, which shows it as a plain connection, so the computers were not linked. Update Ghostex there (or approve on a device that is up to date), then run ghostex computers add again.",
-        );
+        return Err("It was approved in an older Ghostex app or phone app, which shows it as a plain connection, so the computers were not linked. Update Ghostex there (or approve on a device that is up to date), then run ghostex computers add again.");
     }
     Ok(())
 }

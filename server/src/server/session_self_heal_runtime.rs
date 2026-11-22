@@ -210,7 +210,7 @@ fn probe_working_sessions_without_agent(
         let agent = crate::session_chat_composer::session_chat_composer_agent_id(session);
         tokio::task::spawn_blocking(move || {
             let slot = slot;
-            detector.detect_blocking(&slot.0.0, &slot.0.1, agent.as_deref(), true);
+            detector.detect_blocking(&slot.0 .0, &slot.0 .1, agent.as_deref(), true);
         });
     }
 }

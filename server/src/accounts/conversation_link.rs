@@ -104,7 +104,7 @@ fn link_file(source: &Path, dest: &Path) -> Result<(), String> {
             return Err(format!(
                 "that account already has a different copy of it at {}.",
                 dest.display()
-            ));
+            ))
         }
         (Err(error), _) => return Err(format!("its transcript could not be read ({error}).")),
         _ => {}

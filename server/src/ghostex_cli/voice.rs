@@ -7,11 +7,11 @@ use std::io::ErrorKind;
 use std::net::TcpStream;
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tungstenite::client::IntoClientRequest as _;
 use tungstenite::{Message, WebSocket};
 
-use super::rpc::{CliError, CliResult, resolve_local_gxserver_target};
+use super::rpc::{resolve_local_gxserver_target, CliError, CliResult};
 
 const SAMPLE_RATE: u32 = 24_000;
 /// Audio chunk sent per step: 40 ms of 24 kHz PCM16.
@@ -173,7 +173,7 @@ fn parse(args: &[String]) -> CliResult<Options> {
             other => {
                 return Err(CliError::Other(format!(
                     "Unknown option {other}.\n\n{USAGE}"
-                )));
+                )))
             }
         }
         index += 2;
@@ -417,9 +417,7 @@ fn handle_frame(message: Message, start: Instant, watch: &mut TurnWatch, audio: 
                         field("callMode"),
                         frame["resumed"],
                         frame["memory"]["gist"],
-                        frame
-                            .get("focus")
-                            .map_or("(not supported)".to_string(), Value::to_string)
+                        frame.get("focus").map_or("(not supported)".to_string(), Value::to_string)
                     )
                 }
                 "focus" => println!("{at}  [focus] {}", frame["focus"]),

@@ -8,7 +8,7 @@
 //! User (Q1915, "deny list"): agents Ghostex starts in the home folder are kept out of secret folders: ~/.ssh, ~/.aws, ~/.gnupg, ~/.config/gh, keychains, password stores, browser profiles, ~/.netrc and the like, through each agent's own deny or permission settings at start, listed and editable in Settings (`homeSecretFolders`). What each agent can be held to: Claude Code's deny rules stop its own file tools (Read, Edit, Write, Glob, Grep) but not a shell command such as `cat`; Codex's profile denies reads and writes to every command it runs, and so replaces a bypass (`--yolo`) launch with "never ask" inside that profile (full disk and network minus the denied folders); every other agent can't be held to the list.
 //! SEE-ALSO: packages/settings-catalog/src/data/defaults.rs (`homeSecretFolders`), apps/desktop/src/app/window/settings_modal/fields/home_secret_folders.rs (the Settings list), server/src/agents/launch_plan.rs and resume_plan.rs (where it is applied).
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::quote_shell_arg;
 

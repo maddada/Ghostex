@@ -1,8 +1,8 @@
 use crate::{
-    session_chat_composer::{SessionChatComposerState, detect_session_chat_composer_readiness},
+    session_chat_composer::{detect_session_chat_composer_readiness, SessionChatComposerState},
     session_chat_notice::{
-        SESSION_CHAT_NOTICE_TRUST_PROMPT, SESSION_CHAT_NOTICE_USAGE_LIMIT,
-        classify_session_chat_terminal_notice,
+        classify_session_chat_terminal_notice, SESSION_CHAT_NOTICE_TRUST_PROMPT,
+        SESSION_CHAT_NOTICE_USAGE_LIMIT,
     },
     session_chat_send::capture_session_terminal_text,
 };
@@ -174,7 +174,7 @@ pub(crate) async fn wait_for_account_ready(
                     return Err(
                         "The agent started with a different login than the selected account."
                             .to_string(),
-                    );
+                    )
                 }
                 None => {
                     reason = "Could not verify the new agent process's account login.".to_string()

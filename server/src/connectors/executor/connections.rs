@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::paths::GxserverPaths;
 

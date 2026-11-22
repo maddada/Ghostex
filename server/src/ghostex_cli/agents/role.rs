@@ -8,10 +8,10 @@ use super::{
 };
 use crate::ghostex_cli::{
     args::Flags,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
     selector, sessions,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// Validates a `--role` or `role set` value before mutating any session.
 pub(super) fn validate_role(raw: &str) -> CliResult<String> {
@@ -115,10 +115,7 @@ pub(super) fn run(args: &Arguments) -> CliResult<Value> {
 pub(super) fn print_text(action: &str, result: &Value) {
     let reference = text(&result["session"], "globalRef");
     match action {
-        "set" => println!(
-            "Standing role set for {reference}: {}",
-            text(result, "role")
-        ),
+        "set" => println!("Standing role set for {reference}: {}", text(result, "role")),
         "show" => {
             let role = text(result, "role");
             if role.is_empty() {

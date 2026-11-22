@@ -1,6 +1,6 @@
 //! An Executor app's tools: listing them, and calling one that only reads.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::apps;
 use super::client::{self, Endpoint};
@@ -147,11 +147,7 @@ pub(super) fn call_read_only(
                 other => serde_json::to_string_pretty(other).unwrap_or_default(),
             };
             let failed = result.get("toolError").and_then(Value::as_bool) == Some(true);
-            Ok(format!(
-                "{}{}",
-                if failed { "Error: " } else { "" },
-                clip(&text)
-            ))
+            Ok(format!("{}{}", if failed { "Error: " } else { "" }, clip(&text)))
         }
         Some("approval-required") => Err(format!(
             "{} asks for approval before {tool} runs. Ghostex can't ask you about those yet, so it didn't run.",

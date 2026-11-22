@@ -4,12 +4,12 @@
 //! `ghostex gbots brief` (run by the bot before its first reply and after any compaction, so a
 //! long chat picks up memory that changed since it started).
 
-use super::departments::{Department, list_departments};
-use super::folder::{MEMORY_FILE, bot_folder, read_preferences};
+use super::departments::{list_departments, Department};
+use super::folder::{bot_folder, read_preferences, MEMORY_FILE};
 use super::memory::{
-    MEMORY_MAX_BYTES, MEMORY_MAX_LINES, PREFERENCES_MAX_LINES, topic_index_lines, within_budget,
+    topic_index_lines, within_budget, MEMORY_MAX_BYTES, MEMORY_MAX_LINES, PREFERENCES_MAX_LINES,
 };
-use super::record::{Bot, list_bots};
+use super::record::{list_bots, Bot};
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 

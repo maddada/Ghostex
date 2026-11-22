@@ -5,8 +5,8 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use serde_json::Value;
-use ureq::Body;
 use ureq::http::Response;
+use ureq::Body;
 
 const USER_AGENT: &str = "Ghostex-Connectors/1.0";
 

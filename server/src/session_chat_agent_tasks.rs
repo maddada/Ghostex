@@ -31,7 +31,7 @@ waiting").
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 /// Where Claude Code keeps per-session task stores, under its config dir.
 const CLAUDE_TASKS_DIRECTORY: &str = "tasks";

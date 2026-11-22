@@ -4,9 +4,9 @@
 
 use std::process::Stdio;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::args::{Flags, parse_args};
+use super::args::{parse_args, Flags};
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 use super::web::browser_open_command;
@@ -52,8 +52,7 @@ pub(super) fn connectors_command(args: &[String]) -> CliResult<()> {
     match subcommand {
         "status" | "list" | "ls" => call_and_print("/api/readConnectors", params, flags),
         "sign-in" | "signin" | "login" => {
-            let result =
-                rpc::call_gxserver_rpc("/api/signInComposio", &Value::Object(params), flags)?;
+            let result = rpc::call_gxserver_rpc("/api/signInComposio", &Value::Object(params), flags)?;
             match result.get("signInUrl").and_then(Value::as_str) {
                 Some(url) => {
                     println!("Sign in to Composio in your browser:\n{url}");
@@ -73,16 +72,12 @@ pub(super) fn connectors_command(args: &[String]) -> CliResult<()> {
             let app = app.trim();
             if app.is_empty() {
                 return Err(CliError::Other(
-                    "Name the app: ghostex connectors connect <app>, like gmail or slack."
-                        .to_string(),
+                    "Name the app: ghostex connectors connect <app>, like gmail or slack.".to_string(),
                 ));
             }
             params.insert("app".to_string(), json!(app));
-            let result = rpc::call_gxserver_rpc(
-                "/api/connectComposioApp",
-                &Value::Object(params),
-                &slow(flags),
-            )?;
+            let result =
+                rpc::call_gxserver_rpc("/api/connectComposioApp", &Value::Object(params), &slow(flags))?;
             let name = result.get("name").and_then(Value::as_str).unwrap_or(app);
             if result.get("alreadyConnected").and_then(Value::as_bool) == Some(true) {
                 println!("{name} is already connected.");
@@ -126,17 +121,11 @@ pub(super) fn connectors_command(args: &[String]) -> CliResult<()> {
             };
             params.insert("tool".to_string(), json!(tool));
             params.insert("arguments".to_string(), arguments);
-            let result = rpc::call_gxserver_rpc(
-                "/api/callComposioTool",
-                &Value::Object(params),
-                &slow(flags),
-            )?;
+            let result =
+                rpc::call_gxserver_rpc("/api/callComposioTool", &Value::Object(params), &slow(flags))?;
             println!(
                 "{}",
-                result
-                    .get("output")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
+                result.get("output").and_then(Value::as_str).unwrap_or_default()
             );
             Ok(())
         }
@@ -152,9 +141,7 @@ pub(super) fn connectors_command(args: &[String]) -> CliResult<()> {
             call_and_print("/api/setConnectorRule", params, flags)
         }
         "gh" | "gws" => cli_command(subcommand, rest, params, flags, open),
-        "executor" => {
-            super::connectors_executor::executor_command(rest, params, flags, open_in_browser)
-        }
+        "executor" => super::connectors_executor::executor_command(rest, params, flags, open_in_browser),
         "mcp" => super::connectors_mcp::run(),
         other => Err(CliError::Other(format!(
             "Unknown connectors command \"{other}\". Use status, sign-in, sign-out, refresh, connect, tools, call, rules, rule, gh, gws or executor."

@@ -9,11 +9,11 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::hex::{
-    self, Client, DiscoveryError, HexModel, State, chosen_model, parse_discovery, read_discovery,
-    status_failure, transcription_path, unknown_version_message,
+    self, chosen_model, parse_discovery, read_discovery, status_failure, transcription_path,
+    unknown_version_message, Client, DiscoveryError, HexModel, State,
 };
 
 const TOKEN: &str = "hex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -182,20 +182,16 @@ fn every_refusal_says_what_to_do_and_which_ones_are_retried() {
         assert_eq!(failure.code, expected, "{status} {code}");
         assert_eq!(failure.transient, transient, "{status} {code}");
         assert!(failure.message.ends_with('.'), "{}", failure.message);
-        assert!(
-            failure
-                .detail
-                .as_deref()
-                .unwrap_or_default()
-                .contains(&status.to_string())
-        );
+        assert!(failure
+            .detail
+            .as_deref()
+            .unwrap_or_default()
+            .contains(&status.to_string()));
     }
     let not_ready = status_failure(409, r#"{"code":"model-not-ready"}"#, "Parakeet v3");
-    assert!(
-        not_ready
-            .message
-            .contains("Parakeet v3 isn't ready in Hex. Open Hex and download it")
-    );
+    assert!(not_ready
+        .message
+        .contains("Parakeet v3 isn't ready in Hex. Open Hex and download it"));
 }
 
 #[test]
@@ -204,12 +200,10 @@ fn the_row_says_where_the_user_stands() {
     assert_eq!(view["state"], "notInstalled");
     assert_eq!(view["available"], true);
     assert_eq!(view["ready"], false);
-    assert!(
-        view["problem"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Hex 3 isn't installed")
-    );
+    assert!(view["problem"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Hex 3 isn't installed"));
     assert_eq!(
         view["downloadUrl"],
         "https://github.com/anomalyco/hex#downloads"
@@ -221,22 +215,18 @@ fn the_row_says_where_the_user_stands() {
         },
         None,
     );
-    assert!(
-        older["problem"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Hex 0.6.2, which has no local API")
-    );
+    assert!(older["problem"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Hex 0.6.2, which has no local API"));
     assert_eq!(older["olderVersion"], "0.6.2");
 
     let stopped = hex::view(&State::NotRunning, None);
     assert_eq!(stopped["state"], "notRunning");
-    assert!(
-        stopped["problem"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Open Hex")
-    );
+    assert!(stopped["problem"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Open Hex"));
 
     let unsupported = hex::view(
         &State::Unsupported("Hex 3 runs only on Macs with Apple silicon.".into()),
@@ -506,11 +496,9 @@ fn an_unprepared_model_gets_409_and_a_sentence_about_hex() {
         .expect_err("not ready");
     assert_eq!(failure.code, "hexModelNotReady");
     assert!(!failure.transient);
-    assert!(
-        failure
-            .message
-            .contains("Whisper Turbo isn't ready in Hex. Open Hex and download it")
-    );
+    assert!(failure
+        .message
+        .contains("Whisper Turbo isn't ready in Hex. Open Hex and download it"));
     // The saved model is checked against /models first.
     let audio = wav_file(temp.path());
     let failure = hex::transcribe_with(
@@ -549,14 +537,13 @@ fn a_hex_with_another_api_version_is_refused_before_any_upload() {
     .expect_err("refused");
     assert_eq!(failure.code, "hexVersion");
     assert!(failure.message.contains("Update Ghostex"));
-    assert!(
-        !hex.seen
-            .lock()
-            .unwrap()
-            .paths
-            .iter()
-            .any(|path| path.starts_with("POST"))
-    );
+    assert!(!hex
+        .seen
+        .lock()
+        .unwrap()
+        .paths
+        .iter()
+        .any(|path| path.starts_with("POST")));
 }
 
 #[test]

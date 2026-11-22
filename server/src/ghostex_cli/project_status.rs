@@ -14,13 +14,13 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::args::{Flags, parse_args};
-use super::computers::{ConnectedComputer, connected_computers, pick_computer, relay_target};
+use super::args::{parse_args, Flags};
+use super::computers::{connected_computers, pick_computer, relay_target, ConnectedComputer};
 use super::output::print_json;
 use super::rpc::{
-    CliError, CliResult, Target, request_gxserver_rpc, resolve_local_gxserver_target,
+    request_gxserver_rpc, resolve_local_gxserver_target, CliError, CliResult, Target,
 };
 use crate::project_git_state::checkout::{normalize_origin, read_checkout_state};
 

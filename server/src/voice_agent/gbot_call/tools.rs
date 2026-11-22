@@ -5,9 +5,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::super::tools::{ToolMemory, arg_text, send_prompt};
+use super::super::tools::{arg_text, send_prompt, ToolMemory};
 use crate::gbots::CallBot;
 use crate::server::AppState;
 

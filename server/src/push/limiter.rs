@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::registration::{SESSION_ID_MAX, is_printable_id};
+use super::registration::{is_printable_id, SESSION_ID_MAX};
 
 /// Alerts one phone may receive per rolling window.
 pub(crate) const ALERTS_PER_WINDOW: usize = 8;

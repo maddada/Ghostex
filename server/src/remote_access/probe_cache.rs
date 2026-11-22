@@ -5,8 +5,8 @@ use std::{
 
 use anyhow::Result;
 
-use super::identity::{RemoteAccessIdentity, read_remote_access_identity};
-use super::tailscale::{TailscaleStatus, read_tailscale_status};
+use super::identity::{read_remote_access_identity, RemoteAccessIdentity};
+use super::tailscale::{read_tailscale_status, TailscaleStatus};
 
 /*
 CDXC:RemotePairing 2026-09-03:

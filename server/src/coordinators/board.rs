@@ -27,14 +27,13 @@
 //! SEE-ALSO: server/src/coordinators/work.rs (the items), server/src/coordinators/panel.rs (the thread rows and the cache this is built beside), server/src/ghostex_cli/coordinator/board.rs (the CLI alias), server/src/storage/migrations/0055_coordinator_board.sql (the old items).
 
 use chrono::{DateTime, Local, NaiveDate, Utc};
-use rusqlite::{Connection, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{params, Connection};
+use serde_json::{json, Map, Value};
 
-use super::records::{SessionKey, now_iso, sql_error};
+use super::records::{now_iso, sql_error, SessionKey};
 use super::work::{
-    WorkAsk, WorkContext, WorkEvent, WorkItem, WorkThread, delete_work_item, derive,
-    handle_work_request, item_number_of, list_work_items, parse_answers, parse_status,
-    write_work_item,
+    delete_work_item, derive, handle_work_request, item_number_of, list_work_items, parse_answers,
+    parse_status, write_work_item, WorkAsk, WorkContext, WorkEvent, WorkItem, WorkThread,
 };
 use crate::domain::DomainStateError;
 
@@ -114,8 +113,8 @@ fn text(value: &Value, key: &str) -> String {
 /// link (`ghostex link add`) was read for its state; an item's own link never was, so it stayed
 /// grey (an issue) or would show green whatever its state (a PR). A GitHub PR or issue chip looks
 /// the same wherever its link came from: its real state's colour once read, neutral until then.
-fn item_github_links_seen()
--> &'static std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>> {
+fn item_github_links_seen(
+) -> &'static std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>> {
     static SEEN: std::sync::OnceLock<
         std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>,
     > = std::sync::OnceLock::new();
@@ -868,10 +867,7 @@ pub fn handle_board_request(
                     "hours": params.get("hours"),
                     "answer": params.get("answer"),
                 }))?;
-                return Ok((
-                    json!({ "item": format!("B{number}"), "work": changed }),
-                    true,
-                ));
+                return Ok((json!({ "item": format!("B{number}"), "work": changed }), true));
             }
             "answer" => {
                 let answered = work(json!({
@@ -888,7 +884,7 @@ pub fn handle_board_request(
             other => {
                 return Err(bad(format!(
                     "Unknown board request {other}. Use read, add, move, note, done, drop, restore or tag."
-                )));
+                )))
             }
         };
         let mut out = board_answer(&answer);
@@ -1274,15 +1270,13 @@ mod tests {
         // Numbers are never reused; a pin is an item now and takes one.
         let (next, _) = request(json!({"op": "add", "title": "Next"}));
         assert_eq!(next["item"], "B5");
-        assert!(
-            handle_board_request(
-                &db,
-                &key,
-                &[],
-                json!({"op": "drop", "item": "B9"}).as_object().unwrap()
-            )
-            .is_err()
-        );
+        assert!(handle_board_request(
+            &db,
+            &key,
+            &[],
+            json!({"op": "drop", "item": "B9"}).as_object().unwrap()
+        )
+        .is_err());
     }
 
     /// A card's answer is recorded once: a second answer, the same or another, is refused, and the
@@ -1408,12 +1402,10 @@ mod tests {
         assert_eq!(refs(&board, "later"), vec!["B1"]);
         assert_eq!(group_of(&board, "later")["rows"][0]["reason"], "held");
         // Restoring a thread that only hid it leaves no item behind.
-        assert!(
-            list_work_items(&db, &key)
-                .unwrap()
-                .iter()
-                .all(|item| !item.has_thread("P1", "Gsleep"))
-        );
+        assert!(list_work_items(&db, &key)
+            .unwrap()
+            .iter()
+            .all(|item| !item.has_thread("P1", "Gsleep")));
     }
 
     /// An item keeps the user's tag; a thread's card shows its session's tag; the board offers the

@@ -18,20 +18,20 @@
 //! packages/gx-core/src/git_menu/ (the decisions around it).
 
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::agents::read_agent_settings;
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::project_git_state::{exit_code, git, list_projects, run_project_operation, stdout};
 use crate::protocol::rpc_success;
 use crate::server::{
-    AppState, ProjectWorktreeOperationError, RoutedResponse,
     build_commit_message_generation_shell_command, checkout_project_new_branch_for_commit,
     domain_error_response, generate_commit_message_for_project,
-    resolve_commit_message_generation_agent, routed_json,
+    resolve_commit_message_generation_agent, routed_json, AppState, ProjectWorktreeOperationError,
+    RoutedResponse,
 };
 use crate::storage::open_gxserver_database;
-use crate::typed_operations::{TypedOperationError, create_pull_request_for_project};
+use crate::typed_operations::{create_pull_request_for_project, TypedOperationError};
 
 pub const RUN_GIT_SHIP_WORKFLOW_ENDPOINT: &str = "/api/runGitShipWorkflow";
 

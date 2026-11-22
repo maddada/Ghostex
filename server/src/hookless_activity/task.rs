@@ -7,7 +7,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::claude::{ClaudeObserver, SessionRecords};
 use super::codex::CodexObserver;

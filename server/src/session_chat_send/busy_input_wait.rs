@@ -47,7 +47,8 @@ impl PartialEq for AgentMidTurnProbe {
 impl Eq for AgentMidTurnProbe {}
 
 /// The send's answer when a mid-turn agent never caught up.
-pub(crate) const SESSION_CHAT_BUSY_AGENT_STALLED: &str = "The agent stayed in the middle of a turn for five minutes without taking new input, so the message was not sent.";
+pub(crate) const SESSION_CHAT_BUSY_AGENT_STALLED: &str =
+    "The agent stayed in the middle of a turn for five minutes without taking new input, so the message was not sent.";
 
 /// How waiting out a busy agent ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,9 +131,7 @@ pub(crate) fn record_busy_agent_wait(project_id: &str, session_id: &str, what: &
         "sessionChatSendWaitedForBusyAgent",
         project_id,
         session_id,
-        &format!(
-            "The agent was in the middle of a turn and slow to show input; the send waited until {what}, typing nothing more."
-        ),
+        &format!("The agent was in the middle of a turn and slow to show input; the send waited until {what}, typing nothing more."),
         &[],
     );
 }

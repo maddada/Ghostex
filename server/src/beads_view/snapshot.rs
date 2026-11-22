@@ -7,18 +7,18 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use ghostex_gx_protocol::beads_view::{
-    BeadsReadiness, BeadsViewRow, BeadsViewSnapshot, BeadsWorkspaceInfo, BeadsWorkspaceState,
-    capability,
+    capability, BeadsReadiness, BeadsViewRow, BeadsViewSnapshot, BeadsWorkspaceInfo,
+    BeadsWorkspaceState,
 };
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::typed_operations::{
-    CommandOutput, ProcessCommand, TypedOperationContext, beads_action_command,
-    run_process_command_with_timeout,
+    beads_action_command, run_process_command_with_timeout, CommandOutput, ProcessCommand,
+    TypedOperationContext,
 };
 
-use super::cache::{Published, WorkspaceEntry, still_current};
+use super::cache::{still_current, Published, WorkspaceEntry};
 use super::change::ChangeToken;
 use super::discovery::WorkspaceInfo;
 use super::reads::{cached_reply, current_token, store_list_replies, workspace_mode};

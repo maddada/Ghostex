@@ -10,8 +10,8 @@
 //! Polling the session rows (the coordinator supervisor's approach, `classify_thread_session`) instead of hooking the activity endpoints: a question card can arrive through a hook that changes no activity. A finished turn is the Stop hook's new turn-complete attention event, so a turn shorter than the poll is still announced (live test: a one-word reply finished between two reads and was missed); agents without hooks fall back to a working state followed by an idle one, each held for two reads so a turn that flickers idle between tool calls is not called finished.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use super::conversation::{Announcement, Input};

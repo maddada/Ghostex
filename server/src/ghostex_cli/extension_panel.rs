@@ -8,12 +8,12 @@
 
 use std::io::{BufRead, BufReader, Read};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::{
-    args::{Flags, parse_args},
+    args::{parse_args, Flags},
     output::print_json,
-    rpc::{CliError, CliResult, resolve_local_gxserver_target},
+    rpc::{resolve_local_gxserver_target, CliError, CliResult},
 };
 
 pub fn panel_command(args: &[String]) -> CliResult<()> {

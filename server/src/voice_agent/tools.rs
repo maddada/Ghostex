@@ -9,7 +9,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::computers;
 use super::control;
@@ -224,9 +224,7 @@ pub(super) fn definitions(focus: Option<&FocusScope>) -> Value {
     }
     let title = &scope.title;
     let session_help = if scope.is_orchestrator {
-        format!(
-            "Leave it out for \"{title}\". Name one of its threads (its title or ref from the briefing) only to read it or answer its questions."
-        )
+        format!("Leave it out for \"{title}\". Name one of its threads (its title or ref from the briefing) only to read it or answer its questions.")
     } else {
         format!("Leave it out: this call is about \"{title}\" only.")
     };
@@ -654,7 +652,7 @@ async fn list_sessions(state: &Arc<AppState>, args: &Value) -> Result<Value, Str
                         .map(project_choice)
                         .collect::<Vec<_>>()
                         .join(" or ")
-                ));
+                ))
             }
             // Not a project: the user's words may name a session or a coordinator ("tell Big
             // Chungus"), so they are looked up as a title before anything is reported missing.
@@ -662,33 +660,24 @@ async fn list_sessions(state: &Arc<AppState>, args: &Value) -> Result<Value, Str
                 Match::One(found) => {
                     all.retain(|session| {
                         session.reference() == found.reference()
-                            || session
-                                .thread_of
-                                .as_ref()
-                                .is_some_and(|parent| parent.reference == found.reference())
+                            || session.thread_of.as_ref().is_some_and(|parent| parent.reference == found.reference())
                     });
-                    matched_as = Some(
-                        json!({"kind": "session", "note": format!("No project is called \"{project}\"; it is the session \"{}\".", found.title)}),
-                    );
+                    matched_as = Some(json!({"kind": "session", "note": format!("No project is called \"{project}\"; it is the session \"{}\".", found.title)}));
                 }
                 Match::Ambiguous(candidates) => {
                     return Err(format!(
                         "No project is called \"{project}\", but several sessions are: {}. Ask the user which one.",
                         candidates
                             .iter()
-                            .map(|session| format!(
-                                "\"{}\" ({})",
-                                session.title,
-                                session.reference()
-                            ))
+                            .map(|session| format!("\"{}\" ({})", session.title, session.reference()))
                             .collect::<Vec<_>>()
                             .join(" or ")
-                    ));
+                    ))
                 }
                 Match::None => {
                     return Err(format!(
                         "Nothing open is called \"{project}\": no project and no session or coordinator title matches."
-                    ));
+                    ))
                 }
             },
         }
@@ -710,12 +699,10 @@ async fn list_sessions(state: &Arc<AppState>, args: &Value) -> Result<Value, Str
         result["matchedAs"] = matched_as;
     }
     if !unavailable.is_empty() {
-        result["unavailableComputers"] = json!(
-            unavailable
-                .iter()
-                .map(computers::Unavailable::to_tool_value)
-                .collect::<Vec<_>>()
-        );
+        result["unavailableComputers"] = json!(unavailable
+            .iter()
+            .map(computers::Unavailable::to_tool_value)
+            .collect::<Vec<_>>());
     }
     Ok(result)
 }
@@ -870,9 +857,7 @@ async fn read_draft(
 /// Why `draft_prompt` and `send_draft` stop for a chat on another computer: its synced draft lives
 /// in that computer's gxserver, which opens neither reading nor writing it to other computers.
 fn no_chat_draft_elsewhere(computer: &str) -> String {
-    format!(
-        "Drafting into a chat on {computer} can't be done from here, so nothing was written. Offer to send it as a prompt right away instead, or the user can type it in Ghostex."
-    )
+    format!("Drafting into a chat on {computer} can't be done from here, so nothing was written. Offer to send it as a prompt right away instead, or the user can type it in Ghostex.")
 }
 
 /// The unsent text of a draft, unless the terminal owns it (moved there when the user switched).
@@ -1242,11 +1227,10 @@ pub(super) async fn briefing(state: &Arc<AppState>, scope: &FocusScope) -> Value
         facts["threadOf"] = json!(orchestrator);
     }
     if let Ok(chat) = read_chat(state, session, (READ_DEFAULT * 12).clamp(60, 240)).await {
-        facts["working"] = json!(
-            chat.get("working")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        );
+        facts["working"] = json!(chat
+            .get("working")
+            .and_then(Value::as_bool)
+            .unwrap_or(false));
         facts["messages"] = json!(spoken_messages(&chat, READ_DEFAULT, chrono::Local::now()));
         let pending = pending_view(state, session, &chat).await;
         if pending.get("kind").and_then(Value::as_str) != Some("none") {
@@ -1620,7 +1604,7 @@ async fn start_agent(state: &Arc<AppState>, args: &Value) -> ToolOutcome {
                 return ToolOutcome {
                     output: json!({"ok": false, "started": true, "project": project.name, "error": format!("The agent started but the first prompt did not go through: {error}")}),
                     ok: false,
-                };
+                }
             }
         }
     }

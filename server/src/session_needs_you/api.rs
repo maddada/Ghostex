@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::store::{self, NeedsYouRecord, NewItem};
 use crate::domain::{DomainRepository, DomainStateError};

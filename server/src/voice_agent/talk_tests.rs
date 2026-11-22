@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use super::talk::{Cancel, MIN_HOLD_AUDIO_MS, Press, Release, SILENCE_AFTER_HOLD, Talk};
+use super::talk::{Cancel, Press, Release, Talk, MIN_HOLD_AUDIO_MS, SILENCE_AFTER_HOLD};
 
 fn speak(talk: &mut Talk, ms: u64) -> bool {
     talk.passes_audio(ms)

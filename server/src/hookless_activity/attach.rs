@@ -9,9 +9,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::claude::{LiveRecord, session_dirs, text};
+use super::claude::{session_dirs, text, LiveRecord};
 
 /// How often the process list is read while the daemon hosts a conversation.
 const SCAN_EVERY: Duration = Duration::from_secs(2);

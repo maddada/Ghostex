@@ -11,8 +11,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{
-        Mutex, OnceLock,
         atomic::{AtomicU64, Ordering},
+        Mutex, OnceLock,
     },
 };
 
@@ -312,11 +312,10 @@ mod native {
         Foundation::{HMODULE, INVALID_HANDLE_VALUE},
         System::{
             Console::{GetStdHandle, STD_ERROR_HANDLE},
-            Diagnostics::Debug::{EXCEPTION_POINTERS, SetUnhandledExceptionFilter},
+            Diagnostics::Debug::{SetUnhandledExceptionFilter, EXCEPTION_POINTERS},
             LibraryLoader::{
-                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, GetModuleFileNameW,
-                GetModuleHandleExW,
+                GetModuleFileNameW, GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
             },
         },
     };

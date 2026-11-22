@@ -22,7 +22,7 @@ use crate::{
     security::{self, ActionRequest, Principal, RouteAccess, SensitiveAction},
 };
 
-use super::{AppState, RoutedResponse, require_owner_presence, routed_json};
+use super::{require_owner_presence, routed_json, AppState, RoutedResponse};
 
 /// `Some(response)` when the call must stop here: refused, or waiting for an approval.
 pub(crate) fn gate(
@@ -240,7 +240,8 @@ fn record_allowed(caller: &Principal, request: &ActionRequest) {
 }
 
 /// Why a caller without `Capability::OwnerSecrets` is refused.
-const OWNER_SECRETS_MESSAGE: &str = "Only you can give a secret or use your saved keys and 1Password, from Ghostex on your computer or phone.";
+const OWNER_SECRETS_MESSAGE: &str =
+    "Only you can give a secret or use your saved keys and 1Password, from Ghostex on your computer or phone.";
 
 /*
 CDXC:Secrets 2026-11-08 DECISION:
@@ -339,7 +340,7 @@ fn sensitive_action(
 }
 
 fn easy_connect_action(state: &AppState, params: &Map<String, Value>) -> Option<ActionRequest> {
-    use crate::tailcat::{TailcatRepository, TailcatStateUpdate, read_tailcat_state_or_default};
+    use crate::tailcat::{read_tailcat_state_or_default, TailcatRepository, TailcatStateUpdate};
     let update: TailcatStateUpdate = serde_json::from_value(Value::Object(params.clone())).ok()?;
     let current = crate::storage::open_gxserver_database(&state.paths)
         .ok()

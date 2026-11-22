@@ -1,5 +1,5 @@
 use super::ProjectIcon;
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},

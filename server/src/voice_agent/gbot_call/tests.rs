@@ -1,7 +1,7 @@
 //! Calls with a GBot: which finished turn is the call's answer and what it is called (`reply.rs`),
 //! and what a "Working:" update may say (`watch.rs`).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::reply::{answers_call, finished_text};
 use super::watch::{current_work, spoken_note};

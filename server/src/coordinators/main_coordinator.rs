@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
 
-use super::records::{CoordinatorRecord, SessionKey, list_coordinators, now_iso, sql_error};
+use super::records::{list_coordinators, now_iso, sql_error, CoordinatorRecord, SessionKey};
 use crate::domain::{DomainRepository, DomainStateError};
 
 const KEY_PREFIX: &str = "mainCoordinator:";

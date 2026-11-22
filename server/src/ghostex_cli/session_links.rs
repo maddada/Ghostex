@@ -5,10 +5,10 @@
 //! CDXC:SessionLinks 2026-10-24 DECISION:
 //! User picked "What the agent reports with `ghostex link add`" as one of the ways a link joins a session by itself; a link added from inside the session's own terminal counts as the agent's ("Agent added"), one added for another session (the phone, `--session`) as the person's ("You added").
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::actions::with_resolved_gxserver_session_params;
-use super::args::{Flags, parse_args};
+use super::args::{parse_args, Flags};
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 

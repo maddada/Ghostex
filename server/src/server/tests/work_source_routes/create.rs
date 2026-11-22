@@ -3,7 +3,7 @@
 //! Ghostex words itself, and the route's access.
 
 use super::*;
-use crate::protocol::{ApiPermission, ListenerKind, endpoint_for, is_remote_endpoint_allowed};
+use crate::protocol::{endpoint_for, is_remote_endpoint_allowed, ApiPermission, ListenerKind};
 
 /// A project of `workspace_id`.
 fn project_in(routes: &Routes, workspace_id: &str, name: &str) -> String {

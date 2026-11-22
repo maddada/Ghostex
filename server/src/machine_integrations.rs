@@ -7,15 +7,14 @@
 //! SEE-ALSO: apps/desktop/src/app/remote_conn/settings_rpc.rs (the desktop's route to a machine), apps/desktop/src/app/window/settings_modal/tabs/integrations/remote_machine.rs.
 use crate::{
     agent_skills::{
-        self, CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_AGENT_SKILL_NAMES,
+        self, role_only_ghostex_agent_skill, CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_AGENT_SKILL_NAMES,
         MACOS_ONLY_GHOSTEX_AGENT_SKILL_NAMES, SPACEO_MACOS_ONLY_MESSAGE,
-        role_only_ghostex_agent_skill,
     },
     agent_skills_remote,
     domain::DomainStateError,
     paths::GxserverPaths,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -285,11 +284,9 @@ mod tests {
             .find(|row| row["skillName"] == "ghostex")
             .expect("ghostex row");
         assert_eq!(cli["name"], "Ghostex");
-        assert!(
-            cli["description"]
-                .as_str()
-                .is_some_and(|text| !text.is_empty())
-        );
+        assert!(cli["description"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty()));
     }
 
     #[test]

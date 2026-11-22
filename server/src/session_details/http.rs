@@ -3,12 +3,12 @@
 use std::path::PathBuf;
 
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::protocol::rpc_success;
 use crate::server::{
-    AppState, RoutedResponse, domain_error_response, read_runtime_text, routed_json,
+    domain_error_response, read_runtime_text, routed_json, AppState, RoutedResponse,
 };
 use crate::storage::open_gxserver_database;
 
@@ -123,11 +123,9 @@ fn read_details(
     );
     // A Cloud Box session's processes run on the box, out of this computer's reach.
     if crate::agentbox::session_agentbox(&session).is_none() {
-        environment["memoryBytes"] = json!(
-            crate::zmx::provider_zmx_session_name(&session)
-                .ok()
-                .and_then(|name| super::memory::read_session_memory_bytes(&name))
-        );
+        environment["memoryBytes"] = json!(crate::zmx::provider_zmx_session_name(&session)
+            .ok()
+            .and_then(|name| super::memory::read_session_memory_bytes(&name)));
     }
     let changes = folder.as_deref().and_then(super::changes::read_changes);
     let mut result = json!({
@@ -272,17 +270,15 @@ fn read_details(
                 .map(|file| file["tokens"].clone())
                 .unwrap_or(Value::Null)
         };
-        result["memoryFiles"] = json!(
-            facts
-                .memory_files
-                .iter()
-                .map(|file| json!({
-                    "path": file.path,
-                    "kind": file.kind,
-                    "tokens": file_tokens(&file.path),
-                }))
-                .collect::<Vec<_>>()
-        );
+        result["memoryFiles"] = json!(facts
+            .memory_files
+            .iter()
+            .map(|file| json!({
+                "path": file.path,
+                "kind": file.kind,
+                "tokens": file_tokens(&file.path),
+            }))
+            .collect::<Vec<_>>());
         result["background"] = json!({
             "finished": facts.finished_background().into_iter().map(|run| json!({
                 "id": run.id,

@@ -8,7 +8,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use ghostex_gx_protocol::cloud_box::{BoxBootResult, BoxBootTicket};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::{idle, state};
 use crate::ghostex_cli::{args::Flags, rpc};
@@ -72,7 +72,7 @@ fn read_or_reset_identity(box_id: &str) -> Result<(BoxIdentity, bool), String> {
                 return Err(format!(
                     "Can't reset the box identity ({}): {error}",
                     copied.display()
-                ));
+                ))
             }
         }
     }

@@ -1,7 +1,7 @@
 //! A Claude cloud session's record, `runtimeSettings.claudeCloud`, and its wire shape.
 
-use rusqlite::{Connection, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{params, Connection};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 
@@ -229,7 +229,7 @@ pub(crate) fn close_keeps_session_asleep(session: &Value) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     use super::close_keeps_session_asleep;
 

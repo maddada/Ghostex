@@ -1,6 +1,6 @@
 use std::path::{Component, Path, PathBuf};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 #[cfg(test)]
 use crate::ghostex_cli::args::parse_args;

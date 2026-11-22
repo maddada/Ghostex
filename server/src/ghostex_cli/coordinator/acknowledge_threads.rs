@@ -8,7 +8,7 @@ use crate::ghostex_cli::{
     agents,
     args::ParsedArgs,
     output::print_json,
-    rpc::{CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliResult},
 };
 
 pub(super) fn acknowledge_threads(parsed: &ParsedArgs) -> CliResult<()> {

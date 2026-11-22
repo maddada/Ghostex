@@ -2,15 +2,15 @@
 //! status, a ticket's Slack threads, ping and leave. Each takes the workspace id the connection is
 //! keyed by.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::paths::GxserverPaths;
 
 use super::connections::{
-    TeamConnection, read_team_connection, read_team_connections, remove_team_connection,
-    store_team_connection,
+    read_team_connection, read_team_connections, remove_team_connection, store_team_connection,
+    TeamConnection,
 };
-use super::convex_http::{ConvexCallKind, call_convex};
+use super::convex_http::{call_convex, ConvexCallKind};
 use super::invite_link::{build_invite_link, normalize_deployment_url, parse_invite_link};
 use super::runtime::{reload_team_sync, subscription_status};
 

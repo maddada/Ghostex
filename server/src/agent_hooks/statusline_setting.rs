@@ -33,8 +33,8 @@ use super::cursor_statusline::{
 use super::probing::{path_string, read_config_text, write_config_file};
 use super::resolution::provider_hook_paths;
 use super::statusline::{
-    StatuslineAgent, ghostex_statusline_registered, register_statusline, statusline_is_current,
-    unregister_statusline,
+    ghostex_statusline_registered, register_statusline, statusline_is_current,
+    unregister_statusline, StatuslineAgent,
 };
 use crate::paths::GxserverPaths;
 

@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::agents::session_chat_prompt_setting;
 use crate::presentation::{effective_lifecycle_state, presentation_activity};
 use crate::session_chat_interactive::{
-    SessionChatInteractivePrompt, parse_stored_session_chat_prompt,
+    parse_stored_session_chat_prompt, SessionChatInteractivePrompt,
 };
 
 /// CDXC:SessionStatus 2026-10-27 DECISION:

@@ -4,7 +4,7 @@
 //! User (Q3124), on a session the guard stopped: "show it as red dot (blocked) and when i click i see the error inside the session". The stop is kept in the session's `runtimeSettings.memoryGuardStop` (when, the card's words, what was running), so it survives a gxserver restart: while the session sleeps it is the row's blocked state (the red dot and its reason, server/src/presentation/attention_alerts.rs, drawn by every client), and its chat shows the card with Resume (server/src/session_chat_read.rs). The guard's tick clears the record once the session runs again, however it was woken (server/src/server/memory_guard_runtime.rs).
 //! Then (Q3190), asked whether that red dot should also play the blocked sound and banner on top of the guard's own notification: "only the guard's alert". The row carries `blockedAlertedBy: memoryGuard`, so clients draw the dot without the blocked rule's sound and banner (packages/gx-core/src/alert_rule.rs `blocked_alerts`), and Notify me when it steps in controls every alert about the stop.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::session_chat_notice::{
     SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
@@ -21,7 +21,8 @@ pub(crate) const STOP_RECORD: &str = "memoryGuardStop";
 pub(crate) const BLOCKED_ALERTED_BY: &str = "memoryGuard";
 
 /// The blocked reason a stopped session's row says on hover and in its banner.
-pub(crate) const BLOCKED_REASON: &str = "Stopped: this computer was running out of memory. Open it to see what was stopped and resume it.";
+pub(crate) const BLOCKED_REASON: &str =
+    "Stopped: this computer was running out of memory. Open it to see what was stopped and resume it.";
 
 /// The card for `words`; a stopped session's card has Resume.
 pub(crate) fn card(

@@ -11,18 +11,18 @@ use std::sync::{Mutex, OnceLock};
 
 use base64::Engine as _;
 use ghostex_gx_core::settings_sync::{
-    ACCOUNT_KEY_PREFIX, AGENT_KEY_PREFIX, BUNDLED_SKILL_KEY_PREFIX, MAX_SKILL_FILES,
-    MAX_SKILLS_BYTES, OWN_SKILL_KEY_PREFIX, SYNC_CATEGORIES, account_sync_value,
-    agent_roster_values, apply_agent_roster_entry, apply_synced_account, category_enabled,
-    skill_file_path_safe, skill_fits, skill_hash, skill_name_syncs,
+    account_sync_value, agent_roster_values, apply_agent_roster_entry, apply_synced_account,
+    category_enabled, skill_file_path_safe, skill_fits, skill_hash, skill_name_syncs,
+    ACCOUNT_KEY_PREFIX, AGENT_KEY_PREFIX, BUNDLED_SKILL_KEY_PREFIX, MAX_SKILLS_BYTES,
+    MAX_SKILL_FILES, OWN_SKILL_KEY_PREFIX, SYNC_CATEGORIES,
 };
 use rusqlite::Connection;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::agent_skills::{
-    AGENT_SKILL_COPY_EXCLUDED_NAMES, CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_AGENT_SKILL_NAMES,
-    MACOS_ONLY_GHOSTEX_AGENT_SKILL_NAMES, role_only_ghostex_agent_skill,
+    role_only_ghostex_agent_skill, AGENT_SKILL_COPY_EXCLUDED_NAMES, CANONICAL_AGENT_SKILLS_DIR,
+    GHOSTEX_AGENT_SKILL_NAMES, MACOS_ONLY_GHOSTEX_AGENT_SKILL_NAMES,
 };
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;

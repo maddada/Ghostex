@@ -8,10 +8,10 @@ use super::{
 };
 use crate::ghostex_cli::{
     args::Flags,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
     selector, sessions,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// The session a ref names on this computer (`self` is the calling session).
 fn resolve(reference: &str, flags: &Flags) -> CliResult<Value> {

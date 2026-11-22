@@ -1,12 +1,12 @@
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::output::print_json;
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::paths::get_gxserver_paths;
 use ghostex_agent_sync::{
-    AgentStatus, PlanGroupKind, PlanOptions, PlanVerb, SyncPlan, SyncReport, SyncScope, apply,
-    build_plan, scan,
+    apply, build_plan, scan, AgentStatus, PlanGroupKind, PlanOptions, PlanVerb, SyncPlan,
+    SyncReport, SyncScope,
 };
 
 /*

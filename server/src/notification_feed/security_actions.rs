@@ -12,7 +12,7 @@
 //! src/notifications/ in the phone repo.
 
 use rusqlite::Connection;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::audit::StoredEntry;
 use crate::remote_access::{PairedDeviceStatus, RemotePairingRepository};
@@ -73,7 +73,7 @@ pub(crate) fn overlay_removable_devices(db: &Connection, items: &mut [Value]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::remote_access::{RemotePairedDeviceRecord, now_iso};
+    use crate::remote_access::{now_iso, RemotePairedDeviceRecord};
 
     fn entry(
         seq: u64,

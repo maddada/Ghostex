@@ -1,9 +1,9 @@
 //! `PresentationSession.work` and `PresentationSession.links` for a Linear and a GitHub session.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::session_git_status::{
-    SessionGitStatus, SessionPullRequest, set_cached_session_git_status_for_test,
+    set_cached_session_git_status_for_test, SessionGitStatus, SessionPullRequest,
 };
 use crate::session_links::presentation_session_links;
 

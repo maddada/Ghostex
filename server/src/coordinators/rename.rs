@@ -1,9 +1,9 @@
 //! `/api/renameCoordinatorThread`: a thread renames itself (`ghostex orchestrator rename-self`),
 //! or its orchestrator renames it (`ghostex orchestrator rename`).
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::records::{ThreadRecord, read_thread};
+use super::records::{read_thread, ThreadRecord};
 use crate::domain::{DomainRepository, DomainStateError};
 
 /// The longest thread title an orchestrator may give.
@@ -217,9 +217,7 @@ mod tests {
         let session = json!({ "title": "Accounts page mockups" });
         assert_eq!(
             thread_title_reminder_for(Some(&thread()), ("P1", "C1"), &session).as_deref(),
-            Some(
-                "Your title is \"Accounts page mockups\". If this message starts a task that title does not describe, rename yourself first: `ghostex coordinator rename-self \"<3 to 6 words>\"`. If it answers that the user renamed you, keep that name."
-            )
+            Some("Your title is \"Accounts page mockups\". If this message starts a task that title does not describe, rename yourself first: `ghostex coordinator rename-self \"<3 to 6 words>\"`. If it answers that the user renamed you, keep that name.")
         );
     }
 

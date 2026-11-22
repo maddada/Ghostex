@@ -14,14 +14,14 @@ use convex::{ConvexClient, ConvexClientBuilder, FunctionResult, WebSocketState};
 use futures_util::StreamExt;
 use serde::Serialize;
 use serde_json::Value;
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{mpsc, Notify};
 use tokio::task::{JoinHandle, JoinSet};
 
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::server::AppState;
 
-use super::commands::{CommandOutcome, handles_command_type, run_team_command};
-use super::connections::{TeamConnection, read_team_connections};
+use super::commands::{handles_command_type, run_team_command, CommandOutcome};
+use super::connections::{read_team_connections, TeamConnection};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(120);
 const FIRST_RETRY: Duration = Duration::from_secs(5);

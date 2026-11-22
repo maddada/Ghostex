@@ -101,7 +101,7 @@ pub fn run(args: &[String]) -> i32 {
                     None => {
                         return usage_error(
                             "--agent needs one of: claude, codex, pi, opencode, cursor, grok",
-                        );
+                        )
                     }
                 }
             }

@@ -14,7 +14,7 @@
 //! A command may take its whole time limit (30 s for an exact read). Run inline, it would hold the card pass's serial loop over every source, and `refresh_work_feeds`' one lock, for that long. So the background never runs one inline: it queues the call and moves on, and the card shows the answer on a later snapshot.
 
 use std::collections::{HashSet, VecDeque};
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::Instant;

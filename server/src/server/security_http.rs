@@ -10,10 +10,10 @@
 
 use axum::http::StatusCode;
 use ghostex_gx_protocol::approval::{
-    APPROVAL_DENIED_ERROR, APPROVAL_ID_PARAM, APPROVAL_REQUIRED_ERROR, ApproveApprovalParams,
-    DenyApprovalParams, ReadApprovalParams,
+    ApproveApprovalParams, DenyApprovalParams, ReadApprovalParams, APPROVAL_DENIED_ERROR,
+    APPROVAL_ID_PARAM, APPROVAL_REQUIRED_ERROR,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::{
     domain::read_domain_rpc_params,
@@ -21,7 +21,7 @@ use crate::{
     security::{self, ActionRequest, PresenceGrant, PresenceOutcome, Principal},
 };
 
-use super::{AppState, RoutedResponse, routed_json};
+use super::{routed_json, AppState, RoutedResponse};
 
 /// The gate a sensitive route calls before it changes anything:
 ///
@@ -215,7 +215,7 @@ pub(crate) fn route_security_http(
             return Some(reply(
                 StatusCode::BAD_REQUEST,
                 Err(("badRequest", error.message)),
-            ));
+            ))
         }
     };
     if endpoint_path == security::APPROVER_KEYS_ENROLL_ENDPOINT
@@ -544,9 +544,7 @@ fn enroll_key(
                     "Let {} show the pairing code of {here} and approve new phones and computers there (key words: {words})",
                     key.label
                 ),
-                format!(
-                    "Approve only if it is your own Ghostex app, on this computer or on one of your computers connected to it, and it shows the same four words and names {here}."
-                ),
+                format!("Approve only if it is your own Ghostex app, on this computer or on one of your computers connected to it, and it shows the same four words and names {here}."),
             )
         } else {
             (
@@ -554,9 +552,7 @@ fn enroll_key(
                     "Let {} act as you on {here} (key words: {words})",
                     key.label
                 ),
-                format!(
-                    "It can then do everything you can do there: show the pairing code, approve new phones and computers, answer secret requests. Approve only if it is your own Ghostex app and it shows the same four words and names {here}."
-                ),
+                format!("It can then do everything you can do there: show the pairing code, approve new phones and computers, answer secret requests. Approve only if it is your own Ghostex app and it shows the same four words and names {here}."),
             )
         };
         let action = ActionRequest::new(
@@ -1218,9 +1214,7 @@ fn note_terminal_handover(
                     format!("Let {name} connect to {here} from {here}'s terminal"),
                 )
                 .target(name.clone()),
-                crate::audit::Actor::SharedToken {
-                    claimed_session: None,
-                },
+                crate::audit::Actor::SharedToken { claimed_session: None },
                 crate::audit::Outcome::ApprovedBy(format!(
                     "Approved in {here}'s terminal (ghostex computer-code) while {here}'s own Ghostex app was its only owner: {name} gets the Easy Connect tunnel only and signs in with your SSH login; once signed in it may ask to manage {here}"
                 )),
@@ -1236,9 +1230,7 @@ fn note_terminal_handover(
                     format!("{name} now manages {here}"),
                 )
                 .target(name.clone()),
-                crate::audit::Actor::SharedToken {
-                    claimed_session: None,
-                },
+                crate::audit::Actor::SharedToken { claimed_session: None },
                 crate::audit::Outcome::ApprovedBy(format!(
                     "Approved in {here}'s terminal: {name} joined {here} from that terminal while only {here}'s own Ghostex app owned it, and asked through its SSH login. {name} now approves new phones and computers for {here}; the terminal approves nothing more"
                 )),

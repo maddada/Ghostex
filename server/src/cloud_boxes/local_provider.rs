@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use ghostex_gx_cloud::local;
 use ghostex_gx_cloud::metadata::BoxMetadata;
 use ghostex_gx_protocol::cloud_box::{
-    BOX_GHOSTEX_BIN, CLOUD_BOX_TRANSPORT_DIRECT, CloudBoxConnectInfo,
+    CloudBoxConnectInfo, BOX_GHOSTEX_BIN, CLOUD_BOX_TRANSPORT_DIRECT,
 };
 use serde_json::Value;
 
-use super::docker::{BOOT_TIMEOUT, CREATE_TIMEOUT, QUICK_TIMEOUT, run_docker};
+use super::docker::{run_docker, BOOT_TIMEOUT, CREATE_TIMEOUT, QUICK_TIMEOUT};
 
 /// Docker's server architecture, or why Docker can't be used.
 pub(super) fn docker_arch(home: &Path) -> Result<String, String> {

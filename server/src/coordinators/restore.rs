@@ -1,8 +1,8 @@
 //! A closed session restored from Previous Sessions keeps its place among coordinators.
 
-use rusqlite::{Connection, Transaction, TransactionBehavior, params};
+use rusqlite::{params, Connection, Transaction, TransactionBehavior};
 
-use super::records::{SessionKey, now_iso, sql_error};
+use super::records::{now_iso, sql_error, SessionKey};
 use crate::domain::DomainStateError;
 
 /// Moves the coordinator records of a closed session onto the session that restored it: its own

@@ -24,12 +24,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use axum::http::StatusCode;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::{
     domain::read_domain_rpc_params,
     protocol::rpc_success,
-    server::{AppState, RoutedResponse, routed_json},
+    server::{routed_json, AppState, RoutedResponse},
 };
 
 use super::store::{earlier_pages_from, is_page_id, note_retired, read_record};

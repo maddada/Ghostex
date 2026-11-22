@@ -36,7 +36,8 @@ pub(crate) const CREATE_BLOCK: Duration = BACK_OFF;
 
 /// Why a created ticket can't be shown: its id holds a value the workspace stores. The ticket
 /// exists, so the words say so; they quote nothing the command sent.
-pub(crate) const CREATED_ID_SPELLS_CREDENTIAL: &str = "created a ticket, but its ID contains the value of a credential this workspace keeps, which Ghostex can't hide; open it to find the ticket.";
+pub(crate) const CREATED_ID_SPELLS_CREDENTIAL: &str =
+    "created a ticket, but its ID contains the value of a credential this workspace keeps, which Ghostex can't hide; open it to find the ticket.";
 
 /// One create, for the project it was asked from.
 pub(crate) struct CreateCall {

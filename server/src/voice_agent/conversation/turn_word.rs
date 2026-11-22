@@ -7,7 +7,7 @@
 
 use std::time::Instant;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::super::focus::FocusScope;
 use super::{Conversation, Ended, TURN_WORD_HOLD, UNANSWERED_TURN_GRACE};

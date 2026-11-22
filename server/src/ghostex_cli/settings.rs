@@ -5,10 +5,10 @@ use std::{
 };
 
 use serde::Deserialize;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::actions::send_gxserver_cli_action;
-use crate::ghostex_cli::args::{Flags, parse_args};
+use crate::ghostex_cli::args::{parse_args, Flags};
 use crate::ghostex_cli::output::{normalize_js_numbers, print_json};
 use crate::ghostex_cli::rpc::{self, CliError, CliResult};
 use crate::ghostex_cli::usage;

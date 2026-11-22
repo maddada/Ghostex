@@ -1,9 +1,9 @@
 use super::{
     args::Flags,
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 const HELP: &str = "Usage: ghostex accounts [--all] [--refresh] [--json] [--server <profile>]
        ghostex accounts status [--refresh] [--json]   One line per account: its room and whether
@@ -56,7 +56,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             other => {
                 return Err(CliError::Other(format!(
                     "Unknown argument: {other}. See ghostex accounts --help."
-                )));
+                )))
             }
         }
     }

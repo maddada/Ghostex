@@ -34,7 +34,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Local, Utc};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::{agents, args::Flags, rpc::call_gxserver_rpc};
 
@@ -123,8 +123,7 @@ impl Account {
         self.long.is_some_and(|used| used >= LONG_PERCENT)
             || self.short.is_some_and(|(used, resets)| {
                 used >= SHORT_PERCENT
-                    && resets
-                        .is_none_or(|at| at - now >= chrono::Duration::hours(SHORT_RESET_HOURS))
+                    && resets.is_none_or(|at| at - now >= chrono::Duration::hours(SHORT_RESET_HOURS))
             })
     }
 }
@@ -513,13 +512,7 @@ fn print_room(room: &Value, compact: bool) {
             if agent["flag"] == "out" { "OUT" } else { "LOW" },
             agents::text(agent, "label"),
             users_text(agent),
-            if agent["usedBy"]["coordinator"] == true
-                || agent["usedBy"]["threads"].as_u64() != Some(1)
-            {
-                ""
-            } else {
-                "s"
-            },
+            if agent["usedBy"]["coordinator"] == true || agent["usedBy"]["threads"].as_u64() != Some(1) { "" } else { "s" },
             manual_text(agent),
         );
     }

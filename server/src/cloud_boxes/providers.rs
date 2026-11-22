@@ -1,8 +1,8 @@
 //! The provider rows of `providers`.
 
 use ghostex_gx_protocol::cloud_box::{
-    CloudConnectMethod, CloudProvider, CloudProviderConnectionState, CloudProviderId,
-    CloudProviderLimits, LOCAL_PROVIDER_ENV, setting_keys,
+    setting_keys, CloudConnectMethod, CloudProvider, CloudProviderConnectionState, CloudProviderId,
+    CloudProviderLimits, LOCAL_PROVIDER_ENV,
 };
 use serde_json::Value;
 

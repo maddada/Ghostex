@@ -8,17 +8,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+pub use ghostex_gx_protocol::approval::{expired_message, GONE_MESSAGE};
 use ghostex_gx_protocol::approval::{
     ApprovalRequest, ApprovalRequester, ApprovalStatus, SensitiveAction,
 };
-pub use ghostex_gx_protocol::approval::{GONE_MESSAGE, expired_message};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use super::{Principal, approver_keys::ApproverKeyError};
+use super::{approver_keys::ApproverKeyError, Principal};
 
 /// How long a request waits for the owner.
 pub const PENDING_TTL_MS: u64 = 10 * 60 * 1000;

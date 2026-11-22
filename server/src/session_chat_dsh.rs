@@ -14,8 +14,8 @@ use std::{
     time::SystemTime,
 };
 
-use ruzstd::decoding::StreamingDecoder;
 use ruzstd::decoding::errors::{FrameDecoderError, ReadFrameHeaderError};
+use ruzstd::decoding::StreamingDecoder;
 
 /// The events chat reads; everything else in the log (request headers with every tool schema, the
 /// system prompt, runtime context, jobs) is left out of the mirror.

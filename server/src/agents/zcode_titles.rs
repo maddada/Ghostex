@@ -7,10 +7,10 @@
 use std::path::Path;
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::*;
-use crate::domain::{DomainRepository, DomainStateError, sql_error};
+use crate::domain::{sql_error, DomainRepository, DomainStateError};
 use crate::presentation::project_session_title_projection;
 
 /// Mirrors the 180-char cap the discovery reader applies to zcode titles, so a

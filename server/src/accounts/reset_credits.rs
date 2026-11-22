@@ -1,5 +1,5 @@
 use super::{helpers, model::ResetCredit, reset_claim::Outcome};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Mutex};
 
 /// CDXC:AgentProviders 2026-09-11 WHY:
@@ -108,12 +108,12 @@ pub(crate) fn claim(row: &Value, credit_id: &str, request_id: &str) -> Outcome {
     {
         Ok(response) => response,
         Err(ureq::Error::StatusCode(401 | 403)) => {
-            return Outcome::failed("Sign in again to use this reset.");
+            return Outcome::failed("Sign in again to use this reset.")
         }
         Err(_) => {
             return Outcome::failed(
                 "The reset could not be confirmed. Check your limits before trying again.",
-            );
+            )
         }
     };
     let code = crate::http_agent::read_json::<Value>(response)
@@ -154,12 +154,10 @@ mod tests {
             credits.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
             ["first", "later", "unlimited"]
         );
-        assert!(
-            parse(
-                &json!({"credits":[{"id":"broken","expires_at":"bad"}]}),
-                now
-            )
-            .is_err()
-        );
+        assert!(parse(
+            &json!({"credits":[{"id":"broken","expires_at":"bad"}]}),
+            now
+        )
+        .is_err());
     }
 }

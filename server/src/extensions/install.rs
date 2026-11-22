@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::{
-    ExtensionError, ExtensionManifest, ExtensionResult, validate_extension_id, validate_sha256,
+    validate_extension_id, validate_sha256, ExtensionError, ExtensionManifest, ExtensionResult,
 };
 
 const MANIFEST_FILE: &str = "ghostex-extension.json";

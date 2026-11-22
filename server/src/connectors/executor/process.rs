@@ -289,15 +289,13 @@ pub(super) fn stop(paths: &GxserverPaths, workspace: &str) {
 pub(crate) fn start_idle_stop() {
     static STARTED: std::sync::Once = std::sync::Once::new();
     STARTED.call_once(|| {
-        std::thread::spawn(|| {
-            loop {
-                std::thread::sleep(IDLE_CHECK_EVERY);
-                for (data_dir, workspace, mut child) in take_idle(IDLE_STOP_AFTER) {
-                    terminate(&mut child);
-                    let _ = fs::remove_file(Path::new(&data_dir).join(PID_FILE));
-                    if !workspace.is_empty() {
-                        notify_changed(&workspace);
-                    }
+        std::thread::spawn(|| loop {
+            std::thread::sleep(IDLE_CHECK_EVERY);
+            for (data_dir, workspace, mut child) in take_idle(IDLE_STOP_AFTER) {
+                terminate(&mut child);
+                let _ = fs::remove_file(Path::new(&data_dir).join(PID_FILE));
+                if !workspace.is_empty() {
+                    notify_changed(&workspace);
                 }
             }
         });

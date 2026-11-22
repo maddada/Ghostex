@@ -3,14 +3,14 @@
 //! and session delta.
 
 use rusqlite::Connection;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::*;
 use crate::domain::DomainRepository;
 use crate::notification_feed::store::{
-    NOTIFICATION_FEED_KIND_FINISHED, NOTIFICATION_FEED_KIND_NEEDS_INPUT, NewNotificationFeedRow,
     clear_notification_feed, dismiss_notification, insert_notification_feed_row,
-    mark_notification_read, notification_exists,
+    mark_notification_read, notification_exists, NewNotificationFeedRow,
+    NOTIFICATION_FEED_KIND_FINISHED, NOTIFICATION_FEED_KIND_NEEDS_INPUT,
 };
 
 const SERVER: &str = "attention-host";

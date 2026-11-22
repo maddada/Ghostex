@@ -3,8 +3,8 @@ use std::{fs, io::Read, io::Write, path::Path, time::Duration};
 use uuid::Uuid;
 
 use super::{
-    ExtensionCatalog, ExtensionCatalogSnapshot, ExtensionCatalogSource, ExtensionError,
-    ExtensionResult, validate_sha256,
+    validate_sha256, ExtensionCatalog, ExtensionCatalogSnapshot, ExtensionCatalogSource,
+    ExtensionError, ExtensionResult,
 };
 
 /// CDXC:Extensions 2026-11-14 DECISION:

@@ -11,5 +11,5 @@ mod http;
 mod relay;
 
 pub(crate) use agent::handle_start_feedback_agent_http;
-pub(crate) use brief::{FEEDBACK_BRIEF_ENDPOINT, handle_feedback_brief_http};
+pub(crate) use brief::{handle_feedback_brief_http, FEEDBACK_BRIEF_ENDPOINT};
 pub(crate) use http::handle_feedback_http;

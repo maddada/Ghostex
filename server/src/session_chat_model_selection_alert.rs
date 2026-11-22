@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::logging::{DiagnosticLogScenario, GxserverLogInput, GxserverLogger, LogLevel};
 
@@ -727,12 +727,10 @@ mod tests {
         assert!(store.expected.iter().any(
             |entry| entry["sessionId"] == session && entry["reason"] == EXPECTED_GHOSTEX_SLEEP
         ));
-        assert!(
-            !store
-                .disagreements
-                .iter()
-                .any(|entry| entry["sessionId"] == session)
-        );
+        assert!(!store
+            .disagreements
+            .iter()
+            .any(|entry| entry["sessionId"] == session));
     }
 
     #[test]

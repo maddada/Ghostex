@@ -11,11 +11,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rusqlite::OptionalExtension;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
-use crate::server::{AppState, schedule_presentation_project_delta};
+use crate::server::{schedule_presentation_project_delta, AppState};
 use crate::storage::open_gxserver_database;
 
 const DONE_KEY: &str = "gbotsSidecarRetired";

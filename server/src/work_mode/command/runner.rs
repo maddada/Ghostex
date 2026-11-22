@@ -13,7 +13,7 @@ use std::time::Duration;
 use serde_json::{Map, Value};
 
 use crate::paths::GxserverPaths;
-use crate::platform::process::{Keep, RunLimits, Unfinished, run_bounded_after_spawn};
+use crate::platform::process::{run_bounded_after_spawn, Keep, RunLimits, Unfinished};
 
 use super::*;
 
@@ -691,7 +691,7 @@ fn run_answer(call: &CommandCall, after_spawn: impl FnOnce()) -> Result<Answer, 
                     value,
                     stdout: output.stdout,
                     info,
-                });
+                })
             }
             Err(what) => unreadable(env, &what, &output.stdout),
         }

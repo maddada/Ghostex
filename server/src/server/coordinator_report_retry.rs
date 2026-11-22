@@ -6,7 +6,7 @@ use super::*;
 
 use crate::coordinators::{self, SessionKey};
 
-use super::coordinator_runtime::{RETRY_DELAYS_MS, now_ms};
+use super::coordinator_runtime::{now_ms, RETRY_DELAYS_MS};
 
 /// How long reports to one coordinator keep failing, the computer online, before Ghostex gives up.
 ///
@@ -43,7 +43,8 @@ const fn attempts_within(window: i64) -> usize {
 }
 
 const REPORTS_NOTICE_TITLE: &str = "Coordinator stopped getting reports";
-const REPORTS_NOTICE_BODY: &str = "Ghostex tried for 10 minutes and stopped. Check what it is waiting on, then send it a message to try again.";
+const REPORTS_NOTICE_BODY: &str =
+    "Ghostex tried for 10 minutes and stopped. Check what it is waiting on, then send it a message to try again.";
 
 /// One coordinator's run of failed deliveries.
 pub(super) struct FailureStreak {

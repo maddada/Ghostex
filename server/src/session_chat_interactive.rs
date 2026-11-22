@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
-use crate::server::{AppState, read_runtime_text, read_session_text, session_observer_key};
+use crate::server::{read_runtime_text, read_session_text, session_observer_key, AppState};
 use crate::session_chat::*;
 use crate::session_chat_follower::{insert_optional_selected_options, insert_screen_state};
 use crate::session_chat_options::cached_session_chat_screen_state;
@@ -845,7 +845,11 @@ pub fn resolve_session_chat_prompt(
                     _ => false,
                 }
             });
-            if retired { None } else { Some(prompt) }
+            if retired {
+                None
+            } else {
+                Some(prompt)
+            }
         }
         None => transcript.unretired_pending().cloned(),
     }

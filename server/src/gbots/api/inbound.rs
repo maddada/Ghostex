@@ -20,14 +20,14 @@ use std::time::{Duration, Instant};
 
 use axum::body::Body;
 use axum::http::{HeaderMap, Method, StatusCode};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::chat::{MESSAGE_MAX_CHARS, SendRefusal, send};
-use super::keys::{BotKey, key_for, touch};
-use super::reply::{ApiMessage, ReplyState, read_message, reply_state};
+use super::chat::{send, SendRefusal, MESSAGE_MAX_CHARS};
+use super::keys::{key_for, touch, BotKey};
+use super::reply::{read_message, reply_state, ApiMessage, ReplyState};
 use crate::domain::DomainRepository;
-use crate::gbots::record::{Bot, read_bot};
-use crate::server::{AppState, RoutedResponse, routed_json};
+use crate::gbots::record::{read_bot, Bot};
+use crate::server::{routed_json, AppState, RoutedResponse};
 use crate::storage::open_gxserver_database;
 
 /// Every GBot API route starts with this.
@@ -190,16 +190,14 @@ pub(crate) async fn serve(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internalError",
                 "Ghostex could not check the key.",
-            );
+            )
         }
     };
     if let Some(seconds) = rate_limited(&key.key_id) {
         return refuse(
             StatusCode::TOO_MANY_REQUESTS,
             "rateLimited",
-            format!(
-                "This key made {CALLS_PER_MINUTE} calls in the last minute. Try again in {seconds} seconds."
-            ),
+            format!("This key made {CALLS_PER_MINUTE} calls in the last minute. Try again in {seconds} seconds."),
         );
     }
     match route {
@@ -223,7 +221,7 @@ async fn send_message(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 "payloadTooLarge",
                 format!("A message is at most {MESSAGE_MAX_CHARS} characters."),
-            );
+            )
         }
     };
     let Ok(request) = serde_json::from_slice::<Value>(&bytes) else {
@@ -296,20 +294,20 @@ async fn send_message(
                     "messageId": earlier,
                     "poll": poll_path(&bot.bot_id, &earlier),
                 }),
-            );
+            )
         }
         Ok(Err(SendRefusal::Limited(message))) => {
-            return refuse(StatusCode::TOO_MANY_REQUESTS, "limited", message);
+            return refuse(StatusCode::TOO_MANY_REQUESTS, "limited", message)
         }
         Ok(Err(SendRefusal::Failed(error))) => {
-            return refuse(StatusCode::INTERNAL_SERVER_ERROR, error.code, error.message);
+            return refuse(StatusCode::INTERNAL_SERVER_ERROR, error.code, error.message)
         }
         Err(_) => {
             return refuse(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internalError",
                 "Ghostex could not send the message.",
-            );
+            )
         }
     };
     let state_now = await_reply(&state, &message, wait).await;

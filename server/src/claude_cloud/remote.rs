@@ -74,12 +74,12 @@ fn get(login: &Login, path: &str) -> Result<Value, String> {
         match response {
             Ok(response) => {
                 return crate::http_agent::read_json(response)
-                    .map_err(|_| "claude.ai sent an unreadable answer.".to_string());
+                    .map_err(|_| "claude.ai sent an unreadable answer.".to_string())
             }
             // An older token of the same login; the next one may be current.
             Err(ureq::Error::StatusCode(401 | 403)) => continue,
             Err(ureq::Error::StatusCode(404)) => {
-                return Err("claude.ai does not know this session.".to_string());
+                return Err("claude.ai does not know this session.".to_string())
             }
             Err(error) => return Err(format!("claude.ai did not answer ({error}).")),
         }

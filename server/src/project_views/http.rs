@@ -1,14 +1,14 @@
 use crate::{
     domain::read_domain_rpc_params,
     protocol::{rpc_error, rpc_success},
-    server::{AppState, RoutedResponse, routed_json},
+    server::{routed_json, AppState, RoutedResponse},
 };
 use axum::{
     body::Body,
-    http::{HeaderValue, Response, StatusCode, header},
+    http::{header, HeaderValue, Response, StatusCode},
     response::IntoResponse,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 pub(crate) async fn handle(
     state: &AppState,
@@ -23,7 +23,7 @@ pub(crate) async fn handle(
                 Some(path),
                 StatusCode::BAD_REQUEST,
                 rpc_error(error.code, error.message, Some(request_id)),
-            );
+            )
         }
     };
     let port = state.config.listeners.local.port;

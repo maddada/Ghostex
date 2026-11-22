@@ -25,14 +25,14 @@ mod usage;
 mod words;
 
 pub(crate) use card::{
-    BLOCKED_ALERTED_BY, STOP_RECORD, blocked_by_memory_guard, card, card_from_record, stop_record,
-    stopped_parts,
+    blocked_by_memory_guard, card, card_from_record, stop_record, stopped_parts,
+    BLOCKED_ALERTED_BY, STOP_RECORD,
 };
-pub(crate) use pressure::{PressureLevel, read_pressure_level};
+pub(crate) use pressure::{read_pressure_level, PressureLevel};
 pub(crate) use processes::{
-    Member, StopSignal, alive_members, signal_processes, snapshot_user_processes, supported,
+    alive_members, signal_processes, snapshot_user_processes, supported, Member, StopSignal,
 };
-pub(crate) use usage::{ChildGroup, SessionUsage, Step, min_session_bytes, session_usage};
+pub(crate) use usage::{min_session_bytes, session_usage, ChildGroup, SessionUsage, Step};
 pub(crate) use words::*;
 
 /// The settings switch (on by default): the guard acts only while it is on.

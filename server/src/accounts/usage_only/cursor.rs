@@ -1,9 +1,9 @@
 //! Cursor: a browser sign-in Ghostex waits on (nothing to paste), and the plan usage of the
 //! current billing month from Cursor's dashboard service.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::http::{self, Failure, agent, answer};
+use super::http::{self, agent, answer, Failure};
 use super::signin::{Progress, SignedIn};
 use super::store::{Credential, UsageAccount};
 use super::{Detail, Reading};

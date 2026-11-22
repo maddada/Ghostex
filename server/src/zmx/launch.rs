@@ -7,8 +7,8 @@ use std::{
     io::{Read, Write},
     process::{Command, Stdio},
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
     thread,
     time::{Duration, Instant},

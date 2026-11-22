@@ -51,9 +51,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 use crate::session_chat::{
-    SessionChatLineDecoder, SessionChatMessage, SessionChatRole, TranscriptFileVersion,
-    TranscriptLeafMarker, TranscriptLineage, is_noise_message, parse_json_object,
-    transcript_fallback_id,
+    is_noise_message, parse_json_object, transcript_fallback_id, SessionChatLineDecoder,
+    SessionChatMessage, SessionChatRole, TranscriptFileVersion, TranscriptLeafMarker,
+    TranscriptLineage,
 };
 use crate::session_chat_branch_facts::{LineFact, LineFacts};
 use crate::session_chat_decode_claude::{

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::stores::{TrustingAgent, trust_folder};
+use super::stores::{trust_folder, TrustingAgent};
 use crate::domain::DomainRepository;
 
 /// CDXC:AgentProviders 2026-11-14 DECISION:

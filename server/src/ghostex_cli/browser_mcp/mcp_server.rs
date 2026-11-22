@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Read;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::mcp_stdio::McpStdio;
 use crate::ghostex_cli::rpc::{CliError, CliResult};

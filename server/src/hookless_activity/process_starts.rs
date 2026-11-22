@@ -12,10 +12,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::attach::ATTACH_CLIENT;
-use super::claude::{LiveRecord, opened_by_clear, text, transcript_path};
+use super::claude::{opened_by_clear, text, transcript_path, LiveRecord};
 
 /// Starts kept per conversation, newest last.
 const KEPT: usize = 64;

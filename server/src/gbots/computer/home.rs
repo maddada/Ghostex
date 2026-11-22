@@ -10,15 +10,15 @@
 use std::sync::{Arc, OnceLock, Weak};
 
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::remote_chat::HOME_KEY;
 use super::store::{self, Place};
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::paths::GxserverPaths;
 use crate::protocol::{rpc_error, rpc_success};
 use crate::security::Principal;
-use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
+use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
 use crate::storage::open_gxserver_database;
 
 pub(crate) const GBOTS_REMOTE_ENDPOINT: &str = "/api/gbotsRemote";

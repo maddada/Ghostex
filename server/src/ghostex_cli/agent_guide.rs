@@ -1,4 +1,4 @@
-use crate::agents::{PreviewBrowser, agent_preview_browser};
+use crate::agents::{agent_preview_browser, PreviewBrowser};
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 
 /// CDXC:AgentGuide 2026-11-02 DECISION:
@@ -52,15 +52,9 @@ Anything else
 /// The browser lines, which follow the user's Agents open pages in choice.
 fn browser_lines(browser: PreviewBrowser) -> &'static str {
     match browser {
-        PreviewBrowser::Ask => {
-            "- No browser picked yet: ask once whether they want the Ghostex browser or their default browser, and offer to remember it with `ghostex settings set agentPreviewBrowser internal-browser` (or `system-default-browser`)."
-        }
-        PreviewBrowser::Ghostex => {
-            "- The user picked the Ghostex browser (Settings > Browser > Agents open pages in). Use it, no asking."
-        }
-        PreviewBrowser::System => {
-            "- The user picked their default browser (Settings > Browser > Agents open pages in). Use it, no asking."
-        }
+        PreviewBrowser::Ask => "- No browser picked yet: ask once whether they want the Ghostex browser or their default browser, and offer to remember it with `ghostex settings set agentPreviewBrowser internal-browser` (or `system-default-browser`).",
+        PreviewBrowser::Ghostex => "- The user picked the Ghostex browser (Settings > Browser > Agents open pages in). Use it, no asking.",
+        PreviewBrowser::System => "- The user picked their default browser (Settings > Browser > Agents open pages in). Use it, no asking.",
     }
 }
 
@@ -79,9 +73,7 @@ pub fn agent_guide_command(args: &[String]) -> CliResult<()> {
             Ok(())
         }
         Some("help" | "-h" | "--help") => {
-            println!(
-                "Usage: ghostex agent-guide\n       ghostex agent-guide install-skill [--json]\n\nPrint what an agent running in Ghostex can do with the ghostex CLI: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, the guide for each job and Ghostex Help. install-skill installs the ghostex skill (/ghostex, $ghostex in Codex), which sends any agent here."
-            );
+            println!("Usage: ghostex agent-guide\n       ghostex agent-guide install-skill [--json]\n\nPrint what an agent running in Ghostex can do with the ghostex CLI: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, the guide for each job and Ghostex Help. install-skill installs the ghostex skill (/ghostex, $ghostex in Codex), which sends any agent here.");
             Ok(())
         }
         Some(other) => Err(CliError::Other(format!(

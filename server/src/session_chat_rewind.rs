@@ -42,24 +42,24 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::domain::{DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainStateError};
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::protocol::rpc_success;
 use crate::server::{
-    AppState, RoutedResponse, domain_error_response, read_runtime_text, routed_json,
+    domain_error_response, read_runtime_text, routed_json, AppState, RoutedResponse,
 };
 use crate::session_chat::{SessionChatRole, SessionChatTranscriptAgent, TranscriptLineage};
 use crate::session_chat_decode_claude::{
     claude_transcript_lineage, decode_claude_transcript_line, is_noise_message, message_text,
 };
 use crate::session_chat_rewind_state::{
-    SessionChatPendingRewind, session_chat_pending_rewind, set_session_chat_pending_rewind,
+    session_chat_pending_rewind, set_session_chat_pending_rewind, SessionChatPendingRewind,
 };
 use crate::session_chat_send::{
-    SESSION_CHAT_INTERRUPT, SessionChatSendStep, capture_session_terminal_text,
-    execute_session_chat_send, resolve_session_chat_send_target, write_session_chat_payload,
+    capture_session_terminal_text, execute_session_chat_send, resolve_session_chat_send_target,
+    write_session_chat_payload, SessionChatSendStep, SESSION_CHAT_INTERRUPT,
 };
 
 /// What the driver writes to open the flow. Typed as literal keystrokes, not a
@@ -1098,8 +1098,7 @@ impl RewindDriver<'_> {
                 return Err(dialog_mismatch(
                     "prompt list",
                     &format!(
-                        "the list stopped on \"{}\" before reaching the message that was asked for.",
-                        last_row.text
+                        "the list stopped on \"{}\" before reaching the message that was asked for.", last_row.text
                     ),
                 ));
             }
@@ -1110,8 +1109,7 @@ impl RewindDriver<'_> {
         Err(dialog_mismatch(
             "prompt list",
             &format!(
-                "the highlighted prompt was \"{}\" after {} moves, not the message that was asked for.",
-                last_row.text, plan.presses
+                "the highlighted prompt was \"{}\" after {} moves, not the message that was asked for.", last_row.text, plan.presses
             ),
         ))
     }
@@ -1189,8 +1187,8 @@ impl RewindDriver<'_> {
                     return Err(dialog_mismatch(
                         "confirmation",
                         &format!(
-                            "the cursor is on option {} and \"{CLAUDE_REWIND_RESTORE_CONVERSATION}\" is option {} above it.",
-                            selected.number, target.number
+                            "the cursor is on option {} and \"{CLAUDE_REWIND_RESTORE_CONVERSATION}\" is option {} above it."
+                            , selected.number, target.number
                         ),
                     ));
                 }
@@ -1396,12 +1394,12 @@ async fn rewind_session_chat(
             return Err(agent_busy(format!(
                 "{} The rewind did not run.",
                 error.message
-            )));
+            )))
         }
         (Ok(()), None) => {
             return Err(agent_busy(
                 "The session's terminal queue dropped the rewind before it ran.".to_string(),
-            ));
+            ))
         }
         (Ok(()), Some(Ok(()))) => {}
     }

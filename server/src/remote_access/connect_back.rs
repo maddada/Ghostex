@@ -32,9 +32,9 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
 use rusqlite::Connection;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use ghostex_gx_protocol::pairing::DEVICE_KEY_ALGORITHM;
@@ -43,8 +43,8 @@ use crate::paths::GxserverPaths;
 use crate::security::Principal;
 
 use super::computer_pairing::{
-    AddMachine, ComputerPairingCode, device_public_key, device_sign, load_or_create_device_key,
-    start_computer_pairing,
+    device_public_key, device_sign, load_or_create_device_key, start_computer_pairing, AddMachine,
+    ComputerPairingCode,
 };
 use super::pair_device::verify_device_signature;
 use super::repository::{PairedDeviceStatus, RemotePairingRepository};

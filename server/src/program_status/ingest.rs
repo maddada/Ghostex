@@ -1,25 +1,24 @@
 use std::time::Duration;
 
 use serde::Deserialize;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::agents::dispatch_agent_endpoint;
 use crate::domain::DomainRepository;
 use crate::server::{
-    AppState, log_agent_activity_transition, schedule_presentation_session_delta,
-    schedule_stale_activity_presentation_refresh,
+    log_agent_activity_transition, schedule_presentation_session_delta,
+    schedule_stale_activity_presentation_refresh, AppState,
 };
 use crate::session_status::parse_iso_ms;
 use crate::storage::open_gxserver_database;
 
 use super::{
-    ProgramStatusRecord, derive_program_status, forget_program_status,
-    log_settled_program_status_mismatches, mark_program_status_unsupported,
-    observe_program_opinion, program_status_activity, program_status_applied_key,
-    program_status_combines_entry, program_status_entry, set_program_status_applied,
-    set_program_status_applied_key, set_program_status_notified,
+    derive_program_status, forget_program_status, log_settled_program_status_mismatches,
+    mark_program_status_unsupported, observe_program_opinion, program_status_activity,
+    program_status_applied_key, program_status_combines_entry, program_status_entry,
+    set_program_status_applied, set_program_status_applied_key, set_program_status_notified,
     start_program_status_detection_shadow, store_program_status_snapshot,
-    take_program_status_detection_shadow,
+    take_program_status_detection_shadow, ProgramStatusRecord,
 };
 
 /// One program-status line of `zmx watch-title` / `wmx watch-title`.

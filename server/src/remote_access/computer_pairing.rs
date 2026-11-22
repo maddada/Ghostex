@@ -28,14 +28,14 @@ use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow, bail};
-use base64::{Engine, engine::general_purpose::STANDARD};
-use ghostex_gx_protocol::pairing::{DEVICE_KEY_ALGORITHM, pairing_status_payload};
+use anyhow::{anyhow, bail, Context, Result};
+use base64::{engine::general_purpose::STANDARD, Engine};
+use ghostex_gx_protocol::pairing::{pairing_status_payload, DEVICE_KEY_ALGORITHM};
 use ring::rand::SystemRandom;
-use ring::signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair, KeyPair};
-use serde_json::{Value, json};
+use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_ASN1_SIGNING};
+use serde_json::{json, Value};
 
-use crate::ghostex_cli::tailcat_tunnel::{TailcatForwardPlan, TailcatTunnel, start_tailcat_tunnel};
+use crate::ghostex_cli::tailcat_tunnel::{start_tailcat_tunnel, TailcatForwardPlan, TailcatTunnel};
 use crate::paths::GxserverPaths;
 
 use super::pair_device::match_words;
@@ -108,9 +108,7 @@ pub fn parse_computer_pairing_code(params: &Value) -> Result<ComputerPairingCode
         bail!("The Easy Connect code has no address or port.");
     }
     if code.secret.is_empty() {
-        bail!(
-            "This code can't pair a computer by itself. On the other computer, open Settings > Remote, click Connect a Computer, then Copy the code, and paste that code here. If it has no screen, run ghostex computer-code on it and paste the code it prints."
-        );
+        bail!("This code can't pair a computer by itself. On the other computer, open Settings > Remote, click Connect a Computer, then Copy the code, and paste that code here. If it has no screen, run ghostex computer-code on it and paste the code it prints.");
     }
     Ok(code)
 }
@@ -173,7 +171,11 @@ fn strip_go_log_time(line: &str) -> &str {
         && bytes[13] == b':'
         && bytes[16] == b':'
         && bytes[19] == b' ';
-    if stamped { &line[20..] } else { line }
+    if stamped {
+        &line[20..]
+    } else {
+        line
+    }
 }
 
 /// This computer's pairing device key (PKCS#8), made once and kept 0600 in gxserver's state.
@@ -371,9 +373,7 @@ pub fn start_computer_pairing_with(
     // The words are worked out here too: a computer that names others isn't the one in the code.
     if words != match_words(&code.secret, &public_key) {
         tunnel.stop();
-        bail!(
-            "The other computer showed different words from this one, so pairing stopped. Show a new code there and try again."
-        );
+        bail!("The other computer showed different words from this one, so pairing stopped. Show a new code there and try again.");
     }
     let computer_name = started
         .get("computerName")

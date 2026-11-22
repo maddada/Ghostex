@@ -3,7 +3,7 @@
 //! Freebuff keeps each conversation as one `chat-messages.json` that it rewrites whole (`~/.config/manicode/projects/<folder name>/chats/<chat id>/`), so chat follows a JSONL mirror of that file, the way ZCode's database is followed.
 //! SEE-ALSO: server/src/session_chat_decode_freebuff.rs reads the mirror rows; server/src/session_chat_freebuff_question.rs reads and answers its question form.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::{
     collections::HashMap,
     fs,

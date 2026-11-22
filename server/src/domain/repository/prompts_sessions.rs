@@ -1,9 +1,9 @@
 use rusqlite::Connection;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::domain::{
-    DomainResult, normalize_domain_lifecycle_state, normalize_zmx_provider_state, parse_object_map,
-    sql_error,
+    normalize_domain_lifecycle_state, normalize_zmx_provider_state, parse_object_map, sql_error,
+    DomainResult,
 };
 
 /// CDXC:SavedPrompts 2026-09-11 WHY:

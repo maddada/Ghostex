@@ -13,7 +13,7 @@ mod sidebar_tags;
 mod spaces_bridge;
 mod store;
 
-pub(crate) use exchange::{EXCHANGE_ENDPOINT, handle_settings_sync_exchange};
-pub(crate) use http::{SETTINGS_SYNC_ENDPOINTS, handle_settings_sync_http};
+pub(crate) use exchange::{handle_settings_sync_exchange, EXCHANGE_ENDPOINT};
+pub(crate) use http::{handle_settings_sync_http, SETTINGS_SYNC_ENDPOINTS};
 pub(crate) use lists_bridge::agents_synced_from_elsewhere;
 pub(crate) use runner::{nudge_settings_sync, start_settings_sync};

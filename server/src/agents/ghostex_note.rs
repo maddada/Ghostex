@@ -219,20 +219,16 @@ mod tests {
                 links_note(Path::new(IMAGES))
             )
         );
-        assert!(
-            ghostex_note_text(
-                PreviewBrowser::from_setting(Some("internal-browser")),
-                Path::new(IMAGES)
-            )
-            .contains("opened in the Ghostex browser.\n\n")
-        );
-        assert!(
-            ghostex_note_text(
-                PreviewBrowser::from_setting(Some("system-default-browser")),
-                Path::new(IMAGES)
-            )
-            .contains("opened in their default browser.\n\n")
-        );
+        assert!(ghostex_note_text(
+            PreviewBrowser::from_setting(Some("internal-browser")),
+            Path::new(IMAGES)
+        )
+        .contains("opened in the Ghostex browser.\n\n"));
+        assert!(ghostex_note_text(
+            PreviewBrowser::from_setting(Some("system-default-browser")),
+            Path::new(IMAGES)
+        )
+        .contains("opened in their default browser.\n\n"));
     }
 
     #[test]

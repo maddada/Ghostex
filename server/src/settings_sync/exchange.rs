@@ -10,11 +10,11 @@ use std::time::Duration;
 
 use axum::http::StatusCode;
 use ghostex_gx_core::settings_sync::SyncEntry;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::connected_computers::ConnectedComputer;
 use crate::protocol::{rpc_error, rpc_success};
-use crate::server::{AppState, RoutedResponse, routed_json};
+use crate::server::{routed_json, AppState, RoutedResponse};
 
 use super::engine::{now_ms, with_engine};
 use super::store::SyncNote;

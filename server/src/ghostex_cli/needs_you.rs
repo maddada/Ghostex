@@ -2,11 +2,11 @@
 //! phone, a sign-in, a check by eye) above its chat box as a to-do with a Done button
 //! (server/src/session_needs_you/).
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::ghostex_cli::args::{ParsedArgs, parse_args};
+use crate::ghostex_cli::args::{parse_args, ParsedArgs};
 use crate::ghostex_cli::output::print_json;
-use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
+use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 use crate::ghostex_cli::{notify, selector, usage};
 
 pub fn needs_you_command(args: &[String]) -> CliResult<()> {
@@ -64,7 +64,7 @@ pub fn needs_you_command(args: &[String]) -> CliResult<()> {
             return Err(CliError::Other(format!(
                 "Unknown needs-you command: {other}\n\n{}",
                 usage::needs_you_usage()
-            )));
+            )))
         }
     }
     let answer = call_gxserver_rpc(

@@ -34,7 +34,7 @@ mod records;
 pub(crate) use records::*;
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::coordinators::SessionKey;
 use crate::domain::{DomainRepository, DomainStateError};

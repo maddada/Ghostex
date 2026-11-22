@@ -38,7 +38,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 /*
 Long enough to cover a rename the user was not looking at (the fork rename

@@ -1,8 +1,8 @@
 //! Closing a coordinator closes the threads open under it, and restoring it brings them back.
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
-use super::records::{SessionKey, ThreadRecord, list_threads_for, now_iso, sql_error};
+use super::records::{list_threads_for, now_iso, sql_error, SessionKey, ThreadRecord};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::presentation::effective_lifecycle_state;
 

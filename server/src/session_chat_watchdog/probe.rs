@@ -242,21 +242,11 @@ pub enum SendWriteFailure {
 impl SendWriteFailure {
     pub(super) fn detail(self) -> &'static str {
         match self {
-            Self::TerminalUnresponsive => {
-                "This session's terminal did not respond while the message was being typed into it, so the message was never delivered to the agent. Open the terminal to see what it is showing."
-            }
-            Self::PasteNotShown => {
-                "The message was typed into the terminal but never appeared in the agent's input box, so it was not sent. Open the terminal to see what it is showing, then send it again."
-            }
-            Self::PasteDoubled => {
-                "The message showed up twice in the agent's input box, so Ghostex cleared it instead of sending it. Send it again."
-            }
-            Self::NotSubmitted => {
-                "The agent kept the message in its input box after Enter instead of sending it, so it was not sent. Open the terminal to see what it is showing."
-            }
-            Self::AgentStalled => {
-                "The agent stayed in the middle of a turn for five minutes without taking new input, so the message was not sent. Open the terminal to see what it is showing."
-            }
+            Self::TerminalUnresponsive => "This session's terminal did not respond while the message was being typed into it, so the message was never delivered to the agent. Open the terminal to see what it is showing.",
+            Self::PasteNotShown => "The message was typed into the terminal but never appeared in the agent's input box, so it was not sent. Open the terminal to see what it is showing, then send it again.",
+            Self::PasteDoubled => "The message showed up twice in the agent's input box, so Ghostex cleared it instead of sending it. Send it again.",
+            Self::NotSubmitted => "The agent kept the message in its input box after Enter instead of sending it, so it was not sent. Open the terminal to see what it is showing.",
+            Self::AgentStalled => "The agent stayed in the middle of a turn for five minutes without taking new input, so the message was not sent. Open the terminal to see what it is showing.",
         }
     }
 }

@@ -11,11 +11,11 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::github::{
-    Cached, WorkGithubIssueInfo, WorkPullRequestInfo, cache, cache_key, parse_pull_request_value,
-    refresh_work_pull_request,
+    cache, cache_key, parse_pull_request_value, refresh_work_pull_request, Cached,
+    WorkGithubIssueInfo, WorkPullRequestInfo,
 };
 use crate::session_git_status::{parse_gh_pull_request_state, run_gh_command_any_status};
 

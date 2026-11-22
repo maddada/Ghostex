@@ -1,12 +1,12 @@
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::{
     domain::read_domain_rpc_params,
     paths::GxserverPaths,
     protocol::{rpc_error, rpc_success},
     remote_access::RemotePairingRepository,
-    server::{AppState, RoutedResponse, routed_json},
+    server::{routed_json, AppState, RoutedResponse},
     storage::open_gxserver_database,
 };
 

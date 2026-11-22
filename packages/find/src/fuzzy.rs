@@ -76,7 +76,11 @@ fn class_of(c: u8) -> Class {
 
 #[inline]
 fn lower(c: u8) -> u8 {
-    if c.is_ascii_uppercase() { c + 32 } else { c }
+    if c.is_ascii_uppercase() {
+        c + 32
+    } else {
+        c
+    }
 }
 
 #[inline]

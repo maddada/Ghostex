@@ -44,11 +44,9 @@ fn transcript_file(records: &[Value]) -> std::path::PathBuf {
         std::process::id(),
         NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     ));
-    let mut lines = vec![
-        json!({"type": "session", "version": 3, "id": "s1",
+    let mut lines = vec![json!({"type": "session", "version": 3, "id": "s1",
         "timestamp": "2026-10-30T10:00:00.000Z", "cwd": "/tmp"})
-        .to_string(),
-    ];
+    .to_string()];
     lines.extend(records.iter().map(Value::to_string));
     std::fs::write(&path, lines.join("\n") + "\n").expect("write transcript");
     path
@@ -313,11 +311,9 @@ fn every_reopened_fold_holds_its_own_work_around_an_omp_wake_up() {
         [("u1".to_string(), "u1".to_string(), "a2".to_string())]
     );
     assert_eq!(shape(&reopened.expanded), shape(&reopened.full));
-    assert!(
-        shape(&reopened.full)
-            .iter()
-            .any(|item| item.starts_with("work:w1[\"w1\", \"c2\"] final:a2"))
-    );
+    assert!(shape(&reopened.full)
+        .iter()
+        .any(|item| item.starts_with("work:w1[\"w1\", \"c2\"] final:a2")));
 
     // The older history page carries the same rows and range as the snapshot.
     let path = transcript_file(&records(&STANDARD));
@@ -359,11 +355,9 @@ fn a_wake_up_fold_loads_its_work_through_the_prompt_range() {
         shape(&reopened.expanded)
     );
     assert_eq!(fold(&reopened.expanded), fold(&reopened.full));
-    assert!(
-        shape(&reopened.expanded)
-            .iter()
-            .any(|item| item.starts_with("work:u1[] final:a1"))
-    );
+    assert!(shape(&reopened.expanded)
+        .iter()
+        .any(|item| item.starts_with("work:u1[] final:a1")));
 }
 
 #[test]

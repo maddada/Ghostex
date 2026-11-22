@@ -4,7 +4,7 @@
 
 use super::{claude_swap_build, claude_swap_switch, helpers, model::Provider};
 use crate::{domain::DomainStateError, managed_tools, server::AppState};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::{
     collections::BTreeMap,
     collections::HashMap,

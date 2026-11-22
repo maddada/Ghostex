@@ -86,8 +86,8 @@ fn owed_is_honoured_only_for_a_session_just_created_with_no_reply() {
 
 #[test]
 fn the_report_is_the_reply_to_the_leads_own_message_never_a_later_user_turn() {
-    use crate::agents::lead_links::{TurnRow, lead_turn_reply};
-    use crate::coordinators::{MessageSender, agent_message};
+    use crate::agents::lead_links::{lead_turn_reply, TurnRow};
+    use crate::coordinators::{agent_message, MessageSender};
     let lead_ref = "S1:P1:GA";
     let from = |reply_to: &str, body: &str| {
         agent_message(
@@ -148,8 +148,8 @@ fn the_report_is_the_reply_to_the_leads_own_message_never_a_later_user_turn() {
 
 #[test]
 fn a_long_lead_turn_is_found_and_notices_stop_once_the_user_types() {
-    use crate::agents::lead_links::{LeadTurn, TurnRow, lead_turn};
-    use crate::coordinators::{MessageSender, agent_message};
+    use crate::agents::lead_links::{lead_turn, LeadTurn, TurnRow};
+    use crate::coordinators::{agent_message, MessageSender};
     let lead_ref = "S1:P1:GA";
     let lead_message = agent_message(
         &MessageSender {

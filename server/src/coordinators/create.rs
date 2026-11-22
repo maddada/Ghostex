@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use serde_json::{Map, Value};
 
 use super::records::{
-    COORDINATOR_GOAL_MAX_CHARS, COORDINATOR_INSTRUCTIONS_MAX_CHARS, insert_coordinator,
+    insert_coordinator, COORDINATOR_GOAL_MAX_CHARS, COORDINATOR_INSTRUCTIONS_MAX_CHARS,
 };
 use crate::domain::DomainStateError;
 

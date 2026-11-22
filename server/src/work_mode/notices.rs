@@ -2,7 +2,7 @@
 //! stays closed in every window, after a restart, and in the web build.
 
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 

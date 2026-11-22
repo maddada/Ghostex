@@ -1,5 +1,5 @@
 use super::scripts::{ZmxAttachCommandInput, ZmxRunCommandInput, ZmxShellProviderCommandInput};
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{collections::HashMap, process::Command};
@@ -236,9 +236,7 @@ fn start(
         portable_cli_first_on_path(&cli),
         super::codex_wrapper::wmx_codex_wrapper_path_command(),
         quote(&editor),
-        agent_without_powershell7_modules(
-            startup.unwrap_or_default().trim_end_matches(['\r', '\n'])
-        )
+        agent_without_powershell7_modules(startup.unwrap_or_default().trim_end_matches(['\r', '\n']))
     );
     let startup = startup_from_environment(&startup, &mut environment);
     let launch = json!({"name": name, "cwd": cwd,

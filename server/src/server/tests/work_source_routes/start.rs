@@ -5,7 +5,7 @@
 //! and the link, which Start runs before and after it.
 
 use super::*;
-use crate::work_mode::{WorkTicket, plan_ticket_work};
+use crate::work_mode::{plan_ticket_work, WorkTicket};
 
 /// A project of `workspace_id` in a git checkout of its own, and a session row in it (never
 /// started).
@@ -213,11 +213,9 @@ async fn cloud_start_reads_past_a_failure_the_details_page_keeps() {
         ..crate::work_mode::TicketScope::default()
     };
     let source = crate::work_mode::WorkSourceId::parse("fixture").expect("fixture");
-    assert!(
-        crate::work_mode::work_source(source)
-            .read_detail(&scope, "ACM-12", false)
-            .is_err()
-    );
+    assert!(crate::work_mode::work_source(source)
+        .read_detail(&scope, "ACM-12", false)
+        .is_err());
     // Then the cards read it.
     routes.answer("good");
     let crate::work_mode::WorkSourceId::Command(command) = source else {

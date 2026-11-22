@@ -7,7 +7,7 @@
 
 use super::*;
 use crate::session_chat_pi_models::{
-    PiFamilyAgent, empryo_name_spells_id, empryo_shown_names_value, pi_family_terminal_labels,
+    empryo_name_spells_id, empryo_shown_names_value, pi_family_terminal_labels, PiFamilyAgent,
 };
 
 const EMPRYO_MODELS_COMMAND: &str = "/models\r";

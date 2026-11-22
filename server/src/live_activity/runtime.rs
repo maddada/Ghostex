@@ -18,12 +18,12 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, mpsc},
+    sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, PoisonError},
     thread::JoinHandle,
     time::Duration,
 };
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::{
     domain::DomainRepository,
@@ -37,10 +37,10 @@ use crate::{
 };
 
 use super::{
-    content::{Candidates, FinishedMemory, Source, collect_candidates, render, shape_of},
+    content::{collect_candidates, render, shape_of, Candidates, FinishedMemory, Source},
     relay::{RelayClient, RelayOutcome},
     store::{
-        LiveActivityPhone, LiveActivityStore, TokenKind, forget_live_activity_token, token_label,
+        forget_live_activity_token, token_label, LiveActivityPhone, LiveActivityStore, TokenKind,
     },
 };
 

@@ -253,14 +253,8 @@ fn get_bd_tool_status_for_candidates(candidates: &[ToolCandidate]) -> ToolCapabi
         candidate_paths: Some(candidate_paths),
         capability: "beadsProjectBoard".to_string(),
         executable_path: None,
-        guidance: Some(format!(
-            "Install the latest Beads CLI in {}, then reopen the Project board. Official installer: `curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash`. Other supported installers: https://github.com/gastownhall/beads/blob/main/docs/INSTALLING.md",
-            beads_runtime_environment()
-        )),
-        message: format!(
-            "The Beads CLI (`bd`) was not found in {}. Install the latest Beads release there and ensure `bd` is on that environment's PATH.",
-            beads_runtime_environment()
-        ),
+        guidance: Some(format!("Install the latest Beads CLI in {}, then reopen the Project board. Official installer: `curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash`. Other supported installers: https://github.com/gastownhall/beads/blob/main/docs/INSTALLING.md", beads_runtime_environment())),
+        message: format!("The Beads CLI (`bd`) was not found in {}. Install the latest Beads release there and ensure `bd` is on that environment's PATH.", beads_runtime_environment()),
         source: None,
         tool: "bd".to_string(),
     }
@@ -528,12 +522,10 @@ mod tests {
 
     #[test]
     fn gxserver_root_from_dev_target_executable_keeps_cwd_fallback() {
-        assert!(
-            gxserver_root_from_executable_path(Path::new(
-                "/repo/gxserver-rs/target/release/gxserver"
-            ))
-            .is_none()
-        );
+        assert!(gxserver_root_from_executable_path(Path::new(
+            "/repo/gxserver-rs/target/release/gxserver"
+        ))
+        .is_none());
     }
 
     #[test]
@@ -588,12 +580,10 @@ mod tests {
 
         assert_eq!(status.availability, "missing");
         assert!(status.message.contains("was not found in"));
-        assert!(
-            status
-                .guidance
-                .unwrap_or_default()
-                .contains("Install the latest Beads CLI")
-        );
+        assert!(status
+            .guidance
+            .unwrap_or_default()
+            .contains("Install the latest Beads CLI"));
     }
 
     #[test]

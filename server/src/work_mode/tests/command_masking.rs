@@ -2,7 +2,7 @@
 //! masked before it is cut, so no prefix of a secret survives a cap; a structural field holding a
 //! secret refuses the row or the answer; a link, a branch name or a time holding one is dropped.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::*;
 
@@ -281,7 +281,8 @@ fn refused_for_secret(list: &CommandList) -> bool {
     list.tickets.is_empty() && list.skipped == 0 && list.skipped_for_secret == 1
 }
 
-const NOT_SECRET_HINT: &str = "if that credential isn't secret, such as a team number, the command's info should mark it \"secret\": false";
+const NOT_SECRET_HINT: &str =
+    "if that credential isn't secret, such as a team number, the command's info should mark it \"secret\": false";
 
 #[test]
 fn rows_a_secret_alone_refuses_are_counted_apart_and_say_how_to_fix_it() {
@@ -310,17 +311,13 @@ fn rows_a_secret_alone_refuses_are_counted_apart_and_say_how_to_fix_it() {
         errors,
         [
             "Acme: skipped 2 tickets it sent in an unknown shape".to_string(),
-            format!(
-                "Acme: skipped 2 tickets whose id or another field Ghostex can't mask contains a secret credential's value; {NOT_SECRET_HINT}"
-            ),
+            format!("Acme: skipped 2 tickets whose id or another field Ghostex can't mask contains a secret credential's value; {NOT_SECRET_HINT}"),
         ]
     );
     let one = list_of(ticket(json!({ "id": "ACM-17" })), &env).errors("Acme");
     assert_eq!(
         one,
-        [format!(
-            "Acme: skipped 1 ticket whose id or another field Ghostex can't mask contains a secret credential's value; {NOT_SECRET_HINT}"
-        )]
+        [format!("Acme: skipped 1 ticket whose id or another field Ghostex can't mask contains a secret credential's value; {NOT_SECRET_HINT}")]
     );
 }
 
@@ -384,12 +381,10 @@ fn widening_never_makes_a_secret_open() {
     let env = env_holding(SECRET).with_secret(&["url".to_string()]);
     assert!(env.credentials.iter().all(|credential| credential.secret));
     let narrowed = env.with_secret(&[]);
-    assert!(
-        narrowed
-            .credentials
-            .iter()
-            .all(|credential| credential.secret)
-    );
+    assert!(narrowed
+        .credentials
+        .iter()
+        .all(|credential| credential.secret));
 }
 
 #[test]

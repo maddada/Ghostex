@@ -1,9 +1,9 @@
 use serde_json::Value;
 
-use crate::ghostex_cli::args::Flags;
 #[cfg(test)]
 use crate::ghostex_cli::args::parse_args;
-use crate::ghostex_cli::rpc::{CliError, CliResult, ghostex_home, project_id_from_global_ref};
+use crate::ghostex_cli::args::Flags;
+use crate::ghostex_cli::rpc::{ghostex_home, project_id_from_global_ref, CliError, CliResult};
 
 use super::*;
 
@@ -557,11 +557,13 @@ mod tests {
             .expect("live owner");
             assert_eq!(live["sessionId"], json!(format!("session-{agent}")));
         }
-        assert!(
-            resolve_live_agent_session_owner("conversation-codex", Some("claude"), &sessions_list,)
-                .unwrap()
-                .is_none()
-        );
+        assert!(resolve_live_agent_session_owner(
+            "conversation-codex",
+            Some("claude"),
+            &sessions_list,
+        )
+        .unwrap()
+        .is_none());
         assert!(resolve_live_agent_session_owner(
             "conversation-stopped",
             Some("codex"),

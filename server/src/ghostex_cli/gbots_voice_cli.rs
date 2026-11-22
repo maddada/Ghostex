@@ -1,12 +1,12 @@
 //! `ghostex gbots voice <bot> [<voice>|--default]`: the voice a GBot answers calls in
 //! (server/src/gbots/call.rs).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::{
     args::Flags,
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 /// The voice verb's lines in `ghostex gbots --help`.
@@ -54,9 +54,7 @@ pub(crate) fn run_voice(rest: &[String], flags: &Flags) -> CliResult<()> {
             if offered {
                 println!("{name} answers calls in the {label} voice {voice}.");
             } else {
-                println!(
-                    "{name}'s voice is {voice}, which {label} (the Voice agent's provider now) doesn't have, so calls use {default}."
-                );
+                println!("{name}'s voice is {voice}, which {label} (the Voice agent's provider now) doesn't have, so calls use {default}.");
             }
         }
         None => {

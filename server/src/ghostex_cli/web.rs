@@ -4,16 +4,16 @@ mod static_files;
 use std::{io::Write as _, path::PathBuf, process::Command, sync::Arc};
 
 use axum::{
-    Json, Router,
     body::Body,
     extract::State,
-    http::{Method, Request, StatusCode, header},
+    http::{header, Method, Request, StatusCode},
     response::{IntoResponse, Response},
+    Json, Router,
 };
 
 use crate::{
     auth::is_expected_gxserver_auth_token,
-    config::{GxserverConfig, read_gxserver_config},
+    config::{read_gxserver_config, GxserverConfig},
     ghostex_cli::rpc::{CliError, CliResult},
     paths::get_gxserver_paths,
     protocol::rpc_error,
@@ -54,7 +54,7 @@ pub fn web_command(args: &[String]) -> CliResult<()> {
             _ => {
                 return Err(CliError::Other(format!(
                     "Unknown web argument: {argument}\n\n{USAGE}"
-                )));
+                )))
             }
         }
     }
@@ -64,10 +64,7 @@ pub fn web_command(args: &[String]) -> CliResult<()> {
     }
     let dist_dir = static_files::resolve_web_dist_dir(&config);
     if !dist_dir.join("index.html").is_file() {
-        return Err(CliError::Other(format!(
-            "Ghostex Web is not built at {}. Run `cargo xtask web-build` from the checkout or pass --dist-dir <directory>.",
-            dist_dir.display()
-        )));
+        return Err(CliError::Other(format!("Ghostex Web is not built at {}. Run `cargo xtask web-build` from the checkout or pass --dist-dir <directory>.", dist_dir.display())));
     }
     config.web.dist_dir = Some(dist_dir.canonicalize()?);
     let runtime = tokio::runtime::Builder::new_multi_thread()

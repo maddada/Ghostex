@@ -11,19 +11,19 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use portable_pty::{
-    Child, ChildKiller, CommandBuilder, ExitStatus, MasterPty, PtySize, native_pty_system,
+    native_pty_system, Child, ChildKiller, CommandBuilder, ExitStatus, MasterPty, PtySize,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     agents::read_agent_settings,
-    auth::{DeviceApiTokens, is_authorized_client_token},
+    auth::{is_authorized_client_token, DeviceApiTokens},
     constants::GXSERVER_PROTOCOL_VERSION,
     domain::DomainRepository,
     paths::GxserverPaths,
     storage::open_gxserver_database,
-    zmx::{ZmxEndpointError, ZmxServerContext, dispatch_zmx_lifecycle_endpoint},
+    zmx::{dispatch_zmx_lifecycle_endpoint, ZmxEndpointError, ZmxServerContext},
 };
 
 const DEFAULT_COLS: u16 = 120;

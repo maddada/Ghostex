@@ -12,8 +12,8 @@ use serde::Deserialize;
 use crate::paths::GxserverPaths;
 
 use super::{
-    TailcatRuntime, binary::managed_tailcat_binary, read_tailcat_binary_version,
-    resolve_client_tailcat_binary, resolve_host_tailcat_binary, start_tailcat_from_persisted_state,
+    binary::managed_tailcat_binary, read_tailcat_binary_version, resolve_client_tailcat_binary,
+    resolve_host_tailcat_binary, start_tailcat_from_persisted_state, TailcatRuntime,
 };
 
 /// The tailcat version this gxserver installs, and the newest Settings > Updates offers.
@@ -217,9 +217,7 @@ fn build_directory(paths: &GxserverPaths) -> Step<InstallDirectory> {
 
 fn save_failure(error: &std::io::Error) -> Failure {
     Failure::new(
-        format!(
-            "Ghostex couldn't save the Easy Connect helper on this computer ({error}). Check that the disk has room, then try again."
-        ),
+        format!("Ghostex couldn't save the Easy Connect helper on this computer ({error}). Check that the disk has room, then try again."),
         error,
     )
 }
@@ -401,9 +399,7 @@ fn go_arch() -> Step<&'static str> {
         "aarch64" => Ok("arm64"),
         "x86_64" => Ok("amd64"),
         other => Err(Failure::new(
-            format!(
-                "Easy Connect isn't available for this computer's processor ({other}). Use Tailscale or your own network to connect your phone."
-            ),
+            format!("Easy Connect isn't available for this computer's processor ({other}). Use Tailscale or your own network to connect your phone."),
             other,
         )),
     }

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::ghostex_cli::args::{Flags, parse_json_value};
-use crate::ghostex_cli::rpc::{CliResult, GXSERVER_PRODUCT, call_gxserver_rpc, gxserver_root};
+use crate::ghostex_cli::args::{parse_json_value, Flags};
+use crate::ghostex_cli::rpc::{call_gxserver_rpc, gxserver_root, CliResult, GXSERVER_PRODUCT};
 
 use super::*;
 

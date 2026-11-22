@@ -10,7 +10,7 @@ use base64::Engine as _;
 use bytes::Bytes;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt as _, StreamExt as _};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
@@ -19,7 +19,7 @@ use super::focus::{self, FocusScope};
 use super::memory;
 use super::paragraphs;
 use super::prompt;
-use super::provider::{BYTES_PER_MS, Provider, ProviderSocket};
+use super::provider::{Provider, ProviderSocket, BYTES_PER_MS};
 use super::registry;
 use super::sessions::SessionInfo;
 use super::talk::{Cancel, Press, Release, Talk};

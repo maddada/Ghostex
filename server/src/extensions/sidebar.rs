@@ -10,9 +10,9 @@ use ghostex_gx_protocol::extension_panel::{
 use serde_json::Value;
 
 use super::{
-    ExtensionError, ExtensionKind, ExtensionLaunchContext, ExtensionManifest, ExtensionRegistry,
-    ExtensionResult, ExtensionStoreEntry, PanelStore, PanelSurface, read_manifest, read_store,
-    validate_extension_id,
+    read_manifest, read_store, validate_extension_id, ExtensionError, ExtensionKind,
+    ExtensionLaunchContext, ExtensionManifest, ExtensionRegistry, ExtensionResult,
+    ExtensionStoreEntry, PanelStore, PanelSurface,
 };
 
 /// Where gxserver posts a tap on an `extension` action on the extension's own server.
@@ -244,7 +244,7 @@ impl ExtensionRegistry {
             Err(_) => {
                 return Some(Err(ExtensionError::not_found(
                     "The extension has no folder.",
-                )));
+                )))
             }
         };
         Some(match std::fs::canonicalize(root.join(relative)) {

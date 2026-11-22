@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 const CONVEX_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -65,7 +65,7 @@ pub(crate) fn call_convex(
         Err(error) => {
             return Err(format!(
                 "Could not reach the team's Convex project: {error}"
-            ));
+            ))
         }
     };
     let value: Value = crate::http_agent::read_json(response)

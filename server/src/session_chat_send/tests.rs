@@ -425,7 +425,7 @@ fn ask_answer_steps_space_groups_one_second_apart() {
 #[tokio::test]
 #[ignore = "requires an explicitly supplied disposable Claude zmx session"]
 async fn live_zmx_claude_model_changes() {
-    use crate::session_chat_options::{SessionChatOptionAgent, detect_session_chat_selection};
+    use crate::session_chat_options::{detect_session_chat_selection, SessionChatOptionAgent};
     let name = std::env::var("GHOSTEX_CLAUDE_MODEL_TEST_ZMX")
         .expect("set the dedicated test session name");
     assert!(name.starts_with("ghostex-claude-check-"));

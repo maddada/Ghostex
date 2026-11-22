@@ -7,9 +7,9 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use super::cards::{
-    HANDSHAKE, calls, exact_read, log_lines, pin, project_id, project_in, store_values, token_of,
+    calls, exact_read, log_lines, pin, project_id, project_in, store_values, token_of, HANDSHAKE,
 };
-use super::details::{Released, open, wait_for_calls};
+use super::details::{open, wait_for_calls, Released};
 use super::published::command_source;
 use super::start::wait_for_background_reads;
 use super::*;
@@ -384,22 +384,18 @@ fn create_needs_can_create_a_pin_no_team_and_required_credentials() {
         }),
         "Fixture doesn't create tickets."
     );
-    assert!(
-        refusal("cleared", &|workspace_id| {
-            clear_work_source(&store.db, workspace_id, &no_references).expect("cleared");
-        })
-        .ends_with("isn't this workspace's ticket command.")
-    );
+    assert!(refusal("cleared", &|workspace_id| {
+        clear_work_source(&store.db, workspace_id, &no_references).expect("cleared");
+    })
+    .ends_with("isn't this workspace's ticket command."));
     assert_eq!(
         refusal("team", &|workspace_id| join_team(&store, workspace_id)),
         TEAM_REFUSAL
     );
-    assert!(
-        refusal("unset", &|workspace_id| {
-            store_values(&store.paths, workspace_id, id, "", "good");
-        })
-        .starts_with("Set Fixture's API token first")
-    );
+    assert!(refusal("unset", &|workspace_id| {
+        store_values(&store.paths, workspace_id, id, "", "good");
+    })
+    .starts_with("Set Fixture's API token first"));
     assert_eq!(calls(&store, id).len(), before);
 }
 
@@ -640,11 +636,9 @@ fn a_create_that_cant_read_the_stored_values_says_so() {
     let project = project_in(&store, &workspace_id, json!({}));
     // Read before the file goes, as a request reads it once.
     let credentials = WorkCredentials::new(&store.paths);
-    assert!(
-        credentials
-            .source_fields(&workspace_id, "create-a")
-            .is_some()
-    );
+    assert!(credentials
+        .source_fields(&workspace_id, "create-a")
+        .is_some());
     let file = store.paths.auth_dir.join("work-mode-credentials.json");
     std::fs::remove_file(&file).expect("remove");
     std::fs::create_dir(&file).expect("folder");

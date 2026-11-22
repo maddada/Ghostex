@@ -6,7 +6,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use super::files::{DAY, Since, Tally, is_older, prune_tree, remove_file};
+use super::files::{is_older, prune_tree, remove_file, Since, Tally, DAY};
 
 /// CDXC:ServerDaemon 2026-11-03 DECISION:
 /// User chose: a backup taken before a migration is kept for 30 days. They sit in `<gxserver state>/backups`, `<state>/backups`, or beside the database as `state.db.bak-*` / `state.db.before-*`.

@@ -29,7 +29,8 @@ async fn a_settings_save_with_no_app_is_gxservers_where_no_app_ever_saved_settin
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["result"]["savedBy"], "gxserver");
     assert_eq!(
-        crate::shared_settings_file::read_shared_settings(&paths).expect("settings")["useAgentHooks"],
+        crate::shared_settings_file::read_shared_settings(&paths).expect("settings")
+            ["useAgentHooks"],
         true
     );
 

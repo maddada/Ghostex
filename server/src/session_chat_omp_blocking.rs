@@ -407,7 +407,8 @@ fn classify_rounded_frame(
     if is_live_approval(&text, composer, on_composer, end) {
         return Some(OmpBlockingScreen {
             title: "OMP is waiting for tool approval",
-            detail: "Approve or deny the pending tool call in the terminal before sending a message.",
+            detail:
+                "Approve or deny the pending tool call in the terminal before sending a message.",
         });
     }
 
@@ -416,7 +417,8 @@ fn classify_rounded_frame(
     {
         return Some(OmpBlockingScreen {
             title: "OMP is waiting for an answer",
-            detail: "Answer or cancel OMP's question dialog in the terminal before sending a message.",
+            detail:
+                "Answer or cancel OMP's question dialog in the terminal before sending a message.",
         });
     }
 
@@ -751,7 +753,8 @@ pub fn detect_omp_blocking_screen(text: &str) -> Option<OmpBlockingScreen> {
         if rules >= 2 && !composer_after(composer, cancel) {
             return Some(OmpBlockingScreen {
                 title: "OMP has a cancellable operation open",
-                detail: "Wait for or cancel the focused terminal operation before sending a message.",
+                detail:
+                    "Wait for or cancel the focused terminal operation before sending a message.",
             });
         }
     }

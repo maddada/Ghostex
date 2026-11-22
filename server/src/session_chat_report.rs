@@ -1,14 +1,14 @@
 //! `/api/readSessionChatReport`: the chat's Copy Report, a Markdown report of what Ghostex sees in
 //! one session's terminal, for the user to paste into Send Bug / Feedback or a GitHub issue.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 
 mod mask;
 
-use mask::{ReportMask, report_screen};
+use mask::{report_screen, ReportMask};
 
 /// Send problems the report lists, newest last.
 const RECENT_SEND_PROBLEMS: usize = 8;
@@ -394,7 +394,7 @@ fn code_fence(screen: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::verdict_lines;
-    use super::{ReportInput, mask::ReportMask, render_report};
+    use super::{mask::ReportMask, render_report, ReportInput};
     use serde_json::json;
 
     /// Every section of a report carrying the session's ref, its name, a path, an email and a UUID
@@ -490,9 +490,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(
             problems,
-            vec![
-                "2026-11-03T05:51:23Z sessionChatModelSelectionFailed: The claude input box is not on screen yet."
-            ]
+            vec!["2026-11-03T05:51:23Z sessionChatModelSelectionFailed: The claude input box is not on screen yet."]
         );
     }
 

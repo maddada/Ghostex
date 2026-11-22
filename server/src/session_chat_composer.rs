@@ -59,8 +59,8 @@ use crate::storage::open_gxserver_database;
 mod input;
 pub(crate) use input::antigravity_composer_lines;
 pub(crate) use input::claude_frame_without_marker;
-pub(crate) use input::omp_composer::{OMP_NAV_CURSOR_GLYPHS, omp_paste_chip_shown};
-pub use input::{SessionChatComposerInput, claude_composer_draft, session_chat_composer_input};
+pub(crate) use input::omp_composer::{omp_paste_chip_shown, OMP_NAV_CURSOR_GLYPHS};
+pub use input::{claude_composer_draft, session_chat_composer_input, SessionChatComposerInput};
 pub(crate) use input::{
     empryo_composer_busy, empryo_input_head, empryo_input_unfocused, empryo_tab_bar,
 };

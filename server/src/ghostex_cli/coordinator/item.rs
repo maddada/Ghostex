@@ -3,14 +3,14 @@
 //! user (`ask`), says what it waits on (`wait`), and finishes or drops it. `list` prints them by
 //! status, Needs you first, as the Work panel shows them.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::command::{flag_text, resolve_thread_session, server_flags, target_coordinator};
 use crate::ghostex_cli::{
     agents,
     args::{Flags, ParsedArgs},
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 const USAGE: &str = "Usage: ghostex work item [add|now|step|ask|wait|done|drop|list] … (see ghostex work --help; ghostex coordinator item is the same command)";
@@ -224,9 +224,7 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
                         agents::text(item, "title")
                     );
                 }
-                println!(
-                    "Check each is in what shipped and finish it: ghostex coordinator item done <W> \"<what was done; where it shipped>\"."
-                );
+                println!("Check each is in what shipped and finish it: ghostex coordinator item done <W> \"<what was done; where it shipped>\".");
             }
             return Ok(());
         }

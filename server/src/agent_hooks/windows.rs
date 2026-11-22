@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{io::Read, path::Path, sync::mpsc, time::Duration};
 
 /// CDXC:AgentHooks 2026-09-14 WHY:

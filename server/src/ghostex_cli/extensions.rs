@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::{
-    args::{Flags, parse_args},
+    args::{parse_args, Flags},
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 pub fn extensions_command(args: &[String]) -> CliResult<()> {

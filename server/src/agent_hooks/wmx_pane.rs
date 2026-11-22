@@ -4,7 +4,7 @@
 //! On native Windows a pane's agent hangs below the pane's wmx host, `"…\wmx.exe" serve-encoded <base64 launch JSON>`, whose JSON `name` is the same `S..-P..-G..` session name a `zmx run <name>` carries, so the walk reads that instead of `ps`. Windows has no exec, so a launcher stays in the tree: a Ghostex Claude on 2026-11-02 (Claude Code 2.1.316) ran as `claude.exe` below `python.exe`, `python.exe`, `cswap.exe` and `pwsh.exe`, then the pane's `wmx.exe`. Shells and cswap's launcher may stand between the agent and the host; anything else (another agent above all) means the agent is not the pane's own. A parent link counts only when the parent is not newer than the child (`nested_agent::ProcessTable`), so a reused pid never grafts an agent below another pane.
 //! SEE-ALSO: server/src/agent_hooks/ancestor_session.rs `zmx_session_owning_agent` (the zmx walk), .dependencies/wmx/src/launch.rs (the host's command line), server/src/hookless_activity/claude.rs (reads the session records this walk maps to panes).
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 
 /// What the pane walk reads about a process. Windows answers from a Toolhelp snapshot and each
 /// process's command line; the tests answer from a table.

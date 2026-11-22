@@ -19,7 +19,7 @@ use serde_json::Value;
 
 use super::idle_progress::IdleProgress;
 use super::records::ThreadRecord;
-use super::stall::{SessionQuiet, test_scaled};
+use super::stall::{test_scaled, SessionQuiet};
 
 /// One round of idleness: nudged and reported after one, reported again after each further one.
 pub const IDLE_ROUND_MS: i64 = 10 * 60_000;
@@ -42,7 +42,8 @@ pub const IDLE_NUDGE_MESSAGE: &str =
     "Ghostex: your background job looks finished: read its result and carry on.";
 
 /// The message Ghostex sends a thread that stopped mid-task or whose turn was cut off.
-pub const IDLE_CARRY_ON_MESSAGE: &str = "Ghostex: your last turn stopped before your task was done: carry on where you left off, or say you're finished.";
+pub const IDLE_CARRY_ON_MESSAGE: &str =
+    "Ghostex: your last turn stopped before your task was done: carry on where you left off, or say you're finished.";
 
 /// Why an idle thread is watched.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

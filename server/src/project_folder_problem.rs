@@ -28,16 +28,16 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::domain::{DomainRepository, ProjectPathState, project_path_state};
+use crate::domain::{project_path_state, DomainRepository, ProjectPathState};
 use crate::project_folder_mounts::WatchRead;
 use crate::server::AppState;
 use crate::session_chat_notice::{
     SessionChatTerminalNotice, SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
 };
 use crate::storage::open_gxserver_database;
-use ghostex_paths::missing_folder::{MissingFolderDiagnosis, diagnose_missing_folder};
+use ghostex_paths::missing_folder::{diagnose_missing_folder, MissingFolderDiagnosis};
 
 /// The kind of the card a session of such a project shows in its chat.
 pub(crate) const NOTICE_KIND: &str = "projectFolderMissing";

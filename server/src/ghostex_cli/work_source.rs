@@ -4,7 +4,7 @@
 
 use std::path::{Component, Path};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::args::Flags;
 use super::output::print_json;
@@ -67,7 +67,7 @@ pub(super) fn work_source_command(rest: &[String], flags: &Flags) -> CliResult<(
         Some(other) => {
             return Err(CliError::Other(format!(
                 "Unknown issues source command \"{other}\". {USAGE}"
-            )));
+            )))
         }
     };
     print_json(&result);

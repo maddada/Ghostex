@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::agent_transcripts::resolve_session_transcript_path;
 use crate::domain::{DomainRepository, DomainStateError};

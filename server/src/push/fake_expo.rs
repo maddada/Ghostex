@@ -6,8 +6,8 @@ use std::{
     time::Duration,
 };
 
-use axum::{Router, body::Bytes, extract::State, http::Uri, response::IntoResponse};
-use serde_json::{Value, json};
+use axum::{body::Bytes, extract::State, http::Uri, response::IntoResponse, Router};
+use serde_json::{json, Value};
 
 use super::runtime::PushClock;
 

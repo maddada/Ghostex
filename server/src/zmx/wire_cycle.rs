@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::{
     domain::{DomainRepository, DomainStateError},
@@ -439,7 +439,11 @@ fn zmx_session_daemons_present(zmx_names: &[&str]) -> Vec<bool> {
 /// A closed session keeps its terminal state; only a session that can be woken
 /// becomes sleeping.
 fn wire_cycle_target_lifecycle(stopped: bool) -> &'static str {
-    if stopped { "stopped" } else { "sleeping" }
+    if stopped {
+        "stopped"
+    } else {
+        "sleeping"
+    }
 }
 
 /// Ends every incompatible daemon in one go and records each session's sleeping
@@ -1161,16 +1165,14 @@ mod verified_daemon_tests {
             // macOS keeps a system binary's environment from other processes, also in a copy;
             // signed again as a plain program it reads like the real zmx.
             #[cfg(target_os = "macos")]
-            assert!(
-                Command::new("/usr/bin/codesign")
-                    .args(["--force", "--sign", "-"])
-                    .arg(&zmx)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .unwrap()
-                    .success()
-            );
+            assert!(Command::new("/usr/bin/codesign")
+                .args(["--force", "--sign", "-"])
+                .arg(&zmx)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success());
         }
         let mut command = Command::new(&zmx);
         command

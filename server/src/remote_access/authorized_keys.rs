@@ -2,10 +2,10 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{anyhow, bail, Context, Result};
 use base64::{
-    Engine,
     engine::general_purpose::{STANDARD, STANDARD_NO_PAD},
+    Engine,
 };
 use sha2::{Digest, Sha256};
 

@@ -48,14 +48,14 @@ pub mod taxonomy;
 mod tests;
 
 pub use capture::{
-    ClientPlatform, boosts_used, client_connected, extension_installed, extension_toggled,
-    extension_uninstalled, prompt_sent, prompt_source_for_diagnostic_input_source, session_started,
+    boosts_used, client_connected, extension_installed, extension_toggled, extension_uninstalled,
+    prompt_sent, prompt_source_for_diagnostic_input_source, session_started, ClientPlatform,
 };
 pub use client_events::record_client_event;
 pub use gate::is_enabled;
 pub use profile::ProfileSnapshot;
 pub use queue::{handle, init, refresh_profile};
-pub use task::{SHUTDOWN_FLUSH_TIMEOUT, spawn_flush_task, spawn_heartbeat_task};
+pub use task::{spawn_flush_task, spawn_heartbeat_task, SHUTDOWN_FLUSH_TIMEOUT};
 
 /*
 Every telemetry failure ends here, and nowhere else. Telemetry must never crash

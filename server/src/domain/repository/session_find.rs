@@ -17,7 +17,7 @@ use rusqlite::params_from_iter;
 use serde_json::Value;
 
 use crate::domain::{
-    DomainRepository, DomainResult, session_from_row, session_row_from_sql, sql_error,
+    session_from_row, session_row_from_sql, sql_error, DomainRepository, DomainResult,
 };
 
 /// What `/api/findSessions` found: the candidate rows in `list_sessions`' order, and whether they

@@ -8,7 +8,7 @@ use crate::server::{AppState, RoutedResponse};
 use super::{
     answers::reply,
     serve::VISUAL_PAGE_ROUTE_PREFIX,
-    store::{StoreAnswersError, dismiss_layout_notice, is_page_id},
+    store::{dismiss_layout_notice, is_page_id, StoreAnswersError},
 };
 
 pub(crate) const VISUAL_PAGE_NOTICE_SUFFIX: &str = "/notice";
@@ -75,12 +75,10 @@ mod tests {
     fn closing_the_notice_is_kept_on_the_page_record_answered_or_not() {
         let dir = tempfile::tempdir().unwrap();
         let id = write_page(dir.path(), "Page", "<p>page</p>", None, None).unwrap();
-        assert!(
-            read_record(dir.path(), &id)
-                .unwrap()
-                .get("layoutNoticeDismissedAt")
-                .is_none()
-        );
+        assert!(read_record(dir.path(), &id)
+            .unwrap()
+            .get("layoutNoticeDismissedAt")
+            .is_none());
         assert!(super::super::store::store_answers(dir.path(), &id, &json!({"Q1": "a"})).is_ok());
         assert!(dismiss_layout_notice(dir.path(), &id).is_ok());
         assert!(read_record(dir.path(), &id).unwrap()["layoutNoticeDismissedAt"].is_string());

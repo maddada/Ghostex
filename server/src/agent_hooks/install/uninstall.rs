@@ -8,7 +8,7 @@ use serde_json::Value;
 use crate::domain::DomainStateError;
 
 use crate::agent_hooks::codex_trust::follow_codex_hook_trust;
-use crate::agent_hooks::config::{HookDefinition, HookFormat, HookPaths, hook_format, hook_marker};
+use crate::agent_hooks::config::{hook_format, hook_marker, HookDefinition, HookFormat, HookPaths};
 use crate::agent_hooks::plugin_sources::command_for_agent;
 use crate::agent_hooks::probing::{io_error, path_string, push_unique_path, read_file_text};
 use crate::agent_hooks::resolution::{

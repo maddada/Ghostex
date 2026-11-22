@@ -9,10 +9,10 @@
 //! A call reaches a GBot whose chats run on this computer. One given another computer or a Cloud Box (computer/) is refused with a sentence saying so: a Voice agent call about one session is about a session of the computer it runs on (voice_agent/focus.rs).
 
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::record::{Bot, bot_summary, color_hex, require_bot};
-use super::session::{CHAT_KEY, ChatOpening, bot_chats, create_bot_chat_with};
+use super::record::{bot_summary, color_hex, require_bot, Bot};
+use super::session::{bot_chats, create_bot_chat_with, ChatOpening, CHAT_KEY};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::paths::GxserverPaths;
 use crate::server::AppState;
@@ -187,7 +187,7 @@ pub(crate) fn call_refusal(state: &AppState, reference: &str) -> Option<CallRefu
             return Some(refusal(
                 "internalError",
                 format!("SQLite gxserver state error: {error}"),
-            ));
+            ))
         }
     };
     match require_bot(&db, reference) {

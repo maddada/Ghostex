@@ -4,11 +4,11 @@ use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::protocol::rpc_success;
-use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
+use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
 use crate::session_chat_options::SessionChatTerminalDetection;
 use crate::session_chat_send::SessionChatSendTarget;
 use crate::storage::open_gxserver_database;

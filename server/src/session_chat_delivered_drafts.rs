@@ -2,7 +2,7 @@
 //! Delayed delivery runs without a composer, so its exact text and delivery time must survive until a client imports it into sent history.
 //! Draft retirement alone cannot reconstruct the sent text after newer edits or a closed client.
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::Serialize;
 
 use crate::domain::DomainStateError;

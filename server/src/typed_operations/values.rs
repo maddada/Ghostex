@@ -5,11 +5,11 @@ use std::{
 };
 
 use crate::platform::process::NoConsoleWindow;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use tokio::{
     io::AsyncWriteExt,
     process::Command,
-    time::{Instant, timeout},
+    time::{timeout, Instant},
 };
 
 const TYPED_OPERATION_TIMEOUT_MS: u64 = 120_000;
@@ -276,7 +276,7 @@ pub(crate) async fn run_process_command_with_timeout(
         Ok(Err(error)) => {
             return Err(TypedOperationError::dependency_unavailable(format!(
                 "Typed operation command failed: {error}"
-            )));
+            )))
         }
         Err(_) => {
             return Ok(CommandOutput {
@@ -288,7 +288,7 @@ pub(crate) async fn run_process_command_with_timeout(
                 exit_code: 1,
                 stderr: String::new(),
                 stdout: String::new(),
-            });
+            })
         }
     };
     /*

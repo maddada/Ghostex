@@ -8,14 +8,14 @@
 //!   and none of them while Chief is turned off.
 
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::record::read_record;
 use super::session::{chief_agent_rows, open_chief, replace_chief};
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::protocol::{rpc_error, rpc_success};
 use crate::security::Principal;
-use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
+use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
 use crate::storage::open_gxserver_database;
 
 pub(crate) const CHIEF_ENDPOINT: &str = "/api/chief";

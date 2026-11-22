@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::custom_session_tags::{read_custom_session_tags, write_custom_session_tags_and_publish};
 use crate::domain::{DomainRepository, DomainStateError};

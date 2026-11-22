@@ -4,11 +4,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ghostex_gx_core::settings_sync::SyncEntry;
 use ghostex_gx_core::unified_sidebar::{
-    RepoIdentity, folder_in_repository, merge_repo_identities, origin_keys_of, project_repo_key,
-    repo_identity, repository_of_project_key, resolve_repo_identity,
+    folder_in_repository, merge_repo_identities, origin_keys_of, project_repo_key, repo_identity,
+    repository_of_project_key, resolve_repo_identity, RepoIdentity,
 };
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;

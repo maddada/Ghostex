@@ -38,7 +38,7 @@ use std::{
 };
 
 use axum::{
-    http::{HeaderValue, StatusCode, header},
+    http::{header, HeaderValue, StatusCode},
     response::IntoResponse,
 };
 
@@ -46,7 +46,7 @@ use crate::server::{AppState, RoutedResponse};
 
 use super::{
     file_page::{
-        LinkedSession, cover_of, page_for_cover_link, page_for_linked_file, page_show_published,
+        cover_of, page_for_cover_link, page_for_linked_file, page_show_published, LinkedSession,
     },
     prepare::anchor_hrefs,
     serve::{PAGE_SCRIPT_QUERY, READ_ONLY_QUERY, VISUAL_PAGE_ROUTE_PREFIX},

@@ -7,8 +7,8 @@ use std::os::unix::fs::PermissionsExt;
 
 use super::*;
 use crate::work_mode::{
-    SourcePath, command_work_dir, read_credentials, read_work_sources, set_work_source,
-    set_work_source_credentials,
+    command_work_dir, read_credentials, read_work_sources, set_work_source,
+    set_work_source_credentials, SourcePath,
 };
 
 struct Deletion {
@@ -118,12 +118,10 @@ async fn deleting_a_workspace_removes_only_its_own_command_and_credentials() {
     let (status, body) = deletion.delete(&gone).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let db = open_gxserver_database(&deletion.paths).expect("db");
-    assert!(
-        !read_work_sources(&db)
-            .expect("read")
-            .workspaces
-            .contains_key(&gone)
-    );
+    assert!(!read_work_sources(&db)
+        .expect("read")
+        .workspaces
+        .contains_key(&gone));
     assert!(
         read_credentials(&deletion.paths)["workspaceSourceCredentials"]
             .get(&gone)

@@ -5,21 +5,21 @@ use ghostex_gx_chat_core::protocol::{
     coordinator_default_model_label, coordinator_launch_takes_effort,
     coordinator_launch_takes_model, coordinator_model_label,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::{
     acknowledge_threads, board, item, playbook, sleep_threads, status as status_parts, threads,
     usage_room,
 };
 use crate::coordinators::{
-    DEFAULT_CLAUDE_COORDINATOR_MODEL, coordinator_launcher_family as agent_family,
-    default_coordinator_launcher as default_coordinator_agent,
+    coordinator_launcher_family as agent_family,
+    default_coordinator_launcher as default_coordinator_agent, DEFAULT_CLAUDE_COORDINATOR_MODEL,
 };
 use crate::ghostex_cli::{
     agents,
-    args::{Flags, ParsedArgs, parse_args},
+    args::{parse_args, Flags, ParsedArgs},
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
     selector, sessions,
 };
 
@@ -59,9 +59,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             }
             println!("\nFull reference: ghostex coordinator --help --all.");
         } else {
-            println!(
-                "ghostex coordinator: manage a coordinator and its threads.\n  create | promote | make-main | options | list | status | start-thread\n  link | unlink | rename | rename-self | resolve | reopen\n  item | board | remember | forget | set-goal | set-instructions\n  guide | playbook | set-playbook | next-tag\n  <verb> --help shows its usage; --help --all shows the full reference."
-            );
+            println!("ghostex coordinator: manage a coordinator and its threads.\n  create | promote | make-main | options | list | status | start-thread\n  link | unlink | rename | rename-self | resolve | reopen\n  item | board | remember | forget | set-goal | set-instructions\n  guide | playbook | set-playbook | next-tag\n  <verb> --help shows its usage; --help --all shows the full reference.");
         }
         return Ok(());
     }
@@ -197,13 +195,9 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
             agents::text(&result, "title")
         );
         if agents::text(&result, "firstMessage") == "waiting" {
-            println!(
-                "Its first message waits in its agent's input box: change the model and effort there if you like, then press Start on the card in its chat (or Enter in its terminal). A message you send it starts it too."
-            );
+            println!("Its first message waits in its agent's input box: change the model and effort there if you like, then press Start on the card in its chat (or Enter in its terminal). A message you send it starts it too.");
         }
-        println!(
-            "Talk to it in Ghostex, or send it work with: ghostex agents send {reference} \"<request>\""
-        );
+        println!("Talk to it in Ghostex, or send it work with: ghostex agents send {reference} \"<request>\"");
     }
     Ok(())
 }
@@ -404,18 +398,14 @@ fn promote(parsed: &ParsedArgs) -> CliResult<()> {
         agents::text(&result, "title")
     );
     if result["playbookQueued"].as_bool() == Some(true) {
-        println!(
-            "The coordinator skill is installed and the message to read it was sent now; a busy agent takes it at its next input boundary."
-        );
+        println!("The coordinator skill is installed and the message to read it was sent now; a busy agent takes it at its next input boundary.");
     } else {
         println!(
             "Its coordinator skill or message could not be set up ({}). Send it with: ghostex agents send {reference} \"Run ghostex coordinator guide and follow it from now on.\"",
             agents::text(&result, "playbookError")
         );
     }
-    println!(
-        "Sessions it started earlier are not its threads yet; adopt each with: ghostex coordinator link <session-ref> --coordinator {reference}"
-    );
+    println!("Sessions it started earlier are not its threads yet; adopt each with: ghostex coordinator link <session-ref> --coordinator {reference}");
     Ok(())
 }
 
@@ -894,9 +884,7 @@ pub(super) fn print_status(view: &Value, all: bool) {
     }
     let threads = view["threads"].as_array().cloned().unwrap_or_default();
     if threads.is_empty() {
-        println!(
-            "Threads: none yet. Start one with: ghostex coordinator start-thread --title \"<title>\" --task \"<brief>\""
-        );
+        println!("Threads: none yet. Start one with: ghostex coordinator start-thread --title \"<title>\" --task \"<brief>\"");
         return;
     }
     println!("Threads:");

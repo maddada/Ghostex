@@ -1,4 +1,4 @@
-use super::{Client, Snapshot, error};
+use super::{error, Client, Snapshot};
 use crate::{
     domain::DomainStateError,
     session_chat_agent_fleet::{SessionChatAgentFleet, SessionChatSubAgent},

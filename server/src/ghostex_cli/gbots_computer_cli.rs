@@ -1,11 +1,11 @@
 //! `ghostex gbots computer …`: where a GBot's chats run (server/src/gbots/computer/).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::{
     args::Flags,
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 /// The computer verbs' lines in `ghostex gbots --help`. `--computer` stays the flag that runs a

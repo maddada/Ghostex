@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::control::{self, OpenConfirm, StopTarget};
 use super::conversation::Input;
@@ -326,11 +326,10 @@ async fn saying_yes_stops_it_and_the_card_comes_down() {
             session: Some("P1:S1".into()),
         })
         .unwrap();
-    assert!(
-        call.client_frames("confirmDone", Duration::from_millis(300))
-            .await
-            .is_empty()
-    );
+    assert!(call
+        .client_frames("confirmDone", Duration::from_millis(300))
+        .await
+        .is_empty());
     call.end();
 }
 

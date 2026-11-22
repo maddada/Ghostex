@@ -8,12 +8,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::{
-    args::{Flags, js_number, parse_json_value},
+    args::{js_number, parse_json_value, Flags},
     tailcat_tunnel::{
-        TailcatForwardPlan, TailcatTunnel, create_cli_tailcat_forward_plan, start_tailcat_tunnel,
+        create_cli_tailcat_forward_plan, start_tailcat_tunnel, TailcatForwardPlan, TailcatTunnel,
     },
 };
 
@@ -406,7 +406,7 @@ fn wait_for_approval(
             "expired" | "consumed" => {
                 return Err(CliError::Other(format!(
                     "Nobody approved this in time: {summary}. Run the command again to ask again."
-                )));
+                )))
             }
             _ => {}
         }

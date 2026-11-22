@@ -1,6 +1,6 @@
 //! How a branch, a PR body and a request name a ticket.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::*;
 

@@ -6,15 +6,15 @@
 
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::server::{AppState, schedule_presentation_session_delta};
+use crate::server::{schedule_presentation_session_delta, AppState};
 use crate::session_chat_notice::{
-    SESSION_CHAT_NOTICE_AGENT_EXITED, SESSION_CHAT_NOTICE_LOGIN_EXPIRED, SessionChatTerminalNotice,
+    SessionChatTerminalNotice, SESSION_CHAT_NOTICE_AGENT_EXITED, SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
 };
 use crate::session_chat_queue::{
-    SESSION_CHAT_QUEUE_STATE_FAILED, read_session_chat_queue_snapshot,
+    read_session_chat_queue_snapshot, SESSION_CHAT_QUEUE_STATE_FAILED,
 };
 use crate::storage::open_gxserver_database;
 use crate::zmx::dispatch_zmx_lifecycle_endpoint;
@@ -268,8 +268,8 @@ fn close_feedback_session(state: &AppState, project_id: &str, session_id: &str) 
 mod tests {
     use super::*;
     use crate::session_chat_notice::{
-        SESSION_CHAT_NOTICE_TRUST_PROMPT, SessionChatTerminalNoticeSeverity,
-        SessionChatTerminalNoticeSource,
+        SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
+        SESSION_CHAT_NOTICE_TRUST_PROMPT,
     };
 
     const QUEUED: BriefRow<'static> = BriefRow {

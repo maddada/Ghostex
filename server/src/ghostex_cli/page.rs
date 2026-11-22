@@ -1,10 +1,10 @@
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::rpc::{
-    CliError, CliResult, request_gxserver_rpc, resolve_gxserver_server_target,
+    request_gxserver_rpc, resolve_gxserver_server_target, CliError, CliResult,
 };
-use crate::visual_pages::{RETIRE_VISUAL_PAGES_ENDPOINT, page_id_of};
+use crate::visual_pages::{page_id_of, RETIRE_VISUAL_PAGES_ENDPOINT};
 
 /// `ghostex page retire <page>... [--json]`: takes back Ghostex pages the agent published and
 /// replaced, with their open questions (CDXC:Coordinators 2026-11-16 DECISION in

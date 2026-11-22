@@ -10,7 +10,7 @@
 //! SEE-ALSO: server/src/server/previous_session_restore_http.rs, server/src/ghostex_cli/previous_sessions.rs, apps/mobile/app/src/sessions/closedSessions.ts.
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 
@@ -551,16 +551,12 @@ mod tests {
         assert_eq!(open_now.len(), 2);
         for thread in open_now {
             assert!(thread.closed_with_coordinator_at.is_none());
-            assert!(
-                restored_threads
-                    .iter()
-                    .any(|id| id.as_str() == Some(thread.session_id.as_str()))
-            );
-        }
-        assert!(
-            threads
+            assert!(restored_threads
                 .iter()
-                .any(|thread| thread.session_id == done && thread.is_resolved())
-        );
+                .any(|id| id.as_str() == Some(thread.session_id.as_str())));
+        }
+        assert!(threads
+            .iter()
+            .any(|thread| thread.session_id == done && thread.is_resolved()));
     }
 }

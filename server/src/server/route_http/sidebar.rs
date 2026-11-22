@@ -1,6 +1,6 @@
 //! Sidebar-state routes: the launcher/action HUD and its Settings mutations, navigation history, the notification feed and phone push registration, session groups, project collections, Spaces, custom session tags and app user data.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::{
     constants::GXSERVER_PROTOCOL_VERSION,
@@ -8,14 +8,14 @@ use crate::{
     domain::DomainStateError,
     navigation_history::{navigate_history, read_navigation_history, record_navigation_visit},
     notification_feed::{
-        NOTIFICATION_FEED_CREATE_ENDPOINT, NOTIFICATION_FEED_READ_ENDPOINT,
-        NOTIFICATION_FEED_UPDATE_ENDPOINT, create_notification_endpoint,
-        read_notification_feed_endpoint, update_notification_feed_endpoint,
+        create_notification_endpoint, read_notification_feed_endpoint,
+        update_notification_feed_endpoint, NOTIFICATION_FEED_CREATE_ENDPOINT,
+        NOTIFICATION_FEED_READ_ENDPOINT, NOTIFICATION_FEED_UPDATE_ENDPOINT,
     },
     presentation::increment_presentation_revision,
     sidebar_hud::{
-        GlobalSidebarCommandUpdate, create_sidebar_hud_settings_mutation,
-        read_sidebar_agent_roster, read_sidebar_hud, read_sidebar_hud_global_commands,
+        create_sidebar_hud_settings_mutation, read_sidebar_agent_roster, read_sidebar_hud,
+        read_sidebar_hud_global_commands, GlobalSidebarCommandUpdate,
     },
     sidebar_project_collections::{
         assign_project_to_sidebar_collection, read_sidebar_project_collections,
@@ -470,7 +470,7 @@ pub(super) async fn route_sidebar_http(
                 body_json,
                 token_extension_id,
                 caller,
-            });
+            })
         }
     })
 }

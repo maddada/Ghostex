@@ -5,7 +5,7 @@ use std::io::Write;
 use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::paths::GxserverPaths;
 

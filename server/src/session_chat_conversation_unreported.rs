@@ -11,10 +11,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::server::{AppState, read_runtime_text};
+use crate::server::{read_runtime_text, AppState};
 use crate::session_chat_notice::{
     SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
     SessionChatTerminalNoticeActionKind, SessionChatTerminalNoticeSeverity,

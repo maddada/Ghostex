@@ -169,9 +169,7 @@ fn same_build_holder_hung_starting_for(paths: &GxserverPaths) -> Option<serde_js
 
 fn port_in_use_error(port: u16, error: std::io::Error) -> anyhow::Error {
     if error.kind() == std::io::ErrorKind::AddrInUse {
-        anyhow::anyhow!(
-            "Port {port} is already in use and did not respond as a compatible gxserver. Stop the conflicting process or update Ghostex/gxserver so their protocol versions match."
-        )
+        anyhow::anyhow!("Port {port} is already in use and did not respond as a compatible gxserver. Stop the conflicting process or update Ghostex/gxserver so their protocol versions match.")
     } else if cfg!(windows) && error.raw_os_error() == Some(10_013) {
         anyhow::anyhow!(ghostex_paths::windows_gxserver_port::forbidden_port_message(port))
     } else {

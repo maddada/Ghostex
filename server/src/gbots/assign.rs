@@ -14,21 +14,21 @@
 //! A question is a separate chat by default, resolved once it answers and closed when it was opened for that question, so the bot's standing chat with its sender keeps only work; work goes to that standing chat by default so the bot keeps the context of earlier work from the same sender.
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::assignments::{
-    Assignment, FROM_USER, MAX_DEPTH, MAX_PER_ROOT, MAX_REWORKS, ancestors, assignment_summary,
-    count_in_root, insert_assignment, latest_assignment_in_chat, list_assignments, mark_rework,
-    next_assignment_id, open_assignment_in_chat, read_assignment, session_key, set_status,
+    ancestors, assignment_summary, count_in_root, insert_assignment, latest_assignment_in_chat,
+    list_assignments, mark_rework, next_assignment_id, open_assignment_in_chat, read_assignment,
+    session_key, set_status, Assignment, FROM_USER, MAX_DEPTH, MAX_PER_ROOT, MAX_REWORKS,
 };
-use super::record::{Bot, bot_summary, read_bot, require_bot};
-use super::session::{CHAT_KEY, ChatOpening, bot_chats, chat_summary, create_bot_chat_with};
+use super::record::{bot_summary, read_bot, require_bot, Bot};
+use super::session::{bot_chats, chat_summary, create_bot_chat_with, ChatOpening, CHAT_KEY};
 use crate::coordinators::{
-    BriefContext, MessageSender, agent_message, link_thread, now_iso, pending_message_excerpt,
-    read_coordinator, set_thread_pending_message, set_thread_resolved, thread_brief,
+    agent_message, link_thread, now_iso, pending_message_excerpt, read_coordinator,
+    set_thread_pending_message, set_thread_resolved, thread_brief, BriefContext, MessageSender,
 };
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::server::{AppState, dispatch_zmx_lifecycle_http_blocking, queue_session_chat_prompt};
+use crate::server::{dispatch_zmx_lifecycle_http_blocking, queue_session_chat_prompt, AppState};
 
 /// A brief, `--done-when` and rework text are each kept to this many characters.
 const BRIEF_MAX_CHARS: usize = 16_000;

@@ -1,7 +1,7 @@
 //! `ghostex move-project-folder`: moves a project's folder on disk and everything Ghostex keeps
 //! about it (gxserver's `/api/moveProjectFolder`, server/src/project_folder_move/).
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::args::parse_args;
 use super::output::print_json;

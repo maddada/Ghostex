@@ -369,11 +369,9 @@ fn a_value_that_isnt_secret_is_refused_when_the_path_already_holds_it() {
         ),
         other => panic!("not refused: {other:?}"),
     }
-    assert!(
-        !store
-            .credentials()
-            .contains_key("workspaceSourceCredentials")
-    );
+    assert!(!store
+        .credentials()
+        .contains_key("workspaceSourceCredentials"));
 }
 
 /// A stored value that isn't secret is kept out of what an accepted answer puts in the record as
@@ -519,11 +517,10 @@ fn a_value_only_masked_is_never_passed_to_the_command() {
         ..CommandEnv::default()
     };
     let env = CommandEnv::new(Some("fixture"), "ws-a", None, &[], None).masking_too(&kept);
-    assert!(
-        env.vars(|_| None)
-            .iter()
-            .all(|(_, value)| !value.to_string_lossy().contains("abc123"))
-    );
+    assert!(env
+        .vars(|_| None)
+        .iter()
+        .all(|(_, value)| !value.to_string_lossy().contains("abc123")));
     assert_eq!(env.shown("cannot reach abc123"), "cannot reach ••••");
     assert!(env.holds_secrets());
 }
@@ -562,16 +559,12 @@ fn a_value_that_isnt_secret_is_refused_when_the_workspace_id_or_the_path_holds_i
         match save(&store, &workspace_id, json!({ "team": value })) {
             Err(WorkSourceError::Refused(text)) => assert_eq!(
                 text,
-                format!(
-                    "team can't be saved: its value also appears in the command's {what}, which Ghostex can't hide."
-                )
+                format!("team can't be saved: its value also appears in the command's {what}, which Ghostex can't hide.")
             ),
             other => panic!("{value}: not refused: {other:?}"),
         }
     }
-    assert!(
-        !store
-            .credentials()
-            .contains_key("workspaceSourceCredentials")
-    );
+    assert!(!store
+        .credentials()
+        .contains_key("workspaceSourceCredentials"));
 }

@@ -28,4 +28,4 @@ pub(crate) mod uv;
 pub(crate) use endpoint::{
     ensure_homebrew, ensure_mise, ensure_npm, ensure_system_tools, ensure_uv,
 };
-pub(crate) use jobs::{INSTALL_LOCK, Log};
+pub(crate) use jobs::{Log, INSTALL_LOCK};

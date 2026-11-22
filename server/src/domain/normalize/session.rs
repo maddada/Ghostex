@@ -1,13 +1,13 @@
 use std::collections::HashSet;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::normalize::fields::{
     has_string_field, insert_optional_object, insert_optional_string,
     normalize_domain_lifecycle_state, normalize_object, read_optional_text, set_optional_string,
     update_object_field, update_optional_object_field, update_optional_text_field,
 };
-use crate::domain::{DomainResult, DomainStateError, js_string};
+use crate::domain::{js_string, DomainResult, DomainStateError};
 use crate::ids::{create_global_session_ref, create_zmx_session_name, is_gxserver_session_id};
 
 pub(crate) fn normalize_session_input(

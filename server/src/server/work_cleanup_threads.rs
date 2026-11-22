@@ -13,27 +13,28 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::route_http::{answer_work_cleanup, sleep_work_cleanup_session};
 use super::worktree_ops::{
-    ProjectWorktreeOperationError, canonical_worktree_path_key, remove_session_worktree,
+    canonical_worktree_path_key, remove_session_worktree,
     resolve_project_worktree_operation_context, run_project_worktree_action,
+    ProjectWorktreeOperationError,
 };
-use super::{AppState, schedule_presentation_session_delta};
+use super::{schedule_presentation_session_delta, AppState};
 use crate::coordinators::{
     is_sleep_inactive_session, list_coordinators, list_threads, list_threads_for,
     started_by_coordinator, thread_owes_work,
 };
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::presentation::build_presentation_session_delta;
 use crate::session_git_status::{run_git_probe_command, run_git_probe_command_with_status};
 use crate::storage::open_gxserver_database;
 use crate::work_mode::{
-    AUTO_CLEAN_UP_ANSWER, offers_work_cleanup, presentation_session_work, project_work_mode,
+    offers_work_cleanup, presentation_session_work, project_work_mode,
     work_cleanup_pull_request_key, work_cleanup_record, work_cleanup_worktree_path,
-    write_work_cleanup_answer, write_work_cleanup_record,
+    write_work_cleanup_answer, write_work_cleanup_record, AUTO_CLEAN_UP_ANSWER,
 };
 
 /// The setting that lets the pass clean merged threads up by itself.
@@ -577,7 +578,7 @@ fn git_verdict(
             return GitVerdict::Kept {
                 reason: work.code(),
                 detail: work.describe(),
-            };
+            }
         }
         Some(None) => {}
     }

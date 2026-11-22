@@ -1,4 +1,4 @@
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::session_chat_options::{SessionChatContextUsage, SessionChatDetectedOptions};
 

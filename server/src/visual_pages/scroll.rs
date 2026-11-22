@@ -4,14 +4,14 @@ use axum::{
     body::Body,
     http::{Method, StatusCode},
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::server::{AppState, RoutedResponse};
 
 use super::{
     answers::reply,
     serve::VISUAL_PAGE_ROUTE_PREFIX,
-    store::{StoreAnswersError, is_page_id, read_record, store_scroll},
+    store::{is_page_id, read_record, store_scroll, StoreAnswersError},
 };
 
 pub(crate) const VISUAL_PAGE_SCROLL_SUFFIX: &str = "/scroll";
@@ -119,12 +119,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let id =
             super::super::store::write_page(dir.path(), "Page", "<p>page</p>", None, None).unwrap();
-        assert!(
-            read_record(dir.path(), &id)
-                .unwrap()
-                .get("scrollY")
-                .is_none()
-        );
+        assert!(read_record(dir.path(), &id)
+            .unwrap()
+            .get("scrollY")
+            .is_none());
         assert!(store_scroll(dir.path(), &id, 1600).is_ok());
         assert_eq!(read_record(dir.path(), &id).unwrap()["scrollY"], 1600);
         assert!(matches!(

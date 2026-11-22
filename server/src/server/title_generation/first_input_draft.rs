@@ -344,7 +344,8 @@ mod tests {
             )
             .expect("project created");
         let project_id = project["projectId"].as_str().expect("projectId");
-        let draft_text = "You are continuing from \"Coordinator\" in Ghostex.\n\n[Coordinator Handoff](/tmp/export.md)\n\n";
+        let draft_text =
+            "You are continuing from \"Coordinator\" in Ghostex.\n\n[Coordinator Handoff](/tmp/export.md)\n\n";
         let session = repository
             .create_session(
                 json!({
@@ -367,16 +368,14 @@ mod tests {
             .expect("session created");
         let session_id = session["sessionId"].as_str().expect("sessionId");
 
-        assert!(
-            claim_first_user_input_draft(
-                &repository,
-                "/api/startSessionProvider",
-                &json!({ "started": true }),
-                project_id,
-                session_id,
-            )
-            .is_none()
-        );
+        assert!(claim_first_user_input_draft(
+            &repository,
+            "/api/startSessionProvider",
+            &json!({ "started": true }),
+            project_id,
+            session_id,
+        )
+        .is_none());
         let reloaded = repository
             .get_session(project_id, session_id)
             .expect("get session")

@@ -19,12 +19,12 @@
 use super::*;
 
 use crate::agents::lead_links::{
-    LEAD_TURN_SLACK_MS, LeadLink, TurnRow, lead_turn, list_lead_links, read_lead_link,
-    remove_lead_link, set_link_observed_working, settle_finished, settle_quiet, settle_waiting,
+    lead_turn, list_lead_links, read_lead_link, remove_lead_link, set_link_observed_working,
+    settle_finished, settle_quiet, settle_waiting, LeadLink, TurnRow, LEAD_TURN_SLACK_MS,
 };
 use crate::coordinators::{
-    SessionKey, ThreadProgress, ThreadReport, ThreadState, agent_message, classify_thread_session,
-    report_body,
+    agent_message, classify_thread_session, report_body, SessionKey, ThreadProgress, ThreadReport,
+    ThreadState,
 };
 use crate::presentation::effective_lifecycle_state;
 
@@ -65,7 +65,7 @@ struct TurnCache {
 /// and was never reported. The rows are now read back in pages (`before_offset`, as
 /// session_chat_history.rs reads them) until they reach the time of the lead's message.
 fn lead_turn_rows(cache: &mut TurnCache, session: &Value, owed_ms: i64) -> Vec<TurnRow> {
-    use crate::session_chat_tail::{SessionChatTailPage, read_session_chat_tail_page};
+    use crate::session_chat_tail::{read_session_chat_tail_page, SessionChatTailPage};
     let Some(agent) = crate::coordinators::resolve_thread_transcript(session, &mut cache.path)
     else {
         return Vec::new();

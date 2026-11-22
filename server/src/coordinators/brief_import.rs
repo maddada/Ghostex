@@ -17,9 +17,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use rusqlite::Connection;
 use serde_json::Value;
 
-use super::records::{SessionKey, now_iso, read_coordinator, read_thread};
-use super::session_work::{TOPIC_MAX_CHARS, WORK_ITEMS_EXTENSION, read_topic, write_topic};
-use super::work::{WorkEvent, WorkItem, WorkWait, next_item_number, write_work_item};
+use super::records::{now_iso, read_coordinator, read_thread, SessionKey};
+use super::session_work::{read_topic, write_topic, TOPIC_MAX_CHARS, WORK_ITEMS_EXTENSION};
+use super::work::{next_item_number, write_work_item, WorkEvent, WorkItem, WorkWait};
 
 /// Set once this gxserver has looked: the conversion runs at most once per start.
 static LOOKED: AtomicBool = AtomicBool::new(false);

@@ -24,23 +24,22 @@ use std::time::{Duration, Instant};
 use ghostex_gx_chat_core::protocol::ChatMessage;
 use ghostex_gx_chat_core::questions::resource_index::{self, ResourceEntry};
 use ghostex_gx_chat_core::transcript::open_questions::{
-    AskerKind, Found, TagState, asker_entries, askers, linkable_tags, mark_inherited,
-    settle_askers, share_answers, tags_answered_in_words,
+    asker_entries, askers, linkable_tags, mark_inherited, settle_askers, share_answers,
+    tags_answered_in_words, AskerKind, Found, TagState,
 };
 use ghostex_gx_chat_core::transcript::page_answers::answers_page_ids;
-use ghostex_gx_chat_core::transcript::question_forms::{QuestionForm, question_forms};
+use ghostex_gx_chat_core::transcript::question_forms::{question_forms, QuestionForm};
 use rusqlite::OptionalExtension;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, LogLevel};
-use crate::server::{AppState, read_runtime_text};
+use crate::server::{read_runtime_text, AppState};
 use crate::session_chat::{
-    SessionChatBlock, SessionChatIncrementalState, SessionChatMessage, SessionChatRole,
-    SessionChatTranscriptAgent, TranscriptFileVersion, boundary_fingerprint,
-    read_incremental_transcript_messages, read_transcript_file_version,
+    boundary_fingerprint, read_incremental_transcript_messages, read_transcript_file_version,
     resolve_session_chat_transcript_agent, resolve_session_chat_transcript_path,
-    session_chat_line_decoder,
+    session_chat_line_decoder, SessionChatBlock, SessionChatIncrementalState, SessionChatMessage,
+    SessionChatRole, SessionChatTranscriptAgent, TranscriptFileVersion,
 };
 use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;
@@ -1996,23 +1995,19 @@ mod tests {
             252,
             "250 forms, a page and a chart; the plain reply adds none"
         );
-        assert!(
-            index
-                .iter()
-                .filter(|e| e.kind == "form")
-                .all(|e| e.status == "waiting")
-        );
+        assert!(index
+            .iter()
+            .filter(|e| e.kind == "form")
+            .all(|e| e.status == "waiting"));
         let page_entry = index.iter().find(|e| e.kind == "page").unwrap();
         assert_eq!(
             (page_entry.title.as_str(), page_entry.status.as_str()),
             ("Notes", "other")
         );
-        assert!(
-            page_entry
-                .url
-                .as_deref()
-                .is_some_and(|url| url.contains("/visual/"))
-        );
+        assert!(page_entry
+            .url
+            .as_deref()
+            .is_some_and(|url| url.contains("/visual/")));
         assert_eq!(
             index
                 .iter()
@@ -2028,11 +2023,9 @@ mod tests {
             "answered"
         );
         let forked = ledger.index(&[], Some(100), |_| false);
-        assert!(
-            forked
-                .iter()
-                .all(|e| e.kind != "form" || e.at_ms >= Some(100))
-        );
+        assert!(forked
+            .iter()
+            .all(|e| e.kind != "form" || e.at_ms >= Some(100)));
     }
 
     /// A tag reads settled once its question is answered by a one-click link, a form, a page or the
@@ -2178,10 +2171,7 @@ mod tests {
             ledger.index(&[], None, |_| false),
             ledger.turns,
             ledger.answered,
-            ledger
-                .answers_at
-                .iter()
-                .collect::<std::collections::BTreeMap<_, _>>(),
+            ledger.answers_at.iter().collect::<std::collections::BTreeMap<_, _>>(),
             ledger.found,
         )
     }

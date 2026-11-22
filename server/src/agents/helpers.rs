@@ -1,8 +1,8 @@
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::*;
 
-use crate::domain::{DomainRepository, DomainStateError, read_project_id, read_session_id};
+use crate::domain::{read_project_id, read_session_id, DomainRepository, DomainStateError};
 
 pub(crate) fn default_agent_icon_to_id(icon: &str) -> Option<&'static str> {
     match icon {

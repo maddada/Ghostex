@@ -14,22 +14,22 @@ use std::{fs, path::Path};
 
 use axum::{
     body::Body,
-    http::{HeaderValue, Response, StatusCode, header},
+    http::{header, HeaderValue, Response, StatusCode},
     response::IntoResponse,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::{
-    domain::{DomainStateError, read_domain_rpc_params},
+    domain::{read_domain_rpc_params, DomainStateError},
     protocol::rpc_success,
-    server::{AppState, RoutedResponse, domain_error_response, routed_json},
+    server::{domain_error_response, routed_json, AppState, RoutedResponse},
 };
 
 use super::{
     file_page::page_for_file,
     prepare::{page_too_large, prepare_page},
-    serve::{VISUAL_PAGE_ROUTE_PREFIX, in_head, with_page_state},
-    store::{VISUAL_PAGE_MAX_BYTES, is_page_id, new_page_id, read_page, read_record},
+    serve::{in_head, with_page_state, VISUAL_PAGE_ROUTE_PREFIX},
+    store::{is_page_id, new_page_id, read_page, read_record, VISUAL_PAGE_MAX_BYTES},
 };
 
 pub(crate) const VISUAL_PAGE_EXPORT_SUFFIX: &str = "/export";

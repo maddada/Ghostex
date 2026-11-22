@@ -5,8 +5,8 @@
 //! out here, not captured.
 
 use crate::session_chat_question_row_align::{
-    QuestionListUi, QuestionRowAction, QuestionRowTarget, read_omp_custom_prompt,
-    read_question_list_screen,
+    read_omp_custom_prompt, read_question_list_screen, QuestionListUi, QuestionRowAction,
+    QuestionRowTarget,
 };
 
 const QUESTION: &str = "Which colour should the test use?";

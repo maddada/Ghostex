@@ -1,8 +1,8 @@
 //! Home projects as Cloud Boxes sees them: the project key and the project's Cloud Box settings.
 
 use ghostex_gx_cloud::project_key::project_key_from_origin;
-use ghostex_gx_protocol::cloud_box::{CLOUD_BOX_RUNTIME_SETTINGS_KEY, ProjectCloudBoxSettings};
-use serde_json::{Map, Value, json};
+use ghostex_gx_protocol::cloud_box::{ProjectCloudBoxSettings, CLOUD_BOX_RUNTIME_SETTINGS_KEY};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;

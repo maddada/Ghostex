@@ -3,10 +3,10 @@
 //! shown in.
 
 use ghostex_settings_catalog::theme_roles::{
-    THEME_ROLES, THEME_ROLES_SETTING, ThemeRole, appearance_key, format_role_value,
-    parse_role_value, theme_role,
+    appearance_key, format_role_value, parse_role_value, theme_role, ThemeRole, THEME_ROLES,
+    THEME_ROLES_SETTING,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::settings::{self as catalog, CatalogEntry};
 
@@ -148,7 +148,7 @@ pub(crate) fn role_targets(key: &str) -> Option<Result<Vec<String>, String>> {
         Some((other, _)) => {
             return Some(Err(format!(
                 "\"{other}\" is not an appearance: write dark.<role> or light.<role>."
-            )));
+            )))
         }
         None => (&["dark", "light"], key),
     };

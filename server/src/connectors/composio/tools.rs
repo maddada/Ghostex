@@ -3,15 +3,15 @@
 
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::paths::GxserverPaths;
 
-use super::SUGGESTED_APPS;
-use super::account::{self, RpcFailure, with_live};
+use super::account::{self, with_live, RpcFailure};
 use super::connections::list_connected;
 use super::http::clip;
 use super::names::{logo_url, pretty_name};
+use super::SUGGESTED_APPS;
 
 /// Tools agents never see (Open Dot's `HIDDEN_TOOLS`): Composio's sandbox shell and workbench,
 /// its skill and feedback tools, and the blocking wait the connect card replaces.

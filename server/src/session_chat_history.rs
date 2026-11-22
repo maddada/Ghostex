@@ -4,18 +4,18 @@ use std::path::Path;
 use ghostex_gx_chat_core::protocol::{ChatMessage, ChatRole};
 use ghostex_gx_chat_core::transcript::noise::{is_hidden_message, may_suppress_turn};
 use ghostex_gx_chat_core::transcript::tool_fold::{
-    ToolBurstStep, is_tool_only_blocks, takes_tool_burst, takes_tool_burst_row, tool_burst_step_for,
+    is_tool_only_blocks, takes_tool_burst, takes_tool_burst_row, tool_burst_step_for, ToolBurstStep,
 };
 use ghostex_gx_chat_core::transcript::transcript::passes_over_tool_burst;
 use ghostex_gx_chat_core::transcript::turns::{is_settled_reply, passed_over_before_wake};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::session_chat::{
     SessionChatBlock, SessionChatMessage, SessionChatRole, SessionChatTranscriptAgent,
 };
 use crate::session_chat_fork_stitch::{
-    FORK_BOUNDARY_MESSAGE_ID_PREFIX, decode_stitched_cursor, encode_stitched_cursor,
-    read_session_chat_tail_page_stitched,
+    decode_stitched_cursor, encode_stitched_cursor, read_session_chat_tail_page_stitched,
+    FORK_BOUNDARY_MESSAGE_ID_PREFIX,
 };
 use crate::session_chat_tail::SessionChatTailPage;
 

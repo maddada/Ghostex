@@ -5,10 +5,10 @@ use crate::{
     protocol::{rpc_error, rpc_success},
 };
 use axum::{
-    Json,
     body::Body,
-    http::{HeaderMap, Response, StatusCode, header},
+    http::{header, HeaderMap, Response, StatusCode},
     response::IntoResponse,
+    Json,
 };
 use serde_json::json;
 
@@ -32,7 +32,7 @@ pub(super) fn bootstrap(headers: &HeaderMap, api_url: &str) -> Response<Body> {
                     Some(request_id),
                 )),
             )
-                .into_response();
+                .into_response()
         }
     };
     // CDXC:Telemetry 2026-09-06 WHY:

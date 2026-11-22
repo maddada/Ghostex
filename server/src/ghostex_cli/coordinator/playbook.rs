@@ -2,14 +2,14 @@
 //! effect for a project, the user's playbook overrides, and the edited full copies saved before
 //! overrides. See CDXC:Coordinators 2026-11-07 in server/src/coordinators/playbook.rs.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::command::{flag_text, server_flags, text_or_file};
 use crate::ghostex_cli::{
     agents,
     args::{Flags, ParsedArgs},
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 /// The project a command names (`--project-id`, or the calling session's with `--this-project`;
@@ -33,7 +33,7 @@ fn target_project(
         Err(error) => {
             return Err(CliError::Other(format!(
                 "{error} Outside an agent session, pass --project-id <id> (ghostex sessions --json lists project ids)."
-            )));
+            )))
         }
     };
     let project_id = agents::text(&caller, "projectId").to_string();
@@ -187,9 +187,7 @@ pub(super) fn show(parsed: &ParsedArgs) -> CliResult<()> {
         for line in old {
             println!("{line}");
         }
-        println!(
-            "`ghostex coordinator set-playbook --use-ghostex` saves them as Markdown files and moves every coordinator to Ghostex's playbook."
-        );
+        println!("`ghostex coordinator set-playbook --use-ghostex` saves them as Markdown files and moves every coordinator to Ghostex's playbook.");
     }
     Ok(())
 }
@@ -219,18 +217,14 @@ fn set_overrides(parsed: &ParsedArgs) -> CliResult<()> {
     if agents::text(&view["overrides"], "text").trim().is_empty() {
         println!("No playbook overrides now: coordinators follow the playbook alone.");
     } else {
-        println!(
-            "Saved the playbook overrides. Every coordinator reads them after the playbook, ranked above it."
-        );
+        println!("Saved the playbook overrides. Every coordinator reads them after the playbook, ranked above it.");
         if let Some(warning) =
             crate::coordinators::overrides_length_warning(agents::text(&view["overrides"], "text"))
         {
             println!("{warning}");
         }
     }
-    println!(
-        "Coordinators, existing ones too, read it at their next `ghostex coordinator guide`; the next message each one gets tells it the playbook changed."
-    );
+    println!("Coordinators, existing ones too, read it at their next `ghostex coordinator guide`; the next message each one gets tells it the playbook changed.");
     Ok(())
 }
 
@@ -285,9 +279,7 @@ pub(super) fn set(parsed: &ParsedArgs) -> CliResult<()> {
             }
         }
     }
-    println!(
-        "Coordinators, existing ones too, read it at their next `ghostex coordinator guide`; the next message each one gets tells it the playbook changed."
-    );
+    println!("Coordinators, existing ones too, read it at their next `ghostex coordinator guide`; the next message each one gets tells it the playbook changed.");
     Ok(())
 }
 
@@ -399,9 +391,7 @@ fn edit_overrides(parsed: &ParsedArgs) -> CliResult<()> {
         print_json(&view);
         return Ok(());
     }
-    println!(
-        "{done} Every coordinator reads the overrides after the playbook, ranked above it; each one is told its playbook changed with its next message."
-    );
+    println!("{done} Every coordinator reads the overrides after the playbook, ranked above it; each one is told its playbook changed with its next message.");
     if let Some(warning) = crate::coordinators::overrides_length_warning(&text) {
         println!("{warning}");
     }

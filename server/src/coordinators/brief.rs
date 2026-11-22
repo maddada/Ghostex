@@ -300,13 +300,10 @@ pub enum StallNudge<'a> {
 /// linked sessions alike.
 pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
     match report {
-        ThreadReport::Finished {
-            message: Some(message),
-        } => {
+        ThreadReport::Finished { message: Some(message) } => {
             let message = without_foreign_agent_blocks(message);
             let message = message.trim();
-            let mut body =
-                String::from("Ghostex thread report: finished its turn. Its final message:\n\n");
+            let mut body = String::from("Ghostex thread report: finished its turn. Its final message:\n\n");
             if message.chars().count() > COORDINATOR_REPORT_MAX_CHARS {
                 body.extend(message.chars().take(COORDINATOR_REPORT_MAX_CHARS));
                 body.push_str(&format!(
@@ -318,9 +315,7 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
             body
         }
         ThreadReport::CutOff { message } => {
-            let mut body = String::from(
-                "Ghostex thread report: it stopped before its turn ended: its session was put to sleep, or its agent stopped, while it was still working, so its task is not done.",
-            );
+            let mut body = String::from("Ghostex thread report: it stopped before its turn ended: its session was put to sleep, or its agent stopped, while it was still working, so its task is not done.");
             let message = message.map(without_foreign_agent_blocks);
             if let Some(message) = message
                 .as_deref()
@@ -353,15 +348,10 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
 Your message began: {}",
                 excerpt.trim()
             );
-            if let Some(evidence) = evidence
-                .map(str::trim)
-                .filter(|evidence| !evidence.is_empty())
-            {
-                body.push_str(&format!(
-                    "
+            if let Some(evidence) = evidence.map(str::trim).filter(|evidence| !evidence.is_empty()) {
+                body.push_str(&format!("
 
-Its chat shows: {evidence}"
-                ));
+Its chat shows: {evidence}"));
             }
             body.push_str(&format!(
                 "
@@ -391,9 +381,10 @@ Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), t
                     "\n\nGhostex nudged it: \"{}\"",
                     super::stall::nudge_message()
                 )),
-                StallNudge::Failed(error) => {
-                    body.push_str(&format!("\n\nGhostex could not nudge it: {}", error.trim()))
-                }
+                StallNudge::Failed(error) => body.push_str(&format!(
+                    "\n\nGhostex could not nudge it: {}",
+                    error.trim()
+                )),
                 StallNudge::Earlier => {}
             }
             if let Some(row) = last_row.map(str::trim).filter(|row| !row.is_empty()) {
@@ -440,9 +431,10 @@ Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), t
                 StallNudge::Sent => {
                     body.push_str(&format!("\n\nGhostex nudged it: \"{nudge_message}\""))
                 }
-                StallNudge::Failed(error) => {
-                    body.push_str(&format!("\n\nGhostex could not nudge it: {}", error.trim()))
-                }
+                StallNudge::Failed(error) => body.push_str(&format!(
+                    "\n\nGhostex could not nudge it: {}",
+                    error.trim()
+                )),
                 StallNudge::Earlier => {}
             }
             body.push_str(&format!(

@@ -235,12 +235,10 @@ async fn create_worktree_session_route_rejects_a_foreign_existing_worktree_path(
     assert_eq!(response.response.status(), StatusCode::BAD_REQUEST);
     let body = response_json(response.response).await;
     assert_eq!(body["error"], json!("badRequest"));
-    assert!(
-        body["message"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("is not a worktree of this project")
-    );
+    assert!(body["message"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("is not a worktree of this project"));
 
     let missing = route_http(
         state,

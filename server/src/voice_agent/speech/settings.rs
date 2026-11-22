@@ -119,7 +119,7 @@ impl DictateSettings {
                     return Err(
                         "Ghostex no longer has its own speech model: pick Hex as the engine."
                             .to_string(),
-                    );
+                    )
                 }
                 "hexModel" => {
                     next.hex_model = match value {

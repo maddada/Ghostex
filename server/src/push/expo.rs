@@ -1,6 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::registration::is_printable_id;
 use super::store::RECEIPT_ID_MAX;
@@ -203,7 +203,7 @@ fn send_outcome(answer: Answer) -> SendOutcome {
             return SendOutcome::Retry {
                 after: answer.retry_after,
                 code,
-            };
+            }
         }
         Some(Refusal::Failed(code)) => return SendOutcome::Failed(code),
         None => {}

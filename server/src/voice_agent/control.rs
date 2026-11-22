@@ -10,7 +10,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::computers;
 use super::focus::Purpose;
@@ -227,16 +227,12 @@ pub(super) const CARD_PREFIX: &str = "[Ghostex card]";
 
 /// What the model is told after the user pressed Stop on the card and the stop ran.
 pub(super) fn card_stop_message(title: &str, output: &Value) -> String {
-    format!(
-        "{CARD_PREFIX} The user pressed Stop on the card for \"{title}\". stop_session result: {output}"
-    )
+    format!("{CARD_PREFIX} The user pressed Stop on the card for \"{title}\". stop_session result: {output}")
 }
 
 /// What the model is told after the user pressed Cancel on the card.
 pub(super) fn card_cancel_message() -> String {
-    format!(
-        "{CARD_PREFIX} The user pressed Cancel on the stop card: nothing was stopped, leave it running."
-    )
+    format!("{CARD_PREFIX} The user pressed Cancel on the stop card: nothing was stopped, leave it running.")
 }
 
 /// The launcher a voice-started coordinator runs on: the one the user named (it must be an agent

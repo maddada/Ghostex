@@ -1,12 +1,12 @@
 use std::time::Instant;
 
 use axum::http::StatusCode;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::{
     domain::read_domain_rpc_params,
     protocol::{rpc_error, rpc_success},
-    server::{AppState, RoutedResponse, routed_json},
+    server::{routed_json, AppState, RoutedResponse},
     storage::open_gxserver_database,
 };
 

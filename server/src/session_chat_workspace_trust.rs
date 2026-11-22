@@ -1,12 +1,12 @@
 //! Workspace trust selectors whose unnumbered rows are answered by navigation.
 
 use crate::session_chat_notice::{
-    SESSION_CHAT_NOTICE_TRUST_PROMPT, SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
-    SessionChatTerminalNoticeChoice, SessionChatTerminalNoticeSeverity,
-    SessionChatTerminalNoticeSource,
+    SessionChatTerminalNotice, SessionChatTerminalNoticeAction, SessionChatTerminalNoticeChoice,
+    SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
+    SESSION_CHAT_NOTICE_TRUST_PROMPT,
 };
 use crate::session_chat_options::{
-    SessionChatOptionAgent, normalize_spaces, session_chat_option_agent, strip_ansi_sgr,
+    normalize_spaces, session_chat_option_agent, strip_ansi_sgr, SessionChatOptionAgent,
 };
 
 /// CDXC:AgentScreenDetection 2026-09-07 DECISION:

@@ -1,12 +1,12 @@
 //! `ghostex gbots`: Ghostex's bots (server/src/gbots/). The work happens in gxserver
 //! (`/api/gbots`), which decides who may do what.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::{
-    args::{Flags, parse_args},
+    args::{parse_args, Flags},
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 const HELP_HEAD: &str =
@@ -159,7 +159,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "flag" => return super::gbots_problem_cli::run_flag(rest, &flags),
         "day-watch" => return super::gbots_day_watch_cli::run_day_watch(rest, &flags),
         "department" | "departments" => {
-            return super::gbots_department_cli::run_department(rest, &flags);
+            return super::gbots_department_cli::run_department(rest, &flags)
         }
         "team" => return super::gbots_team_cli::run_team(rest, &flags),
         "preset" | "presets" => return super::gbots_team_cli::run_preset(rest, &flags),
@@ -271,7 +271,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             return Err(CliError::Other(format!(
                 "unknown gbots command `{other}`.\n\n{}",
                 help()
-            )));
+            )))
         }
     };
     if json_out {
@@ -400,9 +400,7 @@ fn print_answer(verb: &str, answer: &Value) {
                 println!("Note: {note}");
             }
             if answer["reportsBack"].as_bool() == Some(true) {
-                println!(
-                    "Its report comes back to you when it finishes; end your turn now instead of waiting."
-                );
+                println!("Its report comes back to you when it finishes; end your turn now instead of waiting.");
             } else {
                 println!("Read its answer in that chat.");
             }

@@ -6,9 +6,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde_json::{Map, json};
+use serde_json::{json, Map};
 
-use crate::server::{AppState, dispatch_zmx_lifecycle_http_blocking};
+use crate::server::{dispatch_zmx_lifecycle_http_blocking, AppState};
 
 const POLL: Duration = Duration::from_secs(5);
 

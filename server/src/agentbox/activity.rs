@@ -10,11 +10,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use tokio::sync::Notify;
 
 use super::session::{patch_agentbox_record, session_agentbox};
-use super::status::{ListedBox, list_boxes};
+use super::status::{list_boxes, ListedBox};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;

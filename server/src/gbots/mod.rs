@@ -76,18 +76,18 @@ mod trash;
 /// User (Q4262 "B", on the skills-vs-CLI page): Ghostex's own skills are retired for CLI help, keeping one tiny `ghostex` skill that points at the CLI. The GBot playbook was the `ghostex-gbots` skill's body; it now lives here, built into the CLI with the verbs it names, so a GBot always reads the playbook of the Ghostex it runs on. Every GBot chat's first message tells it to run `ghostex gbots guide` (session.rs `first_message`).
 pub(crate) const GBOT_PLAYBOOK_MD: &str = include_str!("playbook.md");
 
-pub(crate) use api::{BOT_API_ROUTE_PREFIX, is_api_chat_session, serve_bot_api};
+pub(crate) use api::{is_api_chat_session, serve_bot_api, BOT_API_ROUTE_PREFIX};
 pub(crate) use apps_access::{project_reads_apps_only, read_only_refusal};
 pub(crate) use assign::{
     report_heading as assignment_report_heading, settle_report as settle_assignment_report,
 };
 pub(crate) use call::{
-    CallBot, CallRefusal, call_chat as gbot_call_chat, call_refusal as gbot_call_refusal,
-    log_call as log_gbot_call,
+    call_chat as gbot_call_chat, call_refusal as gbot_call_refusal, log_call as log_gbot_call,
+    CallBot, CallRefusal,
 };
-pub(crate) use computer::{GBOTS_REMOTE_ENDPOINT, handle_gbots_remote_http};
+pub(crate) use computer::{handle_gbots_remote_http, GBOTS_REMOTE_ENDPOINT};
 pub(crate) use day_watch::brief_turn_alerts as day_brief_turn_alerts;
-pub(crate) use endpoint::{GBOTS_ENDPOINT, handle_gbots_http};
+pub(crate) use endpoint::{handle_gbots_http, GBOTS_ENDPOINT};
 pub(crate) use feature::{gbots_off_message, gbots_on, gbots_shown};
 pub(crate) use folder::gbots_dir as gbots_folder;
 pub(crate) use markers::keep_gbot_marks;
@@ -103,8 +103,8 @@ pub(crate) use project::{
 };
 pub(crate) use retire::retire_previous_gbots;
 pub(crate) use routine_runs::{
-    RoutineGate, SettledRoutineRun, routine_folder, routine_gate, routine_run_settled,
-    start_routine_run,
+    routine_folder, routine_gate, routine_run_settled, start_routine_run, RoutineGate,
+    SettledRoutineRun,
 };
 pub(crate) use session::rewrite_queued_gbots_first_lines;
 pub(crate) use skill::install_for_visiting_chat as install_gbots_skill_for_visiting_chat;

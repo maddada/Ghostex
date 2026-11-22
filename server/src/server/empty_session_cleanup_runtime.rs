@@ -5,7 +5,7 @@
 
 use super::*;
 
-use crate::empty_session_cleanup::{EmptySessionCandidate, empty_session_candidates};
+use crate::empty_session_cleanup::{empty_session_candidates, EmptySessionCandidate};
 
 /// The `/api/transitionSession` reason of every close this cleanup makes.
 const CLOSE_REASON: &str = "replacedByNewSession";

@@ -1,7 +1,7 @@
 //! The Work page's Link to current session: `setSessionWorkLinks` with `source` + `ticketId` adds
 //! that ticket to the session's links and answers with the request that takes it back.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::*;
 

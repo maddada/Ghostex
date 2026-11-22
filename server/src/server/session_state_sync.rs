@@ -1,5 +1,5 @@
 use super::*;
-use crate::agents::{LifecycleParams, repair_session_working_directory_title};
+use crate::agents::{repair_session_working_directory_title, LifecycleParams};
 
 /*
 CDXC:StateSync 2026-09-01:
@@ -708,7 +708,7 @@ pub(crate) fn has_session_state_sidecar_payload(sidecar: &SessionStateSidecar) -
 }
 
 pub(crate) fn decode_session_state_sidecar_base64(value: &str) -> Option<String> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
     let decoded = STANDARD.decode(value).ok()?;
     String::from_utf8(decoded)
         .ok()

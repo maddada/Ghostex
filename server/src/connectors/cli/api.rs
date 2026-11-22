@@ -1,7 +1,7 @@
 //! What the CLI sign-in routes do: sign a workspace in to `gh` or `gws` (the link to open, and
 //! `gh`'s one-time code) or out of it. Blocking: the login is started and its link read first.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::server::AppState;

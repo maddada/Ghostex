@@ -17,9 +17,9 @@ use crate::{
     domain::DomainRepository,
     logging::{GxserverLogInput, LogLevel},
     notification_feed::store::{
+        account_notification_session_id, insert_notification_feed_row, NewNotificationFeedRow,
         ACCOUNT_NOTIFICATION_PROJECT_ID, NOTIFICATION_FEED_KIND_RESET_EXPIRING,
-        NOTIFICATION_FEED_KIND_RESET_REDEEMED, NewNotificationFeedRow,
-        account_notification_session_id, insert_notification_feed_row,
+        NOTIFICATION_FEED_KIND_RESET_REDEEMED,
     },
     server::AppState,
 };
@@ -292,9 +292,7 @@ pub(crate) fn check(
     };
     if !anthropic_allows(&fresh) {
         remember_try(&saved.id, AFTER_NO);
-        return not_now(
-            "Anthropic says the account is not at a limit this reset clears, or the reset can't be used now.",
-        );
+        return not_now("Anthropic says the account is not at a limit this reset clears, or the reset can't be used now.");
     }
     remember_try(&saved.id, AFTER_CLAIM);
     // Anthropic's count makes the key: a retry after a lost reply replays the same claim, and a

@@ -233,7 +233,7 @@ pub(crate) fn normalize_worktree_session_create_request(
         Some(_) => {
             return Err(DomainStateError::bad_request(
                 "existingWorktree must be an object with a path.",
-            ));
+            ))
         }
     };
     let mut agent_session_params: Map<String, Value> = [
@@ -664,7 +664,7 @@ pub(crate) async fn start_worktree_session(
                 code: "internalError",
                 message: format!("Worktree session task failed: {error}"),
             }
-            .into());
+            .into())
         }
     };
     let first_prompt = request.first_prompt.as_deref().filter(|prompt| {

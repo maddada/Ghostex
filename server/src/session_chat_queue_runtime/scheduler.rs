@@ -1,6 +1,6 @@
 use super::wait_reason::{
-    HeadWait, INPUT_BOX_LAST_RESORT_AFTER_MS, INPUT_BOX_RELOAD_AFTER_MS, InputBoxStep,
-    WATCHDOG_AFTER_MS, WaitReason, stuck_input_box_text, stuck_notification_body,
+    stuck_input_box_text, stuck_notification_body, HeadWait, InputBoxStep, WaitReason,
+    INPUT_BOX_LAST_RESORT_AFTER_MS, INPUT_BOX_RELOAD_AFTER_MS, WATCHDOG_AFTER_MS,
 };
 use super::*;
 
@@ -1799,9 +1799,9 @@ mod tests {
     #[test]
     fn a_delivery_verdict_about_an_earlier_message_fails_no_row() {
         use crate::session_chat_notice::{
-            SESSION_CHAT_NOTICE_DELIVERY_FAILED, SESSION_CHAT_NOTICE_USAGE_LIMIT,
             SessionChatTerminalNotice, SessionChatTerminalNoticeSeverity,
-            SessionChatTerminalNoticeSource,
+            SessionChatTerminalNoticeSource, SESSION_CHAT_NOTICE_DELIVERY_FAILED,
+            SESSION_CHAT_NOTICE_USAGE_LIMIT,
         };
         let notice = |kind| {
             SessionChatTerminalNotice::new(

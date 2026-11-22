@@ -968,7 +968,7 @@ fn validate_remote_server_url(value: &str) -> ExtensionResult<()> {
         None => {
             return Err(ExtensionError::bad_request(
                 "Extension server.url must name a host.",
-            ));
+            ))
         }
     };
     if url.scheme() == "https" || (url.scheme() == "http" && host_is_loopback) {

@@ -35,7 +35,7 @@ use std::sync::Mutex;
 use std::time::SystemTime;
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::resume_lookup::{home_dir, parse_cursor_meta_value};
 use crate::session_chat_paths::find_cursor_chat_transcript;
@@ -513,7 +513,11 @@ fn parse_cursor_timestamp(text: &str) -> Option<i64> {
         Some(sign @ ('+' | '-')) => {
             let (hours, minutes) = zone[1..].split_once(':').unwrap_or((&zone[1..], "0"));
             let minutes = hours.parse::<i64>().ok()? * 60 + minutes.parse::<i64>().ok()?;
-            if sign == '-' { -minutes } else { minutes }
+            if sign == '-' {
+                -minutes
+            } else {
+                minutes
+            }
         }
         Some(_) => return None,
     };

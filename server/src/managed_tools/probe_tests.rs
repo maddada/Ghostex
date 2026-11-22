@@ -12,8 +12,8 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::{
-        Arc, LazyLock,
         atomic::{AtomicUsize, Ordering},
+        Arc, LazyLock,
     },
     time::{Duration, Instant},
 };
@@ -182,21 +182,17 @@ fn a_stuck_check_marks_the_tool_not_answering_and_keeps_its_place() {
     );
     status.read_version(&stuck, &["--version"]);
     assert_eq!(status.version, None);
-    assert!(
-        status
-            .not_answering
-            .as_deref()
-            .is_some_and(|reason| reason.starts_with("`uv --version` didn't answer"))
-    );
+    assert!(status
+        .not_answering
+        .as_deref()
+        .is_some_and(|reason| reason.starts_with("`uv --version` didn't answer")));
     let placeholder = super::endpoint::still_checking(tools::ToolId::Gh);
     assert_eq!(placeholder["id"], "gh");
     assert_eq!(placeholder["label"], "GitHub CLI");
     assert_eq!(placeholder["actions"], serde_json::json!([]));
-    assert!(
-        placeholder["notAnswering"]
-            .as_str()
-            .is_some_and(|reason| reason.starts_with("Checking GitHub CLI took longer than"))
-    );
+    assert!(placeholder["notAnswering"]
+        .as_str()
+        .is_some_and(|reason| reason.starts_with("Checking GitHub CLI took longer than")));
 }
 
 static FLIGHTS: LazyLock<Flights<&'static str, u32>> = LazyLock::new(Flights::new);

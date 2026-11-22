@@ -289,15 +289,13 @@ fn a_branch_names_a_command_ticket_on_the_card() {
         json!({ "projects": [], "ids": ["ACM-12"] })
     );
     // Still fresh: the next pass plans nothing.
-    assert!(
-        planned_reads(
-            &store,
-            &project,
-            std::slice::from_ref(&session),
-            "card-branch"
-        )
-        .is_empty()
-    );
+    assert!(planned_reads(
+        &store,
+        &project,
+        std::slice::from_ref(&session),
+        "card-branch"
+    )
+    .is_empty());
     assert_eq!(calls(&store, "card-branch"), ["list"]);
 }
 
@@ -325,15 +323,13 @@ fn a_ticket_the_command_cant_be_asked_about_keeps_its_last_title() {
     // The program moved away: the next pass finds it can't run, and plans nothing.
     let moved = store.program.with_extension("moved");
     std::fs::rename(&store.program, &moved).expect("move program");
-    assert!(
-        planned_reads(
-            &store,
-            &project,
-            std::slice::from_ref(&session),
-            "card-title"
-        )
-        .is_empty()
-    );
+    assert!(planned_reads(
+        &store,
+        &project,
+        std::slice::from_ref(&session),
+        "card-title"
+    )
+    .is_empty());
     assert_published(
         &card_link(&project, &session, "card-title:ACM-12"),
         unavailable("card-title"),
@@ -434,15 +430,13 @@ fn a_command_stopped_in_a_team_keeps_its_tickets_on_the_card_and_runs_nothing() 
         &card_tickets(&project, &session),
         json!([unavailable("card-team")]),
     );
-    assert!(
-        planned_reads(
-            &store,
-            &project,
-            std::slice::from_ref(&session),
-            "card-team"
-        )
-        .is_empty()
-    );
+    assert!(planned_reads(
+        &store,
+        &project,
+        std::slice::from_ref(&session),
+        "card-team"
+    )
+    .is_empty());
     let mut planned_now = queued_before;
     planned_now.plan.generation = work_source_generation(&workspace_id);
     assert!(prepare(&planned_now).is_none());
@@ -779,11 +773,9 @@ fn a_placement_change_makes_the_projection_forget_the_workspace_left() {
         .expect("moved");
     assert_eq!(cached_project_workspace_id(project_id(&parent)), None);
     assert_eq!(cached_project_workspace_id(project_id(&worktree)), None);
-    assert!(
-        work_targets(&parent, &session)
-            .ids_of(command_source("card-forget"))
-            .is_empty()
-    );
+    assert!(work_targets(&parent, &session)
+        .ids_of(command_source("card-forget"))
+        .is_empty());
 
     place(&store);
     assert_eq!(
@@ -836,11 +828,9 @@ fn a_replace_never_brings_back_a_placement_a_move_made_the_projection_forget() {
     assert!(move_done.recv_timeout(Duration::from_millis(200)).is_err());
     resume.send(()).expect("resume");
     replacing.join().expect("replace thread").expect("replaced");
-    assert!(
-        move_done
-            .recv_timeout(Duration::from_secs(20))
-            .expect("the move lands after the publish")
-    );
+    assert!(move_done
+        .recv_timeout(Duration::from_secs(20))
+        .expect("the move lands after the publish"));
     assert_eq!(cached_project_workspace_id(project_id(&project)), None);
 }
 

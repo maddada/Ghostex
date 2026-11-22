@@ -11,7 +11,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::paths::GxserverPaths;
 
@@ -195,7 +195,8 @@ mod tests {
     }
 
     const FILE_TOKEN: &str = "github.com:\n    users:\n        maddada:\n            oauth_token: gho_example\n    git_protocol: https\n    user: maddada\n    oauth_token: gho_example\n";
-    const KEYCHAIN_ONLY: &str = "github.com:\n    users:\n        maddada: {}\n    git_protocol: https\n    user: maddada\n";
+    const KEYCHAIN_ONLY: &str =
+        "github.com:\n    users:\n        maddada: {}\n    git_protocol: https\n    user: maddada\n";
 
     #[test]
     fn a_gh_folder_with_its_own_token_is_signed_in_and_handed_to_agents() {
@@ -212,11 +213,9 @@ mod tests {
         assert_eq!(gh_account(&paths, "work").as_deref(), Some("maddada"));
         assert!(!signed_in(&paths, "work", CliTool::Gh));
         assert!(gh_needs_sign_in_again(&paths, "work"));
-        assert!(
-            session_env(&paths, "work")
-                .iter()
-                .all(|(name, _)| name != "GH_CONFIG_DIR")
-        );
+        assert!(session_env(&paths, "work")
+            .iter()
+            .all(|(name, _)| name != "GH_CONFIG_DIR"));
         let status = status(&paths, "work");
         assert_eq!(status["gh"]["signedIn"], json!(false));
         assert_eq!(status["gh"]["needsSignInAgain"], json!(true));

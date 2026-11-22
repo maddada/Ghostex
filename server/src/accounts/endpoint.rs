@@ -3,7 +3,7 @@ use crate::{
     domain::{DomainRepository, DomainStateError},
     server::AppState,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 fn required<'a>(params: &'a Map<String, Value>, key: &str) -> Result<&'a str, DomainStateError> {
@@ -302,9 +302,7 @@ pub(crate) fn dispatch(
                 .output()
                 .map_err(store::error)?;
             if !output.status.success() {
-                return Err(DomainStateError::bad_request(
-                    "Couldn't swap these two accounts. For Claude, stop sessions using either account first, then try again.",
-                ));
+                return Err(DomainStateError::bad_request("Couldn't swap these two accounts. For Claude, stop sessions using either account first, then try again."));
             }
             state.accounts.invalidate();
             snapshot = state.accounts.refresh(&state.paths.home_dir, true);
@@ -383,9 +381,7 @@ pub(crate) fn dispatch(
                 .and_then(Value::as_str)
                 .is_some_and(|expected| expected != id)
             {
-                return Err(DomainStateError::bad_request(
-                    "This slot now contains a different login. Sign in to the original account or add the new login separately.",
-                ));
+                return Err(DomainStateError::bad_request("This slot now contains a different login. Sign in to the original account or add the new login separately."));
             }
             let reconnecting = registry.accounts.iter().any(|a| a.id == id);
             if let Some(saved) = registry.accounts.iter_mut().find(|a| a.id == id) {
@@ -1272,10 +1268,7 @@ fn state_value(
                 row["syncedFrom"] = json!(synced.from);
                 row["syncedNumber"] = json!(synced.number);
                 if !loading && !saved.user_disabled {
-                    row["usageError"] = json!(format!(
-                        "Added from {}. Logins stay on each computer, so sign in here once to use it.",
-                        synced.from
-                    ));
+                    row["usageError"] = json!(format!("Added from {}. Logins stay on each computer, so sign in here once to use it.", synced.from));
                 }
             }
             rows.push(row);
@@ -1304,18 +1297,16 @@ fn state_value(
     // The names of the hubs New sessions start on is pinned to, also while the CLIProxyAPI
     // extension is off (Settings shows the name, not the pin).
     let paths = crate::paths::get_gxserver_paths(None);
-    value["newSessionHubLabels"] = json!(
-        registry
-            .new_session_accounts
-            .iter()
-            .filter_map(|(provider, choice)| match choice {
-                NewSessionAccount::Pinned { id } => {
-                    super::hub::launch::pinned_label(&paths, id).map(|label| (*provider, label))
-                }
-                _ => None,
-            })
-            .collect::<std::collections::BTreeMap<_, _>>()
-    );
+    value["newSessionHubLabels"] = json!(registry
+        .new_session_accounts
+        .iter()
+        .filter_map(|(provider, choice)| match choice {
+            NewSessionAccount::Pinned { id } => {
+                super::hub::launch::pinned_label(&paths, id).map(|label| (*provider, label))
+            }
+            _ => None,
+        })
+        .collect::<std::collections::BTreeMap<_, _>>());
     value["hubFallbackAccounts"] = json!(super::default_account::hub_fallback_accounts(
         registry, snapshot
     ));

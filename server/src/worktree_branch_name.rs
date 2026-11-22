@@ -9,9 +9,9 @@
 //! SEE-ALSO: server/src/server/worktree_ops/draft_worktree.rs (the tray's endpoint),
 //! packages/gx-protocol/src/worktree_name.rs (the rule and its tests).
 
-use ghostex_gx_protocol::worktree_name::{WorktreeNameReference, worktree_name_for_message};
+use ghostex_gx_protocol::worktree_name::{worktree_name_for_message, WorktreeNameReference};
 
-use crate::session_links::{SessionLinkRef, normalize_repo, parse_github_url, parse_linear_url};
+use crate::session_links::{normalize_repo, parse_github_url, parse_linear_url, SessionLinkRef};
 
 /// What the message's reference looks up its title in.
 pub(crate) struct ReferenceScope<'a> {

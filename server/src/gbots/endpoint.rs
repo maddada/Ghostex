@@ -40,17 +40,17 @@ use std::sync::Arc;
 
 use axum::http::StatusCode;
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::record::{
-    Bot, BotFields, DEFAULT_ICON, MAX_BOTS, bot_summary, delete_bot, insert_bot, list_bots, new_id,
-    read_bot, record_change, require_bot, update_bot,
+    bot_summary, delete_bot, insert_bot, list_bots, new_id, read_bot, record_change, require_bot,
+    update_bot, Bot, BotFields, DEFAULT_ICON, MAX_BOTS,
 };
 use crate::coordinators::now_iso;
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::protocol::{rpc_error, rpc_success};
 use crate::security::Principal;
-use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
+use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
 use crate::storage::open_gxserver_database;
 
 pub(crate) const GBOTS_ENDPOINT: &str = "/api/gbots";
@@ -91,7 +91,11 @@ impl Asker {
 
     /// `createdBy` and `openedBy`.
     pub(super) fn label(self) -> &'static str {
-        if self == Self::Chief { "chief" } else { "user" }
+        if self == Self::Chief {
+            "chief"
+        } else {
+            "user"
+        }
     }
 }
 
@@ -220,13 +224,7 @@ fn run(
             // Fields left out come from a preset (team_file/presets.rs), its starter notes after.
             let (params, preset) = super::team_file::with_preset(&state.paths, params)?;
             let answer = create(state, &db, &repository, asker, &params, asker.label())?;
-            super::team_file::after_preset_create(
-                state,
-                &db,
-                &answer,
-                preset.as_ref(),
-                asker.label(),
-            );
+            super::team_file::after_preset_create(state, &db, &answer, preset.as_ref(), asker.label());
             Ok(answer)
         }
         "edit" => {
@@ -252,7 +250,9 @@ fn run(
         ),
         "remove" => {
             if !asker.may_manage() {
-                return Err(forbidden("Only you and Ghostex AI can remove a GBot."));
+                return Err(forbidden(
+                    "Only you and Ghostex AI can remove a GBot.",
+                ));
             }
             remove(state, &db, &repository, asker, required(params, "bot")?)
         }
@@ -352,11 +352,7 @@ fn run(
                         .and_then(|id| super::departments::read_department(&db, id).ok().flatten());
                     restore.insert(
                         "department".into(),
-                        json!(
-                            department
-                                .map(|department| department.department_id)
-                                .unwrap_or_default()
-                        ),
+                        json!(department.map(|department| department.department_id).unwrap_or_default()),
                     );
                     restore.insert("lead".into(), json!(before.is_lead));
                     edit(state, &db, &repository, asker, asker.label(), &restore)
@@ -366,12 +362,7 @@ fn run(
         op if super::memory::handles(op) => {
             let writes = !matches!(
                 op,
-                "memoryShow"
-                    | "memoryTopics"
-                    | "memoryTopic"
-                    | "memoryLog"
-                    | "memoryJournal"
-                    | "prefsShow"
+                "memoryShow" | "memoryTopics" | "memoryTopic" | "memoryLog" | "memoryJournal" | "prefsShow"
             );
             if let Some(key) = api_chat_key(&db, &repository, caller) {
                 if writes {
@@ -426,13 +417,9 @@ fn run(
             &mut |bot_id| remove(state, &db, &repository, asker, bot_id),
         ),
         // Its voice for calls (call.rs).
-        op if super::call::handles(op) => {
-            super::call::run(state, &db, asker.may_manage(), op, params)
-        }
+        op if super::call::handles(op) => super::call::run(state, &db, asker.may_manage(), op, params),
         // The GBot API: is it on, turn it on or off, a new key (api/ops.rs).
-        op if super::api::handles(op) => {
-            super::api::run(state, &db, caller, asker.is_user(), op, params)
-        }
+        op if super::api::handles(op) => super::api::run(state, &db, caller, asker.is_user(), op, params),
         // Where its chats run (computer/).
         op if super::computer::handles(op) => super::computer::run(
             state,
@@ -446,13 +433,9 @@ fn run(
             params,
         ),
         // "Keep an eye on my day" (day_watch/).
-        op if super::day_watch::handles(op) => {
-            super::day_watch::run(state, &db, &repository, asker, op, params)
-        }
+        op if super::day_watch::handles(op) => super::day_watch::run(state, &db, &repository, asker, op, params),
         // A GBot's routines (routines.rs).
-        op if op.starts_with("routine") => {
-            super::routines::run(state, &db, &repository, caller, asker, op, params)
-        }
+        op if op.starts_with("routine") => super::routines::run(state, &db, &repository, caller, asker, op, params),
         other => Err(DomainStateError::bad_request(format!(
             "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat, closeChat, ask, assignments, changes, change, undo, a department op (departments, departmentCreate, …), a memory op (memoryShow, memoryAdd, …), a routine op, a problem op (problems, problemRetry, problemRebrief, problemClose), flag, a team op (teamExport, teamPreview, teamImport) or a preset op (presets, preset, presetSave, presetRemove, presetExport)."
         ))),
@@ -469,14 +452,13 @@ fn list(
         .iter()
         .map(|bot| {
             let mut summary = bot_summary(bot);
-            summary["departmentName"] = json!(
-                bot.department_id
-                    .as_deref()
-                    .and_then(|id| departments
-                        .iter()
-                        .find(|department| department.department_id == id))
-                    .map(|department| department.name.clone())
-            );
+            summary["departmentName"] = json!(bot
+                .department_id
+                .as_deref()
+                .and_then(|id| departments
+                    .iter()
+                    .find(|department| department.department_id == id))
+                .map(|department| department.name.clone()));
             summary["folder"] = json!(super::folder::bot_folder(&state.paths, &bot.bot_id));
             summary["openChats"] = json!(
                 super::session::bot_chats(repository, bot)
@@ -531,12 +513,10 @@ fn show(
     summary["computerInfo"] = super::computer::computer_status(state, db, &bot.bot_id);
     summary["voice"] = json!(super::call::read_voice(db, &bot.bot_id));
     summary["voiceChoices"] = crate::voice_agent::gbot_voice_choices(&state.paths);
-    summary["remoteChats"] = json!(
-        super::computer::list_remote_chats(db, Some(&bot.bot_id))?
-            .iter()
-            .map(super::computer::remote_chat_summary)
-            .collect::<Vec<_>>()
-    );
+    summary["remoteChats"] = json!(super::computer::list_remote_chats(db, Some(&bot.bot_id))?
+        .iter()
+        .map(super::computer::remote_chat_summary)
+        .collect::<Vec<_>>());
     Ok(json!({ "bot": summary }))
 }
 
@@ -628,7 +608,7 @@ fn brief(
         (None, None) => {
             return Err(DomainStateError::bad_request(
                 "This isn't a GBot's chat: name the GBot with --bot.",
-            ));
+            ))
         }
     };
     let team = super::brief::Team::load(db)?;

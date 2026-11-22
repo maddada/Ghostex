@@ -1,9 +1,9 @@
 use base64::Engine as _;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::rpc::{
-    CliError, CliResult, request_gxserver_envelope, resolve_gxserver_server_target,
+    request_gxserver_envelope, resolve_gxserver_server_target, CliError, CliResult,
 };
 
 /// `ghostex session-chat-rpc <method> --params-base64 <b64>`: one chat request, answered with the

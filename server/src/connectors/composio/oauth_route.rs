@@ -8,12 +8,12 @@
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::http::{HeaderValue, Response, StatusCode, header};
+use axum::http::{header, HeaderValue, Response, StatusCode};
 
 use crate::server::{AppState, RoutedResponse};
 
 use super::super::workspace::connector_workspaces;
-use super::account::{STALE_LINK, cancel_pending, workspace_for_state};
+use super::account::{cancel_pending, workspace_for_state, STALE_LINK};
 use super::signin::finish_sign_in;
 
 /// The path Composio redirects to, on gxserver's local listener.

@@ -18,7 +18,7 @@ end of a turn: the agent loop is over when the model answers without asking for 
 and an `abort` is a Stop.
 */
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::session_chat::*;
 

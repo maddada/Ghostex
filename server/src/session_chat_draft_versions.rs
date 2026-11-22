@@ -3,7 +3,7 @@
 //! Text comparisons cannot identify a draft after the user deletes or replaces part of it.
 
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -209,9 +209,7 @@ pub fn save(
             },
         )?;
         transaction.commit().map_err(sql_error)?;
-        return Err(DomainStateError::bad_request(
-            "Two editors changed the same draft revision. Both versions are in Recovered; edit the input to continue syncing.",
-        ));
+        return Err(DomainStateError::bad_request("Two editors changed the same draft revision. Both versions are in Recovered; edit the input to continue syncing."));
     }
     if current
         .as_ref()

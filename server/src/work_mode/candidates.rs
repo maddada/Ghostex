@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::paths::GxserverPaths;
 use crate::session_git_status::{gh_cli_is_available, run_gh_command, run_git_probe_command};
@@ -441,7 +441,8 @@ fn list_project_candidates(owner: Option<&str>) -> Result<Vec<Candidate>, String
 
 // --- Linear ------------------------------------------------------------------------------------
 
-const LINEAR_CANDIDATE_FIELDS: &str = "identifier title url state { name type } assignee { name } attachments(first: 10) { nodes { url } }";
+const LINEAR_CANDIDATE_FIELDS: &str =
+    "identifier title url state { name type } assignee { name } attachments(first: 10) { nodes { url } }";
 const OPEN_ISSUE_FILTER: &str = "state: { type: { nin: [\"completed\", \"canceled\"] } }";
 
 fn list_linear_issues(api_key: &str, query: &str, repo: Option<&str>) -> Option<Vec<Candidate>> {
@@ -462,11 +463,7 @@ fn list_linear_issues(api_key: &str, query: &str, repo: Option<&str>) -> Option<
         (
             format!(
                 "query($q: String!{}) {{ {exact_selection} viewer {{ assignedIssues(first: {LINEAR_ISSUE_LIMIT}, orderBy: updatedAt, filter: {{ {OPEN_ISSUE_FILTER}, title: {{ containsIgnoreCase: $q }} }}) {{ nodes {{ {LINEAR_CANDIDATE_FIELDS} }} }} }} issues(first: {LINEAR_ISSUE_LIMIT}, orderBy: updatedAt, filter: {{ title: {{ containsIgnoreCase: $q }} }}) {{ nodes {{ {LINEAR_CANDIDATE_FIELDS} }} }} }}",
-                if exact.is_some() {
-                    ", $id: String!"
-                } else {
-                    ""
-                },
+                if exact.is_some() { ", $id: String!" } else { "" },
             ),
             match &exact {
                 Some(identifier) => json!({ "q": query, "id": identifier }),
@@ -629,9 +626,7 @@ fn list_linear_projects(api_key: &str, query: &str) -> Option<Vec<Candidate>> {
         )
     } else {
         (
-            format!(
-                "query($q: String!) {{ projects(first: 50, orderBy: updatedAt, filter: {{ name: {{ containsIgnoreCase: $q }} }}) {{ nodes {{ {FIELDS} }} }} }}"
-            ),
+            format!("query($q: String!) {{ projects(first: 50, orderBy: updatedAt, filter: {{ name: {{ containsIgnoreCase: $q }} }}) {{ nodes {{ {FIELDS} }} }} }}"),
             json!({ "q": query }),
         )
     };

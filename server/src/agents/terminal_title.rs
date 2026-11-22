@@ -376,7 +376,11 @@ pub(crate) fn strip_empryo_title_suffix(title: &str) -> &str {
         .strip_suffix(" \u{00b7} working")
         .unwrap_or(body)
         .trim_end();
-    if body.is_empty() { "Empryo" } else { body }
+    if body.is_empty() {
+        "Empryo"
+    } else {
+        body
+    }
 }
 
 fn is_empryo_channel_tail(tail: Option<&str>) -> bool {

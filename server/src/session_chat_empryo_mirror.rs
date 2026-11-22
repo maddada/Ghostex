@@ -10,12 +10,12 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::resume_lookup::home_dir;
 use crate::session_chat::{extract_string, parse_json_object, tool_result_output};
-use crate::session_chat_empryo_events::{EmpryoScreenEvents, read_empryo_screen_events};
-use crate::session_chat_empryo_notes::{EmpryoTabNotes, anchor_at, insert_notices, notice_row};
+use crate::session_chat_empryo_events::{read_empryo_screen_events, EmpryoScreenEvents};
+use crate::session_chat_empryo_notes::{anchor_at, insert_notices, notice_row, EmpryoTabNotes};
 
 const EMPRYO_SESSION_ID_MAX_LENGTH: usize = 128;
 

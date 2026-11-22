@@ -13,13 +13,13 @@
 
 use axum::http::StatusCode;
 use base64::Engine as _;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::recordings::{self, Finished, Piece, Saved};
 use super::transcribe;
-use crate::domain::{DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainStateError};
 use crate::protocol::rpc_success;
-use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
+use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
 
 /// Base64 of a piece may not exceed the 1 MiB JSON limit.
 const MAX_PIECE_BYTES: usize = 640 * 1024;

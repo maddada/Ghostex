@@ -5,11 +5,11 @@ use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 
 use rusqlite::{Transaction, TransactionBehavior};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainRepository;
 use crate::server::AppState;
-use crate::session_status::{TURN_COMPLETE_ATTENTION_SOURCE, compute_activity_update};
+use crate::session_status::{compute_activity_update, TURN_COMPLETE_ATTENTION_SOURCE};
 use crate::storage::open_gxserver_database;
 
 /// Sessions with a retire running, `project:session`: probes that land meanwhile skip it.

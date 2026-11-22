@@ -5,12 +5,12 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::Reading;
-use super::http::{self, Failure, agent, answer, url_encode};
+use super::http::{self, agent, answer, url_encode, Failure};
 use super::signin::{Progress, SignedIn};
 use super::store::{Credential, UsageAccount};
+use super::Reading;
 use crate::accounts::model::UsageWindow;
 
 const NAME: &str = "Gemini";
@@ -178,9 +178,7 @@ fn callback(mut stream: TcpStream, state: &str) -> Option<String> {
     } else {
         "This sign-in didn't finish. Go back to Ghostex and try again."
     };
-    let body = format!(
-        "<!doctype html><meta charset=utf-8><title>Ghostex</title><p style=\"font:16px system-ui;margin:3em\">{page}</p>"
-    );
+    let body = format!("<!doctype html><meta charset=utf-8><title>Ghostex</title><p style=\"font:16px system-ui;margin:3em\">{page}</p>");
     let _ = write!(
         stream,
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",

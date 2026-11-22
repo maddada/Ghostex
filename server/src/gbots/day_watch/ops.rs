@@ -2,13 +2,13 @@
 //! `dayWatchOff` (pause it): you and Chief of Staff.
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::super::endpoint::Asker;
-use super::super::record::{Bot, bot_summary, find_bot, read_bot, update_bot};
+use super::super::record::{bot_summary, find_bot, read_bot, update_bot, Bot};
 use super::store::{self, DayWatchRecord};
 use super::text::*;
-use crate::automations::{RoutineSave, routine_view, save_routine, set_routine_enabled_by_id};
+use crate::automations::{routine_view, save_routine, set_routine_enabled_by_id, RoutineSave};
 use crate::coordinators::now_iso;
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use axum::http::StatusCode;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::*;
 use crate::domain::DomainRepository;

@@ -1,7 +1,7 @@
 //! Durable transfer receipts. Receipt acknowledgement never retires unsent text.
 use crate::{domain::DomainStateError, session_chat_draft_versions::DraftVersion};
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Value};
 
 fn sql_error(error: rusqlite::Error) -> DomainStateError {
     DomainStateError {

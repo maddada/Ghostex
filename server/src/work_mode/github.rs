@@ -7,7 +7,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::Value;
 
-use crate::session_git_status::{PullRequestState, parse_gh_pull_request_state, run_gh_command};
+use crate::session_git_status::{parse_gh_pull_request_state, run_gh_command, PullRequestState};
 
 /// Checks finish within minutes, so a linked PR is re-read every two.
 const PULL_REQUEST_TTL: Duration = Duration::from_secs(120);

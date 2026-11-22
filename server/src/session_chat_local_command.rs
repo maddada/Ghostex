@@ -32,7 +32,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::session_chat::{
     SessionChatBlock, SessionChatMessage, SessionChatRole, SessionChatSource,
@@ -1329,11 +1329,8 @@ mod tests {
             "● high · /effort",
         );
         assert_eq!(
-            session_chat_local_command_output(Some("claude"), "/context", &before, &after)
-                .as_deref(),
-            Some(
-                "Context Usage\n     ⛁ ⛁ ⛶ ⛶   61.6k/1m tokens (6%)\n     Auto-compact window: 1m tokens"
-            )
+            session_chat_local_command_output(Some("claude"), "/context", &before, &after).as_deref(),
+            Some("Context Usage\n     ⛁ ⛁ ⛶ ⛶   61.6k/1m tokens (6%)\n     Auto-compact window: 1m tokens")
         );
     }
 

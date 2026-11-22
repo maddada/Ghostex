@@ -15,11 +15,11 @@
 
 use std::collections::HashSet;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::autopilot::{AutopilotConfig, HardLimits, Tier};
 use crate::session_chat_interactive::{
-    SessionChatInteractivePrompt, parse_stored_session_chat_prompt,
+    parse_stored_session_chat_prompt, SessionChatInteractivePrompt,
 };
 
 /// The tool name a Connectors approval card's question carries (connectors/agent/cards.rs).

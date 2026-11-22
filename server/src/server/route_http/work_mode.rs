@@ -2,13 +2,13 @@
 //! status read for the CLI, and the retired per-project switch.
 
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::protocol::rpc_success;
 use crate::work_mode::{
-    IssuesWorkflowParts, LinearKeyScope, linear_api_key_summary, resolve_work_mode_project,
-    store_linear_api_key, verify_linear_api_key,
+    linear_api_key_summary, resolve_work_mode_project, store_linear_api_key, verify_linear_api_key,
+    IssuesWorkflowParts, LinearKeyScope,
 };
 
 use super::super::work_mode_sync::spawn_work_mode_refresh;
@@ -156,7 +156,7 @@ pub(super) async fn route_work_mode_http(
                 body_json,
                 token_extension_id,
                 caller,
-            });
+            })
         }
     })
 }
@@ -164,19 +164,11 @@ pub(super) async fn route_work_mode_http(
 /// One line for the CLI on what Issues Workflow shows with this setup.
 fn issues_workflow_note(parts: IssuesWorkflowParts) -> &'static str {
     match (parts.linear, parts.github) {
-        (false, false) if parts.command => {
-            "Issues Workflow is on with the workspace's ticket command; add a Linear key (`ghostex issues linear-key`) or sign in with `gh auth login` for Linear tickets or pull requests."
-        }
+        (false, false) if parts.command => "Issues Workflow is on with the workspace's ticket command; add a Linear key (`ghostex issues linear-key`) or sign in with `gh auth login` for Linear tickets or pull requests.",
         (true, true) => "Issues Workflow is on: Linear and GitHub parts both show.",
-        (true, false) => {
-            "Issues Workflow is on with Linear only; sign in with `gh auth login` for pull requests and GitHub issues."
-        }
-        (false, true) => {
-            "Issues Workflow is on with GitHub only; add a Linear key (`ghostex issues linear-key`) for Linear tickets."
-        }
-        (false, false) => {
-            "Issues Workflow is off until you add a Linear key (`ghostex issues linear-key`) or sign in with `gh auth login`."
-        }
+        (true, false) => "Issues Workflow is on with Linear only; sign in with `gh auth login` for pull requests and GitHub issues.",
+        (false, true) => "Issues Workflow is on with GitHub only; add a Linear key (`ghostex issues linear-key`) for Linear tickets.",
+        (false, false) => "Issues Workflow is off until you add a Linear key (`ghostex issues linear-key`) or sign in with `gh auth login`.",
     }
 }
 

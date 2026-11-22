@@ -1,6 +1,6 @@
 use super::*;
 use crate::session_chat::{SessionChatBlock, SessionChatInteractivePrompt, SessionChatRole};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 #[test]
 fn large_opencode_image_is_shrunk_to_send_budget() {
@@ -58,10 +58,10 @@ fn pasted_image_references_survive_windows_paths_and_queue_storage() {
         super::attachments::image_references(draft),
         vec![r"C:\test folder\shot (2).png", "/tmp/second.png"]
     );
-    assert!(
-        super::attachments::image_references("[Image #no](ignored.png) [Image #1](broken\n.png)")
-            .is_empty()
-    );
+    assert!(super::attachments::image_references(
+        "[Image #no](ignored.png) [Image #1](broken\n.png)"
+    )
+    .is_empty());
 }
 
 #[test]
@@ -168,12 +168,10 @@ fn questions_offer_boolean_multiselect_and_free_text() {
 #[test]
 fn external_and_conditional_forms_are_not_misrepresented() {
     // An external (browser sign-in) step still sends the whole form to the terminal.
-    assert!(
-        interactive_prompt(&form(
-            json!([{"type":"external","key":"auth","url":"https://example.com"}])
-        ))
-        .is_none()
-    );
+    assert!(interactive_prompt(&form(
+        json!([{"type":"external","key":"auth","url":"https://example.com"}])
+    ))
+    .is_none());
     // A conditional field is asked in the chat and says when it applies; a hidden one is left out.
     let SessionChatInteractivePrompt::Question { questions, .. } = interactive_prompt(&form(
         json!([{"type":"string","key":"answer","when":{"key":"earlier","op":"eq","value":"yes"}},{"type":"string","key":"secret","hidden":true}]),
@@ -295,12 +293,10 @@ fn live_service_questions_permissions_and_controls() {
         .session(&id, &format!("/form/{form_id}"), "GET", None)
         .unwrap();
     assert!(settled.to_string().contains("stored-value"), "{settled}");
-    assert!(
-        client.session(&id, "/form", "GET", None).unwrap()["data"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    assert!(client.session(&id, "/form", "GET", None).unwrap()["data"]
+        .as_array()
+        .unwrap()
+        .is_empty());
     let permission = client
         .session(
             &id,
@@ -311,15 +307,13 @@ fn live_service_questions_permissions_and_controls() {
         .unwrap();
     assert_eq!(permission["data"]["effect"], "ask");
     let permission_id = permission["data"]["id"].as_str().unwrap();
-    assert!(
-        answer(
-            &id,
-            json!({"kind":"approval","toolUseId":"per_stale","approvalSend":"1"})
-                .as_object()
-                .unwrap()
-        )
-        .is_err()
-    );
+    assert!(answer(
+        &id,
+        json!({"kind":"approval","toolUseId":"per_stale","approvalSend":"1"})
+            .as_object()
+            .unwrap()
+    )
+    .is_err());
     answer(
         &id,
         json!({"kind":"approval","toolUseId":permission_id,"approvalSend":""})
@@ -366,12 +360,10 @@ fn live_service_questions_permissions_and_controls() {
         )
         .unwrap();
     interrupt(&id, Some(form["data"]["id"].as_str().unwrap())).unwrap();
-    assert!(
-        client.session(&id, "/form", "GET", None).unwrap()["data"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    assert!(client.session(&id, "/form", "GET", None).unwrap()["data"]
+        .as_array()
+        .unwrap()
+        .is_empty());
     if let Some(model) = catalog["agents"]["opencode"]["models"]
         .as_array()
         .unwrap()

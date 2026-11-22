@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::managed_tools::hex::{self as install, Found};
 
@@ -74,7 +74,7 @@ pub(crate) fn read_discovery(path: &Path) -> Result<Discovery, DiscoveryError> {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Err(DiscoveryError::Missing);
+            return Err(DiscoveryError::Missing)
         }
         Err(_) => return Err(DiscoveryError::Invalid),
     };
@@ -244,16 +244,12 @@ pub(crate) fn status_failure(status: u16, body: &str, model: &str) -> Failure {
         ),
         (409, _) => Failure::final_(
             "hexModelNotReady",
-            format!(
-                "{model} isn't ready in Hex. Open Hex and download it there (or pick another model in Ghostex), then transcribe again."
-            ),
+            format!("{model} isn't ready in Hex. Open Hex and download it there (or pick another model in Ghostex), then transcribe again."),
         ),
         (401, _) => Failure::final_("hexRefused", REFUSED_TOKEN),
         (400, "unsupported-model" | "unknown-model") => Failure::final_(
             "hexModelNotReady",
-            format!(
-                "Hex can't transcribe with {model} in this language. Pick another Hex model, or set Dictate's language to Auto, then transcribe again."
-            ),
+            format!("Hex can't transcribe with {model} in this language. Pick another Hex model, or set Dictate's language to Auto, then transcribe again."),
         ),
         (413, _) => Failure::final_(
             "badAudio",
@@ -277,9 +273,7 @@ pub(crate) fn status_failure(status: u16, body: &str, model: &str) -> Failure {
         ),
         (500, "model-load-failed") => Failure::final_(
             "hexFailed",
-            format!(
-                "Hex couldn't load {model}. Open Hex and check the model, or pick another one, then transcribe again."
-            ),
+            format!("Hex couldn't load {model}. Open Hex and check the model, or pick another one, then transcribe again."),
         ),
         (500, _) => Failure::final_(
             "hexFailed",
@@ -480,13 +474,13 @@ pub(crate) fn state(home: &Path) -> State {
                     older: Some(version.unwrap_or_default()),
                 },
                 None => State::NotInstalled { older: None },
-            };
+            }
         }
         Err(DiscoveryError::UnknownVersion(version)) => {
             return State::Problem {
                 code: "hexVersion",
                 message: unknown_version_message(&version),
-            };
+            }
         }
         // Hex rewrites a damaged file at its next start.
         Err(DiscoveryError::Invalid) => return State::NotRunning,
@@ -503,7 +497,7 @@ pub(crate) fn state_of(client: &Client) -> State {
             return State::Problem {
                 code: failure.code,
                 message: failure.message,
-            };
+            }
         }
     };
     match client.models() {
@@ -553,19 +547,13 @@ pub(crate) fn chosen_model<'a>(
 pub(crate) fn problem(state: &State, saved: Option<&str>) -> Option<(&'static str, String)> {
     match state {
         State::Unsupported(reason) => Some(("hexUnsupported", reason.clone())),
-        State::NotInstalled {
-            older: Some(version),
-        } => Some((
+        State::NotInstalled { older: Some(version) } => Some((
             "hexNotInstalled",
-            format!(
-                "{} has Hex {version}, which has no local API. Install Hex 3 to transcribe with it.",
-                crate::connected_computers::this_computer_name()
-            ),
+            format!("{} has Hex {version}, which has no local API. Install Hex 3 to transcribe with it.", crate::connected_computers::this_computer_name()),
         )),
         State::NotInstalled { older: None } => Some((
             "hexNotInstalled",
-            "Hex 3 isn't installed on this computer. Install it to transcribe with Hex."
-                .to_string(),
+            "Hex 3 isn't installed on this computer. Install it to transcribe with Hex.".to_string(),
         )),
         State::NotRunning => Some((
             "hexNotRunning",
@@ -671,7 +659,8 @@ fn decode_m4a(path: &Path) -> Result<PathBuf, String> {
 const OPEN_WAIT: Duration = Duration::from_secs(20);
 const OPEN_POLL: Duration = Duration::from_millis(250);
 
-const OPENED_BUT_SILENT: &str = "Ghostex opened Hex, but it didn't answer in time. Check that Hex is working, then transcribe again.";
+const OPENED_BUT_SILENT: &str =
+    "Ghostex opened Hex, but it didn't answer in time. Check that Hex is working, then transcribe again.";
 
 /// Whether Dictate opens Hex by itself when it isn't running (macOS with Hex 3 installed), so a
 /// closed Hex is no reason to keep the microphone from recording.
@@ -734,7 +723,7 @@ pub(crate) fn transcribe(
             return Err(Failure::final_(
                 "hexVersion",
                 unknown_version_message(&version),
-            ));
+            ))
         }
         Err(DiscoveryError::Missing | DiscoveryError::Invalid) => match open_and_wait(home) {
             Some(opened) => opened?,

@@ -223,7 +223,7 @@ pub(crate) async fn handle_board_associate_session_http(
                     code: "internalError",
                     message: format!("Board associate-session task failed: {error}"),
                 },
-            );
+            )
         }
     };
     routed_json(
@@ -297,7 +297,7 @@ pub(crate) async fn handle_board_start_work_http(
                     code: "internalError",
                     message: format!("Board start-work task failed: {error}"),
                 },
-            );
+            )
         }
     };
     if let Some((project_id, session_id)) = outcome.created_session.clone() {
@@ -344,7 +344,7 @@ pub(crate) async fn handle_board_start_work_http(
                         code: "internalError",
                         message: format!("Board start-work provider task failed: {error}"),
                     },
-                );
+                )
             }
         }
     }

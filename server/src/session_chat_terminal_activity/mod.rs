@@ -41,9 +41,9 @@ percentage and elapsed clock are read off the screen or omitted; neither is
 ever estimated.
 */
 
-use crate::session_chat_options::{SessionChatOptionAgent, session_chat_option_agent};
+use crate::session_chat_options::{session_chat_option_agent, SessionChatOptionAgent};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 mod agent_stream;
 mod line_parsers;

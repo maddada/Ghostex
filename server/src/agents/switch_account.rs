@@ -24,7 +24,7 @@ its composer already offers "Switch Agent CLI", which may cross families.
 */
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::*;
 use crate::domain::{DomainRepository, DomainStateError};

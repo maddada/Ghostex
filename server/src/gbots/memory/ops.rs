@@ -17,17 +17,17 @@ use std::path::Path;
 
 use chrono::{Local, NaiveDate};
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use super::budget::{Gauge, MEMORY_MAX_BYTES, MEMORY_MAX_LINES, make_room, within_budget};
+use super::budget::{make_room, within_budget, Gauge, MEMORY_MAX_BYTES, MEMORY_MAX_LINES};
 use super::entries::{check_text, format_entry, parse, struck_through};
 use super::journal::{self, FileChange};
 use super::store::{bot_lock, commit, read_file};
 use super::topics::{self, ARCHIVE_STEM};
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::gbots::folder::{MEMORY_FILE, bot_folder};
-use crate::gbots::record::{Bot, bot_summary, list_bots, require_bot};
+use crate::gbots::folder::{bot_folder, MEMORY_FILE};
+use crate::gbots::record::{bot_summary, list_bots, require_bot, Bot};
 use crate::server::AppState;
 
 /// Who asks, as memory's rules see it.
@@ -144,7 +144,7 @@ pub(crate) fn run(
             return Ok(json!({
                 "bot": bot_summary(&bot),
                 "topics": topics::list(&folder).iter().map(topics::Topic::summary).collect::<Vec<_>>(),
-            }));
+            }))
         }
         "memoryTopic" => return topic(&bot, &folder, params),
         "memoryLog" => return log(&bot, &folder, params),
@@ -162,7 +162,7 @@ pub(crate) fn run(
         other => {
             return Err(DomainStateError::bad_request(format!(
                 "Unknown GBots memory op {other}: use memoryShow, memoryAdd, memoryForget, memoryEdit, memoryUndo, memoryTopics, memoryTopic, memoryLog, memoryJournal, prefsShow or prefsSet."
-            )));
+            )))
         }
     };
     if by != "self" {
@@ -464,7 +464,7 @@ fn forget(
             return Err(DomainStateError::not_found(format!(
                 "No note in {}'s memory has those words. `ghostex gbots memory show` lists them.",
                 bot.name
-            )));
+            )))
         }
         [entry] => entry.clone(),
         many => {
@@ -481,7 +481,7 @@ fn forget(
                 } else {
                     String::new()
                 }
-            )));
+            )))
         }
     };
     let mut kept: Vec<&str> = lines[..entry.start].to_vec();
@@ -613,9 +613,7 @@ fn undo(
                     next.id
                 )
             } else {
-                format!(
-                    "There is no memory change {wanted}. `ghostex gbots memory journal` lists them."
-                )
+                format!("There is no memory change {wanted}. `ghostex gbots memory journal` lists them.")
             }));
         }
     }

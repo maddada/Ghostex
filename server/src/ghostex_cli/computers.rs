@@ -1,10 +1,10 @@
 //! `--computer <name>` and session refs of another computer: requests go to this computer's
 //! gxserver, which relays them over the connection the desktop app already has to that computer.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::args::Flags;
-use super::rpc::{CliError, CliResult, Target, request_gxserver_rpc};
+use super::rpc::{request_gxserver_rpc, CliError, CliResult, Target};
 
 /// `ghostex computers [--json]`: the computers this one's agents can reach.
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
@@ -40,9 +40,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         return Ok(());
     }
     if computers.is_empty() {
-        println!(
-            "No computer is connected to this one. Connect one in Settings > Remote > Remote machines."
-        );
+        println!("No computer is connected to this one. Connect one in Settings > Remote > Remote machines.");
         return Ok(());
     }
     println!("NAME\tSERVER ID\tAGENT ACCESS");

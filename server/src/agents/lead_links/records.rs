@@ -1,9 +1,9 @@
 //! The `lead_links` rows (migration 0084): which session reports to which lead, and the watcher's
 //! bookkeeping for each link.
 
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 
-use crate::coordinators::{SessionKey, now_iso, sql_error};
+use crate::coordinators::{now_iso, sql_error, SessionKey};
 use crate::domain::DomainStateError;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

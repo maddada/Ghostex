@@ -98,7 +98,8 @@ pub const SESSION_CHAT_COMPOSER_NOT_READY: &str =
     "The agent's input box is not on screen, so nothing was sent.";
 /// Empryo's input box shows text this terminal's screen capture cannot tell apart from its tip
 /// (the capture has no cursor), so placing a Chat draft there, which would clear it, stops.
-pub(super) const EMPRYO_DRAFT_UNREADABLE: &str = "This terminal's screen does not show its cursor, so Ghostex cannot tell text typed in Empryo's input box from its tip and did not replace it. The Chat draft is still in the chat.";
+pub(super) const EMPRYO_DRAFT_UNREADABLE: &str =
+    "This terminal's screen does not show its cursor, so Ghostex cannot tell text typed in Empryo's input box from its tip and did not replace it. The Chat draft is still in the chat.";
 pub(super) const SESSION_CHAT_CLAUDE_PANEL_NOT_DISMISSED: &str =
     "The Claude Code panel over the input box did not close, so nothing was sent.";
 pub(super) const SESSION_CHAT_CODEX_SIDE_NOT_CLOSED: &str =

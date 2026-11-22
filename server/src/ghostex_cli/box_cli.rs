@@ -3,7 +3,7 @@
 //! one JSON object and exits non-zero on failure.
 
 use ghostex_gx_protocol::cloud_box::box_verbs;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::cloud_boxes::box_mode;
 use crate::ghostex_cli::{

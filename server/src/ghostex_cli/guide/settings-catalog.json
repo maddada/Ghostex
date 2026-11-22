@@ -10900,18 +10900,6 @@
       "agentWritable": true
     },
     {
-      "key": "agentAcpMode",
-      "title": "Use ACP mode",
-      "subtitle": "Run this agent through its structured Agent Client Protocol instead of driving its interactive terminal. Switching to Terminal asks first and interrupts any active turn. Applies to sessions started or resumed after you change it.",
-      "tab": "agents",
-      "tabTitle": "Agents",
-      "section": "agentList",
-      "sectionTitle": "Agents",
-      "type": "json",
-      "default": {},
-      "agentWritable": false
-    },
-    {
       "key": "preferredAgentInterfaceOverrides",
       "title": "Default view per agent",
       "subtitle": "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting.",

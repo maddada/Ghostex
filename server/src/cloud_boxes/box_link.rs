@@ -31,7 +31,7 @@ use ghostex_gx_protocol::cloud_box::{CloudBoxState, CloudProviderId};
 use ghostex_paths::tailcat_forward::{
     ClientEnd, ForwardEvent, ForwardProbe, ForwardSpec, TailcatForward,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::{home_keys, params, registry};
 use crate::domain::DomainStateError;
@@ -62,11 +62,9 @@ fn links() -> &'static Mutex<HashMap<String, Link>> {
 fn watch_idle_links() {
     static STARTED: OnceLock<()> = OnceLock::new();
     STARTED.get_or_init(|| {
-        std::thread::spawn(|| {
-            loop {
-                std::thread::sleep(IDLE_CHECK_EVERY);
-                close_idle_links(Instant::now());
-            }
+        std::thread::spawn(|| loop {
+            std::thread::sleep(IDLE_CHECK_EVERY);
+            close_idle_links(Instant::now());
         });
     });
 }

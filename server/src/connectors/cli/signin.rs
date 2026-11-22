@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use crate::paths::GxserverPaths;
 
-use super::tools::{CliTool, config_dir, executable, tool_env};
+use super::tools::{config_dir, executable, tool_env, CliTool};
 
 /// How long Ghostex waits for the login to print its link.
 const LINK_WITHIN: Duration = Duration::from_secs(20);

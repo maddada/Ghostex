@@ -9,13 +9,13 @@ use std::{
 use crate::paths::GxserverPaths;
 
 use super::{
-    ExtensionBadge, ExtensionCatalogSnapshot, ExtensionError, ExtensionInstallApproval,
-    ExtensionLaunchContext, ExtensionResult, ExtensionRuntime, ExtensionRuntimeStatus,
-    ExtensionStatePatch, ExtensionStoreEntry, InstalledExtension, StoreEntryContent,
     activate_staged_payload, apply_state_patch, catalog_zip_url, check_install_approval,
     default_store_entry, fetch_catalog, read_manifest, read_store, read_zip_store_content,
     stage_local_payload, stage_zip_payload, store_entry_for_install, validate_extension_id,
-    write_store,
+    write_store, ExtensionBadge, ExtensionCatalogSnapshot, ExtensionError,
+    ExtensionInstallApproval, ExtensionLaunchContext, ExtensionResult, ExtensionRuntime,
+    ExtensionRuntimeStatus, ExtensionStatePatch, ExtensionStoreEntry, InstalledExtension,
+    StoreEntryContent,
 };
 
 /// How long after the user's tap on a thread's panel the extension may message that thread.

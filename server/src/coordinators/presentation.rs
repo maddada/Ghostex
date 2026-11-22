@@ -3,9 +3,9 @@
 use std::collections::{BTreeSet, HashMap};
 
 use rusqlite::Connection;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::records::{SessionKey, ThreadRecord, list_coordinators, read_coordinator, read_thread};
+use super::records::{list_coordinators, read_coordinator, read_thread, SessionKey, ThreadRecord};
 use super::state::ThreadProgress;
 use crate::domain::DomainRepository;
 use crate::presentation::now_iso;
@@ -50,14 +50,12 @@ fn insert_fields(
         );
         object.insert(
             "coordinatorThreadState".to_string(),
-            json!(
-                super::live::classify_thread_live(
-                    raw_session,
-                    ThreadProgress::of(thread),
-                    generated_at,
-                )
-                .as_str()
-            ),
+            json!(super::live::classify_thread_live(
+                raw_session,
+                ThreadProgress::of(thread),
+                generated_at,
+            )
+            .as_str()),
         );
     }
 }

@@ -280,7 +280,8 @@ pub(super) async fn run_shell_command(
     }
 }
 
-const SESSION_CHAT_LAUNCH_COMMAND_NOT_RUN: &str = "The agent's start command stayed at the shell prompt without running, so the agent was not started.";
+const SESSION_CHAT_LAUNCH_COMMAND_NOT_RUN: &str =
+    "The agent's start command stayed at the shell prompt without running, so the agent was not started.";
 
 fn log_launch_recovery(
     project_id: &str,

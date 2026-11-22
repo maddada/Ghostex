@@ -2,7 +2,7 @@
 //! client commands may start, and that a closed socket leaves nothing subscribed.
 
 use super::*;
-use axum::{Router, routing::any};
+use axum::{routing::any, Router};
 use tokio_tungstenite::tungstenite::{self, Message as WsMessage};
 
 type Client =

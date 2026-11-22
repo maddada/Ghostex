@@ -2,18 +2,18 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::{
-    Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
 };
 use std::time::{Duration, Instant};
 
-use base64::{Engine, engine::general_purpose::STANDARD};
-use serde_json::{Value, json};
-use ureq::Body;
+use base64::{engine::general_purpose::STANDARD, Engine};
+use serde_json::{json, Value};
 use ureq::config::Config;
 use ureq::http::{Response, Uri};
 use ureq::unversioned::resolver::{DefaultResolver, ResolvedSocketAddrs, Resolver};
 use ureq::unversioned::transport::{DefaultConnector, NextTimeout};
+use ureq::Body;
 use url::Url;
 
 use crate::tcp_listeners::listener_discovery::TcpListenerDetail;

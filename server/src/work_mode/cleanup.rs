@@ -14,8 +14,8 @@
 
 use std::path::Path;
 
-use rusqlite::{Connection, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{params, Connection};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::worktree_sessions::read_worktree_session_marker;

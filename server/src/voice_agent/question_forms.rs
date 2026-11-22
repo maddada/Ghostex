@@ -12,13 +12,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use ghostex_gx_chat_core::QuestionDraft;
 use ghostex_gx_chat_core::questions::forms::answers as form_answers;
 use ghostex_gx_chat_core::transcript::open_questions::AskerKind;
 use ghostex_gx_chat_core::transcript::question_forms::{
-    NOTE_SUFFIX, OTHER_CHOICE, QuestionForm, SKIPPED, answers_message, takes_notes,
+    answers_message, takes_notes, QuestionForm, NOTE_SUFFIX, OTHER_CHOICE, SKIPPED,
 };
-use serde_json::{Map, Value, json};
+use ghostex_gx_chat_core::QuestionDraft;
+use serde_json::{json, Map, Value};
 
 use super::loopback;
 use super::sessions::SessionInfo;
@@ -549,10 +549,7 @@ pub(super) async fn answer(
     args: &Value,
 ) -> Result<Value, String> {
     if let Some(computer) = &session.computer {
-        return Err(format!(
-            "Ghostex forms and Live pages in a chat on {} can't be answered from here, so nothing was sent. The user can answer them in Ghostex.",
-            computer.name
-        ));
+        return Err(format!("Ghostex forms and Live pages in a chat on {} can't be answered from here, so nothing was sent. The user can answer them in Ghostex.", computer.name));
     }
     let asked = collect_async(state, session).await;
     if asked.is_empty() {
@@ -596,7 +593,7 @@ pub(super) async fn answer(
                 return Err(format!(
                     "Several questions are open; give one answers entry per question with its ref. Open questions: {}.",
                     refs()
-                ));
+                ))
             }
         };
         let mut entry = args.clone();

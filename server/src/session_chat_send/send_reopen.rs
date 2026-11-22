@@ -7,14 +7,14 @@
 
 use super::*;
 
-use axum::body::{Body, to_bytes};
-use axum::http::{Response, header::CONTENT_LENGTH};
+use axum::body::{to_bytes, Body};
+use axum::http::{header::CONTENT_LENGTH, Response};
 
 use crate::coordinators::{
-    ReopenPlan, SessionKey, apply_reopen, caller_may_reopen, prepare_reopen,
+    apply_reopen, caller_may_reopen, prepare_reopen, ReopenPlan, SessionKey,
 };
 use crate::security::Principal;
-use crate::session_chat_send_requests::{SEND_REQUEST_ID_PARAM, SendRequestKey, send_once};
+use crate::session_chat_send_requests::{send_once, SendRequestKey, SEND_REQUEST_ID_PARAM};
 
 /// Result field: the send ran the reopen check, so a replay of it answers from the ledger as is.
 const REOPEN_CHECKED: &str = "threadReopenChecked";

@@ -4,21 +4,21 @@ use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use axum::http::StatusCode;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::protocol::rpc_success;
 use crate::server::{
-    AppState, RoutedResponse, domain_error_response, read_runtime_text, routed_json,
+    domain_error_response, read_runtime_text, routed_json, AppState, RoutedResponse,
 };
 use crate::session_chat::{
-    SessionChatTranscriptAgent, resolve_session_chat_transcript_agent,
-    resolve_session_chat_transcript_path,
+    resolve_session_chat_transcript_agent, resolve_session_chat_transcript_path,
+    SessionChatTranscriptAgent,
 };
 use crate::session_chat_follower::{
     session_chat_agent_for_session, session_chat_display_agent_for_session,
 };
-use crate::session_chat_tail::{SessionChatTailPage, read_session_chat_tail_page};
+use crate::session_chat_tail::{read_session_chat_tail_page, SessionChatTailPage};
 use crate::storage::open_gxserver_database;
 
 #[path = "session_chat_subagent_fleet.rs"]

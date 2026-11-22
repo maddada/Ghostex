@@ -14,8 +14,8 @@
 
 use std::time::{Duration, Instant};
 
-use ghostex_settings_catalog::{Platform, built_in_extensions};
-use serde_json::{Map, Value, json};
+use ghostex_settings_catalog::{built_in_extensions, Platform};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::security::Principal;

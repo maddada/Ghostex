@@ -8,8 +8,8 @@ use std::{
     os::unix::ffi::OsStrExt,
     path::PathBuf,
     sync::{
-        Arc, Mutex, OnceLock, RwLock,
         atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex, OnceLock, RwLock,
     },
 };
 

@@ -33,7 +33,7 @@ pub(crate) fn prune_old_pages(
     gxserver_state_dir: &Path,
     now: std::time::SystemTime,
 ) -> crate::storage_cleanup::Tally {
-    use crate::storage_cleanup::{Since, Tally, is_older, remove_file};
+    use crate::storage_cleanup::{is_older, remove_file, Since, Tally};
     let dir = visual_pages_dir(gxserver_state_dir);
     let mut tally = Tally::default();
     let Ok(entries) = fs::read_dir(&dir) else {
@@ -498,12 +498,10 @@ mod tests {
             Ok(true)
         ));
         assert_eq!(notes(dir.path()), "from the phone");
-        assert!(
-            read_record(dir.path(), ID)
-                .unwrap()
-                .get("draftEditedAt")
-                .is_none()
-        );
+        assert!(read_record(dir.path(), ID)
+            .unwrap()
+            .get("draftEditedAt")
+            .is_none());
         assert!(matches!(
             store_draft(dir.path(), ID, &json!({"notes": "b"}), Some(1)),
             Ok(true)

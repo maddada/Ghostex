@@ -22,12 +22,12 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::paths::GxserverPaths;
-use crate::workspaces::{DEFAULT_WORKSPACE_ID, project_workspace_id, workspace_exists};
+use crate::workspaces::{project_workspace_id, workspace_exists, DEFAULT_WORKSPACE_ID};
 
-use super::{WorkSourceId, linear_api_key, workspace_command};
+use super::{linear_api_key, workspace_command, WorkSourceId};
 
 /// How long a team's choice read from Convex is trusted before the background pass reads it again.
 const TEAM_TRACKER_TTL: Duration = Duration::from_secs(5 * 60);

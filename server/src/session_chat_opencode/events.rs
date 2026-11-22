@@ -1,14 +1,14 @@
 //! CDXC:SessionChat 2026-10-17 WHY:
 //! OpenCode's message API returns a reply's text and reasoning only once each part ends, so a chat built on it alone shows a long reply all at once (GitHub #239). Its `/api/event` stream carries the deltas as they are written, and it says when a followed conversation changed, so chats refetch on change instead of reading every message twice a second. Events sent while the stream is down are lost by contract, so every (re)connect marks all chats stale.
 
-use super::{Client, error};
+use super::{error, Client};
 use serde_json::Value;
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader},
     sync::{
-        LazyLock, Mutex, Once,
         atomic::{AtomicBool, AtomicU64, Ordering},
+        LazyLock, Mutex, Once,
     },
     time::Duration,
 };

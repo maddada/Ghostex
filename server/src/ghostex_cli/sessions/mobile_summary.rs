@@ -1,4 +1,4 @@
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::args::Flags;
 use crate::ghostex_cli::output::is_failed_cli_result;

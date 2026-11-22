@@ -5,11 +5,11 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rand::Rng;
 use sha2::{Digest, Sha256};
 
-use super::{Principal, SessionRole, persist::PersistedSessionToken};
+use super::{persist::PersistedSessionToken, Principal, SessionRole};
 
 /// Prefix of a session's own token.
 pub const SESSION_TOKEN_PREFIX: &str = "gxs_";

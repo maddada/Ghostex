@@ -5,7 +5,7 @@
 //! CDXC:Connectors 2026-10-15 DECISION:
 //! User: connectors (Composio apps, later the user's own MCP servers) live on a Settings > Connectors page that every agent can use (Claude, Codex and OpenDots' dots), not inside OpenDots only, because they are needed for MCPs and connectors in general.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::server::AppState;

@@ -6,7 +6,7 @@
 //! Ids are short and readable (`A12`), so a sender can write `--rework A12` from its own report.
 
 use rusqlite::{Connection, OptionalExtension, Row};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::coordinators::now_iso;
 use crate::domain::DomainStateError;

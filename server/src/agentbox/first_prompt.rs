@@ -1,7 +1,7 @@
 //! A box session's first prompt travels inside its launch command; the startup send a client
 //! queues for the same prompt is answered here instead of being typed a second time.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::session::patch_agentbox_record;
 

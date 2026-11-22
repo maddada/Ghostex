@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::connected_computers::ConnectedComputer;
 use crate::constants::{GXSERVER_PROTOCOL_HEADER, GXSERVER_PROTOCOL_VERSION};

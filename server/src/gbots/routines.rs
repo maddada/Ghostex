@@ -9,13 +9,13 @@
 //! Who may set a GBot's routines: you, Chief of Staff and the GBot's own chats; no other agent. A command check runs a shell command on its own every few minutes, so one set by an agent (the GBot or Chief of Staff) for a GBot that asks first (approval Ask or Allow edits) starts paused, and only you turn it on, from its card, GBot Settings or your terminal.
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::endpoint::Asker;
-use super::record::{Bot, new_id, require_bot};
+use super::record::{new_id, require_bot, Bot};
 use crate::automations::{
-    RoutineSave, bot_routines, delete_routine, routine_definition, routine_view, run_routine_now,
-    save_routine, set_routine_enabled_by_id,
+    bot_routines, delete_routine, routine_definition, routine_view, run_routine_now, save_routine,
+    set_routine_enabled_by_id, RoutineSave,
 };
 use crate::coordinators::now_iso;
 use crate::domain::{DomainRepository, DomainStateError};
@@ -474,14 +474,10 @@ pub(super) fn undo_problem(
         .unwrap_or("That routine")
         .to_string();
     Ok(match (kind, current) {
-        ("routineAdded" | "routineEdited", None) => {
-            Some(format!("The routine {name} was removed since."))
-        }
-        ("routineAdded" | "routineEdited", Some(current)) if Some(&current) != after => {
-            Some(format!(
-                "The routine {name} was changed since, so Undo would lose that change. Change or remove it in the GBot's settings instead."
-            ))
-        }
+        ("routineAdded" | "routineEdited", None) => Some(format!("The routine {name} was removed since.")),
+        ("routineAdded" | "routineEdited", Some(current)) if Some(&current) != after => Some(format!(
+            "The routine {name} was changed since, so Undo would lose that change. Change or remove it in the GBot's settings instead."
+        )),
         ("routineAdded" | "routineEdited", Some(_)) => None,
         _ => Some(format!(
             "A removed routine can't come back with Undo. Ask the GBot to set {name} again."

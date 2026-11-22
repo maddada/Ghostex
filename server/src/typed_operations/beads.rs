@@ -3,15 +3,15 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::toolchain::require_system_bd;
 
 use super::values::{
-    CommandOutput, ProcessCommand, StringOrElse, TypedOperationContext, TypedOperationError,
     command_summary_json, display_unknown_value, normalize_issue_id, normalize_required_text,
     nullish_value_to_string, resolve_path_against, run_process_command, typed_result,
-    value_to_string,
+    value_to_string, CommandOutput, ProcessCommand, StringOrElse, TypedOperationContext,
+    TypedOperationError,
 };
 
 const BEADS_BOARD_RESPONSE_LIMIT_BYTES: usize = 4 * 1024 * 1024;
@@ -382,7 +382,7 @@ pub(crate) fn build_beads_command_with_executable(
                 params,
                 &cwd,
                 bd_executable_path,
-            );
+            )
         }
     })
 }
@@ -575,7 +575,7 @@ async fn repository_bd_hooks_use(
         BeadsWorkspace::Workspace(path) => path,
         BeadsWorkspace::None => return BdHooksUse::NotUsed,
         BeadsWorkspace::Failed(message) => {
-            return bd_failed(format!("`bd where` failed: {}", one_line(&message)));
+            return bd_failed(format!("`bd where` failed: {}", one_line(&message)))
         }
     };
     let mut values = Vec::new();
@@ -586,7 +586,7 @@ async fn repository_bd_hooks_use(
                 return bd_failed(format!(
                     "it could not read bd's config (`bd config get {key}`: {})",
                     one_line(&message)
-                ));
+                ))
             }
         }
     }
@@ -600,7 +600,7 @@ async fn repository_bd_hooks_use(
             None => {
                 return bd_failed(format!(
                     "bd's `{key}` setting has a value it does not understand ({value})"
-                ));
+                ))
             }
         }
     }
@@ -649,7 +649,7 @@ async fn repository_bd_hooks_use(
                         candidate.display(),
                         one_line(&message)
                     ),
-                };
+                }
             }
         }
     }
@@ -1267,7 +1267,7 @@ fn normalize_beads_link(input: Option<&Value>, key: &str) -> Result<String, Type
         Some(_) => {
             return Err(TypedOperationError::bad_request(format!(
                 "{key} must be a string."
-            )));
+            )))
         }
     };
     if link.len() > 2_000 || link.contains('\n') || link.contains('\r') {
@@ -1285,7 +1285,7 @@ fn build_beads_set_label_args(input: Option<&Value>) -> Result<Vec<String>, Type
         Some(_) => {
             return Err(TypedOperationError::bad_request(
                 "labels must be an array of non-empty strings.",
-            ));
+            ))
         }
     };
     let mut args = Vec::new();
@@ -1341,7 +1341,7 @@ pub(crate) fn parse_beads_show_output(
         _ => {
             return Err(TypedOperationError::bad_request(
                 "Beads issue detail output must contain exactly one issue object.",
-            ));
+            ))
         }
     };
     let stdout = serde_json::to_string(&issue)
@@ -1501,5 +1501,9 @@ fn compare_label_case_order(left: &str, right: &str) -> Ordering {
 }
 
 fn label_char_case_key(ch: char) -> u8 {
-    if ch.is_uppercase() { 1 } else { 0 }
+    if ch.is_uppercase() {
+        1
+    } else {
+        0
+    }
 }

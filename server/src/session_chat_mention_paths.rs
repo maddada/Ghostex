@@ -246,13 +246,11 @@ mod tests {
     fn a_missing_path_an_npm_scope_a_handle_and_a_decorator_are_not() {
         let (_dir, roots) = project();
         assert!(mentions("open @src/missing.rs", &roots).is_empty());
-        assert!(
-            mentions(
-                "npm install -g @deepseek-ai/dsh <- command to install deepseek harness",
-                &roots
-            )
-            .is_empty()
-        );
+        assert!(mentions(
+            "npm install -g @deepseek-ai/dsh <- command to install deepseek harness",
+            &roots
+        )
+        .is_empty());
         assert!(mentions("thanks @someone, see @Override", &roots).is_empty());
         assert!(mentions("mail me at someone@example.com", &roots).is_empty());
     }

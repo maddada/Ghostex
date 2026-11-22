@@ -20,7 +20,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// The agents whose lineup comes from their CLI. Claude Code's, Cursor's and Antigravity's also read
 /// the CLI's `/model` picker (`agent_model_pickers.rs`).

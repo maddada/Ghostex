@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::session_chat::{
-    SessionChatTranscriptAgent, TranscriptFileVersion, read_transcript_file_version,
+    read_transcript_file_version, SessionChatTranscriptAgent, TranscriptFileVersion,
 };
 use crate::session_chat_fleet_transcript::scan_tail;
 

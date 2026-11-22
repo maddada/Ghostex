@@ -12,7 +12,7 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 
 use super::endpoint::{held_reply, set_parked};
 use super::records::{
-    SessionKey, ThreadRecord, read_thread, set_thread_pending_message, set_thread_resolved,
+    read_thread, set_thread_pending_message, set_thread_resolved, SessionKey, ThreadRecord,
 };
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::security::Principal;

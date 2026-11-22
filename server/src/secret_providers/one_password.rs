@@ -8,7 +8,7 @@ use std::{path::PathBuf, process::Command, time::Duration};
 
 use crate::platform::{
     live_path,
-    process::{Keep, RunLimits, Unfinished, run_bounded},
+    process::{run_bounded, Keep, RunLimits, Unfinished},
 };
 
 const OP_BINARY: &str = "op";
@@ -121,14 +121,10 @@ impl ReadError {
     /// What to tell the user; never carries the value or `op`'s own output.
     pub(crate) fn message(&self) -> &'static str {
         match self {
-            Self::NotInstalled => {
-                "The 1Password CLI (op) is not installed on this computer. Install it from 1Password, then turn on \"Integrate with 1Password CLI\" in 1Password's Developer settings."
-            }
+            Self::NotInstalled => "The 1Password CLI (op) is not installed on this computer. Install it from 1Password, then turn on \"Integrate with 1Password CLI\" in 1Password's Developer settings.",
             Self::InvalidReference => INVALID_REFERENCE_MESSAGE,
             Self::InvalidAccount => "This provider's 1Password account is not valid.",
-            Self::Failed => {
-                "1Password could not read that reference. Check that the account is signed in on this computer, 1Password is unlocked, and the vault, item and field exist."
-            }
+            Self::Failed => "1Password could not read that reference. Check that the account is signed in on this computer, 1Password is unlocked, and the vault, item and field exist.",
             Self::TimedOut => "1Password did not answer in time. Unlock 1Password and try again.",
             Self::Empty => "That 1Password field is empty.",
         }

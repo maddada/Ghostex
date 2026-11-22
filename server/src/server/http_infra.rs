@@ -157,7 +157,7 @@ pub(crate) async fn read_json_body(
             Err(_) | Ok(Some(Err(_))) => {
                 return Err(ReadBodyError::Incomplete {
                     received_bytes: bytes.len() as u64,
-                });
+                })
             }
         }
     }
@@ -396,7 +396,7 @@ pub(crate) fn append_vary_header(response: &mut Response<Body>, value: &str) {
 pub(crate) async fn wait_for_process_signal() {
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{SignalKind, signal};
+        use tokio::signal::unix::{signal, SignalKind};
         let mut terminate = signal(SignalKind::terminate()).expect("install SIGTERM handler");
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {}

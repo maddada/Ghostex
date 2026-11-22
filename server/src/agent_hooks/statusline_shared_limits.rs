@@ -17,7 +17,7 @@ use std::{
 use serde_json::Value;
 
 use super::statusline::{
-    CLAUDE_STATUSLINE_STATE_DIRECTORY, ClaudeStatuslinePayload, read_statusline_payload_file,
+    read_statusline_payload_file, ClaudeStatuslinePayload, CLAUDE_STATUSLINE_STATE_DIRECTORY,
 };
 
 const RATE_LIMIT_WINDOWS: [&str; 2] = ["five_hour", "seven_day"];

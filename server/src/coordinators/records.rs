@@ -1,8 +1,8 @@
 //! The `coordinators` and `coordinator_threads` rows (migration 0041).
 
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{Connection, OptionalExtension, Row, params};
-use serde_json::{Value, json};
+use rusqlite::{params, Connection, OptionalExtension, Row};
+use serde_json::{json, Value};
 
 use crate::domain::DomainStateError;
 

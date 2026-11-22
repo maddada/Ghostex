@@ -3,8 +3,8 @@
 //! SEE-ALSO: session_chat_queue.rs (read/frame carriage), accounts/restart.rs, accounts/continuation.rs, packages/core-ui/accounts/account-switch-card.tsx.
 
 use crate::{domain::DomainRepository, server::AppState, storage::open_gxserver_database};
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Map, Value};
 
 pub(crate) fn read(db: &Connection, project: &str, session: &str) -> Option<Value> {
     let text: Option<String> = db.query_row(

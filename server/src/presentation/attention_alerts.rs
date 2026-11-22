@@ -7,10 +7,10 @@
 //! CDXC:Notifications 2026-11-08 SEE-ALSO: packages/gx-core/src/alert_rule.rs (the decision and the
 //! user's words).
 
-use ghostex_gx_core::AttentionAlerts;
 use ghostex_gx_core::alert_rule::{
-    AlertHandling, AlertRole, AlertTrigger, alert_role, attention_trigger, should_alert,
+    alert_role, attention_trigger, should_alert, AlertHandling, AlertRole, AlertTrigger,
 };
+use ghostex_gx_core::AttentionAlerts;
 use rusqlite::Connection;
 use serde_json::Value;
 

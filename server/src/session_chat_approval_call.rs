@@ -20,8 +20,8 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 use serde_json::{Map, Value};
 
 use crate::session_chat_interactive::{
-    SessionChatInteractivePrompt, normalize_session_chat_tool_name,
-    parse_stored_session_chat_prompt, summarize_approval_input,
+    normalize_session_chat_tool_name, parse_stored_session_chat_prompt, summarize_approval_input,
+    SessionChatInteractivePrompt,
 };
 
 /// How much of the transcript's end is searched for the call's result.

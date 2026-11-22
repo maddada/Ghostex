@@ -26,7 +26,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainRepository;
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};

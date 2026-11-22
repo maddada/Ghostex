@@ -6,11 +6,11 @@
 //! it, the session linked to the PR and to any issue the PR closes. `startWorkOnTicket` takes
 //! `pullRequest` (number or URL) next to `linearIssue` / `githubIssue` for that.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::session_git_status::run_gh_command;
-use crate::worktree_sessions::{WORKTREE_FETCH_COMMAND_TIMEOUT, worktree_git_succeeds};
+use crate::worktree_sessions::{worktree_git_succeeds, WORKTREE_FETCH_COMMAND_TIMEOUT};
 
 use super::*;
 

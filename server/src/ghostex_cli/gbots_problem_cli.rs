@@ -1,12 +1,12 @@
 //! `ghostex gbots problem …` (Chief of Staff and you) and `ghostex gbots flag` (a GBot):
 //! problems of GBot chats (server/src/gbots/problems/).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::ghostex_cli::{
     args::Flags,
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 /// The problem verbs' lines in `ghostex gbots --help`.
@@ -137,7 +137,7 @@ pub(crate) fn run_problem(rest: &[String], flags: &Flags) -> CliResult<()> {
         other => {
             return Err(CliError::Other(format!(
                 "unknown command `ghostex gbots problem {other}`.\n\n{PROBLEM_HELP}"
-            )));
+            )))
         }
     };
     if flags.contains("json") {

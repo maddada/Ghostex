@@ -28,7 +28,7 @@ pub(crate) mod sidecar;
 use std::collections::HashMap;
 use std::sync::{OnceLock, PoisonError, RwLock};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::server::AppState;
 
@@ -178,8 +178,6 @@ pub(crate) fn migrate_at_start(paths: &crate::paths::GxserverPaths) {
         removed |= std::fs::remove_file(paths.app_state_dir.join(name)).is_ok();
     }
     if removed {
-        eprintln!(
-            "[collab] 11.1.0: removed the Collab settings and shares kept before Collab became an extension"
-        );
+        eprintln!("[collab] 11.1.0: removed the Collab settings and shares kept before Collab became an extension");
     }
 }

@@ -1,9 +1,9 @@
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use url::Url;
 
 use super::values::{
-    ProcessCommand, TypedOperationContext, TypedOperationError, command_summary_json,
-    display_unknown_value, run_process_command, typed_result,
+    command_summary_json, display_unknown_value, run_process_command, typed_result, ProcessCommand,
+    TypedOperationContext, TypedOperationError,
 };
 
 pub(crate) async fn run_github_action(

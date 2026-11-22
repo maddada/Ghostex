@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rusqlite::Connection;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::paths::GxserverPaths;
 use crate::storage::open_gxserver_database;
@@ -247,7 +247,8 @@ impl std::fmt::Display for TailcatRefusal {
 impl std::error::Error for TailcatRefusal {}
 
 /// The refusal for a key added while Easy Connect is off.
-pub const EASY_CONNECT_OFF_REFUSAL: &str = "Easy Connect is off on this computer, so no device can be added to it. Turn it on in Ghostex Settings › Remote first.";
+pub const EASY_CONNECT_OFF_REFUSAL: &str =
+    "Easy Connect is off on this computer, so no device can be added to it. Turn it on in Ghostex Settings › Remote first.";
 
 /// Whether `next` holds a key `saved` does not (the `none` placeholder is no key).
 fn adds_client_key(saved: &[String], next: &[String]) -> bool {
@@ -336,9 +337,7 @@ pub fn start_tailcat_from_persisted_state(paths: &GxserverPaths, runtime: &Tailc
                         if removed == 1 {
                             "Took 1 device off this Cloud Box's Easy Connect: its ticket no longer names it".to_string()
                         } else {
-                            format!(
-                                "Took {removed} devices off this Cloud Box's Easy Connect: its ticket no longer names them"
-                            )
+                            format!("Took {removed} devices off this Cloud Box's Easy Connect: its ticket no longer names them")
                         },
                     ),
                     crate::audit::Actor::Ghostex,

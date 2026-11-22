@@ -11,8 +11,8 @@
 //!
 //! SEE-ALSO: server/src/server/empty_session_cleanup_runtime.rs, apps/desktop/src/app/gx_store/create/agent.rs, apps/desktop/src/app/helpers/agents_hub/workspace_agent_actions.rs, server/src/ghostex_cli/actions/create.rs (`--replace-empty-sessions`, the phone's new session).
 
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Map, Value};
 
 use crate::agents::session_is_draft;
 use crate::domain::{DomainRepository, DomainStateError};

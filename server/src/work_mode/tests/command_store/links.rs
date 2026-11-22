@@ -115,16 +115,14 @@ fn a_credentials_file_that_cant_be_read_links_nothing() {
         "{ damaged",
     )
     .expect("damage");
-    assert!(
-        link(
-            &store.db,
-            &store.paths,
-            &workspace_id,
-            &session,
-            json!({ "links-damaged": ["45"] }),
-        )
-        .is_err()
-    );
+    assert!(link(
+        &store.db,
+        &store.paths,
+        &workspace_id,
+        &session,
+        json!({ "links-damaged": ["45"] }),
+    )
+    .is_err());
     let session_row = DomainRepository::new(&store.db, "test")
         .get_session(&session.0, &session.1)
         .expect("read")
@@ -181,20 +179,16 @@ fn a_clear_waits_for_a_link_being_checked_and_written() {
     assert!(clear_done.recv_timeout(Duration::from_millis(200)).is_err());
     resume.send(()).expect("resume");
     linking.join().expect("linked").expect("written");
-    assert!(
-        clear_done
-            .recv_timeout(Duration::from_secs(20))
-            .expect("the clear lands after the write")
-    );
+    assert!(clear_done
+        .recv_timeout(Duration::from_secs(20))
+        .expect("the clear lands after the write"));
     // The link was written while the command was still pinned; the clear then retired its id.
     let sources = read_work_sources(&store.db).expect("record");
     assert!(!sources.workspaces.contains_key(&workspace_id));
-    assert!(
-        sources
-            .retired
-            .iter()
-            .any(|retired| retired.id == "links-locked")
-    );
+    assert!(sources
+        .retired
+        .iter()
+        .any(|retired| retired.id == "links-locked"));
 }
 
 /// A move of the session's project, written straight through the repository (no route's writer
@@ -247,11 +241,9 @@ fn a_project_move_waits_for_a_link_being_checked_and_written() {
     assert!(move_done.recv_timeout(Duration::from_millis(200)).is_err());
     resume.send(()).expect("resume");
     linking.join().expect("linked").expect("written");
-    assert!(
-        move_done
-            .recv_timeout(Duration::from_secs(20))
-            .expect("the move lands after the write")
-    );
+    assert!(move_done
+        .recv_timeout(Duration::from_secs(20))
+        .expect("the move lands after the write"));
 }
 
 /// A session of a placed project in `workspace_id`, whose checkout is on `branch`.

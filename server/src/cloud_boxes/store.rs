@@ -5,13 +5,13 @@
 use ghostex_gx_protocol::cloud_box::{
     CloudBox, CloudProvider, CloudProviderId, CloudSnapshot, CloudSpendLine,
 };
-use rusqlite::{OptionalExtension, params};
-use serde::Serialize;
+use rusqlite::{params, OptionalExtension};
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
-use crate::storage::{GxserverDatabase, open_gxserver_database};
+use crate::storage::{open_gxserver_database, GxserverDatabase};
 
 fn open(paths: &GxserverPaths) -> Result<GxserverDatabase, DomainStateError> {
     open_gxserver_database(paths)

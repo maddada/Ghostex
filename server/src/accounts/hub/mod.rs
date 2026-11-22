@@ -20,7 +20,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::model::{Provider, UsageWindow};
 use super::usage_only::Wait;

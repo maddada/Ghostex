@@ -7,12 +7,12 @@
 //! - `send [--computer <name>] "<text>"`: a message to this computer's Chief, or another
 //!   computer's, the way `ghostex agents send` delivers it.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::{
-    args::{Flags, parse_args},
+    args::{parse_args, Flags},
     output::print_json,
-    rpc::{CliError, CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
 const HELP: &str =
@@ -156,12 +156,8 @@ fn print_status(status: &Value) {
         ),
         None => {
             match status["defaultAgentId"].as_str() {
-                Some(agent) => println!(
-                    "Ghostex AI hasn't been opened yet. `ghostex chief open` starts it on your default agent, {agent} (or pick one with --agent <agent-id>)."
-                ),
-                None => println!(
-                    "Ghostex AI hasn't been opened yet. Pick its agent with: ghostex chief open --agent <agent-id>"
-                ),
+                Some(agent) => println!("Ghostex AI hasn't been opened yet. `ghostex chief open` starts it on your default agent, {agent} (or pick one with --agent <agent-id>)."),
+                None => println!("Ghostex AI hasn't been opened yet. Pick its agent with: ghostex chief open --agent <agent-id>"),
             }
             let agents: Vec<&str> = status["agents"]
                 .as_array()

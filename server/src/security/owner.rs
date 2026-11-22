@@ -7,14 +7,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ghostex_gx_protocol::approval::{
-    ApprovalRequest, ApprovalStatus, ApproverKey, OpenOwnerSessionResult, OwnerChallenge,
-    SensitiveAction, owner_key_approval_signing_payload, owner_session_signing_payload,
+    owner_key_approval_signing_payload, owner_session_signing_payload, ApprovalRequest,
+    ApprovalStatus, ApproverKey, OpenOwnerSessionResult, OwnerChallenge, SensitiveAction,
 };
 use rand::Rng;
 
-use super::{ApproverKeyError, SecurityEvent, SecurityState, verify_approval_signature};
+use super::{verify_approval_signature, ApproverKeyError, SecurityEvent, SecurityState};
 
 /// How long a challenge may be answered.
 pub const OWNER_CHALLENGE_TTL_MS: u64 = 60 * 1000;

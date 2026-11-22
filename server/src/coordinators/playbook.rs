@@ -17,10 +17,10 @@
 
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use super::records::{SessionKey, now_iso, sql_error};
+use super::records::{now_iso, sql_error, SessionKey};
 use super::role::{coordinator_guide_for, coordinator_playbook};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::paths::GxserverPaths;
@@ -1040,11 +1040,9 @@ mod tests {
             .expect("due");
         assert!(text.starts_with("Your playbook changed"));
         assert!(note(&db, &repository, &old).is_some());
-        assert!(
-            playbook_status_notice(&db, &repository, &fresh)
-                .expect("status")
-                .is_some()
-        );
+        assert!(playbook_status_notice(&db, &repository, &fresh)
+            .expect("status")
+            .is_some());
         record_playbook_update_note(&db, &fresh, &version).expect("record");
         assert_eq!(note(&db, &repository, &fresh), None);
         // Reading the edited guide settles the old one without a note.
@@ -1136,11 +1134,8 @@ mod tests {
         // An override removed: listed as removed, the rest left out.
         set_overrides(&db, &repository, "Ask before deleting branches.");
         let (text, _) = guide_changes_for(&db, &repository, &coordinator);
-        assert!(
-            text.contains(
-                "Removed (Under \"The user's overrides\"):\n\nNever push without asking."
-            )
-        );
+        assert!(text
+            .contains("Removed (Under \"The user's overrides\"):\n\nNever push without asking."));
         assert!(!text.contains("New or changed"));
 
         // A coordinator that never read one, and an ordinary session, get the whole guide.
@@ -1436,11 +1431,9 @@ mod tests {
         let view = playbook_view(&db, &repository, None).expect("view");
         assert_eq!(view["oldCopies"], json!([]));
         // Nothing left to retire: no files.
-        assert!(
-            retire_old_copies(&db, &repository, &dir)
-                .expect("again")
-                .is_empty()
-        );
+        assert!(retire_old_copies(&db, &repository, &dir)
+            .expect("again")
+            .is_empty());
     }
 
     #[test]

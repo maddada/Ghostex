@@ -1220,19 +1220,15 @@ mod zcode_tests {
         let input = session_chat_composer_input("zcode", screen).unwrap();
         assert_eq!(input.text, "first line\nsecond line");
         assert_eq!(input.rows, 2);
-        assert!(
-            !detect_session_chat_composer_ready(Some("zcode"), screen)
-                .blocks_message_for(Some("zcode"))
-        );
+        assert!(!detect_session_chat_composer_ready(Some("zcode"), screen)
+            .blocks_message_for(Some("zcode")));
         for blocked in [
             String::new(),
             screen.replace("◈ zai", "other"),
             format!("{screen}Choose a model\n"),
         ] {
-            assert!(
-                detect_session_chat_composer_ready(Some("zcode"), &blocked)
-                    .blocks_message_for(Some("zcode"))
-            );
+            assert!(detect_session_chat_composer_ready(Some("zcode"), &blocked)
+                .blocks_message_for(Some("zcode")));
             assert!(session_chat_composer_input("zcode", &blocked).is_none());
         }
     }
@@ -1329,11 +1325,9 @@ mod antigravity_mode_hint_tests {
             assert!(input.is_empty(), "{text}");
         }
         // Default mode shows no hint.
-        assert!(
-            session_chat_composer_input("antigravity", &screen(""))
-                .unwrap()
-                .is_empty()
-        );
+        assert!(session_chat_composer_input("antigravity", &screen(""))
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -1365,18 +1359,12 @@ mod antigravity_mode_hint_tests {
     fn zmx_captures_tell_the_hint_from_typed_text() {
         let rule = "\u{1b}[0m\u{1b}[38;2;60;64;67m────────────────────────────────────────";
         let capture = |row: &str| {
-            format!(
-                "{rule}\n\u{1b}[0m\u{1b}[38;2;138;180;248m>\u{1b}[1C\u{1b}[0m{row}\n{rule}\n\u{1b}[0m? for shortcuts"
-            )
+            format!("{rule}\n\u{1b}[0m\u{1b}[38;2;138;180;248m>\u{1b}[1C\u{1b}[0m{row}\n{rule}\n\u{1b}[0m? for shortcuts")
         };
-        let hint = capture(
-            "\u{1b}[38;2;154;160;166mAccept-edits mode: file edits auto-approved (shift+tab to cycle)\u{1b}[0m",
-        );
-        assert!(
-            session_chat_composer_input("antigravity", &hint)
-                .unwrap()
-                .is_empty()
-        );
+        let hint = capture("\u{1b}[38;2;154;160;166mAccept-edits mode: file edits auto-approved (shift+tab to cycle)\u{1b}[0m");
+        assert!(session_chat_composer_input("antigravity", &hint)
+            .unwrap()
+            .is_empty());
         let typed =
             session_chat_composer_input("antigravity", &capture("Accept-edits mode: file edits"))
                 .unwrap();
@@ -1479,11 +1467,9 @@ mod claude_ide_pill_tests {
         }
         // ANSI themes colour it by palette index.
         let ansi = screen("\u{1b}[94m[⧉ In main.rs]\u{1b}[39m ");
-        assert!(
-            session_chat_composer_input("claude", &ansi)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(session_chat_composer_input("claude", &ansi)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -1511,11 +1497,9 @@ mod claude_ide_pill_tests {
         }
         // Coloured, but not a label Claude's pill spells.
         let other = screen("\u{1b}[38;2;71;130;200m[⧉ Notes]\u{1b}[39m ");
-        assert!(
-            !session_chat_composer_input("claude", &other)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(!session_chat_composer_input("claude", &other)
+            .unwrap()
+            .is_empty());
     }
 
     /// The input rows as zmx's VT capture (`zmx history --vt --screen`) serializes them.
@@ -1554,7 +1538,7 @@ mod claude_ide_pill_tests {
 mod cursor_zen_tests {
     use super::*;
     use crate::session_chat_composer::{
-        SessionChatComposerState, detect_session_chat_composer_ready,
+        detect_session_chat_composer_ready, SessionChatComposerState,
     };
 
     /// GitHub #422's screen, exactly as reported: zen mode, nothing under the footer.
@@ -1605,19 +1589,12 @@ mod cursor_zen_tests {
     fn a_picker_or_other_rows_under_the_footer_are_not_the_input_box() {
         // Anything but the context row under the footer is a menu or transcript.
         for screen in [
-            format!(
-                "{ISSUE_422_ZEN}   \u{2192} /model [filter]           Select model (Tab to edit)\n     /mcp-integration\n"
-            ),
-            format!(
-                "{ISSUE_422_ZEN}  scratch \u{b7} \u{2014} \u{b7} Ctx 0% used\n  \u{2193} more below\n"
-            ),
+            format!("{ISSUE_422_ZEN}   \u{2192} /model [filter]           Select model (Tab to edit)\n     /mcp-integration\n"),
+            format!("{ISSUE_422_ZEN}  scratch \u{b7} \u{2014} \u{b7} Ctx 0% used\n  \u{2193} more below\n"),
             ISSUE_422_ZEN.replace("  New Agent \u{b7} Auto Balance \u{b7} 0 used\n", ""),
         ] {
             assert!(!ready(&screen), "{screen}");
-            assert!(
-                session_chat_composer_input("cursor", &screen).is_none(),
-                "{screen}"
-            );
+            assert!(session_chat_composer_input("cursor", &screen).is_none(), "{screen}");
         }
     }
 }

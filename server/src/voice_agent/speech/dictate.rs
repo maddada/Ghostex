@@ -1,7 +1,7 @@
 //! What Dictate will do on this computer: the settings with their first-run default, the word the
 //! recognizer is told to expect, and the engine and model that will transcribe (the mic tooltip).
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::settings::{self, DictateSettings, Engine};
 use super::{hex, superwhisper};

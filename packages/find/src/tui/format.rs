@@ -1,4 +1,4 @@
-use crate::index::{SECONDS_PER_DAY, UNKNOWN_DAY_KEY, day_key};
+use crate::index::{day_key, SECONDS_PER_DAY, UNKNOWN_DAY_KEY};
 use crate::scan::civil_from_day_key;
 
 pub fn now_seconds() -> i64 {

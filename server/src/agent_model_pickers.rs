@@ -23,8 +23,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use portable_pty::{ChildKiller, CommandBuilder, PtySize, native_pty_system};
-use serde_json::{Value, json};
+use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, PtySize};
+use serde_json::{json, Value};
 
 use crate::accounts::setup_terminal::LoginTerminal;
 

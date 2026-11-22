@@ -22,12 +22,12 @@ use std::process::Command;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::ghostex_cli::tailcat_tunnel::{TailcatForwardPlan, start_tailcat_tunnel};
+use crate::ghostex_cli::tailcat_tunnel::{start_tailcat_tunnel, TailcatForwardPlan};
 use crate::paths::GxserverPaths;
 
 use super::computer_pairing::{device_public_key, device_sign, read_tailcat_client_key};

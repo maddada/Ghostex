@@ -6,7 +6,7 @@ use crate::{
     session_chat_send::{SessionChatSendError, SessionChatSendStep},
     storage::open_gxserver_database,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::{sync::Arc, time::Instant};
 
 /// How long the switch drives the CLI back to its shell.

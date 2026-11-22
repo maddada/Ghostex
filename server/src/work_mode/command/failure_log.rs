@@ -3,7 +3,7 @@
 //! credential or a customer's data and goes only to the person checking the command (Settings,
 //! `ghostex issues source`).
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 

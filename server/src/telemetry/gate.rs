@@ -11,8 +11,8 @@ design exists to make impossible.
 
 use std::{
     sync::{
-        Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
+        Mutex, OnceLock,
     },
     time::{Duration, Instant, SystemTime},
 };

@@ -4,9 +4,9 @@
 //! byte-identical after.
 
 use super::{
-    CLAUDE_MODEL_COMMAND, CODEX_SUBMIT, CodexPickerPlan, PickerDriver, agent_busy,
-    claude_model_label_matches, collapse_spaces, dialog_mismatch, screen_lines,
-    session_not_running, unsupported_selection,
+    agent_busy, claude_model_label_matches, collapse_spaces, dialog_mismatch, screen_lines,
+    session_not_running, unsupported_selection, CodexPickerPlan, PickerDriver,
+    CLAUDE_MODEL_COMMAND, CODEX_SUBMIT,
 };
 use crate::domain::DomainStateError;
 

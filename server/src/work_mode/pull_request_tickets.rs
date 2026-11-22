@@ -8,7 +8,7 @@
 //! branch (Linear team keys or a GitHub issue number), and Linear's GitHub integration, which
 //! attaches the PR's URL to its issue.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::*;
 

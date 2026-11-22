@@ -4,9 +4,9 @@
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt as _;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use super::items::{self, Usage, definition};
+use super::items::{self, definition, Usage};
 use super::store::{self, Outcome};
 use crate::server::AppState;
 
@@ -213,10 +213,10 @@ async fn update_helper(state: &AppState, provider: &str) -> Result<(), Outcome> 
             Some("failed") => {
                 return Err(failed(
                     job["error"].as_str().unwrap_or("The update failed."),
-                ));
+                ))
             }
             _ if started.elapsed() > JOB_WAIT => {
-                return Err(failed("The update did not finish within 20 minutes."));
+                return Err(failed("The update did not finish within 20 minutes."))
             }
             _ => {}
         }
@@ -311,7 +311,7 @@ async fn update_component(component: &str) -> Result<(), Outcome> {
                             item["error"]
                                 .as_str()
                                 .unwrap_or("The Collab update failed."),
-                        ));
+                        ))
                     }
                     _ if install::update_available().is_none() => return Ok(()),
                     _ => {}

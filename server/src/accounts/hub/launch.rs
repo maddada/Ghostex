@@ -10,7 +10,7 @@ use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::accounts::model::{NewSessionAccount, Provider, Registry};
 use crate::agents::quote_shell_arg;

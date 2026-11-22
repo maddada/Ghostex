@@ -7,7 +7,7 @@
 //! CDXC:VoiceMode 2026-10-20 WHY:
 //! gxserver relays the provider socket instead of minting ephemeral tokens for clients: one implementation of both protocols, the tools run where the sessions are, and the phone never holds a key. The relay adds one hop between the computer and the provider, which is small next to the provider's own turn latency.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest as _;
 use tokio_tungstenite::tungstenite::http::HeaderValue;

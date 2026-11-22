@@ -207,7 +207,7 @@ pub(super) async fn route_agents_http(
                 body_json,
                 token_extension_id,
                 caller,
-            });
+            })
         }
     })
 }

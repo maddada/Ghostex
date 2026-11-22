@@ -11,7 +11,7 @@ use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use ghostex_settings_catalog::{ARTWORK_RELEASE, Artwork, artwork_by_id, artwork_file_name};
+use ghostex_settings_catalog::{artwork_by_id, artwork_file_name, Artwork, ARTWORK_RELEASE};
 use sha2::{Digest as _, Sha256};
 
 /// Where artworks are kept.

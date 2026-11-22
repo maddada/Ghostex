@@ -4,7 +4,7 @@ use std::{
     process::Stdio,
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 
 use crate::paths::GxserverPaths;
 

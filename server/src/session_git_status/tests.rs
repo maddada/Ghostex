@@ -758,12 +758,10 @@ fn pull_requests_are_probed_only_when_gh_is_usable_and_reused_until_their_own_tt
         true,
     );
     assert_eq!(prober.pull_request_probes.load(Ordering::SeqCst), 3);
-    assert!(
-        status_of(&cache, "/repo")
-            .expect("status")
-            .pull_request
-            .is_none()
-    );
+    assert!(status_of(&cache, "/repo")
+        .expect("status")
+        .pull_request
+        .is_none());
 }
 
 #[test]

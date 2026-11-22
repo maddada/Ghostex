@@ -11,8 +11,8 @@ mod api;
 mod store;
 
 pub(crate) use api::{
-    SECRET_REQUEST_ENDPOINTS, handle_secret_request_http, insert_secret_requests,
-    secret_requests_identity, sweep_saved_files,
+    handle_secret_request_http, insert_secret_requests, secret_requests_identity,
+    sweep_saved_files, SECRET_REQUEST_ENDPOINTS,
 };
 
 #[cfg(test)]

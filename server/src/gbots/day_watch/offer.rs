@@ -10,7 +10,7 @@ use std::time::Duration;
 use crate::coordinators::now_iso;
 use crate::domain::DomainRepository;
 use crate::paths::GxserverPaths;
-use crate::server::{AppState, queue_session_chat_prompt};
+use crate::server::{queue_session_chat_prompt, AppState};
 use crate::storage::open_gxserver_database;
 
 /// How often the offer is looked at; the first look waits for gxserver to settle.

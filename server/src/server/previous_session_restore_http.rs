@@ -3,7 +3,7 @@
 
 use super::*;
 
-use crate::previous_session_restore::{RestorePreviousSessionRequest, restore_previous_session};
+use crate::previous_session_restore::{restore_previous_session, RestorePreviousSessionRequest};
 
 pub(crate) async fn handle_restore_previous_session_http(
     state: &AppState,

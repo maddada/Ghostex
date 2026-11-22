@@ -10,9 +10,9 @@ use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::session_chat::{MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES, read_transcript_file_version};
+use crate::session_chat::{read_transcript_file_version, MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES};
 use crate::session_chat_claude_workflows::WorkflowLaunch;
 use crate::session_chat_fleet_transcript::timestamp;
 

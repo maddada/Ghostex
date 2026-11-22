@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::command::{resolve_session, server_flags, target_coordinator};
 use crate::coordinators::inactive_thread_sessions;
@@ -11,7 +11,7 @@ use crate::ghostex_cli::{
     agents,
     args::ParsedArgs,
     output::{is_failed_cli_result, print_json},
-    rpc::{CliResult, call_gxserver_rpc},
+    rpc::{call_gxserver_rpc, CliResult},
 };
 
 /// The pause between two sleeps, the desktop's `BULK_SLEEP_INTERVAL_MS`: terminal teardowns are

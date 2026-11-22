@@ -30,11 +30,11 @@ session in the same project closes it while it is still fully empty (CDXC:Sessio
 */
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::*;
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::zmx::{ZmxServerContext, dispatch_zmx_lifecycle_endpoint};
+use crate::zmx::{dispatch_zmx_lifecycle_endpoint, ZmxServerContext};
 
 pub(crate) const DRAFT_STATUS_KEY: &str = "draftStatus";
 pub(crate) const DRAFT_STATUS_DRAFT: &str = "draft";

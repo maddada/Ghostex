@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, LogLevel};
@@ -11,9 +11,9 @@ use crate::storage::open_gxserver_database_with_busy_timeout;
 use super::api::broadcast_notification_feed_changed;
 use super::body::last_assistant_message_text;
 use super::store::{
-    NOTIFICATION_FEED_KIND_BELL, NOTIFICATION_FEED_KIND_FINISHED,
-    NOTIFICATION_FEED_KIND_NEEDS_INPUT, NewNotificationFeedRow, bounded_notification_body,
-    insert_notification_feed_row, mark_session_notifications_read, notification_agent_icon,
+    bounded_notification_body, insert_notification_feed_row, mark_session_notifications_read,
+    notification_agent_icon, NewNotificationFeedRow, NOTIFICATION_FEED_KIND_BELL,
+    NOTIFICATION_FEED_KIND_FINISHED, NOTIFICATION_FEED_KIND_NEEDS_INPUT,
 };
 
 pub(super) const OBSERVER_BUSY_TIMEOUT: Duration = Duration::from_millis(2_000);
@@ -120,7 +120,7 @@ pub(crate) fn observe_agent_activity_result(
 /// so the list names what waits for the user instead of quoting the agent's last message.
 fn approval_body(activity: &Map<String, Value>) -> Option<String> {
     use crate::session_chat_interactive::{
-        SessionChatInteractivePrompt, parse_stored_session_chat_prompt,
+        parse_stored_session_chat_prompt, SessionChatInteractivePrompt,
     };
     let stored = activity.get("sessionChatPrompt").and_then(Value::as_str)?;
     match parse_stored_session_chat_prompt(stored)? {

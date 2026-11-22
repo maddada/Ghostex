@@ -3,10 +3,10 @@
 //! VT capture the chat card reads, with the cursor-forward gaps Ink leaves when it repaints, and the
 //! plain capture of the same screen.
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::session_chat_claude_dialog::{
-    CLAUDE_ENTER_AFTER_ARROW_MS, claude_dialog_steps, detect_claude_dialog,
+    claude_dialog_steps, detect_claude_dialog, CLAUDE_ENTER_AFTER_ARROW_MS,
 };
 use crate::session_chat_screen_styles::plain_screen_text;
 use crate::session_chat_send::SessionChatSendStep;
@@ -28,11 +28,9 @@ fn both_offer_rows_are_choices_and_the_text_keeps_its_spaces() {
         ["Keep auto (1m tokens)", "Autocompact at ‹ 400k › tokens"]
     );
     assert!(dialog.rows[0].selected);
-    assert!(
-        dialog
-            .body
-            .starts_with("Each message re-sends the whole conversation, so long conversations")
-    );
+    assert!(dialog
+        .body
+        .starts_with("Each message re-sends the whole conversation, so long conversations"));
     for action in ["left", "right", "confirm", "cancel"] {
         assert!(dialog.actions.iter().any(|a| a == action), "{action}");
     }

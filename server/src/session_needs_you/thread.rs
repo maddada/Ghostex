@@ -11,11 +11,11 @@
 //! (W32), which must not happen here.
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::store::NewItem;
 use crate::coordinators::{
-    SessionKey, ThreadRecord, WorkThread, handle_work_request, list_work_items, mark_answer_list,
+    handle_work_request, list_work_items, mark_answer_list, SessionKey, ThreadRecord, WorkThread,
 };
 use crate::domain::{DomainRepository, DomainStateError};
 

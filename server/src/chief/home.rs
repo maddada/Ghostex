@@ -9,10 +9,10 @@
 use std::path::Path;
 
 use rusqlite::Connection;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::server::{AppState, schedule_presentation_project_delta};
+use crate::server::{schedule_presentation_project_delta, AppState};
 
 /// `path` with its trailing separators taken off, compared case-blind on Windows.
 fn folder_key(path: &str) -> String {
