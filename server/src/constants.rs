@@ -203,4 +203,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0082_session_chat_first_messages",
     "0083_chat_message_numbers",
     "0084_lead_links",
+    "0085_session_handovers",
 ];
