@@ -617,7 +617,13 @@ impl GhostexGpuiApp {
                     )
                     // Its computer's icon while more than one computer is in the sidebar
                     // (native_sidebar/computer_mark.rs); the card's tooltip names it.
-                    .children(self.session_computer_badge(session, appearance))
+                    .children(self.session_computer_badge(
+                        session,
+                        appearance,
+                        !crate::app::native_sidebar::computer_mark::hide_computer_icon_until_hover(
+                            hud,
+                        ) || hovered,
+                    ))
                     // The pull request and the agent stay on the right edge.
                     .child(div().flex_1())
                     .children(pull_request.map(|pull_request| {

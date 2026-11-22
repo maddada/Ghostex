@@ -251,10 +251,13 @@ impl GhostexGpuiApp {
             })
             .unwrap_or("")
             .to_owned();
-        let computer_badge = (!buttons_shown)
-            .then(|| self.session_computer_badge(session, appearance))
+        let hide_computer_icon = super::computer_mark::hide_computer_icon_until_hover(hud);
+        let computer_badge = (!buttons_shown || hide_computer_icon)
+            .then(|| {
+                self.session_computer_badge(session, appearance, !hide_computer_icon || hovered)
+            })
             .flatten();
-        let has_computer_badge = computer_badge.is_some();
+        let has_computer_badge = !buttons_shown && computer_badge.is_some();
         // What follows the computer's icon: the status dot or the last-active age, then a question,
         // approval or folded dots.
         let mut trailing: Vec<AnyElement> = Vec::new();
@@ -374,7 +377,9 @@ impl GhostexGpuiApp {
                 .when(!buttons_shown, |row| row.children(super::cloud_box::cloud_box_badge(session, appearance, tooltip_span, self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag())))
                 // The computer's icon comes last before the trailing slot, which keeps one width while it
                 // is drawn so the icons line up down the list (CDXC:RemoteMachines 2026-11-12 in status.rs).
-                .when(!buttons_shown, |row| row.children(computer_badge))
+                // When hideComputerIconUntilHover is on, it still renders before the hover strip on hover
+                // so pointing at the row reveals which computer it runs on.
+                .children(computer_badge)
                 .when(buttons_shown, |row| row.child(self.render_native_session_hover_strip(session, strip_expanded, strip_toggle, appearance, cx)))
                 .when(!trailing.is_empty() || has_computer_badge, |row| row.child(h_flex().flex_shrink_0().justify_end().gap(px(6.0 * scale)).when(has_computer_badge, |slot| slot.min_w(px(super::status::TRAILING_SLOT_WIDTH * scale))).children(trailing))))
                 .children(self.render_native_session_work_chips(session, indent, tooltip_span, appearance, cx))

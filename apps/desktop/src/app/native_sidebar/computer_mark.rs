@@ -9,6 +9,10 @@
 //! CDXC:RemoteMachines 2026-11-08 DECISION:
 //! User, on the offline-notice page (Q1837): "just show WN with redish color in sidebar to indicate, that's enough". The computer's mark takes the soft red the computer's tile icon turns when it fails (machines.rs) while that computer is offline (gx_chat/computers.rs); nothing else on the row changes. Since 2026-11-12 the mark is the icon, not the short name.
 
+//! CDXC:RemoteMachines 2026-11-22 DECISION:
+//! User: "By default let's not show the machine icons in the sidebar unless the user hovers on that row. Add a toggle in Settings to reverse this." On by default (`hideComputerIconUntilHover`, "Show computer icons only on hover" in Settings > Sidebar & Sessions > Sidebar): project headers, session/coordinator/lead rows and Unified cards keep each computer icon's layout space at zero opacity until the row is hovered, so hovering reveals the icon in place without shifting the row. When hover buttons replace a session row's trailing badges while this setting is on, the computer icon still shows before the hover strip so hovering reveals it. Turning the setting off restores always-shown computer icons.
+
+use gpui::prelude::FluentBuilder;
 use gpui::{AnyElement, Hsla, IntoElement, ParentElement, Styled, div, px};
 use serde_json::Value;
 
@@ -115,6 +119,12 @@ fn other_computer_name(session: &NativeSidebarSession) -> Option<&str> {
         .filter(|name| !name.is_empty())
 }
 
+/// Whether computer icons on sidebar rows stay hidden until the row is hovered
+/// (`hideComputerIconUntilHover`, on by default).
+pub(crate) fn hide_computer_icon_until_hover(hud: &Value) -> bool {
+    hud["settings"]["hideComputerIconUntilHover"].as_bool() != Some(false)
+}
+
 impl GhostexGpuiApp {
     /// The name of the computer a row's tooltip says it runs on, when one is drawn.
     pub(crate) fn session_computer_name(&self, session: &NativeSidebarSession) -> Option<String> {
@@ -124,11 +134,13 @@ impl GhostexGpuiApp {
         })
     }
 
-    /// The row's computer icon, when it draws one.
+    /// The row's computer icon, when it draws one. When `visible` is false, the icon stays in
+    /// layout at zero opacity so hovering reveals it in place without shifting the row.
     pub(crate) fn session_computer_badge(
         &self,
         session: &NativeSidebarSession,
         appearance: &SidebarAppearance,
+        visible: bool,
     ) -> Option<AnyElement> {
         let (asset, marked) = match self.sidebar_computer_mark(&session.session_id) {
             Some((asset, _)) => (asset, true),
@@ -153,6 +165,7 @@ impl GhostexGpuiApp {
                 .flex_shrink_0()
                 .flex()
                 .items_center()
+                .when(!visible, |badge| badge.opacity(0.0))
                 .child(with_here_dot(
                     titlebar_svg_icon(asset, 12.0 * scale, color),
                     12.0 * scale,

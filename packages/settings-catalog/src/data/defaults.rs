@@ -650,6 +650,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sidebarMergeRepositoryCopies", J::Bool(true)),
     // CDXC:RemoteMachines 2026-11-15 DECISION in gx-core sidebar_view/merged.rs: off by default.
     ("sidebarHideDisconnectedMachines", J::Bool(false)),
+    // CDXC:RemoteMachines 2026-11-22 DECISION in apps/desktop native_sidebar/computer_mark.rs: on by default.
+    ("hideComputerIconUntilHover", J::Bool(true)),
     // CDXC:RemoteMachines 2026-11-20 DECISION in apps/desktop native_sidebar/computer_mark.rs: on by default.
     ("markComputerYouAreOn", J::Bool(true)),
     // CDXC:Worktrees 2026-11-06 DECISION in gx-core sidebar_view/worktree_fold.rs.

@@ -335,6 +335,18 @@ fn sidebar_section(
             ));
         }
     }
+    // CDXC:RemoteMachines 2026-11-22 DECISION in native_sidebar/computer_mark.rs: on by default,
+    // beside Mark the computer you're on; applies to project headers, session rows, coordinators
+    // and Unified cards.
+    rows.extend(page.toggle(
+        g,
+        s,
+        "hideComputerIconUntilHover",
+        "Show computer icons only on hover",
+        "Hide each computer's icon on sidebar project and session rows until you point at the row. Turn off to always show computer icons on rows while more than one computer is connected.",
+        false,
+        cx,
+    ));
     // CDXC:RemoteMachines 2026-11-20 DECISION in native_sidebar/computer_mark.rs: on by default,
     // with the other computer rows; both sidebars draw the dot.
     rows.extend(page.toggle(

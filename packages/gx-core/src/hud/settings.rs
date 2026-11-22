@@ -13,7 +13,7 @@
 use serde_json::{Map, Value};
 
 /// The keys normalized here.
-pub const NORMALIZED_KEYS: [&str; 15] = [
+pub const NORMALIZED_KEYS: [&str; 16] = [
     "sidebarTheme",
     "sidebarTooltipDelayMs",
     "sidebarCollapseAnimationDurationMs",
@@ -24,6 +24,7 @@ pub const NORMALIZED_KEYS: [&str; 15] = [
     "createSessionOnSidebarDoubleClick",
     "hideBrowserFaviconUntilHover",
     "hideSessionAgentIconUntilHover",
+    "hideComputerIconUntilHover",
     "sidebarSessionCycleSkipsSleeping",
     "dimSleepingSessions",
     "dimInactiveProjects",
@@ -114,6 +115,7 @@ pub(crate) fn hud_settings(raw: &Value, debugging_mode: bool) -> Value {
         ("createSessionOnSidebarDoubleClick", false),
         ("hideBrowserFaviconUntilHover", false),
         ("hideSessionAgentIconUntilHover", false),
+        ("hideComputerIconUntilHover", true),
         ("sidebarSessionCycleSkipsSleeping", false),
         ("dimSleepingSessions", false),
         ("dimInactiveProjects", false),

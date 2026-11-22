@@ -47,6 +47,10 @@ pub fn search_keywords(key: &str) -> &'static [&'static str] {
         // CDXC:RemoteMachines 2026-11-15: people say machine and offline as often as computer and
         // not connected.
         "sidebarHideDisconnectedMachines" => &["offline", "disconnected machines", "hide offline"],
+        // CDXC:RemoteMachines 2026-11-22: people say machine icon as often as computer icon.
+        "hideComputerIconUntilHover" => {
+            &["machine icon", "machine icons", "computer icon", "computer icons", "hover"]
+        }
         // CDXC:RemoteMachines 2026-11-20: what people call the computer they're on, and the dot.
         "markComputerYouAreOn" => &["this computer", "this machine", "current computer", "dot", "dock dot"],
         // CDXC:SessionChat 2026-11-19: Live pages were Ghostex pages (gx page) and inline HTML

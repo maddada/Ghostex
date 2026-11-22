@@ -1040,6 +1040,18 @@
       "agentWritable": true
     },
     {
+      "key": "hideComputerIconUntilHover",
+      "title": "Show computer icons only on hover",
+      "subtitle": "Hide each computer's icon on sidebar project and session rows until you point at the row. Turn off to always show computer icons on rows while more than one computer is connected.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
       "key": "markComputerYouAreOn",
       "title": "Mark the computer you're on",
       "subtitle": "Show a small faint dot under the icon of the computer you're on, like the macOS Dock's, wherever computer icons show (the sidebar's computer tiles, session rows and project headers, the chat's where pill, Session details and Settings > Remote), while another computer is connected. Turn off to show none.",

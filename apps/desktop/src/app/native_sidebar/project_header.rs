@@ -168,10 +168,13 @@ impl GhostexGpuiApp {
                 // CDXC:RemoteMachines 2026-11-21 DECISION:
                 // User, of Main Hub's header: "why dont i see the machine icons here so i can click to toggle each machine pls". Main Hub's header draws the same per-computer icons as a project's (the homes are one merged entry since Q1993, so gx-core fills its chips and hides a computer's chats there, its Chief of Staff included), with the same rules: shown while another computer is in the list, clickable only when more than one computer has a Main Hub. Main Hub's title keeps no tooltip of its own; its card opens on hover.
                 .children(group.machine_names.iter().map(|chip| {
+                    let visible =
+                        !super::computer_mark::hide_computer_icon_until_hover(hud) || hovered;
                     self.project_machine_toggle(
                         &id,
                         chip,
                         group.machine_names.len() > 1,
+                        visible,
                         tooltip_span,
                         appearance,
                         cx,
@@ -519,6 +522,7 @@ impl GhostexGpuiApp {
         group_id: &str,
         chip: &super::model::SidebarMachineChip,
         toggles: bool,
+        visible: bool,
         tooltip_span: super::tooltips::SidebarTooltipSpan,
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
@@ -536,6 +540,7 @@ impl GhostexGpuiApp {
                 "question" => rgb(super::status::QUESTION_COLOR),
                 _ => rgb(0x95d7f6),
             });
+        let shown = visible || dot.is_some();
         let tooltip = match (chip.hidden, dot.is_some()) {
             _ if !toggles => format!("On {}", chip.name),
             (true, true) => format!(
@@ -564,6 +569,7 @@ impl GhostexGpuiApp {
             .size(px(16.0 * scale))
             .rounded(px(3.0 * scale))
             .aria_label(tooltip.clone())
+            .when(!shown, |icon| icon.opacity(0.0))
             .when(toggles, |icon| {
                 icon.cursor_pointer()
                     .role(gpui::Role::Button)
