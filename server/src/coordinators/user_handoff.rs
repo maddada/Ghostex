@@ -60,7 +60,7 @@ const HANDOFF_PHRASES: &[&str] = &[
 
 /// `text` without what it quotes: the words between straight or curly double quotes and between
 /// backticks.
-fn unquoted(text: &str) -> String {
+pub(super) fn unquoted(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut closing: Option<char> = None;
     for character in text.chars() {

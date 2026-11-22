@@ -814,6 +814,89 @@ fn question_tag(word: &str) -> Option<String> {
     (!digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())).then(|| format!("Q{digits}"))
 }
 
+/// Bare work-item IDs (`W34`, `w37`) in `text` (outside quotes and backticks) that match an
+/// existing item in `items`, in order of appearance without duplicates.
+///
+/// CDXC:Coordinators 2026-11-22 DECISION:
+/// User, after a coordinator asked `"Rebuild and relaunch Ghostex Mac app with W34, W37, and W38?"`:
+/// "wtf are w34 w37 and w38 PLEASE modify the playbook/instructions for the coodrinator to tell me
+/// what the work item IS and not just it's ID. I'm not robot! Do this so all users would get this
+/// fix please not just me." Work-item IDs are CLI handles, never how to talk to the user; matching
+/// only existing item numbers on whole tokens outside quotes/backticks catches bare IDs with zero
+/// false positives on words like `W3C`, `Windows`, `W-2`, or paths like `/w34`.
+/// SEE-ALSO: server/src/coordinators/playbook.md ("Asking the user", "Work items", "Your reply").
+fn bare_work_item_ids_in_title<'a>(text: &str, items: &'a [WorkItem]) -> Vec<&'a WorkItem> {
+    let unquoted = super::user_handoff::unquoted(text);
+    let chars: Vec<char> = unquoted.chars().collect();
+    let mut found: Vec<&'a WorkItem> = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+        let left_ok = i == 0 || {
+            let prev = chars[i - 1];
+            !prev.is_alphanumeric() && !matches!(prev, '-' | '_' | '/' | '.' | '@' | '#')
+        };
+        if left_ok && matches!(ch, 'W' | 'w') {
+            let start = i + 1;
+            let mut end = start;
+            while end < chars.len() && chars[end].is_ascii_digit() {
+                end += 1;
+            }
+            if end > start && chars[start] != '0' {
+                let right_ok = if end == chars.len() {
+                    true
+                } else {
+                    let next = chars[end];
+                    let domain_dot = next == '.'
+                        && chars.get(end + 1).is_some_and(|after| after.is_alphanumeric());
+                    !next.is_alphanumeric()
+                        && !matches!(next, '-' | '_' | '/')
+                        && !domain_dot
+                };
+                if right_ok {
+                    let digits: String = chars[start..end].iter().collect();
+                    if let Ok(number) = digits.parse::<i64>() {
+                        if let Some(matched) = items.iter().find(|item| item.number == number) {
+                            if !found.iter().any(|seen| seen.number == matched.number) {
+                                found.push(matched);
+                            }
+                        }
+                    }
+                    i = end;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+    found
+}
+
+/// Why `item ask` refuses `title`, or `None` when it may stand.
+fn ask_title_refusal(title: &str, items: &[WorkItem]) -> Option<String> {
+    let found = bare_work_item_ids_in_title(title, items);
+    if found.is_empty() {
+        return None;
+    }
+    let refs: Vec<String> = found.iter().map(|item| item.reference()).collect();
+    let named: Vec<String> = found
+        .iter()
+        .map(|item| {
+            let title = item.title.trim();
+            if title.is_empty() {
+                item.reference()
+            } else {
+                format!("{} (\"{}\")", item.reference(), title)
+            }
+        })
+        .collect();
+    Some(format!(
+        "Work-item IDs ({}) are CLI handles, not how to talk to the user. Name what the work actually is in plain words instead: {}.",
+        refs.join(", "),
+        named.join(", ")
+    ))
+}
+
 /// Whether a thread row's wait genuinely requires the user in Needs you (approval, folder trust,
 /// sign-in, or an exhausted account pool with no auto-resume). Usage-limit pauses that stay calm
 /// or auto-recover, exited agents, and coordinator-handled questions return `false`
@@ -1784,13 +1867,18 @@ pub fn handle_work_request(
         }
         "ask" => {
             let words = param_text(params, "text").ok_or_else(|| bad("Say what you ask."))?;
+            let items = list_work_items(db, key)?;
+            if params.get("fromThread").is_none() {
+                if let Some(refusal) = ask_title_refusal(&words, &items) {
+                    return Err(bad(refusal));
+                }
+            }
             let tag = match param_text(params, "tag") {
                 Some(tag) => {
                     let tag = question_tag(&tag)
                         .ok_or_else(|| bad(format!("{tag} is not a question tag: use Q12.")))?;
                     // CDXC:Coordinators 2026-11-12 WHY:
                     // Issue #579: an ask reusing a tag the chat had already settled was settled at once by that tag's old answer ("has no open ask"), so the user never saw it. `--tag` still puts a question the chat asked and is waiting on onto the board; a settled tag, or one another item already asked, is refused with the next free one.
-                    let items = list_work_items(db, key)?;
                     let used_on_item = items.iter().any(|other| {
                         other.asks.iter().any(|ask| {
                             ask.tag.eq_ignore_ascii_case(&tag)
@@ -1805,10 +1893,7 @@ pub fn handle_work_request(
                     }
                     tag
                 }
-                None => {
-                    let items = list_work_items(db, key)?;
-                    format!("Q{}", highest_ask_tag(&items).max(ask_floor) + 1)
-                }
+                None => format!("Q{}", highest_ask_tag(&items).max(ask_floor) + 1),
             };
             if item.asks.iter().any(|ask| ask.is_open() && ask.tag == tag) {
                 return Err(bad(format!("{name} already asks {tag}.")));

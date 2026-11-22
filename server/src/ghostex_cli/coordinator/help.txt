@@ -307,7 +307,9 @@ WORK ITEMS
   nothing else on screen, so its title is one short plain question or
   instruction that names its subject, about ten words ("Move the
   settings-folder project out of Work?", "Delete the branch fix/tab-drag?"):
-  never "it", "this" or "that" without the thing, and no Q tag in it. Every
+  never "it", "this" or "that" without the thing, no Q tag in it, and never
+  bare work-item IDs like W34 (those are CLI handles; item ask refuses them
+  in titles). Every
   ask has --detail: what it is about and why you ask, in Markdown with line
   breaks (bold, code, links, lists; #562 links to the PR), a few short lines
   or bullets, not one long paragraph. A one-line --detail (about 90
