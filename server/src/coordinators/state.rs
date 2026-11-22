@@ -816,8 +816,12 @@ impl ThreadScreenWait {
 /// The `ghostex` verbs that fix a screen an orchestrator can fix itself: a start that failed on an
 /// account without a saved login, a usage limit, an agent that exited.
 fn screen_fix(notice: &SessionChatTerminalNotice, thread_ref: &str) -> Option<String> {
+    // CDXC:Coordinators 2026-11-22 DECISION:
+    // User, on the Usage room rules page (Q4409 "never"): Ghostex moves threads between accounts
+    // itself; a coordinator runs `agents switch-account` only when the user asks. This used to tell
+    // the coordinator to pick an account and switch.
     let switch = format!(
-        "run `ghostex accounts status`, then `ghostex agents switch-account {thread_ref} --account <number>` with an account it says you may switch to (\"yes\"); it resumes the same conversation there"
+        "Ghostex moves a thread to another account itself; do not switch it on your own (only if the user asks: `ghostex accounts status`, then `ghostex agents switch-account {thread_ref} --account <number>`)"
     );
     if notice.missing_login() {
         let slot = notice
@@ -825,7 +829,7 @@ fn screen_fix(notice: &SessionChatTerminalNotice, thread_ref: &str) -> Option<St
             .map(|slot| format!(" {slot}"))
             .unwrap_or_default();
         return Some(format!(
-            "To fix it, {switch}. If no account works, ask the user to sign in to account{slot} (Settings > Accounts)."
+            "{switch}. If no account works, ask the user to sign in to account{slot} (Settings > Accounts)."
         ));
     }
     if notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT {
@@ -839,7 +843,7 @@ fn screen_fix(notice: &SessionChatTerminalNotice, thread_ref: &str) -> Option<St
                 "Wait for its quota to reset, or switch models in that thread.".to_string(),
             );
         }
-        return Some(format!("To continue before the reset, {switch}."));
+        return Some(format!("It moves to another automatic account by itself or continues when the limit resets. {switch}."));
     }
     // A start that failed fails the same way on a reload; when its saved chat came back empty after a crash, nothing brings that conversation back.
     if notice.start_failed() {

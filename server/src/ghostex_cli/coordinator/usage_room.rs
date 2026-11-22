@@ -8,9 +8,18 @@
 //! config and offers agents that still have room." Every usable Claude account had hit its weekly
 //! limit and the coordinator and its threads stopped while Antigravity sat at 0% used. Status is
 //! where a coordinator looks anyway, so it carries one line per agent and a LOW or OUT line for an
-//! agent in use when every usable account is at `LOW_PERCENT` or more of an account-wide window,
-//! only one usable account is left of several, or none is. The playbook's "Usage room" says what
-//! the coordinator does then.
+//! agent in use when every usable account is low (see `LONG_PERCENT` and `SHORT_PERCENT`) or none
+//! is usable, and a plain note when only one usable account is left of several. The playbook's
+//! "Usage room" says what the coordinator does then.
+//!
+//! CDXC:Coordinators 2026-11-22 DECISION:
+//! User, on the Usage room rules page (Q4408 "split", Q4409 "never"): Ghostex itself moves threads
+//! between accounts, so a coordinator only guards the agent it runs on. LOW means every usable
+//! account has its 7d (or any longer) window at 80% or more, or its 5h window at 95% or more with an
+//! hour or more left before that window resets: a 5h wall that frees within the hour is Ghostex's
+//! wait to handle, not a reason to bother the user. "Last account" (one usable account of several)
+//! stays a status line, never a held ask. A coordinator never moves a thread between accounts on
+//! its own; it does so only when the user asks.
 //!
 //! CDXC:Coordinators 2026-11-22 DECISION:
 //! "Usable" means an account a thread may run on without asking: ready, and one Ghostex's own
@@ -29,9 +38,16 @@ use serde_json::{json, Value};
 
 use crate::ghostex_cli::{agents, args::Flags, rpc::call_gxserver_rpc};
 
-/// An account at this share of its 5h or 7d window (or a usage-only account's month) or more is
-/// close to out: one long thread turn can take a Claude 5h window from 85% to its limit.
-const LOW_PERCENT: f64 = 85.0;
+/// An account at this share of its 7d window (or any window longer than 5h, such as a usage-only
+/// account's month) or more is close to out: days of work are gone when it fills.
+const LONG_PERCENT: f64 = 80.0;
+
+/// An account at this share of its 5h window or more is close to out, unless that window resets
+/// within `SHORT_RESET_HOURS`: one long thread turn can take it from here to its limit.
+const SHORT_PERCENT: f64 = 95.0;
+
+/// A 5h window that resets sooner than this is waited out by Ghostex, not a LOW.
+const SHORT_RESET_HOURS: i64 = 1;
 
 /// The agents whose accounts report usage, in the order status lists them. The key is the
 /// roster's `provider`; Antigravity's quota is its Google account's Gemini reading.
@@ -84,6 +100,10 @@ struct Account {
     automatic: bool,
     /// The fullest account-wide window's percent, `None` with no reading.
     used: Option<f64>,
+    /// The fullest window that is not the 5h one (7d, a month), `None` with none.
+    long: Option<f64>,
+    /// The 5h window's percent and when it resets, `None` with no 5h window.
+    short: Option<(f64, Option<DateTime<Utc>>)>,
     windows: String,
     /// When a limited account's last full window resets.
     frees_at: Option<DateTime<Utc>>,
@@ -94,6 +114,18 @@ fn parse_time(text: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(text)
         .ok()
         .map(|at| at.with_timezone(&Utc))
+}
+
+impl Account {
+    /// Close to out: its long window is at `LONG_PERCENT`, or its 5h window at `SHORT_PERCENT`
+    /// with an hour or more before it resets (no reset time counts as more than an hour).
+    fn low(&self, now: DateTime<Utc>) -> bool {
+        self.long.is_some_and(|used| used >= LONG_PERCENT)
+            || self.short.is_some_and(|(used, resets)| {
+                used >= SHORT_PERCENT
+                    && resets.is_none_or(|at| at - now >= chrono::Duration::hours(SHORT_RESET_HOURS))
+            })
+    }
 }
 
 fn account(row: &Value, now: DateTime<Utc>) -> Account {
@@ -108,6 +140,21 @@ fn account(row: &Value, now: DateTime<Utc>) -> Account {
         .iter()
         .filter_map(|window| window["usedPercent"].as_f64())
         .reduce(f64::max);
+    let long = windows
+        .iter()
+        .filter(|window| window["label"] != "5h")
+        .filter_map(|window| window["usedPercent"].as_f64())
+        .reduce(f64::max);
+    let short = windows
+        .iter()
+        .filter(|window| window["label"] == "5h")
+        .filter_map(|window| {
+            Some((
+                window["usedPercent"].as_f64()?,
+                window["resetsAt"].as_str().and_then(parse_time),
+            ))
+        })
+        .max_by(|a, b| a.0.total_cmp(&b.0));
     let full: Vec<DateTime<Utc>> = windows
         .iter()
         .filter(|window| window["usedPercent"].as_f64().unwrap_or(0.0) >= 100.0)
@@ -146,6 +193,8 @@ fn account(row: &Value, now: DateTime<Utc>) -> Account {
         manual_room,
         automatic,
         used,
+        long,
+        short,
         windows: windows
             .iter()
             .map(|window| {
@@ -237,7 +286,7 @@ pub(super) fn summarize(view: &Value, roster: &Value, now: DateTime<Utc>) -> Val
             None
         } else if usable.is_empty() {
             Some("out")
-        } else if unread == 0 && usable.iter().all(|a| a.used.unwrap_or(0.0) >= LOW_PERCENT) {
+        } else if unread == 0 && usable.iter().all(|a| a.low(now)) {
             Some("low")
         } else if usable.len() == 1 && pool > 1 {
             Some("lastAccount")
@@ -264,7 +313,8 @@ pub(super) fn summarize(view: &Value, roster: &Value, now: DateTime<Utc>) -> Val
     }
     json!({
         "agents": out,
-        "lowPercent": LOW_PERCENT,
+        "lowLongPercent": LONG_PERCENT,
+        "lowShortPercent": SHORT_PERCENT,
         "oldestReadingAt": oldest.map(|at| at.to_rfc3339()),
     })
 }
@@ -425,14 +475,22 @@ fn print_room(room: &Value, compact: bool) {
     if !brief.is_empty() {
         println!("  {}", brief.join(" · "));
     }
-    let percent = room["lowPercent"].as_f64().unwrap_or(LOW_PERCENT);
+    let long = room["lowLongPercent"].as_f64().unwrap_or(LONG_PERCENT);
+    let short = room["lowShortPercent"].as_f64().unwrap_or(SHORT_PERCENT);
     for agent in rows.iter().filter(|agent| agent["inUse"] == true) {
         let why = match agent["flag"].as_str() {
             Some("out") => "no account has room left".to_string(),
-            Some("low") => {
-                format!("every usable account is at {percent}% or more of its 5h or 7d window")
+            Some("low") => format!(
+                "every usable account is at {long}% or more of its 7d window, or at {short}% or more of its 5h window with an hour or more to reset"
+            ),
+            Some("lastAccount") => {
+                // A note, never a held ask: one account of several left says nothing of its room.
+                println!(
+                    "Note: {}: only one usable account is left (no ask unless a LOW or OUT line follows).",
+                    agents::text(agent, "label")
+                );
+                continue;
             }
-            Some("lastAccount") => "only one usable account is left".to_string(),
             _ => continue,
         };
         let frees = agent["freesAt"]
@@ -443,14 +501,14 @@ fn print_room(room: &Value, compact: bool) {
         if compact {
             // Who runs on it and the manual-only room are on the agent's line above.
             println!(
-                "{}: {}: {why}.{frees} Ask the user which agent to move to (playbook: Usage room).",
+                "{}: {}: {why}.{frees} Raise the held ask: which other agent takes new work (playbook: Usage room). Ghostex moves threads between accounts; you never do unless the user asks.",
                 if agent["flag"] == "out" { "OUT" } else { "LOW" },
                 agents::text(agent, "label"),
             );
             continue;
         }
         println!(
-            "{}: {}, which {} run{} on: {why}.{frees}{} Ask the user which agent to move to now (playbook: Usage room); never use a limit reset.",
+            "{}: {}, which {} run{} on: {why}.{frees}{} Raise the held ask now: which other agent takes new work (playbook: Usage room). Ghostex moves threads between accounts; you never do unless the user asks, and never use a limit reset.",
             if agent["flag"] == "out" { "OUT" } else { "LOW" },
             agents::text(agent, "label"),
             users_text(agent),

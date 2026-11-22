@@ -168,8 +168,9 @@ STATUS
   Its Usage room lines say how much room each agent's accounts have left (from
   the readings Ghostex keeps; ghostex accounts --refresh reads again), which
   agents you and your active threads run on, and a LOW or OUT line for an agent
-  in use when every usable account is at 85% or more of its 5h or 7d window,
-  only one usable account of several is left, or none is.
+  in use when every usable account is at 80% or more of its 7d window (or at
+  95% or more of its 5h window with an hour or more to reset), or none is
+  usable; one usable account of several left is only a note.
 
 THREADS
   start-thread creates an agent session in the coordinator's project, links it,

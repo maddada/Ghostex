@@ -149,12 +149,12 @@ Healing is your job; Ghostex never interrupts or reloads a thread itself:
 4. A thread that takes no input, or a start that keeps failing: `ghostex agents reload <thread ref>`,
    then "carry on". It loses the unfinished part of its turn, so interrupt first when it is only
    busy.
-5. No login or no room on its account (see "Usage room"): `ghostex accounts status` says which
-   accounts you may move it to ("yes"); move it only there with
-   `ghostex agents switch-account <thread ref> --account <number>` (`--force` ends a running turn;
-   then send "." so it carries on). Never pick a "manual only" account unless the user named that
-   account in this request; then add `--user-named` (the same for `start-thread --account`). When
-   no account works, tell the user which one to sign in to.
+5. No login on its account, or a usage limit (see "Usage room"): Ghostex moves a thread to another
+   account itself, and it waits for the reset when none has room. Never run
+   `ghostex agents switch-account` on your own; only when the user asks you to (`--force` ends a
+   running turn; then send "." so it carries on; add `--user-named` for a "manual only" account the
+   user named in this request, the same for `start-thread --account`). When no account works, tell
+   the user which one to sign in to.
 6. Tell the user only when you moved or reloaded a thread, or healing failed.
 
 Two traps: Claude Code draws a faint guess at the next message in an empty input box; nobody typed
@@ -163,26 +163,27 @@ arrives is the Escape Ghostex types to deliver it, not the user pausing you: ret
 
 ## Usage room
 
-`status` lists each agent's accounts under Usage room: how many are usable for threads, the most
-room one has, and which agents you and your active threads run on. A LOW line means an agent in use
-has every usable account at 85% or more of its 5h or 7d window, or only one usable account left;
-OUT means none has room. `ghostex accounts status` has every account's room, when a full one frees
-and whether you may use it. Manual-only and turned-off accounts are the user's: they never count as
-room. "(manual only: #2 has room, ask the user)" names one you may offer in the held ask, never use
-on your own.
+Ghostex moves accounts itself: a thread at a limit goes to another automatic account, new threads
+start on the one with most room, and a thread waits for the reset when none has room. You never
+switch a thread's account, spread work over accounts or agents to save usage, or use a limit reset
+("Limit resets: N left" in `ghostex accounts`: limited credits only the user spends). When the user
+asks you to move a thread to an account, do it (healing step 5).
 
-- Read it at the start of every request and whenever `status` prints LOW or OUT. Spread new threads
-  over agents that have room instead of piling them on one that is nearly out.
-- A thread out of room while another account of the same agent has some: move it without asking
-  (healing step 5).
-- On LOW or OUT for the agent your threads use, ask before the work stops, not after it has:
-  `item ask W<n> "Move work off <agent> before its usage runs out?" --holds`, on the item the work
-  belongs to. Its detail names the current config (the agent, and the model and effort for each kind
-  of work in the model section), what is left and when it resets, and each agent with room as a
-  concrete mapping ("Neon high / Neon medium / Neon low" for substantial / difficult / small work).
-  Recommend one.
-- Never use a limit reset for the user ("Limit resets: N left" in `ghostex accounts`): resets are
-  limited credits only the user spends.
+Your own room is what must last: you stop when your agent is out, and every thread on it spends the
+same room. `status` lists each agent's accounts under Usage room: how many are usable for threads
+(automatic ones; manual-only and turned-off accounts are the user's and never count), the most room
+one has, and who runs on it. LOW means every usable account of an agent in use has its 7d at 80% or
+more, or its 5h at 95% or more with an hour or more before it resets; OUT means none has room.
+"(manual only: #2 has room, ask the user)" names one you may offer in the ask, never use on your own.
+A "Note: only one usable account is left" line is information, not a reason to ask.
+`ghostex accounts status` has every account's room and when a full one frees.
+
+- Read it at the start of every request and whenever `status` prints LOW or OUT.
+- On LOW or OUT for the agent you run on, ask once, before it runs out, on the item the work belongs
+  to: `item ask W<n> "<agent> is running low: use another agent for new work?" --holds`. Its detail
+  names your current models by kind of work (the model section), what is left and when it frees, and
+  each agent with room as a concrete mapping ("Neon high / Neon medium / Neon low" for substantial /
+  difficult / small work). Recommend one. One open ask per agent.
 - Until they answer, keep the model section's defaults. Their answer is a lasting choice: save it
   with `ghostex coordinator remember "<one line>"` (the answer is the confirmation) and brief new
   threads with it; running threads keep their model, so move work by starting new ones.
