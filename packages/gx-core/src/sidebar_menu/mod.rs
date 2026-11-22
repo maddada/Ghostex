@@ -69,8 +69,9 @@ pub use layout::{
 };
 pub use menus::SidebarMenus;
 pub use navigation::{
-    ADD_PROJECT_ACTION, COMMANDS_ACTION, MENU_PANEL_DEV_SERVERS, MENU_PANEL_EXTENSIONS,
-    MENU_PANEL_HELP, MENU_PANEL_MESSAGE_TYPE, MENU_PANEL_RESOURCES, UNIFIED_TOGGLE_GROUPS_ACTION,
+    ADD_PROJECT_ACTION, COLLAPSE_ALL_ICON, COMMANDS_ACTION, EXPAND_ALL_ICON,
+    MENU_PANEL_DEV_SERVERS, MENU_PANEL_EXTENSIONS, MENU_PANEL_HELP, MENU_PANEL_MESSAGE_TYPE,
+    MENU_PANEL_RESOURCES, UNIFIED_TOGGLE_GROUPS_ACTION,
 };
 pub use project::{unified_delete_worktree_menu, without_project_rename};
 pub(crate) use run_in_box::{run_in_box_agents_page, run_in_box_locations_page};

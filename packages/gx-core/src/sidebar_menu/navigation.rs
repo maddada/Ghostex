@@ -23,6 +23,11 @@ use super::item::MenuItem;
 /// The Unified sidebar's Collapse All row, which folds its project groups.
 pub const UNIFIED_TOGGLE_GROUPS_ACTION: &str = "toggleUnifiedGroups";
 
+/// CDXC:Sidebar 2026-11-21 DECISION: User: "icon for collapse all needs to change please, arrows need to be flipped, expand all can keep this icon … then the icon needs to be different than expand all". Collapse All shows the inward arrows on the same diagonal; Expand All and Expand Previous keep the outward ones, and the host's Expand All swap changes the icon with the label.
+pub const COLLAPSE_ALL_ICON: &str = "arrows-diagonal-minimize-2";
+/// The outward arrows Expand All and Expand Previous show (see [`COLLAPSE_ALL_ICON`]).
+pub const EXPAND_ALL_ICON: &str = "arrows-diagonal";
+
 /// The menu's Commands row, which opens Quick Access on its Commands tab; the host adds the
 /// hotkey's current binding as the row's hint.
 pub const COMMANDS_ACTION: &str = "commands";
@@ -280,7 +285,7 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
         if input.settings.unified_group_by_project {
             more.push(intent(
                 "Collapse All",
-                "arrows-diagonal",
+                COLLAPSE_ALL_ICON,
                 UNIFIED_TOGGLE_GROUPS_ACTION,
             ));
         }
@@ -289,15 +294,12 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
             .drawn_project_group_ids
             .iter()
             .any(|group_id| !ui.collapse.collapsed_groups.contains(group_id));
-        more.push(intent(
-            if any_expanded {
-                "Collapse All"
-            } else {
-                "Expand Previous"
-            },
-            "arrows-diagonal",
-            "toggleProjects",
-        ));
+        let (label, icon) = if any_expanded {
+            ("Collapse All", COLLAPSE_ALL_ICON)
+        } else {
+            ("Expand Previous", EXPAND_ALL_ICON)
+        };
+        more.push(intent(label, icon, "toggleProjects"));
     }
     if !is_local {
         more.push(intent("Edit Machine", "pencil", "editMachine"));

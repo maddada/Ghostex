@@ -296,6 +296,7 @@ impl GhostexGpuiApp {
             for row in rows {
                 if row["command"]["action"] == ghostex_gx_core::UNIFIED_TOGGLE_GROUPS_ACTION {
                     row["label"] = Value::from("Expand All");
+                    row["icon"] = Value::from(ghostex_gx_core::EXPAND_ALL_ICON);
                 }
             }
         }

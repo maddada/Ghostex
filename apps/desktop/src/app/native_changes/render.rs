@@ -28,8 +28,8 @@ const ICON_WHITESPACE: &str = "modals/git-commit/pilcrow.svg";
 const ICON_TESTS_SHOWN: &str = "modals/git-commit/flask.svg";
 const ICON_TESTS_HIDDEN: &str = "modals/git-commit/flask-off.svg";
 const ICON_REFRESH: &str = "titlebar/refresh.svg";
-const ICON_FOLD: &str = "titlebar/arrows-diagonal-minimize.svg";
-const ICON_UNFOLD: &str = "titlebar/arrows-diagonal-2.svg";
+const ICON_FOLD: &str = "titlebar/arrows-diagonal-minimize-2.svg";
+const ICON_UNFOLD: &str = "titlebar/arrows-diagonal.svg";
 const ICON_BRANCH: &str = "titlebar/git-branch.svg";
 const ICON_PENCIL: &str = "titlebar/pencil.svg";
 
