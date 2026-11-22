@@ -573,7 +573,7 @@ fn badge_lines(account: &Value) -> Vec<String> {
 }
 
 /// CDXC:AgentProviders 2026-09-11 DECISION:
-/// User: for Claude accounts the Fable limit is the most important number and must never be hidden. Wherever a Claude account shows two percentages, show the two tightest of the weekly, five-hour, and Fable limits, in that fixed order, so the number about to run out is always one of them. Port of `accountHeadlineWindows` in packages/shared/account-usage-windows.ts (deleted 2026-10-01); the popup in apps/desktop/src/app/window/account_usage/limits.rs shows all three as main bars.
+/// User: for Claude accounts the Fable limit is the most important number and must never be hidden. Wherever a Claude account shows two percentages, show the two tightest of the five-hour, weekly, and Fable limits, in that fixed order (five-hour first, as the usage popup lists them; changed from weekly first on 2026-11-22), so the number about to run out is always one of them. Port of `accountHeadlineWindows` in packages/shared/account-usage-windows.ts (deleted 2026-10-01); the popup in apps/desktop/src/app/window/account_usage/limits.rs shows all three as main bars.
 pub(crate) fn claude_headline_windows(windows: &[Value]) -> Vec<&Value> {
     let main: Vec<&Value> = windows.iter().filter(|w| w["model"].is_null()).collect();
     let weekly = main.iter().copied().find(|w| {
@@ -589,7 +589,7 @@ pub(crate) fn claude_headline_windows(windows: &[Value]) -> Vec<&Value> {
         .copied()
         .find(|w| text(w, "model").to_lowercase().contains("fable"))
         .or_else(|| scoped.first().copied());
-    let candidates: Vec<&Value> = [weekly, five_hour, fable].into_iter().flatten().collect();
+    let candidates: Vec<&Value> = [five_hour, weekly, fable].into_iter().flatten().collect();
     let mut by_usage = candidates.clone();
     by_usage.sort_by(|a, b| {
         b["usedPercent"]

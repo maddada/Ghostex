@@ -228,7 +228,7 @@ impl Account {
                 Some(most.map_or(used, |most: f64| most.max(used)))
             })
     }
-    /// The windows the detail pane draws as bars: five-hour first, then the others.
+    /// The windows the detail pane draws as bars: five-hour first, then the others (the headline windows already come in that order).
     pub(crate) fn usage_bars(&self) -> Vec<UsageWindow> {
         let mut windows = self.headline_windows();
         // gxserver already lists a usage-only account's windows in order (Gemini's 5h, 7d, then
@@ -303,8 +303,8 @@ impl Account {
         selector.trim().parse::<f64>().unwrap_or(f64::NAN)
     }
 
-    /// `accountHeadlineWindows`: Claude shows the two tightest of weekly, five-hour and Fable (in
-    /// that order); Codex its weekly and five-hour windows.
+    /// `accountHeadlineWindows`: Claude shows the two tightest of five-hour, weekly and Fable (in
+    /// that order, as the usage popup lists them); Codex its five-hour and weekly windows.
     pub(crate) fn headline_windows(&self) -> Vec<UsageWindow> {
         let usage = self.usage();
         if self.usage_only() {
@@ -325,7 +325,7 @@ impl Account {
             .find(|window| window.is_five_hour())
             .map(|window| (*window).clone());
         if self.provider() != "claude" {
-            return [weekly, five_hour].into_iter().flatten().collect();
+            return [five_hour, weekly].into_iter().flatten().collect();
         }
         let scoped: Vec<&UsageWindow> = usage
             .iter()
@@ -342,7 +342,7 @@ impl Account {
             .or_else(|| scoped.first())
             .map(|window| (*window).clone());
         let candidates: Vec<UsageWindow> =
-            [weekly, five_hour, fable].into_iter().flatten().collect();
+            [five_hour, weekly, fable].into_iter().flatten().collect();
         let mut ranked: Vec<(usize, f64)> = candidates
             .iter()
             .enumerate()
@@ -366,7 +366,7 @@ impl Account {
     /// `accountFigures`: the two small figures beside the logo, each with its tooltip label.
     ///
     /// CDXC:AgentProviders 2026-09-08 DECISION:
-    /// User: Codex account badges show the five-hour percentage on the second line when that limit exists; otherwise show available resets as "2rs" or "0rs". Use the main account windows so Spark's separate five-hour limit does not stand in for an absent account limit. Claude figures are the two tightest of weekly, five-hour, and Fable (see `headline_windows`).
+    /// User: Codex account badges show the five-hour percentage on the second line when that limit exists; otherwise show available resets as "2rs" or "0rs". Use the main account windows so Spark's separate five-hour limit does not stand in for an absent account limit. Claude figures are the two tightest of five-hour, weekly, and Fable, five-hour first like the usage popup (see `headline_windows`).
     pub(crate) fn figures(&self) -> [(Option<String>, String); 2] {
         let windows = self.headline_windows();
         let first = windows.first();

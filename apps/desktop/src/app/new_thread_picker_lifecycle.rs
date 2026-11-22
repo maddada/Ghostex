@@ -133,7 +133,7 @@ fn usage_window_label(window: &Value) -> Option<String> {
 }
 
 /// Port of `AccountLauncherUsage` in the deleted React sidebar's packages/core-ui/accounts/agent-launcher-menu.tsx (git history):
-/// Claude shows its two tightest limits out of weekly, five-hour, and Fable, Codex the weekly window and available resets.
+/// Claude shows its two tightest limits out of five-hour, weekly, and Fable, Codex the weekly window and available resets.
 fn account_usage_line(account: &Value) -> Option<String> {
     let windows = account["usage"]
         .as_array()
