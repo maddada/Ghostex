@@ -21,9 +21,12 @@ use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 use crate::session_chat_files::SESSION_CHAT_IMAGE_MAX_BYTES;
 
+pub mod approval;
 pub(crate) mod channel;
 pub mod host;
 pub(crate) mod spec;
+
+pub use approval::{AcpApprovalLevel, SESSION_ACP_APPROVAL_LEVEL_KEY};
 
 /// Settings key (object map of `<agentFamily>: "non-cli" | "agent-cli"`) storing per-agent
 /// session mode (`Agent CLI` default vs `Non-CLI`).

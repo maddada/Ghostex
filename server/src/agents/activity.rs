@@ -744,7 +744,13 @@ pub(crate) fn next_session_chat_prompt_setting(
     if let Some(prompt) =
         crate::session_chat::derive_session_chat_prompt(tool_name, tool_input, event_name)
     {
-        let prompt = prompt.with_tool_use_id(tool_use_id.map(str::to_string));
+        let approval_reason = params
+            .get("approvalReason")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let prompt = prompt
+            .with_tool_use_id(tool_use_id.map(str::to_string))
+            .with_approval_reason(approval_reason);
         /*
         CDXC:SessionChat 2026-10-06 WHY:
         Claude Code follows an AskUserQuestion's PreToolUse (which carries the call's

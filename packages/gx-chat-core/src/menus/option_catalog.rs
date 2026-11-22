@@ -939,6 +939,50 @@ fn antigravity_effort(
     descriptor
 }
 
+/// Four approval levels shown on the chat box's existing Mode button for ACP (Non-CLI) sessions.
+/// Replaces the binary accept-all toggle for ACP sessions; switching takes effect on the next
+/// permission request with no restart.
+pub fn acp_approval_mode() -> OptionDescriptor {
+    let mut descriptor = OptionDescriptor::new(
+        "mode",
+        "Mode",
+        OptionCategory::Mode,
+        OptionDispatch::CyclicKeySteps {
+            key: "shift-tab".to_string(),
+        },
+    );
+    descriptor.choices = Some(
+        [
+            ("ask", "Ask", "Ask before edits and commands."),
+            (
+                "auto-edits",
+                "Auto-edits",
+                "Auto-approve edits in this folder; ask for commands.",
+            ),
+            (
+                "auto",
+                "Auto",
+                "Use the agent's automatic mode when available, else ask.",
+            ),
+            (
+                "full-access",
+                "Full access",
+                "Approve edits and commands automatically.",
+            ),
+        ]
+        .into_iter()
+        .map(|(value, label, description)| OptionChoice {
+            value: value.to_string(),
+            label: label.to_string(),
+            description: Some(description.to_string()),
+            ..OptionChoice::default()
+        })
+        .collect(),
+    );
+    descriptor.description = Some("Choose when this agent asks before acting.".to_string());
+    descriptor
+}
+
 /// Shift+Tab cycles agy's mode in this order (Antigravity CLI 1.4.0) and the footer names the
 /// current one, which gxserver reports with these values (`match_antigravity_statusline` in
 /// `server/src/session_chat_options/agent_matchers.rs`). A pick is queued to gxserver, which presses

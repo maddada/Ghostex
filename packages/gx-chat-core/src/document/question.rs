@@ -27,6 +27,10 @@ pub struct QuestionCard {
     /// The muted line under it: the tool, and the folder it runs in when known.
     #[serde(default)]
     pub approval_detail: String,
+    /// Optional brief note explaining why an approval still reached the user (e.g. in Full access
+    /// when the agent only offered a saved allow option).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub approval_reason: String,
     /// The answer went out while gxserver was away and goes again once it is back
     /// (`questions::unreachable_retry`); the card says it is reconnecting.
     #[serde(default)]

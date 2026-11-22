@@ -207,83 +207,135 @@ pub(crate) async fn set_model(
     })
 }
 
-/// Change permission/interaction mode on a live ACP session.
-pub(crate) async fn set_mode(
+/// Persist the remembered ACP approval level on the session's `runtimeSettings` in `state.db`.
+pub(crate) async fn persist_approval_level(
+    state: &AppState,
     project_id: &str,
     session_id: &str,
-    mode: &str,
-) -> Result<Value, DomainStateError> {
-    if live(project_id, session_id, "mode").is_none() {
-        return Err(DomainStateError {
-            code: "dependencyUnavailable",
-            message: "The ACP host is not connected yet.".to_string(),
-        });
-    }
-    request(
-        project_id,
-        session_id,
-        "mode",
-        json!({ "mode": mode }),
-        Duration::from_secs(15),
-    )
+    level: super::AcpApprovalLevel,
+) -> Result<(), DomainStateError> {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    let value = level.as_str().to_string();
+    tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, server_id.as_str());
+        let session = repository
+            .get_session(&pid, &sid)?
+            .ok_or_else(|| DomainStateError {
+                code: "notFound",
+                message: "The session no longer exists.".to_string(),
+            })?;
+        let mut runtime_settings = session
+            .get("runtimeSettings")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        runtime_settings.insert(
+            super::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+            json!(value),
+        );
+        let mut update = Map::new();
+        update.insert("projectId".to_string(), json!(pid));
+        update.insert("sessionId".to_string(), json!(sid));
+        update.insert(
+            "runtimeSettings".to_string(),
+            Value::Object(runtime_settings),
+        );
+        repository.update_session(&update).map(|_| ())
+    })
     .await
     .map_err(|error| DomainStateError {
-        code: "invalidParams",
-        message: format!("ACP mode change failed: {error}"),
-    })
+        code: "internalError",
+        message: format!("Could not save ACP approval level: {error}"),
+    })?
 }
 
-/// Cycle to the next available ACP mode (equivalent of Shift+Tab in a CLI session).
+/// Change the approval level on an ACP session, persisting it per session and updating the live
+/// `acp-host` immediately (no restart).
+pub(crate) async fn set_approval_level(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    raw_mode: &str,
+) -> Result<Value, DomainStateError> {
+    let level = super::AcpApprovalLevel::parse(raw_mode).ok_or_else(|| DomainStateError {
+        code: "invalidParams",
+        message: format!("Unsupported approval level: {raw_mode}"),
+    })?;
+    persist_approval_level(state, project_id, session_id, level).await?;
+    if live(project_id, session_id, "mode").is_some() {
+        return request(
+            project_id,
+            session_id,
+            "mode",
+            json!({ "mode": level.as_str() }),
+            Duration::from_secs(15),
+        )
+        .await
+        .map_err(|error| DomainStateError {
+            code: "invalidParams",
+            message: format!("ACP approval level change failed: {error}"),
+        });
+    }
+    Ok(json!({
+        "mode": level.as_str(),
+        "modeLabel": level.label(),
+        "approvalLevel": level.as_str(),
+    }))
+}
+
+/// Cycle to the next ACP approval level (`ask` -> `auto-edits` -> `auto` -> `full-access`).
 pub(crate) async fn cycle_mode(
+    state: &AppState,
     project_id: &str,
     session_id: &str,
 ) -> Result<Value, DomainStateError> {
-    if live(project_id, session_id, "mode").is_none() {
-        return Err(DomainStateError {
-            code: "dependencyUnavailable",
-            message: "The ACP host is not connected yet.".to_string(),
-        });
-    }
-    let snap = request(
-        project_id,
-        session_id,
-        "state",
-        json!({}),
-        Duration::from_secs(5),
-    )
-    .await
-    .map_err(|error| DomainStateError {
-        code: "dependencyUnavailable",
-        message: format!("Could not read ACP modes: {error}"),
-    })?;
-    let current = snap.get("mode").and_then(Value::as_str).unwrap_or_default();
-    let mode_ids: Vec<String> = snap
-        .get("availableModes")
-        .and_then(Value::as_array)
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|item| {
-                    item.get("id")
-                        .or_else(|| item.get("modeId"))
-                        .and_then(Value::as_str)
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_string)
-                })
-                .collect()
+    let current = if live(project_id, session_id, "state").is_some() {
+        request(
+            project_id,
+            session_id,
+            "state",
+            json!({}),
+            Duration::from_secs(5),
+        )
+        .await
+        .ok()
+        .and_then(|snap| {
+            snap.get("approvalLevel")
+                .or_else(|| snap.get("mode"))
+                .and_then(Value::as_str)
+                .and_then(super::AcpApprovalLevel::parse)
         })
-        .unwrap_or_default();
-    if mode_ids.len() < 2 {
-        return Err(DomainStateError {
-            code: "invalidState",
-            message: "This ACP session does not expose multiple modes to cycle.".to_string(),
-        });
-    }
-    let next_index = mode_ids
-        .iter()
-        .position(|id| id == current)
-        .map(|idx| (idx + 1) % mode_ids.len())
-        .unwrap_or(0);
-    set_mode(project_id, session_id, &mode_ids[next_index]).await
+    } else {
+        None
+    };
+    let current = match current {
+        Some(level) => level,
+        None => {
+            let paths = state.paths.clone();
+            let server_id = state.metadata.server_id.clone();
+            let pid = project_id.to_string();
+            let sid = session_id.to_string();
+            tokio::task::spawn_blocking(move || {
+                let db = open_gxserver_database(&paths).ok()?;
+                let repo = DomainRepository::new(&db, server_id.as_str());
+                let session = repo.get_session(&pid, &sid).ok().flatten()?;
+                super::approval::stored_session_approval_level(&session)
+            })
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+        }
+    };
+    let next = current.next_in_cycle();
+    set_approval_level(state, project_id, session_id, next.as_str()).await
 }
 
 /// Probe whether the session's `zmx`/`wmx` provider is confirmed missing on disk.
@@ -450,12 +502,15 @@ pub(crate) async fn switch_to_cli(
         message: format!("Could not persist ACP-to-CLI transition: {error}"),
     })??;
 
-    // Broadcast updated session so desktop/web/phone drop the ACP flag right away.
+    // Broadcast updated session and queue state so desktop/web/phone drop the ACP flag right away.
     state.event_hub.broadcast(json!({
         "type": "sessionUpdated",
         "projectId": project_id,
         "session": updated_session,
     }));
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+        state, project_id, session_id,
+    );
 
     log(
         LogLevel::Info,

@@ -451,6 +451,11 @@ pub struct ChatSideState {
     /// them on. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unavailable_modes: Option<Vec<UnavailableMode>>,
+    /// True while this session runs through a Non-CLI host (e.g. ACP), so the chat box's Mode
+    /// button offers the four approval levels instead of the agent CLI's Shift+Tab modes.
+    /// Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub non_cli_mode: Option<bool>,
     /// The question forms and pages the user removed without answering (form or page ids,
     /// server/src/session_chat_open_questions.rs): no longer counted as waiting. Absent means
     /// unchanged.

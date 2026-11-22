@@ -78,6 +78,7 @@ fn transcript_prompt_state_detects_and_retires_question_cards() {
         tool: "Bash".to_string(),
         summary: None,
         tool_use_id: None,
+        reason: None,
     };
     assert_eq!(
         resolve_session_chat_prompt(Some(approval.clone()), &answered),
@@ -366,6 +367,7 @@ fn an_approval_answer_retires_only_its_own_calls_card() {
         tool: "bash".to_string(),
         summary: Some("echo second-approval".to_string()),
         tool_use_id: id.map(str::to_string),
+        reason: None,
     };
     let answer = |id: Option<&'static str>| SessionChatPromptClearEvent {
         event_name: Some("post_approval_response"),

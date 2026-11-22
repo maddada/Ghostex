@@ -147,8 +147,12 @@ pub(super) async fn send_session_chat_message_attempt(
                     Err(error) => domain_error_response(endpoint_path, request_id, error),
                 },
                 "shift-tab" => {
-                    match crate::acp::channel::cycle_mode(&target.project_id, &target.session_id)
-                        .await
+                    match crate::acp::channel::cycle_mode(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                    )
+                    .await
                     {
                         Ok(_) => {
                             let agent =

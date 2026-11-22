@@ -237,7 +237,7 @@ pub(crate) const CLAUDE_CONVERSATIONS_SET_ASIDE_AT: &str = "claudeConversationsS
 
 #[derive(Clone)]
 pub(crate) struct AgentResumeInput {
-    accept_all: bool,
+    acp_approval_level: crate::acp::AcpApprovalLevel,
     acp_mode: bool,
     agent_command: Option<String>,
     agent_id: Option<String>,
@@ -440,17 +440,12 @@ pub(crate) fn to_agent_resume_input(
         Some(id) => crate::agent_cli::opencode::with_opencode2(id, None, &command),
         None => command,
     });
-    let accept_all = match read_text_from_map(&agent_config, "acceptAllMode")
-        .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
-        .as_deref()
-    {
-        Some("enabled" | "acceptAll") => true,
-        Some("disabled") => false,
-        _ => settings
-            .get("agentAcceptAllEnabled")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-    };
+    let acp_approval_level = crate::acp::approval::resolve_starting_level(
+        &runtime_settings,
+        &agent_config,
+        &launch_settings,
+        settings,
+    );
     let acp_mode = match runtime_settings
         .get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
         .and_then(Value::as_bool)
@@ -466,7 +461,7 @@ pub(crate) fn to_agent_resume_input(
         }),
     };
     AgentResumeInput {
-        accept_all,
+        acp_approval_level,
         acp_mode,
         agent_command: runtime_command,
         agent_id,
@@ -671,7 +666,7 @@ pub(crate) fn build_agent_resume_command(
                     "antigravity",
                     Some(&agent_command),
                     Some(&reference),
-                    input.accept_all,
+                    input.acp_approval_level,
                     None,
                     None,
                 )

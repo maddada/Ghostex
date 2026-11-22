@@ -1688,8 +1688,10 @@ pub(crate) async fn select_session_chat_model(
             message: "This agent does not support the quick model picker.".to_string(),
         });
     }
+    let is_acp = crate::acp::session_is_acp(&target.session);
     let options = crate::session_chat_model_selection::read_options(
         agent.as_deref().unwrap_or_default(),
+        is_acp,
         params,
     )?;
     let scope = crate::session_chat_model_selection::read_scope(
@@ -1718,6 +1720,48 @@ pub(crate) async fn select_session_chat_model(
     if !model.is_empty() && agent.as_deref() == Some("codex") && effort_row_label(&effort).is_none()
     {
         return Err(invalid_params(format!("Unknown Codex effort {effort}.")));
+    }
+    // ACP (Non-CLI) sessions apply approval level and model switches directly over the structured
+    // host channel without typing into the PTY, taking effect on the next permission request with
+    // no restart and persisting the approval level per session.
+    if is_acp {
+        let model_change = !model.is_empty() || !effort.is_empty();
+        if model_change && crate::presentation::effective_lifecycle_state(&target.session) != "running" {
+            return Err(session_not_running(
+                "Waiting for the session to be running before applying the selection.",
+            ));
+        }
+        if model_change {
+            crate::acp::channel::set_model(
+                &target.project_id,
+                &target.session_id,
+                &model,
+                &effort,
+            )
+            .await?;
+        }
+        if let Some(mode) = options.mode.as_deref().filter(|m| !m.is_empty()) {
+            crate::acp::channel::set_approval_level(
+                state,
+                &target.project_id,
+                &target.session_id,
+                mode,
+            )
+            .await?;
+        }
+        if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+            cache.remove(&crate::server::session_observer_key(
+                &target.project_id,
+                &target.session_id,
+            ));
+        }
+        crate::session_chat_options::schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
+        );
+        return Ok(json!({ "ok": true, "model": model, "effort": effort, "scope": scope }));
     }
     if crate::presentation::effective_lifecycle_state(&target.session) != "running" {
         return Err(session_not_running(
