@@ -5,7 +5,7 @@ use super::*;
 use crate::domain::DomainStateError;
 
 pub(crate) const AGENT_SETTINGS_METADATA_KEY: &str = "agents.settings.v1";
-pub(crate) const DEFAULT_PROMPT_AGENT_ID: &str = "codex";
+pub(crate) const DEFAULT_PROMPT_AGENT_ID: &str = "claude";
 pub(crate) const MAX_DEFAULT_PROMPT_AGENT_ID_LENGTH: usize = 120;
 /*
 CDXC:Drafts 2026-08-20:

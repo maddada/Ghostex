@@ -808,7 +808,7 @@ impl SourceCodeServerRuntimeSettings {
             .object()
             .get("codeServerLinkVscodeUserConfig")
             .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
+            .unwrap_or(true);
         let use_vscode_insiders_user_config = settings
             .object()
             .get("codeServerUseVscodeInsidersUserConfig")

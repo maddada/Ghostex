@@ -30,7 +30,7 @@ fn gpui_rename_session_generator_name() -> String {
                 .and_then(|value| value.as_str())
                 .map(str::to_string)
         })
-        .unwrap_or_else(|| "codex".to_string());
+        .unwrap_or_else(|| "claude".to_string());
     if agent == "custom" {
         return "your custom title command".to_string();
     }

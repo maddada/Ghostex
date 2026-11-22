@@ -428,7 +428,7 @@ impl GhostexGpuiApp {
                 .object()
                 .get(MARK_THIS_COMPUTER_SETTING)
                 .and_then(serde_json::Value::as_bool)
-                != Some(false);
+                == Some(true);
         if crate::app::gx_chat::session_directory::mark_this_computer() != mark {
             crate::app::gx_chat::session_directory::set_mark_this_computer(mark);
             cx.notify();

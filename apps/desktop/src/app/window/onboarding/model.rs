@@ -397,7 +397,7 @@ impl OnboardingSettings {
         };
         Self {
             view_hidden: VIEW_KEYS.map(|key| read_bool(object, key.hidden_key(), false)),
-            spaces_on: read_bool(object, "sidebarSpacesEnabled", false),
+            spaces_on: read_bool(object, "sidebarSpacesEnabled", true),
             unified_sidebar: text("sidebarView") == Some("unified"),
             experience_values: ghostex_settings_catalog::experience::AREAS
                 .iter()
@@ -420,7 +420,7 @@ impl OnboardingSettings {
             },
             default_prompt_agent_id: text("defaultPromptAgentId")
                 .filter(|value| !value.is_empty())
-                .unwrap_or("codex")
+                .unwrap_or("claude")
                 .chars()
                 .take(120)
                 .collect(),

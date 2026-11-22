@@ -369,7 +369,7 @@ mod tests {
         assert_eq!(HoverStripKind::Project.other(), HoverStripKind::Unified);
         assert_eq!(
             ids_on(&default_items_of(HoverStripKind::Project)),
-            ["tag", "park", "sleep", "chevron", "close"]
+            Vec::<&str>::new()
         );
         assert_eq!(
             ids_on(&default_items_of(HoverStripKind::Unified)),

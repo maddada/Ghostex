@@ -12,7 +12,7 @@ use crate::app::helpers::*;
 ///
 /// CDXC:Titlebar 2026-11-08 DECISION:
 /// User: "please add setting under this [Frame the work area] to show traffic lights on macos when sidebar is collapsed (default to yes). only show this sub setting on macos". On, the window's traffic lights stay in its top left with the sidebar collapsed, and the header's toggle keeps the docked sidebar's room for them (`window_controls_state` in floating_reveal/model.rs); the floating sidebar then carries no lights of its own. Off is what the 2026-11-06 and 2026-11-07 decisions made of it: the lights hide with the sidebar and show in the floating sidebar's top row. Full screen is unchanged either way. Supersedes, as a default, those decisions' always-hidden lights.
-static SHOW_WINDOW_BUTTONS_WHEN_SIDEBAR_COLLAPSED: AtomicBool = AtomicBool::new(true);
+static SHOW_WINDOW_BUTTONS_WHEN_SIDEBAR_COLLAPSED: AtomicBool = AtomicBool::new(false);
 
 /// The gutter between the card and the window's edges (and the sidebar), in points.
 ///
@@ -35,7 +35,7 @@ pub(crate) const WORK_AREA_FRAME_RADIUS: f32 = 16.5 - WORK_AREA_FRAME_MARGIN;
 pub(crate) const WORK_AREA_FRAME_INNER_RADIUS: f32 =
     WORK_AREA_FRAME_RADIUS - WORK_AREA_FRAME_BORDER;
 
-/// Reads `showWindowButtonsWhenSidebarCollapsed` (on when unset: the catalog default).
+/// Reads `showWindowButtonsWhenSidebarCollapsed` (off when unset: the catalog default).
 pub(crate) fn refresh_show_window_buttons_when_sidebar_collapsed(
     object: &serde_json::Map<String, serde_json::Value>,
 ) {
@@ -43,7 +43,7 @@ pub(crate) fn refresh_show_window_buttons_when_sidebar_collapsed(
         object
             .get("showWindowButtonsWhenSidebarCollapsed")
             .and_then(serde_json::Value::as_bool)
-            .unwrap_or(true),
+            .unwrap_or(false),
         Ordering::Relaxed,
     );
 }

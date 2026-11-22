@@ -106,7 +106,7 @@ pub(crate) fn refresh_window_glass_live(object: &serde_json::Map<String, serde_j
         legacy_video,
     );
     live.speed = number("windowGlassLiveSpeed").map_or(1.0, |speed| speed.clamp(0.25, 2.0) as f32);
-    live.brightness = number("windowGlassLiveBrightness").map_or(0.80, |brightness| {
+    live.brightness = number("windowGlassLiveBrightness").map_or(0.50, |brightness| {
         (brightness.clamp(10.0, 100.0) / 100.0) as f32
     });
     live.only_on_power = object

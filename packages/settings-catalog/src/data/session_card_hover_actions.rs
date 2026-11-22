@@ -9,11 +9,11 @@ pub const DEFAULT_SESSION_CARD_HOVER_BUTTONS: J = J::Arr(&[
         ("enabled", J::Bool(false)),
         ("id", J::Str("closeAfterDone")),
     ]),
-    J::Obj(&[("enabled", J::Bool(true)), ("id", J::Str("tag"))]),
-    J::Obj(&[("enabled", J::Bool(true)), ("id", J::Str("park"))]),
-    J::Obj(&[("enabled", J::Bool(true)), ("id", J::Str("sleep"))]),
-    J::Obj(&[("enabled", J::Bool(true)), ("id", J::Str("chevron"))]),
-    J::Obj(&[("enabled", J::Bool(true)), ("id", J::Str("close"))]),
+    J::Obj(&[("enabled", J::Bool(false)), ("id", J::Str("tag"))]),
+    J::Obj(&[("enabled", J::Bool(false)), ("id", J::Str("park"))]),
+    J::Obj(&[("enabled", J::Bool(false)), ("id", J::Str("sleep"))]),
+    J::Obj(&[("enabled", J::Bool(false)), ("id", J::Str("chevron"))]),
+    J::Obj(&[("enabled", J::Bool(false)), ("id", J::Str("close"))]),
 ]);
 
 /// The Unified sidebar's own strip until the user changes it: Snooze, Park and Close always show,

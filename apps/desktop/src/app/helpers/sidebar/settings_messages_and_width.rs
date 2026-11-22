@@ -147,7 +147,7 @@ pub(crate) fn gpui_app_modal_sidebar_state_message_from_gxserver_hydrate(
     let completion_sound = settings_object
         .get("completionSound")
         .and_then(serde_json::Value::as_str)
-        .unwrap_or("arcade")
+        .unwrap_or("two-tone-1")
         .to_string();
     let completion_sound_label = gpui_completion_sound_label(&completion_sound);
     let theme = gpui_app_modal_sidebar_theme_from_settings(&settings_object);

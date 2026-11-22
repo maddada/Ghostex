@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 use super::super::gx_rpc;
 use crate::GhostexGpuiApp;
 
-const DEFAULT_PROMPT_AGENT_ID: &str = "codex";
+const DEFAULT_PROMPT_AGENT_ID: &str = "claude";
 /// The agents a box runs (Claude and Codex logins go to boxes, D5 and D6).
 const BOX_AGENTS: [&str; 2] = ["claude", "codex"];
 

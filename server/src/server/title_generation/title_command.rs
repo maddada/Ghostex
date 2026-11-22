@@ -103,10 +103,10 @@ pub(crate) async fn generate_first_prompt_session_title(
 /// SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/agents/model.rs `title_generation_preview`, which must preview the same commands.
 pub(crate) fn normalize_title_generation_agent(value: Option<&str>) -> String {
     match value {
-        Some("cursor" | "claude" | "grok" | "pi" | "antigravity" | "empryo" | "custom") => {
+        Some("codex" | "cursor" | "claude" | "grok" | "pi" | "antigravity" | "empryo" | "custom") => {
             value.unwrap().to_string()
         }
-        _ => "codex".to_string(),
+        _ => "claude".to_string(),
     }
 }
 
@@ -126,7 +126,7 @@ pub(crate) fn read_title_generation_command(
         "antigravity" => Ok("agy".to_string()),
         "empryo" => Ok("empryo".to_string()),
         "custom" => Err("Custom title generation command is not configured.".to_string()),
-        _ => Ok("codex".to_string()),
+        _ => Ok("claude".to_string()),
     }
 }
 

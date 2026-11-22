@@ -161,7 +161,7 @@ impl GhostexGpuiApp {
             .get("sessionTitleGenerationAgent")
             .and_then(Value::as_str)
             .filter(|agent| TITLE_GENERATION_AGENTS.contains(agent))
-            .unwrap_or("codex")
+            .unwrap_or("claude")
             .to_string();
         let command = match agent.as_str() {
             "custom" => object

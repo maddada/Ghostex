@@ -128,7 +128,7 @@ fn read_project_automation_state(
     Ok(json!({
         "agents": agents,
         "automations": automations_to_value(read_automations_for_project(db, &project.project_id)?),
-        "defaultAgentId": agent_settings.get("defaultPromptAgentId").and_then(Value::as_str).unwrap_or("codex"),
+        "defaultAgentId": agent_settings.get("defaultPromptAgentId").and_then(Value::as_str).unwrap_or(crate::agents::DEFAULT_PROMPT_AGENT_ID),
         "projectCanUseWorktrees": worktree.0,
         "projectId": project.project_id,
         "projectName": project.name,

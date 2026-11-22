@@ -197,8 +197,8 @@ fn inputs(machines: &[&str], space_id: Option<&str>) -> SidebarInputs {
     inputs.host.machines = machines.iter().map(|machine| tab(machine)).collect();
     inputs.host.merge_machines = true;
     inputs.ui.selected_machine_id = "local".to_string();
+    inputs.settings.sidebar_spaces_enabled = space_id.is_some();
     if let Some(space_id) = space_id {
-        inputs.settings.sidebar_spaces_enabled = true;
         inputs
             .ui
             .collapse

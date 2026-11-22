@@ -427,11 +427,14 @@ impl ChatAppearance {
             work_open: !simple,
             tool_lines: enabled("chatToolCallLines"),
             file_previews: enabled("sessionChatFileEditPreviews"),
-            muted_thinking: enabled("sessionChatMutedThinking"),
+            muted_thinking: settings
+                .get("sessionChatMutedThinking")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true),
             marked_sections: super::marked_sections::MarkerStyle::from_settings(settings),
             marked_heading_strength: state["markedHeadingStrength"]
                 .as_f64()
-                .map_or(0.6, |percent| (percent / 100.0).clamp(0.0, 1.0) as f32),
+                .map_or(0.3, |percent| (percent / 100.0).clamp(0.0, 1.0) as f32),
             text_strength: state["chatTextStrength"]
                 .as_f64()
                 .and_then(ghostex_gx_chat_core::transcript::text_strength::text_strength)

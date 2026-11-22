@@ -30,7 +30,7 @@ use super::super::gx_rpc;
 use crate::GhostexGpuiApp;
 
 /// `DEFAULT_GPUI_PROMPT_AGENT_ID`.
-const DEFAULT_PROMPT_AGENT_ID: &str = "codex";
+const DEFAULT_PROMPT_AGENT_ID: &str = "claude";
 /// Most folders one `openProjectPaths` registers.
 const MAX_OPENED_PATHS: usize = 16;
 

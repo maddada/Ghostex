@@ -424,7 +424,7 @@ pub(crate) fn resolve_commit_message_generation_agent(
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .or_else(|| read_text_from_map(settings, "defaultPromptAgentId"))
-        .unwrap_or_else(|| "codex".to_string());
+        .unwrap_or_else(|| crate::agents::DEFAULT_PROMPT_AGENT_ID.to_string());
     let agent_config = resolve_project_agent_config(project, &agent_id, None);
     let command = read_text_from_map(&agent_config, "command")
         .or_else(|| default_agent_command(&agent_id).map(str::to_string))

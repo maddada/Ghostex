@@ -464,14 +464,14 @@ impl Default for SidebarSettings {
     fn default() -> Self {
         Self {
             enable_session_parking: true,
-            sidebar_spaces_enabled: false,
-            sidebar_space_follow_active_session: false,
+            sidebar_spaces_enabled: true,
+            sidebar_space_follow_active_session: true,
             show_last_active_time: true,
             debugging_mode: false,
             tag_list_items: Value::Null,
             sort_mode: SessionSortMode::LastActivity,
             session_card_hover_buttons: Value::Null,
-            show_tag_menu_when_parking: true,
+            show_tag_menu_when_parking: false,
             show_session_card_hover_buttons_in_context_menu: true,
             keep_awake_enabled: false,
             hide_keep_awake_titlebar_control: false,

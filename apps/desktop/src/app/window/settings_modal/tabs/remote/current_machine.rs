@@ -90,7 +90,7 @@ pub(super) fn this_computer_icon_tile(
     // Another computer the sidebar shows is connected (a saved one that is on, isn't this one
     // again, and answers), and Mark the computer you're on is on: the sidebar's rule
     // (gx_store/remote_clients.rs).
-    let several = tab.store.read(cx).value("markComputerYouAreOn").as_bool() != Some(false)
+    let several = tab.store.read(cx).value("markComputerYouAreOn").as_bool() == Some(true)
         && tab.remote_machines(cx).iter().any(|machine| {
             machine.get("disabled").and_then(serde_json::Value::as_bool) != Some(true)
                 && machine

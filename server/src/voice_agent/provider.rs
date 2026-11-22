@@ -85,7 +85,7 @@ impl Provider {
 
     pub(super) fn default_voice(self) -> &'static str {
         match self {
-            Self::Xai => "eve",
+            Self::Xai => "lux",
             Self::OpenAi => "marin",
         }
     }

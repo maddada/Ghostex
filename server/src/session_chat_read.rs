@@ -698,7 +698,7 @@ pub(crate) async fn handle_read_session_chat_http(
             &state.paths,
             "markedHandoversHeadingStrength"
         )
-        .unwrap_or(60.0)),
+        .unwrap_or(30.0)),
     );
     // Text strength rides every read too, so the phone draws the computer's strength
     // (CDXC:SessionChat 2026-10-31 in packages/gx-chat-core/src/transcript/text_strength.rs).

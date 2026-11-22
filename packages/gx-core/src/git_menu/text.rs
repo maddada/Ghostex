@@ -4,7 +4,7 @@
 use super::state::GitReviewAction;
 
 /// The prompt agent used when neither the dialog nor the settings name one.
-pub const DEFAULT_PROMPT_AGENT_ID: &str = "codex";
+pub const DEFAULT_PROMPT_AGENT_ID: &str = "claude";
 
 pub const GIT_MULTIPLE_COMMITS_PROMPT: &str =
     "Please review my current changes and commit them as multiple focused commits.

@@ -149,13 +149,13 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// `sleepSessionWhenParking`, which decides whether parking also sleeps. Default false, the
+    /// `sleepSessionWhenParking`, which decides whether parking also sleeps. Default true, the
     /// same default the shared settings carry. The remote park reads it through here too.
     pub(super) fn gx_store_sleep_session_when_parking(&self) -> bool {
         crate::shared_settings::shared_sidebar_settings_snapshot()
             .object()
             .get("sleepSessionWhenParking")
             .and_then(Value::as_bool)
-            .unwrap_or(false)
+            .unwrap_or(true)
     }
 }

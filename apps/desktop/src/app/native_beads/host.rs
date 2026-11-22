@@ -287,10 +287,10 @@ impl GhostexGpuiApp {
             std::fs::read_to_string(shared_settings::shared_sidebar_settings_path())
                 .ok()
                 .and_then(|text| serde_json::from_str(&text).ok());
-        if saved
-            .as_ref()
-            .is_some_and(|saved| saved.contains_key(BEADS_LAYOUT_SETTING))
-        {
+        let Some(saved) = saved else {
+            return;
+        };
+        if saved.contains_key(BEADS_LAYOUT_SETTING) {
             return;
         }
         // Any saved trace of an open Kanban tab counts: the open views (older saved states have
@@ -306,11 +306,9 @@ impl GhostexGpuiApp {
             || self.project_view_states_by_project.values().any(|state| {
                 state.open_views.contains(&kanban) || in_strip(&state.view_strip_layout)
             });
-        self.save_beads_layout(if kanban_tab_saved {
-            BeadsLayout::Board
-        } else {
-            BeadsLayout::Tree
-        });
+        if kanban_tab_saved {
+            self.save_beads_layout(BeadsLayout::Board);
+        }
     }
 
     #[cfg(not(ghostex_web))]

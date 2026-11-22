@@ -72,8 +72,7 @@ impl HoverButton {
     }
 }
 
-/// `DEFAULT_SESSION_CARD_HOVER_BUTTONS`: only Close shows at rest, and the chevron reveals Tag,
-/// Park and Sleep.
+/// `DEFAULT_SESSION_CARD_HOVER_BUTTONS`: all hover actions off by default.
 fn defaults() -> Vec<HoverButton> {
     [
         (Some(HoverAction::Rename), false),
@@ -81,11 +80,11 @@ fn defaults() -> Vec<HoverButton> {
         (Some(HoverAction::Note), false),
         (Some(HoverAction::Snooze), false),
         (Some(HoverAction::CloseAfterDone), false),
-        (Some(HoverAction::Tag), true),
-        (Some(HoverAction::Park), true),
-        (Some(HoverAction::Sleep), true),
-        (None, true),
-        (Some(HoverAction::Close), true),
+        (Some(HoverAction::Tag), false),
+        (Some(HoverAction::Park), false),
+        (Some(HoverAction::Sleep), false),
+        (None, false),
+        (Some(HoverAction::Close), false),
     ]
     .into_iter()
     .map(|(action, enabled)| HoverButton { action, enabled })

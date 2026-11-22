@@ -126,14 +126,14 @@ pub(crate) fn hud_settings(raw: &Value, debugging_mode: bool) -> Value {
         "agentManagerZoomPercent".into(),
         agent_manager_zoom_percent(source),
     );
-    // `normalizeDefaultPromptAgentId`: trimmed, `codex` when empty, at most 120 characters.
+    // `normalizeDefaultPromptAgentId`: trimmed, `claude` when empty, at most 120 characters.
     let prompt_agent = source
         .get("defaultPromptAgentId")
         .and_then(Value::as_str)
-        .unwrap_or("codex")
+        .unwrap_or("claude")
         .trim();
     let prompt_agent = if prompt_agent.is_empty() {
-        "codex"
+        "claude"
     } else {
         prompt_agent
     };

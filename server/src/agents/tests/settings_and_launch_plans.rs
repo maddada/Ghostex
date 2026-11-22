@@ -18,7 +18,7 @@ fn agent_settings_use_current_metadata_key_and_default_prompt_agent() {
         initial
             .get("settings")
             .and_then(|settings| settings.get("defaultPromptAgentId")),
-        Some(&json!("codex"))
+        Some(&json!("claude"))
     );
 
     let updated = update_agent_settings(
@@ -57,7 +57,7 @@ fn agent_settings_use_current_metadata_key_and_default_prompt_agent() {
 #[test]
 fn agent_settings_ignore_legacy_metadata_key() {
     let (_temp, db) = open_test_database();
-    let legacy_value = json!({ "agentAcceptAllEnabled": false, "defaultPromptAgentId": "claude" });
+    let legacy_value = json!({ "agentAcceptAllEnabled": false, "defaultPromptAgentId": "codex" });
     write_metadata_value(&db, "gxserverAgentSettings", legacy_value.clone());
 
     let settings = read_agent_settings_with_metadata(&db).expect("legacy ignored");
@@ -72,7 +72,7 @@ fn agent_settings_ignore_legacy_metadata_key() {
         settings
             .get("settings")
             .and_then(|settings| settings.get("defaultPromptAgentId")),
-        Some(&json!("codex"))
+        Some(&json!("claude"))
     );
 
     let updated = update_agent_settings(
@@ -126,7 +126,7 @@ fn agent_settings_normalize_default_prompt_agent_id() {
             .expect("params"),
     )
     .expect("blank update");
-    assert_eq!(blank.get("defaultPromptAgentId"), Some(&json!("codex")));
+    assert_eq!(blank.get("defaultPromptAgentId"), Some(&json!("claude")));
 
     let long_id = "x".repeat(MAX_DEFAULT_PROMPT_AGENT_ID_LENGTH + 10);
     let capped = update_agent_settings(

@@ -700,7 +700,7 @@
       "section": "markedHandovers",
       "sectionTitle": "Marked handovers",
       "type": "number",
-      "default": 60,
+      "default": 30,
       "min": 0,
       "max": 100,
       "step": 10,
@@ -929,7 +929,7 @@
       "section": "sidebar",
       "sectionTitle": "Sidebar",
       "type": "boolean",
-      "default": true,
+      "default": false,
       "advanced": true,
       "agentWritable": true
     },
@@ -1060,7 +1060,7 @@
       "section": "sidebar",
       "sectionTitle": "Sidebar",
       "type": "boolean",
-      "default": true,
+      "default": false,
       "agentWritable": true
     },
     {
@@ -1145,7 +1145,7 @@
       "section": "sidebar",
       "sectionTitle": "Sidebar",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "agentWritable": true
     },
     {
@@ -1157,7 +1157,7 @@
       "section": "sidebar",
       "sectionTitle": "Sidebar",
       "type": "boolean",
-      "default": true,
+      "default": false,
       "agentWritable": true
     },
     {
@@ -1194,7 +1194,7 @@
       "section": "spaces",
       "sectionTitle": "Spaces",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "agentWritable": true
     },
     {
@@ -1240,7 +1240,7 @@
       "section": "spaces",
       "sectionTitle": "Spaces",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "advanced": true,
       "agentWritable": true
     },
@@ -1275,23 +1275,23 @@
           "id": "closeAfterDone"
         },
         {
-          "enabled": true,
+          "enabled": false,
           "id": "tag"
         },
         {
-          "enabled": true,
+          "enabled": false,
           "id": "park"
         },
         {
-          "enabled": true,
+          "enabled": false,
           "id": "sleep"
         },
         {
-          "enabled": true,
+          "enabled": false,
           "id": "chevron"
         },
         {
-          "enabled": true,
+          "enabled": false,
           "id": "close"
         }
       ],
@@ -2218,7 +2218,7 @@
       "section": "sounds",
       "sectionTitle": "Sounds",
       "type": "enum",
-      "default": "arcade",
+      "default": "two-tone-1",
       "options": [
         {
           "label": "Off",
@@ -2905,7 +2905,7 @@
       "section": "fileOpening",
       "sectionTitle": "File opening",
       "type": "enum",
-      "default": "tree",
+      "default": "board",
       "options": [
         {
           "label": "Tree",
@@ -3080,7 +3080,7 @@
       "section": "editor",
       "sectionTitle": "Editor",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "advanced": true,
       "agentWritable": true
     },
@@ -4708,7 +4708,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 80,
+      "default": 50,
       "agentWritable": true
     },
     {
@@ -9274,7 +9274,7 @@
       "section": "textFonts",
       "sectionTitle": "Text & Fonts",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "agentWritable": true
     },
     {
@@ -9399,7 +9399,7 @@
       "section": "sizeZoom",
       "sectionTitle": "Size & Zoom",
       "type": "number",
-      "default": 125,
+      "default": 200,
       "min": 40,
       "max": 600,
       "agentWritable": true
@@ -9463,7 +9463,7 @@
       "section": "windowLayout",
       "sectionTitle": "Window & Layout",
       "type": "boolean",
-      "default": true,
+      "default": false,
       "agentWritable": true,
       "availability": "Only on macOS."
     },
@@ -11121,7 +11121,7 @@
       "section": "config",
       "sectionTitle": "Config",
       "type": "string",
-      "default": "codex",
+      "default": "claude",
       "agentWritable": true
     },
     {
@@ -11133,7 +11133,7 @@
       "section": "config",
       "sectionTitle": "Config",
       "type": "enum",
-      "default": "codex",
+      "default": "claude",
       "options": [
         {
           "label": "Codex",
@@ -14590,7 +14590,7 @@
       "section": "provider",
       "sectionTitle": "Provider and voice",
       "type": "enum",
-      "default": "eve",
+      "default": "lux",
       "options": [
         {
           "label": "Eve",

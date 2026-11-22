@@ -470,7 +470,7 @@ pub fn mark_sections(markdown: String) -> String {
 }
 
 /// The Handover heading color strength (percent) when nothing is saved; it matches the catalog default of `markedHandoversHeadingStrength`.
-pub const DEFAULT_HEADING_STRENGTH: u8 = 60;
+pub const DEFAULT_HEADING_STRENGTH: u8 = 30;
 
 /// The Handover heading color strength the renderers draw: the setting clamped to 0 to 100 and
 /// snapped to its 10% steps, `None` at the default, 60%.

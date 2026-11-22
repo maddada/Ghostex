@@ -42,8 +42,8 @@ const PROJECTS_REFRESH: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum BeadsLayout {
-    #[default]
     Tree,
+    #[default]
     Board,
 }
 
@@ -254,7 +254,7 @@ impl BeadsView {
             focus: cx.focus_handle(),
             target: None,
             generation: 0,
-            layout: BeadsLayout::Tree,
+            layout: BeadsLayout::default(),
             last_saved_layout: None,
             palette: None,
             modal: None,

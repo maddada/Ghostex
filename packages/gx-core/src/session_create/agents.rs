@@ -372,7 +372,7 @@ impl TitleGenerationSettings {
                         | "custom"
                 )
             })
-            .unwrap_or("codex")
+            .unwrap_or("claude")
             .to_string();
         let custom_command = settings
             .get("customSessionTitleGenerationCommand")

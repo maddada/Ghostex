@@ -37,8 +37,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("updatesCheckExtensions", J::Str("1h")),
     ("agentsTidyUpOfferDismissed", J::Bool(false)),
     ("agentManagerZoomPercent", J::Num(100.0)),
-    ("defaultPromptAgentId", J::Str("codex")),
-    ("sessionTitleGenerationAgent", J::Str("codex")),
+    ("defaultPromptAgentId", J::Str("claude")),
+    ("sessionTitleGenerationAgent", J::Str("claude")),
     ("customSessionTitleGenerationCommand", J::Str("")),
     // CDXC:Navigation 2026-07-02-13:05:
     // In-app link routing is the default so cmd-clicked web links land in the
@@ -81,7 +81,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("documentFileOpenTarget", J::Str("files")),
     ("fileChangesOpenTarget", J::Str("changes")),
     ("changesHideTestFiles", J::Bool(false)),
-    ("beadsViewLayout", J::Str("tree")),
+    ("beadsViewLayout", J::Str("board")),
     ("otherFileOpenTarget", J::Str("files")),
     ("videoFileOpenTarget", J::Str("files")),
     ("audioFileOpenTarget", J::Str("files")),
@@ -235,7 +235,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // New installs should use Ghostex-owned bundled editor settings by default
     // so the embedded VS Code surface starts on Dark 2026. Users can still opt
     // into local VS Code settings explicitly from Settings.
-    ("codeServerLinkVscodeUserConfig", J::Bool(false)),
+    ("codeServerLinkVscodeUserConfig", J::Bool(true)),
     ("codeServerUseVscodeInsidersUserConfig", J::Bool(false)),
     ("codeServerNewWindowsAsTabs", J::Bool(false)),
     // Legacy external-IDE preference keys remain normalized so existing settings
@@ -283,7 +283,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
         "showUntrackedProjectDiffWhenNoTrackedChanges",
         J::Bool(false),
     ),
-    ("completionSound", J::Str("arcade")),
+    ("completionSound", J::Str("two-tone-1")),
     // CDXC:Clipboard 2026-09-15 DECISION:
     // User: play the copy sound everywhere in the app when copying, but "make it disabled by default for now". This supersedes the earlier enabled default; this switch is the only gate the copy sound has.
     ("copySound", J::Bool(false)),
@@ -298,10 +298,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Sessions 2026-09-10 DECISION:
     // User: enable parking by default, but keep sleep on park disabled by default.
     ("enableSessionParking", J::Bool(true)),
-    ("sleepSessionWhenParking", J::Bool(false)),
+    ("sleepSessionWhenParking", J::Bool(true)),
     // CDXC:Sessions 2026-09-12 DECISION:
     // User: "Park & Snooze with tags" is on by default, so Park and Snooze open the tag menu unless the user turns it off. Supersedes the 2026-09-11 off-by-default choice for the park-only version of this setting.
-    ("showTagMenuWhenParking", J::Bool(true)),
+    ("showTagMenuWhenParking", J::Bool(false)),
     // CDXC:Sessions 2026-09-11 DECISION:
     // User: "Unpark after sending a message" defaults to on.
     ("unparkAfterSendingMessage", J::Bool(true)),
@@ -339,21 +339,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // still turn the hover chrome off from Settings when they want quieter cards.
     (
         "sessionCardHoverButtons",
-        J::Arr(&[
-            J::Obj(&[("enabled", J::Bool(false)), ("id", J::Str("rename"))]),
-            J::Obj(&[("enabled", J::Bool(false)), ("id", J::Str("pin"))]),
-            J::Obj(&[("enabled", J::Bool(false)), ("id", J::Str("note"))]),
-            J::Obj(&[("enabled", J::Bool(false)), ("id", J::Str("snooze"))]),
-            J::Obj(&[
-                ("enabled", J::Bool(false)),
-                ("id", J::Str("closeAfterDone")),
-            ]),
-            J::Obj(&[("enabled", J::Bool(true)), ("id", J::Str("tag"))]),
-            J::Obj(&[("enabled", J::Bool(true)), ("id", J::Str("park"))]),
-            J::Obj(&[("enabled", J::Bool(true)), ("id", J::Str("sleep"))]),
-            J::Obj(&[("enabled", J::Bool(true)), ("id", J::Str("chevron"))]),
-            J::Obj(&[("enabled", J::Bool(true)), ("id", J::Str("close"))]),
-        ]),
+        super::session_card_hover_actions::DEFAULT_SESSION_CARD_HOVER_BUTTONS,
     ),
     // CDXC:Sessions 2026-10-01 DECISION:
     // User: the enabled hover buttons also appear in the session context menu by default, in the menu's own ChatGPT-style order (Rename, Pin, Snooze, Park, Sleep, Note, Tag As); this supersedes the 2026-09-15 rule that they led the menu in the card's right-to-left order. Close is the exception and never appears in the menu while it is on the card. Turning this off restores the 2026-09-12 rule where every enabled hover button leaves the context menu.
@@ -367,7 +353,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // timestamps by default. Settings still owns an explicit toggle for users who
     // want the timestamp back, and the setting must not affect project-header git
     // diff stats.
-    ("hideLastActiveTimeOnSessionCards", J::Bool(true)),
+    ("hideLastActiveTimeOnSessionCards", J::Bool(false)),
     ("highlightPendingQuestions", J::Bool(false)),
     ("hideAccountEmails", J::Bool(false)),
     // CDXC:ScreenshotMode 2026-11-20 DECISION in apps/desktop/src/app/screenshot_mode.rs: off by
@@ -616,7 +602,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // last-width restore path used at app restart.
     ("sidebarDefaultWidthPx", J::Num(275.0)),
     ("groupWorkingSessions", J::Bool(false)),
-    ("sidebarSpacesEnabled", J::Bool(false)),
+    ("sidebarSpacesEnabled", J::Bool(true)),
     ("sidebarSpaceSwitchBehavior", J::Str("restore")),
     ("sidebarView", J::Str("project")),
     ("sidebarLayout", J::Str("rail")),
@@ -653,7 +639,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:RemoteMachines 2026-11-22 DECISION in apps/desktop native_sidebar/computer_mark.rs: on by default.
     ("hideComputerIconUntilHover", J::Bool(true)),
     // CDXC:RemoteMachines 2026-11-20 DECISION in apps/desktop native_sidebar/computer_mark.rs: on by default.
-    ("markComputerYouAreOn", J::Bool(true)),
+    ("markComputerYouAreOn", J::Bool(false)),
     // CDXC:Worktrees 2026-11-06 DECISION in gx-core sidebar_view/worktree_fold.rs.
     ("worktreeSessionsInProject", J::Bool(true)),
     // CDXC:Sidebar 2026-11-07 DECISION in gx-core sidebar_view/inputs.rs (Pinned order): Manual by default.
@@ -669,7 +655,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("syncKeybindings", J::Bool(false)),
     ("syncCoordinator", J::Bool(false)),
     ("projectSwitchKeepAliveMinutes", J::Num(10.0)),
-    ("sidebarSpaceFollowActiveSession", J::Bool(false)),
+    ("sidebarSpaceFollowActiveSession", J::Bool(true)),
     // CDXC:Spaces 2026-11-12 DECISION in packages/settings-catalog/src/spaces.rs: Active projects is on by default.
     ("sidebarActiveProjects", J::Bool(true)),
     ("sidebarVisibilityMemory", J::Str("shared")),
@@ -701,7 +687,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatQuietViewCalm", J::Bool(false)),
     ("chatVariedWorkingWords", J::Bool(false)),
     // CDXC:SessionChat 2026-10-16 DECISION: User, on a tester's request to draw the agent's thinking grey and its output white as terminals do: "Sure please do it as a toggle (disabled by default) so we can check how it looks." Off keeps the unified look; on, thinking takes the theme's muted text colour and replies its full foreground, in the desktop, web and phone chats.
-    ("sessionChatMutedThinking", J::Bool(false)),
+    ("sessionChatMutedThinking", J::Bool(true)),
     ("sessionChatKeepComposerExpanded", J::Bool(false)),
     ("sessionChatConfirmEscapeInterrupt", J::Bool(true)),
     // CDXC:CatchMeUp 2026-10-11 DECISION: User: "disable this feature by default. add a toggle to enable it under chat". The composer's Catch me up button shows only while this is on.
@@ -721,7 +707,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:VoiceMode 2026-10-20 WHY:
     // xAI is the default provider: Grok Voice is billed per minute at a known price, and Grok dictation already needs the xAI key. Each provider keeps its own voice; the API keys are not settings (gxserver seals them, see server/src/voice_agent/keys.rs).
     ("voiceAgentProvider", J::Str("xai")),
-    ("voiceAgentXaiVoice", J::Str("eve")),
+    ("voiceAgentXaiVoice", J::Str("lux")),
     ("voiceAgentOpenaiVoice", J::Str("marin")),
     ("voiceAgentSpeed", J::Str("1")),
     ("voiceAgentCallMode", J::Str("regular")),
@@ -773,7 +759,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("markedHandoversEmoji", J::Bool(false)),
     // CDXC:MarkedHandovers 2026-10-20 DECISION: User: "i want an advanced setting to be able to set how strong the colors of these headings in the handover are" and "make current colors the max". 100% (the default) draws today's palette; lower blends each heading colour toward the normal text colour, 0% leaving plain bold text. Nothing goes more vivid than today.
     // CDXC:MarkedHandovers 2026-10-22 DECISION: User: "make handover color strength 60 by default". Supersedes the 100 default above; saved values keep what the user chose, and 100% is still the full palette.
-    ("markedHandoversHeadingStrength", J::Num(60.0)),
+    ("markedHandoversHeadingStrength", J::Num(30.0)),
     // CDXC:Theming 2026-06-15-11:24:
     // Custom sidebar/titlebar colors are scoped to the sidebar and titlebar.
     // The default background matches Dark Gray chrome without changing modal or
@@ -1091,7 +1077,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // The default dark look's pane outline since 2026-11-22 (see `darkThemePreset`); #d8664f before.
     ("workspaceActivePaneBorderColor", J::Str("#5581a9")),
     // CDXC:Settings 2026-11-08 DECISION: User: "to show traffic lights on macos when sidebar is collapsed (default to yes)". On: the window's buttons stay with the sidebar collapsed, as they did before the 2026-11-06 floating-sidebar change (GitHub #432), which off restores.
-    ("showWindowButtonsWhenSidebarCollapsed", J::Bool(true)),
+    ("showWindowButtonsWhenSidebarCollapsed", J::Bool(false)),
     ("closeButtonsOnRight", J::Bool(false)),
     // CDXC:Theming 2026-11-21 DECISION:
     // User (through the coordinator): six dark art themes (Moonwater, Glasshouse, Red Earth, Deep Current, Night Garden, Nocturne Canyon) are Ghostex's main themes. Each paints its own artwork behind the sidebar and the work area of an opaque window: no desktop shows through. `windowArt` names the artwork (Polar Night by default since 2026-11-22, `gm-light` in light mode; None keeps the glass as it is), `windowArtDim` darkens it (percent black over it) and `windowArtBlur` softens it (points). The surfaces over it take the glass tints (`windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`).
@@ -1120,7 +1106,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("windowGlassLiveStyleLight", J::Str("ink")),
     // CDXC:Theming 2026-11-22 DECISION: User: "Make the effect for Animated more noticeable by default: it's super not apparent now by default." Raised from 0.3 and 25 (2026-11-21) to 1.0 and 80 so motion is clearly visible on first pick while keeping text readable.
     ("windowGlassLiveSpeed", J::Num(1.0)),
-    ("windowGlassLiveBrightness", J::Num(80.0)),
+    ("windowGlassLiveBrightness", J::Num(50.0)),
     ("windowGlassBlurRadius", J::Num(4.0)),
     ("windowGlassWindowsBlur", J::Str("acrylic")),
     // CDXC:Theming 2026-11-20 DECISION: User (Q4288): "yes, make pane gap 6 and menu blur 17 defaults too", from their own look (see `darkThemePreset`). Menu blur applies in light mode too. Supersedes 20.
@@ -1171,7 +1157,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("workspacePaneGap", J::Num(6.0)),
     ("remoteMachines", J::Arr(&[])),
     ("remoteTailscaleEnabled", J::Bool(true)),
-    ("commandsPanelDefaultHeightPx", J::Num(125.0)),
+    ("commandsPanelDefaultHeightPx", J::Num(200.0)),
     ("commandsPanelSide", J::Str("bottom")),
     ("commandsPanelAutoMinimize", J::Bool(true)),
     ("commandsPanelAutoMinimizeDelaySeconds", J::Num(60.0)),

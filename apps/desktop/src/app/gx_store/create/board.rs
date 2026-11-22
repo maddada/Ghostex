@@ -48,7 +48,7 @@ const LINK_CHECK_CONCURRENCY: usize = 4;
 /// anything else, so this set exists to keep the board from offering a Resume the daemon would
 /// refuse.
 const RESUMABLE_AGENT_IDS: [&str; 3] = ["claude", "codex", "pi"];
-const DEFAULT_PROMPT_AGENT_ID: &str = "codex";
+const DEFAULT_PROMPT_AGENT_ID: &str = "claude";
 /// Link availability answers by `projectId:sessionId`.
 pub(super) type LinkChecks = HashMap<String, (Instant, LinkAvailability)>;
 

@@ -298,7 +298,7 @@ pub(crate) fn gpui_is_bundled_sound_file_name(file_name: &str) -> bool {
 }
 
 pub(crate) fn gpui_normalize_completion_sound(sound: Option<&str>) -> &'static str {
-    match sound.unwrap_or("arcade") {
+    match sound.unwrap_or("two-tone-1") {
         "ping" => "ping",
         "pingdouble" => "pingdouble",
         "glass" => "glass",
@@ -332,7 +332,7 @@ pub(crate) fn gpui_normalize_completion_sound(sound: Option<&str>) -> &'static s
         "voiceover-pack-male-you-win" => "voiceover-pack-male-you-win",
         "voiceover-pack-female-congratulations" => "voiceover-pack-female-congratulations",
         "flawless-victory" => "flawless-victory",
-        _ => "arcade",
+        _ => "two-tone-1",
     }
 }
 

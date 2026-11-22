@@ -1077,7 +1077,7 @@ pub(crate) const COMMAND_PANE_SPLIT_HANDLE_THICKNESS: f32 = 1.0;
 
 pub(crate) const COMMAND_PANE_DEFAULT_SESSION_TITLE: &str = "Command Terminal";
 
-pub(crate) const COMMAND_PANE_DEFAULT_HEIGHT_PX: f32 = 125.0;
+pub(crate) const COMMAND_PANE_DEFAULT_HEIGHT_PX: f32 = 200.0;
 
 pub(crate) const COMMAND_PANE_MIN_DEFAULT_HEIGHT_PX: f32 = 40.0;
 

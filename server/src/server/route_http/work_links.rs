@@ -387,5 +387,5 @@ fn sleep_session_when_parking(state: &AppState) -> bool {
                 .get("sleepSessionWhenParking")
                 .and_then(Value::as_bool)
         })
-        .unwrap_or(false)
+        .unwrap_or(true)
 }
