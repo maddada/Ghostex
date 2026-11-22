@@ -966,12 +966,8 @@ impl NativeChatView {
         // separate bar like u show here". So it is always on this bar while the chat has a dock.
         let status_card = self.dock_status_card();
         let status_width = status_card.as_ref().map_or(0.0, |card| {
-            24.0 + dock_text_width(
-                card["label"].as_str().unwrap_or_default(),
-                bar_font,
-                p,
-                cx,
-            ) + 12.0
+            24.0 + dock_text_width(card["label"].as_str().unwrap_or_default(), bar_font, p, cx)
+                + 12.0
         });
         let named = named_width + status_width <= room;
         let marks: Vec<AnyElement> = counts
@@ -1189,10 +1185,8 @@ impl NativeChatView {
         // A form's or thread-wait row opens its target at once, as a page's opens the page: no
         // empty intermediate modal (gx-chat-core `details_fields`, Q4477).
         let opens_directly = page_row
-            || (matches!(
-                text(row, "kind").as_str(),
-                "form" | "thread" | "threadWait"
-            ) && row["open"].is_object());
+            || (matches!(text(row, "kind").as_str(), "form" | "thread" | "threadWait")
+                && row["open"].is_object());
         let (icon, color) = row_mark(row, p);
         // A thread (only a Work panel card, `BoardRow::dock`) is marked by its agent's logo, as
         // the panel's agent button and the Moving list's Who are.
