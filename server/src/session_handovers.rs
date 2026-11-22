@@ -191,13 +191,22 @@ pub(crate) async fn handle_list_session_handovers_http(
             },
         );
     }
-    let result = (|| {
-        let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+    let paths = state.paths.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    let result = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
             code: "internalError",
             message: format!("SQLite gxserver state error: {error}"),
         })?;
-        list_handovers_for_session(&db, project_id, session_id)
-    })();
+        list_handovers_for_session(&db, &pid, &sid)
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Could not list session handovers: {error}"),
+    })
+    .and_then(|res| res);
     match result {
         Ok(handovers) => routed_json(
             Some(endpoint_path),
@@ -291,25 +300,31 @@ pub(crate) async fn handle_handoff_to_existing_session_http(
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
-    let resolved = (|| {
-        let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+    let resolve_paths = state.paths.clone();
+    let resolve_server_id = state.metadata.server_id.clone();
+    let resolve_from_pid = from_project_id.clone();
+    let resolve_from_sid = from_session_id.clone();
+    let resolve_to_pid = to_project_id.clone();
+    let resolve_to_sid = to_session_id.clone();
+    let resolved = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&resolve_paths).map_err(|error| DomainStateError {
             code: "internalError",
             message: format!("SQLite gxserver state error: {error}"),
         })?;
-        let repo = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let repo = DomainRepository::new(&db, resolve_server_id.as_str());
         let from_session = repo
-            .get_session(&from_project_id, &from_session_id)?
+            .get_session(&resolve_from_pid, &resolve_from_sid)?
             .ok_or_else(|| DomainStateError {
                 code: "notFound",
                 message: "The source session no longer exists.".to_string(),
             })?;
         let to_session = repo
-            .get_session(&to_project_id, &to_session_id)?
+            .get_session(&resolve_to_pid, &resolve_to_sid)?
             .ok_or_else(|| DomainStateError {
                 code: "notFound",
                 message: "The target session no longer exists.".to_string(),
             })?;
-        let from_project_path = repo.get_project(&from_project_id)?.and_then(|project| {
+        let from_project_path = repo.get_project(&resolve_from_pid)?.and_then(|project| {
             project
                 .get("path")
                 .and_then(Value::as_str)
@@ -320,10 +335,10 @@ pub(crate) async fn handle_handoff_to_existing_session_http(
         let prior_turns = if delta {
             last_handover_turn_count(
                 &db,
-                &from_project_id,
-                &from_session_id,
-                &to_project_id,
-                &to_session_id,
+                &resolve_from_pid,
+                &resolve_from_sid,
+                &resolve_to_pid,
+                &resolve_to_sid,
             )
         } else {
             0
@@ -340,7 +355,13 @@ pub(crate) async fn handle_handoff_to_existing_session_http(
             prior_turns,
             to_is_working,
         ))
-    })();
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Could not resolve handover sessions: {error}"),
+    })
+    .and_then(|res| res);
     let (
         from_agent,
         to_agent,
@@ -436,6 +457,41 @@ pub(crate) async fn handle_handoff_to_existing_session_http(
         );
     }
 
+    if dry_run {
+        let available = counts.turns.saturating_sub(selection.skip_turns);
+        let kept_turns = selection
+            .last_turns
+            .map_or(available, |last| last.min(available));
+        let estimated_bytes = if kept_turns == 0 {
+            0
+        } else if kept_turns == counts.turns {
+            counts.whole_bytes
+        } else {
+            counts
+                .last_turns_bytes
+                .get(kept_turns - 1)
+                .copied()
+                .unwrap_or(counts.whole_bytes)
+        };
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(
+                request_id,
+                json!({
+                    "dryRun": true,
+                    "bytes": estimated_bytes,
+                    "turns": counts.turns,
+                    "exportedTurns": kept_turns,
+                    "previousTurnCount": prior_turns,
+                    "delta": delta && prior_turns > 0,
+                    "delivery": "dry_run",
+                    "preset": preset_name,
+                }),
+            ),
+        );
+    }
+
     let export_agent = from_agent.clone();
     let export_sid = from_agent_session_id.clone();
     let export_path = from_agent_session_path.clone();
@@ -505,25 +561,25 @@ pub(crate) async fn handle_handoff_to_existing_session_http(
         prompt.push_str(&note);
     }
 
-    let delivery = if dry_run {
-        "dry_run"
-    } else if to_is_working {
-        let db = match open_gxserver_database(&state.paths) {
-            Ok(db) => db,
-            Err(error) => {
-                return domain_error_response(
-                    endpoint_path,
-                    request_id,
-                    DomainStateError {
-                        code: "internalError",
-                        message: format!("SQLite gxserver state error: {error}"),
-                    },
-                );
-            }
-        };
-        if let Err(error) =
-            enqueue_session_chat_prompt(&db, &to_project_id, &to_session_id, &prompt, false)
-        {
+    let delivery = if to_is_working {
+        let queue_paths = state.paths.clone();
+        let queue_to_pid = to_project_id.clone();
+        let queue_to_sid = to_session_id.clone();
+        let queue_prompt = prompt.clone();
+        let queued = tokio::task::spawn_blocking(move || {
+            let db = open_gxserver_database(&queue_paths).map_err(|error| DomainStateError {
+                code: "internalError",
+                message: format!("SQLite gxserver state error: {error}"),
+            })?;
+            enqueue_session_chat_prompt(&db, &queue_to_pid, &queue_to_sid, &queue_prompt, false)
+        })
+        .await
+        .map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("Could not queue handover prompt: {error}"),
+        })
+        .and_then(|res| res);
+        if let Err(error) = queued {
             return domain_error_response(endpoint_path, request_id, error);
         }
         "queued"
@@ -548,29 +604,47 @@ pub(crate) async fn handle_handoff_to_existing_session_http(
     } else {
         "existing_session"
     };
-    let handover_id = match open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
-        code: "internalError",
-        message: format!("SQLite gxserver state error: {error}"),
-    }) {
-        Ok(db) => match record_handover(
+    let record_paths = state.paths.clone();
+    let record_from_pid = from_project_id.clone();
+    let record_from_sid = from_session_id.clone();
+    let record_to_pid = to_project_id.clone();
+    let record_to_sid = to_session_id.clone();
+    let record_from_agent = from_agent.unwrap_or_else(|| "unknown".to_string());
+    let record_to_agent = to_agent.unwrap_or_else(|| "unknown".to_string());
+    let record_preset = preset_name.clone();
+    let record_export_path = export_path_str.clone();
+    let outcome_turns = outcome.turns;
+    let outcome_kept_turns = outcome.kept_turns;
+    let handover_id = match tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&record_paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        record_handover(
             &db,
             &HandoverRecordInput {
-                from_project_id: &from_project_id,
-                from_session_id: &from_session_id,
-                to_project_id: &to_project_id,
-                to_session_id: &to_session_id,
-                from_agent: from_agent.as_deref().unwrap_or("unknown"),
-                to_agent: to_agent.as_deref().unwrap_or("unknown"),
+                from_project_id: &record_from_pid,
+                from_session_id: &record_from_sid,
+                to_project_id: &record_to_pid,
+                to_session_id: &record_to_sid,
+                from_agent: &record_from_agent,
+                to_agent: &record_to_agent,
                 mode,
-                preset: &preset_name,
-                from_turn_count: outcome.turns,
-                exported_turns: outcome.kept_turns,
-                export_path: Some(&export_path_str),
+                preset: &record_preset,
+                from_turn_count: outcome_turns,
+                exported_turns: outcome_kept_turns,
+                export_path: Some(&record_export_path),
             },
-        ) {
-            Ok(id) => id,
-            Err(error) => return domain_error_response(endpoint_path, request_id, error),
-        },
+        )
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Could not record session handover: {error}"),
+    })
+    .and_then(|res| res)
+    {
+        Ok(id) => id,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
 
