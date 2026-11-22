@@ -6,6 +6,8 @@ use super::{
 use serde_json::{json, Value};
 
 const HELP: &str = "Usage: ghostex accounts [--all] [--refresh] [--json] [--server <profile>]
+       ghostex accounts status [--refresh] [--json]   One line per account: its room and whether
+                                                     an agent may move a thread to it on its own
 
 Lists every saved Claude (Claude Swap) and Codex (Codex Swap) account: its number, email,
 state (ready, limitReached, needsSignIn, disabled when turned off in Settings; a ready account
@@ -28,6 +30,8 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     if args.first().map(String::as_str) == Some("hub") {
         return super::accounts_hub::run(&args[1..]);
     }
+    let status = args.first().map(String::as_str) == Some("status");
+    let args = if status { &args[1..] } else { args };
     let mut json_output = false;
     let mut refresh = false;
     let mut all_sessions = false;
@@ -63,6 +67,9 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         &json!({ "operation": "roster", "refresh": refresh, "allSessions": all_sessions }),
         &flags,
     )?;
+    if status {
+        return print_status(&roster, json_output);
+    }
     if json_output {
         print_json(&json!({
             "ok": true,
@@ -291,4 +298,240 @@ fn resets_line(row: &Value) -> Option<String> {
         ));
     }
     Some(line)
+}
+
+/// CDXC:Coordinators 2026-11-22 DECISION:
+/// User (context-bloat page, fix 4): `ghostex accounts` printed 312 lines, 307 of them the
+/// sessions on each account, when a coordinator needs five: which account it may move a thread
+/// to. `accounts status` prints one line per account with its room and that answer, from the
+/// roster's `autoSwitchable` (Ghostex's own automatic switching rule, `SavedAccount::
+/// auto_switchable`): manual only is the user's to name, turned off or signed out is never.
+/// SEE-ALSO: server/src/accounts/cli.rs (`roster`, `resolve_ready_account`),
+/// server/src/ghostex_cli/coordinator/usage_room.rs, server/src/coordinators/playbook.md.
+fn print_status(roster: &Value, json_output: bool) -> CliResult<()> {
+    let rows = roster["accounts"].as_array().cloned().unwrap_or_default();
+    let usage_rows = roster["usageAccounts"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let now = chrono::Utc::now();
+    let verdict = |row: &Value| -> (&'static str, String, String) {
+        let text = |key: &str| row[key].as_str().unwrap_or_default();
+        let limited = row["limitReached"]
+            .as_array()
+            .is_some_and(|windows| !windows.is_empty());
+        let frees = row["usage"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|window| window["usedPercent"].as_f64().unwrap_or(0.0) >= 100.0)
+            .filter_map(|window| window["resetsAt"].as_str())
+            .filter_map(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            .filter(|at| *at > now)
+            .max()
+            .map(|at| {
+                at.with_timezone(&chrono::Local)
+                    .format("%b %-d %H:%M")
+                    .to_string()
+            });
+        let automatic = row
+            .get("autoSwitchable")
+            .and_then(Value::as_bool)
+            .unwrap_or(row["eligible"] == true);
+        let manual = row["registered"] == true && row["eligible"] != true;
+        if row["userDisabled"] == true || text("status") == "disabled" {
+            return ("off", "turned off in Settings".into(), "no".into());
+        }
+        if row["registered"] != true {
+            return (
+                "new",
+                "not added in Settings".into(),
+                "no (not added in Settings)".into(),
+            );
+        }
+        if text("state") == "needsSignIn" || row["loginExpired"] == true {
+            return (
+                "sign-in",
+                "needs signing in".into(),
+                "no, the user must sign in".into(),
+            );
+        }
+        let room = compact_usage(row);
+        if limited {
+            let at = frees.unwrap_or_default();
+            let room = format!(
+                "{}{}",
+                row["limitReached"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(|window| format!("{window} 100%"))
+                    .collect::<Vec<_>>()
+                    .join(" · "),
+                if at.is_empty() {
+                    String::new()
+                } else {
+                    format!(", frees {at}")
+                }
+            );
+            return (
+                "limit",
+                room,
+                if manual {
+                    "no (manual only, at its limit)".into()
+                } else {
+                    "no, until then".into()
+                },
+            );
+        }
+        let room = if row["noUsageReading"] == true {
+            "no usage reading".to_string()
+        } else {
+            room
+        };
+        if manual || !automatic {
+            return (
+                "ready",
+                room,
+                "only if the user names it (manual only)".into(),
+            );
+        }
+        let mut answer = "yes".to_string();
+        if row["noUsageReading"] == true {
+            answer.push_str(", but check its room first");
+        }
+        if row["default"] == true {
+            answer.push_str(", default");
+        }
+        ("ready", room, answer)
+    };
+    if json_output {
+        let accounts: Vec<Value> = rows
+            .iter()
+            .map(|row| {
+                let (state, room, answer) = verdict(row);
+                json!({
+                    "provider": row["provider"],
+                    "number": row["number"],
+                    "email": row["email"],
+                    "default": row["default"] == true,
+                    "state": state,
+                    "room": room,
+                    "maySwitch": answer.starts_with("yes"),
+                    "manualOnly": row["registered"] == true && row["eligible"] != true,
+                    "answer": answer,
+                })
+            })
+            .collect();
+        let usage: Vec<Value> = usage_rows
+            .iter()
+            .map(|row| {
+                json!({
+                    "provider": row["provider"],
+                    "email": row["email"],
+                    "status": row["status"],
+                    "room": compact_usage(row),
+                })
+            })
+            .collect();
+        print_json(&json!({ "ok": true, "accounts": accounts, "usageAccounts": usage }));
+        return Ok(());
+    }
+    if rows.is_empty() && usage_rows.is_empty() {
+        println!("No accounts are saved. Add one in Settings > Accounts.");
+        return Ok(());
+    }
+    for (provider, heading) in [("claude", "Claude"), ("codex", "Codex")] {
+        let accounts: Vec<&Value> = rows
+            .iter()
+            .filter(|row| row["provider"] == provider)
+            .collect();
+        if accounts.is_empty() {
+            continue;
+        }
+        let lines: Vec<(&Value, (&'static str, String, String))> =
+            accounts.iter().map(|row| (*row, verdict(row))).collect();
+        let default = accounts
+            .iter()
+            .find(|row| row["default"] == true)
+            .map(|row| format!("#{}", row["number"].as_str().unwrap_or_default()));
+        let may: Vec<String> = lines
+            .iter()
+            .filter(|(_, (_, _, answer))| answer.starts_with("yes"))
+            .map(|(row, _)| format!("#{}", row["number"].as_str().unwrap_or_default()))
+            .collect();
+        println!(
+            "{heading}  ({}you may switch a thread to: {})",
+            default
+                .map(|number| format!("new threads use {number}; "))
+                .unwrap_or_default(),
+            if may.is_empty() {
+                "none, ask the user".to_string()
+            } else {
+                may.join(", ")
+            }
+        );
+        let email_width = lines
+            .iter()
+            .map(|(row, _)| label(row).chars().count())
+            .max()
+            .unwrap_or(0);
+        for (row, (state, room, answer)) in &lines {
+            println!(
+                "  #{:<2} {:<email_width$}  {:<7}  {:<28} {answer}",
+                row["number"].as_str().unwrap_or_default(),
+                label(row),
+                state,
+                room,
+            );
+        }
+    }
+    for (provider, heading) in [
+        ("gemini", "Antigravity (Gemini)"),
+        ("cursor", "Cursor"),
+        ("copilot", "Copilot"),
+    ] {
+        for row in usage_rows.iter().filter(|row| row["provider"] == provider) {
+            let status = match row["status"].as_str().unwrap_or_default() {
+                "loginRequired" => "needs sign-in",
+                "loading" => "no reading yet",
+                other => other,
+            };
+            println!(
+                "{heading:<21} {}  {status}  {}",
+                label(row),
+                compact_usage(row)
+            );
+        }
+    }
+    println!(
+        "Sessions per account: ghostex accounts. Limit resets are the user's: never spend them."
+    );
+    Ok(())
+}
+
+fn label(row: &Value) -> &str {
+    match row["email"].as_str().unwrap_or_default() {
+        "" => row["name"].as_str().unwrap_or_default(),
+        email => email,
+    }
+}
+
+/// "5h 27% · 7d 4%": the account-wide windows only, without reset times.
+fn compact_usage(row: &Value) -> String {
+    row["usage"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|window| window["model"].is_null() && window["id"] != "spend")
+        .map(|window| {
+            format!(
+                "{} {}%",
+                window["label"].as_str().unwrap_or_default(),
+                window["usedPercent"].as_f64().unwrap_or(0.0).round()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
