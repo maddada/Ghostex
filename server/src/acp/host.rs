@@ -923,6 +923,43 @@ fn apply_approval_level_and_sync_native_mode(
     target_level: AcpApprovalLevel,
 ) -> Result<(), String> {
     let _mode_guard = mode_sync_lock.lock().unwrap_or_else(|p| p.into_inner());
+    apply_approval_level_and_sync_native_mode_locked(transport, state, target_level)
+}
+
+/// Acquires `mode_sync_lock` FIRST, then re-reads the current `approval_level` and native mode
+/// under the lock before re-syncing, preventing a stale drift thread from reverting a newer user
+/// switch into `Auto`.
+fn resync_native_mode_if_drifted(
+    transport: &AcpTransport,
+    state: &Mutex<HostState>,
+    mode_sync_lock: &Mutex<()>,
+    drifted_mode: &str,
+) {
+    let _mode_guard = mode_sync_lock.lock().unwrap_or_else(|p| p.into_inner());
+    let target_level = {
+        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+        let expected = s.in_flight_target_level.unwrap_or(s.approval_level);
+        let still_in_auto = s.native_auto_active
+            || s.current_mode
+                .as_deref()
+                .is_some_and(is_auto_or_bypass_mode_id);
+        (expected != AcpApprovalLevel::Auto && still_in_auto).then_some(s.approval_level)
+    };
+    if let Some(level) = target_level {
+        if let Err(err) = apply_approval_level_and_sync_native_mode_locked(transport, state, level) {
+            eprintln!(
+                "[ACP] Warning: agent switched to native mode `{drifted_mode}` while level is {}: {err}",
+                level.label()
+            );
+        }
+    }
+}
+
+fn apply_approval_level_and_sync_native_mode_locked(
+    transport: &AcpTransport,
+    state: &Mutex<HostState>,
+    target_level: AcpApprovalLevel,
+) -> Result<(), String> {
     let (sid, current_mode, was_auto_or_bypass, target_mode, is_auto_target) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         let auto_id = find_advertised_auto_mode_id(&s.available_modes);
@@ -1351,38 +1388,19 @@ pub fn run(args: &[String]) -> i32 {
                                         }
                                     };
                                     if needs_drift_resync {
-                                        // Re-sync off the stdout reader thread, re-reading the
-                                        // latest authoritative `approval_level` under `mode_sync_lock`.
+                                        // Re-sync off the stdout reader thread, acquiring
+                                        // `mode_sync_lock` BEFORE reading the latest `approval_level`.
                                         let t_sync = t_out.clone();
                                         let st_sync = st_out.clone();
                                         let lock_sync = mode_lock_out.clone();
                                         let drifted = mode_id.to_string();
                                         thread::spawn(move || {
-                                            let latest = {
-                                                let s = st_sync
-                                                    .lock()
-                                                    .unwrap_or_else(|p| p.into_inner());
-                                                let expected = s
-                                                    .in_flight_target_level
-                                                    .unwrap_or(s.approval_level);
-                                                (expected != AcpApprovalLevel::Auto)
-                                                    .then_some(s.approval_level)
-                                            };
-                                            if let Some(target_level) = latest {
-                                                if let Err(err) =
-                                                    apply_approval_level_and_sync_native_mode(
-                                                        &t_sync,
-                                                        &st_sync,
-                                                        &lock_sync,
-                                                        target_level,
-                                                    )
-                                                {
-                                                    eprintln!(
-                                                        "[ACP] Warning: agent switched to native mode `{drifted}` while level is {}: {err}",
-                                                        target_level.label()
-                                                    );
-                                                }
-                                            }
+                                            resync_native_mode_if_drifted(
+                                                &t_sync,
+                                                &st_sync,
+                                                &lock_sync,
+                                                &drifted,
+                                            );
                                         });
                                     }
                                 }
@@ -1624,6 +1642,7 @@ pub fn run(args: &[String]) -> i32 {
                         let _ = transport.notify("session/cancel", json!({ "sessionId": sid }));
                     }
                     cancel_all_pending_permissions(&transport, &state);
+                    activity.sync();
                     ep.ack(id, true, json!({ "aborted": true }), None);
                 }
                 "approve" => {

@@ -441,6 +441,7 @@ fn is_file_body_key(norm: &str) -> bool {
             | "filecontent"
             | "newfilecontent"
             | "sourcecode"
+            | "newsource"
             | "text"
             | "newtext"
             | "oldtext"
@@ -458,7 +459,13 @@ fn is_file_body_key(norm: &str) -> bool {
             | "body"
             | "data"
             | "snippet"
+            | "oldsnippet"
+            | "newsnippet"
             | "inserttext"
+            | "search"
+            | "replace"
+            | "before"
+            | "after"
             | "patch"
             | "patchtext"
             | "diff"
@@ -769,25 +776,31 @@ fn has_windows_percent_env(text: &str) -> bool {
     false
 }
 
-/// Matches shell variable/command substitution (`${...}`, `$(...)`, or a path segment that is a
-/// bare `$IDENT` like `$HOME/.bashrc`) while allowing legitimate filenames containing `$`
-/// (`app/routes/users.$id.tsx`, `src/routes/$types.d.ts`, `store$.ts`).
+/// Matches shell variable/command substitution (`${...}`, `$(...)`, a leading `$IDENT` path
+/// segment like `$HOME/.bashrc` or `$home/.bashrc`, or a mid-path all-uppercase `$ENV_VAR`
+/// segment) while allowing legitimate filenames and framework dynamic route segments containing
+/// `$` (`app/routes/users.$id.tsx`, `app/routes/$id/page.tsx`, `src/routes/$types.d.ts`,
+/// `store$.ts`).
 fn has_shell_var_syntax(text: &str) -> bool {
     if text.contains("${") || text.contains("$(") {
         return true;
     }
-    for segment in text.split(['/', '\\']) {
+    for (idx, segment) in text.split(['/', '\\']).enumerate() {
         if let Some(ident) = segment.strip_prefix('$') {
-            if !ident.is_empty()
+            let valid_ident = !ident.is_empty()
                 && ident
                     .chars()
                     .next()
                     .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_')
                 && ident
                     .chars()
-                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
-            {
-                return true;
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_');
+            if valid_ident {
+                let all_upper_env = ident.chars().any(|ch| ch.is_ascii_uppercase())
+                    && !ident.chars().any(|ch| ch.is_ascii_lowercase());
+                if idx == 0 || all_upper_env {
+                    return true;
+                }
             }
         }
     }
@@ -913,10 +926,16 @@ fn push_unique(paths: &mut Vec<String>, path: &str) {
 }
 
 /// Execution-context directory keys (`cwd`, `workdir`, `root`): validated to stay inside (or equal
-/// to) `writable_roots` and used as the base for relative target paths, but NOT treated as
-/// mutation targets themselves (so `cwd: "<project_root>"` does not fail strict `resolved != root`).
+/// to) `writable_roots`, but NOT treated as mutation targets themselves (so `cwd: "<project_root>"`
+/// does not fail strict `resolved != root`).
 fn is_context_dir_key(norm: &str) -> bool {
     matches!(norm, "cwd" | "workdir" | "workingdirectory" | "root" | "rootdir")
+}
+
+/// Directory keys that act as execution context on `kind == "edit"` when another target path is
+/// present, but stay strict mutation targets on `delete`/`move` (or when alone).
+fn is_edit_context_dir_key(norm: &str) -> bool {
+    matches!(norm, "directory" | "dir" | "dirpath" | "folder" | "folderpath")
 }
 
 /// Allowlisted single-target path keys for file mutation tools.
@@ -925,6 +944,7 @@ fn is_single_path_key(norm: &str) -> bool {
         norm,
         "path"
             | "filepath"
+            | "notebookpath"
             | "targetpath"
             | "targetfile"
             | "target"
@@ -972,6 +992,69 @@ fn is_single_path_key(norm: &str) -> bool {
             | "folderpath"
             | "location"
     )
+}
+
+/// True when `"target"` in `obj` is the old-text snippet of an edit tool (e.g. Antigravity CLI's
+/// `edit_file({ Path, Target, Replacement })`) rather than a destination path.
+fn target_key_is_edit_snippet(obj: &Map<String, Value>, is_edit_kind: bool) -> bool {
+    if !is_edit_kind {
+        return false;
+    }
+    let mut has_explicit_path = false;
+    let mut has_replacement_body = false;
+    let mut has_source_key = false;
+    for key in obj.keys() {
+        let norm = canonical_key(key);
+        if matches!(
+            norm.as_str(),
+            "path"
+                | "filepath"
+                | "notebookpath"
+                | "targetfile"
+                | "targetpath"
+                | "absolutepath"
+                | "file"
+                | "filename"
+                | "uri"
+                | "fileuri"
+        ) {
+            has_explicit_path = true;
+        }
+        if matches!(
+            norm.as_str(),
+            "replacement"
+                | "replacementcontent"
+                | "newstring"
+                | "newtext"
+                | "newcontent"
+                | "newstr"
+                | "replace"
+                | "after"
+                | "newsnippet"
+        ) {
+            has_replacement_body = true;
+        }
+        if matches!(
+            norm.as_str(),
+            "source" | "sourcepath" | "src" | "srcpath" | "sourcefile" | "from" | "frompath"
+                | "oldpath" | "oldfile"
+        ) {
+            has_source_key = true;
+        }
+    }
+    has_explicit_path && has_replacement_body && !has_source_key
+}
+
+/// True when `obj` (or already-collected locations) provides an explicit file target path besides
+/// `directory`/`dir`/`folder`.
+fn has_explicit_file_target(obj: &Map<String, Value>, has_location_paths: bool) -> bool {
+    if has_location_paths {
+        return true;
+    }
+    obj.keys().any(|key| {
+        let norm = canonical_key(key);
+        is_single_path_key(&norm) && !is_edit_context_dir_key(&norm) && norm != "target"
+    })
 }
 
 /// Allowlisted path-list, edit-chunk, or path-keyed-map keys.
@@ -1063,17 +1146,27 @@ fn is_known_non_path_key(norm: &str) -> bool {
                 | "mimetype"
                 | "waitforprevious"
                 | "resource"
+                | "cellid"
+                | "cellnumber"
+                | "celltype"
+                | "editmode"
+                | "expectedreplacements"
+                | "occurrence"
         )
 }
 
 /// Clean a single unquoted diff path token (stripping trailing `\t` timestamp and `a/` / `b/`).
-/// Fails closed (`Err(())`) on quoted paths (`"`) or backslash escapes (`\`) rather than guessing.
+/// Fails closed (`Err(())`) on quoted paths (`"`), backslash escapes (`\`), or ASCII spaces
+/// (which could hide space-delimited timestamps such as `+++ b/evil_link 2026-11-22 15:00:00`).
 fn parse_diff_path_token(raw: &str) -> Result<Option<String>, ()> {
     let without_tab = raw.split('\t').next().unwrap_or(raw).trim();
     if without_tab.is_empty() {
         return Err(());
     }
-    if without_tab.starts_with('"') || without_tab.contains('"') || without_tab.contains('\\') {
+    if without_tab.contains('"')
+        || without_tab.contains('\\')
+        || without_tab.chars().any(char::is_whitespace)
+    {
         return Err(());
     }
     if without_tab == "/dev/null" {
@@ -1133,35 +1226,58 @@ fn collect_patch_paths(patch: &str, paths: &mut Vec<String>) -> bool {
     let mut in_apply_hunk = false;
     let mut hunk_old_rem: usize = 0;
     let mut hunk_new_rem: usize = 0;
+    let mut prev_hunk_line_was_triple_minus = false;
 
     for raw_line in patch.lines() {
         // Inside a unified diff hunk: consume exact expected old/new lines without scanning body.
+        // Fail closed if an inflated hunk hides a `--- ` + `+++ ` file header pair or terminates
+        // early at a non-hunk header or EOF with remaining lines.
         if hunk_old_rem > 0 || hunk_new_rem > 0 {
+            if prev_hunk_line_was_triple_minus && strip_diff_marker_ws(raw_line, "+++").is_some() {
+                return false;
+            }
             if raw_line.starts_with('-') {
-                hunk_old_rem = hunk_old_rem.saturating_sub(1);
+                if hunk_old_rem == 0 {
+                    return false;
+                }
+                prev_hunk_line_was_triple_minus = strip_diff_marker_ws(raw_line, "---").is_some();
+                hunk_old_rem -= 1;
                 continue;
             } else if raw_line.starts_with('+') {
-                hunk_new_rem = hunk_new_rem.saturating_sub(1);
+                if hunk_new_rem == 0 {
+                    return false;
+                }
+                prev_hunk_line_was_triple_minus = false;
+                hunk_new_rem -= 1;
                 continue;
             } else if raw_line.starts_with(' ') || raw_line.is_empty() {
-                hunk_old_rem = hunk_old_rem.saturating_sub(1);
-                hunk_new_rem = hunk_new_rem.saturating_sub(1);
+                if hunk_old_rem == 0 || hunk_new_rem == 0 {
+                    return false;
+                }
+                prev_hunk_line_was_triple_minus = false;
+                hunk_old_rem -= 1;
+                hunk_new_rem -= 1;
                 continue;
             } else if raw_line.starts_with("\\ No newline") {
+                prev_hunk_line_was_triple_minus = false;
                 continue;
             }
-            // Unexpected non-hunk line while counts remain: reset and inspect as header below.
-            hunk_old_rem = 0;
-            hunk_new_rem = 0;
+            // Non-hunk line while counts are still non-zero: inflated/malformed hunk -> fail closed.
+            return false;
         }
+        prev_hunk_line_was_triple_minus = false;
 
         let trimmed = raw_line.trim_start();
-        if trimmed == "*** Begin Patch" {
+        if (!in_apply_patch && trimmed == "*** Begin Patch") || raw_line == "*** Begin Patch" {
             in_apply_patch = true;
             in_apply_hunk = false;
             continue;
         }
-        if trimmed == "*** End Patch" {
+        // Only match `*** End Patch` at column 0 when inside an `apply_patch` hunk so an indented
+        // context line `" *** End Patch"` never exits hunk tracking prematurely.
+        if (in_apply_hunk && raw_line == "*** End Patch")
+            || (!in_apply_hunk && trimmed == "*** End Patch")
+        {
             in_apply_patch = false;
             in_apply_hunk = false;
             continue;
@@ -1263,18 +1379,25 @@ fn collect_patch_paths(patch: &str, paths: &mut Vec<String>) -> bool {
         }
     }
 
+    if hunk_old_rem > 0 || hunk_new_rem > 0 {
+        return false;
+    }
+
     found > 0
 }
 
 #[derive(Default)]
 struct ExtractedTargets {
     context_dirs: Vec<String>,
-    mutation_paths: Vec<String>,
+    location_paths: Vec<String>,
+    raw_input_paths: Vec<String>,
 }
 
 fn collect_allowlisted_value(
     value: &Value,
+    is_edit_kind: bool,
     is_patch_tool: bool,
+    in_raw_input: bool,
     out: &mut ExtractedTargets,
     depth: usize,
 ) -> bool {
@@ -1283,7 +1406,7 @@ fn collect_allowlisted_value(
     }
     match value {
         Value::Null => true,
-        Value::String(text) if depth == 0 => {
+        Value::String(text) if depth == 0 && in_raw_input => {
             let trimmed = text.trim();
             if trimmed.is_empty() {
                 return true;
@@ -1292,9 +1415,16 @@ fn collect_allowlisted_value(
                 let Ok(parsed) = serde_json::from_str::<Value>(trimmed) else {
                     return false;
                 };
-                return collect_allowlisted_value(&parsed, is_patch_tool, out, depth + 1);
+                return collect_allowlisted_value(
+                    &parsed,
+                    is_edit_kind,
+                    is_patch_tool,
+                    in_raw_input,
+                    out,
+                    depth + 1,
+                );
             }
-            collect_patch_paths(trimmed, &mut out.mutation_paths)
+            collect_patch_paths(trimmed, &mut out.raw_input_paths)
         }
         Value::Array(items) => {
             for item in items {
@@ -1304,10 +1434,17 @@ fn collect_allowlisted_value(
                         if trimmed.is_empty() {
                             return false;
                         }
-                        push_unique(&mut out.mutation_paths, trimmed);
+                        push_unique(&mut out.raw_input_paths, trimmed);
                     }
                     Value::Object(_) | Value::Array(_) => {
-                        if !collect_allowlisted_value(item, is_patch_tool, out, depth + 1) {
+                        if !collect_allowlisted_value(
+                            item,
+                            is_edit_kind,
+                            is_patch_tool,
+                            in_raw_input,
+                            out,
+                            depth + 1,
+                        ) {
                             return false;
                         }
                     }
@@ -1321,11 +1458,14 @@ fn collect_allowlisted_value(
                 .get("type")
                 .and_then(Value::as_str)
                 .is_some_and(|t| t.eq_ignore_ascii_case("diff"));
-            let before_count = out.mutation_paths.len();
+            let before_count = out.raw_input_paths.len();
+            let target_is_snippet = target_key_is_edit_snippet(obj, is_edit_kind);
+            let dir_is_context =
+                is_edit_kind && has_explicit_file_target(obj, !out.location_paths.is_empty());
 
             for (key, val) in obj {
                 let norm = canonical_key(key);
-                if is_context_dir_key(&norm) {
+                if is_context_dir_key(&norm) || (dir_is_context && is_edit_context_dir_key(&norm)) {
                     match val {
                         Value::Null => {}
                         Value::String(s) => {
@@ -1337,6 +1477,12 @@ fn collect_allowlisted_value(
                         }
                         _ => return false,
                     }
+                } else if target_is_snippet && norm == "target" {
+                    // Antigravity CLI `edit_file({ Path, Target, Replacement })`: `Target` is the
+                    // old code snippet to replace, not a filesystem path.
+                    if !matches!(val, Value::Null | Value::String(_)) {
+                        return false;
+                    }
                 } else if is_single_path_key(&norm) {
                     match val {
                         Value::Null => {}
@@ -1345,7 +1491,7 @@ fn collect_allowlisted_value(
                             if trimmed.is_empty() {
                                 return false;
                             }
-                            push_unique(&mut out.mutation_paths, trimmed);
+                            push_unique(&mut out.raw_input_paths, trimmed);
                         }
                         _ => return false,
                     }
@@ -1360,12 +1506,14 @@ fn collect_allowlisted_value(
                                         if trimmed.is_empty() {
                                             return false;
                                         }
-                                        push_unique(&mut out.mutation_paths, trimmed);
+                                        push_unique(&mut out.raw_input_paths, trimmed);
                                     }
                                     Value::Object(_) | Value::Array(_) => {
                                         if !collect_allowlisted_value(
                                             item,
+                                            is_edit_kind,
                                             is_patch_tool,
+                                            in_raw_input,
                                             out,
                                             depth + 1,
                                         ) {
@@ -1382,16 +1530,38 @@ fn collect_allowlisted_value(
                                 if trimmed_key.is_empty() {
                                     return false;
                                 }
-                                push_unique(&mut out.mutation_paths, trimmed_key);
-                                if matches!(entry_val, Value::Object(_) | Value::Array(_))
-                                    && !collect_allowlisted_value(
-                                        entry_val,
-                                        is_patch_tool,
-                                        out,
-                                        depth + 1,
-                                    )
-                                {
-                                    return false;
+                                push_unique(&mut out.raw_input_paths, trimmed_key);
+                                match entry_val {
+                                    Value::Null => {}
+                                    Value::String(s) => match norm.as_str() {
+                                        "moves" | "renames" => {
+                                            let dest = s.trim();
+                                            if dest.is_empty() {
+                                                return false;
+                                            }
+                                            push_unique(&mut out.raw_input_paths, dest);
+                                        }
+                                        "patches" | "diffs" => {
+                                            if !collect_patch_paths(s, &mut out.raw_input_paths) {
+                                                return false;
+                                            }
+                                        }
+                                        "changes" | "edits" | "files" => {}
+                                        _ => return false,
+                                    },
+                                    Value::Object(_) | Value::Array(_) => {
+                                        if !collect_allowlisted_value(
+                                            entry_val,
+                                            is_edit_kind,
+                                            is_patch_tool,
+                                            in_raw_input,
+                                            out,
+                                            depth + 1,
+                                        ) {
+                                            return false;
+                                        }
+                                    }
+                                    _ => return false,
                                 }
                             }
                         }
@@ -1401,12 +1571,19 @@ fn collect_allowlisted_value(
                     match val {
                         Value::Null => {}
                         Value::String(s) => {
-                            if !collect_patch_paths(s, &mut out.mutation_paths) {
+                            if !collect_patch_paths(s, &mut out.raw_input_paths) {
                                 return false;
                             }
                         }
                         Value::Object(_) | Value::Array(_) => {
-                            if !collect_allowlisted_value(val, true, out, depth + 1) {
+                            if !collect_allowlisted_value(
+                                val,
+                                is_edit_kind,
+                                true,
+                                in_raw_input,
+                                out,
+                                depth + 1,
+                            ) {
                                 return false;
                             }
                         }
@@ -1415,15 +1592,23 @@ fn collect_allowlisted_value(
                 } else if is_known_non_path_key(&norm) {
                     match val {
                         Value::String(s)
-                            if is_patch_tool
+                            if in_raw_input
+                                && is_patch_tool
                                 && matches!(norm.as_str(), "content" | "text" | "body" | "data") =>
                         {
-                            if !collect_patch_paths(s, &mut out.mutation_paths) {
+                            if !collect_patch_paths(s, &mut out.raw_input_paths) {
                                 return false;
                             }
                         }
                         Value::Object(_) | Value::Array(_) => {
-                            if !collect_allowlisted_value(val, is_patch_tool, out, depth + 1) {
+                            if !collect_allowlisted_value(
+                                val,
+                                is_edit_kind,
+                                is_patch_tool,
+                                in_raw_input,
+                                out,
+                                depth + 1,
+                            ) {
                                 return false;
                             }
                         }
@@ -1440,7 +1625,7 @@ fn collect_allowlisted_value(
                 }
             }
 
-            if is_diff_block && out.mutation_paths.len() == before_count {
+            if is_diff_block && out.raw_input_paths.len() == before_count {
                 return false;
             }
             true
@@ -1451,6 +1636,12 @@ fn collect_allowlisted_value(
 
 fn extract_mutation_targets(params: &Value) -> Option<ExtractedTargets> {
     let tool_call = params.get("toolCall")?.as_object()?;
+    let kind_lower = tool_call
+        .get("kind")
+        .and_then(Value::as_str)
+        .map(|s| s.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    let is_edit_kind = kind_lower == "edit";
     let tool_name_lower = tool_call
         .get("name")
         .or_else(|| tool_call.get("title"))
@@ -1471,14 +1662,14 @@ fn extract_mutation_targets(params: &Value) -> Option<ExtractedTargets> {
                     .and_then(Value::as_str)
                     .map(str::trim)
                     .filter(|s| !s.is_empty())?;
-                push_unique(&mut out.mutation_paths, path);
+                push_unique(&mut out.location_paths, path);
                 if let Some(uri) = obj.get("uri") {
                     if !uri.is_null() {
                         let uri_str = uri
                             .as_str()
                             .map(str::trim)
                             .filter(|s| !s.is_empty())?;
-                        push_unique(&mut out.mutation_paths, uri_str);
+                        push_unique(&mut out.location_paths, uri_str);
                     }
                 }
             }
@@ -1489,7 +1680,14 @@ fn extract_mutation_targets(params: &Value) -> Option<ExtractedTargets> {
         if !content.is_null() {
             match content {
                 Value::Array(_) | Value::Object(_) => {
-                    if !collect_allowlisted_value(content, is_patch_tool, &mut out, 1) {
+                    if !collect_allowlisted_value(
+                        content,
+                        is_edit_kind,
+                        is_patch_tool,
+                        false,
+                        &mut out,
+                        1,
+                    ) {
                         return None;
                     }
                 }
@@ -1500,22 +1698,40 @@ fn extract_mutation_targets(params: &Value) -> Option<ExtractedTargets> {
 
     if let Some(raw_input) = tool_call.get("rawInput") {
         if !raw_input.is_null()
-            && !collect_allowlisted_value(raw_input, is_patch_tool, &mut out, 0)
+            && !collect_allowlisted_value(
+                raw_input,
+                is_edit_kind,
+                is_patch_tool,
+                true,
+                &mut out,
+                0,
+            )
         {
             return None;
         }
     }
 
-    if out.mutation_paths.is_empty() {
+    if out.location_paths.is_empty() && out.raw_input_paths.is_empty() {
         return None;
     }
     Some(out)
 }
 
+fn path_strictly_inside_roots(raw: &str, base: &Path, writable_roots: &[PathBuf]) -> bool {
+    let Some(resolved) = resolve_path_with_symlinks(Path::new(raw), base) else {
+        return false;
+    };
+    writable_roots
+        .iter()
+        .any(|root| resolved != *root && resolved.starts_with(root))
+}
+
 /// True only when path extraction accounts for every mutation target using allowlisted shapes,
 /// any execution-context directory (`cwd`/`workdir`/`root`) stays inside or equal to
-/// `writable_roots`, AND every mutation target resolves (with symlinks expanded) strictly inside
-/// `writable_roots` (never the root directory itself).
+/// `writable_roots`, every `toolCall.locations` path resolves strictly inside `writable_roots`
+/// against session `cwd` (never masked by `rawInput.cwd`), AND every `rawInput`/`content` path
+/// resolves strictly inside `writable_roots` against BOTH session `cwd` and any `rawInput` context
+/// directory.
 pub fn file_mutation_stays_inside_roots(
     params: &Value,
     writable_roots: &[PathBuf],
@@ -1529,9 +1745,8 @@ pub fn file_mutation_stays_inside_roots(
     };
     let canonical_cwd = resolve_path_with_symlinks(cwd, cwd).unwrap_or_else(|| cwd.to_path_buf());
 
-    // Validate every execution-context directory (`cwd`, `workdir`, `root`): allowed to equal a
-    // writable root, and if present becomes the base directory for resolving relative target paths.
-    let mut effective_base = canonical_cwd.clone();
+    // Validate every execution-context directory (`cwd`, `workdir`, `root`, or edit `directory`):
+    // allowed to equal a writable root; multiple differing context dirs fail closed.
     let mut resolved_ctx: Option<PathBuf> = None;
     for raw_ctx in &targets.context_dirs {
         let Some(resolved) = resolve_path_with_symlinks(Path::new(raw_ctx), &canonical_cwd) else {
@@ -1548,17 +1763,30 @@ pub fn file_mutation_stays_inside_roots(
                 return false;
             }
         } else {
-            effective_base = resolved.clone();
             resolved_ctx = Some(resolved);
         }
     }
 
-    targets.mutation_paths.iter().all(|raw| {
-        let Some(resolved) = resolve_path_with_symlinks(Path::new(raw), &effective_base) else {
+    // `toolCall.locations` are always resolved strictly against session `cwd`.
+    if !targets
+        .location_paths
+        .iter()
+        .all(|raw| path_strictly_inside_roots(raw, &canonical_cwd, writable_roots))
+    {
+        return false;
+    }
+
+    // `rawInput` / `content` paths must stay strictly inside roots against `canonical_cwd` AND
+    // (when present) against `resolved_ctx`, so `rawInput.cwd` can never mask `../` escapes.
+    targets.raw_input_paths.iter().all(|raw| {
+        if !path_strictly_inside_roots(raw, &canonical_cwd, writable_roots) {
             return false;
-        };
-        writable_roots
-            .iter()
-            .any(|root| resolved != *root && resolved.starts_with(root))
+        }
+        if let Some(ctx_base) = &resolved_ctx {
+            if !path_strictly_inside_roots(raw, ctx_base, writable_roots) {
+                return false;
+            }
+        }
+        true
     })
 }

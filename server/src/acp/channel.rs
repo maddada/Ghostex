@@ -356,6 +356,16 @@ pub(crate) async fn set_approval_level(
     })?;
     let lock = approval_lock(project_id, session_id);
     let _guard = lock.lock().await;
+    set_approval_level_locked(state, project_id, session_id, level, is_owner_device).await
+}
+
+async fn set_approval_level_locked(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    level: super::AcpApprovalLevel,
+    is_owner_device: bool,
+) -> Result<Value, DomainStateError> {
     check_approval_level_change_allowed(state, project_id, session_id, level, is_owner_device)
         .await?;
 
@@ -385,16 +395,20 @@ pub(crate) async fn set_approval_level(
             session_id,
             "mode",
             json!({ "mode": level.as_str() }),
-            Duration::from_secs(15),
+            // Strictly above `ACP_RPC_TIMEOUT` (30s) in `acp/host.rs` so slow `session/set_mode`
+            // answers are not prematurely dropped as `NoAnswer`.
+            Duration::from_secs(35),
         )
         .await
         {
             Ok(result) => return Ok(result),
             Err(ChannelError::Unavailable(_) | ChannelError::NoAnswer) => {
-                // Keep desired level persisted so channel registration delivers it on reconnect.
+                // Mark the live channel dirty so `acp-host`'s very next poll receives
+                // `desiredApprovalLevel` once even if its `instance` did not change.
+                crate::pi_chat_channel::mark_approval_sync_needed(project_id, session_id);
                 return Err(DomainStateError {
                     code: "dependencyUnavailable",
-                    message: "The ACP host is reconnecting. Your approval level was saved and will apply as soon as it reconnects.".to_string(),
+                    message: "The ACP host is busy or reconnecting. Your approval level was saved and will apply on its next poll.".to_string(),
                 });
             }
             Err(error) => {
@@ -407,8 +421,9 @@ pub(crate) async fn set_approval_level(
         }
     }
 
-    // No open live channel: desired level is already persisted; only return Ok if confirmed
-    // inactive, else return retryable `dependencyUnavailable`.
+    // No open live channel: desired level is already persisted; mark any channel entry dirty just
+    // in case it just finished a poll, and only return Ok if confirmed inactive.
+    crate::pi_chat_channel::mark_approval_sync_needed(project_id, session_id);
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
     let pid = project_id.to_string();
@@ -448,9 +463,11 @@ pub(crate) async fn cycle_mode(
     session_id: &str,
     is_owner_device: bool,
 ) -> Result<Value, DomainStateError> {
+    let lock = approval_lock(project_id, session_id);
+    let _guard = lock.lock().await;
     let current = current_approval_level(state, project_id, session_id).await;
     let next = current.next_in_cycle();
-    set_approval_level(state, project_id, session_id, next.as_str(), is_owner_device).await
+    set_approval_level_locked(state, project_id, session_id, next, is_owner_device).await
 }
 
 /// Probe whether the session's `zmx`/`wmx` provider is confirmed missing on disk.
