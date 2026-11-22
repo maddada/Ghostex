@@ -307,9 +307,9 @@ pub(crate) async fn check_approval_level_change_allowed(
     project_id: &str,
     session_id: &str,
     target: super::AcpApprovalLevel,
-    is_owner_device: bool,
+    is_user_device: bool,
 ) -> Result<(), DomainStateError> {
-    if is_owner_device {
+    if is_user_device {
         return Ok(());
     }
     let current = current_approval_level(state, project_id, session_id).await;
@@ -318,8 +318,7 @@ pub(crate) async fn check_approval_level_change_allowed(
     }
     Err(DomainStateError {
         code: "forbidden",
-        message: "Only your own computer or phone can raise a session's approval level."
-            .to_string(),
+        message: "Only your own devices can raise a session's approval level.".to_string(),
     })
 }
 

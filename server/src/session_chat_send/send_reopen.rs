@@ -66,7 +66,7 @@ pub(crate) async fn handle_send_session_chat_message_from(
             // replay it answers), before it is typed: its quotes check the record
             // (sender_mark.rs `note_accepted_user_send`); a refused or failed send withdraws it.
             let noted = super::sender_mark::note_accepted_user_send(&state.paths, &body);
-            let is_owner_device = attempt_caller.is_owner_device();
+            let is_user_device = attempt_caller.is_user_device();
             let response = match &compaction {
                 Some(compaction) => {
                     send_after_compaction(
@@ -75,7 +75,7 @@ pub(crate) async fn handle_send_session_chat_message_from(
                         request_id,
                         &body,
                         compaction,
-                        is_owner_device,
+                        is_user_device,
                     )
                     .await
                 }
@@ -85,7 +85,7 @@ pub(crate) async fn handle_send_session_chat_message_from(
                         endpoint_path,
                         request_id,
                         &body,
-                        is_owner_device,
+                        is_user_device,
                     )
                     .await
                 }

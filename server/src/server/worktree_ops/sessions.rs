@@ -85,12 +85,15 @@ pub(crate) async fn handle_worktree_session_http(
     };
     let result = match endpoint_path.as_str() {
         "/api/createWorktreeSession" => {
-            let params = crate::acp::approval::sanitize_create_session_params(
+            match crate::acp::approval::guard_create_session_params(
                 &params,
-                caller.is_owner_device(),
-            );
-            match place_worktree_session_create(state, params) {
-                Ok(params) => create_worktree_session(state, &params).await,
+                caller.is_user_device(),
+                false,
+            ) {
+                Ok(params) => match place_worktree_session_create(state, params) {
+                    Ok(params) => create_worktree_session(state, &params).await,
+                    Err(error) => Err(error.into()),
+                },
                 Err(error) => Err(error.into()),
             }
         }

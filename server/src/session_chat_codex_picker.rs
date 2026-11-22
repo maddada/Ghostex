@@ -1490,11 +1490,11 @@ pub(crate) async fn handle_select_session_chat_model_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
-    let is_owner_device = caller.is_owner_device();
-    // Enforce owner-device gating before either deferred enqueue or immediate execution so an
-    // agent (`Principal::Session`) or peer cannot queue or apply an ACP approval level raise.
+    let is_user_device = caller.is_user_device();
+    // Enforce user-device gating before either deferred enqueue or immediate execution so an
+    // agent (`Principal::Session`) cannot queue or apply an ACP approval level raise.
     // Looks up the session directly from SQLite and propagates errors (never fails open).
-    if !is_owner_device {
+    if !is_user_device {
         if let Some(raw_mode) = params
             .get("options")
             .and_then(Value::as_object)
@@ -1558,9 +1558,9 @@ pub(crate) async fn handle_select_session_chat_model_http(
         }
     }
     let result = if params.get("defer").and_then(Value::as_bool) == Some(true) {
-        crate::session_chat_model_selection::enqueue_for_caller(state, &params, is_owner_device)
+        crate::session_chat_model_selection::enqueue_for_caller(state, &params, is_user_device)
     } else {
-        select_session_chat_model(state, &params, is_owner_device).await
+        select_session_chat_model(state, &params, is_user_device).await
     };
     if let Err(error) = &result {
         // A pick the queue is not carrying (`ghostex select-session-chat-model`): the queued ones

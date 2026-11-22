@@ -125,6 +125,24 @@ impl Principal {
         )
     }
 
+    /// Your own devices, including your paired computers: desktop/web (`Owner`, `LocalAgent`),
+    /// paired phones (`Device`), and paired computers (`Peer`). Agents' session tokens (`Session`,
+    /// including GBot API chats and coordinator threads), Collab guests (`Guest`), extensions
+    /// (`Extension`), and unauthenticated callers (`Anonymous`) are excluded.
+    ///
+    /// CDXC:Security 2026-11-22 DECISION:
+    /// User ("your devices, other computers count as yours"): your own devices (this computer's
+    /// desktop/web/CLI, paired phones, and paired computers) may raise ACP approval levels, turn
+    /// on accept-all defaults (`agentAcceptAllEnabled`, per-agent/per-project `acceptAllMode`),
+    /// and start sessions with `acceptAllMode`/Full access. Agents' session tokens may never raise
+    /// or enable any of these; lowering stays open to everyone.
+    pub fn is_user_device(&self) -> bool {
+        matches!(
+            self,
+            Self::Owner { .. } | Self::Device { .. } | Self::LocalAgent | Self::Peer { .. }
+        )
+    }
+
     /*
     CDXC:Security 2026-11-10 DECISION:
     User (Q2140 = B): "thinking of removing all these dumb blocks because they're adding friction and a lot of bugs … i dont know why we want to ban agents from doing everything with ghostex". You (the owner session, the token file, a paired phone) may do everything. An agent's session token may do everything too except the two things that keep the door: approving what lets someone new in (`DecideApprovals`) and answering or reading secrets (`OwnerSecrets`). Coordinators still manage only their own threads, which is how threads are organised, not a security rule. This supersedes the 8 Nov table that kept setup, owner settings and approvals from the token file and from agents.

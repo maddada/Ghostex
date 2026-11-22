@@ -121,47 +121,120 @@ fn read_trimmed_str<'a>(map: &'a Map<String, Value>, key: &str) -> Option<&'a st
         .filter(|value| !value.is_empty())
 }
 
-/// Strip client-supplied `runtimeSettings.acpApprovalLevel` on every session creation route so
-/// project/agent/global defaults always rule; for non-owner callers, also strip
-/// `launchSettings.acceptAllMode` when it attempts to force accept-all (`"enabled"` / `"acceptAll"`).
-pub fn sanitize_create_session_params(
+/// True when an `acceptAllMode` string explicitly turns accept-all on.
+pub fn is_accept_all_enabled_value(raw: Option<&str>) -> bool {
+    raw.map(str::trim)
+        .is_some_and(|v| matches!(v, "enabled" | "acceptAll"))
+}
+
+/// True when an `acceptAllMode` string explicitly turns accept-all off.
+pub fn is_accept_all_disabled_value(raw: Option<&str>) -> bool {
+    raw.map(str::trim).is_some_and(|v| v == "disabled")
+}
+
+/// True if changing `acceptAllMode` from `stored` to `incoming` enables accept-all or removes a
+/// `"disabled"` override while global `agentAcceptAllEnabled` is `true`.
+pub fn accept_all_mode_change_raises(
+    stored: Option<&str>,
+    incoming: Option<&str>,
+    global_accept_all_enabled: bool,
+) -> bool {
+    if is_accept_all_enabled_value(incoming) && !is_accept_all_enabled_value(stored) {
+        return true;
+    }
+    if global_accept_all_enabled
+        && is_accept_all_disabled_value(stored)
+        && !is_accept_all_disabled_value(incoming)
+    {
+        return true;
+    }
+    false
+}
+
+/// Read the global `agentAcceptAllEnabled` boolean from shared settings (`false` if absent).
+pub fn global_accept_all_enabled_in_shared_settings(
+    paths: &crate::paths::GxserverPaths,
+) -> bool {
+    crate::shared_settings_file::read_shared_settings(paths)
+        .and_then(|v| v.pointer("/agentAcceptAllEnabled").and_then(Value::as_bool))
+        .unwrap_or(false)
+}
+
+/// Guard and normalize session creation parameters across `/api/createSession`,
+/// `/api/createAgentSession`, and `/api/createWorktreeSession`:
+/// - Non-user-device callers (`Principal::Session`, guests, extensions) trying to force
+///   `launchSettings.acceptAllMode` (`"enabled"` / `"acceptAll"`) or raise
+///   `runtimeSettings.acpApprovalLevel` above `Ask` are explicitly refused (`403 forbidden`).
+/// - On `/api/createSession` (`strip_raw_launch_plan == true`), non-user-device callers also have
+///   any raw `launchSettings.agentLaunchPlan` stripped so pre-baked `startupText` cannot smuggle
+///   `--approval-level full-access` or `--accept-all`.
+/// - For all callers, client-supplied `runtimeSettings.acpApprovalLevel` is stripped so project,
+///   agent, launch, and global `acceptAllMode` defaults always govern the starting level.
+pub fn guard_create_session_params(
     params: &Map<String, Value>,
-    is_owner_device: bool,
-) -> Map<String, Value> {
+    is_user_device: bool,
+    strip_raw_launch_plan: bool,
+) -> Result<Map<String, Value>, DomainStateError> {
     let mut cleaned = params.clone();
+    if !is_user_device {
+        if let Some(raw_level) = cleaned
+            .get("runtimeSettings")
+            .and_then(Value::as_object)
+            .and_then(|rt| rt.get(SESSION_ACP_APPROVAL_LEVEL_KEY))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if AcpApprovalLevel::parse(raw_level) != Some(AcpApprovalLevel::Ask) {
+                return Err(DomainStateError {
+                    code: "forbidden",
+                    message: "Only your own devices can start a session above Ask approval."
+                        .to_string(),
+                });
+            }
+        }
+        if let Some(launch) = cleaned
+            .get("launchSettings")
+            .and_then(Value::as_object)
+        {
+            let incoming_accept = launch.get("acceptAllMode").and_then(Value::as_str);
+            if is_accept_all_enabled_value(incoming_accept) {
+                return Err(DomainStateError {
+                    code: "forbidden",
+                    message: "Only your own devices can start a session with accept-all enabled."
+                        .to_string(),
+                });
+            }
+        }
+    }
     if let Some(runtime) = cleaned
         .get_mut("runtimeSettings")
         .and_then(Value::as_object_mut)
     {
         runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
     }
-    if !is_owner_device {
+    if !is_user_device && strip_raw_launch_plan {
         if let Some(launch) = cleaned
             .get_mut("launchSettings")
             .and_then(Value::as_object_mut)
         {
-            let tries_accept_all = launch
-                .get("acceptAllMode")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .is_some_and(|v| matches!(v, "enabled" | "acceptAll"));
-            if tries_accept_all {
-                launch.remove("acceptAllMode");
-            }
+            launch.remove("agentLaunchPlan");
         }
     }
-    cleaned
+    Ok(cleaned)
 }
 
 /// Enforce the single-source-of-truth rule on `/api/updateSession`:
-/// - Non-owner callers trying to raise `runtimeSettings.acpApprovalLevel` or enable
-///   `launchSettings.acceptAllMode` are explicitly refused (`403 forbidden`).
+/// - Non-user-device callers trying to raise `runtimeSettings.acpApprovalLevel`, enable
+///   `launchSettings.acceptAllMode`, or remove a `"disabled"` override while global
+///   `agentAcceptAllEnabled` is `true` are explicitly refused (`403 forbidden`).
 /// - For ALL callers, `runtimeSettings.acpApprovalLevel` is preserved from the stored session so
 ///   only `acp::channel::set_approval_level` can change a session's approval level.
 pub fn guard_update_session_params(
     current_session: Option<&Value>,
     params: &Map<String, Value>,
-    is_owner_device: bool,
+    is_user_device: bool,
+    global_accept_all_enabled: bool,
 ) -> Result<Map<String, Value>, DomainStateError> {
     let mut cleaned = params.clone();
     let stored_runtime = current_session
@@ -178,7 +251,7 @@ pub fn guard_update_session_params(
         .get_mut("runtimeSettings")
         .and_then(Value::as_object_mut)
     {
-        if !is_owner_device {
+        if !is_user_device {
             if let Some(raw_requested) = incoming_runtime
                 .get(SESSION_ACP_APPROVAL_LEVEL_KEY)
                 .and_then(Value::as_str)
@@ -192,7 +265,7 @@ pub fn guard_update_session_params(
                 if !allowed {
                     return Err(DomainStateError {
                         code: "forbidden",
-                        message: "Only your own computer or phone can raise a session's approval level."
+                        message: "Only your own devices can raise a session's approval level."
                             .to_string(),
                     });
                 }
@@ -210,25 +283,25 @@ pub fn guard_update_session_params(
         }
     }
 
-    if !is_owner_device {
+    if !is_user_device {
         if let Some(incoming_launch) = cleaned
             .get_mut("launchSettings")
             .and_then(Value::as_object_mut)
         {
             let stored_accept = stored_launch
                 .and_then(|m| m.get("acceptAllMode"))
-                .and_then(Value::as_str)
-                .map(str::trim);
+                .and_then(Value::as_str);
             let incoming_accept = incoming_launch
                 .get("acceptAllMode")
-                .and_then(Value::as_str)
-                .map(str::trim);
-            if matches!(incoming_accept, Some("enabled" | "acceptAll"))
-                && !matches!(stored_accept, Some("enabled" | "acceptAll"))
-            {
+                .and_then(Value::as_str);
+            if accept_all_mode_change_raises(
+                stored_accept,
+                incoming_accept,
+                global_accept_all_enabled,
+            ) {
                 return Err(DomainStateError {
                     code: "forbidden",
-                    message: "Only your own computer or phone can enable accept-all on a session."
+                    message: "Only your own devices can enable accept-all on a session."
                         .to_string(),
                 });
             }
