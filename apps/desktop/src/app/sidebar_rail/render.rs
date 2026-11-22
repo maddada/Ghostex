@@ -22,16 +22,31 @@ use crate::app::native_sidebar::appearance::SidebarAppearance;
 
 impl Render for RailDragPreview {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .size(px(RAIL_BUTTON))
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(px(RAIL_BUTTON_RADIUS))
-            .bg(self.fill)
-            .border_1()
-            .border_color(self.border)
-            .child(rail_button_artwork(&self.face, self.color))
+        match &self.artwork {
+            RailDragArtwork::Button(face) => div()
+                .size(px(RAIL_BUTTON))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(RAIL_BUTTON_RADIUS))
+                .bg(self.fill)
+                .border_1()
+                .border_color(self.border)
+                .child(rail_button_artwork(face, self.color))
+                .into_any_element(),
+            RailDragArtwork::Separator => div()
+                .w(px(RAIL_BUTTON))
+                .h(px(18.0))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(6.0))
+                .bg(self.fill)
+                .border_1()
+                .border_color(self.border)
+                .child(div().w(px(22.0)).h(px(1.5)).rounded_full().bg(self.color))
+                .into_any_element(),
+        }
     }
 }
 
@@ -42,7 +57,11 @@ fn rail_button_artwork(face: &RailButtonFace, color: Hsla) -> AnyElement {
             .size(px(16.0))
             .rounded(px(3.0))
             .into_any_element(),
-        None => titlebar_svg_icon(face.icon, face.icon_size, color).into_any_element(),
+        None => gpui::svg()
+            .size(px(face.icon_size))
+            .path(face.icon.clone())
+            .text_color(color)
+            .into_any_element(),
     }
 }
 
@@ -50,7 +69,7 @@ fn rail_button_artwork(face: &RailButtonFace, color: Hsla) -> AnyElement {
 fn rail_item_face(key: &'static str) -> RailButtonFace {
     RailButtonFace {
         label: rail_item(key).map_or(key, |item| item.label).to_string(),
-        icon: rail_item_icon(key),
+        icon: gpui::SharedString::new_static(rail_item_icon(key)),
         icon_size: rail_item_icon_size(key),
         image: None,
     }
@@ -63,6 +82,50 @@ fn rail_item_face(key: &'static str) -> RailButtonFace {
 const RAIL_DIVIDER_TOP: f32 = -crate::app::helpers::WORK_AREA_FRAME_MARGIN;
 #[cfg(ghostex_web)]
 const RAIL_DIVIDER_TOP: f32 = 0.0;
+
+/// The straight 2px horizontal drop-reorder line (matching `native_sidebar/drag.rs::drop_line`).
+const RAIL_DROP_LINE_HEIGHT: f32 = 2.0;
+const RAIL_DROP_LINE_COLOR: u32 = 0x60a5fa;
+/// Padding above and below each rail slot so `pb + border_t + pt == RAIL_GAP` and the 2px drop
+/// line sits centered in the gap between icons.
+const RAIL_SLOT_PAD_Y: f32 = (RAIL_GAP - RAIL_DROP_LINE_HEIGHT) / 2.0;
+
+/// Wraps a rail entry (pinned icon, separator, or ⋯) in a flat, non-rounded drop slot whose top
+/// edge draws a plain straight 2px horizontal line centered between icons while a rail drag hovers
+/// over it.
+///
+/// CDXC:Sidebar 2026-11-22 DECISION:
+/// User: the curved drop-position line (from `border_t_2` on a rounded rail button) looked wrong;
+/// use a plain straight horizontal line between icons (and separators), matching the sidebar's
+/// drag-reorder line (`native_sidebar/drag.rs::drop_line`).
+fn rail_drop_slot(
+    child: AnyElement,
+    drop_index: Option<usize>,
+    cx: &mut Context<GhostexGpuiApp>,
+) -> AnyElement {
+    let slot = div()
+        .flex_shrink_0()
+        .w(px(RAIL_BUTTON))
+        .flex()
+        .justify_center()
+        .pt(px(RAIL_SLOT_PAD_Y))
+        .pb(px(RAIL_SLOT_PAD_Y))
+        .border_t(px(RAIL_DROP_LINE_HEIGHT))
+        .border_color(gpui::transparent_black())
+        .child(child);
+    let Some(index) = drop_index.filter(|_| !cfg!(ghostex_web)) else {
+        return slot.into_any_element();
+    };
+    slot.drag_over::<DraggedRailItem>(|style, _, _, _| {
+        style.border_color(gpui::rgb(RAIL_DROP_LINE_COLOR))
+    })
+    .on_drop(
+        cx.listener(move |app, dragged: &DraggedRailItem, _window, cx| {
+            app.move_sidebar_rail_pin(&dragged.key, index, cx);
+        }),
+    )
+    .into_any_element()
+}
 
 /// How one button is drawn.
 #[derive(Clone, Copy)]
@@ -174,13 +237,24 @@ impl GhostexGpuiApp {
         let toggle_center =
             crate::app::native_sidebar::navigation::corner_row_top_padding(appearance.scale)
                 + crate::app::consts::TITLEBAR_CONTROL_HEIGHT * appearance.scale / 2.0;
-        let icons_top = toggle_center + RAIL_BUTTON / 2.0 + RAIL_GAP;
+        let icons_top = toggle_center + RAIL_BUTTON / 2.0 + RAIL_GAP
+            - (RAIL_SLOT_PAD_Y + RAIL_DROP_LINE_HEIGHT);
         let pins = sidebar_rail_pins();
         let main_hub_in_sidebar = self.sidebar_rail_main_hub_in_sidebar();
         let on_rail = |key: &str| !(main_hub_in_sidebar && key == "mainHub");
         let mut buttons = Vec::new();
         for (index, key) in pins.iter().enumerate() {
-            // A pinned link (`link:<id>`): its site icon, its name, its page.
+            // A rail separator (`sep:<id>`): non-clickable thin line, draggable, right-click menu.
+            if ghostex_gx_core::sidebar_rail::is_rail_separator_key(key) {
+                buttons.push(self.render_sidebar_rail_separator(
+                    key.clone(),
+                    index,
+                    &appearance,
+                    cx,
+                ));
+                continue;
+            }
+            // A pinned link (`link:<id>`): its chosen app icon or site icon, its name, its page.
             if let Some(link) = self.sidebar_rail_link_pin(key) {
                 let state = RailItemState {
                     available: true,
@@ -189,7 +263,9 @@ impl GhostexGpuiApp {
                 };
                 let face = RailButtonFace {
                     label: link.label,
-                    icon: "titlebar/world.svg",
+                    icon: link
+                        .icon
+                        .unwrap_or_else(|| gpui::SharedString::new_static("titlebar/world.svg")),
                     icon_size: RAIL_ICON,
                     image: link.image,
                 };
@@ -256,7 +332,6 @@ impl GhostexGpuiApp {
         let workspace = self.render_sidebar_rail_workspace(&appearance, cx);
         let usage = (!self.account_usage_meters().is_empty())
             .then(|| self.render_sidebar_rail_usage_toggle(&appearance, cx));
-        let scale = 1.0;
         v_flex()
             .id("ghostex-gpui-sidebar-rail")
             .w(px(RAIL_WIDTH))
@@ -358,7 +433,6 @@ impl GhostexGpuiApp {
                     .min_h_0()
                     .w_full()
                     .items_center()
-                    .gap(px(RAIL_GAP * scale))
                     .overflow_y_scroll()
                     .children(buttons)
                     .when_some(temporary, |column, temporary| {
@@ -516,7 +590,6 @@ impl GhostexGpuiApp {
         let hover = appearance.hover;
         let selected = appearance.selected;
         let temporary_border = appearance.muted.opacity(0.55);
-        let drop_line = appearance.foreground;
         let bounds = self.sidebar_rail.item_bounds(&key);
         let button = div()
             .id(gpui::SharedString::from(format!(
@@ -540,8 +613,11 @@ impl GhostexGpuiApp {
                 button.border_1().border_color(temporary_border)
             })
             .hover(move |button| button.bg(if look.on { selected } else { hover }))
-            .on_prepaint(move |rect, _, _| {
-                bounds.set(Some(rect));
+            .on_prepaint({
+                let bounds = bounds.clone();
+                move |rect, _, _| {
+                    bounds.set(Some(rect));
+                }
             })
             .child(
                 div()
@@ -564,18 +640,35 @@ impl GhostexGpuiApp {
                     }
                 })
             })
-            // Move and unpin save the pins, which the web build cannot (menu.rs), so it offers
-            // neither them nor dragging.
+            // Move, separator and unpin save the pins, which the web build cannot (menu.rs), so it
+            // offers neither them nor dragging.
             .when(!cfg!(ghostex_web), |button| {
-                let key = key.clone();
-                button.on_mouse_down(
-                    MouseButton::Right,
-                    cx.listener(move |app, event: &MouseDownEvent, window, cx| {
-                        cx.stop_propagation();
-                        let menu = app.sidebar_rail_item_menu(&key);
-                        Self::show_native_sidebar_menu(&menu, event.position, 1.0, window, cx);
-                    }),
-                )
+                let key_mouse = key.clone();
+                let key_a11y = key.clone();
+                let bounds_a11y = bounds.clone();
+                let rail = cx.entity().downgrade();
+                button
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(move |app, event: &MouseDownEvent, window, cx| {
+                            cx.stop_propagation();
+                            let menu = app.sidebar_rail_item_menu(&key_mouse);
+                            Self::show_native_sidebar_menu(&menu, event.position, 1.0, window, cx);
+                        }),
+                    )
+                    .on_a11y_action(
+                        gpui::AccessibleAction::ShowContextMenu,
+                        move |_, window, cx| {
+                            let _ = rail.update(cx, |app, cx| {
+                                let menu = app.sidebar_rail_item_menu(&key_a11y);
+                                let at = bounds_a11y.get().map_or_else(
+                                    || gpui::point(px(RAIL_WIDTH), px(80.0)),
+                                    |b| gpui::point(b.right() + px(4.0), b.top()),
+                                );
+                                Self::show_native_sidebar_menu(&menu, at, 1.0, window, cx);
+                            });
+                        },
+                    )
             })
             .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
                 crate::app::native_sidebar::link_chips::sidebar_style_tooltip(
@@ -585,34 +678,109 @@ impl GhostexGpuiApp {
                 )
             });
         let Some(index) = pin_index.filter(|_| !cfg!(ghostex_web)) else {
-            return button.into_any_element();
+            return rail_drop_slot(button.into_any_element(), None, cx);
         };
         let preview_fill = appearance.selected;
         let preview_border = appearance.muted.opacity(0.4);
-        button
+        let draggable = button
             .on_drag(
                 DraggedRailItem {
                     key,
-                    face: face.clone(),
+                    artwork: RailDragArtwork::Button(face),
                 },
                 move |dragged, _offset, _window, cx| {
                     cx.new(|_| RailDragPreview {
-                        face: dragged.face.clone(),
+                        artwork: dragged.artwork.clone(),
                         fill: preview_fill,
                         border: preview_border,
                         color,
                     })
                 },
             )
-            .drag_over::<DraggedRailItem>(move |style, _, _, _| {
-                style.border_t_2().border_color(drop_line)
+            .into_any_element();
+        rail_drop_slot(draggable, Some(index), cx)
+    }
+
+    /// A thin horizontal divider line in the rail (`sep:<id>`): disabled (not clickable),
+    /// draggable to reorder like any pinned icon, and right-clickable for Add separator / Remove.
+    fn render_sidebar_rail_separator(
+        &self,
+        key: String,
+        index: usize,
+        appearance: &SidebarAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let hover = appearance.hover;
+        let line_color = appearance.muted.opacity(0.42);
+        let bounds = self.sidebar_rail.item_bounds(&key);
+        let separator = div()
+            .id(gpui::SharedString::from(format!(
+                "ghostex-gpui-sidebar-rail-{key}"
+            )))
+            .role(gpui::Role::Button)
+            .aria_label("Rail separator")
+            .flex_shrink_0()
+            .w(px(RAIL_BUTTON))
+            .h(px(16.0))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(6.0))
+            .when(!cfg!(ghostex_web), |el| {
+                el.cursor_grab().hover(move |el| el.bg(hover))
             })
-            .on_drop(
-                cx.listener(move |app, dragged: &DraggedRailItem, _window, cx| {
-                    app.move_sidebar_rail_pin(&dragged.key, index, cx);
+            .on_prepaint({
+                let bounds = bounds.clone();
+                move |rect, _, _| bounds.set(Some(rect))
+            })
+            .child(div().w(px(22.0)).h(px(1.5)).rounded_full().bg(line_color));
+        if cfg!(ghostex_web) {
+            return rail_drop_slot(separator.into_any_element(), None, cx);
+        }
+        let preview_fill = appearance.selected;
+        let preview_border = appearance.muted.opacity(0.4);
+        let preview_line = appearance.foreground.opacity(0.75);
+        let key_mouse = key.clone();
+        let key_a11y = key.clone();
+        let rail = cx.entity().downgrade();
+        let draggable = separator
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |app, event: &MouseDownEvent, window, cx| {
+                    cx.stop_propagation();
+                    let menu = app.sidebar_rail_item_menu(&key_mouse);
+                    Self::show_native_sidebar_menu(&menu, event.position, 1.0, window, cx);
                 }),
             )
-            .into_any_element()
+            .on_a11y_action(
+                gpui::AccessibleAction::ShowContextMenu,
+                move |_, window, cx| {
+                    let _ = rail.update(cx, |app, cx| {
+                        let menu = app.sidebar_rail_item_menu(&key_a11y);
+                        let at = bounds.get().map_or_else(
+                            || gpui::point(px(RAIL_WIDTH), px(80.0)),
+                            |b| gpui::point(b.right() + px(4.0), b.top()),
+                        );
+                        Self::show_native_sidebar_menu(&menu, at, 1.0, window, cx);
+                    });
+                },
+            )
+            .on_drag(
+                DraggedRailItem {
+                    key,
+                    artwork: RailDragArtwork::Separator,
+                },
+                move |dragged, _offset, _window, cx| {
+                    cx.new(|_| RailDragPreview {
+                        artwork: dragged.artwork.clone(),
+                        fill: preview_fill,
+                        border: preview_border,
+                        color: preview_line,
+                    })
+                },
+            )
+            .into_any_element();
+        rail_drop_slot(draggable, Some(index), cx)
     }
 
     /// ⋯, which also takes a dragged pin dropped on it: after the last pin.
@@ -624,11 +792,10 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let bounds = self.sidebar_rail.more_bounds.clone();
         let hover = appearance.hover;
-        let drop_line = appearance.foreground;
         // ⋯ is no anchor of the notifications feed: it wrote the bell's on every frame and won
         // whenever the cached docked sidebar did not repaint (CDXC:Notifications 2026-11-21 on
         // `toggle_gpui_titlebar_notifications_popup_at`).
-        div()
+        let more = div()
             .id("ghostex-gpui-sidebar-rail-more")
             .role(gpui::Role::Button)
             .aria_label("More")
@@ -661,14 +828,6 @@ impl GhostexGpuiApp {
                     );
                 }),
             )
-            .drag_over::<DraggedRailItem>(move |style, _, _, _| {
-                style.border_t_2().border_color(drop_line)
-            })
-            .on_drop(
-                cx.listener(move |app, dragged: &DraggedRailItem, _window, cx| {
-                    app.move_sidebar_rail_pin(&dragged.key, pin_count, cx);
-                }),
-            )
             .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, |window, cx| {
                 crate::app::native_sidebar::link_chips::sidebar_style_tooltip(
                     "More: pin anything to the rail".to_string(),
@@ -676,7 +835,8 @@ impl GhostexGpuiApp {
                     cx,
                 )
             })
-            .into_any_element()
+            .into_any_element();
+        rail_drop_slot(more, Some(pin_count), cx)
     }
 
     /// The account usage tiles' switch: one click shows or hides them at the sidebar's foot.

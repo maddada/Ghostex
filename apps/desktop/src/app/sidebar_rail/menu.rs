@@ -5,8 +5,10 @@
 use gpui::{Bounds, Pixels, Point, Window};
 use serde_json::{Value, json};
 
+use ghostex_gx_core::custom_links::CUSTOM_LINK_COMMAND_TYPE;
 use ghostex_gx_core::sidebar_rail::{
-    RAIL_COMMAND_TYPE, RAIL_ITEMS, RAIL_MENU_GROUPS, rail_item, rail_link_pin_id, rail_pins,
+    RAIL_COMMAND_TYPE, RAIL_ITEMS, RAIL_MENU_GROUPS, is_rail_separator_key,
+    next_rail_separator_key, rail_item, rail_link_pin_id, rail_pins, rail_pins_insert_after,
     rail_pins_moved, rail_pins_with,
 };
 
@@ -118,16 +120,71 @@ impl GhostexGpuiApp {
         Value::Array(rows)
     }
 
-    /// The right-click menu of a pinned icon: move it, or unpin it.
+    /// The right-click menu of a rail entry:
+    /// - A separator: Add separator (below it) and Remove.
+    /// - A pinned link: Edit…, Change icon…, Move up / Move down, Add separator, Unpin from rail.
+    /// - A pinned built-in rail item: Move up / Move down, Add separator, Unpin from rail.
+    /// - A temporary (unpinned) rail item: Pin to rail.
     pub(crate) fn sidebar_rail_item_menu(&self, key: &str) -> Value {
         let pins = sidebar_rail_pins_now();
+        if is_rail_separator_key(key) {
+            return Value::Array(vec![
+                json!({
+                    "label": "Add separator",
+                    "icon": "plus",
+                    "command": command("addSeparator", key),
+                    "checked": false,
+                    "disabled": false,
+                }),
+                json!({
+                    "label": "Remove",
+                    "icon": "trash",
+                    "danger": true,
+                    "command": {
+                        "type": SIDEBAR_RAIL_COMMAND_TYPE,
+                        "op": "pin",
+                        "key": key,
+                        "pinned": false,
+                    },
+                    "checked": false,
+                    "disabled": false,
+                }),
+            ]);
+        }
         let index = pins.iter().position(|pin| pin == key);
         let mut rows = Vec::new();
+        if let Some(id) = rail_link_pin_id(key) {
+            rows.push(json!({
+                "label": "Edit…",
+                "icon": "pencil",
+                "command": { "type": CUSTOM_LINK_COMMAND_TYPE, "op": "edit", "id": id },
+                "checked": false,
+                "disabled": false,
+            }));
+            rows.push(json!({
+                "label": "Change icon…",
+                "icon": "sparkles",
+                "command": { "type": CUSTOM_LINK_COMMAND_TYPE, "op": "changeIcon", "id": id },
+                "checked": false,
+                "disabled": false,
+            }));
+            rows.push(json!({ "separator": true }));
+        }
         if index.is_some_and(|index| index > 0) {
             rows.push(json!({ "label": "Move up", "icon": "arrow-up", "command": command("moveUp", key), "checked": false, "disabled": false }));
         }
         if index.is_some_and(|index| index + 1 < pins.len()) {
             rows.push(json!({ "label": "Move down", "icon": "arrow-down", "command": command("moveDown", key), "checked": false, "disabled": false }));
+        }
+        if index.is_some() {
+            rows.push(json!({
+                "label": "Add separator",
+                "icon": "plus",
+                "command": command("addSeparator", key),
+                "checked": false,
+                "disabled": false,
+            }));
+            rows.push(json!({ "separator": true }));
         }
         rows.push(json!({
             "label": if index.is_some() { "Unpin from rail" } else { "Pin to rail" },
@@ -168,11 +225,15 @@ impl GhostexGpuiApp {
         if command.get("type").and_then(Value::as_str) != Some(SIDEBAR_RAIL_COMMAND_TYPE) {
             return false;
         }
-        // A rail item, or a pinned link (`link:<id>`, packages/gx-core/src/sidebar_rail.rs).
+        // A rail item, a pinned link (`link:<id>`), or a separator (`sep:<id>`).
         let Some(key) = command
             .get("key")
             .and_then(Value::as_str)
-            .filter(|key| rail_item(key).is_some() || rail_link_pin_id(key).is_some())
+            .filter(|key| {
+                rail_item(key).is_some()
+                    || rail_link_pin_id(key).is_some()
+                    || is_rail_separator_key(key)
+            })
             .map(str::to_string)
         else {
             return true;
@@ -214,6 +275,12 @@ impl GhostexGpuiApp {
                 {
                     panel.replace_items(rows);
                 }
+            }
+            Some("addSeparator") => {
+                let pins = sidebar_rail_pins_now();
+                let sep_key = next_rail_separator_key(&pins);
+                self.save_sidebar_rail_pins(&rail_pins_insert_after(&pins, &key, &sep_key), cx);
+                self.dismiss_native_sidebar_menu(cx);
             }
             Some(op @ ("moveUp" | "moveDown")) => {
                 let pins = sidebar_rail_pins_now();

@@ -300,15 +300,9 @@ impl GhostexGpuiApp {
                 }
             }
         }
-        // The user's links and Add link…, read as the menu opens (app/custom_links/). A page in a
-        // browser has no link page to open them in.
-        #[cfg(not(ghostex_web))]
-        if let Some(rows) = items.as_array_mut() {
-            ghostex_gx_core::custom_links::insert_custom_link_rows(
-                rows,
-                crate::app::custom_links::custom_link_menu_rows_now(),
-            );
-        }
+        // CDXC:Sidebar 2026-11-22 DECISION:
+        // User: "Don't show links here, only in the 3 dots in the rail." Custom links and Add link…
+        // live only in the rail's ⋯ menu (app/sidebar_rail/menu.rs), never in the ☰ main menu.
         items
     }
 

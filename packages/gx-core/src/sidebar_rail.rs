@@ -32,7 +32,11 @@ const fn item(key: &'static str, label: &'static str, group: &'static str) -> Ra
 }
 
 /// The ⋯ menu's groups, in order.
-pub const RAIL_MENU_GROUPS: [&str; 3] = ["Go to", "Agents", "This computer"];
+///
+/// CDXC:Sidebar 2026-11-22 DECISION:
+/// User: remove Connect a Phone and Settings from the rail's ⋯ menu (they stay in the ☰ main menu)
+/// and drop the now-empty "This computer" heading.
+pub const RAIL_MENU_GROUPS: [&str; 2] = ["Go to", "Agents"];
 
 /// Every item, in ⋯ menu order.
 ///
@@ -49,8 +53,6 @@ pub const RAIL_ITEMS: &[RailItem] = &[
     item("claude", "Claude", "Agents"),
     item("grok", "Grok Bot", "Agents"),
     item("voiceCall", "Voice Call", "Agents"),
-    item("connectPhone", "Connect a Phone", "This computer"),
-    item("settings", "Settings", "This computer"),
 ];
 
 /// Pinned when `sidebarRailPins` is missing.
@@ -103,12 +105,43 @@ pub fn rail_link_pin_id(key: &str) -> Option<&str> {
         .filter(|id| !id.is_empty())
 }
 
-/// Whether `key` can be pinned: a rail item, or a link.
-fn pinnable(key: &str) -> bool {
-    rail_item(key).is_some() || rail_link_pin_id(key).is_some()
+/// The start of a separator's key (`sep:<id>`): a thin horizontal divider line on the rail.
+///
+/// CDXC:Sidebar 2026-11-22 DECISION:
+/// User: "Add separator" in any rail icon's right-click menu inserts a non-clickable thin line
+/// right below that icon, draggable to reorder like icons, with its own right-click menu (Add
+/// separator, Remove), saved and synced with `sidebarRailPins`.
+pub const RAIL_SEPARATOR_PREFIX: &str = "sep:";
+
+/// The rail key of separator `id`.
+pub fn rail_separator_key(id: &str) -> String {
+    format!("{RAIL_SEPARATOR_PREFIX}{id}")
 }
 
-/// The pinned items' keys, top to bottom: known items and saved links only, each once.
+/// Whether `key` is a rail separator (`sep:<id>`).
+pub fn is_rail_separator_key(key: &str) -> bool {
+    key.strip_prefix(RAIL_SEPARATOR_PREFIX)
+        .is_some_and(|id| !id.is_empty())
+}
+
+/// The next unused separator key (`sep:1`, `sep:2`, …) not already in `pins`.
+pub fn next_rail_separator_key<S: AsRef<str>>(pins: &[S]) -> String {
+    let mut n: usize = 1;
+    loop {
+        let candidate = rail_separator_key(&n.to_string());
+        if !pins.iter().any(|pin| pin.as_ref() == candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+/// Whether `key` can be pinned: a rail item, a link, or a separator.
+fn pinnable(key: &str) -> bool {
+    rail_item(key).is_some() || rail_link_pin_id(key).is_some() || is_rail_separator_key(key)
+}
+
+/// The pinned items' keys, top to bottom: known items, saved links, and separators, each once.
 pub fn rail_pins(settings: &Map<String, Value>) -> Vec<String> {
     let Some(saved) = settings
         .get(RAIL_PINS_SETTINGS_KEY)
@@ -124,7 +157,7 @@ pub fn rail_pins(settings: &Map<String, Value>) -> Vec<String> {
     for key in saved.iter().filter_map(Value::as_str) {
         let known = match rail_link_pin_id(key) {
             Some(id) => links.iter().any(|link| link.id == id),
-            None => rail_item(key).is_some(),
+            None => rail_item(key).is_some() || is_rail_separator_key(key),
         };
         if known && !pins.iter().any(|pin| pin == key) {
             pins.push(key.to_string());
@@ -143,6 +176,29 @@ pub fn rail_pins_with<S: AsRef<str>>(pins: &[S], key: &str, pinned: bool) -> Vec
     if pinned && pinnable(key) {
         next.push(key.to_string());
     }
+    next
+}
+
+/// `pins` with `new_key` inserted right after `after_key` (or at the end when `after_key` is not in
+/// `pins`).
+pub fn rail_pins_insert_after<S: AsRef<str>>(
+    pins: &[S],
+    after_key: &str,
+    new_key: &str,
+) -> Vec<String> {
+    let mut next: Vec<String> = pins
+        .iter()
+        .map(|pin| pin.as_ref().to_string())
+        .filter(|pin| pin != new_key)
+        .collect();
+    if !pinnable(new_key) {
+        return next;
+    }
+    let at = next
+        .iter()
+        .position(|pin| pin == after_key)
+        .map_or(next.len(), |index| index + 1);
+    next.insert(at, new_key.to_string());
     next
 }
 

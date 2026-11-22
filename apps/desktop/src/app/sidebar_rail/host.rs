@@ -29,7 +29,7 @@ impl GhostexGpuiApp {
             return state;
         }
         match key {
-            "search" | "commands" | "connectPhone" | "settings" => state.available = true,
+            "search" | "commands" => state.available = true,
             "mainHub" => {
                 let chief = snapshot
                     .and_then(|snapshot| snapshot.chiefs.iter().find(|chief| chief.is_local));
@@ -71,14 +71,21 @@ impl GhostexGpuiApp {
     pub(crate) fn sidebar_rail_link_pin(&self, key: &str) -> Option<RailLinkPin> {
         let id = ghostex_gx_core::sidebar_rail::rail_link_pin_id(key)?;
         let link = crate::app::custom_links::saved_custom_link(id)?;
-        let image =
-            crate::browser_favicon_cache_lookup(&link.url, None).map(|favicon| favicon.image);
+        let icon = link.icon.as_deref().map(|icon_id| {
+            crate::app::helpers::gpui_sidebar_command_icon_asset_path(Some(icon_id))
+        });
+        let image = if icon.is_some() {
+            None
+        } else {
+            crate::browser_favicon_cache_lookup(&link.url, None).map(|favicon| favicon.image)
+        };
         let showing = self.web_place_on() == Some(WebPlace::Link)
             && crate::app::custom_links::custom_link_page_link()
                 .is_some_and(|showing| showing.id == link.id);
         Some(RailLinkPin {
             label: link.label(),
             id: link.id,
+            icon,
             image,
             showing,
         })
@@ -117,8 +124,6 @@ impl GhostexGpuiApp {
             "search" => self.dispatch_native_sidebar_ui(sidebar_action("sessions"), cx),
             "commands" => self
                 .dispatch_native_sidebar_ui(sidebar_action(ghostex_gx_core::COMMANDS_ACTION), cx),
-            "connectPhone" => self.dispatch_native_sidebar_ui(sidebar_action("remoteSetup"), cx),
-            "settings" => self.dispatch_native_sidebar_ui(sidebar_action("settings"), cx),
             "mainHub" => self.handle_native_sidebar_action(
                 &NativeSidebarAction {
                     command: json!({ "type": "chief", "op": "open" }),

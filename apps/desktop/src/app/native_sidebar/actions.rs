@@ -221,7 +221,7 @@ impl GhostexGpuiApp {
         if self.run_sidebar_rail_command(&command, cx) {
             return;
         }
-        // A link of either ⋯ menu, Add link… and a link's Edit… and Remove (app/custom_links/).
+        // A link of the rail's ⋯ menu, Add link… and a link's Edit… and Remove (app/custom_links/).
         if self.run_custom_link_command(&command, cx) {
             return;
         }

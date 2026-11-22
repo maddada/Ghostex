@@ -16,7 +16,7 @@ fn new_link_id() -> String {
 }
 
 impl GhostexGpuiApp {
-    /// A `customLink` command from either ⋯ menu. Returns whether it was one.
+    /// A `customLink` command from the rail's ⋯ menu. Returns whether it was one.
     pub(crate) fn run_custom_link_command(
         &mut self,
         command: &Value,
@@ -33,8 +33,21 @@ impl GhostexGpuiApp {
                     app.open_custom_link(&id, cx);
                 });
             }
-            (Some("add"), _) => self.open_gpui_custom_link_modal(None, cx),
-            (Some("edit"), Some(id)) => self.open_gpui_custom_link_modal(Some(&id), cx),
+            (Some("add"), _) => self.open_gpui_custom_link_modal(
+                None,
+                crate::app::window::CustomLinkModalMode::Full,
+                cx,
+            ),
+            (Some("edit"), Some(id)) => self.open_gpui_custom_link_modal(
+                Some(&id),
+                crate::app::window::CustomLinkModalMode::Full,
+                cx,
+            ),
+            (Some("changeIcon"), Some(id)) => self.open_gpui_custom_link_modal(
+                Some(&id),
+                crate::app::window::CustomLinkModalMode::IconOnly,
+                cx,
+            ),
             (Some("remove"), Some(id)) => self.remove_custom_link(&id, cx),
             _ => {}
         }
@@ -75,8 +88,10 @@ impl GhostexGpuiApp {
         id: Option<String>,
         name: String,
         url: String,
+        icon: Option<String>,
         cx: &mut gpui::Context<Self>,
     ) {
+        let icon = icon.map(|i| i.trim().to_string()).filter(|i| !i.is_empty());
         let mut links = saved_custom_links();
         match id.and_then(|id| links.iter_mut().find(|link| link.id == id)) {
             Some(link) => {
@@ -84,6 +99,7 @@ impl GhostexGpuiApp {
                 let id = link.id.clone();
                 link.name = name;
                 link.url = url.clone();
+                link.icon = icon;
                 self.save_custom_links(&links, cx);
                 let showing = custom_link_page_link().is_some_and(|link| link.id == id);
                 if moved && showing && self.web_place_on() == Some(WebPlace::Link) {
@@ -98,6 +114,7 @@ impl GhostexGpuiApp {
                     id: new_link_id(),
                     name,
                     url,
+                    icon,
                 });
                 self.save_custom_links(&links, cx);
             }

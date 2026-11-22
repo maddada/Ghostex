@@ -1,10 +1,9 @@
-//! The user's own links in the sidebar's ⋯ menu: what the settings file keeps, how a typed address
-//! becomes a page address, and the menu rows both ⋯ menus (the classic sidebar's and the rail's)
-//! draw for them.
+//! The user's own links in the rail's ⋯ menu: what the settings file keeps, how a typed address
+//! becomes a page address, and the menu rows the rail's ⋯ menu draws for them.
 //!
 //! CDXC:Sidebar 2026-11-22 DECISION:
-//! User: "add the ability inside the 3 dots in the sidebar for the user to add any link they want. when they add it and click on that link then we show the browser expanded with that link open (almost exactly like we do for grok bot embed extension, only difference is we show the address bar like we do in the browser in the side panel and we don't hide it). useful for someone to add for example a link to their CLIProxyAPI and view it easily from inside ghostex ... not as part of any project since it's more meta". The links are the computer's own, not a project's: `customLinks` in the settings file, each `{ "id", "name", "url" }`, in no Settings > Sync category, so a `localhost:8317` link stays on the computer it points at. The ⋯ menu lists them (favicon or globe, the name or else the address's host) with Add link… under them, between Keep Awake and Ask Ghostex AI; the rail's ⋯ menu lists them under its own Links heading. A row opens its page in the sessions column's place the way Grok Bot's opens (apps/desktop/src/app/claude_web/takeover.rs), with the address bar always shown above it; its hover ⋯ and right-click open Edit… and Remove, the way the Unified filter's rows open their menus (`rowMenu`).
-//! SEE-ALSO: apps/desktop/src/app/custom_links/ (opening, the page, its bar), apps/desktop/src/app/window/custom_link_modal.rs (the Add link and Edit link dialog), apps/desktop/src/app/native_sidebar/menus.rs (`native_sidebar_more_menu_now`), apps/desktop/src/app/sidebar_rail/menu.rs.
+//! User: "add the ability inside the 3 dots in the sidebar for the user to add any link they want. when they add it and click on that link then we show the browser expanded with that link open (almost exactly like we do for grok bot embed extension, only difference is we show the address bar like we do in the browser in the side panel and we don't hide it). useful for someone to add for example a link to their CLIProxyAPI and view it easily from inside ghostex ... not as part of any project since it's more meta". Follow-up same day: "Don't show links here, only in the 3 dots in the rail." The links are the computer's own, not a project's: `customLinks` in the settings file, each `{ "id", "name", "url" }`, in no Settings > Sync category, so a `localhost:8317` link stays on the computer it points at. The rail's ⋯ menu lists them under its own Links heading (favicon or globe, the name or else the address's host) with Add link… under them; the sidebar's ☰ main menu does not show them. A row opens its page in the sessions column's place the way Grok Bot's opens (apps/desktop/src/app/claude_web/takeover.rs), with the Browser toolbar always shown above it; its hover ⋯ and right-click open Edit…, Pin to rail / Unpin from rail, and Remove, the way the Unified filter's rows open their menus (`rowMenu`).
+//! SEE-ALSO: apps/desktop/src/app/custom_links/ (opening, the page, its bar), apps/desktop/src/app/window/custom_link_modal.rs (the Add link and Edit link dialog), apps/desktop/src/app/sidebar_rail/menu.rs.
 
 use serde_json::{json, Map, Value};
 
@@ -31,6 +30,9 @@ pub struct CustomLink {
     pub name: String,
     /// A full http or https address (`normalize_custom_link_url`).
     pub url: String,
+    /// Optional app icon id (from the app's command/Space icon set). `None` uses the site's
+    /// favicon (or the globe until cached).
+    pub icon: Option<String>,
 }
 
 impl CustomLink {
@@ -68,6 +70,11 @@ pub fn custom_links_from_value(value: Option<&Value>) -> Vec<CustomLink> {
         if links.iter().any(|link| link.id == id) {
             continue;
         }
+        let icon = entry["icon"]
+            .as_str()
+            .map(str::trim)
+            .filter(|icon| !icon.is_empty())
+            .map(str::to_string);
         links.push(CustomLink {
             id: id.to_string(),
             name: entry["name"]
@@ -76,6 +83,7 @@ pub fn custom_links_from_value(value: Option<&Value>) -> Vec<CustomLink> {
                 .trim()
                 .to_string(),
             url,
+            icon,
         });
         if links.len() == CUSTOM_LINKS_MAX {
             break;
@@ -89,7 +97,18 @@ pub fn custom_links_value(links: &[CustomLink]) -> Value {
     Value::Array(
         links
             .iter()
-            .map(|link| json!({ "id": link.id, "name": link.name, "url": link.url }))
+            .map(|link| {
+                let mut entry = json!({ "id": link.id, "name": link.name, "url": link.url });
+                if let Some(icon) = link
+                    .icon
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|i| !i.is_empty())
+                {
+                    entry["icon"] = json!(icon);
+                }
+                entry
+            })
             .collect(),
     )
 }
@@ -192,8 +211,8 @@ fn command(op: &str, id: Option<&str>) -> MenuCommand {
     MenuCommand::host(command)
 }
 
-/// The ⋯ menu's rows for `links`: one per link (its favicon as a `data:` image where `favicon`
-/// has one, else the globe), then Add link….
+/// The ⋯ menu's rows for `links`: one per link (its chosen app icon if set, else its favicon as a
+/// `data:` image where `favicon` has one, else the globe), then Add link….
 pub fn custom_link_menu_rows(
     links: &[CustomLink],
     favicon: impl Fn(&CustomLink) -> Option<String>,
@@ -202,11 +221,19 @@ pub fn custom_link_menu_rows(
         .iter()
         .map(|link| {
             let label = link.label();
-            let mut row = MenuItem::row(&label, "world", command("open", Some(&link.id))).to_json();
-            if let Some(image) = favicon(link) {
-                row["imageDataUrl"] = json!(image);
-                if let Some(row) = row.as_object_mut() {
-                    row.remove("icon");
+            let chosen_icon = link.icon.as_deref().filter(|icon| !icon.is_empty());
+            let mut row = MenuItem::row(
+                &label,
+                chosen_icon.unwrap_or("world"),
+                command("open", Some(&link.id)),
+            )
+            .to_json();
+            if chosen_icon.is_none() {
+                if let Some(image) = favicon(link) {
+                    row["imageDataUrl"] = json!(image);
+                    if let Some(row) = row.as_object_mut() {
+                        row.remove("icon");
+                    }
                 }
             }
             row["rowMenu"] = json!({
@@ -221,14 +248,17 @@ pub fn custom_link_menu_rows(
     rows
 }
 
-/// What a link row's hover ⋯ and right-click open: Edit…, Pin to rail or Unpin from rail (in the
-/// rail layout's ⋯ menu, whose host sets `pinned`), and Remove.
+/// What a link row's hover ⋯ and right-click open: Edit…, Change icon…, Pin to rail or Unpin from
+/// rail (in the rail layout's ⋯ menu, whose host sets `pinned`), and Remove.
 pub fn custom_link_row_menu(row_menu: &Value) -> Option<Value> {
     if row_menu["kind"] != CUSTOM_LINK_ROW_MENU_KIND {
         return None;
     }
     let id = row_menu["key"].as_str()?;
-    let mut rows = vec![MenuItem::row("Edit…", "pencil", command("edit", Some(id))).to_json()];
+    let mut rows = vec![
+        MenuItem::row("Edit…", "pencil", command("edit", Some(id))).to_json(),
+        MenuItem::row("Change icon…", "sparkles", command("changeIcon", Some(id))).to_json(),
+    ];
     if let Some(pinned) = row_menu["pinned"].as_bool() {
         rows.push(
             MenuItem::row(
@@ -254,29 +284,4 @@ pub fn custom_link_row_menu(row_menu: &Value) -> Option<Value> {
             .to_json(),
     );
     Some(Value::Array(rows))
-}
-
-/// Puts the link rows into the classic sidebar's ⋯ menu as the host opens it: their own group
-/// between Keep Awake and Ask Ghostex AI (before Join Discord where Ask Ghostex AI is not offered).
-pub fn insert_custom_link_rows(menu: &mut Vec<Value>, rows: Vec<Value>) {
-    if rows.is_empty() {
-        return;
-    }
-    let anchor = menu.iter().position(|row| {
-        let message = &row["command"]["message"];
-        (message["type"] == crate::sidebar_menu::MENU_PANEL_MESSAGE_TYPE
-            && message["panel"] == crate::sidebar_menu::MENU_PANEL_HELP)
-            || message["type"] == "openExternalUrl"
-    });
-    let at = anchor.unwrap_or(menu.len());
-    let starts_group = at == 0 || menu[at - 1]["separator"] == true;
-    let mut group = Vec::with_capacity(rows.len() + 2);
-    if !starts_group {
-        group.push(MenuItem::separator().to_json());
-    }
-    group.extend(rows);
-    if anchor.is_some() {
-        group.push(MenuItem::separator().to_json());
-    }
-    menu.splice(at..at, group);
 }

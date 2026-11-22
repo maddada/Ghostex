@@ -1,4 +1,4 @@
-//! Preview of the user's links (packages/gx-core/src/custom_links.rs): the sidebar ⋯ menu's rows,
+//! Preview of the user's links (packages/gx-core/src/custom_links.rs): the rail ⋯ menu's rows,
 //! the Add link dialog, the link page's toolbar and links pinned to the rail.
 //!
 //! `GHOSTEX_NATIVE_MODAL_DEMO=custom-link-dialog` opens the app's own Add link dialog
@@ -6,17 +6,14 @@
 //! `error` shows what an address it cannot read says.
 //!
 //! `GHOSTEX_NATIVE_MODAL_DEMO=custom-links` draws a 1650x962 window. Its states:
-//! - `menu` (default): the classic sidebar's ⋯ menu with three links and Add link… (the rows come
-//!   from gx-core's own builders, laid in by `insert_custom_link_rows`), drawn in the sidebar
-//!   menu's metrics (native_sidebar/menus.rs); `row-menu` adds the first link's own menu.
+//! - `rail-menu` (default): the rail's ⋯ menu with its Links group (each link row's pin, as every
+//!   rail row has) and an unpinned link's own menu open with Pin to rail.
 //! - `page`: the rail with two pinned links, the first one's page open, under the side panel
 //!   Browser's toolbar (Back, Forward, Reload, Home, the address, Page Size, Annotate, History,
 //!   Profile, DevTools, ⋯) and the link page's Close. The toolbar is drawn here in
 //!   render_browser_toolbar's icons, order and sizes, and the page under it is a stand-in, since
 //!   the preview runs neither the app nor a browser engine.
 //! - `rail`: the same, with the pointer on the second pinned link and its tooltip.
-//! - `rail-menu`: the rail's ⋯ menu with its Links group (each link row's pin, as every rail row
-//!   has) and an unpinned link's own menu open with Pin to rail.
 //! - `rail-pin-menu`: a pinned link's right-click menu on the rail: Move up, Move down, Unpin from
 //!   rail.
 //!
@@ -25,8 +22,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use ghostex_gx_core::custom_links::{
-    custom_link_menu_rows, custom_link_row_menu, custom_links_from_value, insert_custom_link_rows,
-    normalize_custom_link_url,
+    custom_link_menu_rows, custom_link_row_menu, custom_links_from_value, normalize_custom_link_url,
 };
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, FontWeight, Hsla, IntoElement,
@@ -112,11 +108,21 @@ fn sample_links() -> Value {
 }
 
 pub(super) fn open_dialog(demo: &super::DemoEnv, cx: &mut App) {
-    let editing = demo.state == "edit";
+    let editing = demo.state == "edit" || demo.state == "icon";
+    let mode = if demo.state == "icon" {
+        CustomLinkModalMode::IconOnly
+    } else {
+        CustomLinkModalMode::Full
+    };
     let host: CustomLinkModalHost = Rc::new(|command, cx: &mut App| {
         match command {
-            CustomLinkModalCommand::Save { id, name, url } => {
-                eprintln!("save: {id:?} {name:?} {url:?}")
+            CustomLinkModalCommand::Save {
+                id,
+                name,
+                url,
+                icon,
+            } => {
+                eprintln!("save: {id:?} {name:?} {url:?} {icon:?}")
             }
             CustomLinkModalCommand::Cancel => eprintln!("cancel"),
         }
@@ -124,24 +130,31 @@ pub(super) fn open_dialog(demo: &super::DemoEnv, cx: &mut App) {
     });
     let config = CustomLinkModalConfig {
         id: editing.then(|| "proxy".to_string()),
+        mode,
         name: if editing {
             "Proxy dashboard".into()
         } else {
             String::new()
         },
         url: match demo.state.as_str() {
-            "edit" => "http://localhost:8317/management.html".into(),
+            "edit" | "icon" => "http://localhost:8317/management.html".into(),
             "error" => "localhost:99999".into(),
             _ => "localhost:8317".into(),
         },
+        icon: (demo.state == "icon").then(|| "rocket".to_string()),
+        site_favicon: None,
         read_address: normalize_custom_link_url,
         palette: demo.palette,
+    };
+    let height = match mode {
+        CustomLinkModalMode::Full => CUSTOM_LINK_MODAL_INITIAL_HEIGHT,
+        CustomLinkModalMode::IconOnly => CUSTOM_LINK_ICON_MODAL_INITIAL_HEIGHT,
     };
     // `error`: press Enter (GHOSTEX_NATIVE_MODAL_DEMO_KEYS=enter) to see what an address it cannot
     // read says.
     let _ = super::open_modal_window(
         CUSTOM_LINK_MODAL_WIDTH,
-        CUSTOM_LINK_MODAL_INITIAL_HEIGHT,
+        height,
         move |window, cx| cx.new(|cx| GpuiCustomLinkModalWindow::new(config, host, window, cx)),
         cx,
     );
@@ -150,7 +163,7 @@ pub(super) fn open_dialog(demo: &super::DemoEnv, cx: &mut App) {
 pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     LIGHT.store(demo.palette.light, Ordering::Relaxed);
     let state = if demo.state.is_empty() {
-        "menu".to_string()
+        "rail-menu".to_string()
     } else {
         demo.state.clone()
     };
@@ -164,8 +177,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
 
 struct CustomLinksDemo {
     state: String,
-    menu: Vec<Value>,
-    row_menu: Vec<Value>,
     /// The rail's ⋯ menu, its Links group, and the unpinned link's own menu.
     rail_menu: Vec<Value>,
     rail_row_menu: Vec<Value>,
@@ -191,11 +202,6 @@ impl CustomLinksDemo {
         let rows = custom_link_menu_rows(&links, |link| {
             (link.id == "wiki").then(|| WIKI_ICON.to_string())
         });
-        let mut menu = base_more_menu();
-        insert_custom_link_rows(&mut menu, rows.clone());
-        let row_menu = custom_link_row_menu(&rows[0]["rowMenu"])
-            .and_then(|menu| menu.as_array().cloned())
-            .unwrap_or_default();
         let address = cx.new(|cx| InputState::new(window, cx).default_value(PAGE_ADDRESS));
         // The rail's ⋯ menu as app/sidebar_rail/menu.rs builds it: a group of items, each with
         // its pin, then the Links group with each link row's pin and Pin to rail in its own menu.
@@ -220,7 +226,7 @@ impl CustomLinksDemo {
             heading("Links"),
         ];
         let mut rail_row_menu = Vec::new();
-        for mut row in rows.clone() {
+        for mut row in rows {
             if let Some(id) = row["rowMenu"]["key"].as_str().map(str::to_string) {
                 let key = ghostex_gx_core::sidebar_rail::rail_link_pin_key(&id);
                 let pinned = pins.contains(&key);
@@ -236,42 +242,11 @@ impl CustomLinksDemo {
         }
         Self {
             state,
-            menu,
-            row_menu,
             rail_menu,
             rail_row_menu,
             address,
         }
     }
-}
-
-/// The classic sidebar's ⋯ menu as gx-core builds it today (sidebar_menu/navigation.rs
-/// `more_menu`), the rows the link group is laid into.
-fn base_more_menu() -> Vec<Value> {
-    let row = |label: &str, icon: &str| json!({ "label": label, "icon": icon, "command": {"type": "sidebarAction"} });
-    let submenu = |label: &str, icon: &str| json!({ "label": label, "icon": icon, "children": [] });
-    let separator = || json!({ "separator": true });
-    vec![
-        row("Add Project", "plus"),
-        submenu("Sort & Filter", "filter"),
-        row("Collapse All", "arrows-diagonal"),
-        separator(),
-        json!({ "label": "Commands", "icon": "bolt", "suffix": "⌘K", "command": {"type": "sidebarAction"} }),
-        row("Agents Hub", "users-group"),
-        row("All Automations", "clock"),
-        row("Connect a Phone", "devices"),
-        row("Connect a Computer", "device-laptop"),
-        submenu("Keep Awake", "moon"),
-        separator(),
-        json!({ "label": "Ask Ghostex AI", "icon": "help-circle", "command": {"type": "command", "message": {"type": ghostex_gx_core::MENU_PANEL_MESSAGE_TYPE, "panel": ghostex_gx_core::MENU_PANEL_HELP}} }),
-        json!({ "label": "Join Discord", "icon": "users-group", "command": {"type": "command", "message": {"type": "openExternalUrl"}} }),
-        row("Send Bug / Feedback", "message-circle"),
-        separator(),
-        submenu("Tools", "tools"),
-        submenu("Ghostex", "ghostex"),
-        separator(),
-        row("Settings", "settings"),
-    ]
 }
 
 fn foreground() -> Hsla {
@@ -545,49 +520,6 @@ fn page_stand_in() -> AnyElement {
 }
 
 impl CustomLinksDemo {
-    fn render_menu(&self, row_menu_open: bool) -> AnyElement {
-        let first_link = self
-            .menu
-            .iter()
-            .position(|row| row.get("rowMenu").is_some());
-        // The menu hangs from the ⋯ button, right edges lined up, as the sidebar opens it.
-        let menu_left = SIDEBAR_WIDTH - 10.0 - MENU_WIDTH;
-        let menu_top = 44.0 + 3.0;
-        // The first link row's top: rows above it at 34pt, separators at 13pt, plus the padding.
-        let first_link_top = first_link.map_or(0.0, |index| {
-            6.0 + self.menu[..index]
-                .iter()
-                .map(|row| if row["separator"] == true { 13.0 } else { 34.0 })
-                .sum::<f32>()
-        });
-        div()
-            .size_full()
-            .relative()
-            .child(
-                h_flex()
-                    .size_full()
-                    .child(sidebar_stand_in())
-                    .child(div().flex_1().h_full().bg(chrome_color(0x0f0f0f, 0xffffff))),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .left(px(menu_left))
-                    .top(px(menu_top))
-                    .child(menu_panel(&self.menu, first_link)),
-            )
-            .when(row_menu_open, |frame| {
-                frame.child(
-                    div()
-                        .absolute()
-                        .left(px(menu_left + MENU_WIDTH + 3.0))
-                        .top(px(menu_top + first_link_top - 6.0))
-                        .child(menu_panel(&self.row_menu, None)),
-                )
-            })
-            .into_any_element()
-    }
-
     /// The side panel Browser's toolbar as render_browser_toolbar lays it out for the link page:
     /// Back, Forward, Reload, Home; the site icon and address; Page Size, Annotate, History,
     /// Profile, DevTools and ⋯; then the link page's Close.
@@ -926,9 +858,7 @@ impl Render for CustomLinksDemo {
                 "page" => self.render_page(false, false),
                 "rail" => self.render_page(true, false),
                 "rail-pin-menu" => self.render_page(false, true),
-                "rail-menu" => self.render_rail_menu(),
-                "row-menu" => self.render_menu(true),
-                _ => self.render_menu(false),
+                _ => self.render_rail_menu(),
             })
     }
 }

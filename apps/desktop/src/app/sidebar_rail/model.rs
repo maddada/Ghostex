@@ -125,8 +125,6 @@ pub(crate) fn rail_item_icon(key: &str) -> &'static str {
         "claude" => "agent-icons/claude.svg",
         "grok" => "agent-icons/grok-build.svg",
         "voiceCall" => "titlebar/headset.svg",
-        "connectPhone" => "titlebar/devices.svg",
-        "settings" => "titlebar/settings.svg",
         _ => "titlebar/dots.svg",
     }
 }
@@ -168,7 +166,11 @@ pub(crate) struct RailLinkPin {
     pub(crate) id: String,
     /// Its name, or its host and port without one: the tooltip.
     pub(crate) label: String,
-    /// The site's icon once its page has been opened; the globe without one.
+    /// Optional chosen app icon SVG path (`titlebar/<name>.svg`). When `None`, `image` (or the
+    /// globe fallback) is drawn instead.
+    pub(crate) icon: Option<gpui::SharedString>,
+    /// The site's icon once its page has been opened; the globe without one (ignored when `icon`
+    /// is set).
     pub(crate) image: Option<std::sync::Arc<gpui::Image>>,
     /// Its page is the one on screen.
     pub(crate) showing: bool,
@@ -179,21 +181,28 @@ pub(crate) struct RailLinkPin {
 #[derive(Clone)]
 pub(crate) struct RailButtonFace {
     pub(crate) label: String,
-    pub(crate) icon: &'static str,
+    pub(crate) icon: gpui::SharedString,
     pub(crate) icon_size: f32,
     pub(crate) image: Option<std::sync::Arc<gpui::Image>>,
 }
 
-/// A pinned icon being dragged along the rail.
+/// What is being dragged along the rail: either a button (built-in or link) or a separator line.
+#[derive(Clone)]
+pub(crate) enum RailDragArtwork {
+    Button(RailButtonFace),
+    Separator,
+}
+
+/// A pinned icon or separator being dragged along the rail.
 #[derive(Clone)]
 pub(crate) struct DraggedRailItem {
     pub(crate) key: String,
-    pub(crate) face: RailButtonFace,
+    pub(crate) artwork: RailDragArtwork,
 }
 
-/// The icon that follows the pointer while one is dragged.
+/// The ghost that follows the pointer while an icon or separator is dragged.
 pub(crate) struct RailDragPreview {
-    pub(crate) face: RailButtonFace,
+    pub(crate) artwork: RailDragArtwork,
     pub(crate) fill: Hsla,
     pub(crate) border: Hsla,
     pub(crate) color: Hsla,

@@ -1107,28 +1107,36 @@ for Updates, Restart Ghostex and the Quit rows); and Settings as the last row
 the folder button right of Search; it is the menu's first row only while the
 sidebar is too narrow for that button. On another computer's tab the menu also
 has Edit Machine.
-**Links in the sidebar menu** (desktop app). Add link… in the sidebar's ⋯ menu
-(between Keep Awake and Ask Ghostex AI; under a Links heading in the rail
-layout's ⋯ menu) saves any web page there, such as a local dashboard. The
-address can be a full address or just a host and port: `localhost:8317` opens
-`http://localhost:8317/`, and a name without a port such as `example.com` opens
-over https. The name is optional; without one the row shows the host. Clicking a
-link opens its page in the sessions column's place, the way Grok Bot opens, under
-the side panel Browser's own toolbar, which stays on top: Back, Forward, Reload,
-Home (the link's own address), the address (type another and press Enter to go
-there), Page Size (phone and tablet preview), Annotate, History, Profile (the
-links' own profile, or one of the Browser's profiles), DevTools, the ⋯ menu, and
-Close. Each row shows the site's icon once the page has been opened, and its ⋯
-(or a right-click) has Edit… and Remove. In the rail layout a link pins to the
-rail like any rail item: the pin on its row in the rail's ⋯ menu, or Pin to rail
-in the row's own menu. A pinned link shows the site's icon (the globe until the
-page has been opened) with its name as the tooltip, opens its page on a click,
-drags into any order among the other pins, and its right-click menu has Move up,
-Move down and Unpin from rail. Removing a link removes its pin. Links belong to
-no project, and they and their pins stay on this computer: they are in no Sync
-category, since an address like `localhost` means something else on another
-machine (`customLinks`, `sidebarRailPins` with `link:<id>` entries). The phone
-does not have them.
+**Links in the rail menu** (desktop app). Add link… under the Links heading in
+the rail's ⋯ menu (not in the sidebar's ☰ menu) saves any web page there, such
+as a local dashboard. The address can be a full address or just a host and port:
+`localhost:8317` opens `http://localhost:8317/`, and a name without a port such
+as `example.com` opens over https. The name is optional; without one the row
+shows the host. You can keep the site's own icon (the default) or pick an app
+icon from the searchable icon grid in the Add/Edit link dialog or from a pinned
+link's right-click **Change icon…** menu. Clicking a link opens its page in the
+sessions column's place, the way Grok Bot opens, under the side panel Browser's
+own toolbar, which stays on top: Back, Forward, Reload, Home (the link's own
+address), the address (type another and press Enter to go there), Page Size
+(phone and tablet preview), Annotate, History, Profile (the links' own profile,
+or one of the Browser's profiles), DevTools, the ⋯ menu, and Close. Each row
+shows its chosen icon or the site's icon once the page has been opened, and its
+⋯ (or a right-click) has Edit…, Change icon…, Pin to rail (or Unpin from rail)
+and Remove. A link also pins to the rail like any rail item from the pin button
+on its row in the rail's ⋯ menu. A pinned link shows its chosen icon or the
+site's icon (the globe until the page has been opened) with its name as the
+tooltip, opens its page on a click, drags into any order among the other pins,
+and its right-click menu has Edit…, Change icon…, Move up, Move down, Add
+separator and Unpin from rail. Right-clicking any pinned rail icon also offers
+**Add separator** to place a thin non-clickable divider line directly below it;
+separators drag to reorder like icons, have their own right-click menu with Add
+separator and Remove, and are saved in the rail order (`sep:<id>` in
+`sidebarRailPins`). Removing a link removes its pin. Links belong to no project,
+and they and their pins stay on this computer: they are in no Sync category,
+since an address like `localhost` means something else on another machine
+(`customLinks`, `sidebarRailPins` with `link:<id>` and `sep:<id>` entries). On
+the phone, ☰ › Links keeps its own list of saved links (with Copy links from a
+computer).
 **Group working sessions** (in the More menu's Sort & Filter page, and in
 Settings > Sidebar; both switch the same setting, off by default) moves each
 project's sessions into a Working section under that project while their agent
