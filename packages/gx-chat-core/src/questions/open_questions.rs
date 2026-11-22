@@ -45,8 +45,9 @@ pub struct OpenQuestions {
     /// How many forms and question pages are unanswered and not put off For later; the ? pill shows
     /// while this is above zero.
     pub count: u32,
-    /// What the ? pill counts and shows for: the unanswered questions the dock above the chat box
-    /// cannot show (older than the loaded rows), so a question is counted in one place only.
+    /// What the ? pill counts and shows for: any unanswered questions the dock above the chat box
+    /// cannot show, so a question is counted in one place only (0 for forms and pages, which all
+    /// dock above the chat box whether loaded or older than the loaded rows).
     #[serde(default)]
     pub pill_count: u32,
     /// The pill's text: "Previous question ↑".
@@ -426,6 +427,78 @@ fn indexed_status(
     .to_string()
 }
 
+/// An older waiting form or page from the session's resource index as an [`Asker`], so the dock,
+/// Work panel and question actions handle it the same way as a loaded row.
+fn asker_from_entry(entry: &ResourceEntry) -> Asker {
+    let kind = match entry.kind.as_str() {
+        "form" => AskerKind::Form,
+        _ => AskerKind::Page,
+    };
+    let seen_only = kind == AskerKind::Page && (entry.awaits_seen || entry.tags.is_empty());
+    Asker {
+        id: entry.id.clone(),
+        kind,
+        message_id: String::new(),
+        tags: entry.tags.clone(),
+        answered: false,
+        obsolete: false,
+        withdrawn: Vec::new(),
+        keys: Vec::new(),
+        skipped: Vec::new(),
+        superseded: Vec::new(),
+        inherited: false,
+        said: Vec::new(),
+        title: entry.title.clone(),
+        at: entry.at_ms,
+        seen_only,
+        source: entry.source.clone(),
+        replaced: false,
+        prints: Vec::new(),
+        rounds: Vec::new(),
+    }
+}
+
+/// Every form and question page waiting on the reader across the whole conversation (older index
+/// entries plus loaded transcript rows), excluding those put off For later, oldest first.
+pub(crate) fn all_unanswered(state: &ChatState) -> Vec<Asker> {
+    let entries = indexed_entries(state);
+    let mut out: Vec<Asker> = indexed_waiting(state, &entries)
+        .into_iter()
+        .filter(|entry| matches!(entry.kind.as_str(), "form" | "page"))
+        .map(asker_from_entry)
+        .collect();
+    out.extend(unanswered(state).into_iter().cloned());
+    out
+}
+
+/// Every waiting form or question page across the whole conversation, including those put off For
+/// later or snoozed (older index entries plus loaded transcript rows), oldest first.
+pub(crate) fn all_waiting(state: &ChatState) -> Vec<Asker> {
+    let later = crate::questions::later::later_ids(state);
+    let removed = crate::questions::later::removed_ids(state);
+    let cards = crate::extras::work_cards::card_tags(state);
+    let on_the_way: Vec<String> = answers_on_the_way(state)
+        .into_iter()
+        .map(|answers| answers.page_id)
+        .collect();
+    let entries = indexed_entries(state);
+    let mut out: Vec<Asker> = index_only(state, &entries)
+        .into_iter()
+        .filter(|entry| entry.thread.is_none())
+        .filter(|entry| matches!(entry.kind.as_str(), "form" | "page"))
+        .filter(|entry| {
+            matches!(
+                indexed_status(entry, &later, &removed, &cards).as_str(),
+                "waiting" | "later"
+            )
+        })
+        .filter(|entry| !on_the_way.contains(&entry.id))
+        .map(asker_from_entry)
+        .collect();
+    out.extend(waiting(state).into_iter().cloned());
+    out
+}
+
 /// How many forms and question pages the index says wait on the reader that the loaded rows do not
 /// hold, not counting the ones put off For later or removed.
 fn indexed_waiting<'a>(state: &ChatState, entries: &'a [ResourceEntry]) -> Vec<&'a ResourceEntry> {
@@ -797,13 +870,18 @@ pub fn project_with(
     let open = unanswered(state);
     // The loaded rows' unanswered questions, plus the ones older than what the chat has loaded,
     // plus the coordinator's open asks.
-    let older = indexed_waiting(state, &indexed_entries(state)).len();
+    let entries = indexed_entries(state);
+    let older_entries = indexed_waiting(state, &entries);
+    let older = older_entries.len();
     let count = (open.len() + older + asks.len()) as u32;
-    // The unanswered forms and pages in the loaded rows and the coordinator's open asks wait in the
-    // dock above the chat box (`extras::work_cards::dock`): the ? pill shows and counts only what
-    // the dock cannot show, the questions older than the loaded rows, so nothing is counted in two
-    // places (the user's "This is a mess man ... wtf is this?", 2026-11-10).
-    let pill_count = older as u32;
+    // Every unanswered form and page (loaded or older than the loaded rows) and every coordinator
+    // open ask waits in the dock above the chat box (`extras::work_cards::dock`), so the ? pill
+    // counts only anything the dock cannot show (none for forms and pages), and nothing is counted
+    // in two places (the user's "This is a mess man ... wtf is this?", 2026-11-10).
+    let pill_count = older_entries
+        .iter()
+        .filter(|entry| !matches!(entry.kind.as_str(), "form" | "page"))
+        .count() as u32;
     let filter = state.questions.open_questions.filter.as_str();
     /*
     CDXC:SessionChat 2026-11-04 WHY:
@@ -924,14 +1002,23 @@ pub fn project_with(
             _ => format!("{count} unanswered questions: go to the previous one"),
         },
         newest: {
-            let form = open.last();
+            let form = open
+                .last()
+                .map(|asker| (asker.at, asker.id.as_str()))
+                .or_else(|| {
+                    older_entries
+                        .iter()
+                        .max_by_key(|entry| entry.at_ms.unwrap_or(i64::MIN))
+                        .map(|entry| (entry.at_ms, entry.id.as_str()))
+                });
             let ask = asks.last();
             match (form, ask) {
-                (Some(form), Some(ask)) if form.at.is_some_and(|at| at > ask.at) => {
-                    Some(form.id.clone())
+                (Some((at, id)), Some(ask)) if at.is_some_and(|at| at > ask.at) => {
+                    Some(id.to_string())
                 }
                 (_, Some(ask)) => Some(ask.key.clone()),
-                (form, None) => form.map(|asker| asker.id.clone()),
+                (Some((_, id)), None) => Some(id.to_string()),
+                (None, None) => None,
             }
         },
         jump: state.questions.open_questions.jump.clone(),
@@ -956,7 +1043,7 @@ pub fn project_with(
 /// CDXC:SessionChat 2026-10-14 WHY:
 /// Starting again from the newest whenever the reader sat at the bottom was tried and dropped: the newest question usually sits at the bottom, so the second click landed on it again instead of stepping back.
 pub fn previous(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
-    let open: Vec<Asker> = unanswered(state).into_iter().cloned().collect();
+    let open = all_unanswered(state);
     // A coordinator's open work item asks are stops too, in time order among the forms and pages:
     // each is shown in the Work panel, the chat staying where it is.
     let asks = crate::extras::work_cards::open_asks(state, context);
@@ -967,17 +1054,7 @@ pub fn previous(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         .chain(asks.iter().map(|ask| (ask.at, ask.key.clone(), true)))
         .collect();
     if stops.is_empty() {
-        // The only questions waiting are older than the loaded rows (the pill counts them): the
-        // newest of them opens in the popup, read back from the transcript.
-        let entries = indexed_entries(state);
-        let newest = indexed_waiting(state, &entries)
-            .into_iter()
-            .max_by_key(|entry| entry.at_ms.unwrap_or(i64::MIN))
-            .map(|entry| entry.id.clone());
-        return match newest {
-            Some(id) => show(state, context, &id),
-            None => Vec::new(),
-        };
+        return Vec::new();
     }
     stops.sort_by_key(|stop| stop.0);
     let last = state.questions.open_questions.last.as_deref();

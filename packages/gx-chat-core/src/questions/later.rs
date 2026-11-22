@@ -309,6 +309,20 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
         .find(|asker| asker.id == id);
     let (tags, title, seen_only) = asker
         .map(|asker| (asker.waiting_tags(), asker.title.clone(), asker.seen_only))
+        .or_else(|| {
+            state
+                .session
+                .resource_index
+                .view()
+                .records()
+                .iter()
+                .find(|entry| entry.id == id)
+                .map(|entry| {
+                    let seen_only =
+                        entry.kind == "page" && (entry.awaits_seen || entry.tags.is_empty());
+                    (entry.tags.clone(), entry.title.clone(), seen_only)
+                })
+        })
         .unwrap_or_default();
     let title = title
         .split_whitespace()
@@ -350,6 +364,16 @@ pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
         .iter()
         .find(|asker| asker.id == id)
         .map(|asker| (asker.waiting_tags(), asker.title.clone()))
+        .or_else(|| {
+            state
+                .session
+                .resource_index
+                .view()
+                .records()
+                .iter()
+                .find(|entry| entry.id == id)
+                .map(|entry| (entry.tags.clone(), entry.title.clone()))
+        })
         .unwrap_or_default();
     let mut effects = remove(state, id);
     if effects.is_empty() {
@@ -391,14 +415,14 @@ pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
 /// Only a page still waiting to be seen is cleared: one that asks questions keeps waiting for its
 /// answers.
 pub fn mark_seen(state: &mut ChatState, ids: &[&str]) -> Vec<Effect> {
-    let unseen: Vec<String> = crate::questions::open_questions::waiting(state)
+    let unseen: Vec<String> = crate::questions::open_questions::all_waiting(state)
         .into_iter()
         .filter(|asker| asker.seen_only)
         .filter(|asker| {
             ids.iter()
                 .any(|id| asker.id.eq_ignore_ascii_case(id.trim()))
         })
-        .map(|asker| asker.id.clone())
+        .map(|asker| asker.id)
         .collect();
     unseen.iter().flat_map(|id| remove(state, id)).collect()
 }
@@ -441,12 +465,12 @@ pub fn seen_on_open(state: &mut ChatState, target: &str) -> Vec<Effect> {
     }
     let lower = target.to_ascii_lowercase();
     let opened = opened_page_ids(state);
-    let ids: Vec<String> = crate::questions::open_questions::waiting(state)
+    let ids: Vec<String> = crate::questions::open_questions::all_waiting(state)
         .into_iter()
         .filter(|asker| asker.seen_only && !asker.id.is_empty())
         .filter(|asker| lower.contains(&asker.id.to_ascii_lowercase()))
         .filter(|asker| !opened.contains(&asker.id.to_ascii_lowercase()))
-        .map(|asker| asker.id.clone())
+        .map(|asker| asker.id)
         .collect();
     let mut effects = Vec::new();
     for id in ids {

@@ -419,6 +419,7 @@ pub fn scan_message(message: &ChatMessage) -> Vec<ResourceEntry> {
                     tags: page.questions.clone().unwrap_or_default(),
                     url: Some(page.url.clone()),
                     source: page.source.clone(),
+                    awaits_seen: page.questions.is_none() && page.awaits_seen,
                     ..ResourceEntry::default()
                 }
             } else {

@@ -925,11 +925,11 @@ fn question_chips(state: &ChatState, row: &Value) -> Vec<BoardTag> {
         .collect()
 }
 
-/// The chat's own unanswered questions (forms and question pages not put off For later), as
-/// Needs you rows, newest first.
+/// The chat's own unanswered questions (forms and question pages not put off For later, both
+/// loaded and older entries from the resource index), as Needs you rows, newest first.
 fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
     let mut rows: Vec<(Option<i64>, BoardRow)> =
-        crate::questions::open_questions::unanswered(state)
+        crate::questions::open_questions::all_unanswered(state)
             .into_iter()
             .map(|asker| {
                 let tags = match asker.tags.as_slice() {
@@ -1360,6 +1360,7 @@ pub struct BoardInputs {
     askers: Stamped<Vec<crate::transcript::open_questions::Asker>>,
     questions: crate::questions::forms::QuestionsInputs,
     resource_index: Stamped<crate::questions::resource_index::ResourceIndex>,
+    queue_prompts: Stamped<Option<Vec<Value>>>,
     later_question_ids: Stamped<Vec<String>>,
     removed_question_ids: Stamped<Vec<String>>,
     /// The opened pages that wait only to be seen: they leave the Needs you count.
@@ -1378,6 +1379,7 @@ impl BoardInputs {
             askers: state.transcript_view.askers.clone(),
             questions: crate::questions::forms::QuestionsInputs::of(&state.questions),
             resource_index: state.session.resource_index.clone(),
+            queue_prompts: state.session.queue_prompts.clone(),
             later_question_ids: state.session.later_question_ids.clone(),
             removed_question_ids: state.session.removed_question_ids.clone(),
             opened_page_ids: state.session.opened_page_ids.clone(),
@@ -1396,6 +1398,7 @@ impl BoardInputs {
             askers,
             questions,
             resource_index,
+            queue_prompts,
             later_question_ids,
             removed_question_ids,
             opened_page_ids,
@@ -1408,6 +1411,7 @@ impl BoardInputs {
             && askers.same_as(&state.transcript_view.askers)
             && questions.matches(&state.questions)
             && resource_index.same_as(&state.session.resource_index)
+            && queue_prompts.same_as(&state.session.queue_prompts)
             && later_question_ids.same_as(&state.session.later_question_ids)
             && removed_question_ids.same_as(&state.session.removed_question_ids)
             && *opened_page_ids == state.session.opened_page_ids
@@ -1457,7 +1461,7 @@ fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
         })
         .filter_map(at_ms);
     let board_rows = board_rows.chain(work);
-    let questions = crate::questions::open_questions::unanswered(state)
+    let questions = crate::questions::open_questions::all_unanswered(state)
         .into_iter()
         .filter_map(|asker| asker.at);
     board_rows

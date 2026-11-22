@@ -1524,10 +1524,11 @@ pub(crate) fn details_fields(detail: &str) -> (bool, String) {
     (true, plain.split_whitespace().collect::<Vec<_>>().join(" "))
 }
 
-/// The forms, pages and one-click questions in the chat's replies that still wait on the reader,
-/// as dock rows with when they were asked. They are the ? pill's own unanswered list
-/// (`questions::open_questions::unanswered`), so For later ones stay out and nothing is counted
-/// twice; one leaves the dock once every question on it is answered, skipped or withdrawn.
+/// The forms, pages and one-click questions in the chat's replies that still wait on the reader
+/// (both loaded transcript rows and older entries from the session's resource index), as dock rows
+/// with when they were asked. They match the Resources unanswered list (`open_questions::all_unanswered`),
+/// so For later ones stay out and nothing is counted twice; one leaves the dock once every question
+/// on it is answered, skipped or withdrawn.
 ///
 /// CDXC:Coordinators 2026-11-10 DECISION:
 /// User: "also please let's show those inline htmls from the agent replies there docked above while
@@ -1540,7 +1541,7 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
     let _ = context;
     question_rows_of(
         state,
-        crate::questions::open_questions::unanswered(state),
+        crate::questions::open_questions::all_unanswered(state),
         now_ms,
     )
 }
@@ -1553,8 +1554,8 @@ fn snoozed_question_rows(state: &ChatState, now_ms: i64) -> Vec<(i64, Value)> {
         return Vec::new();
     }
     let later = crate::questions::later::later_ids(state);
-    let askers: Vec<&crate::transcript::open_questions::Asker> =
-        crate::questions::open_questions::waiting(state)
+    let askers: Vec<crate::transcript::open_questions::Asker> =
+        crate::questions::open_questions::all_waiting(state)
             .into_iter()
             .filter(|asker| later.contains(&asker.id))
             .filter(|asker| until.get(&asker.id).is_some_and(|at| *at > now_ms))
@@ -1579,7 +1580,7 @@ fn snoozed_question_rows(state: &ChatState, now_ms: i64) -> Vec<(i64, Value)> {
 /// [`question_rows`] for these askers.
 fn question_rows_of(
     state: &ChatState,
-    askers: Vec<&crate::transcript::open_questions::Asker>,
+    askers: Vec<crate::transcript::open_questions::Asker>,
     now_ms: i64,
 ) -> Vec<(i64, Value)> {
     askers
@@ -1592,6 +1593,11 @@ fn question_rows_of(
             let snooze = snooze_choices(
                 |hours| json!({ "type": "snoozeQuestion", "id": asker.id, "hours": hours }),
             );
+            let show_in_chat = if asker.message_id.is_empty() {
+                Value::Null
+            } else {
+                json!({ "type": "showInChat", "messageId": asker.message_id, "target": asker.id })
+            };
             let base = json!({
                 "key": format!("dock-questions:{}", asker.id),
                 "status": "needs",
@@ -1604,13 +1610,16 @@ fn question_rows_of(
                 // A page that only waits to be seen asks nothing to answer.
                 "markAnswered": if asker.seen_only { Value::Null } else { json!({ "type": "markQuestionAnswered", "id": asker.id }) },
                 "snooze": snooze,
-                "showInChat": { "type": "showInChat", "messageId": asker.message_id, "target": asker.id },
+                "showInChat": show_in_chat,
                 "mention": "",
                 "needs": true,
             });
             let mut row = base;
             // A one-click question: its answers on the row and Reply, no Open step.
-            if let Some(question) = form.then(|| one_click(state, &asker.message_id, &asker.id)).flatten() {
+            if let Some(question) = (form && !asker.message_id.is_empty())
+                .then(|| one_click(state, &asker.message_id, &asker.id))
+                .flatten()
+            {
                 row["kind"] = json!("question");
                 row["title"] = json!(question.question);
                 row["buttons"] = json!(question
@@ -1670,7 +1679,7 @@ fn question_rows_of(
                     format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" })
                 };
                 row["detail"] = json!([detail]);
-                row["open"] = open_resource(state, asker);
+                row["open"] = open_resource(state, &asker);
                 // Reply beside Open: the reader's own words on the whole form or page, sent to the
                 // agent after its name and the questions it still asks as one range ("Triage (Q12
                 // to Q14): words", `questionsReply`), as a work item ask's Reply goes as "W7 Q12:
