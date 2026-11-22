@@ -179,8 +179,8 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Returns `(acp_mode, is_working)` when the shell session maps to a known presentation row.
-    fn session_acp_mode_info(&self, session_id: TerminalSessionId) -> Option<(bool, bool)> {
+    /// Returns `(non_cli_mode, is_working)` when the shell session maps to a known presentation row.
+    fn session_non_cli_mode_info(&self, session_id: TerminalSessionId) -> Option<(bool, bool)> {
         let presentation = self.gx_store.core.presentation();
         let row = if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
             presentation
@@ -194,37 +194,37 @@ impl GhostexGpuiApp {
                 ))?
                 .server_session(&key.project_id, &key.session_id)?
         };
-        Some((row.acp_mode, row.activity.as_str() == "working"))
+        Some((row.non_cli_mode, row.activity.as_str() == "working"))
     }
 
-    /// Asks for confirmation before switching an ACP-hosted session into interactive Terminal view.
+    /// Asks for confirmation before switching a Non-CLI session into Agent CLI (Terminal) view.
     /// Returns `true` if a confirmation dialog was opened and the caller should wait for it.
-    pub(crate) fn ask_and_switch_acp_session_to_terminal(
+    pub(crate) fn ask_and_switch_non_cli_session_to_terminal(
         &mut self,
         session_id: TerminalSessionId,
         handoff_draft: bool,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let Some((true, is_working)) = self.session_acp_mode_info(session_id) else {
+        let Some((true, is_working)) = self.session_non_cli_mode_info(session_id) else {
             return false;
         };
         let confirmation = if is_working {
             ghostex_gx_core::CloseConfirmation {
-                title: "Interrupt and switch to Terminal?".to_string(),
-                message: "This session is running in ACP mode and currently working. Switching to Terminal is not instant: Ghostex will interrupt the active turn and reopen the agent in its interactive CLI.".to_string(),
+                title: "Interrupt and switch to Agent CLI?".to_string(),
+                message: "This session is running in Non-CLI mode and currently working. Switching to Terminal is not instant: Ghostex will interrupt the active turn and reopen the agent in Agent CLI mode.".to_string(),
                 confirm_label: "Interrupt & Switch".to_string(),
             }
         } else {
             ghostex_gx_core::CloseConfirmation {
-                title: "Switch to Terminal?".to_string(),
-                message: "This session is running in ACP mode. Switching to Terminal is not instant: Ghostex will stop the ACP host and reopen the agent in its interactive CLI.".to_string(),
+                title: "Switch to Agent CLI?".to_string(),
+                message: "This session is running in Non-CLI mode. Switching to Terminal is not instant: Ghostex will stop the Non-CLI host and reopen the agent in Agent CLI mode.".to_string(),
                 confirm_label: "Switch to Terminal".to_string(),
             }
         };
         self.gx_store_confirm_in_app(
             confirmation,
             Box::new(move |app, cx| {
-                app.confirm_switch_session_acp_to_terminal(session_id, handoff_draft, cx);
+                app.confirm_switch_session_non_cli_to_terminal(session_id, handoff_draft, cx);
             }),
             cx,
         );
@@ -259,7 +259,7 @@ impl GhostexGpuiApp {
         }
     }
 
-    fn confirm_switch_session_acp_to_terminal(
+    fn confirm_switch_session_non_cli_to_terminal(
         &mut self,
         session_id: TerminalSessionId,
         handoff_draft: bool,
@@ -344,7 +344,7 @@ impl GhostexGpuiApp {
         if !self.agents_chat_mode_sessions.contains(&session_id) {
             return;
         }
-        if self.ask_and_switch_acp_session_to_terminal(session_id, true, cx) {
+        if self.ask_and_switch_non_cli_session_to_terminal(session_id, true, cx) {
             return;
         }
         if let Some(view) = self.native_chat_views.get(&session_id).cloned()

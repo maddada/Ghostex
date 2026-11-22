@@ -452,9 +452,13 @@ pub(crate) fn to_agent_resume_input(
             .unwrap_or(false),
     };
     let acp_mode = match runtime_settings
-        .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+        .get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
         .and_then(Value::as_bool)
-    {
+        .or_else(|| {
+            runtime_settings
+                .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+                .and_then(Value::as_bool)
+        }) {
         Some(flag) => flag,
         None => agent_id.as_deref().is_some_and(|fam| {
             crate::acp::agent_acp_setting(settings, fam)

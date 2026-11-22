@@ -285,8 +285,8 @@ impl AgentsTab {
                 && agent.is_default
                 && agent_id == super::claude_context::CLAUDE_AGENT_ID)
             || (self.search_opens_pi && super::pi_messages::is_pi_like(agent))
-            || (self.search_opens_acp
-                && super::model::acp_mode_family(&agent_id, agent.icon.as_deref()).is_some());
+            || (self.search_opens_session_mode
+                && super::model::non_cli_mode_family(&agent_id, agent.icon.as_deref()).is_some());
         let cli_agent = self.cli_agent_id(agent);
         let name = agent.name.clone();
         let grip = reorder_handle(

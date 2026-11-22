@@ -354,8 +354,8 @@ pub(crate) fn project_presentation_session(
     {
         output.insert("cloudBox".to_string(), cloud_box);
     }
-    if crate::acp::session_is_acp(session) {
-        output.insert("acpMode".to_string(), Value::Bool(true));
+    if crate::acp::session_is_non_cli(session) {
+        output.insert("nonCliMode".to_string(), Value::Bool(true));
     }
     if activity == "attention" {
         output.insert(

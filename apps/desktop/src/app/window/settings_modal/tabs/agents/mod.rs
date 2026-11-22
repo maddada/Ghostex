@@ -102,8 +102,8 @@ pub(crate) struct AgentsTab {
     /// A search found Messages sent while it works, so OMP's and Pi's panels show open
     /// (pi_messages.rs `search_opens_pi`).
     search_opens_pi: bool,
-    /// A search found Use ACP mode, so ACP-capable agent panels show open.
-    search_opens_acp: bool,
+    /// A search found Session mode, so Non-CLI-capable agent panels show open.
+    search_opens_session_mode: bool,
     /// `draftAgentIds`: the order after a drop, until the synced roster catches up.
     draft_agent_ids: Option<Vec<String>>,
     synced_agent_ids: Vec<String>,
@@ -194,7 +194,7 @@ impl AgentsTab {
             expanded: Vec::new(),
             search_opens_claude: false,
             search_opens_pi: false,
-            search_opens_acp: false,
+            search_opens_session_mode: false,
             draft_agent_ids: None,
             synced_agent_ids: Vec::new(),
             editor: None,
@@ -475,8 +475,8 @@ impl Render for AgentsTab {
         self.search_opens_claude = claude_context::search_opens_claude(&search);
         self.search_opens_pi = pi_messages::search_opens_pi(&search);
         let agent_list_search = search.section("agentList");
-        self.search_opens_acp = agent_list_search.is_searching
-            && agent_list_search.visible_keys.contains("agentAcpMode");
+        self.search_opens_session_mode = agent_list_search.is_searching
+            && agent_list_search.visible_keys.contains("agentSessionMode");
         let mut blocks: Vec<PageBlock> = Vec::new();
         if search.tab.is_searching && !search.tab.has_visible() {
             let store = self.store.clone();

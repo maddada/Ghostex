@@ -905,10 +905,7 @@ pub fn run(args: &[String]) -> i32 {
         .map(|ep| ep.session_id.clone())
         .unwrap_or_else(|| format!("local-{}", std::process::id()));
 
-    println!(
-        "Ghostex ACP Host · {} · Starting ACP server...",
-        spec.display_name
-    );
+    println!("Ghostex Non-CLI Host · {} · Starting...", spec.display_name);
     let _ = std::io::stdout().flush();
 
     let gx_paths = crate::paths::get_gxserver_paths(None);
@@ -1240,12 +1237,12 @@ pub fn run(args: &[String]) -> i32 {
     }
 
     println!(
-        "Ghostex ACP Host · {} · Ready (conversation: {})",
+        "Ghostex Non-CLI Host · {} · Ready (conversation: {})",
         spec.display_name,
         native_session_id.as_deref().unwrap_or("pending")
     );
     println!(
-        "Use Chat View to talk with this agent, or switch to Terminal to open the interactive CLI."
+        "Use Chat View to talk with this agent, or switch to Terminal to open Agent CLI mode."
     );
     let _ = std::io::stdout().flush();
 
@@ -1604,7 +1601,7 @@ pub fn run(args: &[String]) -> i32 {
                     let ep_turn = ep.clone();
                     let fam = spec.family.to_string();
                     thread::spawn(move || {
-                        println!("\r\n[ACP] Turn started...");
+                        println!("\r\n[Non-CLI] Turn started...");
                         let _ = std::io::stdout().flush();
                         let res = t_turn.call(
                             "session/prompt",
@@ -1622,7 +1619,7 @@ pub fn run(args: &[String]) -> i32 {
                                 .to_string(),
                             Err(err) => format!("error: {err}"),
                         };
-                        println!("[ACP] Turn finished ({stop_reason}).");
+                        println!("[Non-CLI] Turn finished ({stop_reason}).");
                         let _ = std::io::stdout().flush();
                         let is_current_turn = {
                             let mut s = st_turn.lock().unwrap_or_else(|p| p.into_inner());

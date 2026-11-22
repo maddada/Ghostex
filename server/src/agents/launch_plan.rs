@@ -651,12 +651,21 @@ pub(crate) fn create_agent_session_params_for_project(
                 // wrap the local launch inside `ghostex acp-host` so the agent stays alive inside
                 // `zmx` across `gxserver` reloads and can switch in-place to the CLI terminal.
                 let explicit_acp = params
-                    .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
-                    .and_then(Value::as_bool);
-                let runtime_acp_off = runtime_settings
-                    .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+                    .get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
                     .and_then(Value::as_bool)
-                    == Some(false);
+                    .or_else(|| {
+                        params
+                            .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+                            .and_then(Value::as_bool)
+                    });
+                let runtime_acp_off = runtime_settings
+                    .get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
+                    .and_then(Value::as_bool)
+                    == Some(false)
+                    || runtime_settings
+                        .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+                        .and_then(Value::as_bool)
+                        == Some(false);
                 let use_acp = agentbox_provider.is_none()
                     && !runtime_acp_off
                     && family.as_deref().is_some_and(|fam| {
@@ -699,6 +708,10 @@ pub(crate) fn create_agent_session_params_for_project(
                             accept_all_effective,
                             req_model.as_deref(),
                             req_effort.as_deref(),
+                        );
+                        runtime_settings.insert(
+                            crate::acp::SESSION_NON_CLI_ACTIVE_KEY.to_string(),
+                            json!(true),
                         );
                         runtime_settings
                             .insert(crate::acp::SESSION_ACP_ACTIVE_KEY.to_string(), json!(true));

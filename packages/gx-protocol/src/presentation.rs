@@ -1250,10 +1250,10 @@ pub struct PresentationSession {
     /// (gx-core `SessionRow::is_chief`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub is_chief: bool,
-    /// The session runs through Ghostex's structured ACP host (`server/src/acp/`) rather than an
-    /// interactive terminal CLI. Absent for CLI sessions and from an older gxserver.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub acp_mode: bool,
+    /// The session runs in Non-CLI mode (through a structured host such as `server/src/acp/`)
+    /// rather than an interactive terminal CLI. Absent for Agent CLI sessions and older gxservers.
+    #[serde(default, alias = "acpMode", skip_serializing_if = "is_false")]
+    pub non_cli_mode: bool,
     /// Its project's main coordinator on this computer (server/src/coordinators/main_coordinator.rs):
     /// the one agents contact by default. Absent from an older gxserver.
     #[serde(default, skip_serializing_if = "is_false")]

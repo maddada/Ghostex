@@ -217,13 +217,28 @@ pub(super) fn supports_chat_view(agent_id: &str, icon: Option<&str>) -> bool {
     ghostex_gx_chat_core::extras::agents::transcript_agent([Some(agent_id), icon]).is_some()
 }
 
-/// Canonical ACP family for agents that support Ghostex's structured ACP host (`server/src/acp/`).
-pub(super) fn acp_mode_family(agent_id: &str, icon: Option<&str>) -> Option<&'static str> {
+/// Canonical family for agents that support Non-CLI mode (structured host instead of interactive
+/// terminal CLI).
+pub(super) fn non_cli_mode_family(agent_id: &str, icon: Option<&str>) -> Option<&'static str> {
     let check = |value: &str| match value.trim().to_ascii_lowercase().as_str() {
         "antigravity" | "agy" => Some("antigravity"),
         _ => None,
     };
     check(agent_id).or_else(|| icon.and_then(check))
+}
+
+/// The two choices for Settings > Agents > Session mode (`agentSessionMode`).
+pub(super) fn session_mode_options() -> Vec<SettingOption> {
+    vec![
+        SettingOption {
+            label: "Agent CLI".to_string(),
+            value: "agent-cli".to_string(),
+        },
+        SettingOption {
+            label: "Non-CLI".to_string(),
+            value: "non-cli".to_string(),
+        },
+    ]
 }
 
 /// `getPreferredAgentInterfaceOverrideOptions(global)`: Inherit (the global choice's label), then

@@ -10900,9 +10900,9 @@
       "agentWritable": true
     },
     {
-      "key": "agentAcpMode",
-      "title": "Use ACP mode",
-      "subtitle": "Run this agent through its structured Agent Client Protocol instead of driving its interactive terminal. Switching to Terminal asks first and interrupts any active turn. Applies to sessions started or resumed after you change it.",
+      "key": "agentSessionMode",
+      "title": "Session mode",
+      "subtitle": "Choose Agent CLI (interactive terminal, instant switching between Chat and Terminal) or Non-CLI (structured host without terminal scraping; switching to Terminal asks first and interrupts any active turn). Applies to sessions started or resumed after you change it.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "agentList",

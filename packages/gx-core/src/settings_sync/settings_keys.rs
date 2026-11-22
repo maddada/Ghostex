@@ -51,7 +51,7 @@ const AGENT_DEFAULT_KEYS: &[&str] = &[
     "newSessionAgentScope",
     "sessionTitleGenerationAgent",
     "agentAcceptAllEnabled",
-    "agentAcpMode",
+    "agentSessionMode",
     "showQuickModelPickerInTerminal",
 ];
 

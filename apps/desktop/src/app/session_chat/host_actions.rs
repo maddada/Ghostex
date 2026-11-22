@@ -824,7 +824,7 @@ impl GhostexGpuiApp {
         // chat draft, so it is a plain view switch like the agent picker's, never a handoff.
         if action == "switchToTerminal" {
             if self.agents_chat_mode_sessions.contains(&session_id) {
-                if self.ask_and_switch_acp_session_to_terminal(session_id, false, cx) {
+                if self.ask_and_switch_non_cli_session_to_terminal(session_id, false, cx) {
                     return;
                 }
                 self.toggle_agents_session_chat_mode(session_id, cx);
@@ -832,7 +832,7 @@ impl GhostexGpuiApp {
             return;
         }
         if action == "agentPickerTerminalView" {
-            if self.ask_and_switch_acp_session_to_terminal(session_id, false, cx) {
+            if self.ask_and_switch_non_cli_session_to_terminal(session_id, false, cx) {
                 return;
             }
             // Model selection deliberately uses a plain view switch: `/model`

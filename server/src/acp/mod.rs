@@ -25,27 +25,43 @@ pub(crate) mod channel;
 pub mod host;
 pub(crate) mod spec;
 
-/// Settings key (object map of `<agentFamily>: bool`) storing per-agent ACP opt-in.
+/// Settings key (object map of `<agentFamily>: "non-cli" | "agent-cli"`) storing per-agent
+/// session mode (`Agent CLI` default vs `Non-CLI`).
+pub const SESSION_MODE_SETTING_KEY: &str = "agentSessionMode";
+
+/// Legacy settings key (`{ "<agentFamily>": true }`) still read as `"non-cli"` when
+/// `agentSessionMode` has no entry for that family.
 pub const ACP_MODE_SETTING_KEY: &str = "agentAcpMode";
 
-/// Session `runtimeSettings` key marking a session currently running through `ghostex acp-host`.
+/// Session `runtimeSettings` key marking a session currently running in Non-CLI mode.
+pub const SESSION_NON_CLI_ACTIVE_KEY: &str = "nonCliMode";
+
+/// Legacy session `runtimeSettings` key kept in sync with `nonCliMode` for ACP-hosted sessions.
 pub const SESSION_ACP_ACTIVE_KEY: &str = "acpMode";
 
-/// Session `runtimeSettings` key naming the ACP agent family (`antigravity`, future `codex`, ...).
+/// Session `runtimeSettings` key naming the Non-CLI agent family (`antigravity`, future `codex`, ...).
 pub const SESSION_ACP_FAMILY_KEY: &str = "acpFamily";
 
-/// Whether Ghostex currently offers an ACP transport for `agent_family`.
+/// Whether Ghostex currently offers a Non-CLI host for `agent_family`.
 pub fn supports_acp(agent_family: &str) -> bool {
     spec::spec_for_family(agent_family).is_some()
 }
 
-/// Explicit per-agent ACP opt-in setting from `settings`, or `None` when not set there.
+/// Explicit per-agent Non-CLI session mode setting from `settings`, or `None` when not set there.
 pub fn agent_acp_setting(
     settings: &serde_json::Map<String, Value>,
     agent_family: &str,
 ) -> Option<bool> {
     if !supports_acp(agent_family) {
         return None;
+    }
+    if let Some(mode) = settings
+        .get(SESSION_MODE_SETTING_KEY)
+        .and_then(Value::as_object)
+        .and_then(|map| map.get(agent_family))
+        .and_then(Value::as_str)
+    {
+        return Some(mode.eq_ignore_ascii_case("non-cli"));
     }
     settings
         .get(ACP_MODE_SETTING_KEY)
@@ -54,12 +70,13 @@ pub fn agent_acp_setting(
         .and_then(Value::as_bool)
 }
 
-/// Whether the user has opted `agent_family` into ACP mode in Settings.
+/// Whether the user has opted `agent_family` into Non-CLI mode in Settings.
 pub fn agent_acp_enabled(settings: &serde_json::Map<String, Value>, agent_family: &str) -> bool {
     agent_acp_setting(settings, agent_family) == Some(true)
 }
 
-/// Reads `agentAcpMode.<agent_family>` from Ghostex's shared settings file (`native-sidebar-settings.json`).
+/// Reads `agentSessionMode.<agent_family>` (falling back to legacy `agentAcpMode`) from Ghostex's
+/// shared settings file (`native-sidebar-settings.json`).
 pub fn agent_acp_enabled_in_shared_settings(agent_family: &str) -> bool {
     if !supports_acp(agent_family) {
         return false;
@@ -70,7 +87,7 @@ pub fn agent_acp_enabled_in_shared_settings(agent_family: &str) -> bool {
         .is_some_and(|map| agent_acp_enabled(&map, agent_family))
 }
 
-/// Canonicalized Ghostex-owned attachment and temp directories that ACP image sends may read from.
+/// Canonicalized Ghostex-owned attachment and temp directories that Non-CLI image sends may read from.
 /// Excludes daemon state roots (`root_dir`, `auth_dir`, `state.db`) and arbitrary user/system paths.
 pub(crate) fn allowed_acp_image_dirs(paths: &GxserverPaths) -> Vec<PathBuf> {
     [
@@ -128,8 +145,8 @@ pub(crate) fn validate_acp_image_path(
                 .to_string(),
         );
     }
-    let metadata = fs::metadata(&canonical)
-        .map_err(|_| "Could not inspect image attachment.".to_string())?;
+    let metadata =
+        fs::metadata(&canonical).map_err(|_| "Could not inspect image attachment.".to_string())?;
     if !metadata.is_file() {
         return Err("Image attachment must be a regular file.".to_string());
     }
@@ -175,7 +192,8 @@ pub(crate) fn read_validated_acp_image(
 ) -> Result<(Vec<u8>, &'static str), String> {
     let (canonical, _) = validate_acp_image_path(paths, raw_path)?;
     let max_bytes = SESSION_CHAT_IMAGE_MAX_BYTES as u64;
-    let file = File::open(&canonical).map_err(|_| "Could not open image attachment.".to_string())?;
+    let file =
+        File::open(&canonical).map_err(|_| "Could not open image attachment.".to_string())?;
     let mut bytes = Vec::new();
     file.take(max_bytes + 1)
         .read_to_end(&mut bytes)
@@ -188,12 +206,22 @@ pub(crate) fn read_validated_acp_image(
     Ok((bytes, mime))
 }
 
-/// True while this session is running in ACP mode (cleared once switched to interactive CLI).
-pub fn session_is_acp(session: &Value) -> bool {
+/// True while this session is running in Non-CLI mode (cleared once switched to Agent CLI).
+pub fn session_is_non_cli(session: &Value) -> bool {
     session
-        .pointer("/runtimeSettings/acpMode")
+        .pointer("/runtimeSettings/nonCliMode")
         .and_then(Value::as_bool)
+        .or_else(|| {
+            session
+                .pointer("/runtimeSettings/acpMode")
+                .and_then(Value::as_bool)
+        })
         == Some(true)
+}
+
+/// True while this session is running through Ghostex's ACP Non-CLI host.
+pub fn session_is_acp(session: &Value) -> bool {
+    session_is_non_cli(session)
 }
 
 /// The ACP family for a session currently running in ACP mode.

@@ -9,15 +9,15 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     ButtonSize, ButtonVariant, ROW_PADDING_X, RowSpec, SELECT_WIDTH, setting_row,
-    settings_button_sized, settings_list_item, settings_select, switch_control,
+    settings_button_sized, settings_list_item, settings_select,
 };
 use super::super::super::palette::SettingsPalette;
 use super::AgentsTab;
 use super::icons;
 use super::model::{
-    AgentButton, HookStatusItem, accept_all_mode_options, acp_mode_family, default_agents,
-    hook_removable, inherit_value, preferred_interface_override_options, supports_accept_all,
-    supports_chat_view,
+    AgentButton, HookStatusItem, accept_all_mode_options, default_agents, hook_removable,
+    inherit_value, non_cli_mode_family, preferred_interface_override_options, session_mode_options,
+    supports_accept_all, supports_chat_view,
 };
 use super::roster::hook_detail_icon;
 use super::select::DropdownOption;
@@ -148,20 +148,20 @@ impl AgentsTab {
         );
     }
 
-    fn set_acp_mode(&mut self, family: &str, enabled: bool, cx: &mut Context<Self>) {
+    fn set_session_mode(&mut self, family: &str, mode: String, cx: &mut Context<Self>) {
         let mut map: Map<String, Value> = self
             .store
             .read(cx)
-            .value("agentAcpMode")
+            .value("agentSessionMode")
             .as_object()
             .cloned()
             .unwrap_or_default();
-        if enabled {
-            map.insert(family.to_string(), json!(true));
+        if mode == "non-cli" {
+            map.insert(family.to_string(), json!("non-cli"));
         } else {
             map.remove(family);
         }
-        self.save("agentAcpMode", Value::Object(map), cx);
+        self.save("agentSessionMode", Value::Object(map), cx);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -340,34 +340,50 @@ impl AgentsTab {
                     cx,
                 )));
             }
-            if let Some(acp_family) = acp_mode_family(&agent.agent_id, agent.icon.as_deref()) {
-                let enabled = self
-                    .store
-                    .read(cx)
-                    .value("agentAcpMode")
-                    .get(acp_family)
-                    .and_then(Value::as_bool)
-                    == Some(true);
-                let control = switch_control(
+            if let Some(family) = non_cli_mode_family(&agent.agent_id, agent.icon.as_deref()) {
+                let current_mode = {
+                    let store = self.store.read(cx);
+                    match store
+                        .value("agentSessionMode")
+                        .get(family)
+                        .and_then(Value::as_str)
+                    {
+                        Some("non-cli") => "non-cli",
+                        Some("agent-cli") => "agent-cli",
+                        _ if store
+                            .value("agentAcpMode")
+                            .get(family)
+                            .and_then(Value::as_bool)
+                            == Some(true) =>
+                        {
+                            "non-cli"
+                        }
+                        _ => "agent-cli",
+                    }
+                };
+                let select = settings_select(
+                    self,
                     p,
-                    SharedString::from(format!("agent-acp-mode-{agent_id}")),
-                    "Use ACP mode",
-                    enabled,
+                    SharedString::from(format!("agent-session-mode-{agent_id}")),
+                    &session_mode_options(),
+                    current_mode,
+                    Some(SELECT_WIDTH),
                     false,
                     None,
-                    move |page: &mut Self, next, _window, cx| {
-                        page.set_acp_mode(acp_family, next, cx);
+                    move |page: &mut Self, value, _window, cx| {
+                        page.set_session_mode(family, value, cx);
                     },
+                    window,
                     cx,
                 );
                 children.push(panel_child(setting_row(
                     p,
-                    SharedString::from(format!("agent-acp-mode-row-{agent_id}")),
-                    RowSpec::new("Use ACP mode").description(
-                        "Run this agent over structured Agent Client Protocol instead of driving its interactive terminal. Switching to Terminal asks first and interrupts any active turn. Applies to new or resumed sessions.",
+                    SharedString::from(format!("agent-session-mode-row-{agent_id}")),
+                    RowSpec::new("Session mode").description(
+                        "Choose Agent CLI (interactive terminal) or Non-CLI (structured host; switching to Terminal asks first and interrupts any active turn). Applies to new or resumed sessions.",
                     ),
                     None,
-                    control,
+                    select,
                     cx,
                 )));
             }

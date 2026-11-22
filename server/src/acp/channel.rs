@@ -86,7 +86,7 @@ pub(crate) async fn send(
     if live(&target.project_id, &target.session_id, "send").is_none() {
         return Err(DomainStateError {
             code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
-            message: "The ACP agent is still starting up. Your message is queued and will send as soon as it is ready.".to_string(),
+            message: "The Non-CLI agent is still starting up. Your message is queued and will send as soon as it is ready.".to_string(),
         });
     }
     let params = json!({
@@ -106,7 +106,7 @@ pub(crate) async fn send(
         Ok(result) => Ok(result),
         Err(ChannelError::Unavailable(_)) => Err(DomainStateError {
             code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
-            message: "The ACP host is reconnecting. Your message will be retried automatically."
+            message: "The Non-CLI host is reconnecting. Your message will be retried automatically."
                 .to_string(),
         }),
         Err(ChannelError::Failed(message)) => Err(DomainStateError {
@@ -119,7 +119,7 @@ pub(crate) async fn send(
         }),
         Err(ChannelError::NoAnswer) => Err(DomainStateError {
             code: "deliveryUnconfirmed",
-            message: "The ACP agent took the message but did not confirm delivery. Check the chat before sending again.".to_string(),
+            message: "The Non-CLI agent took the message but did not confirm delivery. Check the chat before sending again.".to_string(),
         }),
     }
 }
@@ -328,7 +328,7 @@ pub(crate) async fn switch_to_cli(
         .await
         .map_err(|error| DomainStateError {
             code: "sessionInputFailed",
-            message: format!("Could not switch ACP session to Terminal: {error}"),
+            message: format!("Could not switch Non-CLI session to Agent CLI: {error}"),
         })?;
         let native_id = reply
             .get("nativeSessionId")
@@ -417,6 +417,7 @@ pub(crate) async fn switch_to_cli(
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
+        runtime_settings.insert(super::SESSION_NON_CLI_ACTIVE_KEY.to_string(), json!(false));
         runtime_settings.insert(super::SESSION_ACP_ACTIVE_KEY.to_string(), json!(false));
         if let Some(native_id) = native_for_db.as_deref() {
             runtime_settings.insert("agentSessionId".to_string(), json!(native_id));
