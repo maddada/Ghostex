@@ -406,7 +406,10 @@ impl NativeChatView {
         // `packages/gx-chat-core/visual/composer-animation.json`; `composer_animation.rs`
         // holds the interpolation.
         let metrics = &*super::composer_animation::METRICS;
-        let frame = self.composer_frame(cx);
+        let frame = self
+            .pending_composer_frame
+            .take()
+            .unwrap_or_else(|| self.composer_frame(cx));
         let collapsed = frame.collapsed;
         if frame.running && !maximized {
             window.request_animation_frame();
@@ -618,21 +621,37 @@ impl NativeChatView {
         // painted edges, which sit one border width outside that box.
         .absolute()
         .inset(px(-1.0));
-        let padding_block = if collapsed {
+        let resting_padding_block = if collapsed {
             metrics.collapsed_padding_block_px
         } else {
             metrics.expanded_padding_block_px
         } * s;
+        // While transitioning between expanded and collapsed shapes, ease vertical padding from
+        // `expanded_padding_block` (10px) to half the leftover around one line in the collapsed
+        // box (`(48 - 24) / 2 = 12px`). Combined with the inner clip viewport below, line 1 lands
+        // at the exact pixel position and caret height of the collapsed row and line 2 is clipped
+        // to 0px before the row hands off.
+        let collapsed_total = self.composer_animation.collapsed_estimate(s);
+        let collapsed_text_pad = ((collapsed_total - metrics.collapsed_height_px * s) * 0.5)
+            .max(metrics.collapsed_padding_block_px * s);
+        let padding_block = if !collapsed && !maximized && frame.height.is_some() {
+            resting_padding_block
+                + (collapsed_text_pad - resting_padding_block) * frame.collapse_progress
+        } else {
+            resting_padding_block
+        };
         // The box paints at its natural height whenever nothing is moving, so the tween needs the
         // height the content wants. The content column keeps that height even while the box is
         // pinned shorter (it never shrinks, and the box clips it), which is what lets a growing
         // editor or an arriving strip reveal itself over the tween instead of appearing whole.
+        // The animated container is inside the outer bordered card (below `pills_strip`), so its
+        // natural height is content + resting vertical padding with no border added.
         let measured = cx.weak_entity();
         let reported = self.composer_animation.reported();
         let min_delta = metrics.min_delta_px;
         let content_measure = gpui::canvas(
             move |bounds, window, cx| {
-                let natural = bounds.size.height.as_f32() + padding_block * 2.0 + 2.0;
+                let natural = bounds.size.height.as_f32() + resting_padding_block * 2.0;
                 if (reported.get() - natural).abs() < min_delta {
                     return;
                 }
@@ -662,6 +681,9 @@ impl NativeChatView {
             .when(collapsed, |this| {
                 this.flex_row()
                     .items_center()
+                    .min_h(px(
+                        super::composer_animation::COLLAPSED_ROW_MIN_HEIGHT_PX * s
+                    ))
                     .gap(px(metrics.collapsed_row_gap_px * s))
             })
             .children(first_message_card)
@@ -854,7 +876,29 @@ impl NativeChatView {
                         .when_some(frame.height.filter(|_| !maximized), |this, height| {
                             this.h(px(height)).overflow_hidden()
                         })
-                        .child(content)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .w_full()
+                                .min_w_0()
+                                .when(maximized, |this| this.flex_1().min_h_0())
+                                .when(frame.height.is_some() && !maximized, |this| {
+                                    this.flex_1().min_h_0().overflow_hidden()
+                                })
+                                .child(content),
+                        )
+                        // Cross-fade the compact `...` and Send controls in their exact collapsed
+                        // slot during collapse/expand so they glide in/out instead of popping.
+                        .when(
+                            !collapsed && !maximized && frame.compact_controls_opacity > 0.01,
+                            |this| {
+                                this.child(self.render_compact_toolbar_overlay(
+                                    frame.compact_controls_opacity,
+                                    p,
+                                ))
+                            },
+                        )
                         // Dictate's pill floats just above the microphone, over the text field
                         // (dictation.rs), drawn last so it is on top.
                         .children(self.render_dictation_pill(p, cx)),

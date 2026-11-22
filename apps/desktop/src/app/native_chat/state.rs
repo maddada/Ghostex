@@ -261,6 +261,10 @@ pub(crate) struct NativeChatView {
     pub(super) carry: super::carry_attachments::CarryState,
     /// The chat box's height tween and the arrival fade of the controls an expansion brings back.
     pub(super) composer_animation: super::composer_animation::ComposerAnimation,
+    /// This frame's computed composer tween, shared between `NativeChatView::render` (which reads
+    /// `transcript_inset`) and `ComposerHost::render` (which paints the box) so both halves of a
+    /// frame use the exact same timestamp and collapse state.
+    pub(super) pending_composer_frame: Option<super::composer_animation::ComposerFrame>,
     /// Whether this session's status line holds its row of space, remembered across view
     /// re-creations so a chat that is going to show one never paints a frame without it.
     pub(super) status_line_reserved: bool,
@@ -685,6 +689,7 @@ impl NativeChatView {
             held_send_recheck: None,
             carry: Default::default(),
             composer_animation: Default::default(),
+            pending_composer_frame: None,
             context_status_scroll: Default::default(),
             bounds: Default::default(),
             settled_text_width: None,

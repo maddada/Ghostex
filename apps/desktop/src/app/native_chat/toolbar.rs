@@ -146,6 +146,58 @@ impl NativeChatView {
         }
     }
 
+    /// Non-interactive visual mirror of the collapsed toolbar (`...` + Send) positioned in its
+    /// exact collapsed slot, faded in as the box settles shut and faded out as it lifts open.
+    pub(super) fn render_compact_toolbar_overlay(
+        &self,
+        opacity: f32,
+        p: &ChatAppearance,
+    ) -> AnyElement {
+        let s = p.scale;
+        let metrics = &*super::composer_animation::METRICS;
+        let mut row = div()
+            .absolute()
+            .top(px(metrics.collapsed_padding_block_px * s))
+            .right(px(16.0 * s))
+            .h(px(
+                super::composer_animation::COLLAPSED_ROW_MIN_HEIGHT_PX * s
+            ))
+            .flex()
+            .items_center()
+            .gap(px(6.0 * s))
+            .opacity(opacity);
+        if !self.collab_guest() {
+            let issue_tint = self.snapshot["composerRow"]["terminalIssue"]
+                .as_str()
+                .map(|_| gpui::Hsla::from(gpui::rgb(0xf0a3a3)));
+            let pressed = self.chat_menu_is_open(super::actions::MORE_ACTIONS_TRIGGER);
+            let mut dots = div()
+                .size(px(28.0 * s))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_full();
+            if pressed {
+                dots = dots.bg(p.border);
+            }
+            dots = dots.child(
+                gpui::svg()
+                    .path("titlebar/dots.svg")
+                    .size(px(16.0 * s))
+                    .text_color(if let Some(tint) = issue_tint {
+                        tint
+                    } else if pressed {
+                        p.control_primary
+                    } else {
+                        p.primary
+                    }),
+            );
+            row = row.child(dots);
+        }
+        row.child(self.render_send_control_visual(p))
+            .into_any_element()
+    }
+
     pub(super) fn render_toolbar(&self, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
         // A Ghostex Collab guest's chat box: how their message is handled, and Send. Nothing the
         // owner's chat box does to the agent, its model or this computer.

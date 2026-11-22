@@ -69,6 +69,62 @@ impl NativeChatView {
         self.invoke(json!({"type":"interrupt"}), cx);
     }
 
+    /// Visual-only Send/Stop button matching `render_send_control`, used by the non-interactive
+    /// compact-toolbar cross-fade overlay during composer collapse/expand transitions.
+    pub(super) fn render_send_control_visual(&self, p: &ChatAppearance) -> AnyElement {
+        let has_draft = !self.draft.trim().is_empty() || self.attachments_on_their_way();
+        let stop = (self.snapshot["working"] == true || self.stop_cooldown_task.is_some())
+            && !has_draft
+            && !self.collab_guest();
+        let disabled = if stop {
+            self.stop_cooldown_task.is_some()
+        } else {
+            !has_draft || !self.composer_ready
+        };
+        let blocked = !stop && self.snapshot["sendBlockedReason"].is_string();
+        let clear_stop = stop && !p.light;
+        let fill: gpui::Hsla = if clear_stop {
+            gpui::transparent_black()
+        } else {
+            gpui::rgb(if stop {
+                0xf6b5b5
+            } else if p.light {
+                0x7db8fb
+            } else {
+                0xe5e5e5
+            })
+            .into()
+        };
+        let ink = gpui::rgb(if stop {
+            if p.light { 0x7a2929 } else { 0xfcfcfc }
+        } else if p.light {
+            0xffffff
+        } else {
+            0x171717
+        });
+        div()
+            .size(px(24.0 * p.scale))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(6.0 * p.scale))
+            .bg(fill)
+            .when(clear_stop, |this| this.border_1().border_color(p.border))
+            .when(disabled || blocked, |this| this.opacity(0.5))
+            .child(
+                gpui::svg()
+                    .path(if stop {
+                        "titlebar/player-stop.svg"
+                    } else {
+                        "titlebar/arrow-up.svg"
+                    })
+                    .size(px(12.0 * p.scale))
+                    .text_color(ink),
+            )
+            .into_any_element()
+    }
+
     pub(super) fn render_send_control(&self, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
         // A picture still being saved can be sent on its own: it goes the moment it is in.
         let has_draft = !self.draft.trim().is_empty() || self.attachments_on_their_way();

@@ -165,11 +165,14 @@ impl Render for NativeChatView {
             let card = ghostex_gx_chat_core::session::error_card::error_card(&error, None);
             self.error_card("chat-load-error", &card, Vec::new(), &p, cx)
         });
-        self.transcript_inset = if maximized {
-            0.0
+        if maximized {
+            self.pending_composer_frame = None;
+            self.transcript_inset = 0.0;
         } else {
-            self.composer_frame(cx).transcript_inset
-        };
+            let frame = self.composer_frame(cx);
+            self.transcript_inset = frame.transcript_inset;
+            self.pending_composer_frame = Some(frame);
+        }
         crate::app::helpers::indicator_animation::render_indicator_frames_animation_only(
             cx.entity_id(),
         );

@@ -22,8 +22,6 @@ pub(super) struct ComposerAnimationMetrics {
     pub duration_ms: f32,
     pub easing: [f32; 4],
     pub min_delta_px: f32,
-    pub arrival_delay_fraction: f32,
-    pub arrival_duration_fraction: f32,
     pub arrival_translate_y_px: f32,
     pub collapsed_height_px: f32,
     pub collapsed_line_height_px: f32,
@@ -64,6 +62,16 @@ pub(super) fn eased(easing: &[f32; 4], t: f32) -> f32 {
     curve(easing[1], easing[3], u)
 }
 
+/// The collapsed toolbar (`...` button) height at scale 1: the compact row is at least this tall
+/// (`10 + 28 + 10 = 48px`), matching the resting collapsed height while keeping the editor at the
+/// expanded 24px line height centered inside it.
+pub(super) const COLLAPSED_ROW_MIN_HEIGHT_PX: f32 = 28.0;
+
+fn smoothstep(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
 /// What the composer paints this frame.
 #[derive(Clone, Copy)]
 pub(super) struct ComposerFrame {
@@ -72,10 +80,16 @@ pub(super) struct ComposerFrame {
     pub collapsed: bool,
     /// The pinned box height while a tween runs; `None` paints the box at its natural height.
     pub height: Option<f32>,
-    /// The expanded controls' arrival fade (React's delayed opacity keyframes).
+    /// Normalized collapse progress in `0.0..=1.0` (`0.0` = expanded, `1.0` = collapsed) during a
+    /// collapse/expand shape transition; `0.0` during expanded auto-grow tweens.
+    pub collapse_progress: f32,
+    /// The expanded controls' opacity (fades out on collapse, fades in on expand).
     pub controls_opacity: f32,
-    /// The arrival fade's downward offset, in unscaled pixels.
+    /// The expanded controls' downward offset, in unscaled pixels.
     pub controls_offset: f32,
+    /// The compact `...` + Send overlay's opacity while transitioning between expanded and
+    /// collapsed shapes, so those controls cross-fade cleanly in their exact collapsed slot.
+    pub compact_controls_opacity: f32,
     /// True while the view still needs frames.
     pub running: bool,
     /// CDXC:SessionChat 2026-09-21 WHY: The native chat box is a sibling below the transcript, so a box that shrinks makes the list taller, shortens its scroll range, and near the end that clamped the offset, resumed tail follow, re-expanded the box and shifted the rows by the whole difference on every reversal. The list pads its end by what the box has given up against its expanded height, so the scroll range is the same in every collapse state: React's held inset (`use-session-chat-composer-inset.ts`), computed from the frame being painted rather than measured a frame late.
@@ -89,12 +103,17 @@ pub(crate) struct ComposerAnimation {
     from: f32,
     target: f32,
     started: Option<Instant>,
-    /// When the controls that an expansion brings back began their fade.
-    arrival: Option<Instant>,
+    /// Active tween duration in seconds (shortened proportionally on mid-flight reversals).
+    duration_secs: f32,
+    /// The last chat scale seen, used to compute the collapsed height estimate inside `advance`.
+    scale: f32,
     /// The shape being painted, which trails a requested collapse until the box has closed.
     collapsed: bool,
     /// A collapse whose box is still closing over the expanded content.
     closing: bool,
+    /// True while the active tween is transitioning between collapsed and expanded shapes (false
+    /// while an expanded composer auto-grows or shrinks as the user types).
+    shape_transition: bool,
     /// The natural heights last measured in each shape. A collapse or an expansion starts its tween
     /// towards them in the frame the shape flips; waiting for that frame's measurement painted the
     /// box once at its new height before the tween walked back to it.
@@ -126,9 +145,11 @@ impl ComposerAnimation {
     /// Note the collapse state the chat asks for. Leaving the collapsed shape also fades the option
     /// pills and the toolbar back in, the way React animated its `CONTROLS` selector on expansion.
     pub(super) fn set_collapsed(&mut self, requested: bool, reduce_motion: bool, scale: f32) {
+        self.scale = scale.max(0.01);
         // The first paint of a chat has nothing to move from.
         if reduce_motion || self.current.is_none() {
             self.closing = false;
+            self.shape_transition = false;
             if requested != self.collapsed {
                 self.flip(requested, true);
             }
@@ -137,55 +158,78 @@ impl ComposerAnimation {
         match (requested, self.collapsed) {
             (true, false) if !self.closing => {
                 self.closing = true;
-                self.retarget(self.collapsed_estimate(scale), false);
+                self.shape_transition = true;
+                self.retarget(self.collapsed_estimate(self.scale), false, true);
             }
             // The box has closed: the one-line row takes over at the height it landed on.
             (true, false) if self.started.is_none() => {
                 self.closing = false;
+                self.shape_transition = false;
                 self.flip(true, false);
             }
             // Reversed before the box closed: it opens again over the same content.
             (false, false) if self.closing => {
                 self.closing = false;
-                self.retarget(self.expanded_natural, false);
+                self.shape_transition = true;
+                self.retarget(self.expanded_natural, false, true);
             }
-            (false, true) => self.flip(false, false),
+            (false, true) => {
+                self.shape_transition = true;
+                self.flip(false, false);
+            }
             _ => {}
         }
     }
 
     fn flip(&mut self, collapsed: bool, reduce_motion: bool) {
         self.collapsed = collapsed;
-        self.arrival = (!collapsed && !reduce_motion).then(Instant::now);
+        if reduce_motion {
+            self.shape_transition = false;
+        }
         let natural = if collapsed {
             self.collapsed_natural
         } else {
             self.expanded_natural
         };
         if natural > 0.0 {
-            self.retarget(natural, reduce_motion);
+            self.retarget(natural, reduce_motion, !reduce_motion && !collapsed);
         }
     }
 
-    /// The collapsed box's height: as last measured, or from the shared metrics before the first
-    /// collapse.
-    fn collapsed_estimate(&self, scale: f32) -> f32 {
+    /// The collapsed box's inner height (inside the outer card's border): as last measured, or
+    /// from the shared metrics before the first collapse.
+    pub(super) fn collapsed_estimate(&self, scale: f32) -> f32 {
         if self.collapsed_natural > 0.0 {
             self.collapsed_natural
         } else {
-            (METRICS.collapsed_height_px + METRICS.collapsed_padding_block_px * 2.0) * scale + 2.0
+            (METRICS.collapsed_height_px.max(COLLAPSED_ROW_MIN_HEIGHT_PX)
+                + METRICS.collapsed_padding_block_px * 2.0)
+                * scale
         }
     }
 
     /// Walk from the height on screen to `natural`. Returns true when a tween started.
-    fn retarget(&mut self, natural: f32, reduce_motion: bool) -> bool {
+    fn retarget(&mut self, natural: f32, reduce_motion: bool, scale_for_reversal: bool) -> bool {
         let current = self.current.unwrap_or(natural);
         self.target = natural;
         if reduce_motion || (natural - current).abs() < METRICS.min_delta_px {
             self.current = Some(natural);
             self.started = None;
+            self.shape_transition = false;
             return false;
         }
+        let base = self.duration();
+        self.duration_secs = if scale_for_reversal {
+            let full = self.collapse_travel(self.scale.max(0.01));
+            if full > 1.0 {
+                let ratio = ((natural - current).abs() / full).clamp(0.0, 1.0);
+                base * ratio.sqrt().clamp(0.5, 1.0)
+            } else {
+                base
+            }
+        } else {
+            base
+        };
         self.from = current;
         self.started = Some(Instant::now());
         true
@@ -195,54 +239,78 @@ impl ComposerAnimation {
     pub(super) fn advance(&mut self, reduce_motion: bool) -> ComposerFrame {
         if reduce_motion {
             self.started = None;
-            self.arrival = None;
             self.closing = false;
+            self.shape_transition = false;
             if self.current.is_some() {
                 self.current = Some(self.target);
             }
             return ComposerFrame {
                 collapsed: self.collapsed,
                 height: None,
+                collapse_progress: if self.collapsed { 1.0 } else { 0.0 },
                 controls_opacity: 1.0,
                 controls_offset: 0.0,
+                compact_controls_opacity: 0.0,
                 running: false,
                 transcript_inset: self.transcript_inset(self.target),
             };
         }
-        let duration = self.duration();
         let mut height = None;
         if let Some(started) = self.started {
+            let duration = if self.duration_secs > 0.0 {
+                self.duration_secs
+            } else {
+                self.duration()
+            };
             let progress = started.elapsed().as_secs_f32() / duration;
             if progress >= 1.0 {
                 self.started = None;
                 self.current = Some(self.target);
+                self.shape_transition = false;
+                // Hand off immediately when a collapse lands so we never paint an unclipped
+                // expanded frame between the tween ending and the collapsed row taking over.
+                if self.closing {
+                    self.closing = false;
+                    self.collapsed = true;
+                }
             } else {
                 let value =
                     self.from + (self.target - self.from) * eased(&METRICS.easing, progress);
                 self.current = Some(value);
                 height = Some(value);
             }
+        } else if self.shape_transition && !self.collapsed && self.expanded_natural <= 0.0 {
+            // Very first expand of a chat that opened collapsed: hold the collapsed height for the
+            // single layout pass that measures the expanded natural height so it never flashes open.
+            height = self.current;
         }
-        let mut controls_opacity = 1.0;
-        let mut controls_offset = 0.0;
-        if let Some(arrival) = self.arrival {
-            let delay = duration * METRICS.arrival_delay_fraction;
-            let span = (duration * METRICS.arrival_duration_fraction).max(0.001);
-            let progress = (arrival.elapsed().as_secs_f32() - delay) / span;
-            if progress >= 1.0 {
-                self.arrival = None;
+        let (collapse_progress, controls_opacity, controls_offset, compact_controls_opacity) =
+            if self.shape_transition
+                && let Some(painted) = height
+            {
+                let h_col = self.collapsed_estimate(self.scale.max(0.01));
+                let h_exp = self.expanded_natural.max(h_col + 1.0);
+                let collapse_progress = ((h_exp - painted) / (h_exp - h_col)).clamp(0.0, 1.0);
+                let controls_opacity = smoothstep(1.0 - collapse_progress / 0.45);
+                let controls_offset = METRICS.arrival_translate_y_px * (1.0 - controls_opacity);
+                let compact_controls_opacity = smoothstep((collapse_progress - 0.60) / 0.40);
+                (
+                    collapse_progress,
+                    controls_opacity,
+                    controls_offset,
+                    compact_controls_opacity,
+                )
             } else {
-                let fade = eased(&METRICS.easing, progress.max(0.0));
-                controls_opacity = fade;
-                controls_offset = METRICS.arrival_translate_y_px * (1.0 - fade);
-            }
-        }
+                (if self.collapsed { 1.0 } else { 0.0 }, 1.0, 0.0, 0.0)
+            };
         ComposerFrame {
             collapsed: self.collapsed,
             height,
+            collapse_progress,
             controls_opacity,
             controls_offset,
-            running: self.started.is_some() || self.arrival.is_some() || self.closing,
+            compact_controls_opacity,
+            running: self.started.is_some() || self.closing,
             transcript_inset: self.transcript_inset(height.unwrap_or(self.target)),
         }
     }
@@ -291,7 +359,11 @@ impl ComposerAnimation {
             return false;
         }
         // A redraw is owed even when nothing tweens: the transcript's inset follows the new height.
-        self.retarget(natural, reduce_motion);
+        let keep_shape = self.shape_transition;
+        self.retarget(natural, reduce_motion, keep_shape);
+        if !keep_shape {
+            self.shape_transition = false;
+        }
         true
     }
 }
