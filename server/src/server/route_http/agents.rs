@@ -79,12 +79,41 @@ pub(super) async fn route_agents_http(
         | "/api/ingestAgentHookEvent" => {
             handle_agent_http(&state, endpoint.path, request_id, &body_json).await
         }
-        // The Ghostex Pi and OMP extensions' chat channel (pi_chat_channel.rs).
+        // The Ghostex Pi, OMP and ACP chat channel (pi_chat_channel.rs).
         "/api/agentChatChannel" => {
             let params = match read_domain_rpc_params(&body_json) {
                 Ok(params) => params,
                 Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
             };
+            // A session token may only poll, ack, close or check trust for its own `sessionRef`
+            // channel, never hijack another session's channel.
+            if let crate::security::Principal::Session {
+                project_id: own_project,
+                session_id: own_session,
+                ..
+            } = &caller
+            {
+                let reference = params
+                    .get("sessionRef")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .unwrap_or_default();
+                let matches_self = match crate::agent_hooks::probing::parse_global_session_ref(reference) {
+                    (Some(pid), Some(sid)) => pid == *own_project && sid == *own_session,
+                    _ => false,
+                };
+                if !matches_self {
+                    return Ok(domain_error_response(
+                        endpoint.path,
+                        request_id,
+                        DomainStateError {
+                            code: "forbidden",
+                            message: "A session token may only access its own chat channel."
+                                .to_string(),
+                        },
+                    ));
+                }
+            }
             match crate::pi_chat_channel::dispatch(&state, &params).await {
                 Ok(result) => routed_json(
                     Some(endpoint.path),

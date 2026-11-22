@@ -5,7 +5,8 @@
 //! `acp-host` stays alive inside `zmx`, reconnects automatically, and resumes answering
 //! commands without dropping the agent turn or pending approval requests.
 
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::Duration;
 
 use serde_json::{Map, Value, json};
@@ -322,9 +323,26 @@ pub(crate) async fn check_approval_level_change_allowed(
     })
 }
 
-/// Change the approval level on an ACP session, persisting it per session and updating the live
-/// `acp-host` immediately (no restart). When the host is starting or reconnecting, persists the
-/// desired level so it syncs on registration and returns a retryable `dependencyUnavailable` error.
+static APPROVAL_LOCKS: LazyLock<Mutex<HashMap<(String, String), Arc<tokio::sync::Mutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn approval_lock(project_id: &str, session_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+    let mut map = APPROVAL_LOCKS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    map.entry((project_id.to_string(), session_id.to_string()))
+        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+        .clone()
+}
+
+/// Change the approval level on an ACP session, persisting it BEFORE pushing to `acp-host` (so no
+/// channel-open read can see a stale level), serialized per session, and rolling back on a hard
+/// failure from `acp-host`.
+///
+/// - When `acp-host` is starting or reconnecting, keeps the desired level persisted so channel
+///   registration pushes it once and returns retryable `dependencyUnavailable`.
+/// - When `acp-host` refuses the transition (e.g. leaving native `Auto` failed), rolls back SQLite
+///   and returns `UNSUPPORTED_SELECTION_CODE` so the durable selection queue fails visibly once.
 pub(crate) async fn set_approval_level(
     state: &AppState,
     project_id: &str,
@@ -336,8 +354,31 @@ pub(crate) async fn set_approval_level(
         code: "invalidParams",
         message: format!("Unsupported approval level: {raw_mode}"),
     })?;
+    let lock = approval_lock(project_id, session_id);
+    let _guard = lock.lock().await;
     check_approval_level_change_allowed(state, project_id, session_id, level, is_owner_device)
         .await?;
+
+    let previous_level = {
+        let paths = state.paths.clone();
+        let server_id = state.metadata.server_id.clone();
+        let pid = project_id.to_string();
+        let sid = session_id.to_string();
+        tokio::task::spawn_blocking(move || {
+            let db = open_gxserver_database(&paths).ok()?;
+            let repo = DomainRepository::new(&db, server_id.as_str());
+            let session = repo.get_session(&pid, &sid).ok().flatten()?;
+            super::approval::stored_session_approval_level(&session)
+        })
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default()
+    };
+
+    // Persist BEFORE pushing to `acp-host` so channel open/reconnect can never read a stale level.
+    persist_approval_level(state, project_id, session_id, level).await?;
+
     if live(project_id, session_id, "mode").is_some() {
         match request(
             project_id,
@@ -348,30 +389,26 @@ pub(crate) async fn set_approval_level(
         )
         .await
         {
-            Ok(result) => {
-                persist_approval_level(state, project_id, session_id, level).await?;
-                return Ok(result);
-            }
+            Ok(result) => return Ok(result),
             Err(ChannelError::Unavailable(_) | ChannelError::NoAnswer) => {
-                // Persist so `acp-host` syncs on its next reconnect poll, and signal retryable.
-                persist_approval_level(state, project_id, session_id, level).await?;
+                // Keep desired level persisted so channel registration delivers it on reconnect.
                 return Err(DomainStateError {
                     code: "dependencyUnavailable",
                     message: "The ACP host is reconnecting. Your approval level was saved and will apply as soon as it reconnects.".to_string(),
                 });
             }
             Err(error) => {
+                let _ = persist_approval_level(state, project_id, session_id, previous_level).await;
                 return Err(DomainStateError {
-                    code: "invalidState",
+                    code: crate::session_chat_codex_picker::UNSUPPORTED_SELECTION_CODE,
                     message: format!("ACP approval level change failed: {error}"),
                 });
             }
         }
     }
 
-    // No open live channel: persist desired level so the next poll/launch picks it up, and check
-    // whether the session is confirmed inactive (safe to succeed offline) or starting/reconnecting.
-    persist_approval_level(state, project_id, session_id, level).await?;
+    // No open live channel: desired level is already persisted; only return Ok if confirmed
+    // inactive, else return retryable `dependencyUnavailable`.
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
     let pid = project_id.to_string();

@@ -28,6 +28,10 @@ pub struct SelectionOptions {
     /// Codex's permission mode, one of `CODEX_PERMISSION_MODES`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub permissions: Option<String>,
+    /// Internal server-stamped marker: whether an owner device requested the queued mode change.
+    /// Stripped from client input in `read_options` so callers can never forge it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) owner_approved: Option<bool>,
 }
 
 impl SelectionOptions {
@@ -41,12 +45,18 @@ pub(crate) fn read_options(
     is_acp: bool,
     params: &Map<String, Value>,
 ) -> Result<SelectionOptions, DomainStateError> {
-    let mut options: SelectionOptions =
-        serde_json::from_value(params.get("options").cloned().unwrap_or_else(|| json!({})))
-            .map_err(|_| DomainStateError {
-                code: "invalidParams",
-                message: "Invalid chat option selection.".into(),
-            })?;
+    let mut raw_options = params.get("options").cloned().unwrap_or_else(|| json!({}));
+    if let Some(obj) = raw_options.as_object_mut() {
+        // Never accept client-supplied `ownerApproved`.
+        obj.remove("ownerApproved");
+    }
+    let mut options: SelectionOptions = serde_json::from_value(raw_options).map_err(|_| {
+        DomainStateError {
+            code: "invalidParams",
+            message: "Invalid chat option selection.".into(),
+        }
+    })?;
+    options.owner_approved = None;
     if is_acp {
         if let Some(mode) = options.mode.as_deref() {
             let level =
@@ -266,7 +276,15 @@ pub(crate) fn enqueue(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    enqueue_selection(state, params, false)
+    enqueue_selection(state, params, false, true)
+}
+
+pub(crate) fn enqueue_for_caller(
+    state: &AppState,
+    params: &Map<String, Value>,
+    is_owner_device: bool,
+) -> Result<Value, DomainStateError> {
+    enqueue_selection(state, params, false, is_owner_device)
 }
 
 /// Queues a change Ghostex makes on its own, unless a pick is already waiting or applying: the
@@ -275,13 +293,14 @@ pub(crate) fn enqueue_unless_pending(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    enqueue_selection(state, params, true)
+    enqueue_selection(state, params, true, true)
 }
 
 fn enqueue_selection(
     state: &AppState,
     params: &Map<String, Value>,
     unless_pending: bool,
+    is_owner_device: bool,
 ) -> Result<Value, DomainStateError> {
     let project = params
         .get("projectId")
@@ -372,6 +391,7 @@ fn enqueue_selection(
         .unwrap_or_default();
     if incoming_options.mode.is_some() {
         options.mode = incoming_options.mode;
+        options.owner_approved = Some(is_owner_device);
     }
     if incoming_options.permissions.is_some() {
         options.permissions = incoming_options.permissions;
@@ -793,12 +813,11 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                 &state, &project, &session,
             )
             .await;
+            let owner_approved = pending.options.owner_approved.unwrap_or(false);
             let result = crate::session_chat_codex_picker::select_session_chat_model(
                 &state,
                 params.as_object().unwrap(),
-                // Owner-device gating for ACP approval level raises was already enforced at
-                // enqueue time in `handle_select_session_chat_model_http`.
-                true,
+                owner_approved,
             )
             .await;
             if let Some(guard) = first_message {
@@ -903,6 +922,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
             });
             let final_failure = result.as_ref().is_err_and(|error| {
                 error.code == crate::session_chat_codex_picker::UNSUPPORTED_SELECTION_CODE
+                    || error.code == "forbidden"
             });
             if result.is_ok() || final_failure {
                 if let Ok(mut attempts) = unconfirmed_attempts().lock() {

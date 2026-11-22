@@ -2,8 +2,9 @@
 //!
 //! Four levels live on the chat box's existing Mode button:
 //! - `ask`: ask before edits and commands
-//! - `auto-edits`: auto-approve edit/delete/move inside the session folder and writable roots
-//!   (symlink-resolved); ask for commands and anything else
+//! - `auto-edits`: auto-approve edit/delete/move strictly inside the session folder and writable
+//!   roots (symlink-resolved) using an explicit allowlist of understood tool shapes; ask for
+//!   commands and anything else
 //! - `auto`: use the agent's own advertised ACP automatic mode when available, else behave like `ask`
 //! - `full-access`: auto-approve everything
 //!
@@ -18,6 +19,8 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+
+use crate::domain::DomainStateError;
 
 /// Session `runtimeSettings` key storing the remembered ACP approval level for this session.
 pub const SESSION_ACP_APPROVAL_LEVEL_KEY: &str = "acpApprovalLevel";
@@ -116,6 +119,123 @@ fn read_trimmed_str<'a>(map: &'a Map<String, Value>, key: &str) -> Option<&'a st
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
+}
+
+/// Strip client-supplied `runtimeSettings.acpApprovalLevel` on every session creation route so
+/// project/agent/global defaults always rule; for non-owner callers, also strip
+/// `launchSettings.acceptAllMode` when it attempts to force accept-all (`"enabled"` / `"acceptAll"`).
+pub fn sanitize_create_session_params(
+    params: &Map<String, Value>,
+    is_owner_device: bool,
+) -> Map<String, Value> {
+    let mut cleaned = params.clone();
+    if let Some(runtime) = cleaned
+        .get_mut("runtimeSettings")
+        .and_then(Value::as_object_mut)
+    {
+        runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
+    }
+    if !is_owner_device {
+        if let Some(launch) = cleaned
+            .get_mut("launchSettings")
+            .and_then(Value::as_object_mut)
+        {
+            let tries_accept_all = launch
+                .get("acceptAllMode")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .is_some_and(|v| matches!(v, "enabled" | "acceptAll"));
+            if tries_accept_all {
+                launch.remove("acceptAllMode");
+            }
+        }
+    }
+    cleaned
+}
+
+/// Enforce the single-source-of-truth rule on `/api/updateSession`:
+/// - Non-owner callers trying to raise `runtimeSettings.acpApprovalLevel` or enable
+///   `launchSettings.acceptAllMode` are explicitly refused (`403 forbidden`).
+/// - For ALL callers, `runtimeSettings.acpApprovalLevel` is preserved from the stored session so
+///   only `acp::channel::set_approval_level` can change a session's approval level.
+pub fn guard_update_session_params(
+    current_session: Option<&Value>,
+    params: &Map<String, Value>,
+    is_owner_device: bool,
+) -> Result<Map<String, Value>, DomainStateError> {
+    let mut cleaned = params.clone();
+    let stored_runtime = current_session
+        .and_then(|s| s.get("runtimeSettings"))
+        .and_then(Value::as_object);
+    let stored_launch = current_session
+        .and_then(|s| s.get("launchSettings"))
+        .and_then(Value::as_object);
+    let stored_level = current_session
+        .and_then(stored_session_approval_level)
+        .unwrap_or(AcpApprovalLevel::Ask);
+
+    if let Some(incoming_runtime) = cleaned
+        .get_mut("runtimeSettings")
+        .and_then(Value::as_object_mut)
+    {
+        if !is_owner_device {
+            if let Some(raw_requested) = incoming_runtime
+                .get(SESSION_ACP_APPROVAL_LEVEL_KEY)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                let requested = AcpApprovalLevel::parse(raw_requested);
+                let allowed = requested.is_some_and(|target| {
+                    AcpApprovalLevel::may_transition_without_owner(stored_level, target)
+                });
+                if !allowed {
+                    return Err(DomainStateError {
+                        code: "forbidden",
+                        message: "Only your own computer or phone can raise a session's approval level."
+                            .to_string(),
+                    });
+                }
+            }
+        }
+        // Always keep the stored `acpApprovalLevel` so `/api/updateSession` cannot diverge from
+        // `acp::channel::set_approval_level`.
+        match stored_runtime.and_then(|m| m.get(SESSION_ACP_APPROVAL_LEVEL_KEY)) {
+            Some(val) => {
+                incoming_runtime.insert(SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(), val.clone());
+            }
+            None => {
+                incoming_runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
+            }
+        }
+    }
+
+    if !is_owner_device {
+        if let Some(incoming_launch) = cleaned
+            .get_mut("launchSettings")
+            .and_then(Value::as_object_mut)
+        {
+            let stored_accept = stored_launch
+                .and_then(|m| m.get("acceptAllMode"))
+                .and_then(Value::as_str)
+                .map(str::trim);
+            let incoming_accept = incoming_launch
+                .get("acceptAllMode")
+                .and_then(Value::as_str)
+                .map(str::trim);
+            if matches!(incoming_accept, Some("enabled" | "acceptAll"))
+                && !matches!(stored_accept, Some("enabled" | "acceptAll"))
+            {
+                return Err(DomainStateError {
+                    code: "forbidden",
+                    message: "Only your own computer or phone can enable accept-all on a session."
+                        .to_string(),
+                });
+            }
+        }
+    }
+
+    Ok(cleaned)
 }
 
 /// Read the remembered per-session ACP approval level from `session.runtimeSettings`, if set.
@@ -268,7 +388,10 @@ pub fn find_advertised_default_mode_id(
     // Fallback: any advertised mode that is not auto/bypass/edit-auto/plan.
     mode_ids.into_iter().find(|id| {
         let lower = id.to_ascii_lowercase();
-        !is_auto_or_bypass_mode_id(id) && lower != "plan" && lower != "read-only" && lower != "readonly"
+        !is_auto_or_bypass_mode_id(id)
+            && lower != "plan"
+            && lower != "read-only"
+            && lower != "readonly"
     })
 }
 
@@ -307,13 +430,52 @@ fn is_command_key(norm: &str) -> bool {
     )
 }
 
+/// Keys that hold raw file content / replacement text / patch text and must NEVER be JSON-parsed
+/// or searched for command keys (otherwise editing `mcp.json` or `tasks.json` containing
+/// `"command"` would falsely downgrade to a shell command).
+fn is_file_body_key(norm: &str) -> bool {
+    matches!(
+        norm,
+        "content"
+            | "contents"
+            | "filecontent"
+            | "newfilecontent"
+            | "sourcecode"
+            | "text"
+            | "newtext"
+            | "oldtext"
+            | "newcontent"
+            | "oldcontent"
+            | "newstring"
+            | "oldstring"
+            | "newstr"
+            | "oldstr"
+            | "replacement"
+            | "replacementcontent"
+            | "targetcontent"
+            | "codecontent"
+            | "code"
+            | "body"
+            | "data"
+            | "snippet"
+            | "inserttext"
+            | "patch"
+            | "patchtext"
+            | "diff"
+            | "difftext"
+            | "unifieddiff"
+            | "rawpatch"
+    )
+}
+
 fn raw_input_contains_command(value: &Value, depth: usize) -> bool {
     if depth > MAX_RAW_INPUT_DEPTH {
-        // Fail closed on deeply nested inputs.
         return true;
     }
     match value {
-        Value::String(text) => {
+        // Only JSON-parse a top-level stringified `rawInput` (depth == 0), NEVER nested file-body
+        // strings such as `Content: "{\"command\": ...}"` when editing JSON config files.
+        Value::String(text) if depth == 0 => {
             let trimmed = text.trim();
             if trimmed.starts_with('{') || trimmed.starts_with('[') {
                 match serde_json::from_str::<Value>(trimmed) {
@@ -340,6 +502,9 @@ fn raw_input_contains_command(value: &Value, depth: usize) -> bool {
                     if non_empty {
                         return true;
                     }
+                }
+                if is_file_body_key(&norm) && val.is_string() {
+                    continue;
                 }
                 if raw_input_contains_command(val, depth + 1) {
                     return true;
@@ -486,6 +651,20 @@ fn owned_components(path: &Path) -> VecDeque<OwnedComponent> {
         .collect()
 }
 
+/// Char-safe ASCII case-insensitive prefix strip. Never panics on multi-byte UTF-8 boundaries.
+fn strip_ascii_prefix_ignore_case<'a>(input: &'a str, ascii_prefix: &str) -> Option<&'a str> {
+    let prefix_bytes = ascii_prefix.as_bytes();
+    if input
+        .as_bytes()
+        .get(..prefix_bytes.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(prefix_bytes))
+    {
+        input.get(prefix_bytes.len()..)
+    } else {
+        None
+    }
+}
+
 fn percent_decode_strict(input: &str) -> Option<String> {
     let bytes = input.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
@@ -514,19 +693,15 @@ fn percent_decode_strict(input: &str) -> Option<String> {
 /// Parse a `file://` URI strictly into a local filesystem path. Fails closed (`None`) for remote
 /// authorities, query/fragment components, malformed percent-encoding, or non-absolute paths.
 fn parse_file_uri(text: &str) -> Option<PathBuf> {
-    if text.len() < 7 || !text[..7].eq_ignore_ascii_case("file://") {
-        return None;
-    }
-    let rest = &text[7..];
+    let rest = strip_ascii_prefix_ignore_case(text, "file://")?;
     if rest.contains('?') || rest.contains('#') {
         return None;
     }
     let path_part = if let Some(after_slash) = rest.strip_prefix('/') {
         format!("/{after_slash}")
-    } else if rest.len() >= 10 && rest[..10].eq_ignore_ascii_case("localhost/") {
-        format!("/{}", &rest[10..])
+    } else if let Some(after_host) = strip_ascii_prefix_ignore_case(rest, "localhost/") {
+        format!("/{after_host}")
     } else {
-        // Non-empty non-localhost authority (e.g. file://host/share) or missing slash.
         return None;
     };
     let decoded = percent_decode_strict(&path_part)?;
@@ -555,26 +730,93 @@ fn is_windows_drive_relative(text: &str) -> bool {
         && !matches!(bytes.get(2), Some(b'\\' | b'/'))
 }
 
+/// Matches any RFC 3986 URI scheme prefix of length >= 2 (e.g. `file:/etc/passwd`, `http://...`,
+/// `vscode:...`), without colliding with single-letter Windows drive prefixes (`C:\...`).
+fn has_uri_scheme_prefix(text: &str) -> bool {
+    let Some((scheme, _)) = text.split_once(':') else {
+        return false;
+    };
+    if scheme.len() < 2 {
+        return false;
+    }
+    let mut chars = scheme.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    first.is_ascii_alphabetic()
+        && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '-' | '.'))
+}
+
+/// Matches Windows `%ENVVAR%` expansion syntax (e.g. `%USERPROFILE%\.ssh`).
+fn has_windows_percent_env(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let start = i + 1;
+            let mut end = start;
+            while end < bytes.len()
+                && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_')
+            {
+                end += 1;
+            }
+            if end > start && bytes.get(end) == Some(&b'%') {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Matches shell variable/command substitution (`${...}`, `$(...)`, or a path segment that is a
+/// bare `$IDENT` like `$HOME/.bashrc`) while allowing legitimate filenames containing `$`
+/// (`app/routes/users.$id.tsx`, `src/routes/$types.d.ts`, `store$.ts`).
+fn has_shell_var_syntax(text: &str) -> bool {
+    if text.contains("${") || text.contains("$(") {
+        return true;
+    }
+    for segment in text.split(['/', '\\']) {
+        if let Some(ident) = segment.strip_prefix('$') {
+            if !ident.is_empty()
+                && ident
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_')
+                && ident
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn has_unsafe_path_syntax(text: &str) -> bool {
     text.trim().is_empty()
         || text.contains('\0')
         || text.starts_with('~')
-        || text.contains('$')
         || text.contains("://")
+        || has_uri_scheme_prefix(text)
         || is_windows_drive_relative(text)
+        || has_windows_percent_env(text)
+        || has_shell_var_syntax(text)
 }
 
 /// Resolve `raw_path` relative to `cwd` while following every symlink component, including
 /// dangling symlinks whose final target does not exist yet. Fails closed (`None`) on tilde paths,
-/// shell/env syntax (`$`), non-`file://` URI schemes, malformed `file://` URIs, Windows
-/// drive-relative paths (`C:foo`), symlink loops, NUL bytes, or non-`NotFound` filesystem errors.
+/// shell/env variable expansion (`$HOME`, `${VAR}`, `$(...)`, `%USERPROFILE%`), URI schemes other
+/// than valid local `file://` URIs, Windows drive-relative paths (`C:foo`), symlink loops, NUL
+/// bytes, or non-`NotFound` filesystem errors.
 pub fn resolve_path_with_symlinks(raw_path: &Path, cwd: &Path) -> Option<PathBuf> {
     let text = raw_path.to_str()?;
     let trimmed = text.trim();
     if trimmed.is_empty() || trimmed.contains('\0') {
         return None;
     }
-    let parsed_path = if trimmed.len() >= 7 && trimmed[..7].eq_ignore_ascii_case("file://") {
+    let parsed_path = if strip_ascii_prefix_ignore_case(trimmed, "file://").is_some() {
         let uri_path = parse_file_uri(trimmed)?;
         let uri_text = uri_path.to_str()?;
         if has_unsafe_path_syntax(uri_text) {
@@ -588,7 +830,7 @@ pub fn resolve_path_with_symlinks(raw_path: &Path, cwd: &Path) -> Option<PathBuf
         PathBuf::from(trimmed)
     };
 
-    // On Windows, a Prefix component without a RootDir is drive-relative (e.g. `C:foo`): fail closed.
+    // On Windows, a Prefix component without a RootDir is drive-relative (`C:foo`): fail closed.
     let mut has_prefix = false;
     let mut has_root = false;
     for comp in parsed_path.components() {
@@ -670,6 +912,14 @@ fn push_unique(paths: &mut Vec<String>, path: &str) {
     }
 }
 
+/// Execution-context directory keys (`cwd`, `workdir`, `root`): validated to stay inside (or equal
+/// to) `writable_roots` and used as the base for relative target paths, but NOT treated as
+/// mutation targets themselves (so `cwd: "<project_root>"` does not fail strict `resolved != root`).
+fn is_context_dir_key(norm: &str) -> bool {
+    matches!(norm, "cwd" | "workdir" | "workingdirectory" | "root" | "rootdir")
+}
+
+/// Allowlisted single-target path keys for file mutation tools.
 fn is_single_path_key(norm: &str) -> bool {
     matches!(
         norm,
@@ -720,14 +970,11 @@ fn is_single_path_key(norm: &str) -> bool {
             | "dirpath"
             | "folder"
             | "folderpath"
-            | "cwd"
-            | "workdir"
-            | "workingdirectory"
-            | "root"
-            | "rootdir"
+            | "location"
     )
 }
 
+/// Allowlisted path-list, edit-chunk, or path-keyed-map keys.
 fn is_path_list_or_map_key(norm: &str) -> bool {
     matches!(
         norm,
@@ -748,6 +995,9 @@ fn is_path_list_or_map_key(norm: &str) -> bool {
             | "entries"
             | "items"
             | "uris"
+            | "replacementchunks"
+            | "chunks"
+            | "hunks"
     )
 }
 
@@ -764,184 +1014,276 @@ fn is_patch_key(norm: &str) -> bool {
     )
 }
 
+/// Allowlisted non-path keys (file bodies, replacement text, edit metadata, tool flags).
 fn is_known_non_path_key(norm: &str) -> bool {
-    matches!(
-        norm,
-        "content"
-            | "contents"
-            | "text"
-            | "newtext"
-            | "oldtext"
-            | "newstring"
-            | "oldstring"
-            | "newstr"
-            | "oldstr"
-            | "replacement"
-            | "replacementcontent"
-            | "replacementchunks"
-            | "targetcontent"
-            | "codecontent"
-            | "code"
-            | "body"
-            | "data"
-            | "encoding"
-            | "overwrite"
-            | "append"
-            | "create"
-            | "createmissing"
-            | "createdirs"
-            | "recursive"
-            | "force"
-            | "replaceall"
-            | "allowmultiple"
-            | "emptyfile"
-            | "startline"
-            | "endline"
-            | "line"
-            | "column"
-            | "offset"
-            | "limit"
-            | "instruction"
-            | "description"
-            | "summary"
-            | "reason"
-            | "explanation"
-            | "complexity"
-            | "isartifact"
-            | "artifactmetadata"
-            | "yieldms"
-            | "timeout"
-            | "mode"
-            | "permissions"
-            | "type"
-            | "kind"
-            | "id"
-            | "name"
-            | "title"
-            | "language"
-            | "format"
-    )
+    is_file_body_key(norm)
+        || matches!(
+            norm,
+            "encoding"
+                | "overwrite"
+                | "append"
+                | "create"
+                | "createfile"
+                | "isnewfile"
+                | "createmissing"
+                | "createdirs"
+                | "recursive"
+                | "force"
+                | "replaceall"
+                | "allowmultiple"
+                | "emptyfile"
+                | "startline"
+                | "endline"
+                | "line"
+                | "targetline"
+                | "targetposition"
+                | "column"
+                | "offset"
+                | "limit"
+                | "instruction"
+                | "description"
+                | "summary"
+                | "reason"
+                | "explanation"
+                | "complexity"
+                | "isartifact"
+                | "artifactmetadata"
+                | "yieldms"
+                | "timeout"
+                | "mode"
+                | "permissions"
+                | "showdiff"
+                | "type"
+                | "kind"
+                | "id"
+                | "name"
+                | "title"
+                | "language"
+                | "format"
+                | "mimetype"
+                | "waitforprevious"
+                | "resource"
+        )
 }
 
-fn looks_like_path_key_name(norm: &str) -> bool {
-    norm.contains("path")
-        || norm.contains("file")
-        || norm.contains("dir")
-        || norm.contains("folder")
-        || norm.contains("dest")
-        || norm.contains("dst")
-        || norm.contains("target")
-        || norm.contains("src")
-        || norm.contains("source")
-        || norm.contains("uri")
-        || norm.contains("url")
-        || norm.contains("patch")
-        || norm.contains("diff")
-        || norm.contains("move")
-        || norm.contains("rename")
-        || norm.contains("root")
-}
-
-fn looks_like_external_path_value(text: &str) -> bool {
-    let trimmed = text.trim();
-    trimmed.starts_with('/')
-        || trimmed.starts_with('~')
-        || trimmed.starts_with("../")
-        || trimmed.starts_with("..\\")
-        || trimmed.starts_with("\\\\")
-        || trimmed.contains("://")
-        || (trimmed.len() >= 2
-            && trimmed.as_bytes()[0].is_ascii_alphabetic()
-            && trimmed.as_bytes()[1] == b':')
-}
-
-fn clean_diff_path_token(raw: &str) -> Option<String> {
+/// Clean a single unquoted diff path token (stripping trailing `\t` timestamp and `a/` / `b/`).
+/// Fails closed (`Err(())`) on quoted paths (`"`) or backslash escapes (`\`) rather than guessing.
+fn parse_diff_path_token(raw: &str) -> Result<Option<String>, ()> {
     let without_tab = raw.split('\t').next().unwrap_or(raw).trim();
-    let unquoted = without_tab
-        .strip_prefix('"')
-        .and_then(|s| s.strip_suffix('"'))
+    if without_tab.is_empty() {
+        return Err(());
+    }
+    if without_tab.starts_with('"') || without_tab.contains('"') || without_tab.contains('\\') {
+        return Err(());
+    }
+    if without_tab == "/dev/null" {
+        return Ok(None);
+    }
+    let stripped = without_tab
+        .strip_prefix("a/")
+        .or_else(|| without_tab.strip_prefix("b/"))
         .unwrap_or(without_tab)
         .trim();
-    if unquoted.is_empty() || unquoted == "/dev/null" {
-        return None;
+    if stripped.is_empty() {
+        return Err(());
     }
-    let stripped = unquoted
-        .strip_prefix("a/")
-        .or_else(|| unquoted.strip_prefix("b/"))
-        .unwrap_or(unquoted)
-        .trim();
-    if stripped.is_empty() || stripped == "/dev/null" {
-        return None;
+    if stripped == "/dev/null" {
+        return Ok(None);
     }
-    Some(stripped.to_string())
+    Ok(Some(stripped.to_string()))
 }
 
-/// Extract target paths from `apply_patch` headers (trimmed) and unified diff headers
-/// (`diff --git`, `---`, `+++`, `rename from/to`, `copy from/to`). Returns `false` if the patch
-/// text is non-empty and yields no paths (unparseable patch format -> fail closed).
+/// Parse unified diff hunk header `@@ -a[,b] +c[,d] @@` into `(old_lines, new_lines)`.
+fn parse_unified_hunk_counts(line: &str) -> Option<(usize, usize)> {
+    let rest = line.strip_prefix("@@ -")?;
+    let (ranges, _) = rest.split_once(" @@")?;
+    let (old_part, new_part) = ranges.split_once(" +")?;
+    let parse_count = |part: &str| -> Option<usize> {
+        match part.split_once(',') {
+            Some((_, count)) => count.trim().parse::<usize>().ok(),
+            None => Some(1),
+        }
+    };
+    Some((parse_count(old_part)?, parse_count(new_part)?))
+}
+
+/// Strip `prefix` followed by at least one ASCII space or tab (`--- `, `---\t`, `+++ `, `+++\t`).
+fn strip_diff_marker_ws<'a>(line: &'a str, marker: &str) -> Option<&'a str> {
+    let rest = line.strip_prefix(marker)?;
+    let first = rest.as_bytes().first().copied()?;
+    if first == b' ' || first == b'\t' {
+        Some(rest.trim_start_matches([' ', '\t']))
+    } else {
+        None
+    }
+}
+
+/// Hunk-aware extractor for `apply_patch` headers and unified diff headers.
+/// - Ignores hunk body lines so code/comments inside diffs (like SQL `-- ` or strings mentioning
+///   `*** Update File:`) are never mistaken for file headers.
+/// - Accepts both spaces and tabs after `---`/`+++`.
+/// - Fails closed (`false`) on quoted/escaped diff headers, malformed `diff --git` lines, or any
+///   non-empty patch yielding zero paths.
 fn collect_patch_paths(patch: &str, paths: &mut Vec<String>) -> bool {
-    let trimmed_all = patch.trim();
-    if trimmed_all.is_empty() {
+    if patch.trim().is_empty() {
         return false;
     }
     let mut found = 0usize;
+    let mut in_apply_patch = false;
+    let mut in_apply_hunk = false;
+    let mut hunk_old_rem: usize = 0;
+    let mut hunk_new_rem: usize = 0;
+
     for raw_line in patch.lines() {
-        let line = raw_line.trim_start();
-        let mut matched_apply = false;
-        for prefix in [
-            "*** Update File:",
-            "*** Add File:",
-            "*** Delete File:",
-            "*** Move to:",
-        ] {
-            if let Some(rest) = line.strip_prefix(prefix) {
-                let target = rest.trim();
-                if target.is_empty() {
-                    return false;
-                }
-                push_unique(paths, target);
-                found += 1;
-                matched_apply = true;
-                break;
+        // Inside a unified diff hunk: consume exact expected old/new lines without scanning body.
+        if hunk_old_rem > 0 || hunk_new_rem > 0 {
+            if raw_line.starts_with('-') {
+                hunk_old_rem = hunk_old_rem.saturating_sub(1);
+                continue;
+            } else if raw_line.starts_with('+') {
+                hunk_new_rem = hunk_new_rem.saturating_sub(1);
+                continue;
+            } else if raw_line.starts_with(' ') || raw_line.is_empty() {
+                hunk_old_rem = hunk_old_rem.saturating_sub(1);
+                hunk_new_rem = hunk_new_rem.saturating_sub(1);
+                continue;
+            } else if raw_line.starts_with("\\ No newline") {
+                continue;
             }
+            // Unexpected non-hunk line while counts remain: reset and inspect as header below.
+            hunk_old_rem = 0;
+            hunk_new_rem = 0;
         }
-        if matched_apply {
+
+        let trimmed = raw_line.trim_start();
+        if trimmed == "*** Begin Patch" {
+            in_apply_patch = true;
+            in_apply_hunk = false;
             continue;
         }
-        if let Some(rest) = line.strip_prefix("diff --git ") {
-            // `diff --git a/foo b/bar` (handle simple or quoted tokens; fail closed if malformed)
-            let tokens: Vec<&str> = rest.split_whitespace().collect();
-            if tokens.len() < 2 {
+        if trimmed == "*** End Patch" {
+            in_apply_patch = false;
+            in_apply_hunk = false;
+            continue;
+        }
+
+        // `apply_patch` file header lines start at column 0 (or after Begin Patch, never inside a
+        // `+`/`-`/` ` hunk body line).
+        if !in_apply_hunk || raw_line.starts_with("*** ") {
+            let mut matched_apply = false;
+            for prefix in [
+                "*** Update File:",
+                "*** Add File:",
+                "*** Delete File:",
+                "*** Move to:",
+            ] {
+                let candidate = if in_apply_patch { raw_line } else { trimmed };
+                if let Some(rest) = candidate.strip_prefix(prefix) {
+                    let target = rest.trim();
+                    if target.is_empty() || target.contains('"') {
+                        return false;
+                    }
+                    push_unique(paths, target);
+                    found += 1;
+                    in_apply_patch = true;
+                    in_apply_hunk = false;
+                    matched_apply = true;
+                    break;
+                }
+            }
+            if matched_apply {
+                continue;
+            }
+        }
+
+        if in_apply_patch {
+            if raw_line.starts_with("@@") {
+                in_apply_hunk = true;
+            }
+            continue;
+        }
+
+        // Unified diff hunk header.
+        if let Some((old_c, new_c)) = parse_unified_hunk_counts(raw_line) {
+            hunk_old_rem = old_c;
+            hunk_new_rem = new_c;
+            continue;
+        }
+
+        // Unified diff `diff --git a/foo b/bar` (strictly 2 unquoted tokens; fail closed otherwise).
+        if let Some(rest) = raw_line.strip_prefix("diff --git ") {
+            if rest.contains('"') || rest.contains('\\') {
                 return false;
             }
-            for token in [tokens[0], tokens[tokens.len() - 1]] {
-                if let Some(p) = clean_diff_path_token(token) {
-                    push_unique(paths, &p);
-                    found += 1;
+            let tokens: Vec<&str> = rest.split_whitespace().collect();
+            if tokens.len() != 2 {
+                return false;
+            }
+            for token in tokens {
+                match parse_diff_path_token(token) {
+                    Ok(Some(p)) => {
+                        push_unique(paths, &p);
+                        found += 1;
+                    }
+                    Ok(None) => {}
+                    Err(()) => return false,
                 }
             }
             continue;
         }
-        for prefix in ["--- ", "+++ ", "rename from ", "rename to ", "copy from ", "copy to "] {
-            if let Some(rest) = line.strip_prefix(prefix) {
-                if let Some(p) = clean_diff_path_token(rest) {
+
+        // Unified diff `---` / `+++` headers (space OR tab after marker).
+        if let Some(rest) =
+            strip_diff_marker_ws(raw_line, "---").or_else(|| strip_diff_marker_ws(raw_line, "+++"))
+        {
+            match parse_diff_path_token(rest) {
+                Ok(Some(p)) => {
                     push_unique(paths, &p);
                     found += 1;
+                }
+                Ok(None) => {}
+                Err(()) => return false,
+            }
+            continue;
+        }
+
+        // Git rename/copy headers.
+        for prefix in ["rename from ", "rename to ", "copy from ", "copy to "] {
+            if let Some(rest) = raw_line.strip_prefix(prefix) {
+                match parse_diff_path_token(rest) {
+                    Ok(Some(p)) => {
+                        push_unique(paths, &p);
+                        found += 1;
+                    }
+                    Ok(None) => {}
+                    Err(()) => return false,
                 }
                 break;
             }
         }
     }
+
     found > 0
 }
 
-fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>, depth: usize) -> bool {
+#[derive(Default)]
+struct ExtractedTargets {
+    context_dirs: Vec<String>,
+    mutation_paths: Vec<String>,
+}
+
+fn collect_allowlisted_value(
+    value: &Value,
+    is_patch_tool: bool,
+    out: &mut ExtractedTargets,
+    depth: usize,
+) -> bool {
     if depth > MAX_RAW_INPUT_DEPTH {
         return false;
     }
     match value {
         Value::Null => true,
-        Value::String(text) => {
+        Value::String(text) if depth == 0 => {
             let trimmed = text.trim();
             if trimmed.is_empty() {
                 return true;
@@ -950,10 +1292,9 @@ fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>, depth: usize)
                 let Ok(parsed) = serde_json::from_str::<Value>(trimmed) else {
                     return false;
                 };
-                return collect_raw_input_paths(&parsed, paths, depth + 1);
+                return collect_allowlisted_value(&parsed, is_patch_tool, out, depth + 1);
             }
-            // Plain string `rawInput`: only acceptable if it parses as a patch/diff.
-            collect_patch_paths(trimmed, paths)
+            collect_patch_paths(trimmed, &mut out.mutation_paths)
         }
         Value::Array(items) => {
             for item in items {
@@ -963,10 +1304,10 @@ fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>, depth: usize)
                         if trimmed.is_empty() {
                             return false;
                         }
-                        push_unique(paths, trimmed);
+                        push_unique(&mut out.mutation_paths, trimmed);
                     }
                     Value::Object(_) | Value::Array(_) => {
-                        if !collect_raw_input_paths(item, paths, depth + 1) {
+                        if !collect_allowlisted_value(item, is_patch_tool, out, depth + 1) {
                             return false;
                         }
                     }
@@ -976,9 +1317,15 @@ fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>, depth: usize)
             true
         }
         Value::Object(obj) => {
+            let is_diff_block = obj
+                .get("type")
+                .and_then(Value::as_str)
+                .is_some_and(|t| t.eq_ignore_ascii_case("diff"));
+            let before_count = out.mutation_paths.len();
+
             for (key, val) in obj {
                 let norm = canonical_key(key);
-                if is_single_path_key(&norm) {
+                if is_context_dir_key(&norm) {
                     match val {
                         Value::Null => {}
                         Value::String(s) => {
@@ -986,7 +1333,19 @@ fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>, depth: usize)
                             if trimmed.is_empty() {
                                 return false;
                             }
-                            push_unique(paths, trimmed);
+                            push_unique(&mut out.context_dirs, trimmed);
+                        }
+                        _ => return false,
+                    }
+                } else if is_single_path_key(&norm) {
+                    match val {
+                        Value::Null => {}
+                        Value::String(s) => {
+                            let trimmed = s.trim();
+                            if trimmed.is_empty() {
+                                return false;
+                            }
+                            push_unique(&mut out.mutation_paths, trimmed);
                         }
                         _ => return false,
                     }
@@ -1001,10 +1360,15 @@ fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>, depth: usize)
                                         if trimmed.is_empty() {
                                             return false;
                                         }
-                                        push_unique(paths, trimmed);
+                                        push_unique(&mut out.mutation_paths, trimmed);
                                     }
                                     Value::Object(_) | Value::Array(_) => {
-                                        if !collect_raw_input_paths(item, paths, depth + 1) {
+                                        if !collect_allowlisted_value(
+                                            item,
+                                            is_patch_tool,
+                                            out,
+                                            depth + 1,
+                                        ) {
                                             return false;
                                         }
                                     }
@@ -1013,15 +1377,19 @@ fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>, depth: usize)
                             }
                         }
                         Value::Object(map) => {
-                            // Path-keyed map such as `{ "changes": { "/repo/a": "...", "/outside/b": "..." } }`.
                             for (entry_key, entry_val) in map {
                                 let trimmed_key = entry_key.trim();
                                 if trimmed_key.is_empty() {
                                     return false;
                                 }
-                                push_unique(paths, trimmed_key);
+                                push_unique(&mut out.mutation_paths, trimmed_key);
                                 if matches!(entry_val, Value::Object(_) | Value::Array(_))
-                                    && !collect_raw_input_paths(entry_val, paths, depth + 1)
+                                    && !collect_allowlisted_value(
+                                        entry_val,
+                                        is_patch_tool,
+                                        out,
+                                        depth + 1,
+                                    )
                                 {
                                     return false;
                                 }
@@ -1033,43 +1401,47 @@ fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>, depth: usize)
                     match val {
                         Value::Null => {}
                         Value::String(s) => {
-                            if !collect_patch_paths(s, paths) {
+                            if !collect_patch_paths(s, &mut out.mutation_paths) {
                                 return false;
                             }
                         }
                         Value::Object(_) | Value::Array(_) => {
-                            if !collect_raw_input_paths(val, paths, depth + 1) {
+                            if !collect_allowlisted_value(val, true, out, depth + 1) {
                                 return false;
                             }
                         }
                         _ => return false,
                     }
                 } else if is_known_non_path_key(&norm) {
-                    // Still recurse if a known field carries structured nested objects/arrays
-                    // (e.g. `replacementChunks`, structured `content` blocks).
-                    if matches!(val, Value::Object(_) | Value::Array(_))
-                        && !collect_raw_input_paths(val, paths, depth + 1)
-                    {
-                        return false;
-                    }
-                } else {
-                    // Unrecognized key: fail closed if its name looks path/mutation-related, or if
-                    // its scalar value looks like an external/filesystem path, or recurse if nested.
-                    if looks_like_path_key_name(&norm) {
-                        return false;
-                    }
                     match val {
-                        Value::Object(_) | Value::Array(_) => {
-                            if !collect_raw_input_paths(val, paths, depth + 1) {
+                        Value::String(s)
+                            if is_patch_tool
+                                && matches!(norm.as_str(), "content" | "text" | "body" | "data") =>
+                        {
+                            if !collect_patch_paths(s, &mut out.mutation_paths) {
                                 return false;
                             }
                         }
-                        Value::String(s) if looks_like_external_path_value(s) => {
-                            return false;
+                        Value::Object(_) | Value::Array(_) => {
+                            if !collect_allowlisted_value(val, is_patch_tool, out, depth + 1) {
+                                return false;
+                            }
                         }
                         _ => {}
                     }
+                } else {
+                    // Allowlist rule: non-string scalar metadata (bool/number/null) on unrecognized
+                    // keys cannot carry a path; ANY unrecognized string, object, or array fails
+                    // closed and shows the approval card.
+                    match val {
+                        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+                        Value::String(_) | Value::Array(_) | Value::Object(_) => return false,
+                    }
                 }
+            }
+
+            if is_diff_block && out.mutation_paths.len() == before_count {
+                return false;
             }
             true
         }
@@ -1077,60 +1449,17 @@ fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>, depth: usize)
     }
 }
 
-fn collect_content_paths(content: &Value, paths: &mut Vec<String>) -> bool {
-    let items: Vec<&Value> = match content {
-        Value::Null => return true,
-        Value::Array(arr) => arr.iter().collect(),
-        Value::Object(_) => vec![content],
-        _ => return false,
-    };
-    for item in items {
-        let Some(obj) = item.as_object() else {
-            return false;
-        };
-        let is_diff = obj
-            .get("type")
-            .and_then(Value::as_str)
-            .is_some_and(|t| t.eq_ignore_ascii_case("diff"));
-        let mut item_paths = 0usize;
-        for (key, val) in obj {
-            let norm = canonical_key(key);
-            if is_single_path_key(&norm) {
-                match val {
-                    Value::Null => {}
-                    Value::String(s) => {
-                        let trimmed = s.trim();
-                        if trimmed.is_empty() {
-                            return false;
-                        }
-                        push_unique(paths, trimmed);
-                        item_paths += 1;
-                    }
-                    _ => return false,
-                }
-            } else if is_patch_key(&norm) {
-                if let Some(s) = val.as_str() {
-                    if !collect_patch_paths(s, paths) {
-                        return false;
-                    }
-                    item_paths += 1;
-                }
-            }
-        }
-        if is_diff && item_paths == 0 {
-            return false;
-        }
-    }
-    true
-}
-
-/// Extract all target paths referenced by an ACP `edit`/`delete`/`move` tool call from
-/// `toolCall.locations`, `toolCall.content`, and `toolCall.rawInput` (including unified diffs and
-/// `apply_patch` headers). Fails closed (`None`) whenever any location, content diff, or structured
-/// input cannot be fully accounted for.
-pub fn extract_mutation_paths(params: &Value) -> Option<Vec<String>> {
+fn extract_mutation_targets(params: &Value) -> Option<ExtractedTargets> {
     let tool_call = params.get("toolCall")?.as_object()?;
-    let mut paths = Vec::new();
+    let tool_name_lower = tool_call
+        .get("name")
+        .or_else(|| tool_call.get("title"))
+        .and_then(Value::as_str)
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+    let is_patch_tool = tool_name_lower.contains("patch") || tool_name_lower.contains("diff");
+
+    let mut out = ExtractedTargets::default();
 
     if let Some(locations) = tool_call.get("locations") {
         if !locations.is_null() {
@@ -1142,14 +1471,14 @@ pub fn extract_mutation_paths(params: &Value) -> Option<Vec<String>> {
                     .and_then(Value::as_str)
                     .map(str::trim)
                     .filter(|s| !s.is_empty())?;
-                push_unique(&mut paths, path);
+                push_unique(&mut out.mutation_paths, path);
                 if let Some(uri) = obj.get("uri") {
                     if !uri.is_null() {
                         let uri_str = uri
                             .as_str()
                             .map(str::trim)
                             .filter(|s| !s.is_empty())?;
-                        push_unique(&mut paths, uri_str);
+                        push_unique(&mut out.mutation_paths, uri_str);
                     }
                 }
             }
@@ -1157,26 +1486,36 @@ pub fn extract_mutation_paths(params: &Value) -> Option<Vec<String>> {
     }
 
     if let Some(content) = tool_call.get("content") {
-        if !collect_content_paths(content, &mut paths) {
-            return None;
+        if !content.is_null() {
+            match content {
+                Value::Array(_) | Value::Object(_) => {
+                    if !collect_allowlisted_value(content, is_patch_tool, &mut out, 1) {
+                        return None;
+                    }
+                }
+                _ => return None,
+            }
         }
     }
 
     if let Some(raw_input) = tool_call.get("rawInput") {
-        if !collect_raw_input_paths(raw_input, &mut paths, 0) {
+        if !raw_input.is_null()
+            && !collect_allowlisted_value(raw_input, is_patch_tool, &mut out, 0)
+        {
             return None;
         }
     }
 
-    if paths.is_empty() {
+    if out.mutation_paths.is_empty() {
         return None;
     }
-    Some(paths)
+    Some(out)
 }
 
-/// True only when path extraction accounts for every mutation target AND every extracted path
-/// resolves (with symlinks expanded) strictly inside `writable_roots` (never the root directory
-/// itself). Fails closed on any ambiguity, empty paths, or empty roots.
+/// True only when path extraction accounts for every mutation target using allowlisted shapes,
+/// any execution-context directory (`cwd`/`workdir`/`root`) stays inside or equal to
+/// `writable_roots`, AND every mutation target resolves (with symlinks expanded) strictly inside
+/// `writable_roots` (never the root directory itself).
 pub fn file_mutation_stays_inside_roots(
     params: &Value,
     writable_roots: &[PathBuf],
@@ -1185,15 +1524,37 @@ pub fn file_mutation_stays_inside_roots(
     if writable_roots.is_empty() {
         return false;
     }
-    let Some(paths) = extract_mutation_paths(params) else {
+    let Some(targets) = extract_mutation_targets(params) else {
         return false;
     };
-    if paths.is_empty() {
-        return false;
-    }
     let canonical_cwd = resolve_path_with_symlinks(cwd, cwd).unwrap_or_else(|| cwd.to_path_buf());
-    paths.iter().all(|raw| {
-        let Some(resolved) = resolve_path_with_symlinks(Path::new(raw), &canonical_cwd) else {
+
+    // Validate every execution-context directory (`cwd`, `workdir`, `root`): allowed to equal a
+    // writable root, and if present becomes the base directory for resolving relative target paths.
+    let mut effective_base = canonical_cwd.clone();
+    let mut resolved_ctx: Option<PathBuf> = None;
+    for raw_ctx in &targets.context_dirs {
+        let Some(resolved) = resolve_path_with_symlinks(Path::new(raw_ctx), &canonical_cwd) else {
+            return false;
+        };
+        if !writable_roots
+            .iter()
+            .any(|root| resolved == *root || resolved.starts_with(root))
+        {
+            return false;
+        }
+        if let Some(prev) = &resolved_ctx {
+            if prev != &resolved {
+                return false;
+            }
+        } else {
+            effective_base = resolved.clone();
+            resolved_ctx = Some(resolved);
+        }
+    }
+
+    targets.mutation_paths.iter().all(|raw| {
+        let Some(resolved) = resolve_path_with_symlinks(Path::new(raw), &effective_base) else {
             return false;
         };
         writable_roots
