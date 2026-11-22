@@ -19,10 +19,6 @@ yanked = "deny"
 unmaintained = "workspace"
 unsound = "workspace"
 ignore = [
-  # libsqlite3-sys 0.38 bundles SQLite 3.53.2 (CVE-2026-119375: stale page-cache bytes from a crafted
-  # database plus -wal pair; local). The fix is rusqlite 0.41+, which needs SQLite 3.44+ while the macOS
-  # build links the system SQLite (3.39 on macOS 13). Remove once that decision lands.
-  { id = "RUSTSEC-2026-0459", reason = "rusqlite 0.41+ needs SQLite 3.44+, the macOS build links the system SQLite; pending decision" },
   # zip 8.6.0 is only velopack's copy in the desktop lock (our own code is on zip 9.8.1). velopack
   # 1.2.161 requires zip ^8.6 and unpacks only our own signed update packages. Remove these when
   # velopack ships a stable release on zip 9.

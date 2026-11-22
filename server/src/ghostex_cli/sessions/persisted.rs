@@ -170,7 +170,6 @@ pub(super) fn read_persisted_gxserver_inventory_rows_from(
     let mut statement = connection.prepare(&sql).ok()?;
     let column_names: Vec<String> = statement
         .column_names()
-        .iter()
         .map(|name| name.to_string())
         .collect();
     let mut rows = statement.query([]).ok()?;

@@ -4,6 +4,8 @@
 //!
 //! CDXC:Sessions 2026-10-29 WHY:
 //! Since 2026-10-23 the macOS builds link macOS's own SQLite, which cannot open a WAL-mode database with a read-only connection once its `-wal` and `-shm` files are gone, as they are after the agent quits cleanly: every query fails with "unable to open database file". That emptied Quick Access's Closed list (ZCode) and silently dropped other agents' history. A WAL-mode store is therefore opened read-write so SQLite may create those two files beside it, and guards keep the agent's data untouched: no create flag (a missing database stays missing), `query_only` plus an authorizer that refuses every statement but a read (`query_only` alone still lets `PRAGMA journal_mode = DELETE` rewrite the header), and no checkpoint on close (Ghostex never copies the agent's WAL into its database). Any other store opens read-only, so a rollback journal an agent left behind is never rolled back by Ghostex.
+//!
+//! CDXC:Deps 2026-11-21: SQLite is compiled in on macOS again (rusqlite 0.43, CDXC:Deps DECISION in server/Cargo.toml), and that SQLite opens such a store read-only by creating the `-shm` itself. The read-write open with the guards above stays: it behaves the same with either SQLite.
 
 use std::{fs::File, io::Read, path::Path};
 
@@ -22,7 +24,8 @@ pub fn open_agent_store(path: &Path) -> rusqlite::Result<Connection> {
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         );
     }
-    let connection = Connection::open_with_flags(
+    // rusqlite 0.41+: installing a hook needs `&mut Connection`.
+    let mut connection = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;

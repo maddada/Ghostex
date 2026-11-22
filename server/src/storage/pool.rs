@@ -93,10 +93,11 @@ pub(super) fn borrow_gxserver_database(
             .filter(|pool| pool.path == path)
             .and_then(|pool| pool.idle.pop())
     };
-    let connection = match pooled {
+    // rusqlite 0.41+: installing a hook or busy handler needs `&mut Connection`.
+    let mut connection = match pooled {
         Some(connection) => connection,
         None => {
-            let connection = open_unpooled_gxserver_database(path, busy_timeout)?;
+            let mut connection = open_unpooled_gxserver_database(path, busy_timeout)?;
             connection.set_prepared_statement_cache_capacity(POOLED_STATEMENT_CACHE_CAPACITY);
             // A write that commits or rolls back ends its thread's turn in the busy queue.
             connection.commit_hook(Some(|| {
