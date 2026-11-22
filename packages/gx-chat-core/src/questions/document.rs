@@ -121,7 +121,8 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     // while its inputs hold (`forms::project_kept`).
     // `openQuestions` is assembled beside this family too (`open_questions::project_with`).
     into.resource_modal = crate::questions::resource_modal::project(state, context);
-    into.later_questions = crate::questions::open_questions::later_waiting(state);
+    into.later_questions =
+        crate::questions::open_questions::later_waiting_at(state, context.now_millis());
     into.starred_pages = crate::questions::later::starred_page_ids(state)
         .into_iter()
         .collect();

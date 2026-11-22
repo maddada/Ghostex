@@ -269,7 +269,13 @@ pub fn pick_filter(state: &mut ChatState, filter: &str) {
 /// The forms and question pages still waiting on the reader, oldest first, less those put off For
 /// later (`questions/later.rs`).
 pub fn unanswered(state: &ChatState) -> Vec<&Asker> {
-    let later = crate::questions::later::later_ids(state);
+    unanswered_at(state, 0)
+}
+
+/// [`unanswered`] read at `now_ms` (0 when the caller has no clock), excluding timed snoozes whose
+/// end has passed from `later_ids_at`.
+pub(crate) fn unanswered_at(state: &ChatState, now_ms: i64) -> Vec<&Asker> {
+    let later = crate::questions::later::later_ids_at(state, now_ms);
     waiting(state)
         .into_iter()
         .filter(|asker| !later.contains(&asker.id))
@@ -323,7 +329,13 @@ fn settled_by_index(
 /// The forms and pages put off For later that still wait: their cards say For later
 /// (the document's `laterQuestions`).
 pub fn later_waiting(state: &ChatState) -> Vec<String> {
-    let later = crate::questions::later::later_ids(state);
+    later_waiting_at(state, 0)
+}
+
+/// [`later_waiting`] evaluated at `now_ms` so timed snoozes whose end has passed leave
+/// `laterQuestions` immediately.
+pub fn later_waiting_at(state: &ChatState, now_ms: i64) -> Vec<String> {
+    let later = crate::questions::later::later_ids_at(state, now_ms);
     waiting(state)
         .into_iter()
         .filter(|asker| later.contains(&asker.id))
@@ -459,15 +471,16 @@ fn asker_from_entry(entry: &ResourceEntry) -> Asker {
 }
 
 /// Every form and question page waiting on the reader across the whole conversation (older index
-/// entries plus loaded transcript rows), excluding those put off For later, oldest first.
-pub(crate) fn all_unanswered(state: &ChatState) -> Vec<Asker> {
+/// entries plus loaded transcript rows), excluding those put off For later at `now_ms`, oldest
+/// first; timed snoozes whose end has passed return automatically.
+pub(crate) fn all_unanswered_at(state: &ChatState, now_ms: i64) -> Vec<Asker> {
     let entries = indexed_entries(state);
-    let mut out: Vec<Asker> = indexed_waiting(state, &entries)
+    let mut out: Vec<Asker> = indexed_waiting_at(state, &entries, now_ms)
         .into_iter()
         .filter(|entry| matches!(entry.kind.as_str(), "form" | "page"))
         .map(asker_from_entry)
         .collect();
-    out.extend(unanswered(state).into_iter().cloned());
+    out.extend(unanswered_at(state, now_ms).into_iter().cloned());
     out
 }
 
@@ -501,8 +514,12 @@ pub(crate) fn all_waiting(state: &ChatState) -> Vec<Asker> {
 
 /// How many forms and question pages the index says wait on the reader that the loaded rows do not
 /// hold, not counting the ones put off For later or removed.
-fn indexed_waiting<'a>(state: &ChatState, entries: &'a [ResourceEntry]) -> Vec<&'a ResourceEntry> {
-    let later = crate::questions::later::later_ids(state);
+fn indexed_waiting_at<'a>(
+    state: &ChatState,
+    entries: &'a [ResourceEntry],
+    now_ms: i64,
+) -> Vec<&'a ResourceEntry> {
+    let later = crate::questions::later::later_ids_at(state, now_ms);
     let removed = crate::questions::later::removed_ids(state);
     let cards = crate::extras::work_cards::card_tags(state);
     let on_the_way: Vec<String> = answers_on_the_way(state)
@@ -575,7 +592,7 @@ pub fn list(state: &ChatState, context: &ChatContext) -> Vec<QuestionListSection
 /// `list`, with each row's time fields only when `labels` asks for them.
 fn list_rows(state: &ChatState, context: &ChatContext, labels: bool) -> Vec<QuestionListSection> {
     let waiting = waiting(state);
-    let later = crate::questions::later::later_ids(state);
+    let later = crate::questions::later::later_ids_at(state, context.now_millis());
     let removed = crate::questions::later::removed_ids(state);
     let on_the_way: Vec<String> = answers_on_the_way(state)
         .into_iter()
@@ -801,14 +818,28 @@ pub struct ListInputs {
     queue_prompts: Stamped<Option<Vec<serde_json::Value>>>,
     resource_index: Stamped<crate::questions::resource_index::ResourceIndex>,
     later_question_ids: Stamped<Vec<String>>,
+    later_question_until: std::collections::BTreeMap<String, i64>,
+    expired_snoozes: usize,
     removed_question_ids: Stamped<Vec<String>>,
     /// The tags work items ask, which take a question off the list (`waiting`); read from the
     /// coordinator threads, so a work item that starts or stops asking a tag lists the rows again.
     card_tags: crate::questions::forms::CardTags,
 }
 
+fn expired_snoozes_at(state: &ChatState, now_ms: i64) -> usize {
+    if now_ms <= 0 {
+        return 0;
+    }
+    state
+        .session
+        .later_question_until
+        .values()
+        .filter(|until| **until <= now_ms)
+        .count()
+}
+
 impl ListInputs {
-    fn of(state: &ChatState) -> Self {
+    fn of(state: &ChatState, now_ms: i64) -> Self {
         Self {
             askers: state.transcript_view.askers.clone(),
             questions: crate::questions::forms::QuestionsInputs::of(&state.questions),
@@ -816,13 +847,15 @@ impl ListInputs {
             queue_prompts: state.session.queue_prompts.clone(),
             resource_index: state.session.resource_index.clone(),
             later_question_ids: state.session.later_question_ids.clone(),
+            later_question_until: state.session.later_question_until.clone(),
+            expired_snoozes: expired_snoozes_at(state, now_ms),
             removed_question_ids: state.session.removed_question_ids.clone(),
             card_tags: crate::questions::forms::CardTags::of(state),
         }
     }
 
     /// By stamp where it can, by value where a stamp moved ([`Stamped::same_as`]).
-    fn matches(&mut self, state: &ChatState) -> bool {
+    fn matches(&mut self, state: &ChatState, now_ms: i64) -> bool {
         // CDXC:SessionChat 2026-11-11 WHY: every input is named (no `..`), so one added to this
         // struct fails the build here until it is compared below too: a kept part checked on fewer
         // inputs than it was built from would serve a stale value.
@@ -833,6 +866,8 @@ impl ListInputs {
             queue_prompts,
             resource_index,
             later_question_ids,
+            later_question_until,
+            expired_snoozes,
             removed_question_ids,
             card_tags,
         } = self;
@@ -843,6 +878,8 @@ impl ListInputs {
             && queue_prompts.same_as(&state.session.queue_prompts)
             && resource_index.same_as(&state.session.resource_index)
             && later_question_ids.same_as(&state.session.later_question_ids)
+            && *later_question_until == state.session.later_question_until
+            && *expired_snoozes == expired_snoozes_at(state, now_ms)
             && removed_question_ids.same_as(&state.session.removed_question_ids)
     }
 }
@@ -867,11 +904,12 @@ pub fn project_with(
     kept: &mut Option<KeptList>,
     asks: &[crate::extras::work_cards::OpenAsk],
 ) -> OpenQuestions {
-    let open = unanswered(state);
+    let now_ms = context.now_millis();
+    let open = unanswered_at(state, now_ms);
     // The loaded rows' unanswered questions, plus the ones older than what the chat has loaded,
     // plus the coordinator's open asks.
     let entries = indexed_entries(state);
-    let older_entries = indexed_waiting(state, &entries);
+    let older_entries = indexed_waiting_at(state, &entries, now_ms);
     let older = older_entries.len();
     let count = (open.len() + older + asks.len()) as u32;
     // Every unanswered form and page (loaded or older than the loaded rows) and every coordinator
@@ -889,12 +927,16 @@ pub fn project_with(
     */
     let reused = kept
         .as_mut()
-        .and_then(|(inputs, all)| inputs.matches(state).then(|| std::sync::Arc::clone(all)));
+        .and_then(|(inputs, all)| {
+            inputs
+                .matches(state, now_ms)
+                .then(|| std::sync::Arc::clone(all))
+        });
     let all = match reused {
         Some(all) => all,
         None => {
             let all = std::sync::Arc::new(list_rows(state, context, false));
-            *kept = Some((ListInputs::of(state), std::sync::Arc::clone(&all)));
+            *kept = Some((ListInputs::of(state, now_ms), std::sync::Arc::clone(&all)));
             all
         }
     };
@@ -1043,7 +1085,7 @@ pub fn project_with(
 /// CDXC:SessionChat 2026-10-14 WHY:
 /// Starting again from the newest whenever the reader sat at the bottom was tried and dropped: the newest question usually sits at the bottom, so the second click landed on it again instead of stepping back.
 pub fn previous(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
-    let open = all_unanswered(state);
+    let open = all_unanswered_at(state, context.now_millis());
     // A coordinator's open work item asks are stops too, in time order among the forms and pages:
     // each is shown in the Work panel, the chat staying where it is.
     let asks = crate::extras::work_cards::open_asks(state, context);

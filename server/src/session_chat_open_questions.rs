@@ -1526,11 +1526,32 @@ pub(crate) fn refresh(
         );
     }
     let (open, newly) = leave_out_removed(open, newly, &opened);
+    let raw_later_len = session
+        .pointer(&format!("/runtimeSettings/{LATER_KEY}"))
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    let until_value = session.pointer(&format!("/runtimeSettings/{LATER_UNTIL_KEY}"));
     let later = later_ids(&session);
-    let snoozed = snoozes_running(session.pointer(&format!("/runtimeSettings/{LATER_UNTIL_KEY}")));
+    let snoozed = snoozes_running(until_value);
     let (open, newly, still) = leave_out_later(open, newly, &later, &snoozed);
-    if !is_thread && still.len() != later.len() {
-        let _ = write_later(state, &db, project_id, session_id, &still);
+    if !is_thread {
+        // Prune expired snooze timestamps and clear their expired ids from LATER_KEY, even when
+        // gxserver restarted after set_later spawned its in-memory timer, so connected clients get
+        // a prompt-state frame as soon as the snooze ends.
+        let expired_until = !expired(until_value).is_empty();
+        if expired_until {
+            let mut next_until = until_value
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            let now = now_ms();
+            next_until
+                .retain(|id, at| still.contains(id) && at.as_i64().is_some_and(|at| at > now));
+            let _ = write_until(&db, project_id, session_id, &Value::Object(next_until));
+        }
+        if still.len() != raw_later_len {
+            let _ = write_later(state, &db, project_id, session_id, &still);
+        }
     }
     let ids: Vec<&str> = open.iter().map(|asker| asker.id.as_str()).collect();
     let count: usize = open.iter().map(OpenAsker::count).sum();

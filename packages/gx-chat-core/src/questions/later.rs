@@ -33,7 +33,27 @@ pub struct LaterState {
 
 /// The forms and pages put off For later: gxserver's list with this client's changes on top.
 pub fn later_ids(state: &ChatState) -> BTreeSet<String> {
-    let mut ids: BTreeSet<String> = state.session.later_question_ids.iter().cloned().collect();
+    later_ids_at(state, 0)
+}
+
+/// [`later_ids`] read at `now_ms` (0 when the caller has no clock): any timed snooze whose end
+/// (`later_question_until`) has passed is no longer put off, so a snoozed form or page returns to
+/// Needs you as soon as its snooze ends even before a new server frame arrives.
+pub fn later_ids_at(state: &ChatState, now_ms: i64) -> BTreeSet<String> {
+    let mut ids: BTreeSet<String> = state
+        .session
+        .later_question_ids
+        .iter()
+        .filter(|id| {
+            now_ms <= 0
+                || state
+                    .session
+                    .later_question_until
+                    .get(*id)
+                    .is_none_or(|until| *until > now_ms)
+        })
+        .cloned()
+        .collect();
     for (id, (later, _)) in &state.questions.later.pending {
         if *later {
             ids.insert(id.clone());

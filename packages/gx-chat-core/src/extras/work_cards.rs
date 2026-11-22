@@ -1541,7 +1541,7 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
     let _ = context;
     question_rows_of(
         state,
-        crate::questions::open_questions::all_unanswered(state),
+        crate::questions::open_questions::all_unanswered_at(state, now_ms),
         now_ms,
     )
 }
@@ -1553,7 +1553,7 @@ fn snoozed_question_rows(state: &ChatState, now_ms: i64) -> Vec<(i64, Value)> {
     if until.is_empty() {
         return Vec::new();
     }
-    let later = crate::questions::later::later_ids(state);
+    let later = crate::questions::later::later_ids_at(state, now_ms);
     let askers: Vec<crate::transcript::open_questions::Asker> =
         crate::questions::open_questions::all_waiting(state)
             .into_iter()
@@ -2382,7 +2382,8 @@ pub fn ages_change_at(state: &ChatState, cards: &Value, now_ms: i64) -> Option<i
 }
 
 /// When the first snooze still running at `now_ms` ends: gxserver's `snoozedUntil` on an open ask,
-/// or one sent from here. Its ask is back under Needs you from then, in the dock and the panel.
+/// a snoozed form/page's `later_question_until`, or a local ask snooze. Its row is back under Needs
+/// you from then, in the dock and the panel.
 pub fn snoozes_end_at(state: &ChatState, now_ms: i64) -> Option<i64> {
     let sent = crate::extras::work_source::work_of(state)
         .and_then(|work| work.get("items"))
@@ -2392,7 +2393,11 @@ pub fn snoozes_end_at(state: &ChatState, now_ms: i64) -> Option<i64> {
         .flat_map(|item| item["asks"].as_array().into_iter().flatten())
         .filter_map(|ask| at_ms(text(ask, "snoozedUntil")));
     let local = state.extras.panels.work_snoozed.values().copied();
-    sent.chain(local).filter(|until| *until > now_ms).min()
+    let questions = state.session.later_question_until.values().copied();
+    sent.chain(local)
+        .chain(questions)
+        .filter(|until| *until > now_ms)
+        .min()
 }
 
 /// Everything [`project`] reads besides the clock, kept beside the cards it built
