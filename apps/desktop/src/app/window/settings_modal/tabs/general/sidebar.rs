@@ -161,7 +161,7 @@ fn sidebar_section(
             s,
             "unifiedGroupByProject",
             "Group by project",
-            "Put every machine's sessions of one repository under one header, with its Working, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
+            "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
             false,
             cx,
         ));
@@ -169,8 +169,8 @@ fn sidebar_section(
             g,
             s,
             "unifiedWorkingSection",
-            "Working section",
-            "Fold sessions whose agent is working or still running something in the background into a Working section at the bottom of the list. They return to the top of the list when they need you. Shown while the Unified sidebar is selected.",
+            "Group busy sessions in a Moving section",
+            "In the Unified sidebar, move sessions whose agent is currently working (or running background tasks) into a collapsible Moving section at the bottom, so the top stays focused on sessions that need you. They jump back up when done or waiting for you. Shown while the Unified sidebar is selected.",
             true,
             cx,
         ));
@@ -485,7 +485,7 @@ fn spaces_section(
         s,
         ghostex_settings_catalog::spaces::SWITCH_KEY,
         "Spaces",
-        "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping. Off by default; your saved Spaces are kept while it is off.",
+        "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping. On by default; your saved Spaces are kept while it is off.",
         false,
         cx,
     ));
@@ -495,8 +495,8 @@ fn spaces_section(
             g,
             s,
             ghostex_settings_catalog::spaces::ACTIVE_PROJECTS_KEY,
-            "Active projects",
-            "Show a star before your Spaces that lists the projects you are working on from every Space in one list: any project with a session working or waiting on you, or used in the last 8 hours. Click a session there to open it without switching Spaces. On by default; right-click the star to remove it.",
+            "Show the Active projects star in the Spaces bar",
+            "Add a star tab at the start of the Spaces bar that pulls together every project you are currently working on across all Spaces (any project with a busy or waiting session, or used in the last 8 hours), so you can switch between them without changing Spaces. Right-click the star to hide it.",
             true,
             cx,
         ));

@@ -51,7 +51,7 @@ impl HoverStripKind {
     pub(crate) fn description(self) -> &'static str {
         match self {
             Self::Project => {
-                "Buttons a session card shows when you hover it in the Project sidebar. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. By default the strip is Tag, Park, Sleep, chevron, Close. The button beside the strip copies the Unified sidebar's. Shown while the Project sidebar is selected."
+                "Buttons a session card shows when you hover it in the Project sidebar. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. By default none are shown on hover. The button beside the strip copies the Unified sidebar's. Shown while the Project sidebar is selected."
             }
             Self::Unified => {
                 "Buttons a session card shows when you hover it in the Unified sidebar, which keeps its own strip. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked, and opening the chevron opens it on every card. By default the strip is Tag, Sleep, chevron, Snooze, Park, Close. The button beside the strip copies the Project sidebar's. Shown while the Unified sidebar is selected."
