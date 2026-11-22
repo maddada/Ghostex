@@ -7,6 +7,7 @@ use crate::previous_session_restore::{restore_previous_session, RestorePreviousS
 
 pub(crate) async fn handle_restore_previous_session_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: Value,
@@ -14,6 +15,7 @@ pub(crate) async fn handle_restore_previous_session_http(
     let worker_state = state.clone();
     let worker_endpoint = endpoint_path.clone();
     let worker_request_id = request_id.clone();
+    let is_user_device = caller.is_user_device();
     match tokio::task::spawn_blocking(move || {
         handle_domain_http(
             &worker_state,
@@ -23,9 +25,13 @@ pub(crate) async fn handle_restore_previous_session_http(
             |repository, db, params, _| {
                 let request = RestorePreviousSessionRequest::read(params)?;
                 let token = worker_state.auth_token.clone();
-                restore_previous_session(&request, repository, db, &|path, params| {
-                    super::open_conversation_http::loopback(&token, path, params)
-                })
+                restore_previous_session(
+                    &request,
+                    repository,
+                    db,
+                    is_user_device,
+                    &|path, params| super::open_conversation_http::loopback(&token, path, params),
+                )
             },
         )
     })

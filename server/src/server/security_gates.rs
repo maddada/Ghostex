@@ -47,6 +47,17 @@ pub(crate) fn gate(
             }
         }
     }
+    // Defense-in-depth: enforce accept-all default gating before the early return for
+    // Guest/Extension/Anonymous so future allow-list changes cannot accidentally bypass it.
+    if let Ok(params) = read_domain_rpc_params(body) {
+        if accept_all_default_raise_refused(state, caller, endpoint_path, &params) {
+            return Some(forbidden(
+                endpoint_path,
+                request_id,
+                "Only your own devices can turn on accept-all defaults.",
+            ));
+        }
+    }
     // Guests and extensions keep their own endpoint allow-lists, checked at the auth gate; agents
     // on a connected computer keep theirs too, but answering a prompt or typing into a session
     // here asks like it does for an agent here.
@@ -76,13 +87,6 @@ pub(crate) fn gate(
     let params = read_domain_rpc_params(body).ok()?;
     if owner_secret_refused(caller, endpoint_path, &params) {
         return Some(forbidden(endpoint_path, request_id, OWNER_SECRETS_MESSAGE));
-    }
-    if accept_all_default_raise_refused(state, caller, endpoint_path, &params) {
-        return Some(forbidden(
-            endpoint_path,
-            request_id,
-            "Only your own devices can turn on accept-all defaults.",
-        ));
     }
     if chief_turned_off_for(state, caller, endpoint_path, &params) {
         return Some(routed_json(
@@ -295,8 +299,9 @@ fn accept_all_default_raise_refused(
     params: &Map<String, Value>,
 ) -> bool {
     use crate::acp::approval::{
-        accept_all_mode_change_raises, global_accept_all_enabled_in_shared_settings,
-        is_accept_all_disabled_value, is_accept_all_enabled_value,
+        accept_all_mode_change_raises, command_has_accept_all_flag,
+        global_accept_all_enabled_in_shared_settings, is_accept_all_disabled_value,
+        is_accept_all_enabled_value,
     };
 
     if caller.is_user_device() {
@@ -307,13 +312,23 @@ fn accept_all_default_raise_refused(
             params.get("agentAcceptAllEnabled").and_then(Value::as_bool) == Some(true)
         }
         "/api/dispatchRendererCommand" => {
-            params.get("action").and_then(Value::as_str) == Some("updateSettingsPatch")
-                && params
-                    .get("payload")
-                    .and_then(|p| p.pointer("/patch/agentAcceptAllEnabled"))
-                    .and_then(Value::as_bool)
-                    == Some(true)
+            if params.get("action").and_then(Value::as_str) != Some("updateSettingsPatch") {
+                return false;
+            }
+            let Some(payload) = params.get("payload") else {
+                return false;
+            };
+            // Refuse turning on global accept-all or enabling settings-sync categories that could
+            // smuggle `agentAcceptAllEnabled` or `customAgents[].acceptAllMode` from another peer.
+            [
+                "/patch/agentAcceptAllEnabled",
+                "/patch/syncAgentDefaults",
+                "/patch/syncAgents",
+            ]
+            .iter()
+            .any(|ptr| payload.pointer(ptr).and_then(Value::as_bool) == Some(true))
         }
+        "/api/undoSettingsSyncChange" | "/api/restoreSettingsSyncComputer" => true,
         "/api/createProject" => {
             if is_accept_all_enabled_value(params.get("acceptAllMode").and_then(Value::as_str))
                 || is_accept_all_enabled_value(
@@ -333,16 +348,18 @@ fn accept_all_default_raise_refused(
                     arr.iter().any(|agent| {
                         is_accept_all_enabled_value(
                             agent.get("acceptAllMode").and_then(Value::as_str),
-                        )
+                        ) || agent
+                            .get("command")
+                            .and_then(Value::as_str)
+                            .is_some_and(command_has_accept_all_flag)
                     })
                 })
         }
         "/api/updateProject" => {
-            let has_custom_agents = params.get("customAgents").and_then(Value::as_array).is_some();
-            let has_launch_settings = params
-                .get("launchSettings")
-                .and_then(Value::as_object)
-                .is_some();
+            // Check `contains_key` (not `as_array`/`as_object`) so sending `"customAgents": null`
+            // or `"launchSettings": null` cannot skip the guard and wipe stored `"disabled"` overrides.
+            let has_custom_agents = params.contains_key("customAgents");
+            let has_launch_settings = params.contains_key("launchSettings");
             let has_top_accept = params.contains_key("acceptAllMode");
             if !has_custom_agents && !has_launch_settings && !has_top_accept {
                 return false;
@@ -381,8 +398,10 @@ fn accept_all_default_raise_refused(
                     return true;
                 }
             }
-            if let Some(incoming_agents) = params.get("customAgents").and_then(Value::as_array) {
+            if has_custom_agents {
                 let mut stored_modes: std::collections::HashMap<String, Option<String>> =
+                    std::collections::HashMap::new();
+                let mut stored_cmds: std::collections::HashMap<String, String> =
                     std::collections::HashMap::new();
                 if let Some(stored_arr) = stored_project
                     .get("customAgents")
@@ -394,17 +413,29 @@ fn accept_all_default_raise_refused(
                                 .get("acceptAllMode")
                                 .and_then(Value::as_str)
                                 .map(|s| s.trim().to_string());
-                            stored_modes.insert(key, mode);
+                            stored_modes.insert(key.clone(), mode);
+                            if let Some(cmd) = agent.get("command").and_then(Value::as_str) {
+                                stored_cmds.insert(key, cmd.to_string());
+                            }
                         }
                     }
                 }
+                let empty: Vec<Value> = Vec::new();
+                let incoming_agents = params
+                    .get("customAgents")
+                    .and_then(Value::as_array)
+                    .unwrap_or(&empty);
                 let mut seen_keys: HashSet<String> = HashSet::new();
                 for agent in incoming_agents {
                     let incoming_mode = agent.get("acceptAllMode").and_then(Value::as_str);
+                    let incoming_cmd = agent.get("command").and_then(Value::as_str);
                     let Some(key) = custom_agent_identity_key(agent) else {
                         // Fail closed when an agent entry lacks an identity key and tries to
                         // enable accept-all (or could mask a disabled agent when global is on).
-                        if is_accept_all_enabled_value(incoming_mode) || global_enabled {
+                        if is_accept_all_enabled_value(incoming_mode)
+                            || incoming_cmd.is_some_and(command_has_accept_all_flag)
+                            || global_enabled
+                        {
                             return true;
                         }
                         continue;
@@ -414,9 +445,15 @@ fn accept_all_default_raise_refused(
                     if accept_all_mode_change_raises(stored_mode, incoming_mode, global_enabled) {
                         return true;
                     }
+                    if let Some(cmd) = incoming_cmd {
+                        let unchanged = stored_cmds.get(&key).map(String::as_str) == Some(cmd);
+                        if !unchanged && command_has_accept_all_flag(cmd) {
+                            return true;
+                        }
+                    }
                 }
-                // Dropping a stored `"disabled"` agent entry while global `agentAcceptAllEnabled`
-                // is `true` causes that agent to fall back to global accept-all.
+                // Dropping (or nulling) a stored `"disabled"` agent entry while global
+                // `agentAcceptAllEnabled` is `true` causes that agent to fall back to global accept-all.
                 if global_enabled {
                     let dropped_disabled = stored_modes.iter().any(|(key, mode)| {
                         is_accept_all_disabled_value(mode.as_deref()) && !seen_keys.contains(key)

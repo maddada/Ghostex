@@ -555,14 +555,29 @@ pub(in crate::server) async fn route_http(
             .await;
     }
     // The exchange needs to know which computer's token asked, which no area handler sees.
+    // Only your own devices (owner, paired phones, local CLI, paired computers) may sync settings;
+    // agents' session tokens, guests, extensions, and anonymous callers are refused.
     if endpoint.path == crate::settings_sync::EXCHANGE_ENDPOINT {
+        if !caller.is_user_device() {
+            return routed_json(
+                Some(endpoint.path),
+                StatusCode::FORBIDDEN,
+                rpc_error(
+                    "forbidden",
+                    "Only your own devices can sync settings.",
+                    Some(request_id),
+                ),
+            );
+        }
         let peer_server_id = match &peer {
             Some(PeerAuthorization::Allowed { server_id, .. }) => Some(server_id.clone()),
             _ => None,
         };
+        let caller_is_phone = matches!(caller, Principal::Device { .. });
         return crate::settings_sync::handle_settings_sync_exchange(
             state,
             peer_server_id,
+            caller_is_phone,
             body_json,
             request_id,
         )

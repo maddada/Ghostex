@@ -58,7 +58,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "config",
         section_title: "Config",
         title: "Agent approvals: accept all",
-        subtitle: "Start supported agents with approvals turned off (full access) by default. Off keeps each agent CLI default approval mode. Projects can override it.",
+        subtitle: "Start supported agents with approvals turned off (full access) by default. Off keeps each agent CLI default approval mode. Projects can override it. Only your own devices can turn this on; agents can only turn it off.",
         options: &[],
         user_only: false,
     },

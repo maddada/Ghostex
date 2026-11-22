@@ -157,6 +157,7 @@ fn now_ms() -> i64 {
 struct GxserverEndpoint {
     base_url: String,
     token: String,
+    channel_secret: Option<String>,
     session_ref: String,
     project_id: String,
     session_id: String,
@@ -197,10 +198,15 @@ impl GxserverEndpoint {
                     .filter(|s| !s.is_empty())
             })
             .unwrap_or_default();
+        let channel_secret = env::var(super::channel::ACP_CHANNEL_SECRET_ENV)
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         let instance = format!("acp-{}-{}", std::process::id(), now_ms());
         Some(Self {
             base_url,
             token,
+            channel_secret,
             session_ref,
             project_id,
             session_id,
@@ -287,6 +293,9 @@ impl GxserverEndpoint {
             "ok": ok,
             "result": result,
         });
+        if let Some(secret) = self.channel_secret.as_deref() {
+            params["channelSecret"] = json!(secret);
+        }
         if let Some(err) = error {
             params["error"] = json!(err);
         }
@@ -298,13 +307,17 @@ impl GxserverEndpoint {
     }
 
     fn close_channel(&self) {
+        let mut params = json!({
+            "action": "close",
+            "sessionRef": self.session_ref,
+            "instance": self.instance,
+        });
+        if let Some(secret) = self.channel_secret.as_deref() {
+            params["channelSecret"] = json!(secret);
+        }
         let body = json!({
             "requestId": format!("acp-close-{}", now_ms()),
-            "params": {
-                "action": "close",
-                "sessionRef": self.session_ref,
-                "instance": self.instance,
-            },
+            "params": params,
         });
         let _ = self.post_json("/api/agentChatChannel", body, Duration::from_secs(3));
     }
@@ -1105,14 +1118,23 @@ fn exec_interactive_cli(
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        let err = Command::new(&program).envs(envs).args(&args).exec();
+        let err = Command::new(&program)
+            .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
+            .envs(envs)
+            .args(&args)
+            .exec();
         eprintln!("Failed to launch {program}: {err}");
         1
     }
 
     #[cfg(not(unix))]
     {
-        match Command::new(&program).envs(envs).args(&args).status() {
+        match Command::new(&program)
+            .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
+            .envs(envs)
+            .args(&args)
+            .status()
+        {
             Ok(status) => status.code().unwrap_or(0),
             Err(err) => {
                 eprintln!("Failed to launch {program}: {err}");
@@ -1156,6 +1178,7 @@ pub fn run(args: &[String]) -> i32 {
         return 1;
     };
     let mut child = match Command::new(&prog)
+        .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
         .envs(acp_envs)
         .args(&argv)
         .current_dir(&cwd)
@@ -1561,17 +1584,21 @@ pub fn run(args: &[String]) -> i32 {
             thread::sleep(Duration::from_millis(500));
             continue;
         };
+        let mut poll_params = json!({
+            "action": "poll",
+            "sessionRef": ep.session_ref,
+            "agent": channel_agent,
+            "pid": std::process::id(),
+            "instance": ep.instance,
+            "version": 1,
+            "capabilities": capabilities,
+        });
+        if let Some(secret) = ep.channel_secret.as_deref() {
+            poll_params["channelSecret"] = json!(secret);
+        }
         let poll_body = json!({
             "requestId": format!("acp-poll-{}", now_ms()),
-            "params": {
-                "action": "poll",
-                "sessionRef": ep.session_ref,
-                "agent": channel_agent,
-                "pid": std::process::id(),
-                "instance": ep.instance,
-                "version": 1,
-                "capabilities": capabilities,
-            },
+            "params": poll_params,
         });
         let resp = match ep.post_json("/api/agentChatChannel", poll_body, Duration::from_secs(28)) {
             Ok(resp) => {

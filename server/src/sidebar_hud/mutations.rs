@@ -14,18 +14,6 @@ pub fn sidebar_hud_mutation_raises_accept_all(
     }
     match operation.as_deref() {
         Some("save") => {
-            let incoming = match params.get("acceptAllMode") {
-                // Omitted means preserve the existing agent's stored acceptAllMode (no raise).
-                None => return false,
-                Some(Value::String(raw)) => match raw.trim() {
-                    "inherit" => None,
-                    "disabled" => return false,
-                    mode @ ("enabled" | "acceptAll") => Some(mode),
-                    // Invalid values will be rejected by `sidebar_agent_accept_all_mode_update`.
-                    _ => return false,
-                },
-                _ => return false,
-            };
             let (stored_agents, _) = sidebar_agent_state_from_projects(projects);
             let requested_agent_id = optional_trimmed_param(params, "agentId");
             let requested_icon = params
@@ -44,13 +32,28 @@ pub fn sidebar_hud_mutation_raises_accept_all(
                     .then_some(selected_default_agent_id)
                     .flatten()
             });
-            let stored_mode = resolved_agent_id
-                .and_then(|id| {
-                    stored_agents
-                        .iter()
-                        .find(|agent| agent.agent_id.eq_ignore_ascii_case(id))
-                })
-                .and_then(|agent| agent.accept_all_mode.as_deref());
+            // Match case-sensitively (`==`) to stay identical to `sidebar_agent_save_mutation`.
+            let existing_agent = resolved_agent_id
+                .and_then(|id| stored_agents.iter().find(|agent| agent.agent_id == id));
+            if let Some(cmd) = optional_trimmed_param(params, "command") {
+                let unchanged = existing_agent.is_some_and(|a| a.command.trim() == cmd);
+                if !unchanged && crate::acp::approval::command_has_accept_all_flag(&cmd) {
+                    return true;
+                }
+            }
+            let incoming = match params.get("acceptAllMode") {
+                // Omitted means preserve the existing agent's stored acceptAllMode (no raise).
+                None => return false,
+                Some(Value::String(raw)) => match raw.trim() {
+                    "inherit" => None,
+                    "disabled" => return false,
+                    mode @ ("enabled" | "acceptAll") => Some(mode),
+                    // Invalid values will be rejected by `sidebar_agent_accept_all_mode_update`.
+                    _ => return false,
+                },
+                _ => return false,
+            };
+            let stored_mode = existing_agent.and_then(|agent| agent.accept_all_mode.as_deref());
             crate::acp::approval::accept_all_mode_change_raises(
                 stored_mode,
                 incoming,
@@ -70,7 +73,7 @@ pub fn sidebar_hud_mutation_raises_accept_all(
             let (stored_agents, _) = sidebar_agent_state_from_projects(projects);
             stored_agents
                 .iter()
-                .find(|agent| agent.agent_id.eq_ignore_ascii_case(&agent_id))
+                .find(|agent| agent.agent_id == agent_id)
                 .is_some_and(|agent| {
                     crate::acp::approval::is_accept_all_disabled_value(
                         agent.accept_all_mode.as_deref(),

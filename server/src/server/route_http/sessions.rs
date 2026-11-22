@@ -923,6 +923,7 @@ pub(super) async fn route_sessions_http(
         "/api/openConversation" => {
             open_conversation_http::handle_open_conversation_http(
                 &state,
+                &caller,
                 endpoint.path,
                 request_id,
                 body_json,
@@ -932,6 +933,7 @@ pub(super) async fn route_sessions_http(
         "/api/restorePreviousSession" => {
             previous_session_restore_http::handle_restore_previous_session_http(
                 &state,
+                &caller,
                 endpoint.path,
                 request_id,
                 body_json,

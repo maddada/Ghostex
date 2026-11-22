@@ -79,10 +79,43 @@ pub fn restore_previous_session(
     request: &RestorePreviousSessionRequest,
     repository: &DomainRepository<'_>,
     db: &Connection,
+    is_user_device: bool,
     call: &dyn Fn(&str, Value) -> Result<Value, DomainStateError>,
 ) -> Result<Value, DomainStateError> {
     let (project_id, session_id) = (request.project_id.as_str(), request.session_id.as_str());
     let stored = repository.get_session(project_id, session_id)?;
+    if !is_user_device {
+        if let Some(session) = stored.as_ref() {
+            let has_elevated_accept_all = crate::acp::approval::is_accept_all_enabled_value(
+                session
+                    .pointer("/launchSettings/acceptAllMode")
+                    .and_then(Value::as_str),
+            );
+            let has_elevated_level =
+                crate::acp::approval::stored_session_approval_level(session)
+                    .is_some_and(|level| level != crate::acp::AcpApprovalLevel::Ask);
+            let has_elevated_cmd = [
+                "/launchSettings/startupText",
+                "/launchSettings/agentCommand",
+                "/launchSettings/agentLaunchPlan/startupText",
+                "/launchSettings/agentLaunchPlan/command",
+            ]
+            .iter()
+            .any(|ptr| {
+                session
+                    .pointer(ptr)
+                    .and_then(Value::as_str)
+                    .is_some_and(crate::acp::approval::command_has_accept_all_flag)
+            });
+            if has_elevated_accept_all || has_elevated_level || has_elevated_cmd {
+                return Err(DomainStateError {
+                    code: "forbidden",
+                    message: "Only your own devices can restore a session that ran with accept-all or elevated approval."
+                        .to_string(),
+                });
+            }
+        }
+    }
     let previous = call(
         "/api/listPreviousSessions",
         json!({
@@ -98,10 +131,24 @@ pub fn restore_previous_session(
             "This closed session is no longer in Previous Sessions.",
         ));
     };
-    let created = call(
-        "/api/createSession",
-        create_params(project_id, session_id, row, stored.as_ref()),
-    )?;
+    let mut create_body = create_params(project_id, session_id, row, stored.as_ref());
+    if !is_user_device {
+        if let Some(obj) = create_body.as_object_mut() {
+            if let Some(launch) = obj.get_mut("launchSettings").and_then(Value::as_object_mut) {
+                launch.remove("agentLaunchPlan");
+                launch.remove("startupText");
+                if crate::acp::approval::is_accept_all_enabled_value(
+                    launch.get("acceptAllMode").and_then(Value::as_str),
+                ) {
+                    launch.remove("acceptAllMode");
+                }
+            }
+            if let Some(rt) = obj.get_mut("runtimeSettings").and_then(Value::as_object_mut) {
+                rt.remove(crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY);
+            }
+        }
+    }
+    let created = call("/api/createSession", create_body)?;
     let session = created.get("session");
     let Some(restored_id) = non_empty(session, "sessionId") else {
         return Err(DomainStateError::bad_request(
@@ -152,6 +199,7 @@ pub fn restore_previous_session(
         &(restored_project, restored_id),
         repository,
         db,
+        is_user_device,
         call,
     );
     if !restored_threads.is_empty() {
@@ -173,6 +221,7 @@ fn restore_threads_closed_with_coordinator(
     coordinator: &crate::coordinators::SessionKey,
     repository: &DomainRepository<'_>,
     db: &Connection,
+    is_user_device: bool,
     call: &dyn Fn(&str, Value) -> Result<Value, DomainStateError>,
 ) -> (Vec<String>, usize) {
     let Ok(threads) = crate::coordinators::threads_closed_with_coordinator(db, coordinator) else {
@@ -196,7 +245,7 @@ fn restore_threads_closed_with_coordinator(
             session_id: thread.session_id,
             reason: "coordinatorRestored".to_string(),
         };
-        match restore_previous_session(&request, repository, db, call) {
+        match restore_previous_session(&request, repository, db, is_user_device, call) {
             Ok(answer) => restored.extend(non_empty(Some(&answer), "sessionId")),
             Err(_) => not_restored += 1,
         }
@@ -397,7 +446,7 @@ mod tests {
             session_id: session_id.clone(),
             reason: "test".to_string(),
         };
-        let answer = restore_previous_session(&request, &repository, &db, &call).expect("restore");
+        let answer = restore_previous_session(&request, &repository, &db, true, &call).expect("restore");
         let restored_id = answer["sessionId"].as_str().expect("restored id");
         assert_ne!(restored_id, session_id);
         let restored = repository
@@ -528,7 +577,7 @@ mod tests {
             session_id: coordinator.clone(),
             reason: "test".to_string(),
         };
-        let answer = restore_previous_session(&request, &repository, &db, &call).expect("restore");
+        let answer = restore_previous_session(&request, &repository, &db, true, &call).expect("restore");
         let restored = (
             project_id.clone(),
             answer["sessionId"]

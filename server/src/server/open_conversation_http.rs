@@ -11,6 +11,7 @@ const STEP_TIMEOUT_MS: u64 = 60_000;
 
 pub(crate) async fn handle_open_conversation_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: Value,
@@ -18,6 +19,7 @@ pub(crate) async fn handle_open_conversation_http(
     let worker_state = state.clone();
     let worker_endpoint = endpoint_path.clone();
     let worker_request_id = request_id.clone();
+    let is_user_device = caller.is_user_device();
     match tokio::task::spawn_blocking(move || {
         handle_domain_http(
             &worker_state,
@@ -27,7 +29,7 @@ pub(crate) async fn handle_open_conversation_http(
             |repository, db, params, _| {
                 let request = OpenConversationRequest::read(params)?;
                 let token = worker_state.auth_token.clone();
-                open_conversation(&request, repository, db, &|path, params| {
+                open_conversation(&request, repository, db, is_user_device, &|path, params| {
                     loopback(&token, path, params)
                 })
             },

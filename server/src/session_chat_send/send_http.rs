@@ -83,7 +83,7 @@ pub(super) async fn send_session_chat_message_attempt(
     endpoint_path: String,
     request_id: String,
     body: &Value,
-    is_owner_device: bool,
+    is_user_device: bool,
 ) -> RoutedResponse {
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
@@ -152,7 +152,7 @@ pub(super) async fn send_session_chat_message_attempt(
                         state,
                         &target.project_id,
                         &target.session_id,
-                        is_owner_device,
+                        is_user_device,
                     )
                     .await
                     {

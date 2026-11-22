@@ -160,14 +160,89 @@ pub fn global_accept_all_enabled_in_shared_settings(
         .unwrap_or(false)
 }
 
+/// True when a shell command or startup text contains flags that bypass approvals or launch ACP
+/// above `Ask` (`--dangerously-skip-permissions`, `--yolo`, `--accept-all`, `--approval-level`
+/// above `ask`, `danger-full-access`, `bypassPermissions`, `--full-auto`, `--ask-for-approval never`).
+pub fn command_has_accept_all_flag(cmd: &str) -> bool {
+    let lower = cmd.to_ascii_lowercase();
+    let tokens: Vec<String> = lower
+        .split_whitespace()
+        .map(|tok| {
+            tok.trim_matches(|c: char| matches!(c, '\'' | '"' | ';' | '&' | '|' | '(' | ')' | '\r' | '\n'))
+                .to_string()
+        })
+        .filter(|tok| !tok.is_empty())
+        .collect();
+    for (idx, tok) in tokens.iter().enumerate() {
+        let next = tokens.get(idx + 1).map(String::as_str);
+        if matches!(
+            tok.as_str(),
+            "--dangerously-skip-permissions"
+                | "--dangerously-bypass-approvals-and-sandbox"
+                | "--yolo"
+                | "--accept-all"
+                | "--full-auto"
+                | "--allow-all"
+                | "--bypass-permissions"
+        ) {
+            return true;
+        }
+        if tok.contains("danger-full-access")
+            || tok.contains("bypasspermissions")
+            || tok.contains("dangerously-skip-permissions")
+            || tok.contains("dangerously-bypass-approvals-and-sandbox")
+        {
+            return true;
+        }
+        if let Some(val) = tok.strip_prefix("--approval-level=") {
+            if AcpApprovalLevel::parse(val) != Some(AcpApprovalLevel::Ask) {
+                return true;
+            }
+        } else if tok == "--approval-level" {
+            if next.and_then(AcpApprovalLevel::parse) != Some(AcpApprovalLevel::Ask) {
+                return true;
+            }
+        }
+        if let Some(val) = tok
+            .strip_prefix("--permission-mode=")
+            .or_else(|| tok.strip_prefix("--approval-mode="))
+            .or_else(|| tok.strip_prefix("--ask-for-approval="))
+        {
+            if matches!(
+                val,
+                "bypasspermissions" | "bypass" | "yolo" | "auto" | "never" | "full-auto"
+            ) {
+                return true;
+            }
+        } else if matches!(
+            tok.as_str(),
+            "--permission-mode" | "--approval-mode" | "--ask-for-approval" | "-a"
+        ) {
+            if matches!(
+                next,
+                Some("bypasspermissions" | "bypass" | "yolo" | "auto" | "never" | "full-auto")
+            ) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn value_has_non_empty_text(val: Option<&Value>) -> bool {
+    val.and_then(Value::as_str)
+        .is_some_and(|s| !s.trim().is_empty())
+}
+
 /// Guard and normalize session creation parameters across `/api/createSession`,
 /// `/api/createAgentSession`, and `/api/createWorktreeSession`:
 /// - Non-user-device callers (`Principal::Session`, guests, extensions) trying to force
-///   `launchSettings.acceptAllMode` (`"enabled"` / `"acceptAll"`) or raise
-///   `runtimeSettings.acpApprovalLevel` above `Ask` are explicitly refused (`403 forbidden`).
-/// - On `/api/createSession` (`strip_raw_launch_plan == true`), non-user-device callers also have
-///   any raw `launchSettings.agentLaunchPlan` stripped so pre-baked `startupText` cannot smuggle
-///   `--approval-level full-access` or `--accept-all`.
+///   `launchSettings.acceptAllMode` (`"enabled"` / `"acceptAll"`), raise
+///   `runtimeSettings.acpApprovalLevel` above `Ask`, or pass accept-all flags in `agentCommand`
+///   are explicitly refused (`403 forbidden`).
+/// - On `/api/createSession` (`strip_raw_launch_plan == true`), non-user-device callers are also
+///   refused when supplying raw `launchSettings.agentLaunchPlan` or `launchSettings.startupText`
+///   so they cannot smuggle `--approval-level full-access` or `--dangerously-skip-permissions`.
 /// - For all callers, client-supplied `runtimeSettings.acpApprovalLevel` is stripped so project,
 ///   agent, launch, and global `acceptAllMode` defaults always govern the starting level.
 pub fn guard_create_session_params(
@@ -193,10 +268,17 @@ pub fn guard_create_session_params(
                 });
             }
         }
-        if let Some(launch) = cleaned
-            .get("launchSettings")
-            .and_then(Value::as_object)
-        {
+        if let Some(cmd) = cleaned.get("agentCommand").and_then(Value::as_str) {
+            if command_has_accept_all_flag(cmd) {
+                return Err(DomainStateError {
+                    code: "forbidden",
+                    message:
+                        "Only your own devices can pass accept-all flags in an agent command."
+                            .to_string(),
+                });
+            }
+        }
+        if let Some(launch) = cleaned.get("launchSettings").and_then(Value::as_object) {
             let incoming_accept = launch.get("acceptAllMode").and_then(Value::as_str);
             if is_accept_all_enabled_value(incoming_accept) {
                 return Err(DomainStateError {
@@ -204,6 +286,29 @@ pub fn guard_create_session_params(
                     message: "Only your own devices can start a session with accept-all enabled."
                         .to_string(),
                 });
+            }
+            if let Some(cmd) = launch.get("agentCommand").and_then(Value::as_str) {
+                if command_has_accept_all_flag(cmd) {
+                    return Err(DomainStateError {
+                        code: "forbidden",
+                        message:
+                            "Only your own devices can pass accept-all flags in an agent command."
+                                .to_string(),
+                    });
+                }
+            }
+            if strip_raw_launch_plan {
+                let has_raw_plan = launch
+                    .get("agentLaunchPlan")
+                    .is_some_and(|v| !v.is_null());
+                let has_raw_startup = value_has_non_empty_text(launch.get("startupText"));
+                if has_raw_plan || has_raw_startup {
+                    return Err(DomainStateError {
+                        code: "forbidden",
+                        message: "Only your own devices can supply a raw launch plan or startup command."
+                            .to_string(),
+                    });
+                }
             }
         }
     }
@@ -219,15 +324,18 @@ pub fn guard_create_session_params(
             .and_then(Value::as_object_mut)
         {
             launch.remove("agentLaunchPlan");
+            launch.remove("startupText");
         }
     }
     Ok(cleaned)
 }
 
 /// Enforce the single-source-of-truth rule on `/api/updateSession`:
-/// - Non-user-device callers trying to raise `runtimeSettings.acpApprovalLevel`, enable
-///   `launchSettings.acceptAllMode`, or remove a `"disabled"` override while global
-///   `agentAcceptAllEnabled` is `true` are explicitly refused (`403 forbidden`).
+/// - Non-user-device callers trying to raise `runtimeSettings.acpApprovalLevel`, wipe stored
+///   `acpApprovalLevel` via `"runtimeSettings": null`, enable `launchSettings.acceptAllMode`,
+///   remove a `"disabled"` override (including via `"launchSettings": null`) while global
+///   `agentAcceptAllEnabled` is `true`, or inject/modify `agentLaunchPlan`, `startupText`, or
+///   accept-all `agentCommand` flags are explicitly refused (`403 forbidden`).
 /// - For ALL callers, `runtimeSettings.acpApprovalLevel` is preserved from the stored session so
 ///   only `acp::channel::set_approval_level` can change a session's approval level.
 pub fn guard_update_session_params(
@@ -247,63 +355,121 @@ pub fn guard_update_session_params(
         .and_then(stored_session_approval_level)
         .unwrap_or(AcpApprovalLevel::Ask);
 
-    if let Some(incoming_runtime) = cleaned
-        .get_mut("runtimeSettings")
-        .and_then(Value::as_object_mut)
-    {
-        if !is_user_device {
-            if let Some(raw_requested) = incoming_runtime
-                .get(SESSION_ACP_APPROVAL_LEVEL_KEY)
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
+    if cleaned.contains_key("runtimeSettings") {
+        let is_object = cleaned
+            .get("runtimeSettings")
+            .is_some_and(Value::is_object);
+        if !is_object {
+            // Passing `"runtimeSettings": null` (or a non-object) would overwrite the stored
+            // runtime object with `{}` in `merge_session_update`, wiping `acpApprovalLevel`.
+            if !is_user_device
+                && stored_runtime
+                    .and_then(|m| m.get(SESSION_ACP_APPROVAL_LEVEL_KEY))
+                    .is_some()
             {
-                let requested = AcpApprovalLevel::parse(raw_requested);
-                let allowed = requested.is_some_and(|target| {
-                    AcpApprovalLevel::may_transition_without_owner(stored_level, target)
+                return Err(DomainStateError {
+                    code: "forbidden",
+                    message: "Only your own devices can clear or raise a session's approval level."
+                        .to_string(),
                 });
-                if !allowed {
-                    return Err(DomainStateError {
-                        code: "forbidden",
-                        message: "Only your own devices can raise a session's approval level."
-                            .to_string(),
+            }
+            cleaned.insert("runtimeSettings".to_string(), Value::Object(Map::new()));
+        }
+        if let Some(incoming_runtime) = cleaned
+            .get_mut("runtimeSettings")
+            .and_then(Value::as_object_mut)
+        {
+            if !is_user_device {
+                if let Some(raw_requested) = incoming_runtime
+                    .get(SESSION_ACP_APPROVAL_LEVEL_KEY)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    let requested = AcpApprovalLevel::parse(raw_requested);
+                    let allowed = requested.is_some_and(|target| {
+                        AcpApprovalLevel::may_transition_without_owner(stored_level, target)
                     });
+                    if !allowed {
+                        return Err(DomainStateError {
+                            code: "forbidden",
+                            message: "Only your own devices can raise a session's approval level."
+                                .to_string(),
+                        });
+                    }
                 }
             }
-        }
-        // Always keep the stored `acpApprovalLevel` so `/api/updateSession` cannot diverge from
-        // `acp::channel::set_approval_level`.
-        match stored_runtime.and_then(|m| m.get(SESSION_ACP_APPROVAL_LEVEL_KEY)) {
-            Some(val) => {
-                incoming_runtime.insert(SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(), val.clone());
-            }
-            None => {
-                incoming_runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
+            // Always keep the stored `acpApprovalLevel` so `/api/updateSession` cannot diverge
+            // from `acp::channel::set_approval_level`.
+            match stored_runtime.and_then(|m| m.get(SESSION_ACP_APPROVAL_LEVEL_KEY)) {
+                Some(val) => {
+                    incoming_runtime
+                        .insert(SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(), val.clone());
+                }
+                None => {
+                    incoming_runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
+                }
             }
         }
     }
 
-    if !is_user_device {
-        if let Some(incoming_launch) = cleaned
-            .get_mut("launchSettings")
-            .and_then(Value::as_object_mut)
-        {
-            let stored_accept = stored_launch
-                .and_then(|m| m.get("acceptAllMode"))
+    if !is_user_device && cleaned.contains_key("launchSettings") {
+        let incoming_launch = cleaned.get("launchSettings").and_then(Value::as_object);
+        let stored_accept = stored_launch
+            .and_then(|m| m.get("acceptAllMode"))
+            .and_then(Value::as_str);
+        let incoming_accept = incoming_launch
+            .and_then(|m| m.get("acceptAllMode"))
+            .and_then(Value::as_str);
+        if accept_all_mode_change_raises(
+            stored_accept,
+            incoming_accept,
+            global_accept_all_enabled,
+        ) {
+            return Err(DomainStateError {
+                code: "forbidden",
+                message: "Only your own devices can enable accept-all on a session.".to_string(),
+            });
+        }
+        if let Some(launch) = incoming_launch {
+            let stored_plan = stored_launch.and_then(|m| m.get("agentLaunchPlan"));
+            if let Some(incoming_plan) = launch.get("agentLaunchPlan").filter(|v| !v.is_null()) {
+                if stored_plan != Some(incoming_plan) {
+                    return Err(DomainStateError {
+                        code: "forbidden",
+                        message: "Only your own devices can modify a session's launch plan."
+                            .to_string(),
+                    });
+                }
+            }
+            let stored_startup = stored_launch
+                .and_then(|m| m.get("startupText"))
                 .and_then(Value::as_str);
-            let incoming_accept = incoming_launch
-                .get("acceptAllMode")
+            if let Some(incoming_startup) = launch
+                .get("startupText")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+            {
+                if stored_startup != Some(incoming_startup) {
+                    return Err(DomainStateError {
+                        code: "forbidden",
+                        message: "Only your own devices can set a session's startup command."
+                            .to_string(),
+                    });
+                }
+            }
+            let stored_cmd = stored_launch
+                .and_then(|m| m.get("agentCommand"))
                 .and_then(Value::as_str);
-            if accept_all_mode_change_raises(
-                stored_accept,
-                incoming_accept,
-                global_accept_all_enabled,
-            ) {
-                return Err(DomainStateError {
-                    code: "forbidden",
-                    message: "Only your own devices can enable accept-all on a session."
-                        .to_string(),
-                });
+            if let Some(incoming_cmd) = launch.get("agentCommand").and_then(Value::as_str) {
+                if stored_cmd != Some(incoming_cmd) && command_has_accept_all_flag(incoming_cmd) {
+                    return Err(DomainStateError {
+                        code: "forbidden",
+                        message:
+                            "Only your own devices can pass accept-all flags in an agent command."
+                                .to_string(),
+                    });
+                }
             }
         }
     }

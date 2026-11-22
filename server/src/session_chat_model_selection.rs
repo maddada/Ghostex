@@ -282,9 +282,9 @@ pub(crate) fn enqueue(
 pub(crate) fn enqueue_for_caller(
     state: &AppState,
     params: &Map<String, Value>,
-    is_owner_device: bool,
+    is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
-    enqueue_selection(state, params, false, is_owner_device)
+    enqueue_selection(state, params, false, is_user_device)
 }
 
 /// Queues a change Ghostex makes on its own, unless a pick is already waiting or applying: the
@@ -300,7 +300,7 @@ fn enqueue_selection(
     state: &AppState,
     params: &Map<String, Value>,
     unless_pending: bool,
-    is_owner_device: bool,
+    is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
     let project = params
         .get("projectId")
@@ -391,7 +391,7 @@ fn enqueue_selection(
         .unwrap_or_default();
     if incoming_options.mode.is_some() {
         options.mode = incoming_options.mode;
-        options.owner_approved = Some(is_owner_device);
+        options.owner_approved = Some(is_user_device);
     }
     if incoming_options.permissions.is_some() {
         options.permissions = incoming_options.permissions;

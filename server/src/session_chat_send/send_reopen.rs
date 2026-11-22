@@ -218,7 +218,7 @@ async fn send_after_compaction(
     request_id: String,
     body: &Value,
     compaction: &crate::carry_on_compaction::WorkerCompaction,
-    is_owner_device: bool,
+    is_user_device: bool,
 ) -> RoutedResponse {
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
@@ -252,7 +252,7 @@ async fn send_after_compaction(
             endpoint_path,
             request_id,
             body,
-            is_owner_device,
+            is_user_device,
         )
         .await;
     }

@@ -1695,7 +1695,7 @@ fn persist_session_chat_model_resume(
 pub(crate) async fn select_session_chat_model(
     state: &AppState,
     params: &Map<String, Value>,
-    is_owner_device: bool,
+    is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
     let model = read_trimmed(params, "model");
     let effort = read_trimmed(params, "effort");
@@ -1760,7 +1760,7 @@ pub(crate) async fn select_session_chat_model(
                 &target.project_id,
                 &target.session_id,
                 mode,
-                is_owner_device,
+                is_user_device,
             )
             .await?;
         }

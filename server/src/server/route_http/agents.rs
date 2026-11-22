@@ -113,6 +113,36 @@ pub(super) async fn route_agents_http(
                         },
                     ));
                 }
+                // An ACP child agent inherits `GHOSTEX_SESSION_TOKEN` and must never impersonate
+                // `acp-host` on its own `/api/agentChatChannel` to steal or fake-ACK `"mode"`
+                // downgrades. Require the per-session host channel secret (which `acp-host`
+                // strips from the child subprocess environment before spawning the agent).
+                let agent_is_acp = params
+                    .get("agent")
+                    .and_then(Value::as_str)
+                    .is_some_and(|a| a.starts_with("acp:"));
+                let live_is_acp = crate::pi_chat_channel::live(own_project, own_session)
+                    .is_some_and(|info| info.agent.starts_with("acp:"));
+                let stored_is_acp =
+                    crate::acp::channel::session_is_acp_in_db(&state, own_project, own_session);
+                if agent_is_acp || live_is_acp || stored_is_acp {
+                    let provided = params.get("channelSecret").and_then(Value::as_str);
+                    if !crate::acp::channel::verify_channel_secret(
+                        &state.auth_token,
+                        own_project,
+                        own_session,
+                        provided,
+                    ) {
+                        return Ok(domain_error_response(
+                            endpoint.path,
+                            request_id,
+                            DomainStateError {
+                                code: "forbidden",
+                                message: "An ACP session token cannot access its chat channel without the host channel secret.".to_string(),
+                            },
+                        ));
+                    }
+                }
             }
             match crate::pi_chat_channel::dispatch(&state, &params).await {
                 Ok(result) => routed_json(
@@ -174,6 +204,24 @@ pub(super) async fn route_agents_http(
         | "/api/sleepSession"
         | "/api/wakeSession"
         | "/api/killSession" => {
+            if endpoint.path == "/api/startSessionProvider" && !caller.is_user_device() {
+                if let Ok(params) = read_domain_rpc_params(&body_json) {
+                    let has_startup_text = params
+                        .get("startupText")
+                        .and_then(Value::as_str)
+                        .is_some_and(|s| !s.trim().is_empty());
+                    if has_startup_text {
+                        return Ok(domain_error_response(
+                            endpoint.path,
+                            request_id,
+                            DomainStateError {
+                                code: "forbidden",
+                                message: "Only your own devices can pass a custom startup command to startSessionProvider.".to_string(),
+                            },
+                        ));
+                    }
+                }
+            }
             handle_zmx_lifecycle_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/reloadSessionAgent" => {

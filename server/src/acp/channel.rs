@@ -40,6 +40,69 @@ pub(crate) fn log(level: LogLevel, event: &str, details: Value) {
     };
 }
 
+pub(crate) const ACP_CHANNEL_SECRET_ENV: &str = "GHOSTEX_ACP_CHANNEL_SECRET";
+
+/// Derive the per-session ACP host channel secret from gxserver's persistent auth token.
+/// Exported to the `zmx` PTY shell that launches `ghostex acp-host` and removed from the child
+/// ACP agent subprocess env so the agent cannot poll or ack its own `/api/agentChatChannel` using
+/// its inherited `GHOSTEX_SESSION_TOKEN`. Deterministic across `gxserver` reloads.
+pub(crate) fn channel_secret_for_session(
+    auth_token: &str,
+    project_id: &str,
+    session_id: &str,
+) -> Option<String> {
+    let key = auth_token.trim();
+    if key.is_empty() || project_id.is_empty() || session_id.is_empty() {
+        return None;
+    }
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(b"ghostex-acp-channel-v1\0");
+    hasher.update(key.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(project_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(session_id.as_bytes());
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(&mut hex, "{byte:02x}");
+    }
+    Some(format!("gxacp_{hex}"))
+}
+
+/// Constant-time verification of the ACP host channel secret for `(project_id, session_id)`.
+pub(crate) fn verify_channel_secret(
+    auth_token: &str,
+    project_id: &str,
+    session_id: &str,
+    provided: Option<&str>,
+) -> bool {
+    use subtle::ConstantTimeEq as _;
+    let Some(expected) = channel_secret_for_session(auth_token, project_id, session_id) else {
+        return false;
+    };
+    let Some(provided) = provided.map(str::trim).filter(|s| !s.is_empty()) else {
+        return false;
+    };
+    expected.len() == provided.len() && bool::from(expected.as_bytes().ct_eq(provided.as_bytes()))
+}
+
+/// True when the stored session in SQLite is an ACP (Non-CLI) session; fails closed (`true`)
+/// if SQLite cannot be read so an ACP session cannot bypass the channel-secret gate on DB error.
+pub(crate) fn session_is_acp_in_db(state: &AppState, project_id: &str, session_id: &str) -> bool {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return true;
+    };
+    let repo = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    match repo.get_session(project_id, session_id) {
+        Ok(Some(session)) => super::session_is_acp(&session),
+        Ok(None) => false,
+        Err(_) => true,
+    }
+}
+
 /// True when this session has an active ACP host channel open with `capability`.
 pub(crate) fn live(project_id: &str, session_id: &str, capability: &str) -> Option<ChannelInfo> {
     crate::pi_chat_channel::live(project_id, session_id)
@@ -347,7 +410,7 @@ pub(crate) async fn set_approval_level(
     project_id: &str,
     session_id: &str,
     raw_mode: &str,
-    is_owner_device: bool,
+    is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
     let level = super::AcpApprovalLevel::parse(raw_mode).ok_or_else(|| DomainStateError {
         code: "invalidParams",
@@ -355,7 +418,7 @@ pub(crate) async fn set_approval_level(
     })?;
     let lock = approval_lock(project_id, session_id);
     let _guard = lock.lock().await;
-    set_approval_level_locked(state, project_id, session_id, level, is_owner_device).await
+    set_approval_level_locked(state, project_id, session_id, level, is_user_device).await
 }
 
 async fn set_approval_level_locked(
@@ -363,9 +426,9 @@ async fn set_approval_level_locked(
     project_id: &str,
     session_id: &str,
     level: super::AcpApprovalLevel,
-    is_owner_device: bool,
+    is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
-    check_approval_level_change_allowed(state, project_id, session_id, level, is_owner_device)
+    check_approval_level_change_allowed(state, project_id, session_id, level, is_user_device)
         .await?;
 
     let previous_level = {
@@ -460,13 +523,13 @@ pub(crate) async fn cycle_mode(
     state: &AppState,
     project_id: &str,
     session_id: &str,
-    is_owner_device: bool,
+    is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
     let lock = approval_lock(project_id, session_id);
     let _guard = lock.lock().await;
     let current = current_approval_level(state, project_id, session_id).await;
     let next = current.next_in_cycle();
-    set_approval_level_locked(state, project_id, session_id, next, is_owner_device).await
+    set_approval_level_locked(state, project_id, session_id, next, is_user_device).await
 }
 
 /// Probe whether the session's `zmx`/`wmx` provider is confirmed missing on disk.
