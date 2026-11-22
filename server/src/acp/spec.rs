@@ -21,7 +21,11 @@ pub struct AcpAgentSpec {
 const ANTIGRAVITY_SPEC: AcpAgentSpec = AcpAgentSpec {
     family: "antigravity",
     display_name: "Antigravity CLI",
-    acp_argv: &["agy", "acp", "--stdio"],
+    // `--cli_dir_name ghostex-acp` keeps `agy acp` on its default `request-review` policy
+    // (isolated from any `toolPermission: always-proceed` in the user's CLI settings.json) while
+    // sharing the user's existing login and `~/.gemini/antigravity-cli/brain/` transcripts so
+    // Ghostex's four live approval levels (Ask, Auto-edits, Auto, Full access) are authoritative.
+    acp_argv: &["agy", "acp", "--stdio", "--cli_dir_name", "ghostex-acp"],
     default_cli_bin: "agy",
     cli_resume_flag: "--conversation",
     cli_accept_all_flag: Some("--dangerously-skip-permissions"),

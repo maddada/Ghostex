@@ -334,26 +334,54 @@ pub fn detect_session_chat_terminal_state(
     session_id: &str,
     agent_id: Option<&str>,
 ) -> SessionChatTerminalDetection {
-    // An ACP-mode session reports its live model, effort, and approval level directly through
-    // `ghostex acp-host` without terminal screen scraping (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
+    // An ACP-mode session reports its live model, effort, approval level, context usage, and
+    // streaming activity directly through `ghostex acp-host` without terminal screen scraping
+    // (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
     if let Some(acp_state) = crate::acp::channel::channel_state(project_id, session_id) {
+        let available_model_name = |model_id: &str| -> Option<String> {
+            acp_state
+                .get("availableModels")
+                .and_then(Value::as_array)
+                .and_then(|models| {
+                    models.iter().find_map(|entry| {
+                        let id = entry
+                            .get("modelId")
+                            .or_else(|| entry.get("id"))
+                            .and_then(Value::as_str)?;
+                        if id == model_id {
+                            entry
+                                .get("name")
+                                .or_else(|| entry.get("displayName"))
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty())
+                                .map(str::to_string)
+                        } else {
+                            None
+                        }
+                    })
+                })
+        };
         let model = acp_state
             .get("model")
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
             .map(|value| SessionChatDetectedChoice {
                 value: value.to_string(),
-                label: crate::agent_model_catalog::catalog_model(
-                    agent_id.unwrap_or("antigravity"),
-                    value,
-                )
-                .and_then(|entry| {
-                    entry
-                        .get("label")
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                })
-                .unwrap_or_else(|| value.to_string()),
+                label: available_model_name(value)
+                    .or_else(|| {
+                        crate::agent_model_catalog::catalog_model(
+                            agent_id.unwrap_or("antigravity"),
+                            value,
+                        )
+                        .and_then(|entry| {
+                            entry
+                                .get("label")
+                                .and_then(Value::as_str)
+                                .map(str::to_string)
+                        })
+                    })
+                    .unwrap_or_else(|| value.to_string()),
                 source: SessionChatOptionEvidence::Terminal,
             });
         let effort = acp_state
@@ -387,16 +415,122 @@ pub fn detect_session_chat_terminal_state(
                     source: SessionChatOptionEvidence::Terminal,
                 },
             });
+        let context_usage = acp_state.get("contextUsage").and_then(|u| {
+            let obj = u.as_object()?;
+            let usage = SessionChatContextUsage {
+                used_percentage: obj
+                    .get("usedPercentage")
+                    .and_then(Value::as_u64)
+                    .map(|v| v.min(100) as u32),
+                used_tokens: obj.get("usedTokens").and_then(Value::as_u64),
+                window_size: obj.get("windowSize").and_then(Value::as_u64),
+            };
+            (!usage.is_empty()).then_some(usage)
+        });
+        let activity = acp_state.get("liveActivity").and_then(|live| {
+            let obj = live.as_object()?;
+            let kind = obj.get("kind").and_then(Value::as_str)?;
+            let detected_at = obj
+                .get("detectedAt")
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+                });
+            match kind {
+                "stream" => {
+                    let text = obj.get("text").and_then(Value::as_str)?.trim();
+                    if text.is_empty() {
+                        return None;
+                    }
+                    let first_para = text
+                        .split("\n\n")
+                        .next()
+                        .unwrap_or(text)
+                        .trim()
+                        .chars()
+                        .take(240)
+                        .collect::<String>();
+                    Some(crate::session_chat_terminal_activity::SessionChatTerminalActivity {
+                        kind: crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_AGENT_STREAM,
+                        label: first_para,
+                        percent: None,
+                        elapsed_seconds: None,
+                        detected_at,
+                        tokens: None,
+                        detail: None,
+                        text: Some(text.to_string()),
+                        stream: None,
+                        background: None,
+                    })
+                }
+                "tool" => {
+                    let label = obj.get("label").and_then(Value::as_str)?.trim();
+                    if label.is_empty() {
+                        return None;
+                    }
+                    let detail = obj
+                        .get("detail")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
+                    Some(crate::session_chat_terminal_activity::SessionChatTerminalActivity {
+                        kind: crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_CLAUDE_TOOL,
+                        label: label.to_string(),
+                        percent: None,
+                        elapsed_seconds: None,
+                        detected_at,
+                        tokens: None,
+                        detail,
+                        text: None,
+                        stream: None,
+                        background: None,
+                    })
+                }
+                "thinking" => {
+                    let text = obj.get("text").and_then(Value::as_str)?.trim();
+                    if text.is_empty() {
+                        return None;
+                    }
+                    let last_line = text
+                        .lines()
+                        .rev()
+                        .map(str::trim)
+                        .find(|l| !l.is_empty())
+                        .unwrap_or(text)
+                        .chars()
+                        .take(200)
+                        .collect::<String>();
+                    Some(crate::session_chat_terminal_activity::SessionChatTerminalActivity {
+                        kind: crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_CURSOR_THINKING,
+                        label: last_line,
+                        percent: None,
+                        elapsed_seconds: None,
+                        detected_at,
+                        tokens: None,
+                        detail: None,
+                        text: None,
+                        stream: None,
+                        background: None,
+                    })
+                }
+                _ => None,
+            }
+        });
         let selection = SessionChatDetectedSelection {
             model,
             effort,
             mode,
+            context_usage,
             ..SessionChatDetectedSelection::default()
         };
         let options = Some(SessionChatDetectedOptions::new(selection));
         let options = with_checkout_status(repository, project_id, session_id, agent_id, options);
         let mut detection = SessionChatTerminalDetection::default();
         detection.options = options;
+        detection.activity = activity;
         detection.captured = true;
         detection.attempted = true;
         return detection;
