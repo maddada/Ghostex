@@ -105,6 +105,7 @@ struct Account {
     default: bool,
     manual_only: bool,
     no_usage_reading: bool,
+    coordinator_on: bool,
     /// The fullest account-wide window's percent, `None` with no reading.
     used: Option<f64>,
     /// The fullest window that is not the 5h one (7d, a month), `None` with none.
@@ -137,7 +138,7 @@ impl Account {
     }
 }
 
-fn account(row: &Value, now: DateTime<Utc>) -> Account {
+fn account(row: &Value, coordinator: &Value, now: DateTime<Utc>) -> Account {
     let usage_only = row["usageOnly"] == true;
     let windows: Vec<&Value> = row["usage"]
         .as_array()
@@ -214,6 +215,19 @@ fn account(row: &Value, now: DateTime<Utc>) -> Account {
     } else {
         agents::text(row, "state").to_string()
     };
+    let coord_ref = agents::text(coordinator, "globalRef");
+    let coord_pid = agents::text(coordinator, "projectId");
+    let coord_sid = agents::text(coordinator, "sessionId");
+    let coordinator_on = !usage_only
+        && row["sessions"].as_array().is_some_and(|sessions| {
+            sessions.iter().any(|session| {
+                (!coord_ref.is_empty() && agents::text(session, "globalRef") == coord_ref)
+                    || (!coord_pid.is_empty()
+                        && !coord_sid.is_empty()
+                        && agents::text(session, "projectId") == coord_pid
+                        && agents::text(session, "sessionId") == coord_sid)
+            })
+        });
     Account {
         name,
         email,
@@ -224,6 +238,7 @@ fn account(row: &Value, now: DateTime<Utc>) -> Account {
         default: !usage_only && row["default"] == true,
         manual_only: !usage_only && row["registered"] == true && row["eligible"] != true,
         no_usage_reading: !usage_only && row["noUsageReading"] == true,
+        coordinator_on,
         used,
         long,
         short,
@@ -278,7 +293,7 @@ pub(super) fn summarize(view: &Value, roster: &Value, now: DateTime<Utc>) -> Val
         let accounts: Vec<Account> = rows
             .iter()
             .filter(|row| row["provider"] == provider)
-            .map(|row| account(row, now))
+            .map(|row| account(row, &view["coordinator"], now))
             .collect();
         let (coordinator, threads) = users.get(provider).copied().unwrap_or_default();
         if accounts.is_empty() && !coordinator && threads == 0 {
@@ -328,6 +343,9 @@ pub(super) fn summarize(view: &Value, roster: &Value, now: DateTime<Utc>) -> Val
                 });
                 if account.no_usage_reading {
                     detail["noUsageReading"] = json!(true);
+                }
+                if account.coordinator_on {
+                    detail["coordinatorOn"] = json!(true);
                 }
                 detail
             })
@@ -618,17 +636,24 @@ fn print_room(room: &Value, compact: bool) {
             .and_then(local)
             .map(|at| format!(" The next account frees at {at}."))
             .unwrap_or_default();
+        let (reset_option, note) = match reset_hint(agent) {
+            Some(summary) => (
+                format!(", or ({summary}) whether the user wants to use a reset"),
+                "include its expiry and when the window refills by itself; playbook: Usage room",
+            ),
+            None => (String::new(), "playbook: Usage room"),
+        };
         if compact {
             // Who runs on it and the manual-only room are on the agent's line above.
             println!(
-                "{}: {}: {why}.{frees} Raise the held ask: which other agent takes new work (playbook: Usage room). Ghostex moves threads between accounts; you never do unless the user asks.",
+                "{}: {}: {why}.{frees} Raise the held ask: which other agent takes new work{reset_option} ({note}). Ghostex moves threads between accounts; you never do unless the user asks, and you never use a limit reset yourself.",
                 if agent["flag"] == "out" { "OUT" } else { "LOW" },
                 agents::text(agent, "label"),
             );
             continue;
         }
         println!(
-            "{}: {}, which {} run{} on: {why}.{frees}{} Raise the held ask now: which other agent takes new work (playbook: Usage room). Ghostex moves threads between accounts; you never do unless the user asks, and never use a limit reset.",
+            "{}: {}, which {} run{} on: {why}.{frees}{} Raise the held ask now: which other agent takes new work{reset_option} ({note}). Ghostex moves threads between accounts; you never do unless the user asks, and you never use a limit reset yourself.",
             if agent["flag"] == "out" { "OUT" } else { "LOW" },
             agents::text(agent, "label"),
             users_text(agent),
@@ -638,5 +663,48 @@ fn print_room(room: &Value, compact: bool) {
     }
     if !compact {
         println!("Limit resets are the user's to use: never spend them.");
+    }
+}
+
+/// Short summary of available limit resets for the LOW/OUT hint, preferring the account the
+/// coordinator itself runs on when known (e.g. `"#1 has 2 resets, first expires Nov 24 18:00"`).
+fn reset_hint(agent: &Value) -> Option<String> {
+    let details = agent["accountDetails"].as_array()?;
+    let format_one = |detail: &Value| -> Option<String> {
+        let count = detail["limitResets"]["count"].as_u64().unwrap_or(0);
+        if count == 0 {
+            return None;
+        }
+        let account = agents::text(detail, "account");
+        let noun = if count == 1 {
+            "1 reset".to_string()
+        } else {
+            format!("{count} resets")
+        };
+        let first_expiry = detail["limitResets"]["resets"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|reset| reset["expiresAt"].as_str())
+            .find_map(local);
+        Some(match first_expiry {
+            Some(at) if count == 1 => format!("{account} has {noun}, expires {at}"),
+            Some(at) => format!("{account} has {noun}, first expires {at}"),
+            None => format!("{account} has {noun}"),
+        })
+    };
+    if let Some(own) = details
+        .iter()
+        .find(|detail| detail["coordinatorOn"] == true)
+    {
+        if let Some(summary) = format_one(own) {
+            return Some(summary);
+        }
+    }
+    let parts: Vec<String> = details.iter().filter_map(format_one).collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("; "))
     }
 }
