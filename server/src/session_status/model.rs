@@ -266,7 +266,16 @@ pub fn compute_activity_update(
                     "title": title,
                 }),
             );
-            if crate::program_status::combined_program_wins(program_state, detected) {
+            // `done` and `error` protect a finished turn's attention against a late
+            // `idle` (like Claude's 60s idle notification), never a stale `working`
+            // state: if the program already reports `done`/`error` and detection
+            // settles `idle` (such as a manual PostCompact), neither agrees the
+            // session is working, so let `idle` clear `working`.
+            let program_wins =
+                crate::program_status::combined_program_wins(program_state, detected)
+                    && !(matches!(program_state, "done" | "error")
+                        && previous_state.activity == "working");
+            if program_wins {
                 return ActivityUpdate {
                     activity: previous_state.to_value(),
                     entered_attention: false,

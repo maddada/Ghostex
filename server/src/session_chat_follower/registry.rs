@@ -99,9 +99,24 @@ counted as working), so the two drifted. Both now read `presentation_activity`,
 and the stale-activity timer re-syncs the follower through the presentation
 delta, so the flip lands in the chat at the same moment it lands in the sidebar.
 */
+/*
+CDXC:SessionStatus 2026-11-22 WHY:
+A turn that ended with a background shell still running (Claude's Stop with
+`background_tasks`, Antigravity's Stop awaiting background work) keeps
+`agentActivity` working with `backgroundOnlySince` so completion notifications
+wait and Auto Sleep does not sleep the session (CDXC:Coordinators 2026-11-13 in
+session_status/model.rs). Returning `working = true` to the chat made an idle
+thread show "Thinking…" and Stop (observed in Arch Chungus S1u:P2alb:G5a3u after
+`/compact` finished while a background rebuild shell ran), and made mid-turn
+send guards treat an idle prompt as busy. Compaction and active subagents are
+not background-only (`working_only_in_background` returns false for them), so
+they keep the chat working, while background shells stay visible through the
+`shells-running` terminal activity and Background pill.
+*/
 pub(crate) fn session_chat_hook_working(session: &Value) -> bool {
     let generated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     crate::presentation::presentation_activity(session, &generated_at) == "working"
+        && !crate::presentation::working_only_in_background(session, &generated_at)
 }
 
 pub(crate) fn sync_session_chat_follower_for_session(
