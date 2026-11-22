@@ -52,7 +52,9 @@ pub fn is_hidden_key(key: &StorageKey) -> bool {
 pub fn read_hidden(state: &mut ChatState) -> Option<Effect> {
     let session_key = state.identity.session_key.clone();
     if session_key.is_empty()
-        || state.session.coordinator_threads.is_none()
+        || !crate::extras::coordinator_threads::is_coordinator(
+            state.session.coordinator_threads.as_deref(),
+        )
         || state.extras.coordinator_quality.read_for.as_deref() == Some(session_key.as_str())
     {
         return None;
@@ -88,8 +90,9 @@ pub fn dismiss(state: &mut ChatState) -> Vec<Effect> {
 /// The pill, on a coordinator whose model or effort may give a degraded experience
 /// ([`coordinator_model_may_degrade`]), until this chat hides it.
 pub fn pill(state: &ChatState) -> Option<ChatPill> {
-    if state.session.coordinator_threads.is_none()
-        || state.extras.coordinator_quality.hidden != Some(false)
+    if !crate::extras::coordinator_threads::is_coordinator(
+        state.session.coordinator_threads.as_deref(),
+    ) || state.extras.coordinator_quality.hidden != Some(false)
         || degraded_choice(state).is_none()
     {
         return None;

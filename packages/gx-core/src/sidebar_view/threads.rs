@@ -83,14 +83,15 @@ pub(crate) fn recent_thread_deadline_ms(row: &SessionRow) -> Option<i64> {
 
 /// The state a thread counts as on its coordinator's crew badge. A session linked to a lead has no
 /// coordinator thread state, so its own activity stands in: working while it works, waiting while
-/// it waits on the user.
+/// it waits on an approval or question (matching coordinator `"waiting"`, never an unread finished
+/// turn).
 fn tallied_state(row: &SessionRow) -> Option<&str> {
     if row.thread_state.is_some() || !row.lead_linked {
         return row.thread_state.as_deref();
     }
     if row.activity == "working" {
         Some("working")
-    } else if row.needs_you().is_some() {
+    } else if row.awaiting_approval || row.has_question() {
         Some("waiting")
     } else {
         None

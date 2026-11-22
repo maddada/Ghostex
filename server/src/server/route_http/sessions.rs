@@ -707,6 +707,13 @@ pub(super) async fn route_sessions_http(
                             &state, db, repository, project_id, session_id,
                         )?;
                     }
+                    if !output.changed_sessions.is_empty() {
+                        for (project_id, session_id) in
+                            crate::coordinators::refresh_coordinator_panels(db, repository)
+                        {
+                            republish_session_chat(&state, &project_id, &session_id);
+                        }
+                    }
                     Ok(output.result)
                 },
             )

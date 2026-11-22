@@ -1315,8 +1315,9 @@ pub fn coordinator_board_with(
         topic_editable: work_mode
             && crate::extras::work_source::work_of(state)
                 .is_some_and(|work| work.get("topic").is_some()),
-        own: state.session.coordinator_threads.is_none()
-            && crate::extras::work_source::own_work(state).is_some(),
+        own: !crate::extras::coordinator_threads::is_coordinator(
+            state.session.coordinator_threads.as_deref(),
+        ) && crate::extras::work_source::own_work(state).is_some(),
         title: if work_mode { "Work" } else { "Board" }.to_string(),
         groups: out,
         meta: meta.join(" \u{b7} "),

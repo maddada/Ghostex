@@ -72,9 +72,17 @@ fn open_thread(
     let local = match server_id {
         Some(_) => None,
         None => read_thread(db, project_id, session_id)?
-            .filter(|thread| thread.coordinator_key() == coordinator),
+            .filter(|thread| thread.coordinator_key() == coordinator)
+            .map(|thread| (thread.project_id, thread.session_id))
+            .or_else(|| {
+                crate::agents::lead_links::read_lead_link(db, project_id, session_id)
+                    .ok()
+                    .flatten()
+                    .filter(|link| link.lead_key() == coordinator)
+                    .map(|link| (link.project_id, link.session_id))
+            }),
     };
-    let Some(thread) = local else {
+    let Some((thread_project_id, thread_session_id)) = local else {
         // A client that sends no server id (the phone, an older build) still finds a thread on
         // another computer by its ids.
         let remote = list_remote_threads_for(db, &coordinator)?
@@ -90,13 +98,13 @@ fn open_thread(
         return open_remote_thread(remote);
     };
     let session = repository
-        .get_session(&thread.project_id, &thread.session_id)?
+        .get_session(&thread_project_id, &thread_session_id)?
         .ok_or_else(|| DomainStateError::not_found("That thread's session no longer exists."))?;
     let closed = session.get("lifecycleState").and_then(Value::as_str) == Some("stopped");
     if closed {
         let mut wake = Map::new();
-        wake.insert("projectId".into(), json!(thread.project_id));
-        wake.insert("sessionId".into(), json!(thread.session_id));
+        wake.insert("projectId".into(), json!(thread_project_id));
+        wake.insert("sessionId".into(), json!(thread_session_id));
         let woken = dispatch_zmx_lifecycle_http_blocking(
             state,
             "/api/wakeSession".to_string(),
@@ -110,8 +118,8 @@ fn open_thread(
         }
     }
     Ok(json!({
-        "projectId": thread.project_id,
-        "sessionId": thread.session_id,
+        "projectId": thread_project_id,
+        "sessionId": thread_session_id,
         "resumed": closed,
     }))
 }

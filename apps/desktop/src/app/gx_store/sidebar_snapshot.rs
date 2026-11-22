@@ -1068,11 +1068,16 @@ pub(crate) fn insert_coordinator_nesting(
             details.insert("cleanupInBanner".to_string(), Value::Bool(true));
         }
     }
-    // A lead with linked sessions nested under it folds and badges like a coordinator (gx-core
-    // `SessionRow::folds_threads`); one whose linked sessions are drawn as their own rows (the
-    // Unified sidebar's cards) draws neither.
-    if row.is_coordinator || (row.folds_threads() && nesting.thread_count > 0) {
-        let badge = nesting.coordinator_badge();
+    // A lead with linked sessions nested under it (or with active linked sessions in another
+    // project or worktree) folds and badges like a coordinator (gx-core
+    // `SessionRow::folds_threads`); a Unified sidebar card keeps its linked sessions as their own
+    // rows (`thread_count == 0` and idle badge) and draws neither.
+    let badge = nesting.coordinator_badge();
+    if row.is_coordinator
+        || (row.folds_threads()
+            && (nesting.thread_count > 0
+                || badge.tone != ghostex_gx_core::CoordinatorBadgeTone::Idle))
+    {
         details.insert(
             "coordinatorThreads".to_string(),
             json!({

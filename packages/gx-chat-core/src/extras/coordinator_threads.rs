@@ -304,9 +304,14 @@ fn text(value: &Value, key: &str) -> String {
         .to_string()
 }
 
-/// `true` when the session is a coordinator, whatever its thread count.
+/// `true` when the session is a coordinator, whatever its thread count. A lead session's Workers
+/// list rides on `coordinatorThreads` with `"lead": true` so it shares the Workers pill and
+/// popover without taking on coordinator-only chat chrome (tips, welcome copy, effort narrowing,
+/// Autopilot scope, Close After Done hiding, or coordinator work storage).
 pub fn is_coordinator(threads: Option<&Value>) -> bool {
-    threads.is_some_and(Value::is_object)
+    threads.is_some_and(|threads| {
+        threads.is_object() && threads.get("lead") != Some(&Value::Bool(true))
+    })
 }
 
 /// Whether the chat is this computer's Chief of Staff (`coordinatorThreads.chief`, which gxserver

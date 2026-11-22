@@ -101,6 +101,7 @@ fn cached_panel(
     work: Value,
     approvals: Value,
     intro_hidden: bool,
+    lead: bool,
     previous: Option<&CachedPanel>,
 ) -> CachedPanel {
     threads.sort_by(|left, right| {
@@ -121,6 +122,7 @@ fn cached_panel(
             && previous.summary["work"] == work
             && previous.summary["approvals"] == approvals
             && previous.summary["introHidden"] == intro_hidden
+            && (previous.summary.get("lead") == Some(&Value::Bool(true))) == lead
     }) {
         return CachedPanel {
             summary: previous.summary.clone(),
@@ -132,7 +134,7 @@ fn cached_panel(
     serde_json::to_string(&threads)
         .unwrap_or_default()
         .hash(&mut hasher);
-    let summary = json!({
+    let mut summary = json!({
         "threads": threads
             .iter()
             .filter(|row| panel_rank(row) < 2 || row["recent"] == true)
@@ -154,6 +156,11 @@ fn cached_panel(
         // "Don't show again" on the coordinator tips, for every coordinator (intro.rs).
         "introHidden": intro_hidden,
     });
+    if lead {
+        // Marks an ordinary session that leads linked sessions (`lead_links`): gx-chat-core shows
+        // the Workers pill and popover without coordinator-only chat chrome.
+        summary["lead"] = Value::Bool(true);
+    }
     let summary_digest = crate::server::chat_frame_dedupe::digest(&summary);
     CachedPanel {
         summary,
@@ -720,6 +727,126 @@ fn build_row(
     row
 }
 
+/// One linked session row in a lead session's Workers popover (`lead_links`, migration 0084):
+/// uses the same state classification, wait metadata, turn phase/stats and stall checks as
+/// `build_row`, without coordinator-only approval relays or brief tasks.
+fn build_lead_row(
+    server_id: &str,
+    link: &crate::agents::lead_links::LeadLink,
+    session: Option<&Value>,
+    generated_at: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Value {
+    let progress = ThreadProgress {
+        resolved: false,
+        has_run: true,
+    };
+    let state = classify_thread_session(session, progress, generated_at, false);
+    let wait_info = session.and_then(|session| thread_wait_info(session, state));
+    let detail = match state {
+        ThreadState::Waiting => wait_info
+            .as_ref()
+            .map(|info| info.summary.clone())
+            .filter(|summary| !summary.is_empty())
+            .or_else(|| {
+                session
+                    .and_then(waiting_prompt)
+                    .map(|prompt| report_headline(&prompt.summary, 140))
+            })
+            .unwrap_or_else(|| "Waiting for an answer".to_string()),
+        _ => String::new(),
+    };
+    let fallback_at = link
+        .reported_at
+        .as_deref()
+        .or(link.owed_since.as_deref())
+        .unwrap_or(link.created_at.as_str());
+    let active_at = session
+        .and_then(|session| session.get("lastActiveAt"))
+        .and_then(Value::as_str)
+        .unwrap_or(fallback_at)
+        .to_string();
+    let mut row = json!({
+        "projectId": link.project_id,
+        "sessionId": link.session_id,
+        "title": session.map(session_title_of).unwrap_or_else(|| link.session_id.clone()),
+        "state": state.as_str(),
+        "detail": detail,
+        "activeAt": active_at,
+        "globalRef": crate::ids::create_global_session_ref(server_id, &link.project_id, &link.session_id),
+    });
+    let recent = is_recent(&active_at, now);
+    if recent {
+        row["recent"] = json!(true);
+    }
+    if recent || matches!(state, ThreadState::Working | ThreadState::Waiting) {
+        if let Some(work) = session.and_then(|session| {
+            super::turn_work::turn_work(
+                &(link.project_id.clone(), link.session_id.clone()),
+                session,
+            )
+        }) {
+            row["turnWork"] = work.to_value();
+        }
+    }
+    if let Some(detail) =
+        crate::session_self_heal::attention_detail(&link.project_id, &link.session_id)
+    {
+        row["detail"] = json!(detail);
+        row["stuck"] = json!(true);
+    } else if state == ThreadState::Working {
+        if let Some(quiet) = super::stall::session_quiet(&link.project_id, &link.session_id)
+            .filter(|quiet| quiet.stalled)
+        {
+            row["detail"] = json!(super::stall::quiet_detail(&quiet, now.timestamp_millis()));
+            row["stalled"] = json!(true);
+            if quiet.stuck {
+                row["stuck"] = json!(true);
+            }
+            if let Some(since) = super::stall::iso_from_ms(quiet.quiet_since) {
+                row["quietSince"] = json!(since);
+            }
+        }
+    } else if super::stall::session_stuck_since(&link.project_id, &link.session_id).is_some() {
+        row["stuck"] = json!(true);
+    }
+    if let Some(info) = &wait_info {
+        row["waitKind"] = json!(info.kind.as_str());
+        if !info.summary.is_empty() {
+            row["waitSummary"] = json!(info.summary);
+        }
+        if let Some(resets_at) = &info.resets_at {
+            row["waitResetsAt"] = json!(resets_at);
+        }
+        if info.auto_recover {
+            row["waitAutoRecover"] = json!(true);
+        }
+        row["waitNeedsUser"] = json!(info.needs_user);
+    }
+    if state == ThreadState::Waiting && session.is_some_and(thread_needs_user_approval) {
+        row["needsApproval"] = json!(true);
+    }
+    if let Some(pull_request) = session.and_then(pull_request_of) {
+        row["pullRequest"] = pull_request;
+    }
+    if let Some(session) = session {
+        let links = work_links_of(session);
+        if !links.is_empty() {
+            row["links"] = Value::Array(links);
+        }
+        if let Some(agent) = session.get("agentId").and_then(Value::as_str) {
+            row["agent"] = json!(agent);
+        }
+        if let Some(lifecycle) = session.get("lifecycleState") {
+            row["lifecycleState"] = lifecycle.clone();
+        }
+        if let Some(marker) = crate::worktree_sessions::read_worktree_session_marker(session) {
+            row["branch"] = json!(marker.branch);
+        }
+    }
+    row
+}
+
 /// A thread on another computer this one is connected to, from what the remote supervisor last saw
 /// of it (server/coordinator_remote_runtime.rs). `serverId` tells the panel's click to open it on
 /// that computer, and `computer` names it on the row.
@@ -1039,6 +1166,7 @@ pub fn refresh_coordinator_panels(
             work,
             approvals,
             intro_hidden,
+            false,
             panels.get(&key),
         );
         next.insert(key.clone(), panel);
@@ -1055,6 +1183,77 @@ pub fn refresh_coordinator_panels(
                 built_at: std::time::Instant::now(),
             },
         );
+    }
+    // Lead sessions (lead_links, migration 0084): build a Workers list (`lead: true`) for each
+    // ordinary session that leads linked sessions, so its chat shows the Workers pill and popover
+    // without taking on coordinator-only chat chrome.
+    let lead_links = crate::agents::lead_links::list_lead_links(db).unwrap_or_default();
+    let mut links_by_lead: HashMap<SessionKey, Vec<&crate::agents::lead_links::LeadLink>> =
+        HashMap::new();
+    for link in &lead_links {
+        let lead_key = link.lead_key();
+        if next.contains_key(&lead_key) || kept.contains(&lead_key) {
+            continue;
+        }
+        links_by_lead.entry(lead_key).or_default().push(link);
+    }
+    for (lead_key, links) in links_by_lead {
+        if !session_exists(db, &lead_key) {
+            continue;
+        }
+        let mut lead_rows = Vec::with_capacity(links.len());
+        for link in links {
+            let link_key = link.key();
+            let session = repository
+                .get_session(&link_key.0, &link_key.1)
+                .ok()
+                .flatten();
+            lead_rows.push(build_lead_row(
+                repository.server_id.as_str(),
+                link,
+                session.as_ref(),
+                &generated_at,
+                now,
+            ));
+        }
+        let panel = cached_panel(
+            lead_rows,
+            Value::Null,
+            Value::Null,
+            json!([]),
+            true,
+            true,
+            panels.get(&lead_key),
+        );
+        next.insert(lead_key, panel);
+    }
+    // When a lead unlinks its last session, publish one empty panel (`total: 0, lead: true`) so
+    // any open chat drops its Workers pill immediately; on the next tick that cleared entry is
+    // dropped.
+    for (key, previous) in panels.iter() {
+        if !next.contains_key(key)
+            && !kept.contains(key)
+            && previous.summary.get("lead") == Some(&Value::Bool(true))
+            && previous
+                .summary
+                .get("total")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                > 0
+        {
+            next.insert(
+                key.clone(),
+                cached_panel(
+                    Vec::new(),
+                    Value::Null,
+                    Value::Null,
+                    json!([]),
+                    true,
+                    true,
+                    Some(previous),
+                ),
+            );
+        }
     }
     if let Ok(mut rows) = rows().lock() {
         *rows = next_rows;
@@ -1152,7 +1351,7 @@ mod tests {
         assert_eq!(row["detail"], "Find the CPU churn");
         assert_eq!(row["recent"], true);
         assert_eq!(panel_rank(&row), 0);
-        let panel = cached_panel(vec![row], Value::Null, Value::Null, json!([]), false, None);
+        let panel = cached_panel(vec![row], Value::Null, Value::Null, json!([]), false, false, None);
         assert_eq!(panel.summary["total"], 1);
         assert_eq!(panel.summary["threads"][0]["serverId"], "S4k");
 

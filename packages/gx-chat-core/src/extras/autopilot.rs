@@ -45,7 +45,7 @@ fn flag(state: &ChatState, key: &str) -> Option<bool> {
 }
 
 fn is_coordinator(state: &ChatState) -> bool {
-    state.session.coordinator_threads.is_some()
+    crate::extras::coordinator_threads::is_coordinator(state.session.coordinator_threads.as_deref())
 }
 
 /// The pill: Autopilot's switch on a coordinator, the session's own switch elsewhere while

@@ -26,6 +26,7 @@ pub fn work_holder(state: &ChatState) -> Option<&Value> {
         .session
         .coordinator_threads
         .as_deref()
+        .filter(|threads| crate::extras::coordinator_threads::is_coordinator(Some(threads)))
         .or_else(|| own_work(state))
 }
 
