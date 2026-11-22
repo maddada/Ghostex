@@ -133,13 +133,9 @@ fn status(state: &AppState) -> Result<Value, DomainStateError> {
         message: format!("SQLite gxserver state error: {error}"),
     })?;
     let repository = DomainRepository::new(&db, &state.metadata.server_id);
-    let record = read_record(&db).filter(|record| {
-        repository
-            .get_session(&record.project_id, &record.session_id)
-            .ok()
-            .flatten()
-            .is_some()
-    });
+    let record =
+        read_record(&db).filter(|record| super::session::session_open(&repository, record));
+    let earlier_chats = super::session::earlier_chats(&repository, &db);
     // Only agents whose CLI is installed are offered (CDXC:AgentLauncher 2026-11-21 in
     // agents/cli_missing.rs).
     let agents: Vec<Value> = chief_agent_rows(&repository.list_projects()?)
@@ -169,11 +165,13 @@ fn status(state: &AppState) -> Result<Value, DomainStateError> {
         "needsAgent": record.is_none(),
         // The agent its first open starts on (model.rs); clients that see it skip the agent
         // question.
-        "defaultAgentId": super::model::default_agent(
+        "defaultAgentId": super::model::agent_for_next_chat(
             &state.paths,
             &db,
             &chief_agent_rows(&repository.list_projects()?),
         ),
         "agents": agents,
+        // Its earlier chats still open (asleep), newest first, for the row's Earlier Chats.
+        "earlierChats": earlier_chats,
     }))
 }

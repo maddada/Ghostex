@@ -180,6 +180,24 @@ pub(crate) fn default_agent(
         .or_else(|| crate::coordinators::default_coordinator_launcher(agent_rows))
 }
 
+/// The agent Ghostex AI's next chat starts on when no agent is named: the one its last chat ran on
+/// (a chat the user closed reopens on the same agent), else [`default_agent`].
+pub(crate) fn agent_for_next_chat(
+    paths: &crate::paths::GxserverPaths,
+    db: &rusqlite::Connection,
+    agent_rows: &[Value],
+) -> Option<String> {
+    super::read_record(db)
+        .map(|record| record.agent_id)
+        .filter(|agent_id| {
+            agent_rows.iter().any(|row| {
+                row.get("agentId").and_then(Value::as_str) == Some(agent_id.as_str())
+                    && !crate::agents::launcher_row_cli_missing(row, paths.agent_config_home_dir())
+            })
+        })
+        .or_else(|| default_agent(paths, db, agent_rows))
+}
+
 /// What a new Chief of Staff chat on `family` starts on: the user's hand pick from an earlier chat
 /// on the same agent family, else [`pick`].
 pub(crate) fn for_new_chat(family: &str, earlier: Option<&ChiefModel>) -> Option<ChiefModel> {

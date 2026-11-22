@@ -4905,7 +4905,8 @@ itself ("what's stuck?", "how do I pair my phone?").
   your first agent, put Ghostex on your phone), each ticked off by itself once
   it is done, a white **Ask me anything about Ghostex** button and a few
   questions to start with. Once you have a project and have started an agent it
-  says **Hi again!** with how many agents are running and how many need you, and
+  says **Hi again!** with how many agents are working right now and how many
+  need you (the same counts the sidebar shows), and
   offers questions about your work and about Ghostex. Both have a small
   **Report a bug** chip at the bottom. Tapping any of them only puts it in the
   chat box (after anything you already typed); nothing is sent until you send
@@ -4933,10 +4934,13 @@ itself ("what's stuck?", "how do I pair my phone?").
   installing things stay yours.
 - **New Chat keeps your old chat**: right-click the Ask Ghostex AI row for New
   Chat (Ghostex asks first; tick Don't ask again to stop asking). The old chat
-  stays in Main Hub, asleep and named after the day it started. Change Agent
-  moves it to another agent the same way. A new chat's first message waits for
-  Start too. On the phone, a long press on the row
-  offers New Chat and Change Agent.
+  stays in Main Hub, asleep and named after the day it started; right-click the
+  row for **Earlier Chats…** to open one again (closed ones are in Main Hub's
+  History). Change Agent moves it to another agent the same way. A new chat's
+  first message waits for Start too. Closing Ask Ghostex AI's chat closes it
+  like any session (it stays in History); the next time you open Ask Ghostex
+  AI it starts a fresh chat that keeps its memory and threads. On the phone, a
+  long press on the row offers New Chat and Change Agent.
 - **Your secret folders stay out of reach**: agents Ghostex starts in your home
   folder can't read the folders listed in **Folders agents can't read in your
   home folder** (Settings > Agents > Home folder): `.ssh`, `.aws`, `.gnupg`,

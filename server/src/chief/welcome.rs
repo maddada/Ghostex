@@ -84,6 +84,15 @@ fn asked(db: &Connection) -> Vec<String> {
     .unwrap_or_default()
 }
 
+/// Whether a running session holds open questions, the way its sidebar row counts them
+/// (`pendingQuestionCount`, presentation/session_projection.rs).
+fn waits_on_questions(session: &Value) -> bool {
+    crate::session_chat_async_questions::pending_question_count(session)
+        + crate::session_chat_open_questions::open_question_count(session)
+        + crate::session_needs_you::open_count(session)
+        > 0
+}
+
 /// The state, read fresh.
 fn read(paths: &GxserverPaths) -> Option<Value> {
     let db = crate::storage::open_gxserver_database(paths).ok()?;
@@ -115,22 +124,32 @@ fn read(paths: &GxserverPaths) -> Option<Value> {
         .filter(theirs)
         .filter(|session| session["kind"] == "agent")
         .collect();
+    // CDXC:Chief 2026-11-22 WHY: the status line counts what the sidebar shows. It read every
+    // session gxserver ever kept by the activity each one last stored, so closed sessions in
+    // Previous Sessions that ended mid-turn or unread counted as running or needing the user (43
+    // running and 89 needing the user on a computer whose sidebar showed 5 and 1). Now only open
+    // sessions (running or asleep) count: running is a live agent working on its turn (background
+    // work after the turn is not), and needs you is a row with the sidebar's needs-you dot (an
+    // approval, a question or an unread turn, `SessionRow::needs_you` in gx-core).
+    use crate::presentation::session_attributes::{
+        effective_lifecycle_state, is_active, presentation_activity, working_only_in_background,
+    };
     let mut running_projects = HashSet::new();
     let mut running = 0;
     let mut needs_you = 0;
-    for session in &agents {
-        match crate::presentation::session_attributes::presentation_activity(session, &now).as_str()
+    for session in agents.iter().filter(|session| is_active(session)) {
+        let live = effective_lifecycle_state(session) == "running";
+        let activity = presentation_activity(session, &now);
+        if live && activity == "working" && !working_only_in_background(session, &now) {
+            running += 1;
+            running_projects.insert(session["projectId"].as_str().unwrap_or_default());
+        }
+        if crate::session_approval::session_awaits_approval(session, &now)
+            || crate::session_approval::session_awaits_answer(session)
+            || (live && waits_on_questions(session))
+            || activity == "attention"
         {
-            "working"
-                if !crate::presentation::session_attributes::working_only_in_background(
-                    session, &now,
-                ) =>
-            {
-                running += 1;
-                running_projects.insert(session["projectId"].as_str().unwrap_or_default());
-            }
-            "attention" => needs_you += 1,
-            _ => {}
+            needs_you += 1;
         }
     }
     let prompted = agents

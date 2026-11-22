@@ -95,6 +95,18 @@ fn claim_pending_first_user_input_draft_for_chat(
     )
 }
 
+/// Whether the session's held first message is typed into its agent's box (or out of it for a
+/// model change and about to go back).
+fn first_message_in_box(state: &AppState, target: &SessionChatSendTarget) -> bool {
+    use crate::session_chat_first_message::{LIFTED, TYPED};
+    open_gxserver_database(&state.paths)
+        .ok()
+        .and_then(|db| {
+            crate::session_chat_first_message::read(&db, &target.project_id, &target.session_id)
+        })
+        .is_some_and(|message| matches!(message.state.as_str(), TYPED | LIFTED))
+}
+
 /// Transfer a terminal draft into Chat when the session can answer the editor handshake.
 pub(crate) async fn handle_handoff_session_chat_draft_http(
     state: &AppState,
@@ -154,6 +166,18 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
         }
         Ok(None) => {}
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    }
+    // CDXC:Coordinators 2026-11-22 WHY: a coordinator's held first message (Ask Ghostex AI's, New
+    // Coordinator's) sits in the agent's box on purpose and the chat shows it on its First message
+    // card (session_chat_first_message.rs). A switch to Chat while it is there moved it into the
+    // chat box as well, so the message showed twice and the card's Start had nothing to send from
+    // the box. The box is the card's, so nothing is moved.
+    if first_message_in_box(state, &target) {
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "content": "", "transferred": false })),
+        );
     }
     // Pi and OMP hand their input box over through the chat channel's editor commands
     // (pi_chat_actions.rs), without the screen check and Ctrl+G handshake below.

@@ -67,13 +67,19 @@ fn database(state: &AppState) -> Result<crate::storage::GxserverDatabase, Domain
     })
 }
 
-/// Whether the recorded session still exists (the user may have removed it).
-fn session_exists(repository: &DomainRepository<'_>, record: &ChiefRecord) -> bool {
+/// Whether the recorded session is still open: not removed, and not closed.
+///
+/// CDXC:Chief 2026-11-22 WHY: Close on Ask Ghostex AI asked "Close Ask Ghostex AI?" and closed the
+/// chat, but a closed session still counted as Ghostex AI's own, so the next open (its row, the
+/// sidebar's Ask Ghostex AI, a phone) went back to that closed chat and it seemed never to close.
+/// A closed chat now ends like New Chat's old one, except it stays closed (Previous Sessions, the
+/// home's History): the next open starts a fresh chat that takes over its goal, memory and threads.
+pub(super) fn session_open(repository: &DomainRepository<'_>, record: &ChiefRecord) -> bool {
     repository
         .get_session(&record.project_id, &record.session_id)
         .ok()
         .flatten()
-        .is_some()
+        .is_some_and(|session| crate::presentation::session_attributes::is_active(&session))
 }
 
 /// The first open: the record when Chief already has a live session, otherwise a new session on
@@ -84,14 +90,14 @@ pub(super) fn open_chief(
 ) -> Result<Value, DomainStateError> {
     let db = database(state)?;
     let repository = DomainRepository::new(&db, &state.metadata.server_id);
-    if let Some(record) = read_record(&db).filter(|record| session_exists(&repository, record)) {
+    if let Some(record) = read_record(&db).filter(|record| session_open(&repository, record)) {
         let record = move_off_missing_agent(state, &db, &repository, record)?;
         return Ok(json!({ "status": "existing", "chief": record }));
     }
     // No agent named: the user's default agent (model.rs, CDXC:Chief 2026-11-21).
     let picked = match agent_id.map(str::trim).filter(|id| !id.is_empty()) {
         Some(agent_id) => Some(agent_id.to_string()),
-        None => super::model::default_agent(
+        None => super::model::agent_for_next_chat(
             &state.paths,
             &db,
             &chief_agent_rows(&repository.list_projects()?),
@@ -108,10 +114,16 @@ pub(super) fn open_chief(
     let old = read_record(&db);
     let hand_pick = old.as_ref().and_then(|record| record.model.clone());
     let earlier = old
-        .map(|record| live_earlier(&repository, record.earlier))
+        .as_ref()
+        .map(|record| live_earlier(&repository, record.earlier.clone()))
         .unwrap_or_default();
+    let closed = old.as_ref().map(ChiefRecord::key);
     let (record, started) =
         create_chief_session(state, &db, &repository, agent_id, earlier, hand_pick)?;
+    // A chat the user closed hands its goal, memory and threads to the new one, as New Chat does.
+    if let Some(closed) = closed {
+        move_coordinator(&db, &closed, &record.key())?;
+    }
     Ok(json!({ "status": "created", "chief": record, "providerStarted": started }))
 }
 
@@ -176,7 +188,7 @@ pub(super) fn replace_chief(
         .filter(|id| !id.is_empty())
         .unwrap_or(&old.agent_id)
         .to_string();
-    let old_alive = session_exists(&repository, &old);
+    let old_alive = session_open(&repository, &old);
     let mut earlier = Vec::new();
     if old_alive {
         earlier.push(EarlierChat {
@@ -235,6 +247,42 @@ fn live_earlier(repository: &DomainRepository<'_>, chats: Vec<EarlierChat>) -> V
                 .is_some_and(|session| crate::presentation::session_attributes::is_active(&session))
         })
         .collect()
+}
+
+/// Ghostex AI's earlier chats that are still open, newest first: `projectId`, `sessionId`, `title`
+/// and `lastActiveAt`. Closed ones are in the home's History (Previous Sessions).
+///
+/// CDXC:Chief 2026-11-22 WHY: New Chat keeps the old chat asleep as an earlier chat (the 2026-11-08
+/// decision above: "earlier Chief chats stay under the row ... one click away"), and gxserver marked
+/// them `chiefEarlier`, but no client ever listed them, so they sat among Main Hub's other sleeping
+/// sessions where the user could not find them. The row's Earlier Chats reads this list.
+pub(super) fn earlier_chats(repository: &DomainRepository<'_>, db: &Connection) -> Vec<Value> {
+    let Some(record) = read_record(db) else {
+        return Vec::new();
+    };
+    let mut chats: Vec<Value> = live_earlier(repository, record.earlier)
+        .into_iter()
+        .filter_map(|chat| {
+            let session = repository
+                .get_session(&chat.project_id, &chat.session_id)
+                .ok()
+                .flatten()?;
+            let text = |key: &str| session.get(key).and_then(Value::as_str).map(str::to_string);
+            Some(json!({
+                "projectId": chat.project_id,
+                "sessionId": chat.session_id,
+                "title": text("title").unwrap_or_else(|| super::CHIEF_TITLE.to_string()),
+                "lastActiveAt": text("lastActiveAt").or_else(|| text("createdAt")),
+            }))
+        })
+        .collect();
+    chats.sort_by(|a, b| {
+        b["lastActiveAt"]
+            .as_str()
+            .unwrap_or_default()
+            .cmp(a["lastActiveAt"].as_str().unwrap_or_default())
+    });
+    chats
 }
 
 /// An earlier chat still titled "Chief of Staff" is renamed after the day it started ("Chief of

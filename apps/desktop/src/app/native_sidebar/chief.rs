@@ -543,6 +543,7 @@ impl GhostexGpuiApp {
         } else {
             items.push(json!({ "label": "Change Agent", "icon": "robot", "disabled": !has_chief, "children": agents }));
         }
+        items.push(json!({ "label": "Earlier Chats…", "icon": "history", "command": chief_command("earlier", &machine) }));
         items.push(json!({ "label": "Goal & Instructions…", "icon": "target", "disabled": !has_chief, "command": chief_command("goal", &machine) }));
         items.push(json!({ "label": "Memory…", "icon": "brain", "disabled": !has_chief, "command": chief_command("memory", &machine) }));
         // The page has no settings file of its own to turn the extension off in.
@@ -608,6 +609,7 @@ impl GhostexGpuiApp {
                     );
                 }
             }
+            "earlier" => self.show_native_sidebar_chief_earlier(&machine, window, cx),
             "disable" => self.set_native_sidebar_chief_enabled(false, cx),
             "toggleSetting" => {
                 if let Some(key @ (SHOW_ON_ALL_SPACES_SETTING | CONFIRM_NEW_CHAT_SETTING)) =
@@ -928,6 +930,97 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /// Earlier Chats: reads Ghostex AI's earlier chats from `/api/chief` status and lists them under
+    /// its row, newest first; a click opens one (waking it). The last row opens Main Hub's History,
+    /// where closed chats are.
+    ///
+    /// CDXC:Chief 2026-11-22 WHY: the earlier chats New Chat keeps (server/src/chief/session.rs
+    /// `earlier_chats`) were listed nowhere of their own, so the user could not find them among
+    /// Main Hub's other sleeping sessions.
+    fn show_native_sidebar_chief_earlier(
+        &mut self,
+        machine_id: &str,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(target) = self.chief_target_or_toast(machine_id, cx) else {
+            return;
+        };
+        let machine = machine_id.to_string();
+        let owner = self.native_sidebar.chief_row_bounds.clone();
+        let history_group = self.native_sidebar.snapshot.as_ref().and_then(|snapshot| {
+            snapshot
+                .home_headers
+                .iter()
+                .find(|home| home.machine_id == machine)
+                .map(|home| home.group_id.clone())
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let status =
+                crate::app::gx_store::gx_rpc(target, "/api/chief", json!({ "op": "status" })).await;
+            let _ = this.update_in(cx, |app, window, cx| {
+                let status = match status {
+                    Ok(status) => status,
+                    Err(error) => {
+                        app.dispatch_gpui_app_modal_toast(
+                            "warning",
+                            "Earlier chats didn't load",
+                            &error.message,
+                            cx,
+                        );
+                        return;
+                    }
+                };
+                let chats = status["earlierChats"].as_array().cloned().unwrap_or_default();
+                let mut items = vec![json!({ "label": "Earlier chats", "disabled": true })];
+                if chats.is_empty() {
+                    items.push(json!({ "label": "No earlier chats yet", "disabled": true }));
+                }
+                items.extend(chats.iter().filter_map(|chat| {
+                    let row_id = Self::native_sidebar_chief_row_id(
+                        &machine,
+                        chat["projectId"].as_str()?,
+                        chat["sessionId"].as_str()?,
+                    );
+                    Some(json!({
+                        "label": chat["title"].as_str().unwrap_or(super::chief_row_view::CHIEF_LABEL),
+                        "icon": "message-circle",
+                        "command": { "type": "chief", "op": "focusOther", "sidebarSessionId": row_id, "machineId": machine },
+                    }))
+                }));
+                if let Some(group_id) = history_group.as_ref() {
+                    items.push(json!({ "separator": true }));
+                    items.push(json!({
+                        "label": "History",
+                        "icon": "history",
+                        "command": { "type": "projectAction", "action": "history", "groupId": group_id },
+                    }));
+                }
+                let position = owner
+                    .get()
+                    .map(|bounds| bounds.bottom_left())
+                    .unwrap_or_default();
+                let scale = app
+                    .native_sidebar
+                    .snapshot
+                    .as_ref()
+                    .map(|snapshot| SidebarAppearance::from_hud(&snapshot.hud, window).scale)
+                    .unwrap_or(1.0);
+                Self::show_native_sidebar_menu_hung(
+                    &json!(items),
+                    owner.get(),
+                    None,
+                    Some(("chief-earlier".to_owned(), None)),
+                    position,
+                    scale,
+                    window,
+                    cx,
+                );
+            });
+        })
+        .detach();
+    }
+
     /// `open` (first open with the picked agent), `newChat` or `setAgent`, then opens the chat.
     fn change_native_sidebar_chief(
         &mut self,
@@ -947,12 +1040,45 @@ impl GhostexGpuiApp {
                     if let Some(agent_id) = chief["agentId"].as_str() {
                         app.native_sidebar.chief_agent_id = Some(agent_id.to_string());
                     }
-                    if let (Some(project_id), Some(session_id)) =
-                        (chief["projectId"].as_str(), chief["sessionId"].as_str())
-                    {
+                    let Some((project_id, session_id)) =
+                        chief["projectId"].as_str().zip(chief["sessionId"].as_str())
+                    else {
+                        return;
+                    };
+                    // CDXC:Chief 2026-11-22 WHY: a chat gxserver just made (first open, New Chat,
+                    // Change Agent) opens the way every other create does, straight in Chat. A
+                    // row click only switched to Chat once the agent had booted, so the user saw
+                    // the terminal first, with the home folder's trust question Ghostex answers for
+                    // Ask Ghostex AI (chief/presentation.rs), and that late switch moved the held
+                    // first message out of the agent's box into the chat box.
+                    let created = matches!(result["status"].as_str(), Some("created" | "replaced"));
+                    if !created {
                         let row_id =
                             Self::native_sidebar_chief_row_id(&machine, project_id, session_id);
                         app.focus_native_sidebar_chief(&row_id, cx);
+                    } else if machine.is_empty() || machine == ghostex_gx_core::LOCAL_MACHINE_ID {
+                        app.gx_store_focus_created_session(
+                            project_id,
+                            session_id,
+                            false,
+                            Some("chat"),
+                            cx,
+                        );
+                    } else {
+                        let session = ghostex_gx_core::SessionKey::remote(
+                            machine.clone(),
+                            project_id.to_string(),
+                            session_id.to_string(),
+                        );
+                        let payload = ghostex_gx_core::open_remote_session_terminal(
+                            &session.to_sidebar_session_id(),
+                            false,
+                            Some("chat"),
+                        );
+                        app.receive_sidebar_native_project_path_action_payload(
+                            &payload.to_string(),
+                            cx,
+                        );
                     }
                 }
                 Err(error) => app.dispatch_gpui_app_modal_toast(

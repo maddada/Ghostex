@@ -22,6 +22,11 @@ use std::time::Duration;
 
 /// The card's widest column.
 const COLUMN: f32 = 440.0;
+/// The set-up card's widest column: its four prompts sit two by two, and at 440 the longer ones
+/// ("How do coordinators work?") were cut off with an ellipsis.
+const SET_UP_COLUMN: f32 = 480.0;
+/// Below this the prompts go one a row.
+const TWO_PROMPTS_FROM: f32 = 410.0;
 /// The amber of the "needs you" dot.
 const NEEDS_YOU: u32 = 0xe5a33a;
 
@@ -161,8 +166,8 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let room = (self.bounds.get().size.width.as_f32() - 48.0 * s).max(0.0);
-        let column = (COLUMN * s).min(room);
         let new_user = welcome.card == "newUser";
+        let column = (if new_user { COLUMN } else { SET_UP_COLUMN } * s).min(room);
         let still = cx.reduce_motion();
         let mut region = div()
             .flex_1()
@@ -238,22 +243,34 @@ impl NativeChatView {
         }
         region = region.child(self.chief_welcome_ask(welcome, column, p, cx));
         if !new_user {
-            // Two by two, one a row on a narrow chat.
-            let two = column >= 410.0 * s;
-            let width = if two {
-                (column - 8.0 * s) / 2.0
-            } else {
-                column
-            };
+            // Two by two, one a row on a narrow chat. Rows of two that share the width, not
+            // items sized to exactly half of it, which wrapped to one a row when rounding left the
+            // pair a hair wider than the column.
+            let per_row = if column >= TWO_PROMPTS_FROM * s { 2 } else { 1 };
+            let prompts: Vec<AnyElement> = welcome
+                .prompts
+                .iter()
+                .enumerate()
+                .map(|(index, prompt)| self.chief_welcome_prompt(index, prompt, p, cx))
+                .collect();
+            let mut rows = Vec::new();
+            let mut prompts = prompts.into_iter().peekable();
+            while prompts.peek().is_some() {
+                rows.push(
+                    div()
+                        .w_full()
+                        .flex()
+                        .gap(px(8.0 * s))
+                        .children(prompts.by_ref().take(per_row)),
+                );
+            }
             region = region.child(
                 div()
                     .w(px(column))
                     .flex()
-                    .flex_wrap()
+                    .flex_col()
                     .gap(px(8.0 * s))
-                    .children(welcome.prompts.iter().enumerate().map(|(index, prompt)| {
-                        self.chief_welcome_prompt(index, prompt, width, p, cx)
-                    })),
+                    .children(rows),
             );
         }
         // The new user's four asks and Report a bug; on the set-up card Report a bug alone.
@@ -502,7 +519,6 @@ impl NativeChatView {
         &mut self,
         index: usize,
         prompt: &WelcomePrompt,
-        width: f32,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -510,7 +526,8 @@ impl NativeChatView {
         let fill = prompt.fill.clone();
         div()
             .id(("chief-welcome-prompt", index))
-            .w(px(width))
+            .flex_1()
+            .flex_basis(px(0.0))
             .min_w_0()
             .flex()
             .items_center()
@@ -527,7 +544,8 @@ impl NativeChatView {
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.foreground.opacity(0.07)))
             .child(icon(&prompt.icon, 15.0 * s, p.foreground.opacity(0.7)))
-            .child(div().min_w_0().truncate().child(prompt.label.clone()))
+            // A label too long for its half wraps onto a second line instead of losing its end.
+            .child(div().flex_1().min_w_0().child(prompt.label.clone()))
             .on_click(cx.listener(move |this, _, _, cx| this.fill_from_chief_welcome(&fill, cx)))
             .into_any_element()
     }
