@@ -689,8 +689,39 @@ pub(crate) fn create_agent_session_params_for_project(
                             .map(str::to_string);
                         let resume_id = read_text_from_map(&runtime_settings, "agentSessionId");
                         let read_only_acp = read_only_family.is_some();
-                        let approval_level = if read_only_acp {
+                        let api_chat = is_gbot_api_chat(Some(&runtime_settings));
+                        let approval_level = if read_only_acp || api_chat {
                             crate::acp::AcpApprovalLevel::Ask
+                        } else if let Some(bot_id) = runtime_settings
+                            .get("gbot")
+                            .and_then(|g| g.get("botId"))
+                            .and_then(Value::as_str)
+                            .filter(|s| !s.trim().is_empty())
+                        {
+                            // Local GBot chat: read the configured approval directly from
+                            // Ghostex's server-side GBot DB record (never from client params).
+                            match crate::gbots::read_bot(db, bot_id).ok().flatten() {
+                                Some(bot) => match bot.approval.as_str() {
+                                    "edits" => crate::acp::AcpApprovalLevel::AutoEdits,
+                                    "auto" => crate::acp::AcpApprovalLevel::Auto,
+                                    "full" => crate::acp::AcpApprovalLevel::FullAccess,
+                                    _ => crate::acp::AcpApprovalLevel::Ask,
+                                },
+                                None => crate::acp::AcpApprovalLevel::Ask,
+                            }
+                        } else if let Some(remote_approval) = runtime_settings
+                            .get("gbotHome")
+                            .and_then(|g| g.get("approval"))
+                            .and_then(Value::as_str)
+                        {
+                            // Remote GBot chat opened by a paired computer (`Principal::Peer`;
+                            // `guard_create_session_params` strips `gbotHome` for non-user devices).
+                            match remote_approval {
+                                "edits" => crate::acp::AcpApprovalLevel::AutoEdits,
+                                "auto" => crate::acp::AcpApprovalLevel::Auto,
+                                "full" => crate::acp::AcpApprovalLevel::FullAccess,
+                                _ => crate::acp::AcpApprovalLevel::Ask,
+                            }
                         } else {
                             crate::acp::approval::resolve_starting_level(
                                 &runtime_settings,
@@ -701,8 +732,41 @@ pub(crate) fn create_agent_session_params_for_project(
                         };
                         let req_model = read_text(params, "agentModel");
                         let req_effort = read_text(params, "agentEffort");
+                        // Build Ghostex's server-side structured `AcpLaunchProfile` (never
+                        // forwarding arbitrary flags or leading env vars from `agentCommand`).
+                        let (account_wrapper, _, _) =
+                            crate::acp::spec::extract_account_wrapper_and_ignored(
+                                fam,
+                                match fam {
+                                    "claude" => "claude",
+                                    "codex" => "codex",
+                                    _ => "agy",
+                                },
+                                base_cli_cmd.as_deref(),
+                            );
+                        let (append_system_prompt_file, developer_instructions) =
+                            super::acp_launch_note(
+                                fam,
+                                session_is_coordinator(&runtime_settings),
+                                params
+                                    .get("markedHandovers")
+                                    .and_then(Value::as_bool)
+                                    == Some(true),
+                            );
+                        let acp_profile = crate::acp::spec::AcpLaunchProfile {
+                            account_wrapper,
+                            hub_id: crate::accounts::hub::launch::picked_hub(&runtime_settings),
+                            connector_envs: crate::connectors::project_cli_env_for_acp(db, project),
+                            append_system_prompt_file,
+                            developer_instructions,
+                            gbot_chat: is_gbot_chat(Some(&runtime_settings)),
+                            gbot_api_chat: api_chat,
+                            gbot_computer_use_off:
+                                super::gbot_computer_use(Some(&runtime_settings)) == Some(false),
+                            lean_worker: super::is_lean_worker(Some(&runtime_settings)),
+                        };
                         let acp_cmd =
-                            crate::acp::spec::build_acp_host_launch_command_with_options(
+                            crate::acp::spec::build_acp_host_launch_command_with_profile(
                                 fam,
                                 base_cli_cmd.as_deref(),
                                 resume_id.as_deref(),
@@ -712,6 +776,7 @@ pub(crate) fn create_agent_session_params_for_project(
                                 req_effort.as_deref(),
                                 false,
                                 read_only_acp,
+                                &acp_profile,
                             );
                         runtime_settings.insert(
                             crate::acp::SESSION_NON_CLI_ACTIVE_KEY.to_string(),

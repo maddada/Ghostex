@@ -146,6 +146,46 @@ pub(crate) fn with_launch_notes(
     with_note_at(&family, command, &text, &path)
 }
 
+/// Server-side Ghostex launch note / marked-handovers prompt for Non-CLI sessions, returning
+/// `(claude_prompt_file, codex_developer_instructions)` without scraping any command string.
+pub(crate) fn acp_launch_note(
+    family: &str,
+    coordinator: bool,
+    thread_marked_handovers: bool,
+) -> (Option<String>, Option<String>) {
+    if cfg!(test) {
+        return (None, None);
+    }
+    let paths = get_gxserver_paths(None);
+    let text = if thread_marked_handovers {
+        Some(MARKED_HANDOVERS_NOTE.to_string())
+    } else {
+        super::current_launch_note_text(&paths, !coordinator)
+    };
+    let Some(text) = text else {
+        return (None, None);
+    };
+    match family {
+        "claude" => {
+            let path = if coordinator && text != MARKED_HANDOVERS_NOTE {
+                paths
+                    .root_dir
+                    .join("agent-note")
+                    .join("coordinator-note.md")
+            } else {
+                note_file_path(&paths, &text)
+            };
+            if write_note_file(&path, &text).is_ok() {
+                (Some(path.to_string_lossy().to_string()), None)
+            } else {
+                (None, None)
+            }
+        }
+        "codex" => (None, Some(text)),
+        _ => (None, None),
+    }
+}
+
 /// A thread's base command at creation, with the note saved in it, so the thread marks its
 /// handovers on every start and resume whatever the setting says.
 pub(crate) fn with_thread_marked_handovers(family: &str, command: &str) -> String {

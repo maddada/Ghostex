@@ -29,7 +29,10 @@ use super::host::{
     PendingPermission, SpoolWriter, TerminationSignalGuard, LIVE_STREAM_MAX_CHARS,
     POLL_RETRY_DELAY,
 };
-use super::spec::{build_acp_server_argv, transcript_path_for_session, AcpAgentSpec};
+use super::spec::{
+    build_acp_server_argv, build_ghostex_claude_settings_json, transcript_path_for_session,
+    validated_ghostex_prompt_file, AcpAgentSpec,
+};
 
 const CLAUDE_CTRL_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -279,7 +282,11 @@ impl PendingClaudeRequest {
 struct ClaudeState {
     native_session_id: Option<String>,
     working: bool,
-    in_flight_turns: u64,
+    /// Bounded grace window after `abort` or `send(..., interrupt: true)` times out waiting for
+    /// the interrupted turn's `result`. Absorbs a single delayed stale `result` arriving before
+    /// the new turn produces output, while NEVER permanently wedging `working = true` if Claude
+    /// drops the old turn without emitting a `result`.
+    aborted_turn_pending_until: Option<Instant>,
     approval_level: AcpApprovalLevel,
     read_only: bool,
     native_mode: String,
@@ -314,7 +321,7 @@ impl ClaudeState {
         Self {
             native_session_id: None,
             working: false,
-            in_flight_turns: 0,
+            aborted_turn_pending_until: None,
             approval_level,
             read_only,
             native_mode: if read_only { "plan" } else { "default" }.to_string(),
@@ -733,7 +740,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let signal_guard = TerminationSignalGuard::install();
 
     let Some((acp_envs, prog, mut argv)) =
-        build_acp_server_argv(spec, parsed.cli_command.as_deref())
+        build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
         eprintln!("Invalid Claude Non-CLI command.");
         return 1;
@@ -745,6 +752,22 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                 argv[idx + 1] = "plan".to_string();
             }
         }
+    }
+    // Synthesize Ghostex's own `--settings` JSON strictly from server-generated fields (never
+    // from untrusted command strings, never containing hooks, command helpers, or allow rules).
+    if let Some(settings_json) = build_ghostex_claude_settings_json(
+        &parsed.profile,
+        Some(&cwd),
+        parsed.effort.as_deref(),
+    ) {
+        argv.push("--settings".to_string());
+        argv.push(settings_json);
+    }
+    if let Some(prompt_file) = validated_ghostex_prompt_file(
+        parsed.profile.append_system_prompt_file.as_deref(),
+    ) {
+        argv.push("--append-system-prompt-file".to_string());
+        argv.push(prompt_file);
     }
     if let Some(resume_id) = parsed
         .resume_session_id
@@ -1184,13 +1207,27 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                         }
                                     }
                                 }
-                                if s.in_flight_turns > 1 {
-                                    // Stale `result` from an interrupted earlier turn while a newer
-                                    // turn is already running: keep the newer turn's state intact.
-                                    s.in_flight_turns -= 1;
+                                let absorb_stale = if !s.working {
+                                    s.aborted_turn_pending_until = None;
+                                    true
+                                } else if s
+                                    .aborted_turn_pending_until
+                                    .is_some_and(|until| Instant::now() < until)
+                                    && s.live_stream_text.is_empty()
+                                    && s.live_thought_text.is_empty()
+                                {
+                                    // Delayed `result` from an interrupted earlier turn arriving
+                                    // before the new turn emits any output: absorb once so we do
+                                    // not clobber the new turn or drain its pending approvals.
+                                    s.aborted_turn_pending_until = None;
+                                    true
+                                } else {
+                                    false
+                                };
+                                if absorb_stale {
                                     (true, Vec::new())
                                 } else {
-                                    s.in_flight_turns = 0;
+                                    s.aborted_turn_pending_until = None;
                                     s.working = false;
                                     s.clear_live_turn_output();
                                     (false, s.pending_requests.drain(..).collect())
@@ -1404,7 +1441,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = false;
-                        s.in_flight_turns = 0;
+                        s.aborted_turn_pending_until = Some(Instant::now() + Duration::from_secs(8));
                         s.clear_live_turn_output();
                     }
                     activity.sync();
@@ -1672,8 +1709,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     cancel_all_pending_claude(&transport, &state);
                     let sid = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        if s.working {
+                            // Interrupted turn did not finish within the 4s wait: mark a bounded
+                            // grace window so its late `result` cannot kill the new turn.
+                            s.aborted_turn_pending_until =
+                                Some(Instant::now() + Duration::from_secs(8));
+                        }
                         s.working = true;
-                        s.in_flight_turns = s.in_flight_turns.saturating_add(1);
                         s.clear_live_turn_output();
                         s.native_session_id.clone()
                     };
@@ -1700,13 +1742,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             );
                         }
                         Err(err) => {
-                            {
-                                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                                s.in_flight_turns = s.in_flight_turns.saturating_sub(1);
-                                if s.in_flight_turns == 0 {
-                                    s.working = false;
-                                }
-                            }
+                            state.lock().unwrap_or_else(|p| p.into_inner()).working = false;
                             activity.sync();
                             ep.ack(id, false, Value::Null, Some(&err));
                         }
@@ -1781,6 +1817,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             sid.as_deref(),
             accept_all,
             read_only,
+            &parsed.profile,
+            Some(&cwd),
         );
     }
 

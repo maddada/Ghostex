@@ -171,130 +171,185 @@ pub fn global_accept_all_enabled_in_shared_settings(paths: &crate::paths::Gxserv
         .unwrap_or(false)
 }
 
-/// True when a shell command or startup text contains flags that bypass approvals or launch ACP
-/// above `Ask` (`--dangerously-skip-permissions`, `--yolo`, `--accept-all`, `--approval-level`
-/// above `ask`, `danger-full-access`, `bypassPermissions`, `--full-auto`, `--ask-for-approval never`,
-/// or a Claude `--settings` argument that points to an external file or loosens permissions).
+/// True when a caller-supplied shell command or startup text contains flags or leading environment
+/// assignments that bypass approvals, override sandbox/config/settings/MCP/plugins, or launch ACP
+/// above `Ask`. Used to reject untrusted `agentCommand` overrides from non-user-device callers
+/// (`Principal::Session`, guests, extensions). Ghostex injects its own settings, profiles, and
+/// connector env server-side AFTER this guard runs.
 pub fn command_has_accept_all_flag(cmd: &str) -> bool {
     let raw_tokens = super::spec::tokenize_cli_command(cmd);
-    let mut i = 0;
-    while i < raw_tokens.len() {
-        let raw_tok = raw_tokens[i].as_str();
-        let next_raw = raw_tokens.get(i + 1).map(String::as_str);
-        if raw_tok == "--settings" {
-            let Some(val) = next_raw else {
-                return true;
-            };
-            if claude_settings_arg_loosens_permissions(val) {
-                return true;
-            }
-            i += 2;
-            continue;
-        }
-        if let Some(val) = raw_tok.strip_prefix("--settings=") {
-            if claude_settings_arg_loosens_permissions(val) {
-                return true;
-            }
-            i += 1;
-            continue;
-        }
-        i += 1;
+    let (leading_envs, exec_tokens) = super::spec::split_leading_env_assignments(raw_tokens);
+    // Non-user-device callers may never inject leading env vars (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+    // `PATH`, `DYLD_*`, `LD_*`, `BASH_ENV`, `ENV`, `NODE_OPTIONS`, proxy overrides, etc.).
+    if !leading_envs.is_empty() {
+        return true;
     }
 
-    let lower = cmd.to_ascii_lowercase();
-    let tokens: Vec<String> = lower
-        .split_whitespace()
-        .map(|tok| {
-            tok.trim_matches(|c: char| {
-                matches!(c, '\'' | '"' | ';' | '&' | '|' | '(' | ')' | '\r' | '\n')
-            })
-            .to_string()
-        })
-        .filter(|tok| !tok.is_empty())
-        .collect();
-    for (idx, tok) in tokens.iter().enumerate() {
-        let next = tokens.get(idx + 1).map(String::as_str);
+    let mut i = 0;
+    while i < exec_tokens.len() {
+        let raw_tok = exec_tokens[i].as_str();
+        let lower = raw_tok.to_ascii_lowercase();
+        let next_lower = exec_tokens
+            .get(i + 1)
+            .map(|s| s.trim().to_ascii_lowercase());
+
+        // Reject any `--settings` (inline JSON or file path), `-c`/`--config` override, directory
+        // widening, MCP/plugin injection, or tool allowlist from untrusted callers.
         if matches!(
-            tok.as_str(),
-            "--dangerously-skip-permissions"
+            lower.as_str(),
+            "--settings"
+                | "-c"
+                | "--config"
+                | "--add-dir"
+                | "--allowedtools"
+                | "--allowed-tools"
+                | "--mcp-config"
+                | "--strict-mcp-config"
+                | "--plugin-dir"
+                | "--plugin-url"
+                | "--setting-sources"
+                | "--allow-dangerously-skip-permissions"
+                | "--dangerously-skip-permissions"
                 | "--dangerously-bypass-approvals-and-sandbox"
+                | "--dangerously-bypass-hook-trust"
+                | "--approve-for-me"
                 | "--yolo"
                 | "--accept-all"
                 | "--full-auto"
                 | "--allow-all"
                 | "--bypass-permissions"
-        ) {
-            return true;
-        }
-        if tok.contains("danger-full-access")
-            || tok.contains("bypasspermissions")
-            || tok.contains("dangerously-skip-permissions")
-            || tok.contains("dangerously-bypass-approvals-and-sandbox")
+        ) || lower.starts_with("--settings=")
+            || lower.starts_with("-c=")
+            || lower.starts_with("--config=")
+            || lower.starts_with("--add-dir=")
+            || lower.starts_with("--allowedtools=")
+            || lower.starts_with("--allowed-tools=")
+            || lower.starts_with("--mcp-config=")
+            || lower.starts_with("--plugin-dir=")
+            || lower.starts_with("--plugin-url=")
+            || lower.starts_with("--setting-sources=")
         {
             return true;
         }
-        if let Some(val) = tok.strip_prefix("--approval-level=") {
+        if lower.contains("danger-full-access")
+            || lower.contains("bypasspermissions")
+            || lower.contains("dangerously-skip-permissions")
+            || lower.contains("dangerously-bypass-approvals-and-sandbox")
+            || lower.contains("dangerously-bypass-hook-trust")
+        {
+            return true;
+        }
+        if let Some(val) = lower.strip_prefix("--approval-level=") {
             if AcpApprovalLevel::parse(val) != Some(AcpApprovalLevel::Ask) {
                 return true;
             }
-        } else if tok == "--approval-level" {
-            if next.and_then(AcpApprovalLevel::parse) != Some(AcpApprovalLevel::Ask) {
+        } else if lower == "--approval-level" {
+            if next_lower
+                .as_deref()
+                .and_then(AcpApprovalLevel::parse)
+                != Some(AcpApprovalLevel::Ask)
+            {
                 return true;
             }
         }
-        if let Some(val) = tok
-            .strip_prefix("--permission-mode=")
-            .or_else(|| tok.strip_prefix("--approval-mode="))
-            .or_else(|| tok.strip_prefix("--ask-for-approval="))
+        if let Some(val) = lower.strip_prefix("--permission-mode=") {
+            if !matches!(val, "default" | "plan") {
+                return true;
+            }
+        } else if lower == "--permission-mode" {
+            if !matches!(next_lower.as_deref(), Some("default" | "plan")) {
+                return true;
+            }
+        }
+        if let Some(val) = lower
+            .strip_prefix("--approval-mode=")
+            .or_else(|| lower.strip_prefix("--ask-for-approval="))
+            .or_else(|| lower.strip_prefix("-a="))
         {
-            if matches!(
-                val,
-                "bypasspermissions" | "bypass" | "yolo" | "auto" | "never" | "full-auto"
-            ) {
+            if !matches!(val, "untrusted" | "on-request" | "request-review" | "ask") {
                 return true;
             }
         } else if matches!(
-            tok.as_str(),
-            "--permission-mode" | "--approval-mode" | "--ask-for-approval" | "-a"
+            lower.as_str(),
+            "--approval-mode" | "--ask-for-approval" | "-a"
         ) {
-            if matches!(
-                next,
-                Some("bypasspermissions" | "bypass" | "yolo" | "auto" | "never" | "full-auto")
+            if !matches!(
+                next_lower.as_deref(),
+                Some("untrusted" | "on-request" | "request-review" | "ask")
             ) {
                 return true;
             }
         }
-    }
-    false
-}
-
-/// True when a `--settings` argument is NOT a safe inline JSON object (for example a file path
-/// that could pre-approve tools) or contains `permissions.allow`, `permissions.defaultMode`
-/// loosening, or `permissions.additionalDirectories`.
-fn claude_settings_arg_loosens_permissions(raw: &str) -> bool {
-    let trimmed = raw.trim();
-    let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(trimmed) else {
-        // Non-inline JSON (e.g. file path): cannot verify what rules it loads.
-        return true;
-    };
-    if let Some(perms) = obj.get("permissions").and_then(Value::as_object) {
-        if perms
-            .get("allow")
-            .and_then(Value::as_array)
-            .is_some_and(|arr| !arr.is_empty())
+        if let Some(val) = lower
+            .strip_prefix("--sandbox=")
+            .or_else(|| lower.strip_prefix("-s="))
         {
-            return true;
-        }
-        if let Some(mode) = perms.get("defaultMode").and_then(Value::as_str) {
-            let norm = mode.trim().to_ascii_lowercase();
-            if !matches!(norm.as_str(), "" | "default" | "plan") {
+            if val != "read-only" {
+                return true;
+            }
+        } else if matches!(lower.as_str(), "--sandbox" | "-s") {
+            if next_lower.as_deref() != Some("read-only") {
                 return true;
             }
         }
-        if perms
-            .get("additionalDirectories")
-            .and_then(Value::as_array)
-            .is_some_and(|arr| !arr.is_empty())
+        i += 1;
+    }
+
+    // Secondary whitespace-trimmed scan in case shell metacharacters (`;`, `&&`, `|`) hide a flag
+    // inside a compound command string.
+    let lower = cmd.to_ascii_lowercase();
+    for tok in lower
+        .split_whitespace()
+        .map(|tok| {
+            tok.trim_matches(|c: char| {
+                matches!(c, '\'' | '"' | ';' | '&' | '|' | '(' | ')' | '\r' | '\n')
+            })
+        })
+        .filter(|tok| !tok.is_empty())
+    {
+        if matches!(
+            tok,
+            "--dangerously-skip-permissions"
+                | "--dangerously-bypass-approvals-and-sandbox"
+                | "--dangerously-bypass-hook-trust"
+                | "--allow-dangerously-skip-permissions"
+                | "--approve-for-me"
+                | "--yolo"
+                | "--accept-all"
+                | "--full-auto"
+                | "--allow-all"
+                | "--bypass-permissions"
+                | "--settings"
+                | "--add-dir"
+                | "--allowedtools"
+                | "--allowed-tools"
+                | "--mcp-config"
+                | "--plugin-dir"
+                | "--plugin-url"
+                | "--setting-sources"
+                | "-c"
+                | "--config"
+        ) || tok.starts_with("--settings=")
+            || tok.starts_with("--add-dir=")
+            || tok.starts_with("--allowedtools=")
+            || tok.starts_with("--allowed-tools=")
+            || tok.starts_with("--mcp-config=")
+            || tok.starts_with("--plugin-dir=")
+            || tok.starts_with("--plugin-url=")
+            || tok.starts_with("--setting-sources=")
+            || tok.starts_with("-c=")
+            || tok.starts_with("--config=")
+            || tok.contains("danger-full-access")
+            || tok.contains("bypasspermissions")
+            || tok.contains("dangerously-skip-permissions")
+            || tok.contains("dangerously-bypass-approvals-and-sandbox")
+            || tok.contains("dangerously-bypass-hook-trust")
+            || tok.contains("claude_config_dir=")
+            || tok.contains("codex_home=")
+            || tok.contains("dyld_")
+            || tok.contains("ld_preload=")
+            || tok.contains("bash_env=")
+            || tok.contains("node_options=")
         {
             return true;
         }
@@ -387,6 +442,13 @@ pub fn guard_create_session_params(
         .and_then(Value::as_object_mut)
     {
         runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
+        if !is_user_device {
+            // Non-user-device callers may never spoof GBot chat metadata (which carries server-side
+            // approval / computer-use policy) or CLIProxyAPI hub profile selection.
+            runtime.remove("gbot");
+            runtime.remove("gbotHome");
+            runtime.remove(crate::accounts::hub::launch::RUNTIME_KEY);
+        }
     }
     if !is_user_device {
         if let Some(launch) = cleaned
@@ -570,16 +632,21 @@ pub fn resolve_starting_level(
     {
         return remembered;
     }
-    let accept_all_effective = match read_trimmed_str(agent_config, "acceptAllMode")
-        .or_else(|| read_trimmed_str(launch_settings, "acceptAllMode"))
-    {
-        Some("enabled" | "acceptAll") => true,
-        Some("disabled") => false,
-        _ => global_settings
-            .get("agentAcceptAllEnabled")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
+    let explicit_override = |val: Option<&str>| match val {
+        Some("enabled" | "acceptAll") => Some(true),
+        Some("disabled") => Some(false),
+        _ => None,
     };
+    // Explicit per-launch `acceptAllMode` (`"enabled"` / `"disabled"`) takes precedence over
+    // per-agent config, which in turn takes precedence over global `agentAcceptAllEnabled`.
+    let accept_all_effective = explicit_override(read_trimmed_str(launch_settings, "acceptAllMode"))
+        .or_else(|| explicit_override(read_trimmed_str(agent_config, "acceptAllMode")))
+        .unwrap_or_else(|| {
+            global_settings
+                .get("agentAcceptAllEnabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        });
     AcpApprovalLevel::from_accept_all_default(accept_all_effective)
 }
 
