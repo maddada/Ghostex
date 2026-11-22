@@ -241,6 +241,19 @@ pub struct PanelRecovery {
     /// "Continue with Opus 5.5 on ST": its label and the `agentAccounts` request it sends.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<PanelRecoveryAction>,
+    /// "Sign in …", "Turn on …", "Use … for this session": a button per account the detail names
+    /// that a click can make usable, each with the chat command it sends
+    /// (questions/account_wait.rs `AccountFix::command`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fixes: Vec<PanelRecoveryFix>,
+}
+
+/// One of the waiting box's fix buttons.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelRecoveryFix {
+    pub label: String,
+    pub command: Value,
 }
 
 /// The waiting box's button that continues on another model (server/src/accounts/model_fallback.rs).
@@ -281,6 +294,14 @@ fn panel_recovery(
             reason: format!("{}.", words.title),
             detail: Some(words.detail),
             next,
+            fixes: words
+                .fixes
+                .iter()
+                .map(|fix| PanelRecoveryFix {
+                    label: fix.label.clone(),
+                    command: fix.command(),
+                })
+                .collect(),
             action: words.action.map(|action| {
                 let mut request = action.answer;
                 if let Some(fields) = request.as_object_mut() {
@@ -301,6 +322,7 @@ fn panel_recovery(
             detail: None,
             next,
             action: None,
+            fixes: Vec::new(),
         },
     }
 }

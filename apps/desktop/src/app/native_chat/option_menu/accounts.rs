@@ -61,6 +61,8 @@ enum Block {
         next: Option<String>,
         /// "Continue with Opus 5.5 on ST" and its `agentAccounts` request.
         action: Option<(String, Value)>,
+        /// "Sign in …", "Turn on …", "Use … for this session" and the chat command each sends.
+        fixes: Vec<(String, Value)>,
         busy: bool,
     },
     Current {
@@ -247,6 +249,12 @@ fn blocks(panel: &Value, customize: bool) -> Vec<Block> {
             action: recovery["action"]["label"]
                 .as_str()
                 .map(|label| (label.to_owned(), recovery["action"]["request"].clone())),
+            fixes: recovery["fixes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|fix| Some((fix["label"].as_str()?.to_owned(), fix["command"].clone())))
+                .collect(),
             busy,
         });
         out.push(Gap(8.0));
@@ -420,6 +428,7 @@ impl Block {
                 reason,
                 detail,
                 next,
+                fixes,
                 ..
             } => {
                 let next = match next {
@@ -430,7 +439,12 @@ impl Block {
                     Some(detail) => 4.0 + measure.lines(detail, PARAGRAPH, width - 26.0)?,
                     None => 0.0,
                 };
-                26.0 + measure.lines(reason, STRONG, width - 26.0)? + detail + next + 12.0 + 28.0
+                26.0 + measure.lines(reason, STRONG, width - 26.0)?
+                    + detail
+                    + next
+                    + 12.0
+                    + 28.0
+                    + 36.0 * fixes.len() as f32
             }
             Current { .. } => 20.0,
             Usage(columns) => usage_height(columns.len()),
@@ -1008,6 +1022,7 @@ impl ChatOptionMenuPanel {
                 detail,
                 next,
                 action,
+                fixes,
                 busy,
             } => div()
                 .id("account-recovery")
@@ -1028,6 +1043,24 @@ impl ChatOptionMenuPanel {
                         .when_some(detail, |this, detail| this.child(paragraph(detail, false))),
                 )
                 .when_some(next, |this, next| this.child(paragraph(next, false)))
+                // CDXC:AgentProviders 2026-11-22 DECISION in server/src/accounts/limit_wait.rs:
+                // a fix for each account the sentence names (Sign in, Turn on, Use it for this
+                // session), one to a line so the box's height stays known.
+                .children(fixes.into_iter().enumerate().map(|(index, (label, command))| {
+                    div()
+                        .flex()
+                        .child(self.button(
+                            gpui::SharedString::from(format!("account-recovery-fix-{index}")),
+                            label,
+                            None,
+                            busy,
+                            Action::Close(command),
+                            colors,
+                            s,
+                            cx,
+                        ))
+                        .into_any_element()
+                }))
                 .child(
                     div()
                         .flex()

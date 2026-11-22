@@ -230,6 +230,25 @@ pub(crate) fn dispatch(
             store::write(&db, &registry)?;
             state.accounts.invalidate();
             snapshot = state.accounts.refresh(&state.paths.home_dir, true);
+            // Turn on from a session's every-account-full card (limit_wait.rs `describe`): the
+            // session's wait tries again now instead of at its next attempt.
+            if enabled && params.contains_key("sessionId") {
+                let session = get_session(&repository, params)?;
+                let mut runtime = session["runtimeSettings"]
+                    .as_object()
+                    .cloned()
+                    .unwrap_or_default();
+                if let Some(recovery) = runtime.get_mut("accountRecovery").filter(|r| {
+                    r["status"] == "waiting" && r["reason"] == super::limit_wait::NO_ROOM
+                }) {
+                    recovery["nextAttemptAt"] = json!(chrono::Utc::now().to_rfc3339());
+                    update_session(&repository, &session, runtime)?;
+                    state.accounts.recovery.wake(
+                        required(params, "projectId")?,
+                        required(params, "sessionId")?,
+                    );
+                }
+            }
         }
         // "Don't use on <computer>" and its Undo, from a usage popup or the phone's Usage pane
         // (`SavedAccount::sign_in_ignored`).

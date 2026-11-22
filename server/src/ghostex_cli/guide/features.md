@@ -3766,7 +3766,12 @@ account that has room. When no account set to Automatically has room, the
 session's chat says so for the model it runs ("No account has room for Fable
 5.2"), names in one sentence why each other account is out (for example "ST's
 Fable limit is full and SP is manual only") and when it continues on its own,
-and the bell gets one notification; both go away once the session switches or
+including an account turned off on this computer ("is turned off here", with
+Turn on), one added from another computer but never signed in on this one
+("isn't signed in on this computer", with Sign in, which opens Settings >
+Accounts on its sign-in) and one set to manual only that has room ("has room
+but is manual only", with Use it for this session); the bell gets one
+notification; both go away once the session switches or
 resumes. The Accounts & limits popup's waiting box says the same. When another
 model has room on an account, the card's main button continues there ("Continue
 with Opus 5.5 on ST"), switching the account and the model together. A Fable

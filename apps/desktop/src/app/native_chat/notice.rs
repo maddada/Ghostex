@@ -580,6 +580,40 @@ impl NativeChatView {
                     ToneButton::Secondary
                 };
                 let answer = json!({"type":"answer","answer":action["answer"].clone()});
+                // The every-account-full card's "Sign in …" (gx-chat-core
+                // questions/account_wait.rs): Settings > Accounts on that account's sign-in, as
+                // the Accounts & limits panel's Reconnect does.
+                if action["kind"] == "accountSignIn" {
+                    let command = json!({
+                        "type": "openAccountsSettings",
+                        "reconnectAccountId": action["accountId"].clone(),
+                    });
+                    actions.push(
+                        self.tone_button(
+                            gpui::SharedString::from(format!(
+                                "notice-action:{}",
+                                text(action, "id")
+                            )),
+                            &text(action, "label"),
+                            None,
+                            kind,
+                            None,
+                            false,
+                            p,
+                        )
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.handle_action(
+                                &super::actions::NativeChatAction {
+                                    command: command.clone(),
+                                },
+                                window,
+                                cx,
+                            )
+                        }))
+                        .into_any_element(),
+                    );
+                    continue;
+                }
                 actions.push(
                     self.tone_button(
                         gpui::SharedString::from(format!("notice-action:{}", text(action, "id"))),

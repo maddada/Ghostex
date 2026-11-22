@@ -113,6 +113,31 @@ pub fn decorate(
         );
         object.insert("actions".to_string(), Value::Array(actions));
     }
+    // The fixes for the accounts the sentence names (Sign in, Turn on, Use it for this session),
+    // after the card's main button and Wait and ahead of the notice's own actions; two at most,
+    // so the card's buttons stay short.
+    if !words.fixes.is_empty() {
+        let mut actions = object
+            .get("actions")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let lead = usize::from(has_primary_action)
+            + usize::from(has_provider && mode.is_none() && !acknowledged);
+        for (index, fix) in words.fixes.iter().take(2).enumerate() {
+            actions.insert(
+                (lead + index).min(actions.len()),
+                json!({
+                    "id": format!("{}:{}", fix.kind, fix.account_id),
+                    "label": fix.label,
+                    "kind": fix.kind,
+                    "accountId": fix.account_id,
+                    "answer": fix.answer(),
+                }),
+            );
+        }
+        object.insert("actions".to_string(), Value::Array(actions));
+    }
     // The Compact first checkbox on a wait a restart paused (CDXC:AgentProviders 2026-11-14 in
     // server/src/carry_on_compaction.rs, Q3238): ticked for a chat at or above the compaction size,
     // with the (i) tooltip saying why.
@@ -275,6 +300,47 @@ pub struct WaitWords {
     pub title: String,
     pub detail: String,
     pub action: Option<ContinueAction>,
+    /// One button per account the sentence names that a click can make usable: Sign in, Turn on,
+    /// Use it for this session.
+    pub fixes: Vec<AccountFix>,
+}
+
+/// "Turn on x•••0@•••••.•••": an account that could take the session once fixed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AccountFix {
+    pub label: String,
+    /// `accountSignIn` (the app opens Settings > Accounts on its sign-in), `accountTurnOn` or
+    /// `accountUse` (answered by gxserver, server/src/session_chat_send/answer_http.rs).
+    pub kind: String,
+    pub account_id: String,
+}
+
+impl AccountFix {
+    /// The card's answer: gxserver answers `accountTurnOn` and `accountUse`; the app turns
+    /// `accountSignIn` into Settings > Accounts.
+    pub fn answer(&self) -> Value {
+        json!({ "kind": self.kind, "accountId": self.account_id })
+    }
+
+    /// The chat command the Accounts & limits panel's waiting box sends for this fix.
+    pub fn command(&self) -> Value {
+        match self.kind.as_str() {
+            // The desktop reads `reconnectAccountId`, the phone `accountId`.
+            "accountSignIn" => json!({
+                "type": "openAccountsSettings",
+                "reconnectAccountId": self.account_id,
+                "accountId": self.account_id,
+            }),
+            "accountTurnOn" => json!({
+                "type": "accounts",
+                "request": { "operation": "setEnabled", "id": self.account_id, "enabled": true },
+            }),
+            _ => json!({
+                "type": "accounts",
+                "request": { "operation": "select", "accountId": self.account_id },
+            }),
+        }
+    }
 }
 
 /// "Continue with Opus 5.5 on ST": the model and account gxserver found room on.
@@ -323,6 +389,7 @@ pub fn wait_words(
                     label: "Continue".to_string(),
                     answer: json!({ "kind": "resumeRecovery" }),
                 }),
+                fixes: Vec::new(),
             };
         }
         Some("reset") => {
@@ -339,6 +406,7 @@ pub fn wait_words(
                     None => "Ghostex will continue this session when the limit resets. Stop if you\u{2019}d rather continue it yourself.".to_string(),
                 },
                 action: None,
+                fixes: Vec::new(),
             };
         }
         _ => {}
@@ -381,6 +449,7 @@ pub fn wait_words(
                 title,
                 detail,
                 action,
+                fixes: Vec::new(),
             };
         }
         let when = match (reset, text("account"), model) {
@@ -402,7 +471,7 @@ pub fn wait_words(
             ),
             (None, _, _) => "Work continues automatically as soon as an account has room.".to_string(),
         };
-        let reasons = blocked_reasons(wait, &name);
+        let (reasons, fixes) = blocked_reasons(wait, &name);
         let why = match reasons.as_slice() {
             [] => "Every automatic account is full.".to_string(),
             [only] => format!("{only}."),
@@ -416,6 +485,7 @@ pub fn wait_words(
             title,
             detail: format!("{why} {when}"),
             action,
+            fixes,
         };
     }
     let when = match (reset, text("account"), model) {
@@ -441,9 +511,10 @@ pub fn wait_words(
                 "Every account this session can switch to is full, so it waits instead of switching. {when}"
             ),
             action: None,
+            fixes: Vec::new(),
         };
     };
-    let reasons = blocked_reasons(wait, &name);
+    let (reasons, fixes) = blocked_reasons(wait, &name);
     let why = match reasons.as_slice() {
         [] => "No other account can take it.".to_string(),
         [only] => format!("{only}."),
@@ -454,19 +525,59 @@ pub fn wait_words(
         title: format!("No account has room for {model}"),
         detail: format!("{why} {when}"),
         action,
+        fixes,
     }
 }
 
-fn blocked_reasons(wait: &Map<String, Value>, name: &impl Fn(&str) -> String) -> Vec<String> {
-    wait.get("blocked")
+/// Why each other account can't take the session, in the card's one sentence, and the fixes for
+/// the ones a click can make usable.
+///
+/// CDXC:AgentProviders 2026-11-22 DECISION in server/src/accounts/limit_wait.rs (`describe`): an
+/// account turned off here, one never signed in on this computer and one with room that is manual
+/// only are named too, each with its one-click fix.
+fn blocked_reasons(
+    wait: &Map<String, Value>,
+    name: &impl Fn(&str) -> String,
+) -> (Vec<String>, Vec<AccountFix>) {
+    let mut fixes = Vec::new();
+    let reasons = wait
+        .get("blocked")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
         .filter_map(|entry| {
             let account = name(entry.get("account")?.as_str()?.trim());
+            let id = entry
+                .get("accountId")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty());
+            let mut fix = |kind: &str, label: String| {
+                if let Some(id) = id {
+                    fixes.push(AccountFix {
+                        label,
+                        kind: kind.to_string(),
+                        account_id: id.to_string(),
+                    });
+                }
+            };
             match entry.get("why")?.as_str()? {
+                "manual" if entry.get("room").and_then(Value::as_bool) == Some(true) => {
+                    fix("accountUse", format!("Use {account} for this session"));
+                    Some(format!("{account} has room but is manual only"))
+                }
                 "manual" => Some(format!("{account} is manual only")),
-                "signIn" => Some(format!("{account} needs to sign in again")),
+                "off" => {
+                    fix("accountTurnOn", format!("Turn on {account}"));
+                    Some(format!("{account} is turned off here"))
+                }
+                "signIn" if entry.get("here").and_then(Value::as_bool) == Some(false) => {
+                    fix("accountSignIn", format!("Sign in {account}"));
+                    Some(format!("{account} isn\u{2019}t signed in on this computer"))
+                }
+                "signIn" => {
+                    fix("accountSignIn", format!("Sign in {account}"));
+                    Some(format!("{account} needs to sign in again"))
+                }
                 "full" => Some(match entry.get("limit").and_then(Value::as_str) {
                     Some(limit) => format!("{account}\u{2019}s {limit} limit is full"),
                     None => format!("{account} is full"),
@@ -474,7 +585,8 @@ fn blocked_reasons(wait: &Map<String, Value>, name: &impl Fn(&str) -> String) ->
                 _ => None,
             }
         })
-        .collect()
+        .collect();
+    (reasons, fixes)
 }
 
 fn alternative_action(

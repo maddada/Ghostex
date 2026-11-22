@@ -280,15 +280,48 @@ async fn answer_session_chat_prompt(
             Err(error) => domain_error_response(endpoint_path, request_id, error),
         };
     }
+    // The every-account-full card's Sign in opens Settings > Accounts in the app that drew it
+    // (gx-chat-core questions/account_wait.rs); an app that predates it sends it here instead.
+    if kind == "accountSignIn" {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "invalidParams",
+                message: "Sign in to this account in Settings > Accounts.".to_string(),
+            },
+        );
+    }
     // The limit card's Continue (a wait a restart paused), Wait (acknowledge pool limit), Not now
-    // and Stop (CDXC:AgentProviders 2026-11-14 in server/src/accounts/recovery.rs, Q4472): the
-    // same steps as `agentAccounts`.
+    // and Stop (CDXC:AgentProviders 2026-11-14 in server/src/accounts/recovery.rs, Q4472), and the
+    // every-account-full card's Turn on and Use it for this session (CDXC:AgentProviders
+    // 2026-11-22 in accounts/limit_wait.rs): the same steps as `agentAccounts`.
     if matches!(
         kind,
-        "continueWithModel" | "resumeRecovery" | "stopRecovery" | "acknowledgeLimitWait"
+        "continueWithModel"
+            | "resumeRecovery"
+            | "stopRecovery"
+            | "acknowledgeLimitWait"
+            | "accountTurnOn"
+            | "accountUse"
     ) {
         let mut request = params.clone();
-        request.insert("operation".to_string(), json!(kind));
+        match kind {
+            "accountTurnOn" => {
+                request.insert("operation".to_string(), json!("setEnabled"));
+                request.insert(
+                    "id".to_string(),
+                    params.get("accountId").cloned().unwrap_or_default(),
+                );
+                request.insert("enabled".to_string(), json!(true));
+            }
+            "accountUse" => {
+                request.insert("operation".to_string(), json!("select"));
+            }
+            _ => {
+                request.insert("operation".to_string(), json!(kind));
+            }
+        }
         let state = state.clone();
         let result = tokio::task::spawn_blocking(move || {
             crate::accounts::endpoint::dispatch(&state, &request)

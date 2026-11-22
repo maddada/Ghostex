@@ -173,25 +173,62 @@ pub(super) fn describe(
             (free_at > now).then_some((free_at, a.name.clone(), window_name(last)))
         })
         .min_by_key(|(at, _, _)| *at);
-    // Why each other account of this provider cannot take the session: set to manual only, signed
-    // out, or a window this model counts against used up. The card names them in one sentence.
+    // Why each other account of this provider cannot take the session: turned off here, set to
+    // manual only, signed out (or never signed in on this computer), or a window this model counts
+    // against used up. The card names them in one sentence, with a fix for the ones it can fix.
+    //
+    // CDXC:AgentProviders 2026-11-22 DECISION:
+    // User, of a Windows session whose card said only "m•••m's 7d limit is full" while another of
+    // their accounts had room: "i was confused why this session says it can't switch to another
+    // account even tho i do have an account that has credits. then i remembered it's because i
+    // didn't login to xyzt70 claude account or i didn't enable it there. pls make this clear in
+    // the notice". So an account turned off here is named too (`off`, with Turn on), one synced
+    // from another computer and never signed in here says so (`signIn` with `here: false`, with
+    // Sign in), and a manual-only account says whether it has room (`room`, with Use it for this
+    // session); a manual-only account whose window is used up is named by that window instead.
+    // Each carries `accountId` for its fix. An account turned off after its subscription was
+    // refused (`disabled`) stays out: turning it on would not help. Room is only claimed from this
+    // computer's own reading: a turned-off or signed-out account has none here.
     let blocked: Vec<Value> = registry
         .accounts
         .iter()
-        .filter(|a| a.provider == provider && !a.user_disabled && Some(a.id.as_str()) != current)
+        .filter(|a| a.provider == provider && Some(a.id.as_str()) != current)
+        .filter(|a| !(a.user_disabled && a.disabled.is_some()))
         .filter_map(|a| {
-            if !a.eligible {
-                return Some(json!({ "account": a.name, "why": "manual" }));
+            if a.user_disabled {
+                return Some(json!({ "account": a.name, "accountId": a.id, "why": "off" }));
             }
             if a.login_expired_at.is_some() || a.selector.is_empty() {
-                return Some(json!({ "account": a.name, "why": "signIn" }));
+                return Some(json!({
+                    "account": a.name,
+                    "accountId": a.id,
+                    "why": "signIn",
+                    "here": !a.selector.is_empty(),
+                }));
             }
-            let windows = full(reading(&a.id)?);
-            let window = windows
+            let read = reading(&a.id);
+            let windows = read.map(full).unwrap_or_default();
+            if let Some(window) = windows
                 .iter()
                 .find(|w| w.model.is_some())
-                .or_else(|| windows.first())?;
-            Some(json!({ "account": a.name, "why": "full", "limit": window_name(window) }))
+                .or_else(|| windows.first())
+            {
+                return Some(json!({
+                    "account": a.name,
+                    "accountId": a.id,
+                    "why": "full",
+                    "limit": window_name(window),
+                }));
+            }
+            (!a.eligible).then(|| {
+                json!({
+                    "account": a.name,
+                    "accountId": a.id,
+                    "why": "manual",
+                    "room": a.disabled.is_none()
+                        && read.is_some_and(|d| super::recovery::trusted_room(d, model)),
+                })
+            })
         })
         .collect();
     json!({
