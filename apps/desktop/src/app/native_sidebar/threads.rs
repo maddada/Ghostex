@@ -28,8 +28,6 @@ use crate::app::helpers::*;
 pub(crate) const THREAD_INDENT: f32 = 16.0;
 /// The coordinator marker and its thread count.
 const COORDINATOR_ICON: &str = "titlebar/users-group.svg";
-/// A lead's mark (`lead_badge`).
-const LEAD_ICON: &str = "titlebar/link.svg";
 const WAITING_COLOR: u32 = 0x95d7f6;
 /// The coordinator's mark: a three-point outline crown, a 24 px line icon with the 2 px round
 /// stroke of the Tabler set beside it, so one drawing reads at every size from 12 px up.
@@ -243,63 +241,17 @@ pub(crate) fn coordinator_badge(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,
 ) -> Option<AnyElement> {
-    if !is_coordinator(session) {
-        return None;
-    }
-    let threads = session.details.get("coordinatorThreads");
-    let count = threads
-        .and_then(|threads| threads.get("count"))
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    let tone = match threads
-        .and_then(|threads| threads.get("tone"))
-        .and_then(Value::as_str)
-    {
+    // A coordinator, or a lead with its linked sessions nested under it (gx-core
+    // `SessionRow::folds_threads`, CDXC:LeadLinks 2026-11-22).
+    let threads = session.details.get("coordinatorThreads")?;
+    let count = threads.get("count").and_then(Value::as_u64).unwrap_or(0);
+    let tone = match threads.get("tone").and_then(Value::as_str) {
         Some("approval") => ghostex_gx_core::CoordinatorBadgeTone::Approval,
         Some("waiting") => ghostex_gx_core::CoordinatorBadgeTone::Waiting,
         Some("working") => ghostex_gx_core::CoordinatorBadgeTone::Working,
         _ => return None,
     };
     Some(crew_badge(count, crew_tint(tone, appearance), appearance).into_any_element())
-}
-
-/// A lead's mark (lead links, server/src/agents/lead_links): the link icon and how many sessions
-/// report to it, in the muted text colour; the row keeps its agent's own logo.
-pub(crate) fn lead_badge(
-    session: &NativeSidebarSession,
-    appearance: &SidebarAppearance,
-) -> Option<AnyElement> {
-    if is_coordinator(session) {
-        return None;
-    }
-    let count = session
-        .details
-        .get("leadLinkCount")
-        .and_then(Value::as_u64)
-        .filter(|count| *count > 0)?;
-    let scale = appearance.scale;
-    let tint = appearance.muted;
-    Some(
-        div()
-            .id(format!("native-session-lead-{}", session.session_id))
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .gap(px(2.0 * scale))
-            .role(gpui::Role::Image)
-            .aria_label(format!(
-                "Leads {count} linked session{}",
-                if count == 1 { "" } else { "s" }
-            ))
-            .child(titlebar_svg_icon(LEAD_ICON, BADGE_TEXT_SIZE * scale, tint))
-            .child(
-                div()
-                    .text_size(px(BADGE_TEXT_SIZE * scale))
-                    .text_color(tint)
-                    .child(count.to_string()),
-            )
-            .into_any_element(),
-    )
 }
 
 /// The crew count's colour for a gx-core badge tone; grey while idle (drawn only on a Unified card).

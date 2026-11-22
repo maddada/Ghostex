@@ -81,6 +81,22 @@ pub(crate) fn recent_thread_deadline_ms(row: &SessionRow) -> Option<i64> {
         .map(|at| at + RECENT_THREAD_MS)
 }
 
+/// The state a thread counts as on its coordinator's crew badge. A session linked to a lead has no
+/// coordinator thread state, so its own activity stands in: working while it works, waiting while
+/// it waits on the user.
+fn tallied_state(row: &SessionRow) -> Option<&str> {
+    if row.thread_state.is_some() || !row.lead_linked {
+        return row.thread_state.as_deref();
+    }
+    if row.activity == "working" {
+        Some("working")
+    } else if row.needs_you().is_some() {
+        Some("waiting")
+    } else {
+        None
+    }
+}
+
 /// Every coordinator's threads among `rows`, by state. A row listed twice (a project's own rows and
 /// a group's members) counts once.
 pub(crate) fn tally_threads<'a>(
@@ -109,7 +125,7 @@ pub(crate) fn tally_threads<'a>(
         if is_recent_thread(row, now_ms) {
             bump(&mut tally.total);
         }
-        match row.thread_state.as_deref() {
+        match tallied_state(row) {
             Some("waiting") => bump(&mut tally.waiting),
             Some("working") => bump(&mut tally.working),
             _ => {}
@@ -313,8 +329,8 @@ pub(crate) fn nest_threads(
     // Each row's place in the tree (`lay_out_tree`), then its section and folds: a thread takes
     // its coordinator's section, and is folded when a coordinator above it is folded or it waits
     // behind its coordinator's "N older threads" row.
-    // A lead (lead links) has no "N older threads" row or fold of its own, so all its linked
-    // sessions stay listed.
+    // A lead (lead links) folds like a coordinator but has no "N older threads" row, so all its
+    // linked sessions stay listed while it is open.
     let lead_parent: Vec<bool> = sessions
         .iter()
         .map(|session| session.row.is_lead && !session.row.is_coordinator)

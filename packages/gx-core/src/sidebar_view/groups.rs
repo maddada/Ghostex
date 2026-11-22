@@ -216,7 +216,7 @@ pub(crate) fn build_group(
             .row
             .key
             .as_ref()
-            .filter(|_| session.row.is_coordinator)
+            .filter(|_| session.row.folds_threads())
             .and_then(|key| thread_tallies.get(key))
         {
             session.nesting.threads = *tally;
@@ -353,10 +353,10 @@ pub(crate) fn lay_out_group_rows(
         })
         .collect();
     let tag_filtered_out = !ui.selected_tag_filters.is_empty() && sessions.is_empty();
-    // A coordinator is folded unless the user unfolded it during this run.
+    // A coordinator (or a lead) is folded unless the user unfolded it during this run.
     let folded_coordinators: BTreeSet<String> = sessions
         .iter()
-        .filter(|session| session.row.is_coordinator)
+        .filter(|session| session.row.folds_threads())
         .map(|session| session.row.sidebar_session_id.clone())
         .filter(|id| !ui.collapse.expanded_coordinators.contains(id))
         .collect();

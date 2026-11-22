@@ -1365,7 +1365,7 @@ fn group_key(
             .iter()
             .enumerate()
             .filter(|(_, row)| {
-                row.row.is_coordinator
+                row.row.folds_threads()
                     && !inputs
                         .ui
                         .collapse
@@ -1392,7 +1392,7 @@ fn group_key(
             .rows
             .iter()
             .enumerate()
-            .filter(|(_, row)| row.row.is_coordinator)
+            .filter(|(_, row)| row.row.folds_threads())
             .filter_map(|(index, row)| {
                 let key = row.row.key.as_ref()?;
                 Some((index, thread_tallies.get(key).copied()?))

@@ -717,6 +717,15 @@ pub fn rename_shake_key(rename_failed_at: Option<&str>, now_ms: i64) -> Option<&
 }
 
 impl SessionRow {
+    /// A row whose threads nest under it and fold with the coordinator's control, remembered the
+    /// coordinator's way, with the coordinator's crew badge: a coordinator, or a lead.
+    ///
+    /// CDXC:LeadLinks 2026-11-22 DECISION:
+    /// User: a lead session "can be collapsed/expanded in the sidebar, exactly like a coordinator's threads collapse (same control, same remembered state behaviour)", and "its child-count indicator uses exactly the coordinator's icon and style"; "The link icon is reserved for links (PRs, issues, Linear tickets), never for linked sessions." A lead folds from the coordinator's chevron, starts folded on each launch like a coordinator, and shows the crew badge with the coordinator's tones; its row keeps its agent's logo, and it still lists every linked session (no "N older threads" row). This supersedes the 2026-11-20 link-icon badge and always-open tree.
+    pub fn folds_threads(&self) -> bool {
+        self.is_coordinator || self.is_lead
+    }
+
     pub fn has_question(&self) -> bool {
         ghostex_gx_protocol::session_has_question(self.pending_question_count, self.awaiting_answer)
     }
@@ -888,7 +897,8 @@ pub struct SessionRow {
     /// lead (`lead_linked`) carries its lead here, so it nests the same way.
     pub coordinator_parent: Option<SessionKey>,
     /// The session leads others through lead links (gxserver `isLead`, server/src/agents/lead_links):
-    /// its linked sessions nest under it, and its row shows the link count.
+    /// its linked sessions nest under it, folding and counted like a coordinator's threads
+    /// (`folds_threads`).
     pub is_lead: bool,
     /// How many sessions are linked to this lead.
     pub lead_link_count: u16,
