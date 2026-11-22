@@ -7,9 +7,10 @@
 //! - `auto`: use the agent's own advertised ACP automatic mode when available, else behave like `ask`
 //! - `full-access`: auto-approve everything
 //!
-//! Read-only tools (`read`, `search`, `think`) are always auto-approved when the agent offers a
-//! one-time allow option. Auto-approvals strictly choose `allow_once` (never `allow_always`) so
-//! Ghostex never writes permanent rules into the agent's own allowlist.
+//! Read-only tools (`read`, `search`, `think`) are auto-approved when the agent offers a one-time
+//! allow option and `rawInput` does not carry a shell/command field. Auto-approvals strictly choose
+//! `allow_once` (never `allow_always`) so Ghostex never writes permanent rules into the agent's own
+//! allowlist.
 
 use std::collections::VecDeque;
 use std::fs;
@@ -22,6 +23,7 @@ use serde_json::{Map, Value};
 pub const SESSION_ACP_APPROVAL_LEVEL_KEY: &str = "acpApprovalLevel";
 
 const MAX_SYMLINK_HOPS: usize = 40;
+const MAX_RAW_INPUT_DEPTH: usize = 16;
 
 /// The four approval levels offered on the chat box's Mode button for ACP sessions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,6 +96,19 @@ impl AcpApprovalLevel {
             Self::FullAccess => Self::Ask,
         }
     }
+
+    /// Whether a non-owner caller (e.g. an agent session token or peer computer) may transition an
+    /// ACP session from `current` to `target`. Raising permissions always requires an owner device;
+    /// keeping the same level, lowering to `Ask`, or stepping down from `FullAccess` is allowed.
+    pub const fn may_transition_without_owner(current: Self, target: Self) -> bool {
+        matches!(
+            (current, target),
+            (Self::Ask, Self::Ask)
+                | (Self::AutoEdits, Self::Ask | Self::AutoEdits)
+                | (Self::Auto, Self::Ask | Self::Auto)
+                | (Self::FullAccess, _)
+        )
+    }
 }
 
 fn read_trimmed_str<'a>(map: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
@@ -141,6 +156,30 @@ pub fn resolve_starting_level(
     AcpApprovalLevel::from_accept_all_default(accept_all_effective)
 }
 
+/// True when an ACP native mode id represents an automatic, edit-auto-approving, or bypass/yolo
+/// mode that must not be chosen as the safe fallback when leaving `Auto`.
+pub fn is_auto_or_bypass_mode_id(raw: &str) -> bool {
+    let lower = raw.trim().to_ascii_lowercase();
+    if lower.is_empty() {
+        return false;
+    }
+    matches!(lower.as_str(), "auto" | "auto_mode" | "auto-mode")
+        || lower.contains("bypass")
+        || lower.contains("yolo")
+        || lower.contains("full")
+        || lower.contains("accept-all")
+        || lower.contains("accept_all")
+        || lower.contains("allow-all")
+        || lower.contains("allow_all")
+        || lower.contains("auto-approve")
+        || lower.contains("auto_approve")
+        || lower.contains("unrestricted")
+        || lower.contains("accept-edit")
+        || lower.contains("accept_edit")
+        || lower.contains("auto-edit")
+        || lower.contains("auto_edit")
+}
+
 /// Find the agent's advertised automatic ACP mode (e.g. `id: "auto"`), excluding edit-only or
 /// bypass/yolo modes. Returns `None` when the agent advertises no automatic mode.
 pub fn find_advertised_auto_mode_id(available_modes: &Value) -> Option<String> {
@@ -185,48 +224,139 @@ pub fn find_advertised_default_mode_id(
     available_modes: &Value,
     initial_mode: Option<&str>,
 ) -> Option<String> {
-    if let Some(modes) = available_modes.as_array() {
-        for wanted in ["default", "ask", "manual", "supervised"] {
-            if let Some(id) = modes.iter().find_map(|item| {
-                let id = item
-                    .get("id")
-                    .or_else(|| item.get("modeId"))
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())?;
-                id.eq_ignore_ascii_case(wanted).then(|| id.to_string())
-            }) {
-                return Some(id);
-            }
+    let mode_ids: Vec<String> = available_modes
+        .as_array()
+        .map(|modes| {
+            modes
+                .iter()
+                .filter_map(|item| {
+                    item.get("id")
+                        .or_else(|| item.get("modeId"))
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    for wanted in [
+        "default",
+        "ask",
+        "manual",
+        "supervised",
+        "ask-for-approval",
+        "approval-required",
+        "normal",
+        "standard",
+        "code",
+    ] {
+        if let Some(id) = mode_ids.iter().find(|id| id.eq_ignore_ascii_case(wanted)) {
+            return Some(id.clone());
         }
     }
-    initial_mode
+
+    if let Some(initial) = initial_mode
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .filter(|s| {
-            let lower = s.to_ascii_lowercase();
-            !matches!(lower.as_str(), "auto" | "auto_mode" | "auto-mode")
-                && !lower.contains("bypass")
-                && !lower.contains("yolo")
-                && !lower.contains("full")
-        })
-        .map(str::to_string)
+        .filter(|s| !is_auto_or_bypass_mode_id(s))
+    {
+        return Some(initial.to_string());
+    }
+
+    // Fallback: any advertised mode that is not auto/bypass/edit-auto/plan.
+    mode_ids.into_iter().find(|id| {
+        let lower = id.to_ascii_lowercase();
+        !is_auto_or_bypass_mode_id(id) && lower != "plan" && lower != "read-only" && lower != "readonly"
+    })
 }
 
 /// High-level category of an ACP `toolCall` for approval evaluation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToolCategory {
-    /// `read`, `search`, `think`: never asked.
+    /// `read`, `search`, `think` (without shell/command fields): never asked.
     ReadOnly,
-    /// `edit`, `delete`, `move`: auto-approved in `Auto-edits` only when every resolved target path
-    /// stays inside `cwd` or a configured writable root.
+    /// `edit`, `delete`, `move` (without shell/command fields): auto-approved in `Auto-edits` only
+    /// when every resolved target path stays strictly inside `cwd` or a configured writable root.
     FileMutation,
-    /// `execute`, `fetch`, `switch_mode`, `other`, or omitted/unknown: always asked in `Ask` and
-    /// `Auto-edits`.
+    /// `execute`, `fetch`, `switch_mode`, `other`, omitted/unknown, or any call carrying a command
+    /// field in `rawInput`: always asked in `Ask` and `Auto-edits`.
     Other,
 }
 
+fn canonical_key(raw: &str) -> String {
+    raw.chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .map(|ch| ch.to_ascii_lowercase())
+        .collect()
+}
+
+fn is_command_key(norm: &str) -> bool {
+    matches!(
+        norm,
+        "command"
+            | "commandline"
+            | "cmd"
+            | "cmdline"
+            | "script"
+            | "shell"
+            | "shellcommand"
+            | "argv"
+            | "exec"
+    )
+}
+
+fn raw_input_contains_command(value: &Value, depth: usize) -> bool {
+    if depth > MAX_RAW_INPUT_DEPTH {
+        // Fail closed on deeply nested inputs.
+        return true;
+    }
+    match value {
+        Value::String(text) => {
+            let trimmed = text.trim();
+            if trimmed.starts_with('{') || trimmed.starts_with('[') {
+                match serde_json::from_str::<Value>(trimmed) {
+                    Ok(parsed) => raw_input_contains_command(&parsed, depth + 1),
+                    Err(_) => false,
+                }
+            } else {
+                false
+            }
+        }
+        Value::Array(items) => items
+            .iter()
+            .any(|item| raw_input_contains_command(item, depth + 1)),
+        Value::Object(map) => {
+            for (key, val) in map {
+                let norm = canonical_key(key);
+                if is_command_key(&norm) {
+                    let non_empty = match val {
+                        Value::Null => false,
+                        Value::String(s) => !s.trim().is_empty(),
+                        Value::Array(arr) => !arr.is_empty(),
+                        _ => true,
+                    };
+                    if non_empty {
+                        return true;
+                    }
+                }
+                if raw_input_contains_command(val, depth + 1) {
+                    return true;
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
 pub fn classify_tool_call(params: &Value) -> ToolCategory {
+    if let Some(raw_input) = params.pointer("/toolCall/rawInput") {
+        if raw_input_contains_command(raw_input, 0) {
+            return ToolCategory::Other;
+        }
+    }
     let kind = params
         .pointer("/toolCall/kind")
         .and_then(Value::as_str)
@@ -316,15 +446,7 @@ pub fn evaluate_permission(
         };
     }
 
-    let reason = if level == AcpApprovalLevel::FullAccess {
-        Some(
-            "The agent still asked for confirmation even though Full access is on. Review the details before allowing."
-                .to_string(),
-        )
-    } else {
-        None
-    };
-    PermissionDecision::AskUser { reason }
+    PermissionDecision::AskUser { reason: None }
 }
 
 /// Canonicalize `cwd` and any additional writable roots, dropping duplicates and empty paths.
@@ -364,18 +486,126 @@ fn owned_components(path: &Path) -> VecDeque<OwnedComponent> {
         .collect()
 }
 
-/// Resolve `raw_path` relative to `cwd` while following every symlink component, including
-/// dangling symlinks whose final target does not exist yet. Fails closed (`None`) on symlink
-/// loops, NUL bytes, or non-`NotFound` filesystem errors.
-pub fn resolve_path_with_symlinks(raw_path: &Path, cwd: &Path) -> Option<PathBuf> {
-    let text = raw_path.to_str()?;
-    if text.trim().is_empty() || text.contains('\0') {
+fn percent_decode_strict(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            if i + 2 >= bytes.len() {
+                return None;
+            }
+            let hi = (bytes[i + 1] as char).to_digit(16)?;
+            let lo = (bytes[i + 2] as char).to_digit(16)?;
+            let byte = ((hi << 4) | lo) as u8;
+            if byte == 0 {
+                return None;
+            }
+            out.push(byte);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// Parse a `file://` URI strictly into a local filesystem path. Fails closed (`None`) for remote
+/// authorities, query/fragment components, malformed percent-encoding, or non-absolute paths.
+fn parse_file_uri(text: &str) -> Option<PathBuf> {
+    if text.len() < 7 || !text[..7].eq_ignore_ascii_case("file://") {
         return None;
     }
-    let abs = if raw_path.is_absolute() {
-        raw_path.to_path_buf()
+    let rest = &text[7..];
+    if rest.contains('?') || rest.contains('#') {
+        return None;
+    }
+    let path_part = if let Some(after_slash) = rest.strip_prefix('/') {
+        format!("/{after_slash}")
+    } else if rest.len() >= 10 && rest[..10].eq_ignore_ascii_case("localhost/") {
+        format!("/{}", &rest[10..])
     } else {
-        cwd.join(raw_path)
+        // Non-empty non-localhost authority (e.g. file://host/share) or missing slash.
+        return None;
+    };
+    let decoded = percent_decode_strict(&path_part)?;
+    if decoded.is_empty() || decoded.contains('\0') {
+        return None;
+    }
+    #[cfg(windows)]
+    {
+        let bytes = decoded.as_bytes();
+        if bytes.len() >= 3
+            && bytes[0] == b'/'
+            && bytes[1].is_ascii_alphabetic()
+            && bytes[2] == b':'
+        {
+            return Some(PathBuf::from(&decoded[1..]));
+        }
+    }
+    Some(PathBuf::from(decoded))
+}
+
+fn is_windows_drive_relative(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.len() >= 2
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && !matches!(bytes.get(2), Some(b'\\' | b'/'))
+}
+
+fn has_unsafe_path_syntax(text: &str) -> bool {
+    text.trim().is_empty()
+        || text.contains('\0')
+        || text.starts_with('~')
+        || text.contains('$')
+        || text.contains("://")
+        || is_windows_drive_relative(text)
+}
+
+/// Resolve `raw_path` relative to `cwd` while following every symlink component, including
+/// dangling symlinks whose final target does not exist yet. Fails closed (`None`) on tilde paths,
+/// shell/env syntax (`$`), non-`file://` URI schemes, malformed `file://` URIs, Windows
+/// drive-relative paths (`C:foo`), symlink loops, NUL bytes, or non-`NotFound` filesystem errors.
+pub fn resolve_path_with_symlinks(raw_path: &Path, cwd: &Path) -> Option<PathBuf> {
+    let text = raw_path.to_str()?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() || trimmed.contains('\0') {
+        return None;
+    }
+    let parsed_path = if trimmed.len() >= 7 && trimmed[..7].eq_ignore_ascii_case("file://") {
+        let uri_path = parse_file_uri(trimmed)?;
+        let uri_text = uri_path.to_str()?;
+        if has_unsafe_path_syntax(uri_text) {
+            return None;
+        }
+        uri_path
+    } else {
+        if has_unsafe_path_syntax(trimmed) {
+            return None;
+        }
+        PathBuf::from(trimmed)
+    };
+
+    // On Windows, a Prefix component without a RootDir is drive-relative (e.g. `C:foo`): fail closed.
+    let mut has_prefix = false;
+    let mut has_root = false;
+    for comp in parsed_path.components() {
+        match comp {
+            Component::Prefix(_) => has_prefix = true,
+            Component::RootDir => has_root = true,
+            _ => {}
+        }
+    }
+    if has_prefix && !has_root {
+        return None;
+    }
+
+    let abs = if parsed_path.is_absolute() {
+        parsed_path
+    } else {
+        cwd.join(parsed_path)
     };
     let mut queue = owned_components(&abs);
     let mut resolved = PathBuf::new();
@@ -402,6 +632,11 @@ pub fn resolve_path_with_symlinks(raw_path: &Path, cwd: &Path) -> Option<PathBuf
                             return None;
                         }
                         let target = fs::read_link(&candidate).ok()?;
+                        if target.as_os_str().is_empty()
+                            || target.to_str().is_some_and(|s| s.contains('\0'))
+                        {
+                            return None;
+                        }
                         let target_components = owned_components(&target);
                         if target.is_absolute() {
                             resolved.clear();
@@ -411,7 +646,7 @@ pub fn resolve_path_with_symlinks(raw_path: &Path, cwd: &Path) -> Option<PathBuf
                         }
                     }
                     Ok(_) => {
-                        resolved = candidate;
+                        resolved = fs::canonicalize(&candidate).unwrap_or(candidate);
                     }
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                         resolved = candidate;
@@ -429,121 +664,519 @@ pub fn resolve_path_with_symlinks(raw_path: &Path, cwd: &Path) -> Option<PathBuf
     Some(resolved)
 }
 
-/// Extract all target paths referenced by an ACP `edit`/`delete`/`move` tool call from both
-/// `toolCall.locations` and `toolCall.rawInput` (plus `apply_patch`-style headers if present).
-pub fn extract_mutation_paths(params: &Value) -> Vec<String> {
-    let mut paths = Vec::new();
-    let Some(tool_call) = params.get("toolCall") else {
-        return paths;
-    };
-    if let Some(locations) = tool_call.get("locations").and_then(Value::as_array) {
-        for loc in locations {
-            if let Some(path) = loc
-                .get("path")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-            {
-                push_unique(&mut paths, path);
-            }
-        }
-    }
-    if let Some(raw_input) = tool_call.get("rawInput") {
-        collect_raw_input_paths(raw_input, &mut paths);
-    }
-    paths
-}
-
 fn push_unique(paths: &mut Vec<String>, path: &str) {
     if !paths.iter().any(|existing| existing == path) {
         paths.push(path.to_string());
     }
 }
 
-const PATH_KEYS: &[&str] = &[
-    "path",
-    "Path",
-    "file_path",
-    "filePath",
-    "FilePath",
-    "target_path",
-    "targetPath",
-    "TargetFile",
-    "target_file",
-    "AbsolutePath",
-    "absolutePath",
-    "absolute_path",
-    "source",
-    "source_path",
-    "sourcePath",
-    "destination",
-    "destination_path",
-    "destinationPath",
-    "dest",
-    "from",
-    "to",
-    "old_path",
-    "new_path",
-    "oldPath",
-    "newPath",
-    "directory",
-    "dir",
-];
+fn is_single_path_key(norm: &str) -> bool {
+    matches!(
+        norm,
+        "path"
+            | "filepath"
+            | "targetpath"
+            | "targetfile"
+            | "target"
+            | "absolutepath"
+            | "source"
+            | "sourcepath"
+            | "src"
+            | "srcpath"
+            | "sourcefile"
+            | "destination"
+            | "destinationpath"
+            | "destinationfile"
+            | "dest"
+            | "destpath"
+            | "destfile"
+            | "dst"
+            | "dstpath"
+            | "dstfile"
+            | "from"
+            | "frompath"
+            | "fromfile"
+            | "to"
+            | "topath"
+            | "tofile"
+            | "oldpath"
+            | "newpath"
+            | "oldfile"
+            | "newfile"
+            | "oldfilepath"
+            | "newfilepath"
+            | "output"
+            | "outputpath"
+            | "outputfile"
+            | "file"
+            | "filename"
+            | "uri"
+            | "fileuri"
+            | "targeturi"
+            | "sourceuri"
+            | "desturi"
+            | "directory"
+            | "dir"
+            | "dirpath"
+            | "folder"
+            | "folderpath"
+            | "cwd"
+            | "workdir"
+            | "workingdirectory"
+            | "root"
+            | "rootdir"
+    )
+}
 
-const PATH_LIST_KEYS: &[&str] = &["paths", "files", "file_paths", "filePaths", "targets", "edits"];
+fn is_path_list_or_map_key(norm: &str) -> bool {
+    matches!(
+        norm,
+        "paths"
+            | "files"
+            | "filepaths"
+            | "targets"
+            | "edits"
+            | "changes"
+            | "operations"
+            | "ops"
+            | "moves"
+            | "renames"
+            | "deletes"
+            | "deletions"
+            | "patches"
+            | "diffs"
+            | "entries"
+            | "items"
+            | "uris"
+    )
+}
 
-fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>) {
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    for key in PATH_KEYS {
-        if let Some(path) = obj
-            .get(*key)
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        {
-            push_unique(paths, path);
-        }
+fn is_patch_key(norm: &str) -> bool {
+    matches!(
+        norm,
+        "patch"
+            | "patchtext"
+            | "diff"
+            | "difftext"
+            | "unifieddiff"
+            | "input"
+            | "rawpatch"
+    )
+}
+
+fn is_known_non_path_key(norm: &str) -> bool {
+    matches!(
+        norm,
+        "content"
+            | "contents"
+            | "text"
+            | "newtext"
+            | "oldtext"
+            | "newstring"
+            | "oldstring"
+            | "newstr"
+            | "oldstr"
+            | "replacement"
+            | "replacementcontent"
+            | "replacementchunks"
+            | "targetcontent"
+            | "codecontent"
+            | "code"
+            | "body"
+            | "data"
+            | "encoding"
+            | "overwrite"
+            | "append"
+            | "create"
+            | "createmissing"
+            | "createdirs"
+            | "recursive"
+            | "force"
+            | "replaceall"
+            | "allowmultiple"
+            | "emptyfile"
+            | "startline"
+            | "endline"
+            | "line"
+            | "column"
+            | "offset"
+            | "limit"
+            | "instruction"
+            | "description"
+            | "summary"
+            | "reason"
+            | "explanation"
+            | "complexity"
+            | "isartifact"
+            | "artifactmetadata"
+            | "yieldms"
+            | "timeout"
+            | "mode"
+            | "permissions"
+            | "type"
+            | "kind"
+            | "id"
+            | "name"
+            | "title"
+            | "language"
+            | "format"
+    )
+}
+
+fn looks_like_path_key_name(norm: &str) -> bool {
+    norm.contains("path")
+        || norm.contains("file")
+        || norm.contains("dir")
+        || norm.contains("folder")
+        || norm.contains("dest")
+        || norm.contains("dst")
+        || norm.contains("target")
+        || norm.contains("src")
+        || norm.contains("source")
+        || norm.contains("uri")
+        || norm.contains("url")
+        || norm.contains("patch")
+        || norm.contains("diff")
+        || norm.contains("move")
+        || norm.contains("rename")
+        || norm.contains("root")
+}
+
+fn looks_like_external_path_value(text: &str) -> bool {
+    let trimmed = text.trim();
+    trimmed.starts_with('/')
+        || trimmed.starts_with('~')
+        || trimmed.starts_with("../")
+        || trimmed.starts_with("..\\")
+        || trimmed.starts_with("\\\\")
+        || trimmed.contains("://")
+        || (trimmed.len() >= 2
+            && trimmed.as_bytes()[0].is_ascii_alphabetic()
+            && trimmed.as_bytes()[1] == b':')
+}
+
+fn clean_diff_path_token(raw: &str) -> Option<String> {
+    let without_tab = raw.split('\t').next().unwrap_or(raw).trim();
+    let unquoted = without_tab
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .unwrap_or(without_tab)
+        .trim();
+    if unquoted.is_empty() || unquoted == "/dev/null" {
+        return None;
     }
-    for key in PATH_LIST_KEYS {
-        if let Some(items) = obj.get(*key).and_then(Value::as_array) {
-            for item in items {
-                if let Some(path) = item
-                    .as_str()
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                {
-                    push_unique(paths, path);
-                } else if item.is_object() {
-                    collect_raw_input_paths(item, paths);
+    let stripped = unquoted
+        .strip_prefix("a/")
+        .or_else(|| unquoted.strip_prefix("b/"))
+        .unwrap_or(unquoted)
+        .trim();
+    if stripped.is_empty() || stripped == "/dev/null" {
+        return None;
+    }
+    Some(stripped.to_string())
+}
+
+/// Extract target paths from `apply_patch` headers (trimmed) and unified diff headers
+/// (`diff --git`, `---`, `+++`, `rename from/to`, `copy from/to`). Returns `false` if the patch
+/// text is non-empty and yields no paths (unparseable patch format -> fail closed).
+fn collect_patch_paths(patch: &str, paths: &mut Vec<String>) -> bool {
+    let trimmed_all = patch.trim();
+    if trimmed_all.is_empty() {
+        return false;
+    }
+    let mut found = 0usize;
+    for raw_line in patch.lines() {
+        let line = raw_line.trim_start();
+        let mut matched_apply = false;
+        for prefix in [
+            "*** Update File:",
+            "*** Add File:",
+            "*** Delete File:",
+            "*** Move to:",
+        ] {
+            if let Some(rest) = line.strip_prefix(prefix) {
+                let target = rest.trim();
+                if target.is_empty() {
+                    return false;
                 }
+                push_unique(paths, target);
+                found += 1;
+                matched_apply = true;
+                break;
+            }
+        }
+        if matched_apply {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("diff --git ") {
+            // `diff --git a/foo b/bar` (handle simple or quoted tokens; fail closed if malformed)
+            let tokens: Vec<&str> = rest.split_whitespace().collect();
+            if tokens.len() < 2 {
+                return false;
+            }
+            for token in [tokens[0], tokens[tokens.len() - 1]] {
+                if let Some(p) = clean_diff_path_token(token) {
+                    push_unique(paths, &p);
+                    found += 1;
+                }
+            }
+            continue;
+        }
+        for prefix in ["--- ", "+++ ", "rename from ", "rename to ", "copy from ", "copy to "] {
+            if let Some(rest) = line.strip_prefix(prefix) {
+                if let Some(p) = clean_diff_path_token(rest) {
+                    push_unique(paths, &p);
+                    found += 1;
+                }
+                break;
             }
         }
     }
-    for patch_key in ["patch", "input", "diff"] {
-        if let Some(patch) = obj.get(patch_key).and_then(Value::as_str) {
-            for line in patch.lines() {
-                for prefix in [
-                    "*** Update File: ",
-                    "*** Add File: ",
-                    "*** Delete File: ",
-                    "*** Move to: ",
-                ] {
-                    if let Some(rest) = line.strip_prefix(prefix) {
-                        let trimmed = rest.trim();
-                        if !trimmed.is_empty() {
+    found > 0
+}
+
+fn collect_raw_input_paths(value: &Value, paths: &mut Vec<String>, depth: usize) -> bool {
+    if depth > MAX_RAW_INPUT_DEPTH {
+        return false;
+    }
+    match value {
+        Value::Null => true,
+        Value::String(text) => {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                return true;
+            }
+            if trimmed.starts_with('{') || trimmed.starts_with('[') {
+                let Ok(parsed) = serde_json::from_str::<Value>(trimmed) else {
+                    return false;
+                };
+                return collect_raw_input_paths(&parsed, paths, depth + 1);
+            }
+            // Plain string `rawInput`: only acceptable if it parses as a patch/diff.
+            collect_patch_paths(trimmed, paths)
+        }
+        Value::Array(items) => {
+            for item in items {
+                match item {
+                    Value::String(s) => {
+                        let trimmed = s.trim();
+                        if trimmed.is_empty() {
+                            return false;
+                        }
+                        push_unique(paths, trimmed);
+                    }
+                    Value::Object(_) | Value::Array(_) => {
+                        if !collect_raw_input_paths(item, paths, depth + 1) {
+                            return false;
+                        }
+                    }
+                    _ => return false,
+                }
+            }
+            true
+        }
+        Value::Object(obj) => {
+            for (key, val) in obj {
+                let norm = canonical_key(key);
+                if is_single_path_key(&norm) {
+                    match val {
+                        Value::Null => {}
+                        Value::String(s) => {
+                            let trimmed = s.trim();
+                            if trimmed.is_empty() {
+                                return false;
+                            }
                             push_unique(paths, trimmed);
                         }
+                        _ => return false,
+                    }
+                } else if is_path_list_or_map_key(&norm) {
+                    match val {
+                        Value::Null => {}
+                        Value::Array(items) => {
+                            for item in items {
+                                match item {
+                                    Value::String(s) => {
+                                        let trimmed = s.trim();
+                                        if trimmed.is_empty() {
+                                            return false;
+                                        }
+                                        push_unique(paths, trimmed);
+                                    }
+                                    Value::Object(_) | Value::Array(_) => {
+                                        if !collect_raw_input_paths(item, paths, depth + 1) {
+                                            return false;
+                                        }
+                                    }
+                                    _ => return false,
+                                }
+                            }
+                        }
+                        Value::Object(map) => {
+                            // Path-keyed map such as `{ "changes": { "/repo/a": "...", "/outside/b": "..." } }`.
+                            for (entry_key, entry_val) in map {
+                                let trimmed_key = entry_key.trim();
+                                if trimmed_key.is_empty() {
+                                    return false;
+                                }
+                                push_unique(paths, trimmed_key);
+                                if matches!(entry_val, Value::Object(_) | Value::Array(_))
+                                    && !collect_raw_input_paths(entry_val, paths, depth + 1)
+                                {
+                                    return false;
+                                }
+                            }
+                        }
+                        _ => return false,
+                    }
+                } else if is_patch_key(&norm) {
+                    match val {
+                        Value::Null => {}
+                        Value::String(s) => {
+                            if !collect_patch_paths(s, paths) {
+                                return false;
+                            }
+                        }
+                        Value::Object(_) | Value::Array(_) => {
+                            if !collect_raw_input_paths(val, paths, depth + 1) {
+                                return false;
+                            }
+                        }
+                        _ => return false,
+                    }
+                } else if is_known_non_path_key(&norm) {
+                    // Still recurse if a known field carries structured nested objects/arrays
+                    // (e.g. `replacementChunks`, structured `content` blocks).
+                    if matches!(val, Value::Object(_) | Value::Array(_))
+                        && !collect_raw_input_paths(val, paths, depth + 1)
+                    {
+                        return false;
+                    }
+                } else {
+                    // Unrecognized key: fail closed if its name looks path/mutation-related, or if
+                    // its scalar value looks like an external/filesystem path, or recurse if nested.
+                    if looks_like_path_key_name(&norm) {
+                        return false;
+                    }
+                    match val {
+                        Value::Object(_) | Value::Array(_) => {
+                            if !collect_raw_input_paths(val, paths, depth + 1) {
+                                return false;
+                            }
+                        }
+                        Value::String(s) if looks_like_external_path_value(s) => {
+                            return false;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+fn collect_content_paths(content: &Value, paths: &mut Vec<String>) -> bool {
+    let items: Vec<&Value> = match content {
+        Value::Null => return true,
+        Value::Array(arr) => arr.iter().collect(),
+        Value::Object(_) => vec![content],
+        _ => return false,
+    };
+    for item in items {
+        let Some(obj) = item.as_object() else {
+            return false;
+        };
+        let is_diff = obj
+            .get("type")
+            .and_then(Value::as_str)
+            .is_some_and(|t| t.eq_ignore_ascii_case("diff"));
+        let mut item_paths = 0usize;
+        for (key, val) in obj {
+            let norm = canonical_key(key);
+            if is_single_path_key(&norm) {
+                match val {
+                    Value::Null => {}
+                    Value::String(s) => {
+                        let trimmed = s.trim();
+                        if trimmed.is_empty() {
+                            return false;
+                        }
+                        push_unique(paths, trimmed);
+                        item_paths += 1;
+                    }
+                    _ => return false,
+                }
+            } else if is_patch_key(&norm) {
+                if let Some(s) = val.as_str() {
+                    if !collect_patch_paths(s, paths) {
+                        return false;
+                    }
+                    item_paths += 1;
+                }
+            }
+        }
+        if is_diff && item_paths == 0 {
+            return false;
+        }
+    }
+    true
+}
+
+/// Extract all target paths referenced by an ACP `edit`/`delete`/`move` tool call from
+/// `toolCall.locations`, `toolCall.content`, and `toolCall.rawInput` (including unified diffs and
+/// `apply_patch` headers). Fails closed (`None`) whenever any location, content diff, or structured
+/// input cannot be fully accounted for.
+pub fn extract_mutation_paths(params: &Value) -> Option<Vec<String>> {
+    let tool_call = params.get("toolCall")?.as_object()?;
+    let mut paths = Vec::new();
+
+    if let Some(locations) = tool_call.get("locations") {
+        if !locations.is_null() {
+            let arr = locations.as_array()?;
+            for loc in arr {
+                let obj = loc.as_object()?;
+                let path = obj
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())?;
+                push_unique(&mut paths, path);
+                if let Some(uri) = obj.get("uri") {
+                    if !uri.is_null() {
+                        let uri_str = uri
+                            .as_str()
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())?;
+                        push_unique(&mut paths, uri_str);
                     }
                 }
             }
         }
     }
+
+    if let Some(content) = tool_call.get("content") {
+        if !collect_content_paths(content, &mut paths) {
+            return None;
+        }
+    }
+
+    if let Some(raw_input) = tool_call.get("rawInput") {
+        if !collect_raw_input_paths(raw_input, &mut paths, 0) {
+            return None;
+        }
+    }
+
+    if paths.is_empty() {
+        return None;
+    }
+    Some(paths)
 }
 
-/// True only when at least one mutation path is extracted AND every extracted path resolves
-/// (with symlinks expanded) inside `writable_roots`. Fails closed when paths or roots are empty.
+/// True only when path extraction accounts for every mutation target AND every extracted path
+/// resolves (with symlinks expanded) strictly inside `writable_roots` (never the root directory
+/// itself). Fails closed on any ambiguity, empty paths, or empty roots.
 pub fn file_mutation_stays_inside_roots(
     params: &Value,
     writable_roots: &[PathBuf],
@@ -552,7 +1185,9 @@ pub fn file_mutation_stays_inside_roots(
     if writable_roots.is_empty() {
         return false;
     }
-    let paths = extract_mutation_paths(params);
+    let Some(paths) = extract_mutation_paths(params) else {
+        return false;
+    };
     if paths.is_empty() {
         return false;
     }
@@ -563,6 +1198,6 @@ pub fn file_mutation_stays_inside_roots(
         };
         writable_roots
             .iter()
-            .any(|root| resolved == *root || resolved.starts_with(root))
+            .any(|root| resolved != *root && resolved.starts_with(root))
     })
 }

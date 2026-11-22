@@ -796,6 +796,9 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
             let result = crate::session_chat_codex_picker::select_session_chat_model(
                 &state,
                 params.as_object().unwrap(),
+                // Owner-device gating for ACP approval level raises was already enforced at
+                // enqueue time in `handle_select_session_chat_model_http`.
+                true,
             )
             .await;
             if let Some(guard) = first_message {

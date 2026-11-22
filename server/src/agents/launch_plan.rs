@@ -94,6 +94,9 @@ pub(crate) fn create_agent_session_params_for_project(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
+    // Starting ACP approval level comes from project/agent/global acceptAll defaults, never from
+    // client-supplied `runtimeSettings` (so a caller cannot override `acceptAllMode: "disabled"`).
+    runtime_settings.remove(crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY);
     let agent_config = resolve_project_agent_config(project, &agent_id, Some(&launch_settings));
     let agent_icon = read_text_from_map(&agent_config, "icon")
         .or_else(|| read_text_from_map(&launch_settings, "icon"));
@@ -698,6 +701,7 @@ pub(crate) fn create_agent_session_params_for_project(
                             base_cli_cmd.as_deref(),
                             resume_id.as_deref(),
                             approval_level,
+                            &[],
                             req_model.as_deref(),
                             req_effort.as_deref(),
                         );

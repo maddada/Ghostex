@@ -323,6 +323,7 @@ pub(super) async fn route_chat_http(
         "/api/selectSessionChatModel" => {
             crate::session_chat_codex_picker::handle_select_session_chat_model_http(
                 &state,
+                &caller,
                 endpoint.path,
                 request_id,
                 &body_json,

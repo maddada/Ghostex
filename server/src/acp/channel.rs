@@ -153,6 +153,7 @@ pub(crate) async fn answer_permission(
     session_id: &str,
     decision: &str,
     option_id: Option<&str>,
+    tool_use_id: Option<&str>,
 ) -> Result<Value, DomainStateError> {
     if live(project_id, session_id, "approve").is_none() {
         return Err(DomainStateError {
@@ -167,6 +168,7 @@ pub(crate) async fn answer_permission(
         json!({
             "decision": decision,
             "optionId": option_id,
+            "toolUseId": tool_use_id,
         }),
         Duration::from_secs(15),
     )
@@ -256,48 +258,15 @@ pub(crate) async fn persist_approval_level(
     })?
 }
 
-/// Change the approval level on an ACP session, persisting it per session and updating the live
-/// `acp-host` immediately (no restart).
-pub(crate) async fn set_approval_level(
+/// Read the session's current ACP approval level (live channel first, then persisted SQLite value,
+/// failing closed to `Ask` when unknown).
+pub(crate) async fn current_approval_level(
     state: &AppState,
     project_id: &str,
     session_id: &str,
-    raw_mode: &str,
-) -> Result<Value, DomainStateError> {
-    let level = super::AcpApprovalLevel::parse(raw_mode).ok_or_else(|| DomainStateError {
-        code: "invalidParams",
-        message: format!("Unsupported approval level: {raw_mode}"),
-    })?;
-    persist_approval_level(state, project_id, session_id, level).await?;
-    if live(project_id, session_id, "mode").is_some() {
-        return request(
-            project_id,
-            session_id,
-            "mode",
-            json!({ "mode": level.as_str() }),
-            Duration::from_secs(15),
-        )
-        .await
-        .map_err(|error| DomainStateError {
-            code: "invalidParams",
-            message: format!("ACP approval level change failed: {error}"),
-        });
-    }
-    Ok(json!({
-        "mode": level.as_str(),
-        "modeLabel": level.label(),
-        "approvalLevel": level.as_str(),
-    }))
-}
-
-/// Cycle to the next ACP approval level (`ask` -> `auto-edits` -> `auto` -> `full-access`).
-pub(crate) async fn cycle_mode(
-    state: &AppState,
-    project_id: &str,
-    session_id: &str,
-) -> Result<Value, DomainStateError> {
-    let current = if live(project_id, session_id, "state").is_some() {
-        request(
+) -> super::AcpApprovalLevel {
+    if live(project_id, session_id, "state").is_some() {
+        if let Some(level) = request(
             project_id,
             session_id,
             "state",
@@ -311,31 +280,140 @@ pub(crate) async fn cycle_mode(
                 .or_else(|| snap.get("mode"))
                 .and_then(Value::as_str)
                 .and_then(super::AcpApprovalLevel::parse)
-        })
-    } else {
-        None
-    };
-    let current = match current {
-        Some(level) => level,
-        None => {
-            let paths = state.paths.clone();
-            let server_id = state.metadata.server_id.clone();
-            let pid = project_id.to_string();
-            let sid = session_id.to_string();
-            tokio::task::spawn_blocking(move || {
-                let db = open_gxserver_database(&paths).ok()?;
-                let repo = DomainRepository::new(&db, server_id.as_str());
-                let session = repo.get_session(&pid, &sid).ok().flatten()?;
-                super::approval::stored_session_approval_level(&session)
-            })
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default()
+        }) {
+            return level;
         }
-    };
+    }
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&paths).ok()?;
+        let repo = DomainRepository::new(&db, server_id.as_str());
+        let session = repo.get_session(&pid, &sid).ok().flatten()?;
+        super::approval::stored_session_approval_level(&session)
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default()
+}
+
+/// Refuse any non-owner attempt to raise an ACP session's approval level.
+pub(crate) async fn check_approval_level_change_allowed(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    target: super::AcpApprovalLevel,
+    is_owner_device: bool,
+) -> Result<(), DomainStateError> {
+    if is_owner_device {
+        return Ok(());
+    }
+    let current = current_approval_level(state, project_id, session_id).await;
+    if super::AcpApprovalLevel::may_transition_without_owner(current, target) {
+        return Ok(());
+    }
+    Err(DomainStateError {
+        code: "forbidden",
+        message: "Only your own computer or phone can raise a session's approval level."
+            .to_string(),
+    })
+}
+
+/// Change the approval level on an ACP session, persisting it per session and updating the live
+/// `acp-host` immediately (no restart). When the host is starting or reconnecting, persists the
+/// desired level so it syncs on registration and returns a retryable `dependencyUnavailable` error.
+pub(crate) async fn set_approval_level(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    raw_mode: &str,
+    is_owner_device: bool,
+) -> Result<Value, DomainStateError> {
+    let level = super::AcpApprovalLevel::parse(raw_mode).ok_or_else(|| DomainStateError {
+        code: "invalidParams",
+        message: format!("Unsupported approval level: {raw_mode}"),
+    })?;
+    check_approval_level_change_allowed(state, project_id, session_id, level, is_owner_device)
+        .await?;
+    if live(project_id, session_id, "mode").is_some() {
+        match request(
+            project_id,
+            session_id,
+            "mode",
+            json!({ "mode": level.as_str() }),
+            Duration::from_secs(15),
+        )
+        .await
+        {
+            Ok(result) => {
+                persist_approval_level(state, project_id, session_id, level).await?;
+                return Ok(result);
+            }
+            Err(ChannelError::Unavailable(_) | ChannelError::NoAnswer) => {
+                // Persist so `acp-host` syncs on its next reconnect poll, and signal retryable.
+                persist_approval_level(state, project_id, session_id, level).await?;
+                return Err(DomainStateError {
+                    code: "dependencyUnavailable",
+                    message: "The ACP host is reconnecting. Your approval level was saved and will apply as soon as it reconnects.".to_string(),
+                });
+            }
+            Err(error) => {
+                return Err(DomainStateError {
+                    code: "invalidState",
+                    message: format!("ACP approval level change failed: {error}"),
+                });
+            }
+        }
+    }
+
+    // No open live channel: persist desired level so the next poll/launch picks it up, and check
+    // whether the session is confirmed inactive (safe to succeed offline) or starting/reconnecting.
+    persist_approval_level(state, project_id, session_id, level).await?;
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    let confirmed_inactive = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&paths).ok()?;
+        let repo = DomainRepository::new(&db, server_id.as_str());
+        let session = repo.get_session(&pid, &sid).ok().flatten()?;
+        let lifecycle = crate::presentation::effective_lifecycle_state(&session);
+        let inactive_state = matches!(lifecycle.as_str(), "stopped" | "sleeping")
+            || crate::agents::session_is_draft(&session);
+        Some(inactive_state && zmx_session_confirmed_missing(&session))
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(false);
+
+    if confirmed_inactive {
+        return Ok(json!({
+            "mode": level.as_str(),
+            "modeLabel": level.label(),
+            "approvalLevel": level.as_str(),
+        }));
+    }
+
+    Err(DomainStateError {
+        code: "dependencyUnavailable",
+        message: "The ACP host is starting or reconnecting. Your approval level was saved and will apply as soon as it reconnects.".to_string(),
+    })
+}
+
+/// Cycle to the next ACP approval level (`ask` -> `auto-edits` -> `auto` -> `full-access`).
+pub(crate) async fn cycle_mode(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    is_owner_device: bool,
+) -> Result<Value, DomainStateError> {
+    let current = current_approval_level(state, project_id, session_id).await;
     let next = current.next_in_cycle();
-    set_approval_level(state, project_id, session_id, next.as_str()).await
+    set_approval_level(state, project_id, session_id, next.as_str(), is_owner_device).await
 }
 
 /// Probe whether the session's `zmx`/`wmx` provider is confirmed missing on disk.

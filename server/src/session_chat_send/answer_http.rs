@@ -899,11 +899,13 @@ async fn answer_session_chat_prompt(
                         return domain_error_response(endpoint_path, request_id, error);
                     }
                 }
+                let tool_use_id = params.get("toolUseId").and_then(Value::as_str);
                 return match crate::acp::channel::answer_permission(
                     &target.project_id,
                     &target.session_id,
                     decision,
                     option_id,
+                    tool_use_id,
                 )
                 .await
                 {

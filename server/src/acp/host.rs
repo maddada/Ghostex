@@ -4,7 +4,7 @@
 //! `/api/agentChatChannel`, survives `gxserver` reloads without dropping the
 //! agent, and can switch in-place into the interactive CLI terminal on request.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -25,6 +25,7 @@ use crate::constants::{
 use super::approval::{
     AcpApprovalLevel, AcpPermissionOption, PermissionDecision, canonicalize_writable_roots,
     evaluate_permission, find_advertised_auto_mode_id, find_advertised_default_mode_id,
+    is_auto_or_bypass_mode_id,
 };
 use super::spec::{
     AcpAgentSpec, build_acp_server_argv, build_cli_switch_argv, spec_for_family,
@@ -518,7 +519,7 @@ struct HostState {
     available_models: Value,
     available_modes: Value,
     config_options: Value,
-    pending_permission: Option<PendingPermission>,
+    pending_permissions: VecDeque<PendingPermission>,
     child_exited: bool,
 }
 
@@ -545,7 +546,7 @@ impl HostState {
             available_models: Value::Array(Vec::new()),
             available_modes: Value::Array(Vec::new()),
             config_options: Value::Array(Vec::new()),
-            pending_permission: None,
+            pending_permissions: VecDeque::new(),
             child_exited: false,
         }
     }
@@ -571,7 +572,8 @@ impl HostState {
             "availableModels": self.available_models,
             "availableModes": self.available_modes,
             "configOptions": self.config_options,
-            "pendingPermission": self.pending_permission.as_ref().map(|p| p.to_ghostex_prompt()),
+            "pendingPermission": self.pending_permissions.front().map(|p| p.to_ghostex_prompt()),
+            "pendingPermissionCount": self.pending_permissions.len(),
             "transcriptPath": transcript_path,
             "childExited": self.child_exited,
         })
@@ -843,41 +845,72 @@ fn build_prompt_blocks(
     Ok(blocks)
 }
 
-/// Keep the underlying ACP server in its advertised `auto` mode only while `approval_level` is
-/// `Auto` (and the agent advertises one), and in its default/ask mode for `Ask`, `Auto-edits`, and
-/// `Full access` so `acp-host` evaluates every `session/request_permission` live with `allow_once`.
-fn sync_native_mode(transport: &AcpTransport, state: &Mutex<HostState>) {
-    let (sid, level, current_mode, target_mode, is_auto_target) = {
+/// Keep the underlying ACP server in its advertised `auto` mode only while `target_level` is
+/// `Auto` (and the agent advertises both an auto mode and a safe non-auto mode to return to), and
+/// in its default/ask mode for `Ask`, `Auto-edits`, and `Full access` so `acp-host` evaluates
+/// every `session/request_permission` live with `allow_once`.
+///
+/// Fails visibly (`Err`) whenever leaving an active native auto/bypass mode cannot be confirmed on
+/// the subprocess, leaving `approval_level` and `native_auto_active` reflecting reality.
+fn apply_approval_level_and_sync_native_mode(
+    transport: &AcpTransport,
+    state: &Mutex<HostState>,
+    target_level: AcpApprovalLevel,
+) -> Result<(), String> {
+    let (sid, current_mode, was_auto_or_bypass, target_mode, is_auto_target) = {
         let s = state.lock().unwrap_or_else(|p| p.into_inner());
         let auto_id = find_advertised_auto_mode_id(&s.available_modes);
         let default_id = s.default_native_mode.clone().or_else(|| {
             find_advertised_default_mode_id(&s.available_modes, s.current_mode.as_deref())
         });
-        let (target, is_auto) = match level_target(s.approval_level, auto_id, default_id) {
-            Some((id, is_auto)) => (Some(id), is_auto),
-            None => (None, false),
+        let was_auto = s.native_auto_active
+            || s.current_mode
+                .as_deref()
+                .is_some_and(is_auto_or_bypass_mode_id);
+        let (target, is_auto) = match target_level {
+            AcpApprovalLevel::Auto => match (auto_id, default_id.clone()) {
+                // Only enter native auto if we also know a safe non-auto mode to switch back to.
+                (Some(id), Some(_)) => (Some(id), true),
+                (_, default) => (default, false),
+            },
+            AcpApprovalLevel::Ask | AcpApprovalLevel::AutoEdits | AcpApprovalLevel::FullAccess => {
+                (default_id, false)
+            }
         };
         (
             s.native_session_id.clone(),
-            s.approval_level,
             s.current_mode.clone(),
+            was_auto,
             target,
             is_auto,
         )
     };
+
     let Some(sid) = sid else {
-        return;
-    };
-    let Some(target_mode) = target_mode else {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-        s.native_auto_active = false;
-        return;
+        s.approval_level = target_level;
+        return Ok(());
     };
+
+    let Some(target_mode) = target_mode else {
+        if was_auto_or_bypass && !is_auto_target {
+            return Err(
+                "Could not leave the agent's automatic mode because the agent did not advertise a safe non-automatic mode.".to_string(),
+            );
+        }
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.approval_level = target_level;
+        s.native_auto_active = false;
+        return Ok(());
+    };
+
     if current_mode.as_deref() == Some(target_mode.as_str()) {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-        s.native_auto_active = level == AcpApprovalLevel::Auto && is_auto_target;
-        return;
+        s.approval_level = target_level;
+        s.native_auto_active = target_level == AcpApprovalLevel::Auto && is_auto_target;
+        return Ok(());
     }
+
     match transport.call(
         "session/set_mode",
         json!({ "sessionId": sid, "modeId": target_mode }),
@@ -885,29 +918,39 @@ fn sync_native_mode(transport: &AcpTransport, state: &Mutex<HostState>) {
     ) {
         Ok(_) => {
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            s.approval_level = target_level;
             s.current_mode = Some(target_mode);
-            s.native_auto_active = level == AcpApprovalLevel::Auto && is_auto_target;
+            s.native_auto_active = target_level == AcpApprovalLevel::Auto && is_auto_target;
+            Ok(())
         }
-        Err(_) => {
+        Err(err) => {
+            if was_auto_or_bypass && !is_auto_target {
+                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                s.native_auto_active = true;
+                return Err(format!(
+                    "Could not leave the agent's automatic mode: {err}"
+                ));
+            }
+            // Entering native Auto failed: stay safely on the non-auto native mode (behaving like
+            // Ask) while recording the requested level.
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            s.approval_level = target_level;
             s.native_auto_active = false;
+            Ok(())
         }
     }
 }
 
-fn level_target(
-    level: AcpApprovalLevel,
-    auto_id: Option<String>,
-    default_id: Option<String>,
-) -> Option<(String, bool)> {
-    match level {
-        AcpApprovalLevel::Auto => match auto_id {
-            Some(id) => Some((id, true)),
-            None => default_id.map(|id| (id, false)),
-        },
-        AcpApprovalLevel::Ask | AcpApprovalLevel::AutoEdits | AcpApprovalLevel::FullAccess => {
-            default_id.map(|id| (id, false))
-        }
+fn cancel_all_pending_permissions(transport: &AcpTransport, state: &Mutex<HostState>) {
+    let drained: Vec<PendingPermission> = {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.pending_permissions.drain(..).collect()
+    };
+    for perm in drained {
+        let _ = transport.respond_to_agent(
+            perm.rpc_id,
+            json!({ "outcome": { "outcome": "cancelled" } }),
+        );
     }
 }
 
@@ -1188,18 +1231,21 @@ pub fn run(args: &[String]) -> i32 {
                         );
                         let _ = std::io::stdout().flush();
                         let perm_for_report = perm.clone();
-                        let native_id = {
+                        let (should_report, native_id) = {
                             let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                            s.pending_permission = Some(perm);
-                            s.native_session_id.clone()
+                            let was_empty = s.pending_permissions.is_empty();
+                            s.pending_permissions.push_back(perm);
+                            (was_empty, s.native_session_id.clone())
                         };
-                        if let Some(ep) = ep_out.as_ref() {
-                            ep.report_activity(
-                                &fam,
-                                "attention",
-                                native_id.as_deref(),
-                                Some(&perm_for_report),
-                            );
+                        if should_report {
+                            if let Some(ep) = ep_out.as_ref() {
+                                ep.report_activity(
+                                    &fam,
+                                    "attention",
+                                    native_id.as_deref(),
+                                    Some(&perm_for_report),
+                                );
+                            }
                         }
                     } else {
                         t_out.respond_error_to_agent(
@@ -1223,8 +1269,37 @@ pub fn run(args: &[String]) -> i32 {
                                 .or_else(|| update.get("modeId"))
                                 .and_then(Value::as_str)
                             {
-                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                s.current_mode = Some(mode_id.to_string());
+                                let needs_resync_level = {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    s.current_mode = Some(mode_id.to_string());
+                                    if is_auto_or_bypass_mode_id(mode_id) {
+                                        s.native_auto_active = true;
+                                        (s.approval_level != AcpApprovalLevel::Auto)
+                                            .then_some(s.approval_level)
+                                    } else {
+                                        s.native_auto_active = false;
+                                        None
+                                    }
+                                };
+                                if let Some(target_level) = needs_resync_level {
+                                    // Re-sync off the stdout reader thread so `transport.call`
+                                    // never deadlocks waiting for its own response.
+                                    let t_sync = t_out.clone();
+                                    let st_sync = st_out.clone();
+                                    let drifted = mode_id.to_string();
+                                    thread::spawn(move || {
+                                        if let Err(err) = apply_approval_level_and_sync_native_mode(
+                                            &t_sync,
+                                            &st_sync,
+                                            target_level,
+                                        ) {
+                                            eprintln!(
+                                                "[ACP] Warning: agent switched to native mode `{drifted}` while level is {}: {err}",
+                                                target_level.label()
+                                            );
+                                        }
+                                    });
+                                }
                             }
                         }
                         "config_option_update" => {
@@ -1313,7 +1388,11 @@ pub fn run(args: &[String]) -> i32 {
         s.native_session_id.clone()
     };
 
-    sync_native_mode(&transport, &state);
+    if let Err(err) =
+        apply_approval_level_and_sync_native_mode(&transport, &state, parsed.approval_level)
+    {
+        eprintln!("[ACP] Warning: could not sync initial native mode: {err}");
+    }
 
     if let Some(model) = parsed.model.as_deref().filter(|m| !m.is_empty()) {
         if let Some(sid) = native_session_id.as_deref() {
@@ -1377,6 +1456,10 @@ pub fn run(args: &[String]) -> i32 {
             thread::sleep(Duration::from_millis(500));
             continue;
         };
+        let current_level_for_poll = state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .approval_level;
         let poll_body = json!({
             "requestId": format!("acp-poll-{}", now_ms()),
             "params": {
@@ -1386,24 +1469,47 @@ pub fn run(args: &[String]) -> i32 {
                 "pid": std::process::id(),
                 "instance": ep.instance,
                 "version": 1,
+                "approvalLevel": current_level_for_poll.as_str(),
                 "capabilities": capabilities,
             },
         });
         let resp = match ep.post_json("/api/agentChatChannel", poll_body, Duration::from_secs(28)) {
             Ok(resp) => {
+                if let Some(desired) = resp
+                    .pointer("/result/desiredApprovalLevel")
+                    .or_else(|| resp.get("desiredApprovalLevel"))
+                    .and_then(Value::as_str)
+                    .and_then(AcpApprovalLevel::parse)
+                {
+                    let current = state
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .approval_level;
+                    if desired != current {
+                        if let Err(err) =
+                            apply_approval_level_and_sync_native_mode(&transport, &state, desired)
+                        {
+                            eprintln!(
+                                "[ACP] Warning: failed to sync persisted approval level {}: {err}",
+                                desired.label()
+                            );
+                        }
+                    }
+                }
                 if reconnecting {
                     reconnecting = false;
                     // Re-sync live state after a gxserver reload.
                     let (act, sid, perm) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        let act = if s.pending_permission.is_some() {
+                        let front = s.pending_permissions.front().cloned();
+                        let act = if front.is_some() {
                             "attention"
                         } else if s.working {
                             "working"
                         } else {
                             "idle"
                         };
-                        (act, s.native_session_id.clone(), s.pending_permission.clone())
+                        (act, s.native_session_id.clone(), front)
                     };
                     ep.report_activity(spec.family, act, sid.as_deref(), perm.as_ref());
                 }
@@ -1443,17 +1549,7 @@ pub fn run(args: &[String]) -> i32 {
                     if let Some(sid) = sid {
                         let _ = transport.notify("session/cancel", json!({ "sessionId": sid }));
                     }
-                    let pending = state
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .pending_permission
-                        .take();
-                    if let Some(perm) = pending {
-                        let _ = transport.respond_to_agent(
-                            perm.rpc_id,
-                            json!({ "outcome": { "outcome": "cancelled" } }),
-                        );
-                    }
+                    cancel_all_pending_permissions(&transport, &state);
                     ep.ack(id, true, json!({ "aborted": true }), None);
                 }
                 "approve" => {
@@ -1462,13 +1558,29 @@ pub fn run(args: &[String]) -> i32 {
                         .and_then(Value::as_str)
                         .unwrap_or("allow");
                     let explicit = params.get("optionId").and_then(Value::as_str);
-                    let perm = state
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .pending_permission
-                        .take();
+                    let target_tool_use_id = params
+                        .get("toolUseId")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty());
+                    let perm = {
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        if let Some(wanted_id) = target_tool_use_id {
+                            s.pending_permissions
+                                .iter()
+                                .position(|p| p.tool_use_id.as_deref() == Some(wanted_id))
+                                .and_then(|idx| s.pending_permissions.remove(idx))
+                        } else {
+                            s.pending_permissions.pop_front()
+                        }
+                    };
                     let Some(perm) = perm else {
-                        ep.ack(id, false, Value::Null, Some("No pending ACP approval."));
+                        let msg = if target_tool_use_id.is_some() {
+                            "That ACP approval request is no longer pending."
+                        } else {
+                            "No pending ACP approval."
+                        };
+                        ep.ack(id, false, Value::Null, Some(msg));
                         continue;
                     };
                     let outcome = if decision.eq_ignore_ascii_case("escape")
@@ -1482,12 +1594,23 @@ pub fn run(args: &[String]) -> i32 {
                     };
                     match transport.respond_to_agent(perm.rpc_id, json!({ "outcome": outcome })) {
                         Ok(()) => {
-                            let sid = state
-                                .lock()
-                                .unwrap_or_else(|p| p.into_inner())
-                                .native_session_id
-                                .clone();
-                            ep.report_activity(spec.family, "working", sid.as_deref(), None);
+                            let (sid, next_perm) = {
+                                let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                (
+                                    s.native_session_id.clone(),
+                                    s.pending_permissions.front().cloned(),
+                                )
+                            };
+                            if let Some(next_perm) = next_perm {
+                                ep.report_activity(
+                                    spec.family,
+                                    "attention",
+                                    sid.as_deref(),
+                                    Some(&next_perm),
+                                );
+                            } else {
+                                ep.report_activity(spec.family, "working", sid.as_deref(), None);
+                            }
                             ep.ack(id, true, json!({ "answered": true }), None);
                         }
                         Err(err) => ep.ack(id, false, Value::Null, Some(&err)),
@@ -1587,11 +1710,12 @@ pub fn run(args: &[String]) -> i32 {
                         );
                         continue;
                     };
+                    if let Err(err) =
+                        apply_approval_level_and_sync_native_mode(&transport, &state, level)
                     {
-                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        s.approval_level = level;
+                        ep.ack(id, false, Value::Null, Some(&err));
+                        continue;
                     }
-                    sync_native_mode(&transport, &state);
                     let snap = state
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
@@ -1648,17 +1772,7 @@ pub fn run(args: &[String]) -> i32 {
                         }
                     };
                     if is_working && interrupt {
-                        let pending = state
-                            .lock()
-                            .unwrap_or_else(|p| p.into_inner())
-                            .pending_permission
-                            .take();
-                        if let Some(perm) = pending {
-                            let _ = transport.respond_to_agent(
-                                perm.rpc_id,
-                                json!({ "outcome": { "outcome": "cancelled" } }),
-                            );
-                        }
+                        cancel_all_pending_permissions(&transport, &state);
                         let _ = transport.notify("session/cancel", json!({ "sessionId": sid }));
                         let wait_until = SystemTime::now() + Duration::from_secs(4);
                         while SystemTime::now() < wait_until {
@@ -1668,11 +1782,11 @@ pub fn run(args: &[String]) -> i32 {
                             thread::sleep(Duration::from_millis(50));
                         }
                     }
+                    cancel_all_pending_permissions(&transport, &state);
                     let turn_gen = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.turn_generation = s.turn_generation.wrapping_add(1);
                         s.working = true;
-                        s.pending_permission = None;
                         s.turn_generation
                     };
                     ep.report_activity(spec.family, "working", Some(&sid), None);
@@ -1708,16 +1822,23 @@ pub fn run(args: &[String]) -> i32 {
                         };
                         println!("[Non-CLI] Turn finished ({stop_reason}).");
                         let _ = std::io::stdout().flush();
-                        let is_current_turn = {
+                        let (is_current_turn, orphaned_perms) = {
                             let mut s = st_turn.lock().unwrap_or_else(|p| p.into_inner());
                             if s.turn_generation == turn_gen {
                                 s.working = false;
-                                s.pending_permission = None;
-                                true
+                                let drained: Vec<PendingPermission> =
+                                    s.pending_permissions.drain(..).collect();
+                                (true, drained)
                             } else {
-                                false
+                                (false, Vec::new())
                             }
                         };
+                        for perm in orphaned_perms {
+                            let _ = t_turn.respond_to_agent(
+                                perm.rpc_id,
+                                json!({ "outcome": { "outcome": "cancelled" } }),
+                            );
+                        }
                         if is_current_turn {
                             ep_turn.report_activity(&fam, "idle", Some(&sid), None);
                         }
@@ -1732,7 +1853,7 @@ pub fn run(args: &[String]) -> i32 {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
                         (
                             s.working,
-                            s.pending_permission.is_some(),
+                            !s.pending_permissions.is_empty(),
                             s.native_session_id.clone(),
                         )
                     };
@@ -1745,17 +1866,7 @@ pub fn run(args: &[String]) -> i32 {
                         );
                         continue;
                     }
-                    let pending = state
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .pending_permission
-                        .take();
-                    if let Some(perm) = pending {
-                        let _ = transport.respond_to_agent(
-                            perm.rpc_id,
-                            json!({ "outcome": { "outcome": "cancelled" } }),
-                        );
-                    }
+                    cancel_all_pending_permissions(&transport, &state);
                     if is_working {
                         if let Some(sid_ref) = sid.as_deref() {
                             let _ =

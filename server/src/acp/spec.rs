@@ -94,6 +94,7 @@ pub fn build_acp_host_launch_command(
     cli_command: Option<&str>,
     resume_session_id: Option<&str>,
     approval_level: super::AcpApprovalLevel,
+    writable_roots: &[String],
     model: Option<&str>,
     effort: Option<&str>,
 ) -> String {
@@ -102,6 +103,7 @@ pub fn build_acp_host_launch_command(
         cli_command,
         resume_session_id,
         approval_level,
+        writable_roots,
         model,
         effort,
         cfg!(windows),
@@ -113,6 +115,7 @@ fn build_acp_host_launch_command_for_platform(
     cli_command: Option<&str>,
     resume_session_id: Option<&str>,
     approval_level: super::AcpApprovalLevel,
+    writable_roots: &[String],
     model: Option<&str>,
     effort: Option<&str>,
     windows: bool,
@@ -143,6 +146,15 @@ fn build_acp_host_launch_command_for_platform(
     }
     parts.push("--approval-level".to_string());
     parts.push(quote_acp_launch_arg(approval_level.as_str(), windows));
+    for root in writable_roots
+        .iter()
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        parts.push("--writable-root".to_string());
+        parts.push(quote_acp_launch_arg(root, windows));
+    }
     if let Some(m) = model.map(str::trim).filter(|s| !s.is_empty()) {
         parts.push("--model".to_string());
         parts.push(quote_acp_launch_arg(m, windows));
