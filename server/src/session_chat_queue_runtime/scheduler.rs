@@ -854,11 +854,22 @@ impl SessionChatQueueRuntime {
         // first queued prompt starts the box (agents/draft_run_location.rs).
         let pending_box = crate::agentbox::pending_session_agentbox(&session).is_some();
         let awaiting_startup = (draft || head.startup_send) && !pending_box;
+        let acp_session = crate::acp::session_is_acp(&session);
+        let acp_channel_live = acp_session
+            && crate::acp::channel::live(project_id, session_id, "send").is_some();
+        if acp_session && !acp_channel_live {
+            self.reset_gate(key);
+            if awaiting_startup && self.composer_holds.wake_check_due(key, &head.id, now) {
+                (self.waker)(project_id, session_id, &head.id);
+            }
+            return hold(head, WaitReason::Starting);
+        }
         // A Pi or OMP whose chat channel is open takes the message through its own API, so its
         // input box need not be read off the screen (CDXC:PiChatChannel 2026-11-05).
-        let channel_ready = matches!(composer_agent.as_deref(), Some("pi" | "omp"))
-            && crate::pi_chat_channel::live(project_id, session_id)
-                .is_some_and(|channel| channel.supports("send"));
+        let channel_ready = acp_channel_live
+            || (matches!(composer_agent.as_deref(), Some("pi" | "omp"))
+                && crate::pi_chat_channel::live(project_id, session_id)
+                    .is_some_and(|channel| channel.supports("send")));
         // DeepSeek Harness's plugin takes a message while a turn runs too (dsh-tui queues it).
         let channel_ready = channel_ready
             || (composer_agent.as_deref() == Some("dsh")
@@ -1006,7 +1017,7 @@ impl SessionChatQueueRuntime {
         let working = !question_waits && presentation_activity(&session, generated_at) == "working";
         if !gateway_idle
             && !agent_gone
-            && !(working && startup_composer_ready)
+            && !(working && startup_composer_ready && !acp_session)
             && (question_waits
                 || !session_chat_queue_activity_is_deliverable(&session, generated_at))
         {
