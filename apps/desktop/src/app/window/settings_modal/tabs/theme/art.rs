@@ -125,7 +125,7 @@ fn disc(center: (f64, f64), color: u32, edge: f64) -> Layer {
 
 /// The swatch of a Show behind tile (transparency.rs): `desktopAndWindows` or `wallpaper`
 /// (`customImage` and `live` are kept for their old cards' look), 2x a 147x46 box.
-pub(super) fn source_art(source: &str) -> Option<Arc<RenderImage>> {
+pub(crate) fn source_art(source: &str) -> Option<Arc<RenderImage>> {
     let (width, height) = (294, 92);
     let layers = match source {
         "wallpaper" => vec![Layer::Linear {

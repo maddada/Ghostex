@@ -1087,7 +1087,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ),
     ("showActivePaneOutline", J::Bool(false)),
     // The default dark look's pane outline since 2026-11-22 (see `darkThemePreset`); #d8664f before.
-    ("workspaceActivePaneBorderColor", J::Str("#7cbf9f")),
+    ("workspaceActivePaneBorderColor", J::Str("#5581a9")),
     // CDXC:Settings 2026-11-08 DECISION: User: "to show traffic lights on macos when sidebar is collapsed (default to yes)". On: the window's buttons stay with the sidebar collapsed, as they did before the 2026-11-06 floating-sidebar change (GitHub #432), which off restores.
     ("showWindowButtonsWhenSidebarCollapsed", J::Bool(true)),
     ("closeButtonsOnRight", J::Bool(false)),

@@ -8544,19 +8544,20 @@ with when they were made, by which agent or by you, and what changed; Undo is re
 setting it would put back was changed again.
 Settings > Themes shows this in the Themes group, under Appearance. The themes row starts with
 **Default**, Ghostex's own look (it puts the shipped colours, glass and Animated background back),
-then the six **Art** themes, Ghostex's main themes: Moonwater (a quiet mountain night in ink and
-silver), Glasshouse (a secret garden after dark), Red Earth (sculpted dunes in warm embers), Deep
+then the seven **Art** themes, Ghostex's main themes: Moonwater (a quiet mountain night in ink and
+silver), Polar (Polar Night, deep ink navy with a polar mountain artwork and crisp ice-blue accents),
+Glasshouse (a secret garden after dark), Red Earth (sculpted dunes in warm embers), Deep
 Current (luminous ocean currents), Night Garden (wildflowers in a plum dusk) and Nocturne Canyon
 (a desert under a hazy moon). An art theme paints its artwork behind the sidebar and the work
 area and keeps the window solid, so your desktop never shows through; its colours, text, grey
-text and accent come from the artwork. Then come six **Agent-made** looks (Firefly, Ember,
-Synthwave, Polar, Inkstone and Orchid: Firefly Forest, Ember Forge, Synthwave '84, Polar Night,
-Inkstone and Orchid Dusk) and the twenty presets (Catppuccin, Dracula, Solarized, Tokyo Night,
+text and accent come from the artwork. Then come five **Agent-made** looks (Firefly, Ember,
+Synthwave, Inkstone and Orchid: Firefly Forest, Ember Forge, Synthwave '84, Inkstone and Orchid
+Dusk) and the twenty presets (Catppuccin, Dracula, Solarized, Tokyo Night,
 Nord, Kanagawa, Everforest, Gruvbox Material), each of which also sets its theme's own text, grey
 text, accent, link, status, message, code and selection colours. Every tile is a screenshot of
 Ghostex in that theme.
-A theme starts with its own backdrop: its artwork for the art themes, Animated for Default and the
-agent-made looks, and a preset keeps whatever you had. **Your themes**, under the row, keeps
+A theme starts with its own backdrop: its still artwork for Default, every Art theme and every Agent-made look
+(you can still switch any of them to Animated in Artwork below), and a preset keeps whatever you had. **Your themes**, under the row, keeps
 looks you save: **Save current theme** names the look on screen (its colours, artwork and
 transparency) and adds it as a tile showing a small Ghostex window in its colours, with its
 artwork behind; clicking one switches to it (with **Undo** until the next switch), and its …

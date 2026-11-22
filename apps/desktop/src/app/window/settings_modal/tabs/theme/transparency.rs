@@ -62,7 +62,7 @@ pub(super) enum StrengthLocation {
 /// `shared_settings::window_glass_same_for_light_and_dark`, which the app's glass follows: the
 /// saved switch, else on unless a pair was already set apart (both values saved and different).
 /// Kept in step by hand; the preview binary has no `shared_settings`.
-pub(super) fn same_for_light_and_dark(values: &super::super::super::store::SettingsValues) -> bool {
+pub(crate) fn same_for_light_and_dark(values: &super::super::super::store::SettingsValues) -> bool {
     let object = values.map();
     if let Some(same) = object
         .get("windowGlassSameForLightAndDark")
@@ -86,7 +86,7 @@ const SECTION_TITLE: &str = "Window transparency";
 ///
 /// CDXC:Theming 2026-11-22 DECISION:
 /// User (Q4470): "Rename the Desktop/Windows transparency option to Fully transparent" and make it and Wallpaper smaller. They are two small tiles in one row (a 34x24 swatch, the name and one short line) instead of four tall picture cards.
-const SHOW_BEHIND: [(&str, &str, &str); 2] = [
+pub(crate) const SHOW_BEHIND: [(&str, &str, &str); 2] = [
     (
         "desktopAndWindows",
         "Fully transparent",
@@ -104,7 +104,7 @@ const MAIN_KEYS: [&str; 4] = [
 ];
 
 /// The one Transparency control: Off, Dark only, Always (`windowGlass` opaque, auto, frosted).
-fn transparency_choices() -> Vec<SettingOption> {
+pub(crate) fn transparency_choices() -> Vec<SettingOption> {
     [
         ("Off", "opaque"),
         ("Dark only", "auto"),

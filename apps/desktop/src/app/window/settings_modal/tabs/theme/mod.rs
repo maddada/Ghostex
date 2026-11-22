@@ -6,8 +6,8 @@
 //!
 //! CDXC:Theming 2026-10-16 DECISION:
 //! User: "doesn't look so good … can we please make this look nicer? … don't copy everything", then picked direction A (Calm rows) of the mockups in docs/2026-10-16/theme-page. Supersedes the 2026-09-25 layout. The Theme page's rows carry an icon tile (this page only; other pages keep their rows). Appearance is three preview cards (System, Light, Dark). Each group is one card whose rare rows fold under a More row: Colours (Dark mode colour and Light mode colour as two rows of squares, Colourfulness; More: the sidebar and work area set apart, the active pane outline), Transparency (one Off / Dark only / Always control replacing Enable transparency and Use transparency, Strength, Blur, Behind the glass with its pictures or Live gallery; More: picture position, Live speed and brightness, play only when plugged in, the four tints, menu blur) and Chat and terminal (the two themes; More: the terminal palettes), then Related on General. The three-way choices keep the existing row control ("same as what we have now dont change this") and Blur stays as it was ("dont change this"). Custom colour is a "+" square after the squares that opens the Pick Color dialog right at it; no rows open under the colour row (2026-10-17, User: "very bad to have the same colors twice here why??? pls fix no need for these 2 rows that appear when i click on the + option in the colors pls"). The custom colour's depth has no control of its own: Colourfulness sets it (2026-10-17, the user's pick: "Remove it: Colourfulness alone sets how deep the custom colour is"). The squares are "smaller and simpler": 20px, one flat colour, today's ring drawn thinner. A search hit inside a group's More opens it. The page itself is split into four since 2026-11-18 (CDXC:Settings in model.rs): Appearance and the presets lead Themes, the active pane outline moved to Window & Layout, the terminal palettes show without a More row, Theme colours is Fine-tune colours with every row under its More row, and Related on General is gone (its two links sat in Size & Zoom and Terminal colours until 2026-11-19, when the settings they opened moved onto these pages: CDXC:Settings in the settings catalog's general/theme.rs).
-mod art;
-mod artwork;
+pub(crate) mod art;
+pub(crate) mod artwork;
 mod chat_colours;
 mod chat_preview;
 pub(crate) mod colours;
@@ -23,7 +23,7 @@ pub(crate) mod roles;
 pub(crate) mod swatches;
 mod terminal_background;
 mod terminal_text;
-pub(super) mod transparency;
+pub(crate) mod transparency;
 mod user_themes;
 
 use super::super::super::native_modal_kit::*;

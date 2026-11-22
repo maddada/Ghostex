@@ -834,6 +834,7 @@ pub const WINDOW_GLASS_OPTIONS: &[Opt] = &[
 pub const WINDOW_ART_OPTIONS: &[Opt] = &[
     opt("None", "none"),
     opt("Moonwater", "moonwater"),
+    opt("Polar Night", "polar-night"),
     opt("Glasshouse", "glasshouse"),
     opt("Red Earth", "red-earth"),
     opt("Deep Current", "deep-current"),
@@ -843,7 +844,6 @@ pub const WINDOW_ART_OPTIONS: &[Opt] = &[
     opt("Firefly Forest", "firefly-forest"),
     opt("Ember Forge", "ember-forge"),
     opt("Synthwave '84", "synthwave-84"),
-    opt("Polar Night", "polar-night"),
     opt("Orchid Dusk", "orchid-dusk"),
     opt("Catppuccin Mocha", "mocha"),
     opt("Catppuccin Macchiato", "macchiato"),

@@ -273,7 +273,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         // Antigravity installed and picked as the default (Chief of Staff runs on it).
         let with_antigravity: &[&str] = &["claude", "codex", "antigravity"];
         match state {
-            "look" | "make-it-yours" => (
+            "look" | "make-it-yours" | "look-light" | "look-polar" | "look-animated"
+            | "look-transparent" => (
                 InitialPanel::Panel(2),
                 three,
                 false,
@@ -505,6 +506,13 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             settings.insert(key.into(), json!(false));
         }
     }
+    if let Ok(raw) = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS")
+        && let Ok(Value::Object(overrides)) = serde_json::from_str::<Value>(&raw)
+    {
+        for (key, value) in overrides {
+            settings.insert(key, value);
+        }
+    }
     let mut jobs = HashMap::new();
     if cli == "installing" {
         jobs.insert(
@@ -562,6 +570,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                         view.receive_settings(settings, cx)
                     });
                 });
+            }
+            OnboardingCommand::PickWindowArtImage { light } => {
+                eprintln!("pickWindowArtImage light={light}");
             }
             OnboardingCommand::RescanAgents => {
                 let (answers, first) = {
@@ -850,6 +861,34 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             let mut patch = serde_json::Map::new();
             patch.insert("sidebarTheme".into(), json!("plain-light"));
             patch.insert("lightThemePreset".into(), json!("teal"));
+            view.preview_settings_patch(patch, cx)
+        }),
+        "look-light" => with_view(&host, cx, |view, cx| {
+            let mut patch = serde_json::Map::new();
+            patch.insert("sidebarTheme".into(), json!("plain-light"));
+            patch.insert("windowArtLight".into(), json!("latte"));
+            patch.insert("windowArtDim".into(), json!(12));
+            patch.insert("windowGlassSidebarOpacityLight".into(), json!(80));
+            patch.insert("windowGlassWorkAreaTintLight".into(), json!(68));
+            view.preview_settings_patch(patch, cx)
+        }),
+        "look-polar" => with_view(&host, cx, |view, cx| {
+            view.preview_apply_look_theme("polar-night", cx)
+        }),
+        "look-animated" => with_view(&host, cx, |view, cx| {
+            let mut patch = serde_json::Map::new();
+            patch.insert("sidebarTheme".into(), json!("dark-2"));
+            patch.insert("windowArt".into(), json!("none"));
+            patch.insert("windowGlass".into(), json!("frosted"));
+            patch.insert("windowGlassSource".into(), json!("live"));
+            view.preview_settings_patch(patch, cx)
+        }),
+        "look-transparent" => with_view(&host, cx, |view, cx| {
+            let mut patch = serde_json::Map::new();
+            patch.insert("sidebarTheme".into(), json!("dark-2"));
+            patch.insert("windowArt".into(), json!("none"));
+            patch.insert("windowGlass".into(), json!("frosted"));
+            patch.insert("windowGlassSource".into(), json!("desktopAndWindows"));
             view.preview_settings_patch(patch, cx)
         }),
         "get-started-terminal-glass" => with_view(&host, cx, |view, cx| {

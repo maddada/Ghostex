@@ -244,10 +244,18 @@ pub(crate) struct OnboardingSettings {
     pub(crate) work_area_contrast: f64,
     pub(crate) window_art: String,
     pub(crate) window_art_light: String,
+    pub(crate) window_art_dim: f64,
+    pub(crate) window_art_blur: f64,
+    pub(crate) window_art_image: String,
+    pub(crate) window_art_image_light: String,
     pub(crate) window_glass: String,
     pub(crate) window_glass_source: String,
+    pub(crate) window_glass_blur_radius: f64,
     pub(crate) window_glass_live_dark: String,
     pub(crate) window_glass_live_light: String,
+    pub(crate) window_glass_live_speed: f64,
+    pub(crate) window_glass_live_brightness: f64,
+    pub(crate) window_glass_video_only_on_power: bool,
     pub(crate) glass_sidebar_dark: f64,
     pub(crate) glass_work_area_dark: f64,
     pub(crate) glass_sidebar_light: f64,
@@ -448,6 +456,12 @@ impl OnboardingSettings {
             window_art_light: text("windowArtLight")
                 .unwrap_or_else(|| catalog_str("windowArtLight", "none"))
                 .to_string(),
+            window_art_dim: read_number(object, "windowArtDim")
+                .unwrap_or_else(|| catalog_number("windowArtDim")),
+            window_art_blur: read_number(object, "windowArtBlur")
+                .unwrap_or_else(|| catalog_number("windowArtBlur")),
+            window_art_image: text("windowArtImage").unwrap_or_default().to_string(),
+            window_art_image_light: text("windowArtImageLight").unwrap_or_default().to_string(),
             window_glass: match text("windowGlass").or_else(|| {
                 ghostex_settings_catalog::availability::default_value_on(
                     ghostex_settings_catalog::Platform::current(),
@@ -461,12 +475,28 @@ impl OnboardingSettings {
             window_glass_source: text("windowGlassSource")
                 .unwrap_or_else(|| catalog_str("windowGlassSource", "live"))
                 .to_string(),
+            window_glass_blur_radius: read_number(object, "windowGlassBlurRadius")
+                .unwrap_or_else(|| catalog_number("windowGlassBlurRadius")),
             window_glass_live_dark: text("windowGlassLiveStyleDark")
                 .unwrap_or_else(|| catalog_str("windowGlassLiveStyleDark", "aurora"))
                 .to_string(),
             window_glass_live_light: text("windowGlassLiveStyleLight")
                 .unwrap_or_else(|| catalog_str("windowGlassLiveStyleLight", "ink"))
                 .to_string(),
+            window_glass_live_speed: read_number(object, "windowGlassLiveSpeed")
+                .unwrap_or_else(|| catalog_number("windowGlassLiveSpeed")),
+            window_glass_live_brightness: read_number(object, "windowGlassLiveBrightness")
+                .unwrap_or_else(|| catalog_number("windowGlassLiveBrightness")),
+            window_glass_video_only_on_power: read_bool(
+                object,
+                "windowGlassVideoOnlyOnPower",
+                catalog_default("windowGlassVideoOnlyOnPower")
+                    .and_then(|value| match value {
+                        J::Bool(flag) => Some(*flag),
+                        _ => None,
+                    })
+                    .unwrap_or(false),
+            ),
             glass_sidebar_dark,
             glass_work_area_dark: work_area(
                 "windowGlassWorkAreaTintDark",
@@ -549,17 +579,44 @@ impl OnboardingSettings {
         if let Some(value) = text("windowArtLight") {
             self.window_art_light = value;
         }
+        if let Some(value) = number("windowArtDim") {
+            self.window_art_dim = value;
+        }
+        if let Some(value) = number("windowArtBlur") {
+            self.window_art_blur = value;
+        }
+        if let Some(value) = text("windowArtImage") {
+            self.window_art_image = value;
+        }
+        if let Some(value) = text("windowArtImageLight") {
+            self.window_art_image_light = value;
+        }
         if let Some(value) = text("windowGlass") {
             self.window_glass = value;
         }
         if let Some(value) = text("windowGlassSource") {
             self.window_glass_source = value;
         }
+        if let Some(value) = number("windowGlassBlurRadius") {
+            self.window_glass_blur_radius = value;
+        }
         if let Some(value) = text("windowGlassLiveStyleDark") {
             self.window_glass_live_dark = value;
         }
         if let Some(value) = text("windowGlassLiveStyleLight") {
             self.window_glass_live_light = value;
+        }
+        if let Some(value) = number("windowGlassLiveSpeed") {
+            self.window_glass_live_speed = value;
+        }
+        if let Some(value) = number("windowGlassLiveBrightness") {
+            self.window_glass_live_brightness = value;
+        }
+        if let Some(value) = patch
+            .get("windowGlassVideoOnlyOnPower")
+            .and_then(Value::as_bool)
+        {
+            self.window_glass_video_only_on_power = value;
         }
         if let Some(value) = number("windowGlassSidebarOpacityDark") {
             self.glass_sidebar_dark = value;
@@ -576,6 +633,64 @@ impl OnboardingSettings {
         if let Some(value) = patch.get("themeRoles") {
             self.theme_roles = value.clone();
         }
+    }
+
+    /// Packs the look settings into Settings' `SettingsValues`, so Panel 2 reuses the Settings >
+    /// Themes helpers (`artwork::backdrop`, `colours::preview_colours`, `colours::strength_*`,
+    /// `prompt_gallery::applied_theme`) directly.
+    pub(crate) fn to_settings_values(&self) -> super::super::settings_modal::store::SettingsValues {
+        let mut map = Map::new();
+        map.insert("sidebarTheme".into(), Value::String(self.sidebar_theme.clone()));
+        map.insert("darkThemePreset".into(), Value::String(self.dark_theme_preset.clone()));
+        map.insert("lightThemePreset".into(), Value::String(self.light_theme_preset.clone()));
+        map.insert(
+            "customSidebarTitlebarBackgroundTintColor".into(),
+            Value::String(self.custom_dark_tint.clone()),
+        );
+        map.insert(
+            "customSidebarTitlebarLightBackgroundTintColor".into(),
+            Value::String(self.custom_light_tint.clone()),
+        );
+        map.insert("themeSidebarContrast".into(), js_number(self.sidebar_contrast));
+        map.insert("themeWorkAreaContrast".into(), js_number(self.work_area_contrast));
+        map.insert("windowArt".into(), Value::String(self.window_art.clone()));
+        map.insert("windowArtLight".into(), Value::String(self.window_art_light.clone()));
+        map.insert("windowArtDim".into(), js_number(self.window_art_dim));
+        map.insert("windowArtBlur".into(), js_number(self.window_art_blur));
+        map.insert("windowArtImage".into(), Value::String(self.window_art_image.clone()));
+        map.insert(
+            "windowArtImageLight".into(),
+            Value::String(self.window_art_image_light.clone()),
+        );
+        map.insert("windowGlass".into(), Value::String(self.window_glass.clone()));
+        map.insert("windowGlassSource".into(), Value::String(self.window_glass_source.clone()));
+        map.insert("windowGlassBlurRadius".into(), js_number(self.window_glass_blur_radius));
+        map.insert(
+            "windowGlassLiveStyleDark".into(),
+            Value::String(self.window_glass_live_dark.clone()),
+        );
+        map.insert(
+            "windowGlassLiveStyleLight".into(),
+            Value::String(self.window_glass_live_light.clone()),
+        );
+        map.insert("windowGlassLiveSpeed".into(), js_number(self.window_glass_live_speed));
+        map.insert(
+            "windowGlassLiveBrightness".into(),
+            js_number(self.window_glass_live_brightness),
+        );
+        map.insert(
+            "windowGlassVideoOnlyOnPower".into(),
+            Value::Bool(self.window_glass_video_only_on_power),
+        );
+        map.insert("windowGlassSidebarOpacityDark".into(), js_number(self.glass_sidebar_dark));
+        map.insert("windowGlassWorkAreaTintDark".into(), js_number(self.glass_work_area_dark));
+        map.insert("windowGlassSidebarOpacityLight".into(), js_number(self.glass_sidebar_light));
+        map.insert(
+            "windowGlassWorkAreaTintLight".into(),
+            js_number(self.glass_work_area_light),
+        );
+        map.insert("themeRoles".into(), self.theme_roles.clone());
+        super::super::settings_modal::store::SettingsValues::from_map(map)
     }
 
     pub(crate) fn is_view_on(&self, key: ViewKey) -> bool {

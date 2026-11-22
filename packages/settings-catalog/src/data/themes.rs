@@ -79,6 +79,12 @@ pub const ARTWORKS: &[Artwork] = &[
         size_bytes: 350522,
     },
     Artwork {
+        id: "polar-night",
+        name: "Polar Night",
+        sha256: "a7184e97de83d179f177f9235edceb50f3fa3cdd515c1244e8ffde8d81589c36",
+        size_bytes: 113042,
+    },
+    Artwork {
         id: "glasshouse",
         name: "Glasshouse",
         sha256: "cc44012979bc456b13d845bcd75a5c8889a9126a2819cfee9429921aaa4b50ca",
@@ -131,12 +137,6 @@ pub const ARTWORKS: &[Artwork] = &[
         name: "Synthwave '84",
         sha256: "6a0c9321e30d0d1e6e7ad6783a2809b63c4755910a98e887dc98ea4a3e6960a1",
         size_bytes: 173314,
-    },
-    Artwork {
-        id: "polar-night",
-        name: "Polar Night",
-        sha256: "a7184e97de83d179f177f9235edceb50f3fa3cdd515c1244e8ffde8d81589c36",
-        size_bytes: 113042,
     },
     Artwork {
         id: "orchid-dusk",
@@ -616,23 +616,23 @@ fn gallery_theme(look: &J) -> Theme {
         }
     }
     changes.fill_roles("dark");
+    let id = look_text(look, "id").unwrap_or_default();
+    let has_artwork = artwork(&id).is_some();
     let art = look.get("art").and_then(|art| match art {
         J::Bool(flag) => Some(*flag),
         _ => None,
     }) == Some(true);
-    let live = (!art)
-        .then(|| {
-            Some((
-                all.get("windowGlassLiveStyleDark")?.to_string(),
-                all.get("windowGlassLiveSpeed").unwrap_or("1").to_string(),
-                all.get("windowGlassLiveBrightness")
-                    .unwrap_or("80")
-                    .to_string(),
-            ))
-        })
-        .flatten();
+    let live = all.get("windowGlassLiveStyleDark").map(|style| {
+        (
+            style.to_string(),
+            all.get("windowGlassLiveSpeed").unwrap_or("1").to_string(),
+            all.get("windowGlassLiveBrightness")
+                .unwrap_or("80")
+                .to_string(),
+        )
+    });
     Theme {
-        id: look_text(look, "id").unwrap_or_default(),
+        id,
         name: look_text(look, "name").unwrap_or_default(),
         label: look_text(look, "label"),
         kind: if art { "art" } else { "look" },
@@ -640,7 +640,7 @@ fn gallery_theme(look: &J) -> Theme {
         dark: true,
         partner: None,
         prompt: look_text(look, "prompt"),
-        art_look: art.then(|| {
+        art_look: has_artwork.then(|| {
             (
                 all.get("windowArtDim").unwrap_or(ART_DIM_DARK).to_string(),
                 all.get("windowArtBlur").unwrap_or("0").to_string(),
@@ -654,7 +654,7 @@ fn gallery_theme(look: &J) -> Theme {
         live,
         changes,
         partner_changes: None,
-        default_background: Some(if art { "art" } else { "live" }),
+        default_background: Some(if has_artwork { "art" } else { "live" }),
     }
 }
 

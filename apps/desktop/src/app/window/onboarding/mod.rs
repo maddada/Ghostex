@@ -111,6 +111,10 @@ pub(crate) struct AfterSetup {
 pub(crate) enum OnboardingCommand {
     /// `updateSettingsPatch` with `source: firstLaunch:preferences`.
     UpdateSettings(Map<String, Value>),
+    /// Open a native file picker for Themes > Artwork > Your image… (`setYourImage`).
+    PickWindowArtImage {
+        light: bool,
+    },
     /// `requestAgentHookStatus`.
     RescanAgents,
     /// `requestGhostexCliStatus`.
@@ -858,7 +862,7 @@ impl GpuiOnboardingWindow {
         if self.popup_open() {
             return;
         }
-        if self.slider_key(key == "right", cx) {
+        if self.look_slider_key(key == "right", cx) || self.slider_key(key == "right", cx) {
             cx.stop_propagation();
             return;
         }
@@ -1226,7 +1230,7 @@ impl GpuiOnboardingWindow {
         } else {
             match self.panel {
                 1 => self.render_welcome(s, now, cx),
-                2 => self.render_look(s, cx),
+                2 => self.render_look(s, now, cx),
                 3 => self.render_agents(s, now, window, cx),
                 4 => self.render_workspace(s, now, cx),
                 5 => self.render_mobile(s, now, cx),
@@ -1407,8 +1411,13 @@ impl GpuiOnboardingWindow {
         patch: Map<String, Value>,
         cx: &mut Context<Self>,
     ) {
+        self.look.artworks_revealed = None;
         self.update_settings(patch, cx);
         self.get_started.reset(&self.settings, self.system_light);
+    }
+
+    pub(crate) fn preview_apply_look_theme(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.apply_onboarding_gallery_theme(id, cx);
     }
 
     pub(crate) fn preview_workspace_tab(&mut self, view: Option<usize>, cx: &mut Context<Self>) {

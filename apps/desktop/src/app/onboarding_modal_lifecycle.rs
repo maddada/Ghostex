@@ -302,6 +302,50 @@ impl GhostexGpuiApp {
                 let settings = gpui_onboarding_settings();
                 self.update_gpui_onboarding(cx, |view, cx| view.receive_settings(settings, cx));
             }
+            OnboardingCommand::PickWindowArtImage { light } => {
+                let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
+                    files: true,
+                    directories: false,
+                    multiple: false,
+                    prompt: Some("Choose Image".into()),
+                });
+                let background = cx.background_executor().clone();
+                cx.spawn(async move |this, cx| {
+                    let Ok(Ok(Some(paths))) = receiver.await else {
+                        return;
+                    };
+                    let Some(path) = paths.into_iter().next() else {
+                        return;
+                    };
+                    let params = serde_json::json!({
+                        "op": "setYourImage",
+                        "path": path.to_string_lossy(),
+                        "light": light,
+                    });
+                    let result = background
+                        .spawn(async move {
+                            gpui_gxserver_rpc_result("/api/theme", &params, Duration::from_secs(15))
+                        })
+                        .await;
+                    let _ = this.update(cx, |app, cx| match result {
+                        Ok(_) => {
+                            let settings = gpui_onboarding_settings();
+                            app.update_gpui_onboarding(cx, |view, cx| {
+                                view.receive_settings(settings, cx)
+                            });
+                        }
+                        Err(error) => {
+                            app.show_gpui_onboarding_app_toast(
+                                "error",
+                                "Picture not saved",
+                                &error,
+                                cx,
+                            );
+                        }
+                    });
+                })
+                .detach();
+            }
             OnboardingCommand::RescanAgents => {
                 self.run_gpui_progressive_agent_hook_status_task(None, cx);
             }

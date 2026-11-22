@@ -33,27 +33,27 @@ use serde_json::{Map, json};
 use std::path::PathBuf;
 
 /// The art setting of one appearance.
-pub(super) fn art_key(dark: bool) -> &'static str {
+pub(crate) fn art_key(dark: bool) -> &'static str {
     if dark { "windowArt" } else { "windowArtLight" }
 }
 
 /// Whether Live shows behind the glass in this appearance: transparency on there, and Live
 /// behind it.
-pub(super) fn live_shows(values: &SettingsValues, dark: bool) -> bool {
+pub(crate) fn live_shows(values: &SettingsValues, dark: bool) -> bool {
     let glass = values.string("windowGlass");
     values.string("windowGlassSource") == "live" && glass != "opaque" && !(glass == "auto" && !dark)
 }
 
 /// What Artwork shows as picked in one appearance.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(super) enum Backdrop {
+pub(crate) enum Backdrop {
     None,
     Artwork(&'static str),
     YourImage,
     Live,
 }
 
-pub(super) fn backdrop(values: &SettingsValues, dark: bool) -> Backdrop {
+pub(crate) fn backdrop(values: &SettingsValues, dark: bool) -> Backdrop {
     let art = values.string(art_key(dark));
     if art == YOUR_IMAGE_ART_ID {
         return Backdrop::YourImage;
@@ -70,7 +70,7 @@ pub(super) fn backdrop(values: &SettingsValues, dark: bool) -> Backdrop {
 
 /// The name of what is painted behind a solid window in this appearance (an artwork or Your
 /// image), for the Window transparency card's paused line.
-pub(super) fn painted_name(values: &SettingsValues, dark: bool) -> Option<String> {
+pub(crate) fn painted_name(values: &SettingsValues, dark: bool) -> Option<String> {
     match backdrop(values, dark) {
         Backdrop::Artwork(id) => artwork_by_id(id).map(|artwork| artwork.name.to_string()),
         Backdrop::YourImage => Some("Your image".to_string()),
@@ -79,14 +79,14 @@ pub(super) fn painted_name(values: &SettingsValues, dark: bool) -> Option<String
 }
 
 /// The picture Your image keeps for one appearance, when there is one.
-pub(super) fn your_image_path(values: &SettingsValues, dark: bool) -> Option<PathBuf> {
+pub(crate) fn your_image_path(values: &SettingsValues, dark: bool) -> Option<PathBuf> {
     let path = values.string(your_image_key(!dark));
     let path = path.trim();
     (!path.is_empty()).then(|| PathBuf::from(path))
 }
 
 /// A picture file filling a tile's preview.
-pub(super) fn file_preview(path: PathBuf, busy: bool) -> AnyElement {
+pub(crate) fn file_preview(path: PathBuf, busy: bool) -> AnyElement {
     div()
         .relative()
         .size_full()

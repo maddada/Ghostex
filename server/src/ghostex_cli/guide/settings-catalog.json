@@ -4038,6 +4038,10 @@
           "value": "moonwater"
         },
         {
+          "label": "Polar Night",
+          "value": "polar-night"
+        },
+        {
           "label": "Glasshouse",
           "value": "glasshouse"
         },
@@ -4072,10 +4076,6 @@
         {
           "label": "Synthwave '84",
           "value": "synthwave-84"
-        },
-        {
-          "label": "Polar Night",
-          "value": "polar-night"
         },
         {
           "label": "Orchid Dusk",
@@ -4190,6 +4190,10 @@
           "value": "moonwater"
         },
         {
+          "label": "Polar Night",
+          "value": "polar-night"
+        },
+        {
           "label": "Glasshouse",
           "value": "glasshouse"
         },
@@ -4224,10 +4228,6 @@
         {
           "label": "Synthwave '84",
           "value": "synthwave-84"
-        },
-        {
-          "label": "Polar Night",
-          "value": "polar-night"
         },
         {
           "label": "Orchid Dusk",
@@ -9495,7 +9495,7 @@
       "section": "windowLayout",
       "sectionTitle": "Window & Layout",
       "type": "string",
-      "default": "#7cbf9f",
+      "default": "#5581a9",
       "agentWritable": true
     },
     {
