@@ -173,8 +173,34 @@ pub fn global_accept_all_enabled_in_shared_settings(paths: &crate::paths::Gxserv
 
 /// True when a shell command or startup text contains flags that bypass approvals or launch ACP
 /// above `Ask` (`--dangerously-skip-permissions`, `--yolo`, `--accept-all`, `--approval-level`
-/// above `ask`, `danger-full-access`, `bypassPermissions`, `--full-auto`, `--ask-for-approval never`).
+/// above `ask`, `danger-full-access`, `bypassPermissions`, `--full-auto`, `--ask-for-approval never`,
+/// or a Claude `--settings` argument that points to an external file or loosens permissions).
 pub fn command_has_accept_all_flag(cmd: &str) -> bool {
+    let raw_tokens = super::spec::tokenize_cli_command(cmd);
+    let mut i = 0;
+    while i < raw_tokens.len() {
+        let raw_tok = raw_tokens[i].as_str();
+        let next_raw = raw_tokens.get(i + 1).map(String::as_str);
+        if raw_tok == "--settings" {
+            let Some(val) = next_raw else {
+                return true;
+            };
+            if claude_settings_arg_loosens_permissions(val) {
+                return true;
+            }
+            i += 2;
+            continue;
+        }
+        if let Some(val) = raw_tok.strip_prefix("--settings=") {
+            if claude_settings_arg_loosens_permissions(val) {
+                return true;
+            }
+            i += 1;
+            continue;
+        }
+        i += 1;
+    }
+
     let lower = cmd.to_ascii_lowercase();
     let tokens: Vec<String> = lower
         .split_whitespace()
@@ -237,6 +263,40 @@ pub fn command_has_accept_all_flag(cmd: &str) -> bool {
             ) {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// True when a `--settings` argument is NOT a safe inline JSON object (for example a file path
+/// that could pre-approve tools) or contains `permissions.allow`, `permissions.defaultMode`
+/// loosening, or `permissions.additionalDirectories`.
+fn claude_settings_arg_loosens_permissions(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(trimmed) else {
+        // Non-inline JSON (e.g. file path): cannot verify what rules it loads.
+        return true;
+    };
+    if let Some(perms) = obj.get("permissions").and_then(Value::as_object) {
+        if perms
+            .get("allow")
+            .and_then(Value::as_array)
+            .is_some_and(|arr| !arr.is_empty())
+        {
+            return true;
+        }
+        if let Some(mode) = perms.get("defaultMode").and_then(Value::as_str) {
+            let norm = mode.trim().to_ascii_lowercase();
+            if !matches!(norm.as_str(), "" | "default" | "plan") {
+                return true;
+            }
+        }
+        if perms
+            .get("additionalDirectories")
+            .and_then(Value::as_array)
+            .is_some_and(|arr| !arr.is_empty())
+        {
+            return true;
         }
     }
     false
@@ -1222,6 +1282,8 @@ fn is_single_path_key(norm: &str) -> bool {
             | "tofile"
             | "oldpath"
             | "newpath"
+            | "movepath"
+            | "movefile"
             | "oldfile"
             | "newfile"
             | "oldfilepath"
@@ -1638,6 +1700,30 @@ fn collect_patch_paths(patch: &str, paths: &mut Vec<String>) -> bool {
     found > 0
 }
 
+/// True when `diff` contains any patch or unified-diff file-header marker (which must be parsed
+/// by `collect_patch_paths` rather than treated as a single-file hunk body).
+fn diff_string_has_file_header_markers(diff: &str) -> bool {
+    for raw_line in diff.lines() {
+        let trimmed = raw_line.trim_start();
+        if trimmed.starts_with("diff --git ")
+            || strip_diff_marker_ws(trimmed, "---").is_some()
+            || strip_diff_marker_ws(trimmed, "+++").is_some()
+            || trimmed.starts_with("*** Begin Patch")
+            || trimmed.starts_with("*** Update File:")
+            || trimmed.starts_with("*** Add File:")
+            || trimmed.starts_with("*** Delete File:")
+            || trimmed.starts_with("*** Move to:")
+            || trimmed.starts_with("rename from ")
+            || trimmed.starts_with("rename to ")
+            || trimmed.starts_with("copy from ")
+            || trimmed.starts_with("copy to ")
+        {
+            return true;
+        }
+    }
+    false
+}
+
 #[derive(Default)]
 struct ExtractedTargets {
     context_dirs: Vec<String>,
@@ -1824,7 +1910,19 @@ fn collect_allowlisted_value(
                         Value::Null => {}
                         Value::String(s) => {
                             if !collect_patch_paths(s, &mut out.raw_input_paths) {
-                                return false;
+                                // Per-file change objects (such as Codex `FileUpdateChange`:
+                                // `{ path, kind: { type, move_path }, diff }`) carry a unified
+                                // hunk body for the single file named in `obj` without `---`/`+++`
+                                // file headers. Allow a hunk-only `diff` ONLY when `obj` already
+                                // has an explicit file path and `diff` contains no file-header
+                                // markers that could hide another target path.
+                                let hunk_only_per_file = norm == "diff"
+                                    && is_edit_kind
+                                    && has_explicit_file_target(obj, false)
+                                    && !diff_string_has_file_header_markers(s);
+                                if !hunk_only_per_file {
+                                    return false;
+                                }
                             }
                         }
                         Value::Object(_) | Value::Array(_) => {

@@ -28,8 +28,8 @@ use super::approval::{
     AcpPermissionOption, PermissionDecision,
 };
 use super::spec::{
-    build_acp_server_argv, build_cli_switch_argv, spec_for_family, transcript_path_for_session,
-    AcpAgentSpec,
+    build_acp_server_argv, build_cli_switch_argv_with_options, spec_for_family,
+    transcript_path_for_session, AcpAgentSpec,
 };
 
 const ACP_LOAD_TIMEOUT: Duration = Duration::from_secs(90);
@@ -1312,9 +1312,15 @@ pub(super) fn exec_interactive_cli(
     cli_command: Option<&str>,
     native_session_id: Option<&str>,
     accept_all: bool,
+    read_only: bool,
 ) -> i32 {
-    let (envs, program, args) =
-        build_cli_switch_argv(spec, cli_command, native_session_id, accept_all);
+    let (envs, program, args) = build_cli_switch_argv_with_options(
+        spec,
+        cli_command,
+        native_session_id,
+        accept_all,
+        read_only,
+    );
     println!(
         "\r\nSwitching to interactive {} terminal...",
         spec.display_name
@@ -2016,10 +2022,15 @@ pub fn run(args: &[String]) -> i32 {
                         if let Some(wanted_id) = target_tool_use_id {
                             s.pending_permissions
                                 .iter()
-                                .position(|p| p.tool_use_id.as_deref() == Some(wanted_id))
+                                .position(|p| {
+                                    !p.is_question && p.tool_use_id.as_deref() == Some(wanted_id)
+                                })
                                 .and_then(|idx| s.pending_permissions.remove(idx))
                         } else {
-                            s.pending_permissions.pop_front()
+                            s.pending_permissions
+                                .iter()
+                                .position(|p| !p.is_question)
+                                .and_then(|idx| s.pending_permissions.remove(idx))
                         }
                     };
                     let Some(perm) = perm else {
@@ -2064,14 +2075,15 @@ pub fn run(args: &[String]) -> i32 {
                         if let Some(wanted_id) = target_tool_use_id {
                             s.pending_permissions
                                 .iter()
-                                .position(|p| p.tool_use_id.as_deref() == Some(wanted_id))
+                                .position(|p| {
+                                    p.is_question && p.tool_use_id.as_deref() == Some(wanted_id)
+                                })
                                 .and_then(|idx| s.pending_permissions.remove(idx))
                         } else {
                             s.pending_permissions
                                 .iter()
                                 .position(|p| p.is_question)
                                 .and_then(|idx| s.pending_permissions.remove(idx))
-                                .or_else(|| s.pending_permissions.pop_front())
                         }
                     };
                     let Some(perm) = perm else {
@@ -2408,6 +2420,7 @@ pub fn run(args: &[String]) -> i32 {
             parsed.cli_command.as_deref(),
             sid.as_deref(),
             accept_all,
+            parsed.read_only,
         );
     }
 

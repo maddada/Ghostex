@@ -252,7 +252,39 @@ fn at_message_plan(plan: &mut Value) -> Result<String, DomainStateError> {
         ));
     };
     let fork_id = uuid::Uuid::new_v4().to_string();
-    let command = format!("{command} --resume {}", quote_shell_double_arg(&fork_id));
+    let command = if plan.get("acpFork").and_then(Value::as_bool) == Some(true) {
+        let fam = plan
+            .get("acpFamily")
+            .and_then(Value::as_str)
+            .unwrap_or("claude");
+        let level = plan
+            .get("acpApprovalLevel")
+            .and_then(Value::as_str)
+            .and_then(crate::acp::AcpApprovalLevel::parse)
+            .unwrap_or(crate::acp::AcpApprovalLevel::Ask);
+        let read_only = plan
+            .get("acpReadOnly")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        crate::acp::spec::build_acp_host_launch_command_with_options(
+            fam,
+            Some(command),
+            Some(&fork_id),
+            if read_only {
+                crate::acp::AcpApprovalLevel::Ask
+            } else {
+                level
+            },
+            &[],
+            None,
+            None,
+            // `fork_claude_at.rs` already wrote the truncated transcript under `fork_id`.
+            false,
+            read_only,
+        )
+    } else {
+        format!("{command} --resume {}", quote_shell_double_arg(&fork_id))
+    };
     plan["primaryCommand"] = json!(command);
     plan["displayCommand"] = json!(command);
     plan["startupText"] = json!(as_atuin_ignored_shell_input(&command));
@@ -271,24 +303,29 @@ fn side_chat_plan(plan: &mut Value) {
         .to_string();
     if plan.get("acpFork").and_then(Value::as_bool) == Some(true) {
         if let Some(fam) = plan.get("acpFamily").and_then(Value::as_str).map(str::to_string) {
-            let base_cmd = plan
-                .get("baseCommand")
+            let cli_cmd = plan
+                .get("runtimeCommand")
+                .or_else(|| plan.get("baseCommand"))
                 .and_then(Value::as_str)
                 .map(str::to_string);
             let reference = plan
                 .get("acpForkReference")
                 .and_then(Value::as_str)
                 .map(str::to_string);
+            let read_only = plan
+                .get("acpReadOnly")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             let command = crate::acp::spec::build_acp_host_launch_command_with_options(
                 &fam,
-                base_cmd.as_deref(),
+                cli_cmd.as_deref(),
                 reference.as_deref(),
                 crate::acp::AcpApprovalLevel::Ask,
                 &[],
                 None,
                 None,
                 true,
-                false,
+                read_only,
             );
             plan["acpApprovalLevel"] = json!(crate::acp::AcpApprovalLevel::Ask.as_str());
             plan["primaryCommand"] = json!(command);
@@ -438,6 +475,7 @@ pub(crate) fn build_agent_fork_plan(
     if let Some(fam) = acp_fork_family {
         plan.insert("acpFork".to_string(), json!(true));
         plan.insert("acpFamily".to_string(), json!(fam));
+        plan.insert("acpReadOnly".to_string(), json!(source_read_only));
         plan.insert(
             "acpApprovalLevel".to_string(),
             json!(source_acp_level.as_str()),
