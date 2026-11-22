@@ -3,7 +3,7 @@
 //!
 //! CDXC:SessionChat 2026-10-10 WHY:
 //! User: "NOT SENT isn't aligned center vertically in the header of the card ... and i see $msg instead of the message". Agents on Windows send with `$msg = @'…'@; ghostex agents send <ref> $msg 2>&1 | Select-String '"status"'`, and on POSIX with `"$(cat file)"`, so the card read the literal `$msg` and, finding no receipt in the filtered output, called a delivered message NOT SENT. The body now comes from the CLI's echoed `message`, else from the variable's assignment, here-string or file in the same script, and never shows a bare `$var` (it says the script set it). NOT SENT needs a printed send error or a failed exit status that belongs to the send itself; a filtered or chained command whose status says nothing about the send shows no status instead of a wrong one.
-//! SEE-ALSO: sent_message.rs reads the cards; script_loops.rs unrolls the loops a send sits in; server/src/ghostex_cli/agents/delivery.rs and lifecycle.rs echo `message` / `task` in their JSON.
+//! SEE-ALSO: sent_message.rs reads the cards; script_loops.rs unrolls the loops a send sits in; server/src/ghostex_cli/agents/delivery.rs echoes `message` in its full JSON receipt; lifecycle.rs echoes `task`.
 
 use crate::transcript::jsstr::ascii_lower;
 use crate::transcript::script_loops::{powershell_loops, unroll_loops};

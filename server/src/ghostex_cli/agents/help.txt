@@ -224,7 +224,9 @@ DELIVERY
   Blocking prompts can prevent delivery. Inspect chat and queue before retrying.
 
   RETRYING THE SAME MESSAGE
-  Every send has a request id: sendRequestId in the result, and in the error
+  By default send prints one JSON line without the message; --json prints the
+  full receipt. Every send has a request id: req in the short result
+  (sendRequestId in the full receipt), and in the error
   text when a send fails. To retry that same message, pass the id back with
   --request-id <id>. Ghostex delivers one request id at most once: a retry of
   a message that already went out answers from the first attempt (duplicate:

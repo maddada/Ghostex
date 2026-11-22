@@ -4186,8 +4186,8 @@ Settings > Agents is not listed, and `agents create`, `create-agent`,
 `run-agent`, `coordinator create`/`start-thread --agent` and `board start-work
 --agent` refuse it, naming the agents to use instead, unless `--allow-hidden` is
 passed. `agents list` finds running agents in the caller's project; `agents list --all` includes sleeping agents and other projects.
-`agents send <session-ref> "<text>"` attaches the sender's identity
-and reply reference automatically; an agent that sends with
+`agents send <session-ref> "<text>"` prints a short JSON receipt; `--json` prints the full receipt.
+It attaches the sender's identity and reply reference automatically; an agent that sends with
 `send-session-chat-message`, `queue-session-chat-prompt` or `send-message`
 instead gets the same identity attached, so its message never shows as yours. A normal send reaches a busy agent at its
 next input boundary and wakes a sleeping one, so it is right for almost every

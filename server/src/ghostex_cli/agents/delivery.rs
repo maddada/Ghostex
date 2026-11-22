@@ -11,6 +11,38 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
+/// Compact receipt for both direct sends and sends that start a missing coordinator or session.
+/// CDXC:AgentMessaging 2026-11-22 DECISION: User chose Q4393 B: agents send prints one JSON line without the message by default; --json keeps the full receipt. This supersedes the 2026-11-13 full-JSON default.
+/// CDXC:SessionChat 2026-11-22 WHY: Phones already installed parse `recipient` and `sendRequestId` from this output, so the short line keeps those fields alongside Q4393 B until those phones have updated.
+pub(super) fn print_send_receipt(result: &Value, full: bool) {
+    if full {
+        crate::ghostex_cli::output::print_json(result);
+        return;
+    }
+    let recipient = result
+        .get("recipient")
+        .or_else(|| result.get("session"))
+        .or_else(|| result.get("mainCoordinator"))
+        .unwrap_or(result);
+    let reference = recipient
+        .get("globalRef")
+        .and_then(Value::as_str)
+        .or_else(|| result.get("globalRef").and_then(Value::as_str))
+        .unwrap_or("");
+    let mut compact = json!({"status": text(result, "status"), "to": reference,
+        "title": text(recipient, "title"), "agentId": text(recipient, "agentId"),
+        "req": text(result, "sendRequestId"),
+        "sendRequestId": text(result, "sendRequestId"),
+        "recipient": {"globalRef": reference, "title": text(recipient, "title"), "agentId": text(recipient, "agentId")}});
+    if result["duplicate"] == true {
+        compact["duplicate"] = json!(true);
+    }
+    if result["reopenedThread"] == true {
+        compact["reopenedThread"] = json!(true);
+    }
+    println!("{compact}");
+}
+
 /// The rename reminder gxserver adds when `sender` is the orchestrator of the thread `recipient`
 /// (server/src/coordinators/rename.rs `thread_title_reminder`); `None` for any other message,
 /// and from a gxserver too old to answer.
@@ -239,7 +271,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         "sender": sender_summary(sender.as_ref()),
         "recipient": identity::summary(&recipient),
         "receipt": receipt,
-        // CDXC:SessionChat 2026-10-10 WHY: the sender's chat card shows this text; the command line often holds only `$msg` or a `--body-file` path (gx-chat-core sent_message_script.rs).
+        // The full receipt retains the message for older consumers and for scripts whose text is unavailable to the chat card.
         "message": body,
     }))
 }

@@ -113,7 +113,22 @@ pub fn sent_agent_messages(pair: &ToolPair<'_>, written: &[(&str, &str)]) -> Vec
                 message.global_ref = field("globalRef");
                 message.agent_name = field("agentName");
                 message.agent_id = field("agentId");
-                let title = field("title");
+                let mut title = field("title");
+                if let Some(reference) = result.get("to").and_then(Value::as_str) {
+                    message.global_ref = js_trim(reference).to_string();
+                    message.agent_id = result
+                        .get("agentId")
+                        .and_then(Value::as_str)
+                        .map(js_trim)
+                        .unwrap_or_default()
+                        .to_string();
+                    title = result
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .map(js_trim)
+                        .unwrap_or_default()
+                        .to_string();
+                }
                 if !title.is_empty() {
                     message.session_title = title;
                 }
@@ -132,7 +147,18 @@ pub fn sent_agent_messages(pair: &ToolPair<'_>, written: &[(&str, &str)]) -> Vec
                     status => status.to_string(),
                 };
                 message.failure = said("error");
-                message.send_request_id = said("sendRequestId");
+                message.send_request_id = result
+                    .get("req")
+                    .and_then(Value::as_str)
+                    .map(js_trim)
+                    .unwrap_or_else(|| {
+                        result
+                            .get("sendRequestId")
+                            .and_then(Value::as_str)
+                            .map(js_trim)
+                            .unwrap_or_default()
+                    })
+                    .to_string();
                 // What the CLI echoes is what went out, whatever the script built it from.
                 let echoed = result
                     .get("message")
@@ -393,7 +419,9 @@ fn cli_send(shell: &ShellCommand, at: usize, script: &Script<'_>) -> Option<Sent
             Resolved::Text(body) => body,
             Resolved::Unknown => SCRIPTED_BODY.to_string(),
         },
-        (None, Some(path)) => script.file_text(path, shell).unwrap_or_default(),
+        (None, Some(path)) => script
+            .file_text(path, shell)
+            .unwrap_or_else(|| SCRIPTED_BODY.to_string()),
         // `create` without a task starts an agent; it sends it nothing.
         (None, None) if create => return None,
         (None, None) => String::new(),
@@ -420,7 +448,7 @@ fn send_results(output: &str) -> Vec<Value> {
                 serde_json::Deserializer::from_str(&output[offset..]).into_iter::<Value>();
             if let Some(Ok(value)) = stream.next() {
                 let consumed = stream.byte_offset();
-                if ["recipient", "session", "thread"]
+                if ["recipient", "session", "thread", "to"]
                     .iter()
                     .any(|key| value.get(*key).is_some())
                 {

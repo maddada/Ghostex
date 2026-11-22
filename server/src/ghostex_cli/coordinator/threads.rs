@@ -389,20 +389,19 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     if parsed.flags.truthy("json") {
         print_json(&result);
     } else {
-        let where_ = result["thread"]["branch"]
-            .as_str()
-            .map(|branch| format!(" on branch {branch}"))
-            .unwrap_or_default();
-        let kind = if read_only {
-            "read-only thread"
-        } else {
-            "thread"
-        };
-        match status {
-            "started" => println!("Started {kind} \"{title}\" ({reference}){where_}. {note}"),
-            _ => println!("Created {kind} \"{title}\" ({reference}){where_}, pending: {note}"),
+        // Older phone chat cores recognise `thread` and `sendRequestId` in the receipt.
+        let mut compact = json!({"status": status, "to": reference, "title": title,
+            "agentId": agent_id, "req": brief_send_id, "sendRequestId": brief_send_id,
+            "thread": {"globalRef": reference, "title": title, "agentId": agent_id}});
+        for key in ["readOnly", "branch", "worktreePath", "computer"] {
+            if let Some(value) = result["thread"].get(key) {
+                compact[key] = value.clone();
+            }
         }
-        println!("Its report comes back to you when it finishes a turn; end your turn now instead of waiting.");
+        if status == "pending" {
+            compact["note"] = json!(note);
+        }
+        println!("{compact}");
     }
     Ok(())
 }

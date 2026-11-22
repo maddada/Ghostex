@@ -150,7 +150,9 @@ step 7 below). Do not poll or sleep to watch it; end your turn and wait.
    `started` only once the thread's transcript shows the brief, else
    `pending` with the reason; older CLIs print "Started thread" without
    checking, so read the thread's chat. None of these means the agent has read it.
-   Newer CLIs print a `sendRequestId` with every send (and in a failed send's
+   Sends print one JSON line without the message; `--json` keeps the full receipt.
+   The short receipt calls its request id `req` (`sendRequestId` in the full receipt).
+   Newer CLIs print a request id with every send (and in a failed send's
    error); to retry that same message, add `--request-id <that id>` and Ghostex
    delivers it at most once. Older CLIs reject the flag; read the chat instead.
    Send text that holds code, backticks, `$` or quotes through a quoted heredoc,

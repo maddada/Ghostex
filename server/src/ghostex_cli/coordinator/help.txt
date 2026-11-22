@@ -199,8 +199,10 @@ THREADS
   $(command) inside double quotes first, and start-thread waits for it.
   --body-file - reads standard input (ghostex agents --help, DELIVERY).
   start-thread then waits up to a minute for the thread's transcript to show
-  the brief and answers `started`, or `pending: <reason>` (still starting, or
-  its screen shows a question only a person can answer). A brief whose send
+  the brief and prints a one-line JSON receipt with status `started` or
+  `pending` and its reason (still starting, or
+  its screen shows a question only a person can answer). --json prints the full
+  receipt. A brief whose send
   failed is retried once; a second failure is an error. Only `started` means
   the thread has the work. Do not resend a pending brief: if it never
   arrives, Ghostex sends the coordinator "Ghostex thread report: your message
