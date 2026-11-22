@@ -275,9 +275,6 @@ pub(crate) fn apply_settings_theme_colours() {
     use std::sync::atomic::Ordering;
     let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
     let object = snapshot.object();
-    if object.is_empty() {
-        return;
-    }
     let light = sidebar_uses_light_theme(object);
     crate::CHROME_LIGHT_APPEARANCE.store(light, Ordering::Relaxed);
     apply_theme_roles(object);

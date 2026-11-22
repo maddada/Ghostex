@@ -371,7 +371,7 @@ impl SharedSidebarSettingsSnapshot {
             light_theme: read_string_field(
                 &self.object,
                 "terminalGhosttyLightTheme",
-                "GitHub Light Default",
+                "Ghostex Everforest Light",
             )
             .to_string(),
             terminal_background: terminal_background(&self.object),

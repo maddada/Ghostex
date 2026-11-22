@@ -53,10 +53,14 @@ fn whole(value: f64) -> Value {
     }
 }
 
-/// `clampSidebarThemeSetting(readString(source, 'sidebarTheme', 'system'))`.
+/// `clampSidebarThemeSetting(readString(source, 'sidebarTheme', <catalog default>))`.
 pub(crate) fn sidebar_theme_setting(source: &Map<String, Value>) -> &'static str {
-    match source.get("sidebarTheme").and_then(Value::as_str) {
-        None | Some("system") => "system",
+    let raw = source.get("sidebarTheme").and_then(Value::as_str).or_else(|| {
+        ghostex_settings_catalog::default_value("sidebarTheme")
+            .and_then(ghostex_settings_catalog::J::as_str)
+    });
+    match raw {
+        Some("system") | None => "system",
         Some("plain-light") => "plain-light",
         Some(_) => "dark-2",
     }

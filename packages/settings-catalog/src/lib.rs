@@ -466,7 +466,7 @@ pub fn keep_old_look_for_existing_settings(
             .any(|(dark, light)| key == dark || key == light)
     });
     if sets_a_glass_pair && !settings.contains_key("windowGlassSameForLightAndDark") {
-        let same = window_glass_same_for_light_and_dark(settings);
+        let same = window_glass_same_for_light_and_dark_with_default(settings, true);
         settings.insert(
             "windowGlassSameForLightAndDark".to_string(),
             serde_json::Value::Bool(same),
@@ -520,18 +520,34 @@ pub const WINDOW_GLASS_LIGHT_DARK_PAIRS: [(&str, &str); 5] = [
 ];
 
 /// Whether light mode uses the dark-mode picture, video, Live background and tints
-/// (`windowGlassSameForLightAndDark`). A settings file that never saw the switch counts as on
-/// unless its two sides were already set apart: a pair is "the same" when both values are equal or
-/// neither was ever saved, so a fresh install starts with one set of rows and a file whose light
-/// mode was tuned on purpose keeps both sets.
+/// (`windowGlassSameForLightAndDark`). When the switch is unset and no dark/light pair was saved,
+/// it falls back to the catalog default (`windowGlassSameForLightAndDark`); otherwise a file whose
+/// saved pairs match counts as on and one whose sides were set apart counts as off.
 pub fn window_glass_same_for_light_and_dark(
     object: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    let default_same = match default_value("windowGlassSameForLightAndDark") {
+        Some(J::Bool(flag)) => *flag,
+        _ => true,
+    };
+    window_glass_same_for_light_and_dark_with_default(object, default_same)
+}
+
+fn window_glass_same_for_light_and_dark_with_default(
+    object: &serde_json::Map<String, serde_json::Value>,
+    default_same: bool,
 ) -> bool {
     if let Some(same) = object
         .get("windowGlassSameForLightAndDark")
         .and_then(serde_json::Value::as_bool)
     {
         return same;
+    }
+    if WINDOW_GLASS_LIGHT_DARK_PAIRS
+        .iter()
+        .all(|(dark, light)| !object.contains_key(*dark) && !object.contains_key(*light))
+    {
+        return default_same;
     }
     WINDOW_GLASS_LIGHT_DARK_PAIRS.iter().all(|(dark, light)| {
         match (object.get(*dark), object.get(*light)) {
@@ -665,7 +681,7 @@ mod dark_look_tests {
         let gray =
             theme_colours::dark_chrome_raw_controls(&settings(json!({"darkThemePreset": "gray"})));
         assert_eq!(theme_colours::dark_chrome_raw_controls(&after), gray);
-        assert!(window_glass_same_for_light_and_dark(&before));
+        assert!(!window_glass_same_for_light_and_dark(&before));
         assert!(window_glass_same_for_light_and_dark(&after));
         assert_eq!(tints(&after), [94.0; 4]);
         // Runs once: a second pass finds every key saved.
@@ -694,14 +710,14 @@ mod dark_look_tests {
         );
     }
 
-    /// A new install (nothing saved) draws the 2026-11-21 look: the Custom #46506a at depth 96.
+    /// A new install (nothing saved) draws the 2026-11-22 look: the Custom #404e78 at depth 96.
     #[test]
     fn a_new_install_draws_the_windows_look() {
         assert_eq!(
             theme_colours::dark_chrome_raw_controls(&Map::new()),
-            (96.0, 0x46506a)
+            (96.0, 0x404e78)
         );
-        assert_eq!(theme_colours::default_custom_dark_tint_rgb(), 0x46506a);
+        assert_eq!(theme_colours::default_custom_dark_tint_rgb(), 0x404e78);
     }
 
     /// A file set up on the 2026-11-20 Black look (its first step already ran) keeps Black, its

@@ -521,19 +521,39 @@ pub fn light_chrome_controls(object: &Map<String, Value>) -> (f64, u32) {
     )
 }
 
+/// The Custom light colour's tint while a settings file has none: the catalog's default
+/// (`customSidebarTitlebarLightBackgroundTintColor`).
+pub fn default_custom_light_tint_rgb() -> u32 {
+    crate::default_value("customSidebarTitlebarLightBackgroundTintColor")
+        .and_then(J::as_str)
+        .and_then(|hex| hex_rgb(Some(&Value::String(hex.to_string()))))
+        .unwrap_or(DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_TINT_RGB)
+}
+
+/// The Custom light colour's depth while a settings file has none: the catalog's default
+/// (`customSidebarTitlebarLightBackgroundLightnessPercent`).
+pub fn default_custom_light_lightness_percent() -> f64 {
+    crate::default_value("customSidebarTitlebarLightBackgroundLightnessPercent")
+        .and_then(J::as_f64)
+        .unwrap_or(DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_LIGHTNESS_PERCENT)
+}
+
 /// `light_chrome_controls` before its final clamp: a preset's depth plus the sidebar contrast, or
 /// the Custom colour's saved depth one point deeper (SEE-ALSO: `dark_chrome_raw_controls`).
 pub fn light_chrome_raw_controls(object: &Map<String, Value>) -> (f64, u32) {
-    let preset = object.get("lightThemePreset").and_then(Value::as_str);
+    let preset = object
+        .get("lightThemePreset")
+        .and_then(Value::as_str)
+        .or_else(|| crate::default_value("lightThemePreset").and_then(J::as_str));
     if preset == Some("custom") {
         let lightness = clamp_sidebar_titlebar_light_background_lightness_percent(
             object
                 .get("customSidebarTitlebarLightBackgroundLightnessPercent")
                 .and_then(Value::as_f64)
-                .unwrap_or(DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_LIGHTNESS_PERCENT),
+                .unwrap_or_else(default_custom_light_lightness_percent),
         ) + CUSTOM_LIGHT_THEME_DEPTH_SHIFT;
         let tint = hex_rgb(object.get("customSidebarTitlebarLightBackgroundTintColor"))
-            .unwrap_or(DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_TINT_RGB);
+            .unwrap_or_else(default_custom_light_tint_rgb);
         return (lightness, tint);
     }
     let (_, lightness, tint) = preset
@@ -616,7 +636,11 @@ pub fn dark_preset_is_custom(object: &Map<String, Value>) -> bool {
 
 /// Whether the light appearance uses a Custom colour rather than one of the built-in colour squares.
 pub fn light_preset_is_custom(object: &Map<String, Value>) -> bool {
-    object.get("lightThemePreset").and_then(Value::as_str) == Some("custom")
+    object
+        .get("lightThemePreset")
+        .and_then(Value::as_str)
+        .or_else(|| crate::default_value("lightThemePreset").and_then(J::as_str))
+        == Some("custom")
 }
 
 /// The chrome background one appearance resolves to from the saved settings, whichever

@@ -35,7 +35,10 @@ pub(crate) fn sidebar_uses_light_theme(
     match object
         .get("sidebarTheme")
         .and_then(serde_json::Value::as_str)
-    {
+        .or_else(|| {
+            ghostex_settings_catalog::default_value("sidebarTheme")
+                .and_then(ghostex_settings_catalog::J::as_str)
+        }) {
         Some("plain-light") => true,
         Some("system") | None => gpui_system_uses_light_appearance(),
         _ => false,

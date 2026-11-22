@@ -10,7 +10,13 @@ pub fn effective_content_color_scheme(
         Some("light") => "light",
         Some("dark") => "dark",
         Some("system") => "system",
-        _ => match settings.get("sidebarTheme").and_then(Value::as_str) {
+        _ => match settings
+            .get("sidebarTheme")
+            .and_then(Value::as_str)
+            .or_else(|| {
+                ghostex_settings_catalog::default_value("sidebarTheme")
+                    .and_then(ghostex_settings_catalog::J::as_str)
+            }) {
             Some("plain-light") => "light",
             Some("system") | None => "system",
             _ => "dark",

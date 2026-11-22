@@ -348,13 +348,17 @@ impl OnboardingSettings {
     /// here; the app passes presets already migrated by its own theme reader.
     pub(crate) fn from_object(object: &Map<String, Value>) -> Self {
         let text = |key: &str| object.get(key).and_then(Value::as_str).map(str::trim);
-        let sidebar_theme = match text("sidebarTheme") {
-            None => "system".to_string(),
-            Some(value @ ("plain-light" | "system")) => value.to_string(),
-            Some(_) => "dark-2".to_string(),
-        };
         // A key the file does not hold reads as the settings catalog's default.
         let catalog_default = |key: &str| ghostex_settings_catalog::default_value(key);
+        let catalog_str = |key: &str, fallback: &'static str| {
+            catalog_default(key)
+                .and_then(J::as_str)
+                .unwrap_or(fallback)
+        };
+        let sidebar_theme = match text("sidebarTheme").unwrap_or_else(|| catalog_str("sidebarTheme", "system")) {
+            value @ ("plain-light" | "system") => value.to_string(),
+            _ => "dark-2".to_string(),
+        };
         let catalog_number =
             |key: &str| catalog_default(key).and_then(J::as_f64).unwrap_or_default();
         let preset = |key: &str, presets: &[(&str, &str); 16]| {
@@ -438,8 +442,12 @@ impl OnboardingSettings {
                 }),
             sidebar_contrast: theme_contrast_points(object, "themeSidebarContrast"),
             work_area_contrast: theme_contrast_points(object, "themeWorkAreaContrast"),
-            window_art: text("windowArt").unwrap_or("none").to_string(),
-            window_art_light: text("windowArtLight").unwrap_or("none").to_string(),
+            window_art: text("windowArt")
+                .unwrap_or_else(|| catalog_str("windowArt", "none"))
+                .to_string(),
+            window_art_light: text("windowArtLight")
+                .unwrap_or_else(|| catalog_str("windowArtLight", "none"))
+                .to_string(),
             window_glass: match text("windowGlass").or_else(|| {
                 ghostex_settings_catalog::availability::default_value_on(
                     ghostex_settings_catalog::Platform::current(),
@@ -450,12 +458,14 @@ impl OnboardingSettings {
                 Some(value @ ("frosted" | "opaque")) => value.to_string(),
                 _ => "auto".to_string(),
             },
-            window_glass_source: text("windowGlassSource").unwrap_or("live").to_string(),
+            window_glass_source: text("windowGlassSource")
+                .unwrap_or_else(|| catalog_str("windowGlassSource", "live"))
+                .to_string(),
             window_glass_live_dark: text("windowGlassLiveStyleDark")
-                .unwrap_or("ink")
+                .unwrap_or_else(|| catalog_str("windowGlassLiveStyleDark", "aurora"))
                 .to_string(),
             window_glass_live_light: text("windowGlassLiveStyleLight")
-                .unwrap_or("drift")
+                .unwrap_or_else(|| catalog_str("windowGlassLiveStyleLight", "ink"))
                 .to_string(),
             glass_sidebar_dark,
             glass_work_area_dark: work_area(
@@ -1170,12 +1180,13 @@ mod tests {
     #[test]
     fn unsaved_tints_read_as_strength_twenty_and_stay_equal() {
         let settings = OnboardingSettings::from_object(&Map::new());
-        assert_eq!(settings.glass_sidebar_dark, settings.glass_work_area_dark);
+        assert_eq!(settings.glass_sidebar_dark, 61.0);
+        assert_eq!(settings.glass_work_area_dark, 67.0);
         assert_eq!(settings.glass_sidebar_light, settings.glass_work_area_light);
-        assert_eq!(transparency_strength(&settings), (Some(20.0), 20.0));
+        assert_eq!(transparency_strength(&settings), (Some(45.0), 45.0));
         let [dark_sidebar, dark_work, light_sidebar, light_work] =
             tints(&transparency_strength_patch(35.0, &settings));
-        assert_eq!(dark_sidebar, dark_work);
+        assert_eq!(dark_work - dark_sidebar, 6.0);
         assert_eq!(light_sidebar, light_work);
     }
 

@@ -1100,12 +1100,12 @@ mod tests {
     #[test]
     fn catalog_defaults_are_strength_twenty() {
         let values = SettingsValues::from_map(Map::new());
-        let patch = strength_patch(20.0, strength_gaps(&values));
+        let patch = strength_patch(45.0, strength_gaps(&values));
         for key in TINT_KEYS {
             let default = ghostex_settings_catalog::default_value(key)
                 .and_then(ghostex_settings_catalog::J::as_f64);
             assert_eq!(patch[key].as_f64(), default, "{key}");
         }
-        assert_eq!(strength_from_settings(&values), (Some(20.0), 20.0));
+        assert_eq!(strength_from_settings(&values), (Some(45.0), 45.0));
     }
 }

@@ -90,6 +90,10 @@ pub(crate) fn refresh_window_art(object: &serde_json::Map<String, serde_json::Va
     let chosen = object
         .get(art_key)
         .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            ghostex_settings_catalog::default_value(art_key)
+                .and_then(ghostex_settings_catalog::J::as_str)
+        })
         .unwrap_or_default();
     // Your image (CDXC:Theming 2026-11-22 on `YOUR_IMAGE_ART_ID` in the settings catalog's
     // data/themes.rs): the picture gxserver keeps, named by its path; none chosen paints nothing.

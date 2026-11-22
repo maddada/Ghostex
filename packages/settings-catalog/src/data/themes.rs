@@ -328,9 +328,11 @@ const FULL_COLOURFULNESS: [(&str, &str); 4] = [
 ];
 
 fn artwork(id: &str) -> Option<&'static str> {
-    // Default is Inkstone's look, so it shows Inkstone's artwork once there is one.
     let id = if id == DEFAULT_LOOK_ID {
-        "inkstone"
+        crate::default_value("windowArt")
+            .and_then(J::as_str)
+            .filter(|art| *art != "none")
+            .unwrap_or("inkstone")
     } else {
         id
     };
@@ -455,6 +457,14 @@ impl Theme {
                 if let Some(artwork) = artwork(&self.id) {
                     changes.set(art_key, artwork);
                 }
+                if self.kind == "default" {
+                    if let Some(light_art) = crate::default_value("windowArtLight")
+                        .and_then(J::as_str)
+                        .filter(|art| !art.is_empty())
+                    {
+                        changes.set("windowArtLight", light_art);
+                    }
+                }
                 let (dim, blur) = self.art_look.clone().unwrap_or_else(|| {
                     let dim = if self.dark {
                         ART_DIM_DARK
@@ -465,13 +475,17 @@ impl Theme {
                 });
                 changes.set("windowArtDim", &dim);
                 changes.set("windowArtBlur", &blur);
-                let tints = if self.dark {
-                    ART_TINTS_DARK
+                if self.kind == "default" {
+                    self.set_tints(&mut changes);
                 } else {
-                    ART_TINTS_LIGHT
-                };
-                for (key, value) in tints {
-                    changes.set(key, value);
+                    let tints = if self.dark {
+                        ART_TINTS_DARK
+                    } else {
+                        ART_TINTS_LIGHT
+                    };
+                    for (key, value) in tints {
+                        changes.set(key, value);
+                    }
                 }
             }
             "live" => {
@@ -665,6 +679,7 @@ fn default_theme(platform: Platform) -> Theme {
     changes.fill_roles("dark");
     let shipped = |key: &str| default_text(platform, key).unwrap_or_default();
     let solid = shipped("windowGlass") == "opaque";
+    let has_default_art = artwork_by_id(&shipped("windowArt")).is_some();
     Theme {
         id: DEFAULT_LOOK_ID.into(),
         name: DEFAULT_LOOK_NAME.into(),
@@ -674,18 +689,24 @@ fn default_theme(platform: Platform) -> Theme {
         dark: true,
         partner: None,
         prompt: Some(
-            "Put Ghostex's own look back: its default colours, glass and Animated background.".into(),
+            "Put Ghostex's own look back: its default colours, artwork, glass and Animated background.".into(),
         ),
         live: Some((
             shipped("windowGlassLiveStyleDark"),
             shipped("windowGlassLiveSpeed"),
             shipped("windowGlassLiveBrightness"),
         )),
-        art_look: None,
+        art_look: has_default_art.then(|| (shipped("windowArtDim"), shipped("windowArtBlur"))),
         tints: TINT_KEYS_DARK.map(|key| shipped(key)),
         changes,
         partner_changes: None,
-        default_background: Some(if solid { "solid" } else { "live" }),
+        default_background: Some(if has_default_art {
+            "art"
+        } else if solid {
+            "solid"
+        } else {
+            "live"
+        }),
     }
 }
 

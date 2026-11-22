@@ -673,7 +673,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sidebarVisibilityMemory", J::Str("shared")),
     ("expandCollapsedProjectsOnJump", J::Bool(true)),
     // CDXC:Theming 2026-09-14 DECISION: User: default App theme to System, with Chat and Terminal on Follow app. Existing saved theme selections remain unchanged.
-    ("sidebarTheme", J::Str("system")),
+    // CDXC:Theming 2026-11-22 DECISION: User: default Ghostex's built-in theme to their current look (Dark mode, Polar Night artwork and colours, Gruvbox Material Light artwork and Everforest Light colours in light mode; see `darkThemePreset`).
+    ("sidebarTheme", J::Str("dark-2")),
     ("sessionChatTheme", J::Str("app")),
     ("sessionChatFontFamily", J::Str("")),
     // CDXC:SessionChat 2026-10-31 DECISION: User: "add a slider to pick the color of the text how strong it is (color of text in the chat now is not full white, i have user wanting it to be full white". 0% is today's colour, so nobody's look changes until they move it; 100% is full white in dark mode and full black in light mode.
@@ -813,10 +814,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     //
     // Background Contrast and Background Tint are always-active Theming controls.
     ("customSidebarTitlebarForegroundColor", J::Str("#d8d8d8")),
-    // Since 2026-11-21 the default dark look's colour (see `darkThemePreset`); Graphite keeps #808080.
+    // Since 2026-11-22 the default dark look's colour (see `darkThemePreset`); Graphite keeps #808080.
     (
         "customSidebarTitlebarBackgroundTintColor",
-        J::Str("#46506a"),
+        J::Str("#404e78"),
     ),
     (
         "customSidebarTitlebarBackgroundDarknessPercent",
@@ -826,42 +827,62 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Theming 2026-11-20 DECISION:
     // User: "make my current theme values the default for Ghostex in dark mode, with transparency and all that." Out of the box dark mode is their look: the Black colour square, glass tinted 88 in the sidebar and the work area (Strength 20), a 4 point blur, the Ghostex Kanagawa Dragon terminal palette, faint borders (`#3e3e3e6b`) and dark message bubbles (`#0000006b`), and Ink as the Live background. Light mode keeps its own defaults (its light tints move to 93 only so the one Strength slider reads 20; light mode is solid out of the box, so they change nothing there). Their App font is not shipped with Ghostex, so the App font stays App default; Terminal background stays Black / white (the CDXC:Theming 2026-09-28 decision in terminal_gpui_engine.rs), which in dark mode with Black looks the same. Supersedes Gray (2026-07-22), Strength 10 (2026-10-23) and the GitHub Dark dark palette (2026-10-14) as defaults. Then (Q4290) long-time users keep their current look: `keep_old_look_for_existing_settings` (lib.rs) writes the old defaults into an existing settings file once. Superseded on 2026-11-21 by their Windows look (above).
     // CDXC:Theming 2026-11-21 DECISION:
-    // User: "can u please make the current theme i have on windows now the default dark theme for people when they first install ghostex? i dont like the fully black one we have." Out of the box dark mode is their Windows look (the agent-made Inkstone look without its fonts): the Custom colour #46506a at depth 96, the Inkstone theme colours (paper-white text #ece4d6, grey text #9b968d, a cinnabar accent and focus ring #d8664f, borders 8% and dividers 6%, cards, controls, menus and the chat box in near-neutral blue-blacks, selection 9%, hover 5%, muted success, warning and danger), the cinnabar pane outline colour, and Live glass behind the window: Ink at speed 0.3 and brightness 25. Live draws the same on macOS, Windows and Linux (no system blur), so the look matches across platforms; Blur stays 4 because Live is not blurred by it on macOS, and Blur on Windows stays Acrylic for Desktop and windows. Kept as they were: transparency off by default on Windows (the 2026-10-04 decision in availability.rs) and one tint for the sidebar and the work area (88, the 2026-10-23 Strength decision; their Windows sidebar is 82). Fonts are not part of a look (their Windows fonts are the defaults anyway). Supersedes the 2026-11-20 Black look below. Long-time users keep their current look (`DARK_LOOK_2026_11_21_OLD_DEFAULTS` in lib.rs).
+    // User: "can u please make the current theme i have on windows now the default dark theme for people when they first install ghostex? i dont like the fully black one we have." Out of the box dark mode is their Windows look (the agent-made Inkstone look without its fonts): the Custom colour #46506a at depth 96, the Inkstone theme colours (paper-white text #ece4d6, grey text #9b968d, a cinnabar accent and focus ring #d8664f, borders 8% and dividers 6%, cards, controls, menus and the chat box in near-neutral blue-blacks, selection 9%, hover 5%, muted success, warning and danger), the cinnabar pane outline colour, and Live glass behind the window: Ink at speed 0.3 and brightness 25. Live draws the same on macOS, Windows and Linux (no system blur), so the look matches across platforms; Blur stays 4 because Live is not blurred by it on macOS, and Blur on Windows stays Acrylic for Desktop and windows. Kept as they were: transparency off by default on Windows (the 2026-10-04 decision in availability.rs) and one tint for the sidebar and the work area (88, the 2026-10-23 Strength decision; their Windows sidebar is 82). Fonts are not part of a look (their Windows fonts are the defaults anyway). Supersedes the 2026-11-20 Black look below. Long-time users keep their current look (`DARK_LOOK_2026_11_21_OLD_DEFAULTS` in lib.rs). Superseded on 2026-11-22 by their Polar Night art look below.
+    // CDXC:Theming 2026-11-22 DECISION:
+    // User: "I want my current theme to be the default one for Ghostex (same art, same everything)." Out of the box Ghostex uses Dark appearance (`dark-2`), Custom dark tint `#404e78` at depth 96, Custom light tint `#fcf3da` at depth 97, Polar Night artwork in dark mode (`polar-night`) and Gruvbox Material Light artwork in light mode (`gm-light`) with dimming 45 and blur 0, Transparency Always (`frosted`; Windows keeps `opaque` in availability.rs while Art still paints in an opaque window), Same for light and dark off, Picture position desktop, Animated styles Aurora (dark) and Ink (light) (keeping the raised 1.0 speed and 80 brightness defaults), glass tints 61/67 (dark) and 64/64 (light) (Strength 45), Polar Night dark theme colours with `#5581a9` accent/focus ring and Everforest Light light theme colours, terminal palettes Ghostex Nord (dark) and Ghostex Everforest Light (light) with Follow theme terminal background, and `#7cbf9f` active pane outline. Fonts stay unchanged (not part of a theme). Changes only the catalog defaults so saved user settings are untouched.
     ("darkThemePreset", J::Str("custom")),
-    ("lightThemePreset", J::Str("gray")),
+    ("lightThemePreset", J::Str("custom")),
     ("themeSidebarContrast", J::Num(0.0)),
     ("themeWorkAreaContrast", J::Num(0.0)),
     (
         "themeRoles",
-        J::Obj(&[(
-            "dark",
-            J::Obj(&[
-                ("accent", J::Str("#d8664f")),
-                ("focusRing", J::Str("#d8664f")),
-                ("border", J::Str("8%")),
-                ("divider", J::Str("6%")),
-                ("text", J::Str("#ece4d6")),
-                ("mutedText", J::Str("#9b968d")),
-                ("userMessage", J::Str("base+12%")),
-                ("chatBox", J::Str("base+6%/80%")),
-                ("surface", J::Str("base+8%/80%")),
-                ("control", J::Str("base+10%/80%")),
-                ("menu", J::Str("base+6%/95%")),
-                ("selection", J::Str("9%")),
-                ("hover", J::Str("5%")),
-                ("success", J::Str("#9cbf8c")),
-                ("warning", J::Str("#d9b46a")),
-                ("danger", J::Str("#e06c75")),
-            ]),
-        )]),
+        J::Obj(&[
+            (
+                "dark",
+                J::Obj(&[
+                    ("accent", J::Str("#5581a9")),
+                    ("focusRing", J::Str("#5581a9")),
+                    ("border", J::Str("8%")),
+                    ("divider", J::Str("6%")),
+                    ("text", J::Str("#e6e4de")),
+                    ("mutedText", J::Str("#8c95a3")),
+                    ("userMessage", J::Str("base+12%")),
+                    ("chatBox", J::Str("base+6%/80%")),
+                    ("surface", J::Str("base+8%/80%")),
+                    ("control", J::Str("base+10%/80%")),
+                    ("menu", J::Str("base+6%/95%")),
+                    ("selection", J::Str("9%")),
+                    ("hover", J::Str("5%")),
+                    ("success", J::Str("#a3c48e")),
+                    ("warning", J::Str("#dcbd7a")),
+                    ("danger", J::Str("#d9827c")),
+                ]),
+            ),
+            (
+                "light",
+                J::Obj(&[
+                    ("text", J::Str("#5c6a72")),
+                    ("mutedText", J::Str("#939f91")),
+                    ("accent", J::Str("#8da101")),
+                    ("focusRing", J::Str("#8da101")),
+                    ("link", J::Str("#3a94c5")),
+                    ("success", J::Str("#8da101")),
+                    ("warning", J::Str("#dfa000")),
+                    ("danger", J::Str("#f85552")),
+                    ("userMessage", J::Str("#efebd4")),
+                    ("codeBlock", J::Str("#f4f0d9")),
+                    ("selection", J::Str("#eaedc8")),
+                ]),
+            ),
+        ]),
     ),
     (
         "customSidebarTitlebarLightBackgroundTintColor",
-        J::Str("#808080"),
+        J::Str("#fcf3da"),
     ),
     (
         "customSidebarTitlebarLightBackgroundLightnessPercent",
-        J::Num(96.0),
+        J::Num(97.0),
     ),
     (
         "customSidebarTitlebarLightBackgroundColor",
@@ -884,8 +905,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("terminalFontWeight", J::Num(300.0)),
     ("terminalBoldUsesHeavierFont", J::Bool(true)),
     ("terminalColorScheme", J::Str("app")),
-    ("terminalGhosttyLightTheme", J::Str("GitHub Light Default")),
-    ("terminalGhosttyTheme", J::Str("Ghostex Kanagawa Dragon")),
+    ("terminalGhosttyLightTheme", J::Str("Ghostex Everforest Light")),
+    ("terminalGhosttyTheme", J::Str("Ghostex Nord")),
     ("terminalBackgroundOpacity", J::Num(100.0)),
     ("terminalBackgroundImage", J::Str("")),
     ("terminalBackgroundImageOpacity", J::Num(1.0)),
@@ -1065,16 +1086,16 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
         ]),
     ),
     ("showActivePaneOutline", J::Bool(false)),
-    // The default dark look's accent since 2026-11-21 (see `darkThemePreset`); #3b82f6 before.
-    ("workspaceActivePaneBorderColor", J::Str("#d8664f")),
+    // The default dark look's pane outline since 2026-11-22 (see `darkThemePreset`); #d8664f before.
+    ("workspaceActivePaneBorderColor", J::Str("#7cbf9f")),
     // CDXC:Settings 2026-11-08 DECISION: User: "to show traffic lights on macos when sidebar is collapsed (default to yes)". On: the window's buttons stay with the sidebar collapsed, as they did before the 2026-11-06 floating-sidebar change (GitHub #432), which off restores.
     ("showWindowButtonsWhenSidebarCollapsed", J::Bool(true)),
     ("closeButtonsOnRight", J::Bool(false)),
     // CDXC:Theming 2026-11-21 DECISION:
-    // User (through the coordinator): six dark art themes (Moonwater, Glasshouse, Red Earth, Deep Current, Night Garden, Nocturne Canyon) are Ghostex's main themes. Each paints its own artwork behind the sidebar and the work area of an opaque window: no desktop shows through. `windowArt` names the artwork (None, the default, keeps the glass as it is), `windowArtDim` darkens it (percent black over it) and `windowArtBlur` softens it (points). The surfaces over it take the glass tints (`windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`).
+    // User (through the coordinator): six dark art themes (Moonwater, Glasshouse, Red Earth, Deep Current, Night Garden, Nocturne Canyon) are Ghostex's main themes. Each paints its own artwork behind the sidebar and the work area of an opaque window: no desktop shows through. `windowArt` names the artwork (Polar Night by default since 2026-11-22, `gm-light` in light mode; None keeps the glass as it is), `windowArtDim` darkens it (percent black over it) and `windowArtBlur` softens it (points). The surfaces over it take the glass tints (`windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`).
     // SEE-ALSO: apps/desktop/src/app/helpers/window_art.rs, data/theme_gallery.rs.
-    ("windowArt", J::Str("none")),
-    ("windowArtLight", J::Str("none")),
+    ("windowArt", J::Str("polar-night")),
+    ("windowArtLight", J::Str("gm-light")),
     ("windowArtDim", J::Num(45.0)),
     ("windowArtBlur", J::Num(0.0)),
     // CDXC:Theming 2026-11-22 (`YOUR_IMAGE_ART_ID` in data/themes.rs): the user's own picture
@@ -1083,18 +1104,18 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("windowArtImage", J::Str("")),
     ("windowArtImageLight", J::Str("")),
     ("savedThemes", J::Arr(&[])),
-    ("windowGlass", J::Str("auto")),
+    ("windowGlass", J::Str("frosted")),
     // Animated (stored as "live") since 2026-11-21, the default dark look's glass (see `darkThemePreset`); Desktop and windows before.
     ("windowGlassSource", J::Str("live")),
-    ("windowGlassImagePlacement", J::Str("static")),
-    ("windowGlassSameForLightAndDark", J::Bool(true)),
+    ("windowGlassImagePlacement", J::Str("desktop")),
+    ("windowGlassSameForLightAndDark", J::Bool(false)),
     ("windowGlassImageDark", J::Str("")),
     ("windowGlassImageLight", J::Str("")),
     ("windowGlassVideoDark", J::Str("")),
     ("windowGlassVideoLight", J::Str("")),
     ("windowGlassVideoOnlyOnPower", J::Bool(true)),
-    ("windowGlassLiveStyleDark", J::Str("ink")),
-    ("windowGlassLiveStyleLight", J::Str("drift")),
+    ("windowGlassLiveStyleDark", J::Str("aurora")),
+    ("windowGlassLiveStyleLight", J::Str("ink")),
     // CDXC:Theming 2026-11-22 DECISION: User: "Make the effect for Animated more noticeable by default: it's super not apparent now by default." Raised from 0.3 and 25 (2026-11-21) to 1.0 and 80 so motion is clearly visible on first pick while keeping text readable.
     ("windowGlassLiveSpeed", J::Num(1.0)),
     ("windowGlassLiveBrightness", J::Num(80.0)),
@@ -1103,13 +1124,13 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Theming 2026-11-20 DECISION: User (Q4288): "yes, make pane gap 6 and menu blur 17 defaults too", from their own look (see `darkThemePreset`). Menu blur applies in light mode too. Supersedes 20.
     ("windowGlassMenuBlurRadius", J::Num(17.0)),
     // CDXC:Theming 2026-11-20 DECISION:
-    // User: "pls make the sidebar and main area default to having the same strength for the transparency by default" (2026-10-23), then "make my current theme values the default for Ghostex in dark mode, with transparency and all that" (2026-11-20, see `darkThemePreset`). The four tints are the ones Settings' Strength slider writes at 20 (`transparencyStrengthPatch`), so the slider opens on 20, and the sidebar and the work area share one tint per appearance. Supersedes Strength 10 (94 dark, 97 light).
+    // User: "pls make the sidebar and main area default to having the same strength for the transparency by default" (2026-10-23), then "make my current theme values the default for Ghostex in dark mode, with transparency and all that" (2026-11-20, see `darkThemePreset`), then "I want my current theme to be the default one for Ghostex (same art, same everything)" (2026-11-22: 61/67 dark, 64/64 light, Strength 45).
     // SEE-ALSO: apps/desktop/src/app/helpers/window_glass.rs, apps/desktop/src/app/window/onboarding/model.rs, apps/desktop/src/app/window/settings_modal/tabs/theme/colours.rs.
-    ("windowGlassSidebarOpacityDark", J::Num(88.0)),
-    ("windowGlassWorkAreaTintDark", J::Num(88.0)),
-    ("windowGlassSidebarOpacityLight", J::Num(93.0)),
-    ("windowGlassWorkAreaTintLight", J::Num(93.0)),
-    ("terminalBackgroundMode", J::Str("pure")),
+    ("windowGlassSidebarOpacityDark", J::Num(61.0)),
+    ("windowGlassWorkAreaTintDark", J::Num(67.0)),
+    ("windowGlassSidebarOpacityLight", J::Num(64.0)),
+    ("windowGlassWorkAreaTintLight", J::Num(64.0)),
+    ("terminalBackgroundMode", J::Str("theme")),
     ("workspaceBackgroundColor", J::Str("")),
     ("clickToWakeSleepingSessions", J::Bool(true)),
     ("dimSleepingSessions", J::Bool(false)),

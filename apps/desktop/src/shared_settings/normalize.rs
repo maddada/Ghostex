@@ -127,17 +127,23 @@ pub(crate) fn terminal_background(
         "workspaceBackgroundColor",
         DEFAULT_TERMINAL_BACKGROUND_COLOR,
     ));
-    match read_string_field(object, "terminalBackgroundMode", "") {
+    let mode = read_string_field(object, "terminalBackgroundMode", "");
+    let effective_mode = if !mode.is_empty() {
+        mode
+    } else if custom.is_some() {
+        "custom"
+    } else {
+        ghostex_settings_catalog::default_value("terminalBackgroundMode")
+            .and_then(ghostex_settings_catalog::J::as_str)
+            .unwrap_or("pure")
+    };
+    match effective_mode {
         "theme" => SharedTerminalBackground::Theme,
         "custom" => custom.map_or(
             SharedTerminalBackground::Theme,
             SharedTerminalBackground::Custom,
         ),
-        "pure" => SharedTerminalBackground::Pure,
-        _ => custom.map_or(
-            SharedTerminalBackground::Pure,
-            SharedTerminalBackground::Custom,
-        ),
+        _ => SharedTerminalBackground::Pure,
     }
 }
 
@@ -399,7 +405,7 @@ mod terminal_background_tests {
         // Custom without a usable colour follows the theme; the retired #010101 means unset.
         assert_eq!(settings(Some("custom"), "#12345g", true), theme);
         assert_eq!(settings(Some("custom"), "#010101", false), theme);
-        assert_eq!(settings(None, "#010101", false), [0, 0, 0]);
-        assert_eq!(settings(None, "", true), [0xff, 0xff, 0xff]);
+        assert_eq!(settings(None, "#010101", false), theme);
+        assert_eq!(settings(None, "", true), theme);
     }
 }

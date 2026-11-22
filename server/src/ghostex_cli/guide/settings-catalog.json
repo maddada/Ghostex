@@ -3775,7 +3775,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "system",
+      "default": "dark-2",
       "options": [
         {
           "label": "Dark",
@@ -3887,7 +3887,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "string",
-      "default": "#46506a",
+      "default": "#404e78",
       "agentWritable": true
     },
     {
@@ -3901,7 +3901,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "gray",
+      "default": "custom",
       "options": [
         {
           "label": "Graphite",
@@ -3985,7 +3985,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "string",
-      "default": "#808080",
+      "default": "#fcf3da",
       "agentWritable": true
     },
     {
@@ -4027,7 +4027,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "none",
+      "default": "polar-night",
       "options": [
         {
           "label": "None",
@@ -4179,7 +4179,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "none",
+      "default": "gm-light",
       "options": [
         {
           "label": "None",
@@ -4407,7 +4407,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "auto",
+      "default": "frosted",
       "options": [
         {
           "label": "Dark only",
@@ -4470,7 +4470,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "boolean",
-      "default": true,
+      "default": false,
       "agentWritable": true
     },
     {
@@ -4484,7 +4484,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "static",
+      "default": "desktop",
       "options": [
         {
           "label": "Moves with the window",
@@ -4578,7 +4578,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "ink",
+      "default": "aurora",
       "options": [
         {
           "label": "Aurora",
@@ -4630,7 +4630,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "drift",
+      "default": "ink",
       "options": [
         {
           "label": "Aurora",
@@ -4769,7 +4769,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 88,
+      "default": 61,
       "agentWritable": true
     },
     {
@@ -4783,7 +4783,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 88,
+      "default": 67,
       "agentWritable": true
     },
     {
@@ -4797,7 +4797,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 93,
+      "default": 64,
       "agentWritable": true
     },
     {
@@ -4811,7 +4811,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 93,
+      "default": 64,
       "agentWritable": true
     },
     {
@@ -4859,12 +4859,12 @@
       "type": "json",
       "default": {
         "dark": {
-          "accent": "#d8664f",
-          "focusRing": "#d8664f",
+          "accent": "#5581a9",
+          "focusRing": "#5581a9",
           "border": "8%",
           "divider": "6%",
-          "text": "#ece4d6",
-          "mutedText": "#9b968d",
+          "text": "#e6e4de",
+          "mutedText": "#8c95a3",
           "userMessage": "base+12%",
           "chatBox": "base+6%/80%",
           "surface": "base+8%/80%",
@@ -4872,9 +4872,22 @@
           "menu": "base+6%/95%",
           "selection": "9%",
           "hover": "5%",
-          "success": "#9cbf8c",
-          "warning": "#d9b46a",
-          "danger": "#e06c75"
+          "success": "#a3c48e",
+          "warning": "#dcbd7a",
+          "danger": "#d9827c"
+        },
+        "light": {
+          "text": "#5c6a72",
+          "mutedText": "#939f91",
+          "accent": "#8da101",
+          "focusRing": "#8da101",
+          "link": "#3a94c5",
+          "success": "#8da101",
+          "warning": "#dfa000",
+          "danger": "#f85552",
+          "userMessage": "#efebd4",
+          "codeBlock": "#f4f0d9",
+          "selection": "#eaedc8"
         }
       },
       "agentWritable": false
@@ -4922,7 +4935,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "Ghostex Kanagawa Dragon",
+      "default": "Ghostex Nord",
       "options": [
         {
           "label": "Use terminal config file",
@@ -6966,7 +6979,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "GitHub Light Default",
+      "default": "Ghostex Everforest Light",
       "options": [
         {
           "label": "0x96f",
@@ -9006,7 +9019,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "pure",
+      "default": "theme",
       "options": [
         {
           "label": "Black / white",
@@ -9106,7 +9119,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 96,
+      "default": 97,
       "agentWritable": true
     },
     {
@@ -9482,7 +9495,7 @@
       "section": "windowLayout",
       "sectionTitle": "Window & Layout",
       "type": "string",
-      "default": "#d8664f",
+      "default": "#7cbf9f",
       "agentWritable": true
     },
     {
