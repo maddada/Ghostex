@@ -829,7 +829,6 @@ impl NativeChatView {
                 .flex_nowrap()
                 .justify_start()
                 .px(px(8.0 * s))
-                .pb(px(6.0 * s))
                 .items_center()
                 .gap(px(6.0 * s))
                 .text_size(px(13.0 * s))
