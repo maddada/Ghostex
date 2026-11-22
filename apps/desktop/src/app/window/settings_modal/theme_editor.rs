@@ -2,12 +2,14 @@
 //!
 //! Opened from the top of Settings > Themes (closing Settings so the user sees the main Ghostex
 //! window live behind it) or after onboarding's "Make it yours" step. Single scrollable column
-//! (~320px wide) holding every theme customization control in one place: Appearance, Theme tiles,
-//! Background & Art/Live galleries, Dark/Light colour squares + uncapped Custom colour,
-//! Colourfulness & separate sidebar/work-area contrast, Accent & Fine-tune colour roles, Glass
-//! controls, Chat & Terminal appearance, Undo, Reset, and "All theme settings" back to Settings.
+//! (~320px wide) aligned with Settings > Themes: Appearance, Theme tiles, the single Artwork strip
+//! (None, all artworks, Your image, Animated at the end) with its controls directly below, Dark /
+//! Light colour squares + uncapped Custom colour, Colourfulness & separate sidebar/work-area
+//! contrast, Accent & Fine-tune colour roles, the slim Window transparency section (paused while an
+//! artwork is active, with Fully transparent / Wallpaper tiles), Chat & Terminal appearance, Undo,
+//! Reset, and "All theme settings" back to Settings.
 use super::super::native_modal_kit::*;
-use super::catalog::settings_catalog;
+use super::catalog::{module, settings_catalog};
 use super::fields::{
     ColorSaver, FieldStates, SettingsPage, SliderBinding, SliderSaver, centered_tint_picker_overlay,
     open_tint_picker, set_color_saver, settings_icon, step_slider, tooltip_text,
@@ -16,7 +18,13 @@ use super::model::SettingsModalHost;
 use super::palette::{SETTINGS_FONT, SettingsPalette};
 use super::restore::OpenFormMemory;
 use super::shell::SettingsModalConfig;
-use super::store::{SettingsStore, SettingsValues, new_settings_store, store_gxserver_rpc};
+use super::store::{
+    SettingsStore, SettingsValues, new_settings_store, post_store_message, store_gxserver_rpc,
+};
+use super::tabs::theme::art::source_art;
+use super::tabs::theme::artwork::{
+    Backdrop, art_key, backdrop, file_preview, live_shows, painted_name, your_image_path,
+};
 use super::tabs::theme::colours::{
     COLOURFULNESS_LAST_POSITION, STRENGTH_MAX, STRENGTH_MIN, STRENGTH_STEP,
     area_colourfulness_patch, colourfulness_display_step, colourfulness_name, colourfulness_patch,
@@ -31,16 +39,20 @@ use super::tabs::theme::prompt_gallery::{
 use super::tabs::theme::role_defaults::role_default;
 use super::tabs::theme::roles::{alpha_of, hex_of, saved_role, with_role};
 use super::tabs::theme::swatches::swatch_colour;
+use super::tabs::theme::transparency::{
+    SHOW_BEHIND, same_for_light_and_dark, transparency_choices,
+};
 use ghostex_settings_catalog::theme_roles::{
     RoleValue, THEME_ROLES_SETTING, format_role_value, parse_role_value,
 };
+use ghostex_settings_catalog::{ARTWORKS, YOUR_IMAGE_ART_ID, artwork_by_id};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, ClickEvent, Context, Entity, FocusHandle, Focusable, Image, ImageFormat,
     InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton, ObjectFit,
-    ParentElement as _, Point, Pixels, Render, ScrollHandle, SharedString,
+    ParentElement as _, Point, Pixels, Render, RenderImage, ScrollHandle, SharedString,
     StatefulInteractiveElement as _, Styled as _, StyledImage as _, Subscription, Window,
-    WindowAppearance, WindowControlArea, div, img, px,
+    WindowAppearance, WindowControlArea, canvas, div, img, point, px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
@@ -57,7 +69,6 @@ pub(crate) const THEME_EDITOR_HEIGHT: f32 = 640.0;
 const HEADER_HEIGHT: f32 = 40.0;
 const FOOTER_HEIGHT: f32 = 38.0;
 const INITIAL_THEME_TILES: usize = 8;
-const INITIAL_ART_TILES: usize = 8;
 const DRAG_THRESHOLD: f32 = 3.0;
 
 const ICON_GRIP: &str = "modals/settings/grip-vertical.svg";
@@ -70,18 +81,7 @@ const ICON_PLUS: &str = "modals/settings/plus.svg";
 const ICON_RESET: &str = "modals/settings/refresh.svg";
 
 const ACCENT_DOTS: [&str; 8] = [
-    "#86d3f8", "#d8664f", "#7aa2f7", "#7ecdc5", "#a7c080", "#d8a657", "#d69bb5", "#bd93f9",
-];
-
-const LIVE_STYLES: [(&str, &str); 8] = [
-    ("ink", "Ink"),
-    ("drift", "Drift"),
-    ("nebula", "Nebula"),
-    ("mesh", "Mesh"),
-    ("aurora", "Aurora"),
-    ("silk", "Silk"),
-    ("bokeh", "Bokeh"),
-    ("waves", "Waves"),
+    "#86d3f8", "#7cb8f7", "#d8664f", "#7ecdc5", "#a7c080", "#d8a657", "#d69bb5", "#bd93f9",
 ];
 
 const FINE_TUNE_ROLES: [(&str, &str); 12] = [
@@ -145,7 +145,10 @@ pub(crate) struct GpuiThemeEditorWindow {
     picked_dark: bool,
     picked_light: bool,
     all_themes: bool,
-    all_art: bool,
+    artworks_scroll: ScrollHandle,
+    artworks_wheel: StripWheelLock,
+    artworks_revealed: Option<bool>,
+    artworks_reveal: Rc<Cell<Option<usize>>>,
     more_colours_contrast: bool,
     split_areas: bool,
     more_roles: bool,
@@ -155,6 +158,7 @@ pub(crate) struct GpuiThemeEditorWindow {
     slider_undo_armed: Rc<RefCell<HashSet<&'static str>>>,
     drag_press: Option<Point<Pixels>>,
     posters: HashMap<String, Arc<Image>>,
+    source_images: HashMap<String, Arc<RenderImage>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -220,7 +224,10 @@ impl GpuiThemeEditorWindow {
             picked_dark: false,
             picked_light: false,
             all_themes: false,
-            all_art: false,
+            artworks_scroll: ScrollHandle::new(),
+            artworks_wheel: StripWheelLock::default(),
+            artworks_revealed: None,
+            artworks_reveal: Rc::new(Cell::new(None)),
             more_colours_contrast: split_areas,
             split_areas,
             more_roles: false,
@@ -230,6 +237,7 @@ impl GpuiThemeEditorWindow {
             slider_undo_armed: Rc::new(RefCell::new(HashSet::new())),
             drag_press: None,
             posters: HashMap::new(),
+            source_images: HashMap::new(),
             _subscriptions: vec![store_sub, appearance_sub],
         }
     }
@@ -462,12 +470,8 @@ impl GpuiThemeEditorWindow {
             .unwrap_or_default();
         let mut touched_roles = false;
         for (key, value) in changes {
-            if let Some(rest) = key.strip_prefix("role.") {
+            if let Some((appearance @ ("dark" | "light"), role_id)) = key.split_once('.') {
                 touched_roles = true;
-                let (appearance, role_id) = match rest.split_once('.') {
-                    Some((a @ ("dark" | "light"), id)) => (a, id),
-                    _ => ("dark", rest),
-                };
                 let entry = role_map
                     .entry(appearance.to_string())
                     .or_insert_with(|| Value::Object(Map::new()));
@@ -504,56 +508,89 @@ impl GpuiThemeEditorWindow {
         self.apply_tracked_patch(patch, cx);
     }
 
-    fn select_background(&mut self, bg: &str, cx: &mut Context<Self>) {
+    fn pick_no_artwork(&mut self, dark: bool, enable_transparency: bool, cx: &mut Context<Self>) {
         let values = self.store.read(cx).values();
-        let themes = gallery_themes();
-        if let Some((theme, _, _)) = applied_theme(&themes, &values) {
-            let partner = theme.kind == "preset" && (!theme.dark || !self.picked_light);
-            let changes = theme.background_patch(bg, partner);
-            if !changes.is_empty() {
-                if self.store.read(cx).request().gxserver_rpc_available {
-                    self.theme_rpc(
-                        &format!("background-{bg}"),
-                        json!({ "op": "set", "changes": changes }),
-                        "Background not changed",
-                        cx,
-                    );
-                } else {
-                    self.apply_direct_theme_changes(&changes, cx);
-                }
-                return;
+        let mut changes = Map::new();
+        changes.insert(art_key(dark).into(), json!("none"));
+        if live_shows(&values, dark) {
+            changes.insert("windowGlassSource".into(), json!("desktopAndWindows"));
+        }
+        if enable_transparency {
+            let glass = values.string("windowGlass");
+            if glass == "opaque" {
+                changes.insert(
+                    "windowGlass".into(),
+                    json!(if dark { "auto" } else { "frosted" }),
+                );
+            } else if glass == "auto" && !dark {
+                changes.insert("windowGlass".into(), json!("frosted"));
             }
         }
-        let dark = preview_scheme_dark(&values.string("sidebarTheme"), self.scheme_dark);
-        let art_key = if dark { "windowArt" } else { "windowArtLight" };
-        let mut patch = Map::new();
-        match bg {
-            "art" => {
-                let current_art = values.string(art_key);
-                let id = if ghostex_settings_catalog::artwork_by_id(&current_art).is_some() {
-                    current_art
-                } else {
-                    "moonwater".to_string()
-                };
-                patch.insert(art_key.into(), json!(id));
-                patch.insert("windowGlass".into(), json!("frosted"));
-            }
-            "live" => {
-                patch.insert(art_key.into(), json!("none"));
-                patch.insert("windowGlass".into(), json!("frosted"));
-                patch.insert("windowGlassSource".into(), json!("live"));
-            }
-            "transparent" => {
-                patch.insert(art_key.into(), json!("none"));
-                patch.insert("windowGlass".into(), json!("frosted"));
-                patch.insert("windowGlassSource".into(), json!("desktopAndWindows"));
-            }
-            _ => {
-                patch.insert(art_key.into(), json!("none"));
-                patch.insert("windowGlass".into(), json!("opaque"));
-            }
+        if self.store.read(cx).request().gxserver_rpc_available {
+            self.theme_rpc(
+                "artwork-none",
+                json!({ "op": "set", "changes": changes }),
+                "Background not changed",
+                cx,
+            );
+        } else {
+            self.apply_tracked_patch(changes, cx);
         }
-        self.apply_tracked_patch(patch, cx);
+    }
+
+    fn pick_live(&mut self, dark: bool, cx: &mut Context<Self>) {
+        let values = self.store.read(cx).values();
+        let glass = values.string("windowGlass");
+        let mut changes = Map::new();
+        if values.string(art_key(dark)) != "none" {
+            changes.insert(art_key(dark).into(), json!("none"));
+        }
+        changes.insert("windowGlassSource".into(), json!("live"));
+        if glass == "opaque" {
+            changes.insert(
+                "windowGlass".into(),
+                json!(if dark { "auto" } else { "frosted" }),
+            );
+        } else if glass == "auto" && !dark {
+            changes.insert("windowGlass".into(), json!("frosted"));
+        }
+        if self.store.read(cx).request().gxserver_rpc_available {
+            self.theme_rpc(
+                "artwork-live",
+                json!({ "op": "set", "changes": changes }),
+                "Background not changed",
+                cx,
+            );
+        } else {
+            self.apply_tracked_patch(changes, cx);
+        }
+    }
+
+    fn pick_your_image(&mut self, dark: bool, change: bool, cx: &mut Context<Self>) {
+        let values = self.store.read(cx).values();
+        if change || your_image_path(&values, dark).is_none() {
+            post_store_message(
+                &self.store,
+                json!({
+                    "appearance": if dark { "dark" } else { "light" },
+                    "type": "pickWindowArtImageFile",
+                }),
+                cx,
+            );
+            return;
+        }
+        let mut changes = Map::new();
+        changes.insert(art_key(dark).into(), json!(YOUR_IMAGE_ART_ID));
+        if self.store.read(cx).request().gxserver_rpc_available {
+            self.theme_rpc(
+                "artwork-yours",
+                json!({ "op": "set", "changes": changes }),
+                "Background not changed",
+                cx,
+            );
+        } else {
+            self.apply_tracked_patch(changes, cx);
+        }
     }
 
     fn select_artwork(&mut self, id: &str, dark: bool, cx: &mut Context<Self>) {
@@ -565,12 +602,8 @@ impl GpuiThemeEditorWindow {
                 cx,
             );
         } else {
-            let key = if dark { "windowArt" } else { "windowArtLight" };
             let mut patch = Map::new();
-            patch.insert(key.into(), json!(id));
-            if id != "none" {
-                patch.insert("windowGlass".into(), json!("frosted"));
-            }
+            patch.insert(art_key(dark).into(), json!(id));
             self.apply_tracked_patch(patch, cx);
         }
     }
@@ -734,19 +767,6 @@ impl GpuiThemeEditorWindow {
         set_color_saver(self, key, saver);
     }
 
-    fn current_background(&self, values: &SettingsValues, dark: bool) -> &'static str {
-        let art_key = if dark { "windowArt" } else { "windowArtLight" };
-        if ghostex_settings_catalog::artwork_by_id(&values.string(art_key)).is_some() {
-            return "art";
-        }
-        match values.string("windowGlass").as_str() {
-            "opaque" => "solid",
-            "auto" if !dark => "solid",
-            _ if values.string("windowGlassSource") == "live" => "live",
-            _ => "transparent",
-        }
-    }
-
     fn cached_picture(
         &mut self,
         kind: &str,
@@ -763,6 +783,7 @@ impl GpuiThemeEditorWindow {
     }
 
     fn cached_live_poster(&mut self, style: &str, light: bool) -> Option<Arc<Image>> {
+        let style = if style == "video" { "ink" } else { style };
         let key = format!("live-{style}-{}", if light { "light" } else { "dark" });
         if let Some(picture) = self.posters.get(&key) {
             return Some(picture.clone());
@@ -770,6 +791,59 @@ impl GpuiThemeEditorWindow {
         let picture = live_poster(style, light)?;
         self.posters.insert(key, picture.clone());
         Some(picture)
+    }
+
+    fn cached_source_art(&mut self, source: &str) -> Option<Arc<RenderImage>> {
+        if let Some(image) = self.source_images.get(source) {
+            return Some(image.clone());
+        }
+        let image = source_art(source)?;
+        self.source_images.insert(source.to_string(), image.clone());
+        Some(image)
+    }
+
+    fn strength_slider_row(
+        &mut self,
+        p: &SettingsPalette,
+        values: &SettingsValues,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let (exact, strength) = strength_from_settings(values);
+        let strength_label = if exact.is_some() {
+            format!("{}%", strength.round() as i64)
+        } else {
+            format!("~{}%", strength.round() as i64)
+        };
+        let strength_saver = self.tracked_slider_saver(
+            "float-glass-strength",
+            &[
+                "windowGlassSidebarOpacityDark",
+                "windowGlassWorkAreaTintDark",
+                "windowGlassSidebarOpacityLight",
+                "windowGlassWorkAreaTintLight",
+            ],
+            |store, value, _commit, cx| {
+                let gaps = strength_gaps(&store.values());
+                store.apply_patch(strength_patch(value, gaps), "settings:control", cx);
+            },
+            cx,
+        );
+        self.compact_slider_row(
+            p,
+            "Strength",
+            strength_label,
+            SliderBinding {
+                key: "float-glass-strength",
+                min: STRENGTH_MIN,
+                max: STRENGTH_MAX,
+                step: STRENGTH_STEP,
+            },
+            strength,
+            strength_saver,
+            window,
+            cx,
+        )
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -1287,319 +1361,524 @@ impl GpuiThemeEditorWindow {
         Self::section_box(p, content)
     }
 
-    fn background_section(
+    fn artwork_strip_tile(
+        p: &SettingsPalette,
+        id: SharedString,
+        title: String,
+        tip: String,
+        selected: bool,
+        preview: AnyElement,
+        on_click: impl Fn(&mut Self, &ClickEvent, &mut Window, &mut Context<Self>) + 'static,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        v_flex()
+            .id(id)
+            .w(px(68.0))
+            .flex_shrink_0()
+            .gap(px(3.0))
+            .cursor_pointer()
+            .tooltip(tooltip_text(tip))
+            .on_click(cx.listener(on_click))
+            .child(
+                div()
+                    .w_full()
+                    .h(px(36.0))
+                    .rounded(px(5.0))
+                    .overflow_hidden()
+                    .bg(hsla(p.raised))
+                    .border_color(if selected {
+                        hsla(p.foreground)
+                    } else {
+                        hsla(p.hairline)
+                    })
+                    .when(selected, |this| this.border_2())
+                    .when(!selected, |this| this.border_1())
+                    .child(preview),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .text_size(px(10.0))
+                    .text_color(if selected {
+                        hsla(p.foreground)
+                    } else {
+                        hsla(p.muted)
+                    })
+                    .when(selected, |this| this.font_weight(gpui::FontWeight::SEMIBOLD))
+                    .child(title),
+            )
+            .into_any_element()
+    }
+
+    fn artwork_section(
         &mut self,
         p: &SettingsPalette,
         values: &SettingsValues,
         dark: bool,
+        picked: &Backdrop,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let current_bg = self.current_background(values, dark);
-        let mut content = vec![
-            Self::section_heading(p, "Background", None),
-            self.segmented(
+        let labels: Vec<(String, String)> = gallery_themes()
+            .into_iter()
+            .map(|theme| {
+                let label = theme.label.clone().unwrap_or_else(|| {
+                    theme
+                        .name
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or_default()
+                        .to_string()
+                });
+                (theme.id, label)
+            })
+            .collect();
+        let active_name = match picked {
+            Backdrop::None => "None".to_string(),
+            Backdrop::Artwork(id) => artwork_by_id(id)
+                .map(|a| a.name.to_string())
+                .unwrap_or_else(|| (*id).to_string()),
+            Backdrop::YourImage => "Your image".to_string(),
+            Backdrop::Live => "Animated".to_string(),
+        };
+
+        let mut tiles: Vec<AnyElement> = Vec::with_capacity(ARTWORKS.len() + 3);
+        tiles.push(Self::artwork_strip_tile(
+            p,
+            "float-artwork-none".into(),
+            "None".into(),
+            "No artwork".into(),
+            *picked == Backdrop::None,
+            div().size_full().bg(hsla(p.raised)).into_any_element(),
+            move |editor, _, _, cx| editor.pick_no_artwork(dark, false, cx),
+            cx,
+        ));
+        for artwork in ARTWORKS {
+            let id = artwork.id;
+            let short = labels
+                .iter()
+                .find(|(theme_id, _)| theme_id == id)
+                .map(|(_, label)| label.clone())
+                .unwrap_or_else(|| artwork.name.to_string());
+            let picture = self.cached_picture("theme-art", id, artwork_thumbnail_bytes);
+            let preview = div()
+                .size_full()
+                .when_some(picture, |this, pic| {
+                    this.child(img(pic).size_full().object_fit(ObjectFit::Cover))
+                })
+                .into_any_element();
+            tiles.push(Self::artwork_strip_tile(
                 p,
-                "float-bg",
-                &[
-                    ("art", "Art"),
-                    ("live", "Animated"),
-                    ("transparent", "Glass"),
-                    ("solid", "Solid"),
-                ],
-                current_bg,
-                |editor, value, _window, cx| editor.select_background(value, cx),
+                SharedString::from(format!("float-art-{id}")),
+                short,
+                artwork.name.to_string(),
+                *picked == Backdrop::Artwork(id),
+                preview,
+                move |editor, _, _, cx| editor.select_artwork(id, dark, cx),
                 cx,
-            ),
-        ];
-        if current_bg == "art" {
-            let art_key = if dark { "windowArt" } else { "windowArtLight" };
-            let current_art = values.string(art_key);
-            let artworks = ghostex_settings_catalog::ARTWORKS;
-            let total = artworks.len();
-            let shown = if self.all_art {
-                total
-            } else {
-                INITIAL_ART_TILES.min(total)
-            };
-            let mut tiles: Vec<AnyElement> = Vec::with_capacity(shown);
-            for artwork in artworks.iter().take(shown) {
-                let id = artwork.id;
-                let selected = current_art == id;
-                let picture = self.cached_picture("theme-art", id, artwork_thumbnail_bytes);
-                tiles.push(
-                    div()
-                        .id(SharedString::from(format!("float-art-{id}")))
-                        .w(px(68.0))
-                        .h(px(36.0))
-                        .rounded(px(5.0))
-                        .overflow_hidden()
-                        .cursor_pointer()
-                        .bg(hsla(p.raised))
-                        .border_color(if selected {
-                            hsla(p.foreground)
-                        } else {
-                            hsla(p.hairline)
-                        })
-                        .when(selected, |this| this.border_2())
-                        .when(!selected, |this| this.border_1())
-                        .tooltip(tooltip_text(artwork.name))
-                        .on_click(cx.listener(move |editor, _: &ClickEvent, _window, cx| {
-                            editor.select_artwork(id, dark, cx);
-                        }))
-                        .when_some(picture, |this, pic| {
-                            this.child(img(pic).size_full().object_fit(ObjectFit::Cover))
-                        })
-                        .into_any_element(),
-                );
-            }
-            content.push(
-                h_flex()
+            ));
+        }
+
+        // Your image…
+        let path = your_image_path(values, dark);
+        let yours_picked = *picked == Backdrop::YourImage;
+        let yours_preview = match path.clone() {
+            Some(path) => file_preview(path, false),
+            None => div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(hsla(p.foreground_alpha(0.04)))
+                .child(settings_icon(ICON_PLUS, 13.0, p.muted))
+                .into_any_element(),
+        };
+        tiles.push(Self::artwork_strip_tile(
+            p,
+            "float-artwork-yours".into(),
+            "Your image".into(),
+            "Your image: any picture behind the window".into(),
+            yours_picked,
+            yours_preview,
+            move |editor, _, _, cx| editor.pick_your_image(dark, yours_picked, cx),
+            cx,
+        ));
+
+        // Animated at the end of the Artwork strip.
+        let active_style = values.string(if dark || values.string("windowGlass") == "auto" {
+            "windowGlassLiveStyleDark"
+        } else {
+            "windowGlassLiveStyleLight"
+        });
+        let live_pic = self.cached_live_poster(&active_style, !dark);
+        let live_preview = div()
+            .size_full()
+            .when_some(live_pic, |this, pic| {
+                this.child(img(pic).size_full().object_fit(ObjectFit::Cover))
+            })
+            .into_any_element();
+        tiles.push(Self::artwork_strip_tile(
+            p,
+            "float-artwork-live".into(),
+            "Animated".into(),
+            "Animated: a calm animation in your theme colours, or your own video".into(),
+            *picked == Backdrop::Live,
+            live_preview,
+            move |editor, _, _, cx| editor.pick_live(dark, cx),
+            cx,
+        ));
+
+        let picked_slot = match picked {
+            Backdrop::None => None,
+            Backdrop::Artwork(id) => ARTWORKS
+                .iter()
+                .position(|artwork| artwork.id == *id)
+                .map(|index| index + 1),
+            Backdrop::YourImage => Some(ARTWORKS.len() + 1),
+            Backdrop::Live => Some(ARTWORKS.len() + 2),
+        };
+        if let Some(slot) = picked_slot
+            && self.artworks_revealed != Some(dark)
+        {
+            self.artworks_revealed = Some(dark);
+            self.artworks_reveal.set(Some(slot));
+        }
+        let scroll = self.artworks_scroll.clone();
+        let wheel = strip_wheel_layer(&scroll, &self.artworks_wheel);
+        let reveal = self.artworks_reveal.clone();
+        let measure = scroll.clone();
+        let entity = cx.entity_id();
+
+        let strip = div()
+            .relative()
+            .w_full()
+            .min_w_0()
+            .child(
+                div()
+                    .id("float-artworks-strip")
                     .w_full()
-                    .mt(px(8.0))
-                    .flex_wrap()
+                    .flex()
+                    .items_start()
+                    .overflow_x_scroll()
+                    .restrict_scroll_to_axis()
+                    .track_scroll(&scroll)
                     .gap(px(6.0))
-                    .children(tiles)
-                    .into_any_element(),
-            );
-            if total > INITIAL_ART_TILES {
-                let expanded = self.all_art;
-                let fg = hsla(p.foreground);
-                let muted = hsla(p.muted);
+                    .pb(px(2.0))
+                    .children(tiles),
+            )
+            .child(wheel)
+            .child(
+                canvas(
+                    |_, _, _| (),
+                    move |_, _, _, cx| {
+                        if let Some(slot) = reveal.get()
+                            && let Some(tile) = measure.bounds_for_item(slot)
+                        {
+                            reveal.set(None);
+                            let view = measure.bounds();
+                            let centre = tile.left() - view.left() + tile.size.width / 2.0;
+                            let target = (view.size.width / 2.0 - centre)
+                                .clamp(-measure.max_offset().x, px(0.0));
+                            measure.set_offset(point(target, measure.offset().y));
+                            cx.notify(entity);
+                        }
+                    },
+                )
+                .absolute()
+                .size_0(),
+            )
+            .into_any_element();
+
+        let mut content = vec![
+            Self::section_heading(p, "Artwork", Some(active_name)),
+            strip,
+        ];
+
+        match picked {
+            Backdrop::Artwork(_) | Backdrop::YourImage => {
+                if *picked == Backdrop::YourImage && path.is_none() {
+                    let hover_bg = hsla(p.foreground_alpha(0.10));
+                    content.push(
+                        h_flex()
+                            .w_full()
+                            .pt(px(6.0))
+                            .items_center()
+                            .justify_between()
+                            .gap(px(8.0))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_size(px(11.0))
+                                    .text_color(hsla(p.muted))
+                                    .child("No picture chosen yet."),
+                            )
+                            .child(
+                                div()
+                                    .id("float-artwork-choose-pic")
+                                    .px(px(8.0))
+                                    .py(px(3.0))
+                                    .rounded(px(5.0))
+                                    .border_1()
+                                    .border_color(hsla(p.hairline))
+                                    .bg(hsla(p.foreground_alpha(0.05)))
+                                    .hover(move |s| s.bg(hover_bg))
+                                    .cursor_pointer()
+                                    .text_size(px(11.0))
+                                    .text_color(hsla(p.foreground))
+                                    .on_click(cx.listener(move |editor, _, _, cx| {
+                                        editor.pick_your_image(dark, true, cx);
+                                    }))
+                                    .child("Choose picture…"),
+                            )
+                            .into_any_element(),
+                    );
+                }
+                content.push(self.strength_slider_row(p, values, window, cx));
+                let dim = values.f64("windowArtDim");
+                let dim_saver = self.tracked_slider_saver(
+                    "float-art-dim",
+                    &["windowArtDim"],
+                    |store, value, commit, cx| {
+                        if commit {
+                            store.update_setting("windowArtDim", json!(value.round()), cx);
+                        } else {
+                            store.update_setting_debounced(
+                                "windowArtDim",
+                                json!(value.round()),
+                                cx,
+                            );
+                        }
+                    },
+                    cx,
+                );
+                content.push(self.compact_slider_row(
+                    p,
+                    "Dimming",
+                    format!("{}%", dim.round() as i64),
+                    SliderBinding {
+                        key: "float-art-dim",
+                        min: settings_catalog().number(module::SETTINGS, "MIN_WINDOW_ART_DIM"),
+                        max: settings_catalog().number(module::SETTINGS, "MAX_WINDOW_ART_DIM"),
+                        step: 1.0,
+                    },
+                    dim,
+                    dim_saver,
+                    window,
+                    cx,
+                ));
+                let blur = values.f64("windowArtBlur");
+                let blur_saver = self.tracked_slider_saver(
+                    "float-art-blur",
+                    &["windowArtBlur"],
+                    |store, value, commit, cx| {
+                        if commit {
+                            store.update_setting("windowArtBlur", json!(value.round()), cx);
+                        } else {
+                            store.update_setting_debounced(
+                                "windowArtBlur",
+                                json!(value.round()),
+                                cx,
+                            );
+                        }
+                    },
+                    cx,
+                );
+                content.push(self.compact_slider_row(
+                    p,
+                    "Blur",
+                    format!("{} pt", blur.round() as i64),
+                    SliderBinding {
+                        key: "float-art-blur",
+                        min: settings_catalog().number(module::SETTINGS, "MIN_WINDOW_ART_BLUR"),
+                        max: settings_catalog().number(module::SETTINGS, "MAX_WINDOW_ART_BLUR"),
+                        step: 1.0,
+                    },
+                    blur,
+                    blur_saver,
+                    window,
+                    cx,
+                ));
+            }
+            Backdrop::Live => {
+                let single =
+                    values.string("windowGlass") == "auto" || same_for_light_and_dark(values);
+                let live_key = if dark || single {
+                    "windowGlassLiveStyleDark"
+                } else {
+                    "windowGlassLiveStyleLight"
+                };
+                let current_live = values.string(live_key);
+                let options = settings_catalog()
+                    .options(module::SETTINGS, "WINDOW_GLASS_LIVE_STYLE_OPTIONS");
+                let mut cards: Vec<AnyElement> = Vec::with_capacity(options.len());
+                for option in options {
+                    let style_id = option.value;
+                    let style_name = option.label;
+                    let selected = current_live == style_id;
+                    let picture = self.cached_live_poster(&style_id, !dark);
+                    cards.push(
+                        v_flex()
+                            .id(SharedString::from(format!("float-live-{style_id}")))
+                            .w(px(68.0))
+                            .gap(px(2.0))
+                            .cursor_pointer()
+                            .tooltip(tooltip_text(style_name.clone()))
+                            .on_click(cx.listener(move |editor, _: &ClickEvent, _window, cx| {
+                                let mut patch = Map::new();
+                                patch.insert(live_key.into(), json!(style_id));
+                                if single {
+                                    patch.insert("windowGlassLiveStyleLight".into(), json!(style_id));
+                                }
+                                patch.insert("windowGlassSource".into(), json!("live"));
+                                if editor.store.read(cx).values().string("windowGlass") == "opaque" {
+                                    patch.insert(
+                                        "windowGlass".into(),
+                                        json!(if dark { "auto" } else { "frosted" }),
+                                    );
+                                }
+                                editor.apply_tracked_patch(patch, cx);
+                            }))
+                            .child(
+                                div()
+                                    .w_full()
+                                    .h(px(34.0))
+                                    .rounded(px(5.0))
+                                    .overflow_hidden()
+                                    .bg(hsla(p.raised))
+                                    .border_color(if selected {
+                                        hsla(p.foreground)
+                                    } else {
+                                        hsla(p.hairline)
+                                    })
+                                    .when(selected, |this| this.border_2())
+                                    .when(!selected, |this| this.border_1())
+                                    .when_some(picture, |this, pic| {
+                                        this.child(
+                                            img(pic).size_full().object_fit(ObjectFit::Cover),
+                                        )
+                                    }),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.0))
+                                    .text_color(if selected {
+                                        hsla(p.foreground)
+                                    } else {
+                                        hsla(p.muted)
+                                    })
+                                    .when(selected, |this| {
+                                        this.font_weight(gpui::FontWeight::SEMIBOLD)
+                                    })
+                                    .child(style_name),
+                            )
+                            .into_any_element(),
+                    );
+                }
                 content.push(
                     h_flex()
-                        .id("float-art-toggle-all")
-                        .mt(px(5.0))
-                        .gap(px(4.0))
-                        .items_center()
-                        .cursor_pointer()
-                        .text_size(px(11.5))
-                        .text_color(muted)
-                        .hover(move |s| s.text_color(fg))
-                        .on_click(cx.listener(move |editor, _: &ClickEvent, _window, cx| {
-                            editor.all_art = !expanded;
-                            cx.notify();
-                        }))
-                        .child(settings_icon(
-                            if expanded {
-                                ICON_CHEVRON_DOWN
-                            } else {
-                                ICON_CHEVRON_RIGHT
-                            },
-                            12.0,
-                            p.muted,
-                        ))
-                        .child(if expanded {
-                            "Show fewer backgrounds".to_string()
+                        .w_full()
+                        .mt(px(8.0))
+                        .flex_wrap()
+                        .gap(px(6.0))
+                        .children(cards)
+                        .into_any_element(),
+                );
+                content.push(self.strength_slider_row(p, values, window, cx));
+                let speed = values.f64("windowGlassLiveSpeed");
+                let speed_label = if (speed - speed.round()).abs() < 1e-6 {
+                    format!("{}x", speed as i64)
+                } else {
+                    format!("{speed:.2}x").replace(".50x", ".5x")
+                };
+                let speed_saver = self.tracked_slider_saver(
+                    "float-live-speed",
+                    &["windowGlassLiveSpeed"],
+                    |store, value, commit, cx| {
+                        let rounded = (value * 4.0).round() / 4.0;
+                        if commit {
+                            store.update_setting("windowGlassLiveSpeed", json!(rounded), cx);
                         } else {
-                            format!("All {total} backgrounds")
-                        })
-                        .into_any_element(),
+                            store.update_setting_debounced(
+                                "windowGlassLiveSpeed",
+                                json!(rounded),
+                                cx,
+                            );
+                        }
+                    },
+                    cx,
                 );
-            }
-            let dim = values.f64("windowArtDim");
-            let dim_saver = self.tracked_slider_saver(
-                "float-art-dim",
-                &["windowArtDim"],
-                |store, value, commit, cx| {
-                    if commit {
-                        store.update_setting("windowArtDim", json!(value.round()), cx);
-                    } else {
-                        store.update_setting_debounced("windowArtDim", json!(value.round()), cx);
-                    }
-                },
-                cx,
-            );
-            content.push(self.compact_slider_row(
-                p,
-                "Art dimming",
-                format!("{}%", dim.round() as i64),
-                SliderBinding {
-                    key: "float-art-dim",
-                    min: 0.0,
-                    max: ghostex_settings_catalog::MAX_WINDOW_ART_DIM,
-                    step: 1.0,
-                },
-                dim,
-                dim_saver,
-                window,
-                cx,
-            ));
-            let blur = values.f64("windowArtBlur");
-            let blur_saver = self.tracked_slider_saver(
-                "float-art-blur",
-                &["windowArtBlur"],
-                |store, value, commit, cx| {
-                    if commit {
-                        store.update_setting("windowArtBlur", json!(value.round()), cx);
-                    } else {
-                        store.update_setting_debounced("windowArtBlur", json!(value.round()), cx);
-                    }
-                },
-                cx,
-            );
-            content.push(self.compact_slider_row(
-                p,
-                "Art blur",
-                format!("{}px", blur.round() as i64),
-                SliderBinding {
-                    key: "float-art-blur",
-                    min: 0.0,
-                    max: ghostex_settings_catalog::MAX_WINDOW_ART_BLUR,
-                    step: 1.0,
-                },
-                blur,
-                blur_saver,
-                window,
-                cx,
-            ));
-        } else if current_bg == "live" {
-            let live_key = if dark {
-                "windowGlassLiveStyleDark"
-            } else {
-                "windowGlassLiveStyleLight"
-            };
-            let current_live = values.string(live_key);
-            let mut tiles: Vec<AnyElement> = Vec::with_capacity(LIVE_STYLES.len());
-            for &(style_id, style_name) in &LIVE_STYLES {
-                let selected = current_live == style_id;
-                let picture = self.cached_live_poster(style_id, !dark);
-                tiles.push(
-                    v_flex()
-                        .id(SharedString::from(format!("float-live-{style_id}")))
-                        .w(px(68.0))
-                        .gap(px(2.0))
-                        .cursor_pointer()
-                        .tooltip(tooltip_text(style_name))
-                        .on_click(cx.listener(move |editor, _: &ClickEvent, _window, cx| {
-                            let mut patch = Map::new();
-                            patch.insert(live_key.into(), json!(style_id));
-                            patch.insert("windowGlassSource".into(), json!("live"));
-                            if editor.store.read(cx).values().string("windowGlass") == "opaque" {
-                                patch.insert("windowGlass".into(), json!("frosted"));
-                            }
-                            editor.apply_tracked_patch(patch, cx);
-                        }))
-                        .child(
-                            div()
-                                .w_full()
-                                .h(px(34.0))
-                                .rounded(px(5.0))
-                                .overflow_hidden()
-                                .bg(hsla(p.raised))
-                                .border_color(if selected {
-                                    hsla(p.foreground)
-                                } else {
-                                    hsla(p.hairline)
-                                })
-                                .when(selected, |this| this.border_2())
-                                .when(!selected, |this| this.border_1())
-                                .when_some(picture, |this, pic| {
-                                    this.child(img(pic).size_full().object_fit(ObjectFit::Cover))
-                                }),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(10.0))
-                                .text_color(if selected {
-                                    hsla(p.foreground)
-                                } else {
-                                    hsla(p.muted)
-                                })
-                                .child(style_name),
-                        )
-                        .into_any_element(),
+                content.push(self.compact_slider_row(
+                    p,
+                    "Speed",
+                    speed_label,
+                    SliderBinding {
+                        key: "float-live-speed",
+                        min: settings_catalog()
+                            .number(module::SETTINGS, "MIN_WINDOW_GLASS_LIVE_SPEED"),
+                        max: settings_catalog()
+                            .number(module::SETTINGS, "MAX_WINDOW_GLASS_LIVE_SPEED"),
+                        step: 0.25,
+                    },
+                    speed,
+                    speed_saver,
+                    window,
+                    cx,
+                ));
+                let bright = values.f64("windowGlassLiveBrightness");
+                let bright_saver = self.tracked_slider_saver(
+                    "float-live-brightness",
+                    &["windowGlassLiveBrightness"],
+                    |store, value, commit, cx| {
+                        if commit {
+                            store.update_setting(
+                                "windowGlassLiveBrightness",
+                                json!(value.round()),
+                                cx,
+                            );
+                        } else {
+                            store.update_setting_debounced(
+                                "windowGlassLiveBrightness",
+                                json!(value.round()),
+                                cx,
+                            );
+                        }
+                    },
+                    cx,
                 );
+                content.push(self.compact_slider_row(
+                    p,
+                    "Brightness",
+                    format!("{}%", bright.round() as i64),
+                    SliderBinding {
+                        key: "float-live-brightness",
+                        min: settings_catalog()
+                            .number(module::SETTINGS, "MIN_WINDOW_GLASS_LIVE_BRIGHTNESS"),
+                        max: settings_catalog()
+                            .number(module::SETTINGS, "MAX_WINDOW_GLASS_LIVE_BRIGHTNESS"),
+                        step: 1.0,
+                    },
+                    bright,
+                    bright_saver,
+                    window,
+                    cx,
+                ));
+                let plugged = values.bool("windowGlassVideoOnlyOnPower");
+                content.push(self.compact_toggle_row(
+                    p,
+                    "float-live-power",
+                    "Play only when plugged in",
+                    plugged,
+                    |editor, checked, cx| {
+                        editor.save_one("windowGlassVideoOnlyOnPower", json!(checked), cx)
+                    },
+                    cx,
+                ));
             }
-            content.push(
-                h_flex()
-                    .w_full()
-                    .mt(px(8.0))
-                    .flex_wrap()
-                    .gap(px(6.0))
-                    .children(tiles)
-                    .into_any_element(),
-            );
-            let speed = values.f64("windowGlassLiveSpeed");
-            let speed_saver = self.tracked_slider_saver(
-                "float-live-speed",
-                &["windowGlassLiveSpeed"],
-                |store, value, commit, cx| {
-                    let rounded = (value * 4.0).round() / 4.0;
-                    if commit {
-                        store.update_setting("windowGlassLiveSpeed", json!(rounded), cx);
-                    } else {
-                        store.update_setting_debounced(
-                            "windowGlassLiveSpeed",
-                            json!(rounded),
-                            cx,
-                        );
-                    }
-                },
-                cx,
-            );
-            content.push(self.compact_slider_row(
-                p,
-                "Speed",
-                format!("{speed:.2}x"),
-                SliderBinding {
-                    key: "float-live-speed",
-                    min: 0.25,
-                    max: 2.0,
-                    step: 0.25,
-                },
-                speed,
-                speed_saver,
-                window,
-                cx,
-            ));
-            let bright = values.f64("windowGlassLiveBrightness");
-            let bright_saver = self.tracked_slider_saver(
-                "float-live-brightness",
-                &["windowGlassLiveBrightness"],
-                |store, value, commit, cx| {
-                    if commit {
-                        store.update_setting(
-                            "windowGlassLiveBrightness",
-                            json!(value.round()),
-                            cx,
-                        );
-                    } else {
-                        store.update_setting_debounced(
-                            "windowGlassLiveBrightness",
-                            json!(value.round()),
-                            cx,
-                        );
-                    }
-                },
-                cx,
-            );
-            content.push(self.compact_slider_row(
-                p,
-                "Brightness",
-                format!("{}%", bright.round() as i64),
-                SliderBinding {
-                    key: "float-live-brightness",
-                    min: 10.0,
-                    max: 100.0,
-                    step: 1.0,
-                },
-                bright,
-                bright_saver,
-                window,
-                cx,
-            ));
-            let plugged = values.bool("windowGlassVideoOnlyOnPower");
-            content.push(self.compact_toggle_row(
-                p,
-                "float-live-power",
-                "Play only when plugged in",
-                plugged,
-                |editor, checked, cx| {
-                    editor.save_one("windowGlassVideoOnlyOnPower", json!(checked), cx)
-                },
-                cx,
-            ));
+            Backdrop::None => {}
         }
         Self::section_box(p, content)
     }
@@ -2103,102 +2382,268 @@ impl GpuiThemeEditorWindow {
         None
     }
 
-    fn glass_section(
+    fn window_transparency_section(
         &mut self,
         p: &SettingsPalette,
         values: &SettingsValues,
+        dark: bool,
+        picked: &Backdrop,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        if let Some(name) = painted_name(values, dark) {
+            let hover_bg = hsla(p.foreground_alpha(0.10));
+            return Self::section_box(
+                p,
+                vec![
+                    Self::section_heading(p, "Window transparency", Some("Paused".into())),
+                    v_flex()
+                        .w_full()
+                        .gap(px(8.0))
+                        .p(px(9.0))
+                        .rounded(px(7.0))
+                        .border_1()
+                        .border_color(hsla(p.hairline))
+                        .bg(hsla(p.foreground_alpha(0.03)))
+                        .child(
+                            div()
+                                .text_size(px(11.5))
+                                .line_height(px(15.5))
+                                .text_color(hsla(p.muted))
+                                .child(format!(
+                                    "{name} is behind the window in {} mode, so the window is solid and transparency is paused.",
+                                    if dark { "dark" } else { "light" }
+                                )),
+                        )
+                        .child(
+                            div()
+                                .id("float-transparency-resume")
+                                .self_start()
+                                .px(px(9.0))
+                                .py(px(4.0))
+                                .rounded(px(6.0))
+                                .border_1()
+                                .border_color(hsla(p.hairline))
+                                .bg(hsla(p.foreground_alpha(0.06)))
+                                .hover(move |s| s.bg(hover_bg))
+                                .cursor_pointer()
+                                .text_size(px(11.5))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(hsla(p.foreground))
+                                .on_click(cx.listener(move |editor, _, _, cx| {
+                                    editor.pick_no_artwork(dark, true, cx);
+                                }))
+                                .child("Use transparency"),
+                        )
+                        .into_any_element(),
+                ],
+            );
+        }
+
         let glass = values.string("windowGlass");
+        let source = values.string("windowGlassSource");
+        let choices = transparency_choices();
+        let active_bg = hsla(p.foreground_alpha(if p.light { 0.14 } else { 0.16 }));
+        let hover_bg = hsla(p.foreground_alpha(0.09));
+        let fg = hsla(p.foreground);
+        let muted = hsla(p.muted);
+        let glass_bar = h_flex()
+            .w_full()
+            .p(px(2.0))
+            .gap(px(2.0))
+            .rounded(px(7.0))
+            .bg(hsla(p.foreground_alpha(0.06)))
+            .children(choices.into_iter().map(|opt| {
+                let selected = opt.value == glass;
+                let value = opt.value;
+                div()
+                    .id(SharedString::from(format!("float-glass-{value}")))
+                    .flex_1()
+                    .min_w_0()
+                    .h(px(24.0))
+                    .px(px(4.0))
+                    .rounded(px(5.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .text_size(px(11.5))
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .when(selected, |this| {
+                        this.bg(active_bg)
+                            .text_color(fg)
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                    })
+                    .when(!selected, |this| {
+                        this.text_color(muted)
+                            .hover(move |s| s.bg(hover_bg).text_color(fg))
+                    })
+                    .on_click(cx.listener(move |editor, _: &ClickEvent, _window, cx| {
+                        editor.save_one("windowGlass", json!(value), cx);
+                    }))
+                    .child(opt.label)
+            }))
+            .into_any_element();
+
         let mut content = vec![
-            Self::section_heading(p, "Glass", None),
-            self.segmented(
-                p,
-                "float-glass",
-                &[
-                    ("opaque", "Off"),
-                    ("auto", "Dark only"),
-                    ("frosted", "Always"),
-                ],
-                &glass,
-                |editor, value, _window, cx| editor.save_one("windowGlass", json!(value), cx),
-                cx,
-            ),
+            Self::section_heading(p, "Window transparency", None),
+            glass_bar,
         ];
-        if glass != "opaque" {
-            let (exact, strength) = strength_from_settings(values);
-            let strength_label = if exact.is_some() {
-                format!("{}", strength.round() as i64)
-            } else {
-                format!("~{}", strength.round() as i64)
-            };
-            let strength_saver = self.tracked_slider_saver(
-                "float-glass-strength",
-                &[
-                    "windowGlassSidebarOpacityDark",
-                    "windowGlassWorkAreaTintDark",
-                    "windowGlassSidebarOpacityLight",
-                    "windowGlassWorkAreaTintLight",
-                ],
-                |store, value, _commit, cx| {
-                    let gaps = strength_gaps(&store.values());
-                    store.apply_patch(strength_patch(value, gaps), "settings:control", cx);
-                },
-                cx,
+
+        let active_here = glass != "opaque" && !(glass == "auto" && !dark);
+        if active_here {
+            let mut tiles: Vec<AnyElement> = Vec::with_capacity(SHOW_BEHIND.len());
+            for &(value, title, sub_text) in &SHOW_BEHIND {
+                let selected = source == value;
+                let swatch = self.cached_source_art(value);
+                let border_hover = hsla(p.foreground_alpha(0.3));
+                tiles.push(
+                    v_flex()
+                        .id(SharedString::from(format!("float-show-behind-{value}")))
+                        .flex_1()
+                        .min_w_0()
+                        .gap(px(5.0))
+                        .p(px(6.0))
+                        .rounded(px(7.0))
+                        .border_color(hsla(if selected {
+                            p.foreground_alpha(0.85)
+                        } else {
+                            p.hairline
+                        }))
+                        .when(selected, |this| this.border_2())
+                        .when(!selected, |this| {
+                            this.border_1()
+                                .hover(move |s| s.border_color(border_hover))
+                        })
+                        .bg(hsla(p.foreground_alpha(0.03)))
+                        .cursor_pointer()
+                        .tooltip(tooltip_text(format!("{title}: {sub_text}")))
+                        .on_click(cx.listener(move |editor, _: &ClickEvent, _window, cx| {
+                            editor.save_one("windowGlassSource", json!(value), cx);
+                        }))
+                        .child(
+                            div()
+                                .relative()
+                                .w_full()
+                                .h(px(26.0))
+                                .rounded(px(4.0))
+                                .overflow_hidden()
+                                .when_some(swatch, |this, image| {
+                                    this.child(
+                                        img(image)
+                                            .absolute()
+                                            .inset_0()
+                                            .size_full()
+                                            .object_fit(ObjectFit::Fill),
+                                    )
+                                })
+                                .when(value == "desktopAndWindows", |this| {
+                                    this.child(
+                                        div()
+                                            .absolute()
+                                            .left(px(5.0))
+                                            .top(px(5.0))
+                                            .w(px(22.0))
+                                            .h(px(14.0))
+                                            .rounded(px(2.5))
+                                            .bg(hsla(modal_rgba(0xffffff, 0.38))),
+                                    )
+                                }),
+                        )
+                        .child(
+                            v_flex()
+                                .w_full()
+                                .min_w_0()
+                                .gap(px(1.0))
+                                .child(
+                                    div()
+                                        .text_size(px(11.0))
+                                        .line_height(px(13.5))
+                                        .text_color(hsla(p.foreground))
+                                        .when(selected, |this| {
+                                            this.font_weight(gpui::FontWeight::SEMIBOLD)
+                                        })
+                                        .child(title),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(9.5))
+                                        .line_height(px(12.5))
+                                        .text_color(hsla(p.muted))
+                                        .child(sub_text),
+                                ),
+                        )
+                        .into_any_element(),
+                );
+            }
+            if source == "live" {
+                content.push(
+                    div()
+                        .pt(px(6.0))
+                        .text_size(px(11.0))
+                        .line_height(px(14.5))
+                        .text_color(hsla(p.muted))
+                        .child("Animated is active in Artwork above. Pick one of these to see through the window instead.")
+                        .into_any_element(),
+                );
+            }
+            content.push(
+                h_flex()
+                    .w_full()
+                    .pt(px(6.0))
+                    .gap(px(6.0))
+                    .children(tiles)
+                    .into_any_element(),
             );
-            content.push(self.compact_slider_row(
-                p,
-                "Glass strength",
-                strength_label,
-                SliderBinding {
-                    key: "float-glass-strength",
-                    min: STRENGTH_MIN,
-                    max: STRENGTH_MAX,
-                    step: STRENGTH_STEP,
-                },
-                strength,
-                strength_saver,
-                window,
-                cx,
-            ));
-            let blur = values.f64("windowGlassBlurRadius");
-            let blur_saver = self.tracked_slider_saver(
-                "float-glass-blur",
-                &["windowGlassBlurRadius"],
-                |store, value, commit, cx| {
-                    if commit {
-                        store.update_setting("windowGlassBlurRadius", json!(value.round()), cx);
-                    } else {
-                        store.update_setting_debounced(
-                            "windowGlassBlurRadius",
-                            json!(value.round()),
-                            cx,
-                        );
-                    }
-                },
-                cx,
-            );
-            content.push(self.compact_slider_row(
-                p,
-                "Blur",
-                format!("{}px", blur.round() as i64),
-                SliderBinding {
-                    key: "float-glass-blur",
-                    min: 0.0,
-                    max: 20.0,
-                    step: 1.0,
-                },
-                blur,
-                blur_saver,
-                window,
-                cx,
-            ));
+
+            if *picked == Backdrop::None {
+                content.push(self.strength_slider_row(p, values, window, cx));
+                let blur = values.f64("windowGlassBlurRadius");
+                let blur_saver = self.tracked_slider_saver(
+                    "float-glass-blur",
+                    &["windowGlassBlurRadius"],
+                    |store, value, commit, cx| {
+                        if commit {
+                            store.update_setting(
+                                "windowGlassBlurRadius",
+                                json!(value.round()),
+                                cx,
+                            );
+                        } else {
+                            store.update_setting_debounced(
+                                "windowGlassBlurRadius",
+                                json!(value.round()),
+                                cx,
+                            );
+                        }
+                    },
+                    cx,
+                );
+                content.push(self.compact_slider_row(
+                    p,
+                    "Blur",
+                    format!("{} pt", blur.round() as i64),
+                    SliderBinding {
+                        key: "float-glass-blur",
+                        min: settings_catalog()
+                            .number(module::SETTINGS, "MIN_WINDOW_GLASS_BLUR_RADIUS"),
+                        max: settings_catalog()
+                            .number(module::SETTINGS, "MAX_WINDOW_GLASS_BLUR_RADIUS"),
+                        step: 1.0,
+                    },
+                    blur,
+                    blur_saver,
+                    window,
+                    cx,
+                ));
+            }
             let more_open = self.more_glass;
             content.push(self.fold_button(
                 p,
                 "float-more-glass",
-                "More glass",
+                "More transparency",
                 more_open,
                 |editor, cx| {
                     editor.more_glass = !editor.more_glass;
@@ -2231,11 +2676,13 @@ impl GpuiThemeEditorWindow {
                 content.push(self.compact_slider_row(
                     p,
                     "Menu blur",
-                    format!("{}px", menu_blur.round() as i64),
+                    format!("{} pt", menu_blur.round() as i64),
                     SliderBinding {
                         key: "float-menu-blur",
-                        min: 0.0,
-                        max: 40.0,
+                        min: settings_catalog()
+                            .number(module::SETTINGS, "MIN_WINDOW_GLASS_MENU_BLUR_RADIUS"),
+                        max: settings_catalog()
+                            .number(module::SETTINGS, "MAX_WINDOW_GLASS_MENU_BLUR_RADIUS"),
                         step: 1.0,
                     },
                     menu_blur,
@@ -2244,6 +2691,16 @@ impl GpuiThemeEditorWindow {
                     cx,
                 ));
             }
+        } else if glass == "auto" && !dark {
+            content.push(
+                div()
+                    .pt(px(6.0))
+                    .text_size(px(11.0))
+                    .line_height(px(14.5))
+                    .text_color(hsla(p.muted))
+                    .child("Transparency is set to Dark only. Pick Always for light mode too.")
+                    .into_any_element(),
+            );
         }
         Self::section_box(p, content)
     }
@@ -2340,6 +2797,7 @@ impl Render for GpuiThemeEditorWindow {
         };
         let appearance = values.string("sidebarTheme");
         let dark = preview_scheme_dark(&appearance, self.scheme_dark);
+        let picked = backdrop(&values, dark);
         let appearance_section = Self::section_box(
             &p,
             vec![
@@ -2353,16 +2811,20 @@ impl Render for GpuiThemeEditorWindow {
                         ("dark-2", "Dark"),
                     ],
                     &appearance,
-                    |editor, value, _window, cx| editor.save_one("sidebarTheme", json!(value), cx),
+                    |editor, value, _window, cx| {
+                        editor.artworks_revealed = None;
+                        editor.save_one("sidebarTheme", json!(value), cx);
+                    },
                     cx,
                 ),
             ],
         );
         let themes_section = self.themes_grid_section(&p, &values, cx);
-        let bg_section = self.background_section(&p, &values, dark, window, cx);
+        let artwork_section = self.artwork_section(&p, &values, dark, &picked, window, cx);
         let colour_section = self.colour_section(&p, &values, dark, window, cx);
         let accent_section = self.accent_and_roles_section(&p, &values, !dark, window, cx);
-        let glass_section = self.glass_section(&p, &values, window, cx);
+        let transparency_section =
+            self.window_transparency_section(&p, &values, dark, &picked, window, cx);
         let chat_term_section = self.chat_and_terminal_section(&p, &values, cx);
         let color_picker_overlay =
             self.active_color_picker_overlay(&p, &values, dark, window, cx);
@@ -2392,10 +2854,10 @@ impl Render for GpuiThemeEditorWindow {
                             .w_full()
                             .child(appearance_section)
                             .child(themes_section)
-                            .child(bg_section)
+                            .child(artwork_section)
+                            .child(transparency_section)
                             .child(colour_section)
                             .child(accent_section)
-                            .child(glass_section)
                             .child(chat_term_section),
                     ),
             )

@@ -676,8 +676,32 @@ pub(super) fn open_theme_editor(demo: &super::DemoEnv, cx: &mut App) {
         initial.insert("sidebarTheme".into(), json!("plain-light"));
     } else {
         initial.insert("sidebarTheme".into(), json!("dark-2"));
-        initial.entry("windowArt".to_string()).or_insert_with(|| json!("moonwater"));
-        initial.entry("windowGlass".to_string()).or_insert_with(|| json!("frosted"));
+        initial
+            .entry("windowArt".to_string())
+            .or_insert_with(|| json!("polar-night"));
+        initial
+            .entry("windowGlass".to_string())
+            .or_insert_with(|| json!("frosted"));
+    }
+    match state.as_str() {
+        "theme-editor-animated" => {
+            initial.insert("windowArt".into(), json!("none"));
+            initial.insert("windowGlass".into(), json!("frosted"));
+            initial.insert("windowGlassSource".into(), json!("live"));
+        }
+        "theme-editor-transparent" => {
+            initial.insert("windowArt".into(), json!("none"));
+            initial.insert("windowGlass".into(), json!("frosted"));
+            initial.insert("windowGlassSource".into(), json!("desktopAndWindows"));
+        }
+        _ => {}
+    }
+    if let Ok(raw) = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS")
+        && let Ok(Value::Object(overrides)) = serde_json::from_str::<Value>(&raw)
+    {
+        for (key, value) in overrides {
+            initial.insert(key, value);
+        }
     }
     let palette = if super::env("GHOSTEX_NATIVE_MODAL_DEMO_GLASS") == "1" {
         let base = if demo.palette.light {
