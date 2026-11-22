@@ -239,6 +239,7 @@ pub(crate) const CLAUDE_CONVERSATIONS_SET_ASIDE_AT: &str = "claudeConversationsS
 pub(crate) struct AgentResumeInput {
     acp_approval_level: crate::acp::AcpApprovalLevel,
     acp_mode: bool,
+    acp_read_only: bool,
     agent_command: Option<String>,
     agent_id: Option<String>,
     agent_lookup_command: Option<String>,
@@ -440,12 +441,17 @@ pub(crate) fn to_agent_resume_input(
         Some(id) => crate::agent_cli::opencode::with_opencode2(id, None, &command),
         None => command,
     });
-    let acp_approval_level = crate::acp::approval::resolve_starting_level(
-        &runtime_settings,
-        &agent_config,
-        &launch_settings,
-        settings,
-    );
+    let acp_read_only = crate::coordinators::is_read_only_thread(Some(&runtime_settings));
+    let acp_approval_level = if acp_read_only {
+        crate::acp::AcpApprovalLevel::Ask
+    } else {
+        crate::acp::approval::resolve_starting_level(
+            &runtime_settings,
+            &agent_config,
+            &launch_settings,
+            settings,
+        )
+    };
     let acp_mode = match runtime_settings
         .get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
         .and_then(Value::as_bool)
@@ -463,6 +469,7 @@ pub(crate) fn to_agent_resume_input(
     AgentResumeInput {
         acp_approval_level,
         acp_mode,
+        acp_read_only,
         agent_command: runtime_command,
         agent_id,
         agent_lookup_command,
@@ -715,15 +722,19 @@ pub(crate) fn build_agent_resume_command(
                 let resume_ref = codex_exact_reference
                     .as_deref()
                     .filter(|exact| !is_uuid(exact) || codex_rollout_written(input, exact));
-                return Some(crate::acp::spec::build_acp_host_launch_command(
-                    "codex",
-                    Some(agent_command),
-                    resume_ref,
-                    input.acp_approval_level,
-                    &[],
-                    None,
-                    None,
-                ));
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_options(
+                        "codex",
+                        Some(agent_command),
+                        resume_ref,
+                        input.acp_approval_level,
+                        &[],
+                        None,
+                        None,
+                        false,
+                        input.acp_read_only,
+                    ),
+                );
             }
             let reference = codex_reference?;
             // See `codex_rollout_written`: a thread Codex never saved starts fresh.
@@ -758,15 +769,19 @@ pub(crate) fn build_agent_resume_command(
                     get_claude_session_id(Some(exact))
                         .is_none_or(|id| claude_transcript_written(input, &id))
                 });
-                return Some(crate::acp::spec::build_acp_host_launch_command(
-                    "claude",
-                    Some(agent_command),
-                    resume_ref,
-                    input.acp_approval_level,
-                    &[],
-                    None,
-                    None,
-                ));
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_options(
+                        "claude",
+                        Some(agent_command),
+                        resume_ref,
+                        input.acp_approval_level,
+                        &[],
+                        None,
+                        None,
+                        false,
+                        input.acp_read_only,
+                    ),
+                );
             }
             // CDXC:SessionChat 2026-10-09 WHY:
             // A session whose Claude has no conversation yet has nothing to lose, so a wake starts it fresh under the same session id instead of resuming. A wake used to resume whatever id the session held, and a Claude that quit before its first message printed "No conversation found with session ID" and fell back to the shell, so the automatic send recovery and Fix it (session_chat_queue_runtime/send_heal.rs) both failed on it. Every wake now follows the account switch's rule (CDXC:AgentProviders 2026-10-04 above).

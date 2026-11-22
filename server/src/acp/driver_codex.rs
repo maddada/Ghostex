@@ -247,6 +247,7 @@ struct CodexState {
     active_turn_id: Option<String>,
     working: bool,
     approval_level: AcpApprovalLevel,
+    read_only: bool,
     cwd: PathBuf,
     writable_roots: Vec<PathBuf>,
     current_model: Option<String>,
@@ -271,6 +272,7 @@ struct CodexState {
 impl CodexState {
     fn new(
         approval_level: AcpApprovalLevel,
+        read_only: bool,
         cwd: PathBuf,
         writable_roots: Vec<PathBuf>,
         initial_model: Option<String>,
@@ -282,6 +284,7 @@ impl CodexState {
             active_turn_id: None,
             working: false,
             approval_level,
+            read_only,
             cwd,
             writable_roots,
             current_model: initial_model,
@@ -460,9 +463,10 @@ impl Drop for CodexExitGuard {
 }
 
 /// Build `(approvalPolicy, approvalsReviewer, sandboxPolicy)` for Codex `turn/start` matching
-/// Ghostex's four approval levels.
+/// Ghostex's four approval levels (plus `--read-only` threads when at `Ask`).
 fn codex_turn_policies(
     level: AcpApprovalLevel,
+    read_only: bool,
     writable_roots: &[PathBuf],
 ) -> (Value, &'static str, Value) {
     let roots: Vec<String> = writable_roots
@@ -470,6 +474,11 @@ fn codex_turn_policies(
         .map(|p| p.to_string_lossy().to_string())
         .collect();
     match level {
+        AcpApprovalLevel::Ask if read_only => (
+            json!("untrusted"),
+            "user",
+            json!({ "type": "readOnly" }),
+        ),
         // In Ask, keep `workspaceWrite` + `approvalPolicy: "untrusted"` so Codex proposes file
         // edits via `apply_patch` (sending `item/fileChange/requestApproval`) and shell commands
         // via `item/commandExecution/requestApproval` for Ghostex's user approval gate, rather
@@ -685,6 +694,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let transport = Arc::new(CodexTransport::new(stdin, &spool_session_id));
     let state = Arc::new(Mutex::new(CodexState::new(
         parsed.approval_level,
+        parsed.read_only,
         cwd_path.clone(),
         writable_roots,
         parsed.model.clone(),
@@ -1231,14 +1241,15 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         }
     }
 
-    // 3. Start or resume thread with explicit approvalPolicy/sandbox so any user-global
+    // 3. Start, fork, or resume thread with explicit approvalPolicy/sandbox so any user-global
     // `approval_policy = "never"` in `~/.codex/config.toml` cannot override Ghostex's level.
     let (init_approval, init_reviewer, _init_sandbox_policy) = {
         let s = state.lock().unwrap_or_else(|p| p.into_inner());
-        codex_turn_policies(s.approval_level, &s.writable_roots)
+        codex_turn_policies(s.approval_level, s.read_only, &s.writable_roots)
     };
     let init_sandbox_mode = match parsed.approval_level {
         AcpApprovalLevel::FullAccess => "danger-full-access",
+        AcpApprovalLevel::Ask if parsed.read_only => "read-only",
         AcpApprovalLevel::Ask | AcpApprovalLevel::AutoEdits | AcpApprovalLevel::Auto => {
             "workspace-write"
         }
@@ -1249,8 +1260,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
+        let method = if parsed.fork_session {
+            "thread/fork"
+        } else {
+            "thread/resume"
+        };
         transport.call(
-            "thread/resume",
+            method,
             json!({
                 "threadId": resume_id,
                 "cwd": cwd,
@@ -1572,10 +1588,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                         continue;
                     };
-                    state
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .approval_level = level;
+                    {
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        s.approval_level = level;
+                        if level != AcpApprovalLevel::Ask {
+                            s.read_only = false;
+                        }
+                    }
                     let snap = state
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
@@ -1602,13 +1621,14 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
-                    let (is_working, tid, turn_id, level, roots, model, effort) = {
+                    let (is_working, tid, turn_id, level, read_only, roots, model, effort) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
                         (
                             s.working,
                             s.thread_id.clone(),
                             s.active_turn_id.clone(),
                             s.approval_level,
+                            s.read_only,
                             s.writable_roots.clone(),
                             s.current_model.clone(),
                             s.current_effort.clone(),
@@ -1688,7 +1708,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     }
                     cancel_all_pending_codex(&transport, &state);
                     let (approval_policy, reviewer, sandbox_policy) =
-                        codex_turn_policies(level, &roots);
+                        codex_turn_policies(level, read_only, &roots);
                     let mut turn_params = Map::new();
                     turn_params.insert("threadId".to_string(), json!(tid));
                     turn_params.insert("input".to_string(), Value::Array(input));

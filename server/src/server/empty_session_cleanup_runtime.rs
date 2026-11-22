@@ -63,6 +63,11 @@ async fn read_candidates(
 /// Only an input box the agent's screen grammar recognises as empty counts; a screen that cannot
 /// be read, or an agent mid-dialog, holds text as far as this rule knows.
 async fn input_box_is_empty(candidate: &EmptySessionCandidate) -> bool {
+    if candidate.is_acp {
+        // Non-CLI sessions have no CLI terminal input box; `empty_session_candidates` already
+        // proved there is no chat draft, queue, transcript, or activity.
+        return true;
+    }
     crate::session_chat_send::capture_session_terminal_text_vt(&candidate.zmx_name)
         .await
         .and_then(|screen| {

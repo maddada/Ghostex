@@ -61,6 +61,20 @@ pub(crate) fn mark_fork_params(params: &mut Value, parent_session_id: &str, ques
             json!("applied"),
         );
         runtime.insert("titleSource".to_string(), json!("user"));
+        if runtime
+            .get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
+            .and_then(Value::as_bool)
+            == Some(true)
+            || runtime
+                .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+                .and_then(Value::as_bool)
+                == Some(true)
+        {
+            runtime.insert(
+                crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+                json!(crate::acp::AcpApprovalLevel::Ask.as_str()),
+            );
+        }
     }
     if let Some(launch) = params
         .get_mut("launchSettings")

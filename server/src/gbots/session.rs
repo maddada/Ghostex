@@ -200,6 +200,22 @@ pub(crate) fn default_approval(rows: &[Value], agent_id: &str) -> &'static str {
 }
 
 fn apply_approval(params: &mut Map<String, Value>, approval: &str, family: Option<&str>) {
+    let acp_level = match approval {
+        "full" => "full-access",
+        "auto" => "auto",
+        "edits" => "auto-edits",
+        _ => "ask",
+    };
+    if let Some(runtime) = params
+        .entry("runtimeSettings".to_string())
+        .or_insert_with(|| Value::Object(Map::new()))
+        .as_object_mut()
+    {
+        runtime.insert(
+            crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+            json!(acp_level),
+        );
+    }
     let launch = params
         .entry("launchSettings".to_string())
         .or_insert_with(|| Value::Object(Map::new()));

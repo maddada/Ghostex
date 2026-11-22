@@ -269,6 +269,34 @@ fn side_chat_plan(plan: &mut Value) {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    if plan.get("acpFork").and_then(Value::as_bool) == Some(true) {
+        if let Some(fam) = plan.get("acpFamily").and_then(Value::as_str).map(str::to_string) {
+            let base_cmd = plan
+                .get("baseCommand")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let reference = plan
+                .get("acpForkReference")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let command = crate::acp::spec::build_acp_host_launch_command_with_options(
+                &fam,
+                base_cmd.as_deref(),
+                reference.as_deref(),
+                crate::acp::AcpApprovalLevel::Ask,
+                &[],
+                None,
+                None,
+                true,
+                false,
+            );
+            plan["acpApprovalLevel"] = json!(crate::acp::AcpApprovalLevel::Ask.as_str());
+            plan["primaryCommand"] = json!(command);
+            plan["displayCommand"] = json!(command);
+            plan["startupText"] = json!(as_atuin_ignored_shell_input(&command));
+            return;
+        }
+    }
     let Some(command) = plan
         .get("primaryCommand")
         .and_then(Value::as_str)
@@ -296,7 +324,58 @@ pub(crate) fn build_agent_fork_plan(
     let trusted_title = trusted_resume_title(session);
     let mut empryo_fork_id = None;
     let mut copilot_fork_id = None;
+    let is_acp_source = crate::acp::session_is_acp(session);
+    let source_read_only = crate::coordinators::is_read_only_thread(
+        session.get("runtimeSettings").and_then(Value::as_object),
+    );
+    let source_acp_level = if source_read_only {
+        crate::acp::AcpApprovalLevel::Ask
+    } else {
+        session
+            .pointer("/runtimeSettings/acpApprovalLevel")
+            .and_then(Value::as_str)
+            .and_then(crate::acp::AcpApprovalLevel::parse)
+            .unwrap_or(crate::acp::AcpApprovalLevel::Ask)
+    };
+    let mut acp_fork_family: Option<String> = None;
+    let mut acp_fork_reference: Option<String> = None;
     let primary_command = match (agent_id, runtime_command) {
+        (Some("codex"), Some(command)) if is_acp_source => exact_reference
+            .as_deref()
+            .and_then(normalize_codex_session_id)
+            .map(|reference| {
+                acp_fork_family = Some("codex".to_string());
+                acp_fork_reference = Some(reference.clone());
+                crate::acp::spec::build_acp_host_launch_command_with_options(
+                    "codex",
+                    Some(command),
+                    Some(&reference),
+                    source_acp_level,
+                    &[],
+                    None,
+                    None,
+                    true,
+                    source_read_only,
+                )
+            }),
+        (Some("claude"), Some(command)) if is_acp_source => exact_reference
+            .clone()
+            .or_else(|| trusted_title.clone())
+            .map(|reference| {
+                acp_fork_family = Some("claude".to_string());
+                acp_fork_reference = Some(reference.clone());
+                crate::acp::spec::build_acp_host_launch_command_with_options(
+                    "claude",
+                    Some(command),
+                    Some(&reference),
+                    source_acp_level,
+                    &[],
+                    None,
+                    None,
+                    true,
+                    source_read_only,
+                )
+            }),
         (Some("codex"), Some(command)) => exact_reference
             .as_deref()
             .and_then(normalize_codex_session_id)
@@ -356,6 +435,15 @@ pub(crate) fn build_agent_fork_plan(
         "runtimeCommand",
         runtime_command.map(str::to_string),
     );
+    if let Some(fam) = acp_fork_family {
+        plan.insert("acpFork".to_string(), json!(true));
+        plan.insert("acpFamily".to_string(), json!(fam));
+        plan.insert(
+            "acpApprovalLevel".to_string(),
+            json!(source_acp_level.as_str()),
+        );
+        insert_optional_string(&mut plan, "acpForkReference", acp_fork_reference);
+    }
     if let Some(command) = primary_command {
         plan.insert(
             "startupText".to_string(),
@@ -501,6 +589,31 @@ pub(crate) fn create_agent_fork_session_params(
             .and_then(Value::as_object_mut),
     ) {
         runtime.insert("accountBaseCommand".to_string(), json!(base));
+    }
+    if plan.get("acpFork").and_then(Value::as_bool) == Some(true) {
+        if let Some(runtime) = params
+            .get_mut("runtimeSettings")
+            .and_then(Value::as_object_mut)
+        {
+            runtime.insert(
+                crate::acp::SESSION_NON_CLI_ACTIVE_KEY.to_string(),
+                json!(true),
+            );
+            runtime.insert(crate::acp::SESSION_ACP_ACTIVE_KEY.to_string(), json!(true));
+            if let Some(fam) = plan.get("acpFamily").and_then(Value::as_str) {
+                runtime.insert(crate::acp::SESSION_ACP_FAMILY_KEY.to_string(), json!(fam));
+            }
+            if let Some(level) = plan.get("acpApprovalLevel").and_then(Value::as_str) {
+                runtime.insert(
+                    crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+                    json!(level),
+                );
+            }
+            runtime.insert(
+                "gxserverForkInitialRenameStatus".to_string(),
+                json!("applied"),
+            );
+        }
     }
     if let Some(surface) = source_session.get("surface").cloned() {
         params.insert("surface".to_string(), surface);

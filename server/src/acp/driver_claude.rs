@@ -723,6 +723,14 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         eprintln!("Invalid Claude Non-CLI command.");
         return 1;
     };
+    if parsed.read_only {
+        // `--read-only` threads start Claude in its native `plan` mode, matching CLI `--read-only`.
+        for idx in 0..argv.len() {
+            if argv[idx] == "--permission-mode" && idx + 1 < argv.len() {
+                argv[idx + 1] = "plan".to_string();
+            }
+        }
+    }
     if let Some(resume_id) = parsed
         .resume_session_id
         .as_deref()
@@ -731,6 +739,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     {
         argv.push("--resume".to_string());
         argv.push(resume_id.to_string());
+        if parsed.fork_session {
+            argv.push("--fork-session".to_string());
+        }
     }
     if let Some(model) = parsed
         .model
@@ -787,11 +798,16 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         parsed.model.clone(),
         parsed.effort.clone(),
     )));
-    if let Some(resume_id) = parsed.resume_session_id.as_deref().filter(|s| !s.is_empty()) {
-        state
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .native_session_id = Some(resume_id.to_string());
+    if parsed.read_only {
+        state.lock().unwrap_or_else(|p| p.into_inner()).native_mode = "plan".to_string();
+    }
+    if !parsed.fork_session {
+        if let Some(resume_id) = parsed.resume_session_id.as_deref().filter(|s| !s.is_empty()) {
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .native_session_id = Some(resume_id.to_string());
+        }
     }
     let activity = ClaudeActivityReporter::start(endpoint.clone(), state.clone());
     let shutting_down = Arc::new(AtomicBool::new(false));

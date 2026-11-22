@@ -260,6 +260,14 @@ pub(super) async fn escalate_undelivered_send(
     */
     let typed_into_terminal = !matches!(reason, UndeliveredSendReason::WriteFailed(_));
     let reasoning_from_silence = reason == UndeliveredSendReason::TranscriptSilent;
+    // Non-CLI (`ghostex acp-host`) sessions deliver messages directly over JSON-RPC and never
+    // run an interactive CLI TUI in their PTY; skip CLI terminal screen scraping when an ACP
+    // channel is active for this session.
+    if crate::acp::channel::channel_state(&probe.project_id, &probe.session_id).is_some()
+        && reasoning_from_silence
+    {
+        return;
+    }
     let screen = crate::session_chat_send::capture_session_terminal_text(&probe.zmx_name).await;
     // CDXC:AgentScreenDetection 2026-09-13 DECISION:
     // User: do not show a delivery warning for a message waiting behind compaction.
