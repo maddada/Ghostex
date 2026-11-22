@@ -58,6 +58,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("grokWebStartPage", J::Str("https://grok.com/")),
     // The Grok logins, each `{ "id", "name" }` with its own browser profile (apps/desktop/src/app/claude_web/grok.rs). Empty is one login named Grok.
     ("grokWebLogins", J::Arr(&[])),
+    // The sidebar ⋯ menu's links, each `{ "id", "name", "url" }` (packages/gx-core/src/custom_links.rs). In no Settings > Sync category: a localhost link points at the computer it was added on.
+    ("customLinks", J::Arr(&[])),
     // CDXC:SessionLinks 2026-10-27 SEE-ALSO: `SessionLinksDisplay` in packages/gx-core/src/sidebar_view/links.rs (what each value shows). The default is Badge (2026-10-27: "and also please make the sidebar show as badge by default"), which replaces the 2026-10-24 Always default.
     ("sidebarSessionLinks", J::Str("badge")),
     // CDXC:SessionLinks 2026-10-24 SEE-ALSO: native_sidebar/links_list.rs; the links list's folded groups, kept app-wide (Merged or closed and Removed folded until opened).

@@ -1107,6 +1107,19 @@ for Updates, Restart Ghostex and the Quit rows); and Settings as the last row
 the folder button right of Search; it is the menu's first row only while the
 sidebar is too narrow for that button. On another computer's tab the menu also
 has Edit Machine.
+**Links in the sidebar menu** (desktop app). Add link… in the sidebar's ⋯ menu
+(between Keep Awake and Ask Ghostex AI; under a Links heading in the rail
+layout's ⋯ menu) saves any web page there, such as a local dashboard. The
+address can be a full address or just a host and port: `localhost:8317` opens
+`http://localhost:8317/`, and a name without a port such as `example.com` opens
+over https. The name is optional; without one the row shows the host. Clicking a
+link opens its page in the sessions column's place, the way Grok Bot opens, with
+an address bar that stays on top: Back, Forward, Reload, the address (type
+another and press Enter to go there) and Close. Each row shows the site's icon
+once the page has been opened, and its ⋯ (or a right-click) has Edit… and
+Remove. Links belong to no project, and they stay on this computer: they are in
+no Sync category, since an address like `localhost` means something else on
+another machine (`customLinks`). The phone does not have them.
 **Group working sessions** (in the More menu's Sort & Filter page, and in
 Settings > Sidebar; both switch the same setting, off by default) moves each
 project's sessions into a Working section under that project while their agent
