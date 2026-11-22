@@ -1481,6 +1481,7 @@ pub(crate) async fn run_claude_model_picker_job(
 
 pub(crate) async fn handle_select_session_chat_model_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -1489,10 +1490,51 @@ pub(crate) async fn handle_select_session_chat_model_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    let is_owner_device = caller.is_owner_device();
+    // Enforce owner-device gating before either deferred enqueue or immediate execution so an
+    // agent (`Principal::Session`) or peer cannot queue or apply an ACP approval level raise.
+    if !is_owner_device {
+        if let Some(raw_mode) = params
+            .get("options")
+            .and_then(Value::as_object)
+            .and_then(|opts| opts.get("mode"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if let Ok(target) =
+                resolve_session_chat_send_target(state, &params, "selectSessionChatModel")
+            {
+                if crate::acp::session_is_acp(&target.session) {
+                    let level = match crate::acp::AcpApprovalLevel::parse(raw_mode) {
+                        Some(level) => level,
+                        None => {
+                            return domain_error_response(
+                                endpoint_path,
+                                request_id,
+                                invalid_params(format!("Unsupported approval level: {raw_mode}")),
+                            );
+                        }
+                    };
+                    if let Err(error) = crate::acp::channel::check_approval_level_change_allowed(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                        level,
+                        false,
+                    )
+                    .await
+                    {
+                        return domain_error_response(endpoint_path, request_id, error);
+                    }
+                }
+            }
+        }
+    }
     let result = if params.get("defer").and_then(Value::as_bool) == Some(true) {
         crate::session_chat_model_selection::enqueue(state, &params)
     } else {
-        select_session_chat_model(state, &params).await
+        select_session_chat_model(state, &params, is_owner_device).await
     };
     if let Err(error) = &result {
         // A pick the queue is not carrying (`ghostex select-session-chat-model`): the queued ones
@@ -1627,6 +1669,7 @@ fn persist_session_chat_model_resume(
 pub(crate) async fn select_session_chat_model(
     state: &AppState,
     params: &Map<String, Value>,
+    is_owner_device: bool,
 ) -> Result<Value, DomainStateError> {
     let model = read_trimmed(params, "model");
     let effort = read_trimmed(params, "effort");
@@ -1635,6 +1678,80 @@ pub(crate) async fn select_session_chat_model(
     }
     let target = resolve_session_chat_send_target(state, params, "selectSessionChatModel")?;
     let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session);
+    // ACP (Non-CLI) sessions apply approval level and model switches directly over the structured
+    // host channel without typing into the PTY, taking effect on the next permission request with
+    // no restart and persisting the approval level per session. Checked before agent-name gates so
+    // any future ACP adapter works without silent rejection.
+    if crate::acp::session_is_acp(&target.session) {
+        let options = crate::session_chat_model_selection::read_options(
+            agent.as_deref().unwrap_or_default(),
+            true,
+            params,
+        )?;
+        let scope = crate::session_chat_model_selection::read_scope(
+            agent.as_deref().unwrap_or_default(),
+            params,
+        )?;
+        let session_only = scope == crate::session_chat_model_selection::SCOPE_SESSION;
+        if session_only && model.is_empty() {
+            return Err(invalid_params(
+                "A session-only change needs the model to apply in this session.",
+            ));
+        }
+        if !model.is_empty() || options.is_empty() {
+            crate::session_chat_model_selection::validate_selection(
+                agent.as_deref().unwrap_or_default(),
+                &model,
+                &effort,
+            )?;
+        }
+        if let Some(refusal) = crate::session_chat_model_selection::foreign_model_refusal(
+            agent.as_deref().unwrap_or_default(),
+            &model,
+        ) {
+            return Err(unsupported_selection(refusal));
+        }
+        let model_change = !model.is_empty() || !effort.is_empty();
+        if model_change
+            && crate::presentation::effective_lifecycle_state(&target.session) != "running"
+        {
+            return Err(session_not_running(
+                "Waiting for the session to be running before applying the selection.",
+            ));
+        }
+        if model_change {
+            crate::acp::channel::set_model(
+                &target.project_id,
+                &target.session_id,
+                &model,
+                &effort,
+            )
+            .await?;
+        }
+        if let Some(mode) = options.mode.as_deref().filter(|m| !m.is_empty()) {
+            crate::acp::channel::set_approval_level(
+                state,
+                &target.project_id,
+                &target.session_id,
+                mode,
+                is_owner_device,
+            )
+            .await?;
+        }
+        if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+            cache.remove(&crate::server::session_observer_key(
+                &target.project_id,
+                &target.session_id,
+            ));
+        }
+        crate::session_chat_options::schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
+        );
+        return Ok(json!({ "ok": true, "model": model, "effort": effort, "scope": scope }));
+    }
     if agent.as_deref() == Some("opencode") {
         // A chat's model can be picked before its first message, so the conversation may not exist yet.
         let conversation = crate::session_chat_opencode::chat_conversation(
@@ -1688,10 +1805,9 @@ pub(crate) async fn select_session_chat_model(
             message: "This agent does not support the quick model picker.".to_string(),
         });
     }
-    let is_acp = crate::acp::session_is_acp(&target.session);
     let options = crate::session_chat_model_selection::read_options(
         agent.as_deref().unwrap_or_default(),
-        is_acp,
+        false,
         params,
     )?;
     let scope = crate::session_chat_model_selection::read_scope(
@@ -1720,48 +1836,6 @@ pub(crate) async fn select_session_chat_model(
     if !model.is_empty() && agent.as_deref() == Some("codex") && effort_row_label(&effort).is_none()
     {
         return Err(invalid_params(format!("Unknown Codex effort {effort}.")));
-    }
-    // ACP (Non-CLI) sessions apply approval level and model switches directly over the structured
-    // host channel without typing into the PTY, taking effect on the next permission request with
-    // no restart and persisting the approval level per session.
-    if is_acp {
-        let model_change = !model.is_empty() || !effort.is_empty();
-        if model_change && crate::presentation::effective_lifecycle_state(&target.session) != "running" {
-            return Err(session_not_running(
-                "Waiting for the session to be running before applying the selection.",
-            ));
-        }
-        if model_change {
-            crate::acp::channel::set_model(
-                &target.project_id,
-                &target.session_id,
-                &model,
-                &effort,
-            )
-            .await?;
-        }
-        if let Some(mode) = options.mode.as_deref().filter(|m| !m.is_empty()) {
-            crate::acp::channel::set_approval_level(
-                state,
-                &target.project_id,
-                &target.session_id,
-                mode,
-            )
-            .await?;
-        }
-        if let Ok(mut cache) = state.session_chat_option_cache.lock() {
-            cache.remove(&crate::server::session_observer_key(
-                &target.project_id,
-                &target.session_id,
-            ));
-        }
-        crate::session_chat_options::schedule_session_chat_option_redetect(
-            state,
-            &target.project_id,
-            &target.session_id,
-            agent.as_deref(),
-        );
-        return Ok(json!({ "ok": true, "model": model, "effort": effort, "scope": scope }));
     }
     if crate::presentation::effective_lifecycle_state(&target.session) != "running" {
         return Err(session_not_running(

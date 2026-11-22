@@ -667,6 +667,7 @@ pub(crate) fn build_agent_resume_command(
                     Some(&agent_command),
                     Some(&reference),
                     input.acp_approval_level,
+                    &[],
                     None,
                     None,
                 )

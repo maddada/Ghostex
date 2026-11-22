@@ -102,9 +102,10 @@ pub(crate) fn gate(
     require_owner_presence(state, caller, action, body, endpoint_path, request_id).err()
 }
 
-/// Every route that types, sends, queues, answers or interrupts in a session.
+/// Every route that types, sends, queues, answers, changes mode/model, or interrupts in a session.
 const SESSION_INPUT_ROUTES: &[&str] = &[
     "/api/answerSessionChatPrompt",
+    "/api/selectSessionChatModel",
     "/api/sendSessionText",
     "/api/sendSessionEnter",
     "/api/sendSessionMessage",
@@ -117,6 +118,15 @@ const SESSION_INPUT_ROUTES: &[&str] = &[
     // Standing role line injects context on SessionStart or after compaction (agents/standing_role.rs).
     "/api/sessionStandingRole",
 ];
+
+fn requests_mode_change(params: &Map<String, Value>) -> bool {
+    params
+        .get("options")
+        .and_then(Value::as_object)
+        .and_then(|opts| opts.get("mode"))
+        .and_then(Value::as_str)
+        .is_some_and(|mode| !mode.trim().is_empty())
+}
 
 /*
 CDXC:GBots 2026-11-09 WHY:
@@ -141,7 +151,10 @@ fn api_chat_refused(
             project_id: own_project,
             session_id: own_session,
             ..
-        } if own_session == session_id && (project_id.is_empty() || own_project == project_id) => {
+        } if own_session == session_id
+            && (project_id.is_empty() || own_project == project_id)
+            && !(endpoint_path == "/api/selectSessionChatModel" && requests_mode_change(params)) =>
+        {
             false
         }
         _ => crate::gbots::is_api_chat_session(state, project_id, session_id),
@@ -174,6 +187,18 @@ fn relayed_card_refusal(
             }
             let kind = text(params, "kind").unwrap_or_default();
             (crate::coordinators::is_relayed_answer_kind(kind)
+                && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
+            .then_some(RELAYED_CARD_ONLY_YOU)
+        }
+        "/api/selectSessionChatModel" => {
+            (requests_mode_change(params)
+                && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
+            .then_some(RELAYED_CARD_ONLY_YOU)
+        }
+        "/api/sendSessionChatMessage" => {
+            let is_mode_cycle = text(params, "key")
+                .is_some_and(|key| key.eq_ignore_ascii_case("shift-tab"));
+            (is_mode_cycle
                 && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
             .then_some(RELAYED_CARD_ONLY_YOU)
         }

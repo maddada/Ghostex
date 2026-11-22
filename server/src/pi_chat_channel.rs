@@ -237,12 +237,37 @@ fn drain(queue: &mut VecDeque<Value>) -> Vec<Value> {
     commands
 }
 
-async fn poll(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
+async fn read_persisted_acp_approval_level(
+    state: &crate::server::AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Option<crate::acp::AcpApprovalLevel> {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        let db = crate::storage::open_gxserver_database(&paths).ok()?;
+        let repo = crate::domain::DomainRepository::new(&db, server_id.as_str());
+        let session = repo.get_session(&pid, &sid).ok().flatten()?;
+        crate::acp::approval::stored_session_approval_level(&session)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+async fn poll(
+    state: &crate::server::AppState,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
     let channel_key = channel_key(params)?;
     let agent = read_string(params, "agent").unwrap_or_else(|| "pi".to_string());
     let pid = params.get("pid").and_then(Value::as_u64);
     let instance = read_string(params, "instance");
     let version = params.get("version").and_then(Value::as_u64).unwrap_or(0);
+    let reported_approval_level = read_string(params, "approvalLevel")
+        .and_then(|raw| crate::acp::AcpApprovalLevel::parse(&raw));
     let capabilities = params
         .get("capabilities")
         .and_then(Value::as_array)
@@ -254,9 +279,12 @@ async fn poll(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let wake = {
+    let is_acp = agent.starts_with("acp:");
+    let mut newly_registered = false;
+    let (wake, immediate_commands) = {
         let mut channels = lock(&CHANNELS);
         let channel = channels.entry(channel_key.clone()).or_insert_with(|| {
+            newly_registered = true;
             log_channel("piChatChannel.opened", &channel_key, &agent, version, pid);
             Channel {
                 agent: agent.clone(),
@@ -272,6 +300,7 @@ async fn poll(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
         });
         if channel.instance != instance {
             // The session's agent was restarted, or Pi replaced its runtime (/new, /resume, reload).
+            newly_registered = true;
             log_channel("piChatChannel.reopened", &channel_key, &agent, version, pid);
             channel.pid = pid;
             channel.instance = instance;
@@ -281,19 +310,63 @@ async fn poll(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
         channel.capabilities = capabilities;
         channel.last_seen = Instant::now();
         if !channel.queue.is_empty() {
-            return Ok(json!({ "commands": drain(&mut channel.queue) }));
+            (None, Some(drain(&mut channel.queue)))
+        } else {
+            (Some(channel.wake.clone()), None)
         }
-        channel.polling += 1;
-        channel.wake.clone()
     };
-    let guard = PollGuard(channel_key);
+
+    // On ACP channel registration/reconnect (or whenever the host reports a stale level), push the
+    // persisted `acpApprovalLevel` immediately without blocking for `POLL_HOLD`.
+    let desired_approval_level = if is_acp {
+        read_persisted_acp_approval_level(state, &channel_key.0, &channel_key.1).await
+    } else {
+        None
+    };
+    let approval_mismatch = desired_approval_level
+        .is_some_and(|desired| Some(desired) != reported_approval_level);
+
+    if let Some(commands) = immediate_commands {
+        let mut resp = json!({ "commands": commands });
+        if let Some(desired) = desired_approval_level {
+            resp["desiredApprovalLevel"] = json!(desired.as_str());
+        }
+        return Ok(resp);
+    }
+    if is_acp && (newly_registered || approval_mismatch) && desired_approval_level.is_some() {
+        let mut resp = json!({ "commands": [], "holdMs": 0 });
+        if let Some(desired) = desired_approval_level {
+            resp["desiredApprovalLevel"] = json!(desired.as_str());
+        }
+        return Ok(resp);
+    }
+
+    let wake = wake.expect("wake present when no immediate commands");
+    {
+        let mut channels = lock(&CHANNELS);
+        if let Some(channel) = channels.get_mut(&channel_key) {
+            if !channel.queue.is_empty() {
+                let mut resp = json!({ "commands": drain(&mut channel.queue) });
+                if let Some(desired) = desired_approval_level {
+                    resp["desiredApprovalLevel"] = json!(desired.as_str());
+                }
+                return Ok(resp);
+            }
+            channel.polling += 1;
+        }
+    }
+    let guard = PollGuard(channel_key.clone());
     let _ = tokio::time::timeout(POLL_HOLD, wake.notified()).await;
     let commands = lock(&CHANNELS)
         .get_mut(&guard.0)
         .map(|channel| drain(&mut channel.queue))
         .unwrap_or_default();
     drop(guard);
-    Ok(json!({ "commands": commands, "holdMs": POLL_HOLD.as_millis() as u64 }))
+    let mut resp = json!({ "commands": commands, "holdMs": POLL_HOLD.as_millis() as u64 });
+    if let Some(desired) = desired_approval_level {
+        resp["desiredApprovalLevel"] = json!(desired.as_str());
+    }
+    Ok(resp)
 }
 
 fn ack(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
@@ -342,7 +415,7 @@ pub(crate) async fn dispatch(
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     match read_string(params, "action").as_deref() {
-        Some("poll") => poll(params).await,
+        Some("poll") => poll(state, params).await,
         Some("ack") => ack(params),
         Some("close") => close(params),
         Some("trust") => trust(state, params),
