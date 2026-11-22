@@ -595,6 +595,28 @@ pub(super) async fn route_chat_http(
                 Err(error) => domain_error_response(endpoint.path, request_id, error),
             }
         }
+        "/api/switchSessionCliToAcp" => {
+            let params = match read_domain_rpc_params(&body_json) {
+                Ok(params) => params,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            let project_id = match read_project_id(&params) {
+                Ok(id) => id,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            let session_id = match read_session_id(&params) {
+                Ok(id) => id,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            match crate::acp::channel::switch_to_acp(&state, &project_id, &session_id).await {
+                Ok(result) => routed_json(
+                    Some(endpoint.path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result),
+                ),
+                Err(error) => domain_error_response(endpoint.path, request_id, error),
+            }
+        }
         "/api/exportSessionTranscript" => {
             handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
                 .await

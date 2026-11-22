@@ -458,11 +458,27 @@ struct PendingPermission {
     summary: String,
     tool_use_id: Option<String>,
     reason: Option<String>,
+    is_question: bool,
     options: Vec<AcpPermissionOption>,
 }
 
 impl PendingPermission {
     fn to_ghostex_prompt(&self) -> Value {
+        if self.is_question {
+            return json!({
+                "kind": "question",
+                "toolUseId": self.tool_use_id,
+                "questions": [{
+                    "question": if self.tool_name.trim().is_empty() { "Choose an option." } else { self.tool_name.as_str() },
+                    "header": "Question",
+                    "multiSelect": false,
+                    "allowCustom": false,
+                    "options": self.options.iter().map(|opt| json!({
+                        "label": if opt.name.trim().is_empty() { opt.option_id.as_str() } else { opt.name.as_str() },
+                    })).collect::<Vec<_>>(),
+                }],
+            });
+        }
         let mut prompt = json!({
             "kind": "approval",
             "tool": self.tool_name,
@@ -478,6 +494,32 @@ impl PendingPermission {
             prompt["reason"] = json!(reason);
         }
         prompt
+    }
+
+    fn resolve_question_option_id(&self, selections: &[Value]) -> Option<String> {
+        let first = selections.first()?;
+        if let Some(indices) = first.get("indices").and_then(Value::as_array) {
+            if let Some(idx) = indices.first().and_then(Value::as_u64) {
+                if let Some(opt) = self.options.get(idx as usize) {
+                    return Some(opt.option_id.clone());
+                }
+            }
+        }
+        if let Some(other) = first
+            .get("other")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if let Some(opt) = self
+                .options
+                .iter()
+                .find(|opt| opt.option_id == other || opt.name.eq_ignore_ascii_case(other))
+            {
+                return Some(opt.option_id.clone());
+            }
+        }
+        None
     }
 
     fn resolve_option_id(
@@ -516,6 +558,26 @@ impl PendingPermission {
     }
 }
 
+fn now_iso_rfc3339() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+const LIVE_STREAM_MAX_CHARS: usize = 32_768;
+
+fn append_bounded(buf: &mut String, chunk: &str, max_bytes: usize) {
+    if chunk.is_empty() {
+        return;
+    }
+    buf.push_str(chunk);
+    if buf.len() > max_bytes {
+        let mut cut = buf.len() - max_bytes;
+        while cut < buf.len() && !buf.is_char_boundary(cut) {
+            cut += 1;
+        }
+        buf.drain(..cut);
+    }
+}
+
 struct HostState {
     family: String,
     native_session_id: Option<String>,
@@ -534,6 +596,17 @@ struct HostState {
     available_modes: Value,
     config_options: Value,
     pending_permissions: VecDeque<PendingPermission>,
+    live_stream_text: String,
+    live_stream_started_at: Option<String>,
+    live_thought_text: String,
+    live_thought_started_at: Option<String>,
+    live_tool_label: Option<String>,
+    live_tool_detail: Option<String>,
+    live_tool_started_at: Option<String>,
+    usage_used_tokens: Option<u64>,
+    usage_window_size: Option<u64>,
+    session_title: Option<String>,
+    last_event_at_ms: i64,
     child_exited: bool,
 }
 
@@ -562,8 +635,74 @@ impl HostState {
             available_modes: Value::Array(Vec::new()),
             config_options: Value::Array(Vec::new()),
             pending_permissions: VecDeque::new(),
+            live_stream_text: String::new(),
+            live_stream_started_at: None,
+            live_thought_text: String::new(),
+            live_thought_started_at: None,
+            live_tool_label: None,
+            live_tool_detail: None,
+            live_tool_started_at: None,
+            usage_used_tokens: None,
+            usage_window_size: None,
+            session_title: None,
+            last_event_at_ms: now_ms(),
             child_exited: false,
         }
+    }
+
+    fn clear_live_turn_output(&mut self) {
+        self.live_stream_text.clear();
+        self.live_stream_started_at = None;
+        self.live_thought_text.clear();
+        self.live_thought_started_at = None;
+        self.live_tool_label = None;
+        self.live_tool_detail = None;
+        self.live_tool_started_at = None;
+    }
+
+    fn live_activity_json(&self) -> Value {
+        if !self.working {
+            return Value::Null;
+        }
+        if !self.live_stream_text.trim().is_empty() {
+            return json!({
+                "kind": "stream",
+                "text": self.live_stream_text,
+                "detectedAt": self.live_stream_started_at.as_deref().unwrap_or_default(),
+            });
+        }
+        if let Some(label) = self.live_tool_label.as_deref().filter(|s| !s.trim().is_empty()) {
+            return json!({
+                "kind": "tool",
+                "label": label,
+                "detail": self.live_tool_detail,
+                "detectedAt": self.live_tool_started_at.as_deref().unwrap_or_default(),
+            });
+        }
+        if !self.live_thought_text.trim().is_empty() {
+            return json!({
+                "kind": "thinking",
+                "text": self.live_thought_text,
+                "detectedAt": self.live_thought_started_at.as_deref().unwrap_or_default(),
+            });
+        }
+        Value::Null
+    }
+
+    fn context_usage_json(&self) -> Value {
+        let Some(used) = self.usage_used_tokens.filter(|u| *u > 0) else {
+            return Value::Null;
+        };
+        let mut obj = serde_json::Map::new();
+        obj.insert("usedTokens".to_string(), json!(used));
+        if let Some(size) = self.usage_window_size.filter(|s| *s > 0) {
+            obj.insert("windowSize".to_string(), json!(size));
+            let pct = ((used as f64 / size as f64) * 100.0)
+                .round()
+                .clamp(0.0, 100.0) as u32;
+            obj.insert("usedPercentage".to_string(), json!(pct));
+        }
+        Value::Object(obj)
     }
 
     fn snapshot_json(&self) -> Value {
@@ -589,6 +728,10 @@ impl HostState {
             "configOptions": self.config_options,
             "pendingPermission": self.pending_permissions.front().map(|p| p.to_ghostex_prompt()),
             "pendingPermissionCount": self.pending_permissions.len(),
+            "liveActivity": self.live_activity_json(),
+            "contextUsage": self.context_usage_json(),
+            "sessionTitle": self.session_title,
+            "lastEventAtMs": self.last_event_at_ms,
             "transcriptPath": transcript_path,
             "childExited": self.child_exited,
         })
@@ -751,17 +894,30 @@ fn apply_session_metadata(state: &mut HostState, result: &Value) {
 
 fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission {
     let tool_call = params.get("toolCall").unwrap_or(&Value::Null);
-    let tool_name = tool_call
-        .get("name")
-        .or_else(|| tool_call.get("kind"))
-        .or_else(|| tool_call.get("title"))
-        .and_then(Value::as_str)
-        .unwrap_or("Tool")
-        .to_string();
     let tool_use_id = tool_call
         .get("toolCallId")
         .and_then(Value::as_str)
         .map(str::to_string);
+    let is_question = tool_use_id
+        .as_deref()
+        .is_some_and(|id| id.starts_with("interaction_"));
+    let tool_name = if is_question {
+        tool_call
+            .get("title")
+            .or_else(|| tool_call.pointer("/rawInput/question"))
+            .or_else(|| tool_call.get("name"))
+            .and_then(Value::as_str)
+            .unwrap_or("Question")
+            .to_string()
+    } else {
+        tool_call
+            .get("name")
+            .or_else(|| tool_call.get("kind"))
+            .or_else(|| tool_call.get("title"))
+            .and_then(Value::as_str)
+            .unwrap_or("Tool")
+            .to_string()
+    };
     let summary = tool_call
         .get("rawInput")
         .and_then(|v| {
@@ -832,6 +988,7 @@ fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission 
         summary,
         tool_use_id,
         reason: None,
+        is_question,
         options,
     }
 }
@@ -1301,6 +1458,10 @@ pub fn run(args: &[String]) -> i32 {
                         return;
                     };
                     t_out.spool_event(&msg);
+                    {
+                        let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                        s.last_event_at_ms = now_ms();
+                    }
                     let has_method = msg.get("method").and_then(Value::as_str).is_some();
                     let has_id = msg.get("id").is_some();
                     if !has_method && has_id {
@@ -1325,43 +1486,51 @@ pub fn run(args: &[String]) -> i32 {
                         let params = msg.get("params").cloned().unwrap_or(Value::Null);
                         if method == "session/request_permission" {
                             let mut perm = parse_permission_request(rpc_id, &params);
-                            let (level, roots, session_cwd) = {
-                                let s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                (s.approval_level, s.writable_roots.clone(), s.cwd.clone())
-                            };
-                            match evaluate_permission(
-                                level,
-                                &params,
-                                &perm.options,
-                                &roots,
-                                &session_cwd,
-                            ) {
-                                PermissionDecision::AutoApprove { option_id } => {
-                                    println!(
-                                        "\r\n[ACP] Auto-approved ({}): {} ({})",
-                                        level.label(),
-                                        perm.tool_name,
-                                        perm.summary
-                                    );
-                                    let _ = std::io::stdout().flush();
-                                    let _ = t_out.respond_to_agent(
-                                        perm.rpc_id,
-                                        json!({
-                                            "outcome": {
-                                                "outcome": "selected",
-                                                "optionId": option_id,
-                                            }
-                                        }),
-                                    );
-                                    return;
-                                }
-                                PermissionDecision::AskUser { reason } => {
-                                    perm.reason = reason;
+                            if !perm.is_question {
+                                let (level, roots, session_cwd) = {
+                                    let s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    (s.approval_level, s.writable_roots.clone(), s.cwd.clone())
+                                };
+                                match evaluate_permission(
+                                    level,
+                                    &params,
+                                    &perm.options,
+                                    &roots,
+                                    &session_cwd,
+                                ) {
+                                    PermissionDecision::AutoApprove { option_id } => {
+                                        println!(
+                                            "\r\n[ACP] Auto-approved ({}): {} ({})",
+                                            level.label(),
+                                            perm.tool_name,
+                                            perm.summary
+                                        );
+                                        let _ = std::io::stdout().flush();
+                                        let _ = t_out.respond_to_agent(
+                                            perm.rpc_id,
+                                            json!({
+                                                "outcome": {
+                                                    "outcome": "selected",
+                                                    "optionId": option_id,
+                                                }
+                                            }),
+                                        );
+                                        return;
+                                    }
+                                    PermissionDecision::AskUser { reason } => {
+                                        perm.reason = reason;
+                                    }
                                 }
                             }
                             println!(
-                                "\r\n[ACP] Waiting for approval: {} ({})",
-                                perm.tool_name, perm.summary
+                                "\r\n[ACP] Waiting for {}: {} ({})",
+                                if perm.is_question {
+                                    "question answer"
+                                } else {
+                                    "approval"
+                                },
+                                perm.tool_name,
+                                perm.summary
                             );
                             let _ = std::io::stdout().flush();
                             let was_empty = {
@@ -1432,6 +1601,110 @@ pub fn run(args: &[String]) -> i32 {
                                 if let Some(opts) = update.get("configOptions") {
                                     let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                                     s.config_options = opts.clone();
+                                }
+                            }
+                            "agent_message_chunk" => {
+                                if let Some(text) = update
+                                    .pointer("/content/text")
+                                    .or_else(|| update.get("text"))
+                                    .and_then(Value::as_str)
+                                    .filter(|t| !t.is_empty())
+                                {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    if s.live_stream_started_at.is_none() {
+                                        s.live_stream_started_at = Some(now_iso_rfc3339());
+                                    }
+                                    append_bounded(
+                                        &mut s.live_stream_text,
+                                        text,
+                                        LIVE_STREAM_MAX_CHARS,
+                                    );
+                                    s.live_tool_label = None;
+                                    s.live_tool_detail = None;
+                                    s.live_tool_started_at = None;
+                                }
+                            }
+                            "agent_thought_chunk" => {
+                                if let Some(text) = update
+                                    .pointer("/content/text")
+                                    .or_else(|| update.get("text"))
+                                    .and_then(Value::as_str)
+                                    .filter(|t| !t.is_empty())
+                                {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    if s.live_thought_started_at.is_none() {
+                                        s.live_thought_started_at = Some(now_iso_rfc3339());
+                                    }
+                                    append_bounded(
+                                        &mut s.live_thought_text,
+                                        text,
+                                        LIVE_STREAM_MAX_CHARS,
+                                    );
+                                }
+                            }
+                            "tool_call" | "tool_call_update" => {
+                                let status = update
+                                    .get("status")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or_default();
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                if matches!(status, "completed" | "failed" | "cancelled") {
+                                    s.live_tool_label = None;
+                                    s.live_tool_detail = None;
+                                    s.live_tool_started_at = None;
+                                } else {
+                                    let label = update
+                                        .get("title")
+                                        .or_else(|| update.get("name"))
+                                        .or_else(|| update.get("kind"))
+                                        .and_then(Value::as_str)
+                                        .map(str::trim)
+                                        .filter(|t| !t.is_empty())
+                                        .map(str::to_string);
+                                    if let Some(label) = label {
+                                        s.live_tool_label = Some(label);
+                                    }
+                                    if s.live_tool_started_at.is_none() {
+                                        s.live_tool_started_at = Some(now_iso_rfc3339());
+                                    }
+                                    let detail = update
+                                        .pointer("/locations/0/path")
+                                        .or_else(|| update.pointer("/rawInput/command"))
+                                        .or_else(|| update.pointer("/rawInput/CommandLine"))
+                                        .or_else(|| update.pointer("/rawInput/file_path"))
+                                        .or_else(|| update.pointer("/rawInput/path"))
+                                        .or_else(|| update.pointer("/rawInput/TargetFile"))
+                                        .and_then(Value::as_str)
+                                        .map(str::trim)
+                                        .filter(|t| !t.is_empty())
+                                        .map(str::to_string);
+                                    if detail.is_some() {
+                                        s.live_tool_detail = detail;
+                                    }
+                                }
+                            }
+                            "usage_update" => {
+                                let used = update.get("used").and_then(Value::as_u64);
+                                let size = update.get("size").and_then(Value::as_u64);
+                                if used.is_some() || size.is_some() {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    if let Some(u) = used {
+                                        s.usage_used_tokens = Some(u);
+                                    }
+                                    if let Some(sz) = size {
+                                        s.usage_window_size = Some(sz);
+                                    }
+                                }
+                            }
+                            "session_info_update" => {
+                                if let Some(title) = update
+                                    .get("title")
+                                    .and_then(Value::as_str)
+                                    .map(str::trim)
+                                    .filter(|t| !t.is_empty())
+                                {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    s.session_title = Some(title.to_string());
                                 }
                             }
                             _ => {}
@@ -1564,6 +1837,7 @@ pub fn run(args: &[String]) -> i32 {
         "send",
         "abort",
         "approve",
+        "answer_question",
         "model",
         "mode",
         "state",
@@ -1720,6 +1994,50 @@ pub fn run(args: &[String]) -> i32 {
                         Err(err) => ep.ack(id, false, Value::Null, Some(&err)),
                     }
                 }
+                "answer_question" => {
+                    let selections = params
+                        .get("selections")
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .unwrap_or_default();
+                    let target_tool_use_id = params
+                        .get("toolUseId")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty());
+                    let perm = {
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        if let Some(wanted_id) = target_tool_use_id {
+                            s.pending_permissions
+                                .iter()
+                                .position(|p| p.tool_use_id.as_deref() == Some(wanted_id))
+                                .and_then(|idx| s.pending_permissions.remove(idx))
+                        } else {
+                            s.pending_permissions
+                                .iter()
+                                .position(|p| p.is_question)
+                                .and_then(|idx| s.pending_permissions.remove(idx))
+                                .or_else(|| s.pending_permissions.pop_front())
+                        }
+                    };
+                    let Some(perm) = perm else {
+                        ep.ack(id, false, Value::Null, Some("NO_PENDING_QUESTION"));
+                        continue;
+                    };
+                    let outcome = if let Some(opt_id) = perm.resolve_question_option_id(&selections)
+                    {
+                        json!({ "outcome": "selected", "optionId": opt_id })
+                    } else {
+                        json!({ "outcome": "cancelled" })
+                    };
+                    match transport.respond_to_agent(perm.rpc_id, json!({ "outcome": outcome })) {
+                        Ok(()) => {
+                            activity.sync();
+                            ep.ack(id, true, json!({ "answered": true }), None);
+                        }
+                        Err(err) => ep.ack(id, false, Value::Null, Some(&err)),
+                    }
+                }
                 "model" => {
                     let model = params
                         .get("model")
@@ -1863,12 +2181,7 @@ pub fn run(args: &[String]) -> i32 {
                         continue;
                     };
                     if is_working && !interrupt {
-                        ep.ack(
-                            id,
-                            false,
-                            Value::Null,
-                            Some("The ACP agent is currently working on a turn."),
-                        );
+                        ep.ack(id, false, Value::Null, Some("ACP_AGENT_BUSY"));
                         continue;
                     }
                     let blocks = match build_prompt_blocks(&gx_paths, &text, &images) {
@@ -1894,6 +2207,7 @@ pub fn run(args: &[String]) -> i32 {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.turn_generation = s.turn_generation.wrapping_add(1);
                         s.working = true;
+                        s.clear_live_turn_output();
                         s.turn_generation
                     };
                     activity.sync();
@@ -1919,11 +2233,23 @@ pub fn run(args: &[String]) -> i32 {
                             Duration::from_secs(60 * 60),
                         );
                         let stop_reason = match &res {
-                            Ok(val) => val
-                                .get("stopReason")
-                                .and_then(Value::as_str)
-                                .unwrap_or("end_turn")
-                                .to_string(),
+                            Ok(val) => {
+                                if let Some(total) = val
+                                    .pointer("/usage/totalTokens")
+                                    .or_else(|| val.pointer("/usage/inputTokens"))
+                                    .and_then(Value::as_u64)
+                                    .filter(|u| *u > 0)
+                                {
+                                    let mut s = st_turn.lock().unwrap_or_else(|p| p.into_inner());
+                                    if s.usage_used_tokens.is_none() {
+                                        s.usage_used_tokens = Some(total);
+                                    }
+                                }
+                                val.get("stopReason")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("end_turn")
+                                    .to_string()
+                            }
                             Err(err) => format!("error: {err}"),
                         };
                         println!("[Non-CLI] Turn finished ({stop_reason}).");
@@ -1932,6 +2258,7 @@ pub fn run(args: &[String]) -> i32 {
                             let mut s = st_turn.lock().unwrap_or_else(|p| p.into_inner());
                             if s.turn_generation == turn_gen {
                                 s.working = false;
+                                s.clear_live_turn_output();
                                 let drained: Vec<PendingPermission> =
                                     s.pending_permissions.drain(..).collect();
                                 (true, drained)

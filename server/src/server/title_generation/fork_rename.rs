@@ -71,8 +71,11 @@ pub(crate) fn fork_initial_rename_target(
         .and_then(Value::as_str)
         .or_else(|| session.get("agentId").and_then(Value::as_str))?
         .trim();
-    // A fork created already named (Empryo's copy, `fork_empryo.rs`) has nothing to type.
-    if read_runtime_text(session, "gxserverForkInitialRenameStatus").as_deref() == Some("applied") {
+    // A fork created already named (Empryo's copy, `fork_empryo.rs`) or in Non-CLI mode
+    // (no interactive CLI composer to receive `/rename`) has nothing to type.
+    if crate::acp::session_is_acp(session)
+        || read_runtime_text(session, "gxserverForkInitialRenameStatus").as_deref() == Some("applied")
+    {
         return None;
     }
     Some(ForkInitialRenameTarget {

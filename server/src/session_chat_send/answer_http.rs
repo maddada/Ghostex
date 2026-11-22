@@ -1068,6 +1068,82 @@ async fn answer_session_chat_prompt(
             }
         }
         "question" => {
+            if crate::acp::session_is_acp(&target.session) {
+                let raw_selections: Vec<Value> = params
+                    .get("selections")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                let tool_use_id = params.get("toolUseId").and_then(Value::as_str);
+                let blocking_res = crate::acp::channel::answer_question(
+                    &target.project_id,
+                    &target.session_id,
+                    &raw_selections,
+                    tool_use_id,
+                )
+                .await;
+                let final_res = match blocking_res {
+                    Ok(ok) => Ok(ok),
+                    Err(err) if err.code == "noPendingQuestion" => {
+                        // Turn-ending question tools (e.g. Antigravity's `ask_question` over ACP)
+                        // finish the turn and expect the user's selection as the next prompt.
+                        let stored_prompt = crate::agents::session_chat_prompt_setting(&target.session)
+                            .as_deref()
+                            .and_then(crate::session_chat::parse_stored_session_chat_prompt)
+                            .or_else(|| transcript_pending_question_prompt(&target.session));
+                        if let Some(crate::session_chat::SessionChatInteractivePrompt::Question {
+                            questions,
+                            ..
+                        }) = stored_prompt
+                        {
+                            let typed_selections: Vec<
+                                crate::session_chat::SessionChatQuestionSelection,
+                            > = serde_json::from_value(Value::Array(raw_selections))
+                                .unwrap_or_default();
+                            if crate::session_chat_send::has_ask_answer(&typed_selections) {
+                                let answer_text =
+                                    crate::session_chat_question_liveness::format_ask_answer_message(
+                                        &questions,
+                                        &typed_selections,
+                                    );
+                                crate::acp::channel::send(
+                                    &state.paths,
+                                    &target,
+                                    &answer_text,
+                                    &[],
+                                    false,
+                                )
+                                .await
+                            } else {
+                                Ok(json!({ "dismissed": true }))
+                            }
+                        } else {
+                            Err(err)
+                        }
+                    }
+                    Err(err) => Err(err),
+                };
+                return match final_res {
+                    Ok(_) => {
+                        let agent =
+                            crate::session_chat_follower::session_chat_display_agent_for_session(
+                                &target.session,
+                            );
+                        schedule_session_chat_option_redetect(
+                            state,
+                            &target.project_id,
+                            &target.session_id,
+                            agent.as_deref(),
+                        );
+                        routed_json(
+                            Some(endpoint_path),
+                            StatusCode::OK,
+                            rpc_success(request_id, json!({ "queued": false })),
+                        )
+                    }
+                    Err(error) => domain_error_response(endpoint_path, request_id, error),
+                };
+            }
             let agent = session_chat_agent_for_session(&target.session);
             let screen_prompt =
                 if crate::session_chat_options::session_chat_questions_only_on_screen(
