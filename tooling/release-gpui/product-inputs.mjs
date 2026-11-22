@@ -24,10 +24,10 @@ export const TOOLCHAIN = Object.freeze({
   androidBuildTools: '37.0.0',
   androidNdk: '29.0.14206865',
   androidPlatform: 'android-37.0',
-  bun: '1.4.4',
+  bun: '1.4.5',
   dotnet: '8.0.x',
   java: '17.0.19+10',
-  node: '24.22.1',
+  node: '24.22.3',
   ripgrepPackageVersion: '1.17.1',
   ripgrepSha256: '2fa16464fd8638588a67c7fc172d3c4b57fbdc65dff366e10b0b0e90734628a6',
   ripgrepVersion: 'v15.0.1',
@@ -36,7 +36,7 @@ export const TOOLCHAIN = Object.freeze({
    * apps/mobile/tailcat-bridge before Gradle compiles against it. Both pins are
    * asserted against that module's go.mod and against the workflow file below.
    */
-  tailcatBridgeGo: '1.27.1',
+  tailcatBridgeGo: '1.27.4',
   tailcatBridgeGomobile: 'v0.0.0-20260821190718-4776eadac327',
   /*
    * CDXC:CloudBoxes 2026-11-02 SEE-ALSO: the tailcat every gxserver Linux package
@@ -47,7 +47,7 @@ export const TOOLCHAIN = Object.freeze({
    * that script, server/src/tailcat/install.rs and the workflows.
    */
   tailcat: 'v0.6.0',
-  tailcatGo: '1.27.1',
+  tailcatGo: '1.27.4',
   vpk: '1.2.0',
   /*
    * One Zig toolchain for the whole repo. Ghostty and the zmx fork moved from

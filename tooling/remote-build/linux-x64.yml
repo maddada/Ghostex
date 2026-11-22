@@ -111,7 +111,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       # The crates set rustc-wrapper = kache in their .cargo/config.toml, so cargo fails without kache on PATH. kache-action installs it and exports RUSTC_WRAPPER; the store lives on the toolchain disk (KACHE_CACHE_DIR above), not in the GitHub cache.
       - name: Install kache
         uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed

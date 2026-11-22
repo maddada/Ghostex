@@ -182,7 +182,7 @@ jobs:
       # other Node.
       - name: Set up the pinned native editor Node.js
         if: ${{ steps.probe.outputs.action == 'build' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .dependencies/code-server/.node-version
           architecture: ${{ inputs.arch }}

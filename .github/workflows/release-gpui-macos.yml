@@ -118,7 +118,7 @@ jobs:
           pr-comment: 'false'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       # CDXC:Release 2026-09-15 WHY:
       # Only the code-server identity input is restored here. The VS Code tree,
       # its `npm ci` (4 to 6 minutes) and the ripgrep seed were only needed to
@@ -224,9 +224,9 @@ jobs:
           tooling/release-gpui/retry.sh 3 5 -- npm --prefix .dependencies/code-server ci
       - name: Pre-fetch Zig package dependencies
         run: tooling/release-gpui/fetch-zig-deps.sh ghostty
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24.22.1
+          node-version: 24.22.3
       - name: Validate Sparkle signing credential
         if: ${{ inputs.update_sparkle }}
         env:
