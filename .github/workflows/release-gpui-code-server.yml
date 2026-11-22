@@ -206,6 +206,11 @@ jobs:
             .dependencies/code-server/lib/vscode/extensions/pnpm-lock.yaml
       - name: Build the code-server runtime
         if: ${{ steps.probe.outputs.action == 'build' }}
+        env:
+          # @vscode/ripgrep's postinstall looks its release up on api.github.com and sends GITHUB_TOKEN
+          # when set; unauthenticated, a shared runner hits the API rate limit and the install fails
+          # with 403 (run 44929289321), as the macOS and Windows steps already avoid.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           # CI=true makes code-server's postinstall and VS Code's install every root frozen.
           tooling/release-gpui/retry.sh 3 5 -- pnpm --dir .dependencies/code-server install --frozen-lockfile
