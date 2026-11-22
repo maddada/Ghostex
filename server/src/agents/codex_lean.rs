@@ -140,6 +140,19 @@ pub(crate) fn is_lean_worker(runtime_settings: Option<&Map<String, Value>>) -> b
     })
 }
 
+/// Feature names to pass to `--disable` for a Non-CLI lean Codex worker when "Lean Codex workers"
+/// is enabled in Settings.
+pub(crate) fn lean_codex_disabled_features_if_enabled() -> Vec<String> {
+    if cfg!(test) || !lean_codex_workers_enabled() {
+        return Vec::new();
+    }
+    lean_codex_flags()
+        .split_whitespace()
+        .filter(|tok| *tok != "--disable")
+        .map(str::to_string)
+        .collect()
+}
+
 /// `command` with the lean flags when it starts Codex for a coordinator's thread or a lead's linked
 /// session while "Lean Codex workers" is on; every other command as it is.
 pub(crate) fn with_lean_codex_worker(

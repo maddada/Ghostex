@@ -209,6 +209,31 @@ fn session_overrides(home: &Path) -> Map<String, Value> {
         .collect()
 }
 
+/// Write Ghostex's `"skillOverrides"` directly into a Ghostex-generated Claude `--settings` map
+/// (used by Non-CLI `driver_claude`).
+pub(crate) fn write_ghostex_skills_into_settings(settings: &mut Map<String, Value>) {
+    if cfg!(test) {
+        return;
+    }
+    let home = crate::paths::get_gxserver_paths(None)
+        .agent_config_home_dir()
+        .to_path_buf();
+    let _ = keep_ghostex_skills_manual_outside_ghostex(&home);
+    let overrides = session_overrides(&home);
+    if overrides.is_empty() {
+        return;
+    }
+    if let Some(entry) = settings
+        .entry(SKILL_OVERRIDES_KEY.to_string())
+        .or_insert_with(|| Value::Object(Map::new()))
+        .as_object_mut()
+    {
+        for (name, value) in overrides {
+            entry.entry(name).or_insert(value);
+        }
+    }
+}
+
 /// `command` with `"skillOverrides": {"<name>": "on"}` merged into its `--settings` JSON when it
 /// starts or resumes Claude, so a Ghostex session's model may still pick up Ghostex's skills.
 pub(crate) fn with_ghostex_skills_on(family: Option<&str>, command: &str) -> String {

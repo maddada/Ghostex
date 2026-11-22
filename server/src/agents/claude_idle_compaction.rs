@@ -238,6 +238,18 @@ pub(crate) fn session_waiting_for_idle_compaction(
     should_wait_for_idle_compaction(compaction, used_tokens, prompt_cache, now_ms)
 }
 
+/// Write Ghostex's idle compaction and cache length directly into a Ghostex-generated Claude
+/// `--settings` map (used by Non-CLI `driver_claude`).
+pub(crate) fn write_compaction_into_settings(settings: &mut Map<String, Value>) {
+    if cfg!(test) {
+        return;
+    }
+    let compaction = ClaudeCompaction::read();
+    if compaction.writes_anything() {
+        compaction.write_into(settings);
+    }
+}
+
 /// `command` with this computer's idle compaction and cache length in its `--settings` JSON, for a
 /// Claude launch or resume; any other agent's command is left as it is.
 pub(crate) fn with_claude_compaction_settings(family: Option<&str>, command: &str) -> String {

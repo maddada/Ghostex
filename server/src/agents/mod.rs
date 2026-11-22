@@ -43,17 +43,25 @@ pub mod zcode_titles;
 pub(crate) use accept_all::*;
 pub(crate) use activity::*;
 pub(crate) use bypass_consent::*;
-pub(crate) use claude_idle_compaction::with_claude_compaction_settings;
+pub(crate) use claude_idle_compaction::{
+    with_claude_compaction_settings, write_compaction_into_settings,
+};
 pub(crate) use claude_launch_ultracode::with_claude_launch_ultracode;
 pub(crate) use cli_missing::*;
 pub(crate) use codex_daemon::*;
-pub(crate) use codex_lean::{lean_codex_flags, with_lean_codex_worker};
+pub(crate) use codex_lean::{
+    is_lean_worker, lean_codex_disabled_features_if_enabled, lean_codex_flags,
+    with_lean_codex_worker,
+};
 pub(crate) use draft_run_location::*;
 pub(crate) use draft_switch::*;
 pub(crate) use drafts::*;
 pub use endpoint::*;
 pub(crate) use fork::*;
-pub(crate) use gbot_computer_use::with_gbot_computer_use;
+pub(crate) use gbot_computer_use::{
+    claude_screen_deny_rules, codex_disabled_screen_servers, gbot_computer_use,
+    with_gbot_computer_use,
+};
 pub(crate) use ghostex_note::*;
 pub(crate) use gone_activity::*;
 pub(crate) use helpers::*;

@@ -239,6 +239,7 @@ pub(crate) const CLAUDE_CONVERSATIONS_SET_ASIDE_AT: &str = "claudeConversationsS
 pub(crate) struct AgentResumeInput {
     acp_approval_level: crate::acp::AcpApprovalLevel,
     acp_mode: bool,
+    acp_profile: crate::acp::spec::AcpLaunchProfile,
     acp_read_only: bool,
     agent_command: Option<String>,
     agent_id: Option<String>,
@@ -485,9 +486,41 @@ pub(crate) fn to_agent_resume_input(
                 .unwrap_or_else(|| crate::acp::agent_acp_enabled_in_shared_settings(fam))
         }),
     };
+    let acp_profile = if acp_mode {
+        if let Some(fam) = agent_id.as_deref() {
+            let (account_wrapper, _, _) = crate::acp::spec::extract_account_wrapper_and_ignored(
+                fam,
+                match fam {
+                    "claude" => "claude",
+                    "codex" => "codex",
+                    _ => "agy",
+                },
+                runtime_command.as_deref(),
+            );
+            let (append_system_prompt_file, developer_instructions) =
+                super::acp_launch_note(fam, session_is_coordinator(&runtime_settings), false);
+            crate::acp::spec::AcpLaunchProfile {
+                account_wrapper,
+                hub_id: crate::accounts::hub::launch::picked_hub(&runtime_settings),
+                connector_envs: crate::connectors::project_cli_env_for_acp_resume(project),
+                append_system_prompt_file,
+                developer_instructions,
+                gbot_chat: is_gbot_chat(Some(&runtime_settings)),
+                gbot_api_chat: is_gbot_api_chat(Some(&runtime_settings)),
+                gbot_computer_use_off: super::gbot_computer_use(Some(&runtime_settings))
+                    == Some(false),
+                lean_worker: super::is_lean_worker(Some(&runtime_settings)),
+            }
+        } else {
+            crate::acp::spec::AcpLaunchProfile::default()
+        }
+    } else {
+        crate::acp::spec::AcpLaunchProfile::default()
+    };
     AgentResumeInput {
         acp_approval_level,
         acp_mode,
+        acp_profile,
         acp_read_only,
         agent_command: runtime_command,
         agent_id,
@@ -688,7 +721,7 @@ pub(crate) fn build_agent_resume_command(
         }),
         "antigravity" => exact_reference.map(|reference| {
             if input.acp_mode {
-                crate::acp::spec::build_acp_host_launch_command(
+                crate::acp::spec::build_acp_host_launch_command_with_profile(
                     "antigravity",
                     Some(&agent_command),
                     Some(&reference),
@@ -696,6 +729,9 @@ pub(crate) fn build_agent_resume_command(
                     &[],
                     None,
                     None,
+                    false,
+                    input.acp_read_only,
+                    &input.acp_profile,
                 )
             } else {
                 format!(
@@ -742,7 +778,7 @@ pub(crate) fn build_agent_resume_command(
                     .as_deref()
                     .filter(|exact| !is_uuid(exact) || codex_rollout_written(input, exact));
                 return Some(
-                    crate::acp::spec::build_acp_host_launch_command_with_options(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
                         "codex",
                         Some(agent_command),
                         resume_ref,
@@ -752,6 +788,7 @@ pub(crate) fn build_agent_resume_command(
                         None,
                         false,
                         input.acp_read_only,
+                        &input.acp_profile,
                     ),
                 );
             }
@@ -789,7 +826,7 @@ pub(crate) fn build_agent_resume_command(
                         .is_none_or(|id| claude_transcript_written(input, &id))
                 });
                 return Some(
-                    crate::acp::spec::build_acp_host_launch_command_with_options(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
                         "claude",
                         Some(agent_command),
                         resume_ref,
@@ -799,6 +836,7 @@ pub(crate) fn build_agent_resume_command(
                         None,
                         false,
                         input.acp_read_only,
+                        &input.acp_profile,
                     ),
                 );
             }
