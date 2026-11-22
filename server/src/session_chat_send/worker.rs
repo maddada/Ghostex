@@ -386,6 +386,20 @@ pub(super) async fn run_session_chat_send_worker(
                         break;
                     }
                 }
+                SessionChatSendStep::SubmitAntigravityPoppedQueue => {
+                    if let Err(error) = submit_antigravity_popped_queue(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        &|| job_generation != generation.load(Ordering::SeqCst),
+                    )
+                    .await
+                    {
+                        outcome = Err(error);
+                        break;
+                    }
+                }
                 SessionChatSendStep::GuardClaudeInterrupt => {
                     if !crate::session_chat_claude_interrupt::claim_claude_interrupt_escape(
                         &project_id,

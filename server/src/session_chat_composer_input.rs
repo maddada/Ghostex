@@ -92,6 +92,27 @@ pub(super) fn antigravity_input_region(lines: &[String]) -> Option<Range<usize>>
     rule_input_region(&lines[..=head], &['>'])
 }
 
+/// The plain VT-parsed screen lines, the top rule row, the input row range (`start..bottom_rule`),
+/// and the first footer row below the bottommost horizontal rule of Antigravity CLI's live
+/// composer, or `None` when the composer is not on screen.
+pub(crate) fn antigravity_composer_lines(
+    screen: &str,
+) -> Option<(Vec<String>, usize, Range<usize>, usize)> {
+    let plain: Vec<String> = styled_lines(screen)
+        .into_iter()
+        .map(|line| line.text)
+        .collect();
+    let region = antigravity_input_region(&plain)?;
+    let head = plain[..region.start]
+        .iter()
+        .rposition(|line| is_titled_horizontal_rule(line))?;
+    let footer_start = plain
+        .iter()
+        .rposition(|line| is_horizontal_rule(line))
+        .map_or(region.end + 1, |foot| foot + 1);
+    Some((plain, head, region, footer_start))
+}
+
 /// The hints Antigravity CLI 1.4.9 shows in its empty input row after Shift+Tab leaves Default
 /// mode (Default shows none). Read from the shipped binary and checked live on 2026-10-29.
 const ANTIGRAVITY_MODE_HINTS: &[&str] = &[

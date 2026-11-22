@@ -146,6 +146,11 @@ pub(super) async fn send_session_chat_message_attempt(
                 transcript,
             }];
             steps.extend(session_chat_interrupt_escape_steps(agent.as_deref()));
+            if crate::agents::identity::normalize_agent_id(agent.as_deref()).as_deref()
+                == Some("antigravity")
+            {
+                steps.push(SessionChatSendStep::SubmitAntigravityPoppedQueue);
+            }
             Some(steps)
         } else {
             crate::session_chat_send::build_session_chat_key_steps(key)

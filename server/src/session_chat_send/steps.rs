@@ -19,6 +19,10 @@ pub enum SessionChatSendStep {
         agent: Option<String>,
         transcript: Option<QueuedPromptTranscriptMark>,
     },
+    /// After the play button's Escape cancels an Antigravity CLI turn, wait for Antigravity to
+    /// move its queued message(s) into its input box and submit them with Return
+    /// (session_chat_send/queued_prompt_escape.rs).
+    SubmitAntigravityPoppedQueue,
     /// Wait for Cursor to show "ctrl+c to stop", and stop this interrupt job if it never does.
     GuardCursorInterrupt,
     /// Answer the "Tell the agent what to do instead" box Cursor opens after an approval's Skip

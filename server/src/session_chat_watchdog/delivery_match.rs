@@ -329,6 +329,15 @@ pub(crate) fn transcript_line_records_prompt(
     ) {
         return true;
     }
+    if agent == SessionChatTranscriptAgent::Antigravity {
+        return parse_json_object(line).is_some_and(|record| {
+            record.get("part").and_then(Value::as_str) == Some("user")
+                && record
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .is_some_and(|text| !text.trim().is_empty())
+        });
+    }
     agent == SessionChatTranscriptAgent::Claude
         && parse_json_object(line).is_some_and(|record| {
             record.get("type").and_then(Value::as_str) == Some("attachment")
