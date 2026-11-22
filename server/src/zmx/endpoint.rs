@@ -445,6 +445,10 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 update.insert("lifecycleState".to_string(), json!("running"));
                 update.insert("providerState".to_string(), provider_state);
                 let lifecycle_session = repository.update_session_for_lifecycle(&update)?;
+                crate::accounts::quota_wait::clear_on_lifecycle_change(
+                    repository,
+                    &lifecycle_session,
+                );
                 let session =
                     apply_wake_session_activity_suppression(repository, &lifecycle_session)?;
                 attach
@@ -508,6 +512,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
             };
             let (kill, session) =
                 kill_and_cache_session_provider(repository, &lifecycle, target_lifecycle)?;
+            crate::accounts::quota_wait::clear_on_lifecycle_change(repository, &session);
             json!({
                 "action": action,
                 "keptAsleep": kept_asleep,
@@ -697,6 +702,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
             };
             let (kill, session) =
                 kill_and_cache_session_provider(repository, &lifecycle, target_lifecycle)?;
+            crate::accounts::quota_wait::clear_on_lifecycle_change(repository, &session);
             // Claude's SessionEnd hook cannot post from a pane a sleep killed; the hook-free
             // comparison counts the observer's SessionEnd for it as expected (comparison.rs).
             if endpoint_path == "/api/sleepSession" {

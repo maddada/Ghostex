@@ -540,16 +540,14 @@ impl SessionChatOptionDetector {
                 );
             }
         }
-        // The cache above keeps the raw notice so a repaint keeps its identity; callers only ever see the visible one, and the account-switch suppression and a remembered folder's auto-trust are part of visibility (see `session_chat_notice_hidden`).
-        detected.notice = detected.notice.filter(|notice| {
-            crate::session_chat_notice_progress::visible(project_id, session_id, notice)
-                && !crate::session_chat_notice::session_chat_notice_hidden(
-                    project_id, session_id, notice,
-                )
-        });
+        // Observe raw (progress-visible) notices for `quota_wait` BEFORE `session_chat_notice_hidden`
+        // suppresses dismissed/post-action banners, so `quota_wait` knows whether the old banner is
+        // still sitting on screen vs scrolled away cleanly.
         if detected.captured {
-            self.recovery
-                .observe(project_id, session_id, detected.notice.as_ref());
+            let progress_visible_notice = detected
+                .notice
+                .as_ref()
+                .filter(|notice| crate::session_chat_notice_progress::visible(project_id, session_id, notice));
             let model_label = detected
                 .options
                 .as_ref()
@@ -559,9 +557,20 @@ impl SessionChatOptionDetector {
                 &self.app_state,
                 project_id,
                 session_id,
-                detected.notice.as_ref(),
+                progress_visible_notice,
                 model_label,
             );
+        }
+        // The cache above keeps the raw notice so a repaint keeps its identity; callers only ever see the visible one, and the account-switch suppression, quota suppression, and a remembered folder's auto-trust are part of visibility (see `session_chat_notice_hidden`).
+        detected.notice = detected.notice.filter(|notice| {
+            crate::session_chat_notice_progress::visible(project_id, session_id, notice)
+                && !crate::session_chat_notice::session_chat_notice_hidden(
+                    project_id, session_id, notice,
+                )
+        });
+        if detected.captured {
+            self.recovery
+                .observe(project_id, session_id, detected.notice.as_ref());
         }
         crate::agent_model_pins::observe_detection(
             &self.paths,

@@ -495,6 +495,7 @@ fn supervise(
     threads: Vec<ThreadRecord>,
 ) -> Vec<Delivery> {
     repair_empryo_coordinator_roles(state, db, repository, memory);
+    probe_antigravity_coordinators(state, db, repository);
     // A thread its coordinator's close took with it waits for the coordinator's restore, which
     // brings it back; reporting it closed meanwhile would mark it done.
     let open = threads
@@ -991,6 +992,41 @@ fn is_running_empryo(session: &Value) -> bool {
 /// again before the supervisor gives up on that coordinator.
 const EMPRYO_ROLE_CHECK_EVERY_MS: i64 = 30_000;
 const EMPRYO_ROLE_RETYPES: usize = 3;
+
+/// Probes running Antigravity coordinators through the 5s detector cache on every supervisor tick,
+/// independent of whether any thread reports are pending, so a quota-hit coordinator triggers its
+/// single Grok Bot alert even when idle with zero open threads.
+fn probe_antigravity_coordinators(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+) {
+    let Ok(coordinators) = coordinators::list_coordinators(db) else {
+        return;
+    };
+    let detector = crate::session_chat_options::SessionChatOptionDetector::new(state);
+    for coordinator in coordinators {
+        let Some(session) = repository
+            .get_session(&coordinator.project_id, &coordinator.session_id)
+            .ok()
+            .flatten()
+        else {
+            continue;
+        };
+        if effective_lifecycle_state(&session) != "running" {
+            continue;
+        }
+        let agent = crate::session_chat_composer::session_chat_composer_agent_id(&session);
+        if agent.as_deref() == Some("antigravity") {
+            detector.detect_blocking(
+                &coordinator.project_id,
+                &coordinator.session_id,
+                agent.as_deref(),
+                false,
+            );
+        }
+    }
+}
 
 /// CDXC:Coordinators 2026-10-07 WHY:
 /// Empryo 3.9.1-beta sets `/agent` on the window's current chat only: a first window draws its input box before its engine has restored the tab, and the restore (or another window joining the engine) writes the tab back without the agent, so a coordinator queued its `/agent ghostex-coordinator` line, saw it accepted, and still ran without its role (seen live 2026-10-07). The engine records the tab's profile in its session's `meta.json` (and logs `"agent":null` after every turn of a tab without one), which a narrow window's border cannot show (it shortens the `as ghostex-coordinator` segment to a glyph or drops it), so the role is read there, not off the border. An idle coordinator without it gets the line again, a few times at most, typed straight into its terminal: never through the chat queue, which piled duplicates behind a busy coordinator and drew a chat row for every one (seen live 2026-10-07).

@@ -148,8 +148,8 @@ fn decorate_quota_wait(
         }
         _ => {
             let title = match countdown.as_deref() {
-                Some(cd) => format!("Antigravity quota reached · resets in {cd}"),
-                None => "Antigravity quota reached".to_string(),
+                Some(cd) => format!("Quota reached · resets in {cd}"),
+                None => "Quota reached".to_string(),
             };
             let detail = match when.as_deref() {
                 Some(when) => format!(
@@ -165,7 +165,7 @@ fn decorate_quota_wait(
     object.insert("tone".to_string(), json!("wait"));
     // Rebuild actions cleanly in the exact order:
     // - quotaBlocked: Wait for reset (primary), Switch model, Terminal view (+ Dismiss in renderer)
-    // - quotaWaiting: Switch model (primary), Terminal view, Stop (+ Dismiss in renderer)
+    // - quotaWaiting: Switch model (primary), Terminal view, Cancel wait (+ Dismiss in renderer)
     let mut actions = Vec::new();
     if mode == "quotaWaiting" {
         actions.push(json!({
@@ -183,7 +183,7 @@ fn decorate_quota_wait(
         }));
         actions.push(json!({
             "id": "dismissUsageLimit",
-            "label": "Stop",
+            "label": "Cancel wait",
             "kind": "restartAgent",
             "answer": { "kind": "restartAgent", "actionId": "dismissUsageLimit" },
         }));

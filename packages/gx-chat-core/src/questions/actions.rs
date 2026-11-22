@@ -259,7 +259,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             crate::questions::forms::toggle(state, id);
         }
         ActionKind::Answer => {
-            if let Some(answer) = action.param("answer") {
+            if let Some(answer) = action.param("answer").filter(|value| value.is_object()) {
                 let answer = answer.clone();
                 // Retry on a failed message's card goes through its notice: remembered, so a
                 // second failure leads with Fix it (`composer/delivery_card.rs`).
@@ -563,6 +563,8 @@ fn answer_prompt(state: &mut ChatState, answer: &Value) -> Vec<Effect> {
             && (answer.get("choiceIndex").is_some_and(Value::is_number)
                 || answer.get("pickerRow").is_some()
                 || closes_dialog(answer)))
+        || (kind == "restartAgent"
+            && answer.get("actionId").and_then(Value::as_str) == Some("dismissUsageLimit"))
     {
         state.questions.answered_notice_key = state.questions.active_notice_key.clone();
     }

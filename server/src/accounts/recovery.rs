@@ -1321,11 +1321,14 @@ async fn wait_for_compaction(
             };
             row
         };
-        if row
-            .pointer("/runtimeSettings/accountRecovery/claim")
-            .and_then(Value::as_str)
-            != Some(&plan.claim)
-        {
+        let active_claim = if plan.quota_wait {
+            row.pointer("/runtimeSettings/quotaLimit/claim")
+                .and_then(Value::as_str)
+        } else {
+            row.pointer("/runtimeSettings/accountRecovery/claim")
+                .and_then(Value::as_str)
+        };
+        if active_claim != Some(&plan.claim) {
             return false;
         }
         let working =

@@ -45,6 +45,9 @@ pub(crate) const ACTION_DISMISS_USAGE_LIMIT: &str = "dismissUsageLimit";
 const RESUME_BUFFER_SECS: i64 = 20;
 /// Fallback delay when the user clicks "Wait for reset" on a quota banner that named no timer.
 const UNKNOWN_RESET_FALLBACK_MINUTES: i64 = 5;
+/// Drop an armed `waiting` record if `resumeAt` is already stale by more than this (e.g. a
+/// sleeping/closed session woken hours later) instead of firing an unexpected `"Continue."`.
+const STALE_WAIT_DROP_MINUTES: i64 = 30;
 
 fn states() -> &'static Mutex<HashMap<(String, String), Value>> {
     static STATES: OnceLock<Mutex<HashMap<(String, String), Value>>> = OnceLock::new();
@@ -183,11 +186,12 @@ pub(crate) fn observe(
             set_cached(project_id, session_id, Some(existing.clone()));
             return;
         }
-        // If the user already dismissed or armed Wait-for-reset for an active episode whose reset
-        // has not yet passed and the banner text is the same notice kind, do not re-raise the red
-        // dot unless the previous episode was already resumed.
+        // Keep active, dismissed, or suppressed episodes intact across gxserver restarts,
+        // brief redraws, model switches, and post-resume probes while the same banner text is
+        // still on screen so we never re-block, shift `resetsAt`, or double-ping Grok Bot.
         let status = existing["status"].as_str().unwrap_or_default();
-        if matches!(status, "waiting" | "dismissed")
+        if matches!(status, "blocked" | "waiting" | "dismissed" | "suppressed")
+            && existing["evidence"].as_str().is_some()
             && existing["evidence"].as_str() == n.details.as_deref()
         {
             set_cached(project_id, session_id, Some(existing.clone()));
@@ -202,6 +206,12 @@ pub(crate) fn observe(
     let duration = parse_notice_reset_duration(n);
     let resets_at = duration.map(|d| anchor + d);
     let resume_at = resets_at.map(|t| t + chrono::Duration::seconds(RESUME_BUFFER_SECS));
+    let prior_grokbot_notified = existing.as_ref().and_then(|e| {
+        let notified = e["grokbotNotifiedAt"].as_str().filter(|s| !s.is_empty())?;
+        let still_same_window = e["status"].as_str() == Some("blocked")
+            || parse_rfc3339(e.get("resetsAt")).is_some_and(|at| at > now);
+        still_same_window.then(|| notified.to_string())
+    });
     let mut record = json!({
         "status": "blocked",
         "detectedAt": n.detected_at,
@@ -211,6 +221,9 @@ pub(crate) fn observe(
         "model": model_label.filter(|m| !m.trim().is_empty()),
         "evidence": n.details,
     });
+    if let Some(notified_at) = prior_grokbot_notified {
+        record["grokbotNotifiedAt"] = json!(notified_at);
+    }
     // Q4460: When a coordinator session itself hits quota, send a single Grok Bot alert
     // (deduplicated per episode via `grokbotNotifiedAt`).
     let runtime = session["runtimeSettings"]
@@ -222,7 +235,7 @@ pub(crate) fn observe(
             .ok()
             .flatten()
             .is_some();
-    if is_coordinator {
+    if is_coordinator && record["grokbotNotifiedAt"].as_str().is_none() {
         let title = session["title"]
             .as_str()
             .map(str::trim)
@@ -260,10 +273,16 @@ pub(crate) fn observe(
     let _ = save_state(state, &repo, &session, Some(record));
 }
 
-/// Clears any stored quota wait when the user switches model, sends a message after reset, or a
-/// real assistant reply arrives.
+/// Suppresses the current quota banner when the user switches model or sends a message, clearing
+/// the sidebar red dot and armed wait while keeping the stale terminal banner suppressed until it
+/// scrolls off screen or changes.
 pub(crate) fn clear_for_session(state: &AppState, project_id: &str, session_id: &str) {
-    if current_cached(project_id, session_id).is_none() {
+    let cached = current_cached(project_id, session_id);
+    let notice = crate::session_chat_options::cached_session_chat_terminal_notice(
+        state, project_id, session_id,
+    )
+    .filter(|n| n.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT);
+    if cached.is_none() && notice.is_none() {
         return;
     }
     let Ok(db) = open_gxserver_database(&state.paths) else {
@@ -275,7 +294,84 @@ pub(crate) fn clear_for_session(state: &AppState, project_id: &str, session_id: 
         set_cached(project_id, session_id, None);
         return;
     };
-    let _ = save_state(state, &repo, &session, None);
+    let existing = session
+        .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}"))
+        .filter(|v| v.is_object())
+        .cloned()
+        .or(cached);
+    let detected_at = existing
+        .as_ref()
+        .and_then(|e| e["detectedAt"].as_str())
+        .map(str::to_string)
+        .or_else(|| notice.as_ref().map(|n| n.detected_at.clone()));
+    let evidence = existing
+        .as_ref()
+        .and_then(|e| e["evidence"].as_str())
+        .map(str::to_string)
+        .or_else(|| notice.as_ref().and_then(|n| n.details.clone()));
+    let next = if detected_at.is_some() || evidence.is_some() {
+        Some(json!({
+            "status": "suppressed",
+            "detectedAt": detected_at,
+            "evidence": evidence,
+            "updatedAt": Utc::now().to_rfc3339(),
+        }))
+    } else {
+        None
+    };
+    let _ = save_state(state, &repo, &session, next);
+    let detector = crate::session_chat_options::SessionChatOptionDetector::new(state);
+    detector.publish_screen_state(project_id, session_id);
+}
+
+/// Drops any stored `quotaLimit` when a session sleeps, closes, or wakes so an armed wait cannot
+/// fire an unexpected `"Continue."` hours later after a lifecycle change.
+pub(crate) fn clear_on_lifecycle_change(repo: &DomainRepository<'_>, session: &Value) {
+    let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
+    else {
+        return;
+    };
+    set_cached(pid, sid, None);
+    if session
+        .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}"))
+        .is_none_or(Value::is_null)
+    {
+        return;
+    }
+    let mut runtime = session["runtimeSettings"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    runtime.remove(RUNTIME_KEY);
+    let _ = endpoint::update_session_members(repo, session, &runtime, &[RUNTIME_KEY]);
+}
+
+/// Whether `notice` is a stale `usageLimit` banner already dismissed (`Cancel wait` / `Dismiss`)
+/// or superseded by a model switch, manual send, or automatic continuation (`suppressed`).
+pub(crate) fn is_suppressed_notice(
+    project_id: &str,
+    session_id: &str,
+    notice: &SessionChatTerminalNotice,
+) -> bool {
+    if notice.kind != SESSION_CHAT_NOTICE_USAGE_LIMIT {
+        return false;
+    }
+    let Some(record) = current_cached(project_id, session_id) else {
+        return false;
+    };
+    if !matches!(
+        record["status"].as_str(),
+        Some("dismissed" | "suppressed")
+    ) {
+        return false;
+    }
+    let same_detected = record["detectedAt"]
+        .as_str()
+        .is_some_and(|d| d == notice.detected_at.as_str());
+    let same_evidence = record["evidence"]
+        .as_str()
+        .is_some_and(|e| notice.details.as_deref() == Some(e));
+    same_detected || same_evidence
 }
 
 /// Card action: user clicked "Wait for reset" on the quota card (Q4461).
@@ -496,12 +592,21 @@ pub(crate) fn restore(state: &AppState, repo: &DomainRepository<'_>, session: &V
             let _ = save_state(state, repo, session, Some(record));
         }
         Some("waiting") => {
-            set_cached(pid, sid, Some(record.clone()));
-            if let Some(resume_at) = parse_rfc3339(record.get("resumeAt")) {
-                super::api_errors::wake_at(state, pid, sid, resume_at);
+            let now = Utc::now();
+            let lifecycle = session["lifecycleState"].as_str().unwrap_or_default();
+            let stale = lifecycle != "running"
+                || parse_rfc3339(record.get("resumeAt"))
+                    .is_some_and(|at| now - at > chrono::Duration::minutes(STALE_WAIT_DROP_MINUTES));
+            if stale {
+                let _ = save_state(state, repo, session, None);
+            } else {
+                set_cached(pid, sid, Some(record.clone()));
+                if let Some(resume_at) = parse_rfc3339(record.get("resumeAt")) {
+                    super::api_errors::wake_at(state, pid, sid, resume_at);
+                }
             }
         }
-        Some("blocked" | "dismissed") => {
+        Some("blocked" | "dismissed" | "suppressed") => {
             set_cached(pid, sid, Some(record));
         }
         _ => {
@@ -543,6 +648,10 @@ pub(crate) fn plan_due_resume(
     if let Some(resume_at) = parse_rfc3339(record.get("resumeAt")) {
         if resume_at > now {
             super::api_errors::wake_at(state, pid, sid, resume_at);
+            return Ok(None);
+        }
+        if now - resume_at > chrono::Duration::minutes(STALE_WAIT_DROP_MINUTES) {
+            save_state(state, repo, session, None)?;
             return Ok(None);
         }
     }
@@ -620,8 +729,13 @@ pub(crate) fn finish_delivery(
     }
     match result {
         Ok(()) => {
-            // Clear the wait cleanly once the single continuation was delivered.
-            let _ = save_state(state, &repo, &session, None);
+            // Suppress the old banner until it scrolls off screen so the next 5s probe does not
+            // re-block on the pre-continuation terminal output.
+            record["status"] = json!("suppressed");
+            record["claim"] = Value::Null;
+            record["resumeAt"] = Value::Null;
+            record["updatedAt"] = json!(Utc::now().to_rfc3339());
+            let _ = save_state(state, &repo, &session, Some(record));
         }
         Err(error) => {
             let now = Utc::now();

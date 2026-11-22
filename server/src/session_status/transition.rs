@@ -104,17 +104,12 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
         return next;
     }
 
-    let effective_agent = title_signal
-        .as_ref()
-        .map(|signal| signal.agent_name.as_str())
-        .or_else(|| normalize_status_agent_name(input.agent_id.as_deref()).as_deref().and_then(|_| None));
     let is_antigravity = title_signal
         .as_ref()
         .is_some_and(|signal| signal.agent_name == "antigravity")
         || normalize_status_agent_name(input.agent_id.as_deref()).as_deref()
             == Some("antigravity")
         || previous.agent_name.as_deref() == Some("antigravity");
-    let _ = effective_agent;
 
     // CDXC:SessionStatus 2026-11-22 DECISION (Q4463):
     // Antigravity CLI emits `🔔 agy` titles and terminal BEL events at startup and between tool
@@ -138,8 +133,7 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
         && !has_explicit_activity
         && previous.activity == "working"
         && previous.working_source.as_deref() == Some("explicit")
-        && (title_signal.as_ref().map(|signal| signal.state.as_str()) != Some("attention")
-            || is_antigravity)
+        && title_signal.as_ref().map(|signal| signal.state.as_str()) != Some("attention")
         && !is_trusted_spinner_stop_title(&input, &previous, title_signal.as_ref())
         && !is_trusted_settled_title_stop(&input, &previous, title_signal.as_ref())
     {

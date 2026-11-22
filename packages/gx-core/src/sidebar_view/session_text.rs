@@ -523,14 +523,13 @@ pub(crate) fn next_label_deadline(
     show_relative_time: bool,
 ) -> Option<LabelDeadline> {
     let now = now_ms as i64;
-    let countdown = [
+    let second_countdown = [
         row.delayed_send
             .as_ref()
             .and_then(|delayed| delayed.deadline_at.as_deref()),
         row.close_after_done
             .as_ref()
             .and_then(|close| close.deadline_at.as_deref()),
-        row.quota_resets_at.as_deref(),
     ]
     .into_iter()
     .flatten()
@@ -542,6 +541,23 @@ pub(crate) fn next_label_deadline(
     // measured back from the deadline.
     .map(|deadline| deadline - ((deadline - now - 1) / 1000) * 1000)
     .min();
+    // Quota reset badges show whole minutes/hours (`13m`, `3h 12m`) above 60s and seconds (`45s`)
+    // below 60s, so wake on minute boundaries while > 60s instead of ticking at 1Hz for hours.
+    let quota_countdown = row
+        .quota_resets_at
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .and_then(parse_iso_ms)
+        .filter(|deadline| *deadline > now)
+        .map(|deadline| {
+            let remaining = deadline - now;
+            if remaining > 60_000 {
+                deadline - ((remaining - 1) / 60_000) * 60_000
+            } else {
+                deadline - ((remaining - 1) / 1000) * 1000
+            }
+        });
+    let countdown = [second_countdown, quota_countdown].into_iter().flatten().min();
     if let Some(countdown) = countdown {
         return Some(LabelDeadline::Countdown(countdown.max(now + 1) as u64));
     }

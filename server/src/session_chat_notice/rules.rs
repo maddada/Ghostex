@@ -961,12 +961,35 @@ const ZCODE_RULES: &[NoticeRule] = &[NoticeRule {
 /// ... retry in Ns`, `RESOURCE_EXHAUSTED`) only on its terminal screen and in its CLI log, never in
 /// `transcript_full.jsonl`. With no rules here, a session hitting 429s showed no notice in chat and
 /// its queued messages, quiet nudges, and Autopilot retries kept firing against the quota wall.
+const ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS: &[&str] = &[
+    "⚠",
+    "Error ID:",
+    "✕",
+    "✖",
+    "Error:",
+    "upgrade your subscription",
+];
+
+const ANTIGRAVITY_RESOURCE_EXHAUSTED_CORROBORATORS: &[&str] = &[
+    "⚠",
+    "Error ID:",
+    "✕",
+    "✖",
+    "status 429",
+    "HTTP 429",
+    "code: 429",
+    "\"code\": 429",
+];
+
 const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
     kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
     severity: SessionChatTerminalNoticeSeverity::Warning,
     title: "Usage limit reached",
     detail: ANTIGRAVITY_USAGE_LIMIT_DETAIL,
     blocks_input: false,
+    // CDXC:AgentProviders 2026-11-22 WHY: Require Antigravity's error-banner framing
+    // (`⚠`, `Error ID:`, `✕`/`✖`, `Error:`, or `upgrade your subscription`) so code, diffs, logs,
+    // and assistant replies quoting quota phrases never false-positive as live usage limits.
     signatures: &[
         NoticeSignature {
             scope: NoticeScope::Banner,
@@ -975,7 +998,7 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
                 NoticePart::Gap(120),
                 NoticePart::Text("Resets in"),
             ],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
@@ -984,12 +1007,12 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
                 NoticePart::Gap(120),
                 NoticePart::Text("upgrade your subscription"),
             ],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[NoticePart::Text("Individual quota reached")],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
@@ -998,7 +1021,7 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
                 NoticePart::Gap(120),
                 NoticePart::Text("Resets in"),
             ],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
@@ -1007,29 +1030,29 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
                 NoticePart::Gap(120),
                 NoticePart::Text("Resets in"),
             ],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[NoticePart::Text(
                 "You have exhausted your quota on this model",
             )],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[NoticePart::Text("Allocation Quota Reached")],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[NoticePart::Text("quota exceeded, try again later")],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[NoticePart::Text("Quota exceeded, try again later")],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
@@ -1038,7 +1061,7 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
                 NoticePart::Gap(80),
                 NoticePart::Text("retry in"),
             ],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
@@ -1047,7 +1070,7 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
                 NoticePart::Gap(80),
                 NoticePart::Text("retry in"),
             ],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
@@ -1056,7 +1079,7 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
                 NoticePart::Gap(80),
                 NoticePart::Text("retry in"),
             ],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
@@ -1065,12 +1088,12 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
                 NoticePart::Gap(80),
                 NoticePart::Text("retry in"),
             ],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[NoticePart::Text("RESOURCE_EXHAUSTED")],
-            corroborators: &[],
+            corroborators: ANTIGRAVITY_RESOURCE_EXHAUSTED_CORROBORATORS,
         },
     ],
     actions: &[OPEN_TERMINAL],

@@ -74,18 +74,16 @@ fn notice_from_rule(
 }
 
 /// "resets 4pm" from Claude's "You've hit your limit · resets 4pm (Europe/Berlin)",
-/// "resets in 3h16m25s" from Antigravity's "… Resets in 3h16m25s.", or
-/// "retry in 30s" from Antigravity's rate limit banner, without the time zone.
+/// "resets in 3h16m25s" / "resets in 1h 23m" / "resets in 30 seconds" from Antigravity's banners,
+/// or "retry in 30s" from Antigravity's rate limit banner, without the time zone.
 fn limit_reset(line: &str) -> Option<String> {
     let lower = line.to_ascii_lowercase();
-    if let Some(start) = lower.find("resets in ") {
-        let rest = &line[start + "resets in ".len()..];
-        let token = rest
-            .split_whitespace()
-            .next()?
-            .trim_end_matches(['.', ',', ')', ';']);
-        if !token.is_empty() {
-            return Some(format!("resets in {token}"));
+    for needle in ["resets in ", "retry in "] {
+        if let Some(start) = lower.find(needle) {
+            let rest = &line[start + needle.len()..];
+            if let Some(phrase) = extract_duration_phrase(rest) {
+                return Some(format!("{needle}{phrase}"));
+            }
         }
     }
     if let Some(start) = lower.find("resets ") {
@@ -104,20 +102,96 @@ fn limit_reset(line: &str) -> Option<String> {
             return Some(normalized);
         }
     }
-    let start = lower.find("retry in ")?;
-    let rest = &line[start + "retry in ".len()..];
-    let token = rest
-        .split_whitespace()
-        .next()?
-        .trim_end_matches(['.', ',', ')', ';']);
-    if token.is_empty() {
+    None
+}
+
+fn is_duration_unit_word(word: &str) -> bool {
+    matches!(
+        word.to_ascii_lowercase().as_str(),
+        "s" | "sec"
+            | "secs"
+            | "second"
+            | "seconds"
+            | "m"
+            | "min"
+            | "mins"
+            | "minute"
+            | "minutes"
+            | "h"
+            | "hr"
+            | "hrs"
+            | "hour"
+            | "hours"
+            | "d"
+            | "day"
+            | "days"
+    )
+}
+
+fn is_go_duration_token(token: &str) -> bool {
+    crate::accounts::hub::cooldown::go_duration(token)
+        .is_some_and(|d| d > chrono::Duration::zero())
+}
+
+fn spaced_unit_seconds(num: i64, unit: &str) -> Option<i64> {
+    if num <= 0 {
         return None;
     }
-    Some(format!("retry in {token}"))
+    match unit.to_ascii_lowercase().as_str() {
+        "s" | "sec" | "secs" | "second" | "seconds" => Some(num),
+        "m" | "min" | "mins" | "minute" | "minutes" => Some(num.saturating_mul(60)),
+        "h" | "hr" | "hrs" | "hour" | "hours" => Some(num.saturating_mul(3600)),
+        "d" | "day" | "days" => Some(num.saturating_mul(86400)),
+        _ => None,
+    }
+}
+
+/// Extracts one or more consecutive duration tokens from the start of `rest` (`"12m52s."`,
+/// `"1h 23m."`, `"30 seconds."`, `"2 minutes 30 seconds."`), stopping at sentence punctuation.
+fn extract_duration_phrase(rest: &str) -> Option<String> {
+    let raw_words: Vec<&str> = rest.split_whitespace().take(6).collect();
+    let mut parts = Vec::new();
+    let mut i = 0;
+    while i < raw_words.len() {
+        let raw = raw_words[i];
+        let ends_sentence = raw.ends_with(['.', ',', ')', ';', '!', '?']);
+        let clean = raw.trim_end_matches(['.', ',', ')', ';', '!', '?']);
+        if clean.is_empty() {
+            break;
+        }
+        if is_go_duration_token(clean) {
+            parts.push(clean.to_string());
+            i += 1;
+            if ends_sentence {
+                break;
+            }
+            continue;
+        }
+        if clean.chars().all(|c| c.is_ascii_digit()) && i + 1 < raw_words.len() {
+            let next_raw = raw_words[i + 1];
+            let next_ends = next_raw.ends_with(['.', ',', ')', ';', '!', '?']);
+            let next_clean = next_raw.trim_end_matches(['.', ',', ')', ';', '!', '?']);
+            if is_duration_unit_word(next_clean) {
+                parts.push(format!("{clean} {next_clean}"));
+                i += 2;
+                if next_ends {
+                    break;
+                }
+                continue;
+            }
+        }
+        if parts.is_empty() {
+            // Keep single fallback token for unparsed forms like "soon" or "4pm".
+            parts.push(clean.to_string());
+        }
+        break;
+    }
+    (!parts.is_empty()).then(|| parts.join(" "))
 }
 
 /// Parses a relative reset or retry duration from a usage-limit notice (`Resets in 3h16m25s`,
-/// `retry in 30s`, `retry in 2m30s`, etc.) using the shared Go duration parser.
+/// `Resets in 1h 23m`, `Resets in 30 seconds`, `retry in 30s`, etc.) using the shared Go duration
+/// parser and spaced-unit accumulation.
 pub(crate) fn parse_notice_reset_duration(
     notice: &SessionChatTerminalNotice,
 ) -> Option<chrono::Duration> {
@@ -137,35 +211,45 @@ pub(crate) fn parse_reset_duration_text(text: &str) -> Option<chrono::Duration> 
         while let Some(found) = lower[offset..].find(needle) {
             let start = offset + found + needle.len();
             let rest = text[start..].trim_start();
-            // First try Go duration syntax (`3h16m25s`, `12m52s`, `45s`, `2h`).
-            let token_end = rest
-                .find(|c: char| {
-                    !(c.is_ascii_digit() || matches!(c, '.' | 'h' | 'm' | 's' | 'µ' | 'u' | 'n'))
-                })
-                .unwrap_or(rest.len());
-            let token = rest[..token_end].trim_end_matches('.');
-            if !token.is_empty() {
-                if let Some(duration) = crate::accounts::hub::cooldown::go_duration(token) {
-                    if duration > chrono::Duration::zero() {
-                        return Some(duration);
+            let raw_words: Vec<&str> = rest.split_whitespace().take(6).collect();
+            let mut total = chrono::Duration::zero();
+            let mut i = 0;
+            while i < raw_words.len() {
+                let raw = raw_words[i];
+                let ends_sentence = raw.ends_with(['.', ',', ')', ';', '!', '?']);
+                let clean = raw.trim_end_matches(['.', ',', ')', ';', '!', '?']);
+                if clean.is_empty() {
+                    break;
+                }
+                if let Some(d) = crate::accounts::hub::cooldown::go_duration(clean) {
+                    if d > chrono::Duration::zero() {
+                        total += d;
+                        i += 1;
+                        if ends_sentence {
+                            break;
+                        }
+                        continue;
                     }
                 }
+                if let Ok(value) = clean.parse::<i64>() {
+                    if i + 1 < raw_words.len() {
+                        let next_raw = raw_words[i + 1];
+                        let next_ends = next_raw.ends_with(['.', ',', ')', ';', '!', '?']);
+                        let next_clean = next_raw.trim_end_matches(['.', ',', ')', ';', '!', '?']);
+                        if let Some(secs) = spaced_unit_seconds(value, next_clean) {
+                            total += chrono::Duration::seconds(secs);
+                            i += 2;
+                            if next_ends {
+                                break;
+                            }
+                            continue;
+                        }
+                    }
+                }
+                break;
             }
-            // Fallback for spaced units like "30 seconds" or "5 minutes".
-            let mut parts = rest.split_whitespace();
-            if let (Some(num_str), Some(unit_raw)) = (parts.next(), parts.next()) {
-                if let Ok(value) = num_str.parse::<i64>() {
-                    let unit = unit_raw.trim_end_matches(['.', ',', ')', ';']).to_ascii_lowercase();
-                    let seconds = match unit.as_str() {
-                        "s" | "sec" | "secs" | "second" | "seconds" => Some(value),
-                        "m" | "min" | "mins" | "minute" | "minutes" => Some(value.saturating_mul(60)),
-                        "h" | "hr" | "hrs" | "hour" | "hours" => Some(value.saturating_mul(3600)),
-                        _ => None,
-                    };
-                    if let Some(secs) = seconds.filter(|s| *s > 0) {
-                        return Some(chrono::Duration::seconds(secs));
-                    }
-                }
+            if total > chrono::Duration::zero() {
+                return Some(total);
             }
             offset = start;
         }

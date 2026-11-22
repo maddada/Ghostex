@@ -264,6 +264,7 @@ pub fn session_chat_notice_hidden(
 ) -> bool {
     notice.auto_trust
         || account_usage_notice_suppressed(project_id, session_id, notice)
+        || crate::accounts::quota_wait::is_suppressed_notice(project_id, session_id, notice)
         || crate::session_chat_claude_bypass_consent::bypass_consent_being_answered(
             project_id, session_id, notice,
         )
