@@ -376,7 +376,9 @@ pub(crate) fn start_session_provider_with_observed_state(
             &lifecycle.session_id,
             &launch_env,
         );
-        if crate::acp::session_is_acp(&probed_session) || startup_text.contains("acp-host") {
+        if crate::acp::session_is_acp(&probed_session)
+            || startup_text.contains(" acp-host --agent")
+        {
             if let Ok(auth_token) = std::fs::read_to_string(&context.auth_token_file) {
                 if let Some(secret) = crate::acp::channel::channel_secret_for_session(
                     &auth_token,

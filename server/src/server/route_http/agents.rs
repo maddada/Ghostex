@@ -204,7 +204,11 @@ pub(super) async fn route_agents_http(
         | "/api/sleepSession"
         | "/api/wakeSession"
         | "/api/killSession" => {
-            if endpoint.path == "/api/startSessionProvider" && !caller.is_user_device() {
+            if matches!(
+                endpoint.path.as_str(),
+                "/api/startSessionProvider" | "/api/wakeSession" | "/api/attachSessionMetadata"
+            ) && !caller.is_user_device()
+            {
                 if let Ok(params) = read_domain_rpc_params(&body_json) {
                     let has_startup_text = params
                         .get("startupText")
@@ -216,7 +220,8 @@ pub(super) async fn route_agents_http(
                             request_id,
                             DomainStateError {
                                 code: "forbidden",
-                                message: "Only your own devices can pass a custom startup command to startSessionProvider.".to_string(),
+                                message: "Only your own devices can pass a custom startup command."
+                                    .to_string(),
                             },
                         ));
                     }

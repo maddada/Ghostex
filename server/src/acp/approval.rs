@@ -151,12 +151,25 @@ pub fn accept_all_mode_change_raises(
     false
 }
 
-/// Read the global `agentAcceptAllEnabled` boolean from shared settings (`false` if absent).
+/// Read the global `agentAcceptAllEnabled` boolean from shared settings or SQLite `agents.settings.v1`
+/// (`true` if either enables it, `false` if both are off/absent).
 pub fn global_accept_all_enabled_in_shared_settings(
     paths: &crate::paths::GxserverPaths,
 ) -> bool {
-    crate::shared_settings_file::read_shared_settings(paths)
+    let shared_enabled = crate::shared_settings_file::read_shared_settings(paths)
         .and_then(|v| v.pointer("/agentAcceptAllEnabled").and_then(Value::as_bool))
+        .unwrap_or(false);
+    if shared_enabled {
+        return true;
+    }
+    crate::storage::open_gxserver_database(paths)
+        .ok()
+        .and_then(|db| crate::agents::read_agent_settings(&db).ok())
+        .and_then(|settings| {
+            settings
+                .get("agentAcceptAllEnabled")
+                .and_then(Value::as_bool)
+        })
         .unwrap_or(false)
 }
 
@@ -297,18 +310,15 @@ pub fn guard_create_session_params(
                     });
                 }
             }
-            if strip_raw_launch_plan {
-                let has_raw_plan = launch
-                    .get("agentLaunchPlan")
-                    .is_some_and(|v| !v.is_null());
-                let has_raw_startup = value_has_non_empty_text(launch.get("startupText"));
-                if has_raw_plan || has_raw_startup {
-                    return Err(DomainStateError {
-                        code: "forbidden",
-                        message: "Only your own devices can supply a raw launch plan or startup command."
-                            .to_string(),
-                    });
-                }
+            let has_raw_startup = value_has_non_empty_text(launch.get("startupText"));
+            let has_raw_plan =
+                strip_raw_launch_plan && launch.get("agentLaunchPlan").is_some_and(|v| !v.is_null());
+            if has_raw_plan || has_raw_startup {
+                return Err(DomainStateError {
+                    code: "forbidden",
+                    message: "Only your own devices can supply a raw launch plan or startup command."
+                        .to_string(),
+                });
             }
         }
     }
@@ -318,12 +328,14 @@ pub fn guard_create_session_params(
     {
         runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
     }
-    if !is_user_device && strip_raw_launch_plan {
+    if !is_user_device {
         if let Some(launch) = cleaned
             .get_mut("launchSettings")
             .and_then(Value::as_object_mut)
         {
-            launch.remove("agentLaunchPlan");
+            if strip_raw_launch_plan {
+                launch.remove("agentLaunchPlan");
+            }
             launch.remove("startupText");
         }
     }
