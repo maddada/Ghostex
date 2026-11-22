@@ -266,8 +266,6 @@ async fn poll(
     let pid = params.get("pid").and_then(Value::as_u64);
     let instance = read_string(params, "instance");
     let version = params.get("version").and_then(Value::as_u64).unwrap_or(0);
-    let reported_approval_level = read_string(params, "approvalLevel")
-        .and_then(|raw| crate::acp::AcpApprovalLevel::parse(&raw));
     let capabilities = params
         .get("capabilities")
         .and_then(Value::as_array)
@@ -316,29 +314,27 @@ async fn poll(
         }
     };
 
-    // On ACP channel registration/reconnect (or whenever the host reports a stale level), push the
-    // persisted `acpApprovalLevel` immediately without blocking for `POLL_HOLD`.
-    let desired_approval_level = if is_acp {
+    // Push the persisted ACP approval level ONCE on channel open/reconnect (`newly_registered`).
+    // Normal polls never reconcile on mismatch, avoiding post-ack revert races and spin loops.
+    let initial_approval_level = if is_acp && newly_registered {
         read_persisted_acp_approval_level(state, &channel_key.0, &channel_key.1).await
     } else {
         None
     };
-    let approval_mismatch = desired_approval_level
-        .is_some_and(|desired| Some(desired) != reported_approval_level);
 
     if let Some(commands) = immediate_commands {
         let mut resp = json!({ "commands": commands });
-        if let Some(desired) = desired_approval_level {
-            resp["desiredApprovalLevel"] = json!(desired.as_str());
+        if let Some(level) = initial_approval_level {
+            resp["desiredApprovalLevel"] = json!(level.as_str());
         }
         return Ok(resp);
     }
-    if is_acp && (newly_registered || approval_mismatch) && desired_approval_level.is_some() {
-        let mut resp = json!({ "commands": [], "holdMs": 0 });
-        if let Some(desired) = desired_approval_level {
-            resp["desiredApprovalLevel"] = json!(desired.as_str());
-        }
-        return Ok(resp);
+    if let Some(level) = initial_approval_level {
+        return Ok(json!({
+            "commands": [],
+            "holdMs": 0,
+            "desiredApprovalLevel": level.as_str(),
+        }));
     }
 
     let wake = wake.expect("wake present when no immediate commands");
@@ -346,27 +342,19 @@ async fn poll(
         let mut channels = lock(&CHANNELS);
         if let Some(channel) = channels.get_mut(&channel_key) {
             if !channel.queue.is_empty() {
-                let mut resp = json!({ "commands": drain(&mut channel.queue) });
-                if let Some(desired) = desired_approval_level {
-                    resp["desiredApprovalLevel"] = json!(desired.as_str());
-                }
-                return Ok(resp);
+                return Ok(json!({ "commands": drain(&mut channel.queue) }));
             }
             channel.polling += 1;
         }
     }
-    let guard = PollGuard(channel_key.clone());
+    let guard = PollGuard(channel_key);
     let _ = tokio::time::timeout(POLL_HOLD, wake.notified()).await;
     let commands = lock(&CHANNELS)
         .get_mut(&guard.0)
         .map(|channel| drain(&mut channel.queue))
         .unwrap_or_default();
     drop(guard);
-    let mut resp = json!({ "commands": commands, "holdMs": POLL_HOLD.as_millis() as u64 });
-    if let Some(desired) = desired_approval_level {
-        resp["desiredApprovalLevel"] = json!(desired.as_str());
-    }
-    Ok(resp)
+    Ok(json!({ "commands": commands, "holdMs": POLL_HOLD.as_millis() as u64 }))
 }
 
 fn ack(params: &Map<String, Value>) -> Result<Value, DomainStateError> {

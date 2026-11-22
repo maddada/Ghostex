@@ -32,6 +32,11 @@ pub(super) async fn route_sessions_http(
             |repository, db, params, _| {
                 // Only gxserver makes a box session (a box create, or reopening one from history).
                 let mut params = crate::agentbox::without_client_agentbox_record(params);
+                // Strip client-supplied `acpApprovalLevel` and (for non-owners) `acceptAllMode`.
+                params = crate::acp::approval::sanitize_create_session_params(
+                    &params,
+                    caller.is_owner_device(),
+                );
                 // A session whose folder is missing never starts (the provider refuses it, and it does
                 // not expand `~`), so a new session's own `cwd` is stored as the folder it checked on
                 // this computer; a restore keeps its source's.
@@ -74,7 +79,10 @@ pub(super) async fn route_sessions_http(
             &body_json,
             |repository, db, params, _| {
                 // `--path <folder>` is added as a project first (gbots/project.rs).
-                let mut placed = params.clone();
+                let mut placed = crate::acp::approval::sanitize_create_session_params(
+                    params,
+                    caller.is_owner_device(),
+                );
                 crate::gbots::add_create_project_path(&state, db, repository, &mut placed)?;
                 // Who the first request is from: the user's message `agents send --as-user`
                 // starts it with, labelled, or an agent's, signed (session_chat_send/sender_mark.rs).
@@ -401,8 +409,22 @@ pub(super) async fn route_sessions_http(
             &body_json,
             |repository, db, params, _| {
                 // gxserver's own GBot marks stay as they are (gbots/markers.rs).
-                let params = &crate::gbots::keep_gbot_marks(db, repository, params);
-                let session = repository.update_session(params)?;
+                let params = crate::gbots::keep_gbot_marks(db, repository, params);
+                // Single source of truth for ACP approval levels: `/api/updateSession` preserves
+                // stored `acpApprovalLevel` for all callers and refuses non-owner raises.
+                let current_session = match (
+                    params.get("projectId").and_then(Value::as_str),
+                    params.get("sessionId").and_then(Value::as_str),
+                ) {
+                    (Some(pid), Some(sid)) => repository.get_session(pid, sid).ok().flatten(),
+                    _ => None,
+                };
+                let params = crate::acp::approval::guard_update_session_params(
+                    current_session.as_ref(),
+                    &params,
+                    caller.is_owner_device(),
+                )?;
+                let session = repository.update_session(&params)?;
                 let project_id = value_text(&session, "projectId")?;
                 let session_id = value_text(&session, "sessionId")?;
                 schedule_presentation_session_delta(

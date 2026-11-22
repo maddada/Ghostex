@@ -74,6 +74,7 @@ pub(crate) fn canonical_worktree_path_key(path: &str) -> String {
 
 pub(crate) async fn handle_worktree_session_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -83,10 +84,16 @@ pub(crate) async fn handle_worktree_session_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     let result = match endpoint_path.as_str() {
-        "/api/createWorktreeSession" => match place_worktree_session_create(state, params) {
-            Ok(params) => create_worktree_session(state, &params).await,
-            Err(error) => Err(error.into()),
-        },
+        "/api/createWorktreeSession" => {
+            let params = crate::acp::approval::sanitize_create_session_params(
+                &params,
+                caller.is_owner_device(),
+            );
+            match place_worktree_session_create(state, params) {
+                Ok(params) => create_worktree_session(state, &params).await,
+                Err(error) => Err(error.into()),
+            }
+        }
         "/api/removeSessionWorktree" => remove_session_worktree(state, &params).await,
         _ => Err(DomainStateError::not_found(format!(
             "{endpoint_path} is not a gxserver worktree session endpoint."

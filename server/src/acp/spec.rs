@@ -292,8 +292,12 @@ fn is_valid_env_name(name: &str) -> bool {
 }
 
 fn strip_ps_env_prefix(token: &str) -> Option<&str> {
-    if token.len() > 5 && token[..5].eq_ignore_ascii_case("$env:") {
-        Some(&token[5..])
+    if token
+        .as_bytes()
+        .get(..5)
+        .is_some_and(|head| head.eq_ignore_ascii_case(b"$env:"))
+    {
+        token.get(5..).filter(|rest| !rest.is_empty())
     } else {
         None
     }

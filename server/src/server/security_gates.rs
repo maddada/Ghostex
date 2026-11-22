@@ -77,6 +77,13 @@ pub(crate) fn gate(
     if owner_secret_refused(caller, endpoint_path, &params) {
         return Some(forbidden(endpoint_path, request_id, OWNER_SECRETS_MESSAGE));
     }
+    if accept_all_default_raise_refused(state, caller, endpoint_path, &params) {
+        return Some(forbidden(
+            endpoint_path,
+            request_id,
+            "Only your own computer or phone can turn on accept-all defaults.",
+        ));
+    }
     if chief_turned_off_for(state, caller, endpoint_path, &params) {
         return Some(routed_json(
             Some(endpoint_path.to_string()),
@@ -153,7 +160,10 @@ fn api_chat_refused(
             ..
         } if own_session == session_id
             && (project_id.is_empty() || own_project == project_id)
-            && !(endpoint_path == "/api/selectSessionChatModel" && requests_mode_change(params)) =>
+            && !(endpoint_path == "/api/selectSessionChatModel" && requests_mode_change(params))
+            && !(endpoint_path == "/api/sendSessionChatMessage"
+                && text(params, "key")
+                    .is_some_and(|key| key.eq_ignore_ascii_case("shift-tab"))) =>
         {
             false
         }
@@ -262,6 +272,93 @@ fn record_allowed(caller: &Principal, request: &ActionRequest) {
         crate::audit::Outcome::Allowed,
         None,
     );
+}
+
+/// Non-owner callers (agents, peers, guests, extensions) may not raise global or per-project
+/// accept-all defaults (`agentAcceptAllEnabled: true`, `customAgents[].acceptAllMode: "enabled"`).
+fn accept_all_default_raise_refused(
+    state: &AppState,
+    caller: &Principal,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+) -> bool {
+    if caller.is_owner_device() {
+        return false;
+    }
+    match endpoint_path {
+        "/api/updateAgentSettings" => {
+            params.get("agentAcceptAllEnabled").and_then(Value::as_bool) == Some(true)
+        }
+        "/api/dispatchRendererCommand" => {
+            params.get("action").and_then(Value::as_str) == Some("updateSettingsPatch")
+                && params
+                    .get("payload")
+                    .and_then(|p| p.pointer("/patch/agentAcceptAllEnabled"))
+                    .and_then(Value::as_bool)
+                    == Some(true)
+        }
+        "/api/updateProject" => {
+            let incoming_enabled_ids: Vec<String> = params
+                .get("customAgents")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|agent| {
+                            let mode = agent
+                                .get("acceptAllMode")
+                                .and_then(Value::as_str)
+                                .map(str::trim)?;
+                            matches!(mode, "enabled" | "acceptAll").then(|| {
+                                agent
+                                    .get("id")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or_default()
+                                    .to_string()
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if incoming_enabled_ids.is_empty() {
+                return false;
+            }
+            // Allow echoing an already-enabled agent entry on an unrelated project update; refuse
+            // enabling accept-all on any agent that did not already have it enabled.
+            let stored_enabled: HashSet<String> = params
+                .get("projectId")
+                .and_then(Value::as_str)
+                .and_then(|pid| {
+                    let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
+                    let repo =
+                        crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+                    let project = repo.get_project(pid).ok().flatten()?;
+                    let set = project
+                        .get("customAgents")
+                        .and_then(Value::as_array)?
+                        .iter()
+                        .filter_map(|agent| {
+                            let mode = agent
+                                .get("acceptAllMode")
+                                .and_then(Value::as_str)
+                                .map(str::trim)?;
+                            matches!(mode, "enabled" | "acceptAll").then(|| {
+                                agent
+                                    .get("id")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or_default()
+                                    .to_string()
+                            })
+                        })
+                        .collect();
+                    Some(set)
+                })
+                .unwrap_or_default();
+            incoming_enabled_ids
+                .iter()
+                .any(|id| !stored_enabled.contains(id))
+        }
+        _ => false,
+    }
 }
 
 /// Why a caller without `Capability::OwnerSecrets` is refused.

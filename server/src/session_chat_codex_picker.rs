@@ -1493,6 +1493,7 @@ pub(crate) async fn handle_select_session_chat_model_http(
     let is_owner_device = caller.is_owner_device();
     // Enforce owner-device gating before either deferred enqueue or immediate execution so an
     // agent (`Principal::Session`) or peer cannot queue or apply an ACP approval level raise.
+    // Looks up the session directly from SQLite and propagates errors (never fails open).
     if !is_owner_device {
         if let Some(raw_mode) = params
             .get("options")
@@ -1502,37 +1503,62 @@ pub(crate) async fn handle_select_session_chat_model_http(
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            if let Ok(target) =
-                resolve_session_chat_send_target(state, &params, "selectSessionChatModel")
-            {
-                if crate::acp::session_is_acp(&target.session) {
-                    let level = match crate::acp::AcpApprovalLevel::parse(raw_mode) {
-                        Some(level) => level,
-                        None => {
-                            return domain_error_response(
-                                endpoint_path,
-                                request_id,
-                                invalid_params(format!("Unsupported approval level: {raw_mode}")),
-                            );
-                        }
-                    };
-                    if let Err(error) = crate::acp::channel::check_approval_level_change_allowed(
-                        state,
-                        &target.project_id,
-                        &target.session_id,
-                        level,
-                        false,
-                    )
-                    .await
-                    {
-                        return domain_error_response(endpoint_path, request_id, error);
+            let project_id = read_trimmed(&params, "projectId");
+            let session_id = read_trimmed(&params, "sessionId");
+            if project_id.is_empty() || session_id.is_empty() {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    invalid_params("selectSessionChatModel requires projectId and sessionId."),
+                );
+            }
+            let session = match crate::storage::open_gxserver_database(&state.paths)
+                .map_err(|error| DomainStateError {
+                    code: "internalError",
+                    message: format!("SQLite gxserver state error: {error}"),
+                })
+                .and_then(|db| {
+                    let repository = crate::domain::DomainRepository::new(
+                        &db,
+                        state.metadata.server_id.as_str(),
+                    );
+                    repository
+                        .get_session(&project_id, &session_id)?
+                        .ok_or_else(|| DomainStateError {
+                            code: "notFound",
+                            message: "The session no longer exists.".to_string(),
+                        })
+                }) {
+                Ok(session) => session,
+                Err(error) => return domain_error_response(endpoint_path, request_id, error),
+            };
+            if crate::acp::session_is_acp(&session) {
+                let level = match crate::acp::AcpApprovalLevel::parse(raw_mode) {
+                    Some(level) => level,
+                    None => {
+                        return domain_error_response(
+                            endpoint_path,
+                            request_id,
+                            invalid_params(format!("Unsupported approval level: {raw_mode}")),
+                        );
                     }
+                };
+                if let Err(error) = crate::acp::channel::check_approval_level_change_allowed(
+                    state,
+                    &project_id,
+                    &session_id,
+                    level,
+                    false,
+                )
+                .await
+                {
+                    return domain_error_response(endpoint_path, request_id, error);
                 }
             }
         }
     }
     let result = if params.get("defer").and_then(Value::as_bool) == Some(true) {
-        crate::session_chat_model_selection::enqueue(state, &params)
+        crate::session_chat_model_selection::enqueue_for_caller(state, &params, is_owner_device)
     } else {
         select_session_chat_model(state, &params, is_owner_device).await
     };
