@@ -281,20 +281,22 @@ fn message_segments(
     if body.is_empty() {
         tool_segments(message, folds, in_work_fold, out);
     } else if reasoning && message["thinkingCard"].is_object() {
-        // A thought drawn as a slim Thought line (`thinking_card.rs`): its one-line preview is
-        // visible, its full body opens behind `thinking-card:<id>`, and its folded calls (when
-        // `thinkingCard.calls` is set) open behind `reasoning:<id>`.
-        let preview = match str_of(&message["thinkingCard"], "preview") {
-            preview if preview.is_empty() => str_of(&message["thinkingRow"], "preview"),
-            preview => preview,
-        };
+        // A thought drawn as a slim Thought line (`thinking_card.rs`): closed, its one-line
+        // preview is visible; opened behind `thinking-card:<id>`, both desktop and mobile hide
+        // the preview and show only its full body. Its folded calls (when `thinkingCard.calls` is
+        // set) open behind `reasoning:<id>`.
         let calls_key = format!("reasoning:{id}");
-        out.push(Segment {
-            text: preview,
-            label: Some(calls_key.clone()),
-        });
         if folds.open(&format!("thinking-card:{id}"), false) {
             out.push(markdown(body));
+        } else {
+            let preview = match str_of(&message["thinkingCard"], "preview") {
+                preview if preview.is_empty() => str_of(&message["thinkingRow"], "preview"),
+                preview => preview,
+            };
+            out.push(Segment {
+                text: preview,
+                label: Some(calls_key.clone()),
+            });
         }
         if message["thinkingCard"]["calls"].is_string() {
             if folds.open(&calls_key, tools_default) {

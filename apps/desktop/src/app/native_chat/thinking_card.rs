@@ -1,12 +1,12 @@
 //! A thought drawn as one slim line shaped like a tool row, instead of the open thinking lane
 //! (`thinking.rs`): a brain tile, "Thinking…" while the thought is being written or "Thought" once
 //! the agent moved on, and the thought's line (its newest finished line while it streams, its first
-//! line after). One click opens or closes the full thought below it. A running thought that owns
-//! the calls it made ends its line with "N tool calls" and a chevron that folds them, as a reply's
-//! sentence folds its calls (`thinkingCard.calls`). gx-chat-core marks the rows
-//! (`thinkingCard` for the running turn, `thinkingRow` for every thought; the user's decision is in
-//! its `transcript/thinking_card.rs`). The phone's `ThinkingLine` in `MessageRow.tsx` is the same
-//! row.
+//! line after). One click opens or closes the full thought below it. A thought outside a turn fold
+//! that owns the calls it made ends its line with "N tool calls" and a chevron that folds them, as
+//! a reply's sentence folds its calls (`thinkingCard.calls`). gx-chat-core marks the rows
+//! (`thinkingCard` for the running turn and for settled thoughts outside a turn fold that own tool
+//! calls, `thinkingRow` for every thought; the user's decision is in its
+//! `transcript/thinking_card.rs`). The phone's `ThinkingLine` in `MessageRow.tsx` is the same row.
 
 use super::disclosure_body::{DisclosureRail, disclosure_body};
 use super::tool_run::{DESCRIBED_LABEL_OPACITY, ROW_PAD_X, TILE};
@@ -24,9 +24,9 @@ use serde_json::Value;
 const OPEN_CAP: f32 = 288.0;
 
 impl NativeChatView {
-    /// The thought as one closed line. `message["thinkingCard"]` (the running turn) supplies the
-    /// live flag, the newest finished line and the label of the calls it folds; any other thought
-    /// reads its `thinkingRow`.
+    /// The thought as one closed line. `message["thinkingCard"]` (present on the running turn and
+    /// on settled thoughts outside a turn fold that own tool calls) supplies the live flag, the
+    /// preview line and the label of the calls it folds; any other thought reads its `thinkingRow`.
     pub(super) fn thinking_card(
         &mut self,
         id: &str,

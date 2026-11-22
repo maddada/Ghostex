@@ -76,8 +76,9 @@ impl RunningThinking {
         if !running && !owns_unflattened_tools(row) {
             return;
         }
+        let live = running && self.live.as_deref() == Some(message.id.as_str());
         let calls = folded_calls(row);
-        let card_preview = if running {
+        let card_preview = if live {
             let text: String = message
                 .blocks
                 .iter()
@@ -96,7 +97,7 @@ impl RunningThinking {
         };
         if let Value::Object(fields) = std::sync::Arc::make_mut(row) {
             let mut card = json!({
-                "live": running && self.live.as_deref() == Some(message.id.as_str()),
+                "live": live,
                 "preview": card_preview,
             });
             if let Some(calls) = calls {
