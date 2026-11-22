@@ -1,7 +1,9 @@
-//! The Transparency group of the Theme page: one Off / Dark only / Always control, Strength, Blur
-//! (the points slider, or Windows' own blur choice) and Behind the glass with its pictures or Live
-//! gallery; under More transparency options the picture position, Live speed and brightness, Play
-//! only when plugged in, the four tints and Menu blur.
+//! The Window transparency group of the Theme page: one Off / Dark only / Always control, Show
+//! behind (Fully transparent or Wallpaper), Strength and Blur (the points slider, or Windows' own
+//! blur choice); under More transparency options Same for light and dark, the wallpaper or video
+//! position, Live speed and brightness, Play only when plugged in, the four tints and Menu blur.
+//! Live's gallery (`live_gallery`) shows under Themes' Artwork strip, where Live is picked
+//! (artwork.rs).
 //!
 //! CDXC:Theming 2026-09-26 DECISION:
 //! User: rename Automatic to "Dark only", and when it is picked hide every light-mode transparency control (the light tints, the light picture and the light video); their saved values stay for when Always is picked again.
@@ -10,20 +12,18 @@ use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::{
     SizedButtonSize, SizedButtonVariant, SliderBinding, SliderSaver, reset_key, segmented_field,
     select_field, setting_row, settings_sized_button, slider_number_field,
-    slider_number_field_with, stock_segmented, text_field, toggle_field, toggle_field_with,
-    tooltip_text,
+    slider_number_field_with, stock_segmented, toggle_field, toggle_field_with, tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{SettingsStore, post_store_message};
 use super::colours::{
-    STRENGTH_MAX, STRENGTH_MIN, STRENGTH_STEP, strength_from_settings, strength_gaps,
-    strength_patch,
+    STRENGTH_MAX, STRENGTH_MIN, STRENGTH_STEP, preview_scheme_dark, strength_from_settings,
+    strength_gaps, strength_patch,
 };
 use super::controls::{
-    ICON_BEHIND_GLASS, ICON_BLUR, ICON_STRENGTH, ICON_TRANSPARENCY, indented_row,
-    more_options_button, subhead,
+    ICON_BEHIND_GLASS, ICON_BLUR, ICON_STRENGTH, ICON_TRANSPARENCY, more_options_button, subhead,
 };
-use super::{MoreGroup, ThemeCx, ThemeTab, art, gallery, more_has_hit};
+use super::{MoreGroup, ThemeCx, ThemeTab, art, artwork, gallery, more_has_hit};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement, ObjectFit,
@@ -70,33 +70,29 @@ fn same_for_light_and_dark(values: &super::super::super::store::SettingsValues) 
     )
 }
 
-/// `GLASS_SOURCE_CARDS`: what the glass shows, as the four picture cards of step 1.
-const SOURCE_CARDS: [(&str, &str, &str); 4] = [
+/// The card's title.
+const SECTION_TITLE: &str = "Window transparency";
+
+/// Show behind's two small tiles: what the see-through window shows. Picture and Live left these
+/// tiles on 2026-11-22 (Live is the last tile of Themes' Artwork; a saved Picture keeps working).
+///
+/// CDXC:Theming 2026-11-22 DECISION:
+/// User (Q4470): "Rename the Desktop/Windows transparency option to Fully transparent" and make it and Wallpaper smaller. They are two small tiles in one row (a 34x24 swatch, the name and one short line) instead of four tall picture cards.
+const SHOW_BEHIND: [(&str, &str, &str); 2] = [
     (
         "desktopAndWindows",
-        "Desktop and windows",
-        "Everything behind Ghostex, blurred.",
+        "Fully transparent",
+        "Everything behind, blurred",
     ),
-    ("wallpaper", "Wallpaper", "Just your desktop picture."),
-    ("customImage", "Picture", "An image you choose."),
-    ("live", "Live", "A calm animation, or your own video."),
+    ("wallpaper", "Wallpaper", "Just your desktop picture"),
 ];
 
-/// The keys the Transparency card shows outside its More row.
-const MAIN_KEYS: [&str; 13] = [
-    "windowArt",
-    "windowArtDim",
-    "windowArtBlur",
+/// The keys the Window transparency card shows outside its More row.
+const MAIN_KEYS: [&str; 4] = [
     "windowGlass",
     "windowGlassBlurRadius",
     "windowGlassWindowsBlur",
     "windowGlassSource",
-    "windowGlassImageDark",
-    "windowGlassImageLight",
-    "windowGlassVideoDark",
-    "windowGlassVideoLight",
-    "windowGlassLiveStyleDark",
-    "windowGlassLiveStyleLight",
 ];
 
 /// The one Transparency control: Off, Dark only, Always (`windowGlass` opaque, auto, frosted).
@@ -185,6 +181,10 @@ pub(in super::super) fn windows_blur_field<V: super::super::super::fields::Setti
     )
 }
 
+/// The Live gallery's cards per row: five small posters, so the gallery under Artwork stays about
+/// as tall as two strip rows.
+const LIVE_COLUMNS: usize = 5;
+
 fn number(name: &str) -> f64 {
     settings_catalog().number(module::SETTINGS, name)
 }
@@ -229,7 +229,7 @@ impl ThemeTab {
         Some(image)
     }
 
-    fn post_picker(&mut self, kind: &str, light: bool, cx: &mut Context<Self>) {
+    pub(super) fn post_picker(&mut self, kind: &str, light: bool, cx: &mut Context<Self>) {
         if kind == "pickWindowGlassVideoFile" {
             self.video_error = None;
         }
@@ -241,6 +241,9 @@ impl ThemeTab {
         cx.notify();
     }
 
+    /// The Window transparency card (CDXC:Theming 2026-11-22 in artwork.rs): Transparency, what
+    /// shows behind (Fully transparent or Wallpaper), Strength and Blur, then More options. While
+    /// an artwork from Themes is painted it is one quiet line, since the window is solid then.
     pub(super) fn transparency_section(
         &mut self,
         t: &ThemeCx,
@@ -256,6 +259,21 @@ impl ThemeTab {
         {
             return None;
         }
+        let dark = preview_scheme_dark(&values.string("sidebarTheme"), self.scheme_dark);
+        let mut rows: Vec<AnyElement> = Vec::new();
+        if let Some(name) = artwork::painted_name(&values, dark)
+            && !t.searching
+        {
+            rows.push(self.paused_row(&p, &name, dark, cx));
+            return super::super::super::fields::settings_section(
+                &p,
+                SECTION_TITLE,
+                None,
+                None,
+                rows,
+            )
+            .map(IntoElement::into_any_element);
+        }
         let glass = values.string("windowGlass");
         let glass_on = glass != "opaque";
         let dark_only = glass == "auto";
@@ -263,11 +281,8 @@ impl ThemeTab {
         // reads the dark-mode keys for light mode while it is on (helpers/window_glass.rs).
         let same = same_for_light_and_dark(&values);
         let single = dark_only || same;
+        let source = values.string("windowGlassSource");
         let note = status_note(t.glass_blocked);
-        let mut rows: Vec<AnyElement> = Vec::new();
-        let art = values.string("windowArt");
-        let art_on = !art.is_empty() && art != "none";
-        rows.extend(self.art_rows(t, art_on, window, cx));
         // A search hit on a glass row while transparency is Off shows the control that turns it on.
         if visible("windowGlass") || (t.searching && !glass_on) {
             let options = transparency_choices();
@@ -290,47 +305,11 @@ impl ThemeTab {
                 cx,
             ));
         }
-        // Under an art theme Strength sets how much of the artwork shows through the sidebar and
-        // the work area (helpers/window_art.rs), whatever Transparency says.
-        if (glass_on || art_on) && visible("windowGlass") {
-            let (exact, nearest) = strength_from_settings(&values);
-            let saver: SliderSaver = Rc::new(
-                |store: &Entity<SettingsStore>, value, _commit, cx: &mut App| {
-                    store.update(cx, |store, cx| {
-                        let patch = strength_patch(value, strength_gaps(&store.values()));
-                        store.apply_patch(patch, "settings:control", cx)
-                    });
-                },
-            );
-            rows.push(slider_number_field_with(
-                self,
-                &p,
-                t.spec_plain(
-                    "windowGlassSidebarOpacityDark",
-                    "Strength",
-                    if exact.is_none() {
-                        "Tuned by hand under More transparency options; moving this sets the tints from the slider again, keeping the difference between the sidebar and the work area."
-                    } else if windows_blur_shown(&values)
-                        && values.string("windowGlassWindowsBlur") == "acrylic"
-                    {
-                        "Higher shows more of what is behind the window. Acrylic keeps Windows' own grey frost even at 100; Blur set to Plain blur or Off lets it go fully clear."
-                    } else {
-                        "Higher shows more of what is behind the window."
-                    },
-                )
-                .icon(ICON_STRENGTH),
-                Some(reset_key::<Self>("windowGlassSidebarOpacityDark")),
-                SliderBinding {
-                    key: "themeTransparencyStrength",
-                    min: STRENGTH_MIN,
-                    max: STRENGTH_MAX,
-                    step: STRENGTH_STEP,
-                },
-                nearest,
-                saver,
-                window,
-                cx,
-            ));
+        if glass_on && visible("windowGlassSource") {
+            rows.push(self.show_behind_row(t, &source, cx));
+        }
+        if glass_on && visible("windowGlass") {
+            rows.push(self.strength_row(t, false, window, cx));
         }
         let blur_hidden = ghostex_settings_catalog::availability::row_hidden(
             ghostex_settings_catalog::Platform::current(),
@@ -347,7 +326,7 @@ impl ThemeTab {
                     if cfg!(target_os = "macos") {
                         "How soft what shows behind the window looks, in points. 0 shows it sharp."
                     } else {
-                        "How soft the wallpaper, picture or video behind the window looks, in points. 0 shows it sharp. Desktop and windows uses your system's own blur."
+                        "How soft the wallpaper or Live video behind the window looks, in points. 0 shows it sharp. Fully transparent uses your system's own blur."
                     },
                 )
                 .icon(ICON_BLUR),
@@ -376,8 +355,21 @@ impl ThemeTab {
                 cx,
             ));
         }
-        if glass_on {
-            rows.extend(self.behind_glass_rows(
+        let shown = glass_on && self.more_shown(MoreGroup::Transparency, t.searching, &visible);
+        if glass_on && !t.searching {
+            let open = self.more_open[MoreGroup::Transparency.index()];
+            rows.push(more_options_button(
+                &p,
+                "theme-more-transparency",
+                "More transparency options",
+                "Same for light and dark, wallpaper position, Live speed, sidebar and work area tints, menu blur",
+                shown,
+                move |page, _window, cx| page.set_more_open(MoreGroup::Transparency, !open, cx),
+                cx,
+            ));
+        }
+        if shown {
+            rows.extend(self.more_transparency_rows(
                 t,
                 single,
                 (!dark_only).then_some(same),
@@ -385,99 +377,226 @@ impl ThemeTab {
                 cx,
             ));
         }
-        let shown = glass_on && self.more_shown(MoreGroup::Transparency, t.searching, &visible);
-        if glass_on && !t.searching {
-            let open = self.more_open[MoreGroup::Transparency.index()];
-            rows.push(more_options_button(
-                &p,
-                "theme-more-transparency",
-                "More glass options",
-                "Picture position, Live speed, sidebar and work area tints, menu blur",
-                shown,
-                move |page, _window, cx| page.set_more_open(MoreGroup::Transparency, !open, cx),
-                cx,
-            ));
-        }
-        if shown {
-            rows.extend(self.more_transparency_rows(t, single, window, cx));
-        }
-        super::super::super::fields::settings_section(&p, "Glass", None, None, rows)
+        super::super::super::fields::settings_section(&p, SECTION_TITLE, None, None, rows)
             .map(IntoElement::into_any_element)
     }
 
-    /// Art behind the window, and while an art theme's artwork shows, its dimming and blur.
-    fn art_rows(
+    /// Strength: how much of what is behind (the desktop, Live or the artwork) shows through the
+    /// sidebar and the work area. `under_art`: the row under Themes' Artwork strip, indented like
+    /// Dimming and Blur beside it.
+    pub(super) fn strength_row(
         &mut self,
         t: &ThemeCx,
-        art_on: bool,
+        under_art: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
+    ) -> AnyElement {
         let p = t.p;
         let values = t.values.clone();
-        let mut rows: Vec<AnyElement> = Vec::new();
-        if t.visible("windowArt") {
-            let options = settings_catalog().options(module::SETTINGS, "WINDOW_ART_OPTIONS");
-            let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
-            rows.push(select_field(
-                self,
-                &p,
-                "windowArt",
-                t.spec_plain(
-                    "windowArt",
-                    "Art behind the window",
-                    "An art theme's artwork behind the sidebar and the work area, in dark mode. The window stays solid, so your desktop never shows through. None goes back to the glass below.",
-                )
-                .icon(ICON_BEHIND_GLASS),
-                Some(reset_key::<Self>("windowArt")),
-                &options,
-                &values.choice("windowArt", &allowed),
-                None,
-                |page: &mut Self, next, _window, cx| page.save("windowArt", json!(next), cx),
-                window,
-                cx,
-            ));
-        }
-        for (key, title, subtitle) in [
-            (
-                "windowArtDim",
-                "Art dimming",
-                "How much the artwork is darkened, so text over it stays easy to read.",
-            ),
-            (
-                "windowArtBlur",
-                "Art blur",
-                "How soft the artwork looks, in points. 0 keeps it sharp.",
-            ),
-        ] {
-            if !art_on || !t.visible(key) {
-                continue;
-            }
-            let upper = if key == "windowArtDim" { "DIM" } else { "BLUR" };
-            rows.push(slider_number_field(
-                self,
-                &p,
-                t.spec(key, title, subtitle).dependent(),
-                Some(reset_key::<Self>(key)),
-                SliderBinding {
-                    key,
-                    min: number(&format!("MIN_WINDOW_ART_{upper}")),
-                    max: number(&format!("MAX_WINDOW_ART_{upper}")),
-                    step: 1.0,
-                },
-                values.f64(key),
-                window,
-                cx,
-            ));
-        }
-        rows
+        let (exact, nearest) = strength_from_settings(&values);
+        let saver: SliderSaver = Rc::new(
+            |store: &Entity<SettingsStore>, value, _commit, cx: &mut App| {
+                store.update(cx, |store, cx| {
+                    let patch = strength_patch(value, strength_gaps(&store.values()));
+                    store.apply_patch(patch, "settings:control", cx)
+                });
+            },
+        );
+        let description = if exact.is_none() {
+            "Tuned by hand under More transparency options; moving this sets the tints from the slider again, keeping the difference between the sidebar and the work area."
+        } else if under_art {
+            "Higher shows more of the artwork through the sidebar and the work area."
+        } else if windows_blur_shown(&values)
+            && values.string("windowGlassWindowsBlur") == "acrylic"
+        {
+            "Higher shows more of what is behind the window. Acrylic keeps Windows' own grey frost even at 100; Blur set to Plain blur or Off lets it go fully clear."
+        } else {
+            "Higher shows more of what is behind the window."
+        };
+        let spec = t.spec_plain("windowGlassSidebarOpacityDark", "Strength", description);
+        let spec = if under_art {
+            spec.dependent()
+        } else {
+            spec.icon(ICON_STRENGTH)
+        };
+        slider_number_field_with(
+            self,
+            &p,
+            spec,
+            Some(reset_key::<Self>("windowGlassSidebarOpacityDark")),
+            SliderBinding {
+                key: "themeTransparencyStrength",
+                min: STRENGTH_MIN,
+                max: STRENGTH_MAX,
+                step: STRENGTH_STEP,
+            },
+            nearest,
+            saver,
+            window,
+            cx,
+        )
     }
 
-    /// Behind the glass: the four picture cards, the Same for light and dark switch (`same`, absent
-    /// under Dark only), then the pictures or the Live gallery for the picked one right under
-    /// them. With one appearance (`single`: Dark only, or Same for light and dark on) the
-    /// light-mode slots stay hidden.
-    fn behind_glass_rows(
+    /// The card while an artwork is painted: the window is solid, so transparency waits; Use
+    /// transparency takes the artwork off in the appearance on screen.
+    fn paused_row(
+        &mut self,
+        p: &SettingsPalette,
+        name: &str,
+        dark: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        h_flex()
+            .w_full()
+            .gap(px(16.0))
+            .px(px(20.0))
+            .py(px(14.0))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(px(13.0))
+                    .line_height(px(18.57))
+                    .text_color(hsla(p.muted))
+                    .child(format!(
+                        "{name} is behind the window in {} mode, so the window is solid and transparency is paused.",
+                        if dark { "dark" } else { "light" }
+                    )),
+            )
+            .child(settings_sized_button(
+                p,
+                "theme-transparency-resume",
+                "Use transparency",
+                None,
+                None,
+                SizedButtonVariant::Secondary,
+                SizedButtonSize::Sm,
+                false,
+                None,
+                move |page: &mut Self, _window, cx| page.pick_no_artwork(dark, cx),
+                cx,
+            ))
+            .into_any_element()
+    }
+
+    /// Show behind: Fully transparent or Wallpaper as two small tiles. Live (picked in Themes'
+    /// Artwork) and a picture saved before the 2026-11-22 reorganisation keep working; neither tile
+    /// is picked then and the line says what shows.
+    fn show_behind_row(&mut self, t: &ThemeCx, source: &str, cx: &mut Context<Self>) -> AnyElement {
+        let p = t.p;
+        let description = match source {
+            "live" => {
+                "Live, picked in Artwork above, shows behind the glass now. Pick one of these to see through the window instead."
+            }
+            "customImage" => {
+                "A picture you chose earlier shows behind the glass now. Pick one of these to see through the window instead, or put any picture behind the window with Your image\u{2026} in Artwork above."
+            }
+            _ => "Everything behind the window, softly blurred, or just your desktop picture.",
+        };
+        let tiles: Vec<AnyElement> = SHOW_BEHIND
+            .iter()
+            .map(|(value, label, sub)| {
+                let picked = *value == source;
+                let image = self.art_image(&format!("source-{value}"), || art::source_art(value));
+                let value = *value;
+                h_flex()
+                    .id(SharedString::from(format!("theme-glass-source-{value}")))
+                    .flex_1()
+                    .min_w_0()
+                    .max_w(px(230.0))
+                    .gap(px(9.0))
+                    .px(px(10.0))
+                    .py(px(7.0))
+                    .rounded(px(9.0))
+                    .border_1()
+                    .border_color(hsla(if picked {
+                        p.foreground_alpha(0.85)
+                    } else {
+                        p.hairline
+                    }))
+                    .bg(card_background(&p))
+                    .cursor_pointer()
+                    .when(!picked, |this| {
+                        let hover = p.foreground_alpha(0.3);
+                        this.hover(move |this| this.border_color(hsla(hover)))
+                    })
+                    .on_click(cx.listener(move |page, _: &ClickEvent, _window, cx| {
+                        page.save("windowGlassSource", json!(value), cx);
+                    }))
+                    .child(
+                        div()
+                            .relative()
+                            .flex_shrink_0()
+                            .w(px(34.0))
+                            .h(px(24.0))
+                            .rounded(px(5.0))
+                            .overflow_hidden()
+                            .when_some(image, |this, image| {
+                                this.child(
+                                    img(image)
+                                        .absolute()
+                                        .left_0()
+                                        .top_0()
+                                        .size_full()
+                                        .object_fit(ObjectFit::Fill),
+                                )
+                            })
+                            .when(value == "desktopAndWindows", |this| {
+                                this.child(
+                                    div()
+                                        .absolute()
+                                        .left(px(4.0))
+                                        .top(px(4.0))
+                                        .w(px(15.0))
+                                        .h(px(11.0))
+                                        .rounded(px(2.0))
+                                        .bg(hsla(modal_rgba(0xffffff, 0.38))),
+                                )
+                            }),
+                    )
+                    .child(
+                        v_flex()
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(px(12.0))
+                                    .line_height(px(15.0))
+                                    .text_color(hsla(p.foreground))
+                                    .when(picked, |this| this.font_weight(gpui::FontWeight::MEDIUM))
+                                    .child(*label),
+                            )
+                            .child(
+                                div()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(px(10.5))
+                                    .line_height(px(13.0))
+                                    .text_color(hsla(p.muted))
+                                    .child(*sub),
+                            ),
+                    )
+                    .into_any_element()
+            })
+            .collect();
+        setting_row(
+            &p,
+            "windowGlassSource",
+            t.spec_plain("windowGlassSource", "Show behind", description)
+                .icon(ICON_BEHIND_GLASS)
+                .wide(),
+            Some(reset_key::<Self>("windowGlassSource")),
+            h_flex()
+                .w_full()
+                .gap(px(8.0))
+                .children(tiles)
+                .into_any_element(),
+            cx,
+        )
+    }
+
+    fn more_transparency_rows(
         &mut self,
         t: &ThemeCx,
         single: bool,
@@ -488,40 +607,7 @@ impl ThemeTab {
         let p = t.p;
         let values = t.values.clone();
         let source = values.string("windowGlassSource");
-        let appearances: Vec<bool> = if single {
-            vec![false]
-        } else {
-            vec![false, true]
-        };
-        let pictures_visible =
-            t.visible("windowGlassImageDark") || t.visible("windowGlassImageLight");
-        let live_visible = [
-            "windowGlassLiveStyleDark",
-            "windowGlassLiveStyleLight",
-            "windowGlassVideoDark",
-            "windowGlassVideoLight",
-        ]
-        .iter()
-        .any(|key| t.visible(key));
         let mut rows: Vec<AnyElement> = Vec::new();
-        if !(t.visible("windowGlassSource") || pictures_visible || live_visible) {
-            return rows;
-        }
-        let cards = self.source_cards(&p, &source, cx);
-        rows.push(setting_row(
-            &p,
-            "windowGlassSource",
-            t.spec_plain(
-                "windowGlassSource",
-                "Behind the glass",
-                "What the glass blurs: everything behind Ghostex, just your desktop picture, a picture you choose, or Live, a calm animation in your theme colours or your own video.",
-            )
-            .icon(ICON_BEHIND_GLASS)
-            .wide(),
-            Some(reset_key::<Self>("windowGlassSource")),
-            cards,
-            cx,
-        ));
         if let Some(same) = same.filter(|_| t.visible("windowGlassSameForLightAndDark")) {
             rows.push(toggle_field_with(
                 &p,
@@ -529,7 +615,7 @@ impl ThemeTab {
                 t.spec(
                     "windowGlassSameForLightAndDark",
                     "Same for light and dark",
-                    "Use the dark-mode picture, video, Live background and tints in light mode too. Turn off to pick them for light mode separately.",
+                    "Use the dark-mode Live background and tints in light mode too. Turn off to pick them for light mode separately.",
                 ),
                 same,
                 Some(reset_key::<Self>("windowGlassSameForLightAndDark")),
@@ -548,76 +634,6 @@ impl ThemeTab {
                 cx,
             ));
         }
-        if source == "customImage" && pictures_visible {
-            if t.native_picker {
-                rows.push(indented_row(self.picture_pair(
-                    &p,
-                    &values,
-                    &appearances,
-                    cx,
-                )));
-            } else {
-                for light in &appearances {
-                    let key = if *light {
-                        "windowGlassImageLight"
-                    } else {
-                        "windowGlassImageDark"
-                    };
-                    if !t.visible(key) {
-                        continue;
-                    }
-                    let appearance = if *light { "light" } else { "dark" };
-                    rows.push(text_field(
-                        self,
-                        &p,
-                        key,
-                        t.spec(
-                            key,
-                            if *light {
-                                "Picture for light mode"
-                            } else if single {
-                                "Picture"
-                            } else {
-                                "Picture for dark mode"
-                            },
-                            &format!("The picture the glass blurs in {appearance} mode."),
-                        )
-                        .dependent(),
-                        Some(reset_key::<Self>(key)),
-                        &values.string(key),
-                        Some(&format!("/Users/you/Pictures/{appearance}.jpg")),
-                        Some(|text: &str| text.trim().to_string()),
-                        None,
-                        window,
-                        cx,
-                    ));
-                }
-            }
-        }
-        if source == "live" && live_visible {
-            rows.push(indented_row(self.live_gallery(
-                &p,
-                &values,
-                single,
-                t.native_picker,
-                cx,
-            )));
-        }
-        rows
-    }
-
-    /// The rows under More transparency options (only while transparency is on). `single`: one
-    /// appearance (Dark only, or Same for light and dark on), so the light-mode tints stay hidden.
-    fn more_transparency_rows(
-        &mut self,
-        t: &ThemeCx,
-        single: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let p = t.p;
-        let values = t.values.clone();
-        let source = values.string("windowGlassSource");
         let uses_picture = source != "desktopAndWindows";
         let appearances: Vec<bool> = if single {
             vec![false]
@@ -638,7 +654,6 @@ impl ThemeTab {
         let live_uses_video = live_slots.iter().any(|style| style == "video");
         // A Live animation is drawn over the window itself, so only a video has a position to pick.
         let uses_placement = uses_picture && (source != "live" || live_uses_video);
-        let mut rows: Vec<AnyElement> = Vec::new();
         if uses_placement && t.visible("windowGlassImagePlacement") {
             let options = settings_catalog()
                 .options(module::SETTINGS, "WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS");
@@ -649,7 +664,11 @@ impl ThemeTab {
                 "windowGlassImagePlacement",
                 t.spec(
                     "windowGlassImagePlacement",
-                    "Picture position",
+                    match source.as_str() {
+                        "wallpaper" => "Wallpaper position",
+                        "live" => "Video position",
+                        _ => "Picture position",
+                    },
                     "Stays with the desktop can trail the window while you drag it.",
                 ),
                 Some(reset_key::<Self>("windowGlassImagePlacement")),
@@ -815,269 +834,8 @@ impl ThemeTab {
     }
 
     /// Behind the glass: the four picture cards.
-    fn source_cards(
-        &mut self,
-        p: &SettingsPalette,
-        selected: &str,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let ring = p.ring;
-        let cards: Vec<AnyElement> = SOURCE_CARDS
-            .iter()
-            .map(|(value, label, description)| {
-                let is_selected = *value == selected;
-                let image = self.art_image(&format!("source-{value}"), || art::source_art(value));
-                let value = value.to_string();
-                let key = value.clone();
-                let art = div()
-                    .relative()
-                    .w_full()
-                    .h(px(46.0))
-                    .mb(px(8.0))
-                    .rounded(px(7.0))
-                    .overflow_hidden()
-                    .when_some(image, |this, image| {
-                        this.child(
-                            img(image)
-                                .absolute()
-                                .left_0()
-                                .top_0()
-                                .size_full()
-                                .rounded(px(7.0))
-                                .object_fit(ObjectFit::Fill),
-                        )
-                    })
-                    .when(key == "desktopAndWindows", |this| {
-                        // `.is-desktop::after`: a window at 35% white, and its `18px 8px` shadow at 20%.
-                        this.child(
-                            div()
-                                .absolute()
-                                .left(gpui::relative(0.1))
-                                .top(gpui::relative(0.18))
-                                .w(gpui::relative(0.45))
-                                .h(gpui::relative(0.6))
-                                .child(
-                                    div()
-                                        .absolute()
-                                        .left(px(18.0))
-                                        .top(px(8.0))
-                                        .size_full()
-                                        .rounded(px(4.0))
-                                        .bg(hsla(modal_rgba(0xffffff, 0.2))),
-                                )
-                                .child(
-                                    div()
-                                        .absolute()
-                                        .left_0()
-                                        .top_0()
-                                        .size_full()
-                                        .rounded(px(4.0))
-                                        .bg(hsla(modal_rgba(0xffffff, 0.35))),
-                                ),
-                        )
-                    });
-                v_flex()
-                    .id(SharedString::from(format!("theme-glass-source-{value}")))
-                    .flex_1()
-                    .min_w_0()
-                    .gap(px(2.0))
-                    .p(px(if is_selected { 9.0 } else { 10.0 }))
-                    .rounded(px(10.0))
-                    .when(is_selected, |this| this.border_2().border_color(hsla(ring)))
-                    .when(!is_selected, |this| {
-                        this.border_1().border_color(hsla(p.hairline))
-                    })
-                    .bg(card_background(p))
-                    .on_click(cx.listener(move |page, _: &ClickEvent, _window, cx| {
-                        page.save("windowGlassSource", json!(value.clone()), cx);
-                    }))
-                    .child(art)
-                    .child(
-                        div()
-                            .text_size(px(14.0))
-                            .line_height(px(20.0))
-                            .text_color(hsla(p.foreground))
-                            .child(*label),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(11.0))
-                            .line_height(px(14.85))
-                            .text_color(hsla(p.muted))
-                            .child(*description),
-                    )
-                    .into_any_element()
-            })
-            .collect();
-        h_flex()
-            .w_full()
-            .items_stretch()
-            .gap(px(10.0))
-            .children(cards)
-            .into_any_element()
-    }
 
-    /// The dark and light pictures side by side, under the Picture card.
-    fn picture_pair(
-        &mut self,
-        p: &SettingsPalette,
-        values: &super::super::super::store::SettingsValues,
-        appearances: &[bool],
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let slots: Vec<AnyElement> = appearances
-            .iter()
-            .map(|light| {
-                let light = *light;
-                let key = if light {
-                    "windowGlassImageLight"
-                } else {
-                    "windowGlassImageDark"
-                };
-                let path = values.string(key);
-                let has_path = !path.is_empty();
-                let thumb = if has_path {
-                    let image = self
-                        .art_image(if light { "thumb-light" } else { "thumb-dark" }, || {
-                            art::picture_thumb(light)
-                        });
-                    div()
-                        .w_full()
-                        .h(px(72.0))
-                        .mb(px(4.0))
-                        .rounded(px(MODAL_RADIUS_CONTROL))
-                        .overflow_hidden()
-                        .when_some(image, |this, image| {
-                            this.child(
-                                img(image)
-                                    .size_full()
-                                    .rounded(px(MODAL_RADIUS_CONTROL))
-                                    .object_fit(ObjectFit::Fill),
-                            )
-                        })
-                        .into_any_element()
-                } else {
-                    let stripes = self.art_image(
-                        if p.light {
-                            "thumb-empty-light"
-                        } else {
-                            "thumb-empty-dark"
-                        },
-                        || art::empty_thumb_stripes(p.foreground),
-                    );
-                    div()
-                        .relative()
-                        .w_full()
-                        .h(px(72.0))
-                        .mb(px(4.0))
-                        .rounded(px(MODAL_RADIUS_CONTROL))
-                        .border_1()
-                        .border_dashed()
-                        .border_color(hsla(p.hairline))
-                        .overflow_hidden()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .when_some(stripes, |this, image| {
-                            this.child(
-                                img(image)
-                                    .absolute()
-                                    .left_0()
-                                    .top_0()
-                                    .size_full()
-                                    .object_fit(ObjectFit::Cover),
-                            )
-                        })
-                        .child(
-                            div()
-                                .text_size(px(11.0))
-                                .line_height(px(15.71))
-                                .text_color(hsla(p.muted))
-                                .child("No picture yet"),
-                        )
-                        .into_any_element()
-                };
-                let file = div()
-                    .id(SharedString::from(format!(
-                        "theme-glass-picture-file-{key}"
-                    )))
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .text_size(px(11.0))
-                    .line_height(px(15.71))
-                    .text_color(hsla(p.muted))
-                    .when(has_path, |this| this.tooltip(tooltip_text(path.clone())))
-                    .child(if has_path {
-                        file_name(&path)
-                    } else {
-                        "Shows the live blur".to_string()
-                    });
-                let mut actions = vec![settings_sized_button(
-                    p,
-                    SharedString::from(format!("theme-glass-picture-choose-{key}")),
-                    if has_path { "Change…" } else { "Choose…" },
-                    None,
-                    None,
-                    SizedButtonVariant::Secondary,
-                    SizedButtonSize::Sm,
-                    false,
-                    None,
-                    move |page: &mut Self, _window, cx| {
-                        page.post_picker("pickWindowGlassImageFile", light, cx)
-                    },
-                    cx,
-                )];
-                if has_path {
-                    actions.push(settings_sized_button(
-                        p,
-                        SharedString::from(format!("theme-glass-picture-clear-{key}")),
-                        "Clear",
-                        None,
-                        None,
-                        SizedButtonVariant::Outline,
-                        SizedButtonSize::Sm,
-                        false,
-                        None,
-                        move |page: &mut Self, _window, cx| page.save(key, json!(""), cx),
-                        cx,
-                    ));
-                }
-                v_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .gap(px(4.0))
-                    .p(px(10.0))
-                    .rounded(px(10.0))
-                    .border_1()
-                    .border_color(hsla(p.hairline))
-                    .bg(card_background(p))
-                    .child(thumb)
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .line_height(px(18.57))
-                            .text_color(hsla(p.foreground))
-                            .child(if light { "Light mode" } else { "Dark mode" }),
-                    )
-                    .child(file)
-                    .child(h_flex().mt(px(6.0)).gap(px(6.0)).children(actions))
-                    .into_any_element()
-            })
-            .collect();
-        h_flex()
-            .w_full()
-            .items_start()
-            .gap(px(12.0))
-            .children(slots)
-            .into_any_element()
-    }
-
-    /// `GlassLiveGallery`: the eight animations and "Your video", one pick per appearance.
-    ///
-    /// CDXC:Theming 2026-09-26 DECISION:
-    /// User: "let's hide videos and merge videos with live / make videos just take from custom video user picks or the animations we did". Live lists the eight animations and then "Your video", a file the user picks for each mode; picking the card with no file yet opens the file dialog.
-    fn live_gallery(
+    pub(super) fn live_gallery(
         &mut self,
         p: &SettingsPalette,
         values: &super::super::super::store::SettingsValues,
@@ -1215,8 +973,8 @@ impl ThemeTab {
         let mut grid_rows: Vec<AnyElement> = Vec::new();
         let mut cards = cards.into_iter().peekable();
         while cards.peek().is_some() {
-            let mut row: Vec<AnyElement> = cards.by_ref().take(3).collect();
-            while row.len() < 3 {
+            let mut row: Vec<AnyElement> = cards.by_ref().take(LIVE_COLUMNS).collect();
+            while row.len() < LIVE_COLUMNS {
                 row.push(div().flex_1().min_w_0().into_any_element());
             }
             grid_rows.push(

@@ -480,13 +480,23 @@ async fn background(
 
 /// `art`: artwork `id`, downloaded first when it is not kept yet (art.rs): the kept file's path,
 /// and its bytes in base64 when `inline` (the web build, which can't read the file).
-async fn art(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
+/// `art`: the file of artwork `id` (downloading it first), or with `id` `yourImage` the picture
+/// Your image keeps for dark mode, or light mode with `light`; with `inline`, its bytes too.
+async fn art(state: &AppState, params: &Map<String, Value>) -> Result<Value, DomainStateError> {
     let id = text(params, "id").to_string();
     let inline = params.get("inline").and_then(Value::as_bool) == Some(true);
-    let path = tokio::task::spawn_blocking(move || super::art::ensure_artwork(&id))
-        .await
-        .map_err(|join| error("internalError", join.to_string()))?
-        .map_err(|message| error("dependencyUnavailable", message))?;
+    let path = if id == ghostex_settings_catalog::YOUR_IMAGE_ART_ID {
+        let light = params.get("light").and_then(Value::as_bool) == Some(true);
+        let settings = read_settings(state)?;
+        let saved = look::current(&settings, ghostex_settings_catalog::your_image_key(light));
+        super::art::kept_your_image(saved.as_str().unwrap_or_default())
+            .map_err(|message| error("notFound", message))?
+    } else {
+        tokio::task::spawn_blocking(move || super::art::ensure_artwork(&id))
+            .await
+            .map_err(|join| error("internalError", join.to_string()))?
+            .map_err(|message| error("dependencyUnavailable", message))?
+    };
     let mut answer = json!({ "path": path.to_string_lossy() });
     if inline {
         use base64::Engine as _;
@@ -559,6 +569,35 @@ async fn set_artwork(
     Ok(answer)
 }
 
+/// `setYourImage`: keeps a copy of picture `path` and shows it behind the window in dark mode, or
+/// light mode with `light`, as one `set` of the art setting and its picture (CDXC:Theming
+/// 2026-11-22 on `YOUR_IMAGE_ART_ID` in packages/settings-catalog/src/data/themes.rs).
+async fn set_your_image(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let source = text(params, "path").to_string();
+    if source.is_empty() {
+        return Err(error("badRequest", "Give the picture's path."));
+    }
+    let light = params.get("light").and_then(Value::as_bool) == Some(true);
+    let kept = tokio::task::spawn_blocking(move || super::art::keep_your_image(Path::new(&source)))
+        .await
+        .map_err(|join| error("internalError", join.to_string()))?
+        .map_err(|message| error("badRequest", message))?;
+    let art_key = if light { "windowArtLight" } else { "windowArt" };
+    let mut params = params.clone();
+    params.insert(
+        "changes".into(),
+        json!({
+            art_key: ghostex_settings_catalog::YOUR_IMAGE_ART_ID,
+            ghostex_settings_catalog::your_image_key(light): kept.to_string_lossy(),
+        }),
+    );
+    set(state, caller, &params).await
+}
+
 fn history(state: &AppState) -> Result<Value, DomainStateError> {
     let settings = read_settings(state)?;
     Ok(json!({
@@ -599,9 +638,10 @@ pub(crate) async fn handle_theme_http(
         "set" => set(&state, &caller, &params).await,
         "apply" => apply(&state, &caller, &params).await,
         "background" => background(&state, &caller, &params).await,
-        "art" => art(&params).await,
+        "art" => art(&state, &params).await,
         "artworks" => artworks(&state),
         "setArtwork" => set_artwork(&state, &caller, &params).await,
+        "setYourImage" => set_your_image(&state, &caller, &params).await,
         "undo" => undo_or_redo(&state, &caller, &params, true).await,
         "redo" => undo_or_redo(&state, &caller, &params, false).await,
         other => Err(error(

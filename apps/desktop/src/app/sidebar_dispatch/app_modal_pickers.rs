@@ -62,6 +62,30 @@ impl GhostexGpuiApp {
         );
     }
 
+    /// Settings -> Themes -> Artwork -> Your image…: the picture painted behind the window in dark
+    /// or light mode (the store hands it to gxserver's `setYourImage`).
+    pub(crate) fn handle_gpui_pick_window_art_image_message(
+        &mut self,
+        message: &serde_json::Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let appearance = if message["appearance"] == "light" {
+            "light"
+        } else {
+            "dark"
+        };
+        self.pick_image_for_app_modal(
+            move |path| {
+                serde_json::json!({
+                    "appearance": appearance,
+                    "path": path,
+                    "type": "windowArtImageFilePicked",
+                })
+            },
+            cx,
+        );
+    }
+
     /// Settings -> Window glass -> Live: "Choose a file…" for the dark or light mode's own video. The dialog
     /// cannot filter by type, so a picked file that is not a .mov, .mp4 or .m4v comes back as an
     /// error for the row to show.

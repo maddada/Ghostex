@@ -1076,6 +1076,12 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("windowArtLight", J::Str("none")),
     ("windowArtDim", J::Num(45.0)),
     ("windowArtBlur", J::Num(0.0)),
+    // CDXC:Theming 2026-11-22 (`YOUR_IMAGE_ART_ID` in data/themes.rs): the user's own picture
+    // behind the window, per computer; `savedThemes` are the looks saved under Your themes
+    // (apps/desktop/src/app/window/settings_modal/tabs/theme/user_themes.rs).
+    ("windowArtImage", J::Str("")),
+    ("windowArtImageLight", J::Str("")),
+    ("savedThemes", J::Arr(&[])),
     ("windowGlass", J::Str("auto")),
     // Live since 2026-11-21, the default dark look's glass (see `darkThemePreset`); Desktop and windows before.
     ("windowGlassSource", J::Str("live")),

@@ -77,8 +77,7 @@ pub(crate) fn current_background(settings: &Map<String, Value>, light: bool) -> 
     let art = look::current(settings, if light { "windowArtLight" } else { "windowArt" });
     if art
         .as_str()
-        .and_then(ghostex_settings_catalog::artwork_by_id)
-        .is_some()
+        .is_some_and(ghostex_settings_catalog::art_id_paints)
     {
         return "art";
     }

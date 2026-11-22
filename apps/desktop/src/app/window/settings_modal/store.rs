@@ -665,6 +665,31 @@ impl SettingsStore {
             "windowGlassVideoFilePicked" if has_error => return,
             "windowGlassVideoFilePicked" if light => "windowGlassVideoLight",
             "windowGlassVideoFilePicked" => "windowGlassVideoDark",
+            // Your image… in Themes > Artwork: gxserver keeps a copy and shows it as one theme
+            // change (`setYourImage` in server/src/theme/endpoint.rs).
+            "windowArtImageFilePicked" => {
+                if let Some(path) = path {
+                    let store = cx.entity();
+                    cx.defer(move |cx| {
+                        let notice = store.clone();
+                        store_gxserver_rpc(
+                            &store,
+                            "/api/theme",
+                            json!({ "op": "setYourImage", "path": path, "light": light }),
+                            std::time::Duration::from_secs(30),
+                            move |result, cx| {
+                                if let Err(reason) = result {
+                                    notice.update(cx, |store, cx| {
+                                        store.toast("warning", "Picture not used", &reason, cx)
+                                    });
+                                }
+                            },
+                            cx,
+                        );
+                    });
+                }
+                return;
+            }
             "appIconState" => {
                 if payload.get("ok").and_then(Value::as_bool) == Some(true)
                     && let Some(source) = payload.get("selectedId").and_then(Value::as_str)

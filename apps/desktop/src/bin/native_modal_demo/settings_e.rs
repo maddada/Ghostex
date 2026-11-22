@@ -17,6 +17,10 @@
 //! Themes at its Themes group (the presets), and `theme-presets-<preset id>` (`theme-presets-kg-wave`) with that
 //! preset picked, which the row scrolls into view. `theme-colours` opens it at Colours, `theme-at-<section>` at that section
 //! (`transparency`, `chatTerminal`).
+//! `theme-yours` opens Themes with four saved themes (Your themes) and Your image behind the window
+//! (`GHOSTEX_NATIVE_MODAL_DEMO_YOUR_IMAGE=<file>` is the picture), `theme-yours-live` with Live picked
+//! in Artwork, `theme-yours-naming` with Save current theme's name field open and
+//! `theme-yours-managing` with the first saved theme's … actions open.
 use serde_json::{Map, Value, json};
 
 /// `GHOSTEX_NATIVE_MODAL_DEMO_STATE`.
@@ -113,6 +117,7 @@ pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
             settings.insert("themeSidebarContrast".into(), json!(-8));
             settings.insert("themeWorkAreaContrast".into(), json!(0));
         }
+        state if state.starts_with("theme-yours") => your_themes_settings(state, settings),
         state if state.starts_with("theme-presets-") => {
             let id = &state["theme-presets-".len()..];
             if let Some((_, patch)) =
@@ -123,6 +128,95 @@ pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
         }
         _ => {}
     }
+}
+
+/// `theme-yours*`: a custom teal look with Your image behind the window (or Live), and four saved
+/// themes: that look, two presets with their artwork and one with Live.
+fn your_themes_settings(state: &str, settings: &mut Map<String, Value>) {
+    let picture = super::super::env("GHOSTEX_NATIVE_MODAL_DEMO_YOUR_IMAGE");
+    let picture = if picture.is_empty() {
+        "/Users/you/Pictures/coast.jpg".to_string()
+    } else {
+        picture
+    };
+    let live = state == "theme-yours-live";
+    let mut current = Map::new();
+    current.insert("darkThemePreset".into(), json!("custom"));
+    current.insert(
+        "customSidebarTitlebarBackgroundTintColor".into(),
+        json!("#2f5d6b"),
+    );
+    current.insert("windowGlass".into(), json!("frosted"));
+    if live {
+        current.insert("windowArt".into(), json!("none"));
+        current.insert("windowArtLight".into(), json!("none"));
+        current.insert("windowGlassSource".into(), json!("live"));
+        current.insert("windowGlassLiveStyleDark".into(), json!("aurora"));
+        current.insert("windowGlassLiveStyleLight".into(), json!("drift"));
+    } else {
+        current.insert("windowArt".into(), json!("yourImage"));
+        current.insert("windowArtLight".into(), json!("yourImage"));
+    }
+    settings.extend(current.clone());
+    settings.insert("windowArtImage".into(), json!(picture));
+    settings.insert("windowArtImageLight".into(), json!(picture));
+    let preset = |id: &str, art: Value, extra: &[(&str, Value)]| {
+        let mut look =
+            super::super::settings_modal::tabs::theme::presets::theme_preset_choice(id, false)
+                .map(|(_, patch)| patch)
+                .unwrap_or_default();
+        look.insert("windowArt".into(), art.clone());
+        look.insert("windowArtLight".into(), art);
+        for (key, value) in extra {
+            look.insert((*key).into(), value.clone());
+        }
+        look
+    };
+    let mut coast = Map::new();
+    coast.insert("darkThemePreset".into(), json!("custom"));
+    coast.insert(
+        "customSidebarTitlebarBackgroundTintColor".into(),
+        json!("#2f5d6b"),
+    );
+    coast.insert("windowArt".into(), json!("yourImage"));
+    coast.insert("windowArtLight".into(), json!("yourImage"));
+    let themes = [
+        ("theme-1", "Coast", coast),
+        (
+            "theme-2",
+            "Dracula night",
+            preset("dracula", json!("dracula"), &[]),
+        ),
+        (
+            "theme-3",
+            "Kanagawa wave",
+            preset("kg-wave", json!("kg-wave"), &[]),
+        ),
+        (
+            "theme-4",
+            "Nord aurora",
+            preset(
+                "nord",
+                json!("none"),
+                &[
+                    ("windowGlass", json!("frosted")),
+                    ("windowGlassSource", json!("live")),
+                    ("windowGlassLiveStyleDark", json!("aurora")),
+                ],
+            ),
+        ),
+    ];
+    settings.insert(
+        "savedThemes".into(),
+        Value::Array(
+            themes
+                .into_iter()
+                .map(|(id, name, look)| {
+                    json!({ "id": id, "name": name, "savedAt": "2026-11-22T10:00:00Z", "settings": look })
+                })
+                .collect(),
+        ),
+    );
 }
 
 /// Adds the hud fields these pages read to a `sidebarState` hydrate.
@@ -162,7 +256,7 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
     if let Some(section) = state.strip_prefix("theme-at-") {
         return Some(json!({ "initialTab": "theme", "initialSection": section }));
     }
-    if state.starts_with("theme-presets") {
+    if state.starts_with("theme-presets") || state.starts_with("theme-yours") {
         return Some(json!({ "initialTab": "theme", "initialSection": "themes" }));
     }
     // `GHOSTEX_NATIVE_MODAL_DEMO_QUERY` filters the page, e.g. "permissions" for the grant rows.
@@ -286,6 +380,11 @@ pub(super) fn answers(message: &Value) -> Vec<Value> {
             "appearance": message.get("appearance").cloned().unwrap_or(json!("dark")),
             "path": "/Users/you/Pictures/morning-fields.jpg",
             "type": "windowGlassImageFilePicked"
+        })],
+        Some("pickWindowArtImageFile") => vec![json!({
+            "appearance": message.get("appearance").cloned().unwrap_or(json!("dark")),
+            "path": "/Users/you/Pictures/coast.jpg",
+            "type": "windowArtImageFilePicked"
         })],
         Some("pickWindowGlassVideoFile") => {
             let light = message.get("appearance").and_then(Value::as_str) == Some("light");

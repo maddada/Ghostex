@@ -51,6 +51,12 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "pickWindowArtImageFile" => {
+                self.handle_gpui_pick_window_art_image_message(
+                    &serde_json::Value::Object(command.clone()),
+                    cx,
+                );
+            }
             "pickWindowGlassVideoFile" => {
                 self.handle_gpui_pick_window_glass_video_message(
                     &serde_json::Value::Object(command.clone()),

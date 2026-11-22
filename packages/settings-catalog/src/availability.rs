@@ -226,7 +226,7 @@ pub fn availability_note(key: &str) -> Option<String> {
     }
     let (platform, _, _) = row.hidden_while?;
     Some(format!(
-        "Not shown on {} while Behind the glass is Desktop and windows.",
+        "Not shown on {} while the window is Fully transparent.",
         platform_name(platform)
     ))
 }

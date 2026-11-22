@@ -4019,7 +4019,7 @@
     {
       "key": "windowArt",
       "title": "Art behind the window",
-      "subtitle": "The artwork painted behind the sidebar and the work area in dark mode, with the window solid so your desktop never shows through: a theme's own Art background, or any artwork from Backgrounds in Themes. It downloads the first time it shows. None goes back to Transparency.",
+      "subtitle": "The artwork painted behind the sidebar and the work area in dark mode, with the window solid so your desktop never shows through: any artwork from Artwork in Themes, or Your image, a picture you choose. An artwork downloads the first time it shows. None goes back to Window transparency.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4160,6 +4160,10 @@
         {
           "label": "Gruvbox Material Light",
           "value": "gm-light"
+        },
+        {
+          "label": "Your image",
+          "value": "yourImage"
         }
       ],
       "agentWritable": true
@@ -4167,7 +4171,7 @@
     {
       "key": "windowArtLight",
       "title": "Art behind the window in light mode",
-      "subtitle": "The artwork a light theme paints behind the sidebar and the work area in light mode, with the window solid. None keeps light mode as Transparency sets it.",
+      "subtitle": "The artwork a light theme paints behind the sidebar and the work area in light mode, with the window solid. None keeps light mode as Window transparency sets it.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4308,6 +4312,10 @@
         {
           "label": "Gruvbox Material Light",
           "value": "gm-light"
+        },
+        {
+          "label": "Your image",
+          "value": "yourImage"
         }
       ],
       "agentWritable": true
@@ -4347,6 +4355,48 @@
       "agentWritable": true
     },
     {
+      "key": "windowArtImage",
+      "title": "Your image for dark mode",
+      "subtitle": "The picture Your image paints behind the window in dark mode, as Ghostex keeps a copy of it on this computer. Pick it with Your image… at the end of Artwork in Themes. It stays on this computer when Settings sync.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "string",
+      "default": "",
+      "agentWritable": true
+    },
+    {
+      "key": "windowArtImageLight",
+      "title": "Your image for light mode",
+      "subtitle": "The picture Your image paints behind the window in light mode, as Ghostex keeps a copy of it on this computer. It stays on this computer when Settings sync.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "string",
+      "default": "",
+      "agentWritable": true
+    },
+    {
+      "key": "savedThemes",
+      "title": "Your themes",
+      "subtitle": "Looks you saved with Save current theme in Themes. Each keeps its colours, artwork and transparency, so one click switches back to it. They sync with Appearance; a Your image picture stays on the computer it was picked on.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "json",
+      "default": [],
+      "agentWritable": false
+    },
+    {
       "key": "windowGlass",
       "title": "Transparency",
       "subtitle": "Let your desktop show through the window: Off, Dark only (light mode stays solid) or Always.",
@@ -4380,7 +4430,7 @@
     {
       "key": "windowGlassSource",
       "title": "Behind the glass",
-      "subtitle": "Desktop and windows, your wallpaper, a picture you choose, or Live: a calm animation in your theme colours or your own video.",
+      "subtitle": "Fully transparent (everything behind the window, blurred), your wallpaper, a picture you choose, or Live: a calm animation in your theme colours or your own video.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4391,7 +4441,7 @@
       "default": "live",
       "options": [
         {
-          "label": "Desktop and windows",
+          "label": "Fully transparent",
           "value": "desktopAndWindows"
         },
         {
@@ -4652,7 +4702,7 @@
     {
       "key": "windowGlassBlurRadius",
       "title": "Blur",
-      "subtitle": "How soft what shows behind the window looks, in points. 0 shows it sharp. On Windows and Linux, Desktop and windows uses the system blur, so this sets the wallpaper, picture and video blur; on Windows, Blur on Windows picks that system blur.",
+      "subtitle": "How soft what shows behind the window looks, in points. 0 shows it sharp. On Windows and Linux, Fully transparent uses the system blur, so this sets the wallpaper, picture and video blur; on Windows, Blur on Windows picks that system blur.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4662,12 +4712,12 @@
       "type": "number",
       "default": 4,
       "agentWritable": true,
-      "availability": "Not shown on Windows while Behind the glass is Desktop and windows."
+      "availability": "Not shown on Windows while the window is Fully transparent."
     },
     {
       "key": "windowGlassWindowsBlur",
       "title": "Blur on Windows",
-      "subtitle": "How Windows blurs what shows behind the window while Desktop and windows shows behind the glass. Windows has no blur amount to set, so pick Acrylic (Windows' own frosted blur), Plain blur (the same blur without Windows' grey frost, so the tints can go fully clear; it takes more work to draw) or Off (sharp, the fastest).",
+      "subtitle": "How Windows blurs what shows behind the window while it is Fully transparent. Windows has no blur amount to set, so pick Acrylic (Windows' own frosted blur), Plain blur (the same blur without Windows' grey frost, so the tints can go fully clear; it takes more work to draw) or Off (sharp, the fastest).",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",

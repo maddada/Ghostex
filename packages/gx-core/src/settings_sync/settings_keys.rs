@@ -24,6 +24,10 @@ pub const APPEARANCE_LEFT_OUT: &[&str] = &[
     "windowGlassImageLight",
     "windowGlassVideoDark",
     "windowGlassVideoLight",
+    // Your image's picture: a copy kept on each computer (CDXC:Theming 2026-11-22 on
+    // `YOUR_IMAGE_ART_ID` in packages/settings-catalog/src/data/themes.rs).
+    "windowArtImage",
+    "windowArtImageLight",
     "interfaceScalePercent",
     "interfaceScaleAreasSeparately",
     "linuxDisplayScale",

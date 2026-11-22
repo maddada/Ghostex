@@ -24,14 +24,19 @@ use gpui::{
 const ART_FADE_IN: Duration = Duration::from_millis(450);
 
 /// The artwork the settings ask for in the current appearance: its id, dim and blur, and whether
-/// it is painted under light mode (the dimming is then a white wash).
+/// it is painted under light mode (the dimming is then a white wash). `picture` tells Your image's
+/// pictures apart (a hash of the kept file's path; 0 for the artworks).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct ArtChoice {
     id: &'static str,
+    picture: u64,
     dim: u8,
     blur: u8,
     light: bool,
 }
+
+/// A decoded artwork's identity: the artwork (or Your image's picture) and its blur.
+type ArtKey = (&'static str, u64, u8);
 
 static WINDOW_ART: Mutex<Option<ArtChoice>> = Mutex::new(None);
 /// An artwork is chosen for the appearance the app shows.
@@ -43,9 +48,9 @@ static ART_WORK_AREA_PERCENT: AtomicU8 = AtomicU8::new(88);
 /// The decoded artwork in use (by id and blur), the one being fetched and decoded, and the last
 /// one that could not be had (not tried again until another is asked for).
 struct Decoded {
-    ready: Option<((&'static str, u8), Arc<RenderImage>)>,
-    pending: Option<(&'static str, u8)>,
-    failed: Option<(&'static str, u8)>,
+    ready: Option<(ArtKey, Arc<RenderImage>)>,
+    pending: Option<ArtKey>,
+    failed: Option<ArtKey>,
 }
 
 static DECODED: Mutex<Decoded> = Mutex::new(Decoded {
@@ -82,19 +87,41 @@ pub(crate) fn refresh_window_art(object: &serde_json::Map<String, serde_json::Va
             .clamp(0.0, max)
             .round() as u8
     };
-    let choice = object
+    let chosen = object
         .get(art_key)
         .and_then(serde_json::Value::as_str)
-        .and_then(ghostex_settings_catalog::artwork_by_id)
-        .map(|artwork| ArtChoice {
-            id: artwork.id,
-            dim: percent("windowArtDim", ghostex_settings_catalog::MAX_WINDOW_ART_DIM),
-            blur: percent(
-                "windowArtBlur",
-                ghostex_settings_catalog::MAX_WINDOW_ART_BLUR,
-            ),
-            light,
+        .unwrap_or_default();
+    // Your image (CDXC:Theming 2026-11-22 on `YOUR_IMAGE_ART_ID` in the settings catalog's
+    // data/themes.rs): the picture gxserver keeps, named by its path; none chosen paints nothing.
+    let your_picture = (chosen == ghostex_settings_catalog::YOUR_IMAGE_ART_ID)
+        .then(|| {
+            object
+                .get(ghostex_settings_catalog::your_image_key(light))
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+        })
+        .flatten()
+        .map(|path| {
+            use std::hash::{Hash as _, Hasher as _};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            path.hash(&mut hasher);
+            hasher.finish().max(1)
         });
+    let id_and_picture = match your_picture {
+        Some(picture) => Some((ghostex_settings_catalog::YOUR_IMAGE_ART_ID, picture)),
+        None => ghostex_settings_catalog::artwork_by_id(chosen).map(|artwork| (artwork.id, 0)),
+    };
+    let choice = id_and_picture.map(|(id, picture)| ArtChoice {
+        id,
+        picture,
+        dim: percent("windowArtDim", ghostex_settings_catalog::MAX_WINDOW_ART_DIM),
+        blur: percent(
+            "windowArtBlur",
+            ghostex_settings_catalog::MAX_WINDOW_ART_BLUR,
+        ),
+        light,
+    });
     let (sidebar, work_area) = if light {
         (
             ghostex_settings_catalog::window_glass_light_key(
@@ -148,7 +175,8 @@ pub(crate) fn window_art_redraw_key() -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     window_art_active().hash(&mut hasher);
     if let Ok(art) = WINDOW_ART.lock() {
-        art.map(|art| (art.id, art.dim, art.blur)).hash(&mut hasher);
+        art.map(|art| (art.id, art.picture, art.dim, art.blur))
+            .hash(&mut hasher);
     }
     ART_SIDEBAR_PERCENT
         .load(Ordering::Relaxed)
@@ -164,10 +192,28 @@ pub(crate) fn window_art_redraw_key() -> u64 {
 /// of their colour).
 const ART_COLOUR_SATURATION: f32 = 0.70;
 
+/// The longest side Your image is decoded to: a picture larger than any window is scaled down
+/// first, so a huge photo costs no more memory than an artwork.
+const YOUR_IMAGE_MAX_SIDE: u32 = 3840;
+
 /// Decodes `bytes` into the BGRA bitmap GPUI draws, blurred by `blur` points first and toned to
-/// [`ART_COLOUR_SATURATION`] of its colour.
-fn decode_artwork(bytes: &[u8], blur: u8) -> Option<Arc<RenderImage>> {
-    let decoded = image::load_from_memory_with_format(bytes, image::ImageFormat::WebP).ok()?;
+/// [`ART_COLOUR_SATURATION`] of its colour. An artwork is WebP; Your image is any picture format
+/// gxserver accepted (server/src/theme/art.rs), scaled to [`YOUR_IMAGE_MAX_SIDE`].
+fn decode_artwork(bytes: &[u8], blur: u8, yours: bool) -> Option<Arc<RenderImage>> {
+    let decoded = if yours {
+        let picture = image::load_from_memory(bytes).ok()?;
+        if picture.width().max(picture.height()) > YOUR_IMAGE_MAX_SIDE {
+            picture.resize(
+                YOUR_IMAGE_MAX_SIDE,
+                YOUR_IMAGE_MAX_SIDE,
+                image::imageops::FilterType::Triangle,
+            )
+        } else {
+            picture
+        }
+    } else {
+        image::load_from_memory_with_format(bytes, image::ImageFormat::WebP).ok()?
+    };
     let mut rgba = decoded.into_rgba8();
     if blur > 0 {
         // The artwork is about 1.5 times the size it covers on a common window, so a point of
@@ -196,13 +242,14 @@ fn decode_artwork(bytes: &[u8], blur: u8) -> Option<Arc<RenderImage>> {
 }
 
 /// The artwork's bytes from gxserver, which downloads it the first time (server/src/theme/art.rs):
-/// on the desktop the file it keeps, in the browser the bytes in its answer.
-async fn fetch_artwork(id: &'static str) -> Option<Vec<u8>> {
+/// on the desktop the file it keeps, in the browser the bytes in its answer. Your image is the
+/// picture gxserver keeps for the appearance `light` names.
+async fn fetch_artwork(id: &'static str, light: bool) -> Option<Vec<u8>> {
     let inline = cfg!(ghostex_web);
     let answer = crate::app::gx_store::gx_rpc(
         None,
         "/api/theme",
-        serde_json::json!({ "op": "art", "id": id, "inline": inline }),
+        serde_json::json!({ "op": "art", "id": id, "light": light, "inline": inline }),
     )
     .await
     .ok()?;
@@ -224,7 +271,7 @@ async fn fetch_artwork(id: &'static str) -> Option<Vec<u8>> {
 /// here the first time it is asked for, and every window redraws when it is ready) or when it
 /// could not be had.
 fn artwork_image(choice: ArtChoice, cx: &mut App) -> Option<Arc<RenderImage>> {
-    let key = (choice.id, choice.blur);
+    let key = (choice.id, choice.picture, choice.blur);
     let mut decoded = DECODED.lock().ok()?;
     if let Some((ready_key, image)) = &decoded.ready
         && *ready_key == key
@@ -239,10 +286,11 @@ fn artwork_image(choice: ArtChoice, cx: &mut App) -> Option<Arc<RenderImage>> {
     drop(decoded);
     let background = cx.background_executor().clone();
     cx.spawn(async move |cx| {
-        let image = match fetch_artwork(choice.id).await {
+        let yours = choice.id == ghostex_settings_catalog::YOUR_IMAGE_ART_ID;
+        let image = match fetch_artwork(choice.id, choice.light).await {
             Some(bytes) => {
                 background
-                    .spawn(async move { decode_artwork(&bytes, choice.blur) })
+                    .spawn(async move { decode_artwork(&bytes, choice.blur, yours) })
                     .await
             }
             None => None,
@@ -321,7 +369,11 @@ pub(crate) fn window_art_backdrop(cx: &mut App) -> Option<AnyElement> {
             picture
                 .with_animation(
                     gpui::ElementId::Name(
-                        format!("window-art-{}-{}", choice.id, choice.blur).into(),
+                        format!(
+                            "window-art-{}-{}-{}",
+                            choice.id, choice.picture, choice.blur
+                        )
+                        .into(),
                     ),
                     Animation::new(ART_FADE_IN),
                     |picture, delta| picture.opacity(delta),

@@ -46,6 +46,28 @@ pub fn artwork_by_id(id: &str) -> Option<&'static Artwork> {
     ARTWORKS.iter().find(|artwork| artwork.id == id)
 }
 
+/// `windowArt` / `windowArtLight` value that paints the user's own picture (`windowArtImage` /
+/// `windowArtImageLight`, a copy gxserver keeps beside the downloaded artworks) instead of one of
+/// [`ARTWORKS`].
+///
+/// CDXC:Theming 2026-11-22 DECISION:
+/// User (Q4473 note on the Themes reorganisation): "also add custom image picking at the end of the artworks so the user can add any image". Artwork ends with Your image…, which opens a file dialog; gxserver copies the picture into its `theme-art/yours/` folder (server/src/theme/art.rs) and the window paints it like any artwork, with the same Strength, Dimming and Blur. The picture's path is kept per computer (`windowArtImage`, `windowArtImageLight`, left out of Settings Sync), so a synced `yourImage` on a computer without the picture leaves the window solid, as an artwork that can't be downloaded does.
+pub const YOUR_IMAGE_ART_ID: &str = "yourImage";
+
+/// The per-computer picture key Your image reads in dark mode, or light mode with `light`.
+pub fn your_image_key(light: bool) -> &'static str {
+    if light {
+        "windowArtImageLight"
+    } else {
+        "windowArtImage"
+    }
+}
+
+/// Whether `id` (a `windowArt` value) paints something: one of [`ARTWORKS`] or Your image.
+pub fn art_id_paints(id: &str) -> bool {
+    id == YOUR_IMAGE_ART_ID || artwork_by_id(id).is_some()
+}
+
 /// CDXC:Theming 2026-11-21 DECISION:
 /// User: "i wanna reduce the bundle size not increase it": no theme artwork ships inside the app. Each is downloaded the first time it is shown, from the components repository the app's other on-demand parts come from, checked against the hash and size listed here (they are built into the app, so a changed file is refused), and kept on disk (gxserver's component store, `theme-art/`). Only small thumbnails are bundled. A theme whose artwork is not here yet applies its colours at once and the artwork fades in when it arrives; offline, the window stays solid in the theme's colour. Supersedes the six artworks bundled on 2026-11-21 (e05a071ea).
 /// SEE-ALSO: server/src/theme/art.rs (the download and cache), apps/desktop/src/app/helpers/window_art.rs.

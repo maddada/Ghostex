@@ -114,6 +114,9 @@ impl GhostexGpuiApp {
             "pickWindowGlassVideoFile" => {
                 self.handle_gpui_pick_window_glass_video_message(&message, cx);
             }
+            "pickWindowArtImageFile" => {
+                self.handle_gpui_pick_window_art_image_message(&message, cx);
+            }
             "pickFirstLaunchProjectFolder" => {
                 self.handle_gpui_pick_first_launch_project_folder_message(cx);
             }

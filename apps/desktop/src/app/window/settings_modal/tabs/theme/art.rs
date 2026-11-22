@@ -123,8 +123,8 @@ fn disc(center: (f64, f64), color: u32, edge: f64) -> Layer {
     }
 }
 
-/// The art above a "Behind the glass" card: `desktopAndWindows`, `wallpaper`,
-/// `customImage` or `live`, 2x its 147x46 box.
+/// The swatch of a Show behind tile (transparency.rs): `desktopAndWindows` or `wallpaper`
+/// (`customImage` and `live` are kept for their old cards' look), 2x a 147x46 box.
 pub(super) fn source_art(source: &str) -> Option<Arc<RenderImage>> {
     let (width, height) = (294, 92);
     let layers = match source {
@@ -173,64 +173,4 @@ pub(super) fn source_art(source: &str) -> Option<Arc<RenderImage>> {
         }],
     };
     paint(width, height, &layers)
-}
-
-/// The decorative thumb of a chosen dark or light glass picture, 2x its 323x72 box.
-pub(super) fn picture_thumb(light: bool) -> Option<Arc<RenderImage>> {
-    let layers = if light {
-        vec![
-            Layer::Linear {
-                angle: 180.0,
-                stops: vec![
-                    (0.0, hex(0xbcdcff)),
-                    (0.58, hex(0xeaf4ff)),
-                    (0.59, hex(0xa9cf93)),
-                    (1.0, hex(0xa9cf93)),
-                ],
-            },
-            disc((0.72, 0.3), 0xffe29a, 0.11),
-        ]
-    } else {
-        vec![
-            Layer::Linear {
-                angle: 180.0,
-                stops: vec![
-                    (0.0, hex(0x0f1733)),
-                    (0.6, hex(0x27325f)),
-                    (0.61, hex(0x121a2e)),
-                    (1.0, hex(0x121a2e)),
-                ],
-            },
-            disc((0.3, 0.3), 0x6d8fd6, 0.1),
-        ]
-    };
-    paint(646, 144, &layers)
-}
-
-/// `repeating-linear-gradient(45deg, <fg 4%> 0 8px, transparent 8px 16px)` over a 323x72 empty
-/// thumb, 2x.
-pub(super) fn empty_thumb_stripes(foreground: gpui::Rgba) -> Option<Arc<RenderImage>> {
-    let (width, height) = (646u32, 144u32);
-    let color = [
-        (foreground.r as f64 * 255.0).round(),
-        (foreground.g as f64 * 255.0).round(),
-        (foreground.b as f64 * 255.0).round(),
-    ];
-    let mut bgra = vec![0u8; (width * height * 4) as usize];
-    let (sin, cos) = 45f64.to_radians().sin_cos();
-    for row in 0..height {
-        for column in 0..width {
-            // Distance along the 45deg gradient line in CSS pixels (the bitmap is 2x).
-            let along = ((column as f64 + 0.5) * sin - (row as f64 + 0.5) * -cos) / 2.0;
-            let phase = along.rem_euclid(16.0);
-            let alpha = if phase < 8.0 { 0.04 } else { 0.0 };
-            let index = ((row * width + column) * 4) as usize;
-            bgra[index] = color[2] as u8;
-            bgra[index + 1] = color[1] as u8;
-            bgra[index + 2] = color[0] as u8;
-            bgra[index + 3] = (alpha * 255.0_f64).round() as u8;
-        }
-    }
-    let buffer = image::RgbaImage::from_raw(width, height, bgra)?;
-    Some(Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])))
 }

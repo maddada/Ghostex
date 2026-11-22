@@ -8,7 +8,7 @@
 //! The app's other on-demand parts are signed archives sealed into the release manifest; an artwork is one public image whose hash and size are compiled into the app, which pins it as firmly without a release-time seal, so a theme can add one without a new component release. `GHOSTEX_THEME_ART_BASE_URL` points the download somewhere else (a test server serving the files locally).
 
 use std::io::{Read as _, Write as _};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use ghostex_settings_catalog::{ARTWORK_RELEASE, Artwork, artwork_by_id, artwork_file_name};
@@ -17,6 +17,99 @@ use sha2::{Digest as _, Sha256};
 /// Where artworks are kept.
 pub(crate) fn art_dir() -> PathBuf {
     crate::components::component_root("theme-art")
+}
+
+/// Where Your image pictures are kept (CDXC:Theming 2026-11-22 on `YOUR_IMAGE_ART_ID` in
+/// packages/settings-catalog/src/data/themes.rs): `<first 16 of the hash>.<format>`, so picking the
+/// same picture twice keeps one copy and a saved theme's picture stays put.
+pub(crate) fn your_images_dir() -> PathBuf {
+    art_dir().join("yours")
+}
+
+/// The largest picture Your image takes.
+const YOUR_IMAGE_MAX_BYTES: u64 = 64 * 1024 * 1024;
+/// The longest side Your image takes, in pixels.
+const YOUR_IMAGE_MAX_SIDE: u32 = 16_384;
+
+/// Copies picture `source` into [`your_images_dir`] and returns the kept file. Refuses a file
+/// that is not a PNG, JPEG, WebP, GIF, BMP or TIFF picture the app can paint. Blocking: run it
+/// off the async runtime.
+pub(crate) fn keep_your_image(source: &Path) -> Result<PathBuf, String> {
+    let name = source
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| source.display().to_string());
+    let meta =
+        std::fs::metadata(source).map_err(|error| format!("Could not open {name}: {error}."))?;
+    if !meta.is_file() {
+        return Err(format!("{name} is not a file."));
+    }
+    if meta.len() > YOUR_IMAGE_MAX_BYTES {
+        return Err(format!(
+            "{name} is larger than 64 MB. Pick a smaller picture."
+        ));
+    }
+    let bytes =
+        std::fs::read(source).map_err(|error| format!("Could not read {name}: {error}."))?;
+    let unsupported = || {
+        format!(
+            "{name} is not a picture Ghostex can show. Pick a PNG, JPEG, WebP, GIF, BMP or TIFF."
+        )
+    };
+    let format = image::guess_format(&bytes).map_err(|_| unsupported())?;
+    let extension = match format {
+        image::ImageFormat::Png => "png",
+        image::ImageFormat::Jpeg => "jpg",
+        image::ImageFormat::WebP => "webp",
+        image::ImageFormat::Gif => "gif",
+        image::ImageFormat::Bmp => "bmp",
+        image::ImageFormat::Tiff => "tiff",
+        _ => return Err(unsupported()),
+    };
+    let (width, height) = image::ImageReader::with_format(std::io::Cursor::new(&bytes), format)
+        .into_dimensions()
+        .map_err(|_| unsupported())?;
+    if width == 0 || height == 0 || width.max(height) > YOUR_IMAGE_MAX_SIDE {
+        return Err(format!(
+            "{name} is {width} by {height} pixels. Pick a picture no wider or taller than {YOUR_IMAGE_MAX_SIDE}."
+        ));
+    }
+    let digest = hex::encode(Sha256::digest(&bytes));
+    let dir = your_images_dir();
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| format!("Could not make {}: {error}", dir.display()))?;
+    let kept = dir.join(format!("{}.{extension}", &digest[..16]));
+    if std::fs::metadata(&kept).is_ok_and(|meta| meta.len() == bytes.len() as u64) {
+        return Ok(kept);
+    }
+    let partial = dir.join(format!(
+        ".copy-{}-{}",
+        std::process::id(),
+        crate::components::unique()
+    ));
+    let written = std::fs::write(&partial, &bytes).and_then(|()| std::fs::rename(&partial, &kept));
+    if let Err(error) = written {
+        let _ = std::fs::remove_file(&partial);
+        return Err(format!("Could not keep {name}: {error}."));
+    }
+    Ok(kept)
+}
+
+/// The kept Your image picture `path` names (a `windowArtImage` value), refused unless it is one
+/// of [`your_images_dir`]'s files.
+pub(crate) fn kept_your_image(path: &str) -> Result<PathBuf, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("No picture is chosen for Your image.".to_string());
+    }
+    let dir = std::fs::canonicalize(your_images_dir())
+        .map_err(|_| "The picture for Your image is not on this computer.".to_string())?;
+    let file = std::fs::canonicalize(path)
+        .map_err(|_| "The picture for Your image is not on this computer.".to_string())?;
+    if !file.starts_with(&dir) || !file.is_file() {
+        return Err("The picture for Your image is not one Ghostex kept.".to_string());
+    }
+    Ok(file)
 }
 
 /// The kept file of `artwork`, whether or not it is there yet.

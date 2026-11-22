@@ -24,9 +24,9 @@ use super::controls::{CARD_INSET_X, CARD_INSET_Y};
 use super::controls::{ICON_DARK, ICON_LIGHT};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, KeyDownEvent,
-    ParentElement as _, ScrollHandle, SharedString, StatefulInteractiveElement as _,
-    Styled as _, canvas, div, point, px,
+    AnyElement, Context, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _,
+    ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, canvas, div, point,
+    px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
@@ -527,6 +527,7 @@ pub(super) fn theme_tile(
         )
         .child(
             h_flex()
+                .w_full()
                 .mt(px(6.0))
                 .gap(px(3.0))
                 .items_center()
@@ -535,7 +536,11 @@ pub(super) fn theme_tile(
                         .flex_shrink_0(),
                 )
                 .child(
+                    // A saved theme's name (user_themes.rs) can be longer than the card.
                     div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .text_ellipsis()
                         .whitespace_nowrap()
                         .text_size(px(11.0))
                         .line_height(px(13.0))

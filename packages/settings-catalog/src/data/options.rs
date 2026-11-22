@@ -865,10 +865,11 @@ pub const WINDOW_ART_OPTIONS: &[Opt] = &[
     opt("Everforest Light", "ef-light"),
     opt("Gruvbox Material Dark", "gm-dark"),
     opt("Gruvbox Material Light", "gm-light"),
+    opt("Your image", "yourImage"),
 ];
 
 pub const WINDOW_GLASS_SOURCE_OPTIONS: &[Opt] = &[
-    opt("Desktop and windows", "desktopAndWindows"),
+    opt("Fully transparent", "desktopAndWindows"),
     opt("Wallpaper only", "wallpaper"),
     opt("Custom image", "customImage"),
     opt("Live", "live"),

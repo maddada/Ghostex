@@ -21,9 +21,8 @@ use super::colours::preview_scheme_dark;
 use super::presets::{TileSpec, theme_tile};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, Image, ImageFormat, InteractiveElement as _, IntoElement, ObjectFit,
-    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
-    StyledImage as _, Window, div, img, px,
+    AnyElement, Context, Image, ImageFormat, IntoElement, ObjectFit, ParentElement as _,
+    SharedString, Styled as _, StyledImage as _, Window, div, img, px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
@@ -195,12 +194,16 @@ pub(crate) fn artwork_thumbnail_bytes(id: &str) -> Option<&'static [u8]> {
 /// applied here with its change, which its tile can undo.
 #[derive(Default)]
 pub(super) struct PromptGallery {
-    busy: Option<String>,
+    pub(super) busy: Option<String>,
     applied: Option<(String, String)>,
-    /// The Backgrounds gallery's sideways scroll.
-    artworks_scroll: gpui::ScrollHandle,
-    /// The axis the gallery's current swipe is locked to.
-    artworks_wheel: StripWheelLock,
+    /// The Artwork strip's sideways scroll (artwork.rs).
+    pub(super) artworks_scroll: gpui::ScrollHandle,
+    /// The axis the strip's current swipe is locked to.
+    pub(super) artworks_wheel: StripWheelLock,
+    /// The appearance (dark) whose picked tile was brought into view, and the tile to centre once
+    /// it is laid out.
+    pub(super) artworks_revealed: Option<bool>,
+    pub(super) artworks_reveal: std::rc::Rc<std::cell::Cell<Option<usize>>>,
 }
 
 /// One short line of a failed theme call for its notice: the first sentence of the answer's first
@@ -436,7 +439,7 @@ impl ThemeTab {
     }
 
     /// One `/api/theme` call for theme `id`'s tile; a failure shows as a notice titled `failed`.
-    fn theme_call(
+    pub(super) fn theme_call(
         &mut self,
         id: &str,
         params: Value,
@@ -489,7 +492,7 @@ impl ThemeTab {
     }
 
     /// Artwork `id`'s thumbnail, decoded once per page.
-    fn artwork_thumbnail(&mut self, id: &str) -> Option<Arc<Image>> {
+    pub(super) fn artwork_thumbnail(&mut self, id: &str) -> Option<Arc<Image>> {
         self.bundled_picture("theme-art", id, artwork_thumbnail_bytes)
     }
 
@@ -616,228 +619,6 @@ impl ThemeTab {
             },
             cx,
         )
-    }
-
-    /// The theme the settings show now: an agent-made, art or Default look by its colours, else a
-    /// preset by its settings (presets.rs).
-    fn applied_gallery_theme(&self, values: &SettingsValues) -> Option<GalleryTheme> {
-        let themes = gallery_themes();
-        if let Some((theme, _, _)) = applied_theme(&themes, values) {
-            return Some(theme.clone());
-        }
-        let preset = super::presets::theme_presets()
-            .into_iter()
-            .find(|preset| super::presets::theme_preset_matches(values, preset))?;
-        themes.into_iter().find(|theme| theme.id == preset.id)
-    }
-
-    /// The background showing now in the appearance on screen: art, solid, live or transparent.
-    fn current_background(&self, values: &SettingsValues) -> &'static str {
-        let dark = preview_scheme_dark(&values.string("sidebarTheme"), self.scheme_dark);
-        let art = values.string(if dark { "windowArt" } else { "windowArtLight" });
-        if ghostex_settings_catalog::artwork_by_id(&art).is_some() {
-            return "art";
-        }
-        match values.string("windowGlass").as_str() {
-            "opaque" => "solid",
-            "auto" if !dark => "solid",
-            _ if values.string("windowGlassSource") == "live" => "live",
-            _ => "transparent",
-        }
-    }
-
-    /// Background, under the themes row: the applied theme's Art, Live, Glass and Solid
-    /// (those it has), the one showing now picked.
-    ///
-    /// CDXC:Theming 2026-11-21 DECISION:
-    /// User: "after i pick a theme i can switch the presets". Every theme's backgrounds sit in one control under the row; a press switches only the background, as one theme change Undo puts back, and keeps the theme's colours.
-    pub(super) fn background_row(
-        &mut self,
-        p: &SettingsPalette,
-        values: &SettingsValues,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        let theme = self.applied_gallery_theme(values)?;
-        let options: Vec<super::super::super::catalog::SettingOption> =
-            ghostex_settings_catalog::BACKGROUNDS
-                .iter()
-                .filter(|(id, _)| theme.backgrounds.iter().any(|offered| offered == id))
-                .map(|(id, label)| super::super::super::catalog::SettingOption {
-                    label: label.to_string(),
-                    value: id.to_string(),
-                })
-                .collect();
-        let current = self.current_background(values);
-        let partner = theme.kind == "preset" && (!theme.dark || !self.picked_light);
-        Some(super::super::super::fields::segmented_field(
-            p,
-            "theme-background",
-            super::super::super::fields::RowSpec::new("Background".to_string()).description(format!(
-                "What {} shows behind the sidebar and the work area: its own artwork, its Live animation, your desktop through the glass, or nothing.",
-                theme.name
-            )),
-            None,
-            &options,
-            Some(current),
-            None,
-            move |page: &mut Self, next, _window, cx| {
-                let changes = theme.background_patch(&next, partner);
-                if changes.is_empty() {
-                    return;
-                }
-                page.theme_call(
-                    &format!("background-{next}"),
-                    json!({ "op": "set", "changes": changes }),
-                    "Background not changed",
-                    cx,
-                );
-            },
-            cx,
-        ))
-    }
-
-    /// Backgrounds: every theme's artwork, to put behind any theme (in the appearance on screen),
-    /// and None. Each downloads the first time it shows.
-    ///
-    /// CDXC:Theming 2026-11-21 DECISION:
-    /// User: every theme image "is also a standalone background the user can pick for ANY theme: a background gallery (thumbnails, downloaded on demand like the rest) in Settings > Themes next to the presets, so the user can combine any theme with any image. The theme own image stays its default Art preset." The gallery's tiles are bundled thumbnails; a press saves the artwork through `/api/theme` `setArtwork`, which downloads it.
-    pub(super) fn artworks_row(
-        &mut self,
-        p: &SettingsPalette,
-        values: &SettingsValues,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let dark = preview_scheme_dark(&values.string("sidebarTheme"), self.scheme_dark);
-        let current = values.string(if dark { "windowArt" } else { "windowArtLight" });
-        let labels: Vec<(String, String)> = gallery_themes()
-            .into_iter()
-            .map(|theme| {
-                let label = theme.label.clone().unwrap_or_else(|| {
-                    theme
-                        .name
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or_default()
-                        .to_string()
-                });
-                (theme.id, label)
-            })
-            .collect();
-        let mut tiles: Vec<AnyElement> = Vec::new();
-        let none_selected = ghostex_settings_catalog::artwork_by_id(&current).is_none();
-        tiles.push(theme_tile(
-            p,
-            TileSpec {
-                id: "theme-artwork-none".into(),
-                name: "No artwork".into(),
-                label: "None".into(),
-                dark,
-                caption: None,
-                selected: none_selected,
-                cut: false,
-            },
-            vec![div().size_full().bg(hsla(p.raised)).into_any_element()],
-            None,
-            move |page, _window, cx| {
-                page.theme_call(
-                    "artwork-none",
-                    json!({ "op": "setArtwork", "id": "none", "light": !dark }),
-                    "Background not changed",
-                    cx,
-                );
-            },
-            cx,
-        ));
-        for artwork in ghostex_settings_catalog::ARTWORKS {
-            let busy = self.prompt_gallery.busy.as_deref()
-                == Some(format!("artwork-{}", artwork.id).as_str());
-            let preview = self
-                .artwork_thumbnail(artwork.id)
-                .map(|picture| screenshot_preview(picture, busy))
-                .into_iter()
-                .collect();
-            let label = labels
-                .iter()
-                .find(|(id, _)| id == artwork.id)
-                .map(|(_, label)| label.clone())
-                .unwrap_or_else(|| artwork.name.to_string());
-            let id = artwork.id;
-            tiles.push(theme_tile(
-                p,
-                TileSpec {
-                    id: SharedString::from(format!("theme-artwork-{id}")),
-                    name: artwork.name.into(),
-                    label: label.into(),
-                    dark,
-                    caption: None,
-                    selected: current == id,
-                    cut: false,
-                },
-                preview,
-                None,
-                move |page, _window, cx| {
-                    page.theme_call(
-                        &format!("artwork-{id}"),
-                        json!({ "op": "setArtwork", "id": id, "light": !dark }),
-                        "Background not changed",
-                        cx,
-                    );
-                },
-                cx,
-            ));
-        }
-        let scroll = self.prompt_gallery.artworks_scroll.clone();
-        let wheel = strip_wheel_layer(&scroll, &self.prompt_gallery.artworks_wheel);
-        v_flex()
-            .w_full()
-            .min_w_0()
-            .child(
-                v_flex()
-                    .px(px(16.0))
-                    .pt(px(12.0))
-                    .gap(px(2.0))
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .line_height(px(19.0))
-                            .text_color(hsla(p.foreground))
-                            .child("Backgrounds"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .line_height(px(18.57))
-                            .text_color(hsla(p.muted))
-                            .child(if dark {
-                                "Any theme's artwork behind any theme, in dark mode. Each downloads the first time it shows; until then the window stays solid."
-                            } else {
-                                "Any theme's artwork behind any theme, in light mode. Each downloads the first time it shows; until then the window stays solid."
-                            }),
-                    ),
-            )
-            .child(
-                div()
-                    .relative()
-                    .w_full()
-                    .min_w_0()
-                    .child(
-                        div()
-                            .id("theme-artworks-row")
-                            .w_full()
-                            .flex()
-                            .items_start()
-                            .overflow_x_scroll()
-                            .restrict_scroll_to_axis()
-                            .track_scroll(&scroll)
-                            .px(px(16.0))
-                            .pt(px(6.0))
-                            .pb(px(12.0))
-                            .gap(px(8.0))
-                            .children(tiles),
-                    )
-                    .child(wheel),
-            )
-            .into_any_element()
     }
 
     /// The applied look's line, under the themes row.

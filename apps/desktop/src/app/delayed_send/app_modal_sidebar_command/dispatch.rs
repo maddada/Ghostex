@@ -29,6 +29,7 @@ impl GhostexGpuiApp {
             | "setAppIcon"
             | "pickTerminalBackgroundImageFile"
             | "pickWindowGlassImageFile"
+            | "pickWindowArtImageFile"
             | "pickWindowGlassVideoFile"
             | "pickFirstLaunchProjectFolder"
             | "firstLaunchCreateProjectSession"

@@ -41,9 +41,9 @@ pub mod update_checks;
 pub use search_keywords::{search_keywords, section_search_keywords};
 
 pub use data::{
-    artwork_by_id, artwork_file_name, theme_gallery, Artwork, ARTWORKS, ARTWORK_RELEASE,
-    BACKGROUNDS, BACKGROUND_KEYS, DEFAULT_LOOK_ID, DEFAULT_LOOK_NAME, MAX_WINDOW_ART_BLUR,
-    MAX_WINDOW_ART_DIM,
+    art_id_paints, artwork_by_id, artwork_file_name, theme_gallery, your_image_key, Artwork,
+    ARTWORKS, ARTWORK_RELEASE, BACKGROUNDS, BACKGROUND_KEYS, DEFAULT_LOOK_ID, DEFAULT_LOOK_NAME,
+    MAX_WINDOW_ART_BLUR, MAX_WINDOW_ART_DIM, YOUR_IMAGE_ART_ID,
 };
 pub use hotkey_chords::{
     customized_normal_hotkey, hotkey_keystroke, platform_hotkey, terminal_hotkey,
