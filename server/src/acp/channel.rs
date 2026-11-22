@@ -173,6 +173,10 @@ pub(crate) async fn send(
             message: "The Non-CLI host is reconnecting. Your message will be retried automatically."
                 .to_string(),
         }),
+        Err(ChannelError::Failed(message)) if message == "ACP_AGENT_BUSY" => Err(DomainStateError {
+            code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
+            message: "The Non-CLI agent is currently working on a turn. Your message is queued and will send as soon as it finishes.".to_string(),
+        }),
         Err(ChannelError::Failed(message)) => Err(DomainStateError {
             code: "invalidState",
             message,
@@ -240,6 +244,42 @@ pub(crate) async fn answer_permission(
     .map_err(|error| DomainStateError {
         code: "invalidState",
         message: format!("Could not answer the ACP approval: {error}"),
+    })
+}
+
+/// Answer a pending interactive question prompt on an ACP/Non-CLI session.
+pub(crate) async fn answer_question(
+    project_id: &str,
+    session_id: &str,
+    selections: &[Value],
+    tool_use_id: Option<&str>,
+) -> Result<Value, DomainStateError> {
+    if live(project_id, session_id, "answer_question").is_none() {
+        return Err(DomainStateError {
+            code: "dependencyUnavailable",
+            message: "The Non-CLI host is not connected to receive this answer.".to_string(),
+        });
+    }
+    request(
+        project_id,
+        session_id,
+        "answer_question",
+        json!({
+            "selections": selections,
+            "toolUseId": tool_use_id,
+        }),
+        Duration::from_secs(15),
+    )
+    .await
+    .map_err(|error| match error {
+        ChannelError::Failed(msg) if msg == "NO_PENDING_QUESTION" => DomainStateError {
+            code: "noPendingQuestion",
+            message: "No blocking Non-CLI question prompt is pending.".to_string(),
+        },
+        other => DomainStateError {
+            code: "invalidState",
+            message: format!("Could not answer the Non-CLI question: {other}"),
+        },
     })
 }
 
@@ -721,5 +761,167 @@ pub(crate) async fn switch_to_cli(
         "switched": true,
         "switchedLive": switched_live,
         "nativeSessionId": native_session_id,
+    }))
+}
+
+/// Switch a CLI session whose agent supports Non-CLI mode back to Non-CLI (`acp-host`) by
+/// updating `runtimeSettings.nonCliMode = true` and cycling the session cleanly onto its same
+/// conversation id.
+pub(crate) async fn switch_to_acp(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Result<Value, DomainStateError> {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    let (already_acp, family, was_running) = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, server_id.as_str());
+        let session = repository
+            .get_session(&pid, &sid)?
+            .ok_or_else(|| DomainStateError {
+                code: "notFound",
+                message: "The session no longer exists.".to_string(),
+            })?;
+        let family = session
+            .pointer("/runtimeSettings/acpFamily")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
+            .ok_or_else(|| DomainStateError {
+                code: "invalidParams",
+                message: "This session does not belong to an agent that supports Non-CLI mode."
+                    .to_string(),
+            })?;
+        if !super::supports_acp(&family) {
+            return Err(DomainStateError {
+                code: "invalidParams",
+                message: format!("Agent `{family}` does not support Non-CLI mode."),
+            });
+        }
+        let running = crate::presentation::effective_lifecycle_state(&session) == "running";
+        if super::session_is_acp(&session) {
+            return Ok((true, family, running));
+        }
+        let mut runtime_settings = session
+            .get("runtimeSettings")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        runtime_settings.insert(super::SESSION_NON_CLI_ACTIVE_KEY.to_string(), json!(true));
+        runtime_settings.insert(super::SESSION_ACP_ACTIVE_KEY.to_string(), json!(true));
+        runtime_settings.insert(super::SESSION_ACP_FAMILY_KEY.to_string(), json!(family));
+        let mut update = Map::new();
+        update.insert("projectId".to_string(), json!(pid));
+        update.insert("sessionId".to_string(), json!(sid));
+        update.insert(
+            "runtimeSettings".to_string(),
+            Value::Object(runtime_settings),
+        );
+        let updated = repository.update_session(&update)?;
+        Ok((
+            false,
+            updated
+                .pointer("/runtimeSettings/acpFamily")
+                .and_then(Value::as_str)
+                .unwrap_or(&family)
+                .to_string(),
+            running,
+        ))
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Could not update session for Non-CLI mode: {error}"),
+    })??;
+
+    if already_acp {
+        return Ok(json!({
+            "switched": true,
+            "restarted": false,
+            "family": family,
+        }));
+    }
+
+    if was_running {
+        if let Err(failure) =
+            crate::session_chat_queue_runtime::cycle_session_explained(state, project_id, session_id)
+                .await
+        {
+            // Roll back nonCliMode flag if cycling the provider failed.
+            let paths = state.paths.clone();
+            let server_id = state.metadata.server_id.clone();
+            let pid = project_id.to_string();
+            let sid = session_id.to_string();
+            let _ = tokio::task::spawn_blocking(move || {
+                if let Ok(db) = open_gxserver_database(&paths) {
+                    let repo = DomainRepository::new(&db, server_id.as_str());
+                    if let Ok(Some(session)) = repo.get_session(&pid, &sid) {
+                        let mut rs = session
+                            .get("runtimeSettings")
+                            .and_then(Value::as_object)
+                            .cloned()
+                            .unwrap_or_default();
+                        rs.insert(super::SESSION_NON_CLI_ACTIVE_KEY.to_string(), json!(false));
+                        rs.insert(super::SESSION_ACP_ACTIVE_KEY.to_string(), json!(false));
+                        let mut update = Map::new();
+                        update.insert("projectId".to_string(), json!(pid));
+                        update.insert("sessionId".to_string(), json!(sid));
+                        update.insert("runtimeSettings".to_string(), Value::Object(rs));
+                        let _ = repo.update_session(&update);
+                    }
+                }
+            })
+            .await;
+            return Err(DomainStateError {
+                code: "sessionInputFailed",
+                message: format!("Could not switch back to Non-CLI mode: {failure}"),
+            });
+        }
+    }
+
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    if let Ok(Ok(Some(updated_session))) = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&paths)?;
+        let repo = DomainRepository::new(&db, server_id.as_str());
+        Ok::<_, anyhow::Error>(repo.get_session(&pid, &sid).ok().flatten())
+    })
+    .await
+    {
+        state.event_hub.broadcast(json!({
+            "type": "sessionUpdated",
+            "projectId": project_id,
+            "session": updated_session,
+        }));
+    }
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+        state, project_id, session_id,
+    );
+
+    log(
+        LogLevel::Info,
+        "acp.switchedToAcp",
+        json!({
+            "projectId": project_id,
+            "sessionId": session_id,
+            "family": family,
+            "restarted": was_running,
+        }),
+    );
+
+    Ok(json!({
+        "switched": true,
+        "restarted": was_running,
+        "family": family,
     }))
 }
