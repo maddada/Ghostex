@@ -665,7 +665,7 @@ async fn answer_session_chat_prompt(
         if crate::acp::session_is_acp(&target.session) {
             if let Some(text) = answer_text {
                 if let Err(error) =
-                    crate::acp::channel::send(&state.paths, &target, &text, &[], true).await
+                    crate::acp::channel::steer(&state.paths, &target, &text).await
                 {
                     return domain_error_response(endpoint_path, request_id, error);
                 }

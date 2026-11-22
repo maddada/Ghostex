@@ -618,7 +618,14 @@ pub(super) async fn route_chat_http(
                 Ok(id) => id,
                 Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
             };
-            match crate::acp::channel::switch_to_acp(&state, &project_id, &session_id).await {
+            match crate::acp::channel::switch_to_acp(
+                &state,
+                &project_id,
+                &session_id,
+                caller.is_user_device(),
+            )
+            .await
+            {
                 Ok(result) => routed_json(
                     Some(endpoint.path),
                     StatusCode::OK,

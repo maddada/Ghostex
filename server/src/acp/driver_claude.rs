@@ -279,7 +279,9 @@ impl PendingClaudeRequest {
 struct ClaudeState {
     native_session_id: Option<String>,
     working: bool,
+    in_flight_turns: u64,
     approval_level: AcpApprovalLevel,
+    read_only: bool,
     native_mode: String,
     cwd: PathBuf,
     writable_roots: Vec<PathBuf>,
@@ -303,6 +305,7 @@ struct ClaudeState {
 impl ClaudeState {
     fn new(
         approval_level: AcpApprovalLevel,
+        read_only: bool,
         cwd: PathBuf,
         writable_roots: Vec<PathBuf>,
         initial_model: Option<String>,
@@ -311,8 +314,10 @@ impl ClaudeState {
         Self {
             native_session_id: None,
             working: false,
+            in_flight_turns: 0,
             approval_level,
-            native_mode: "default".to_string(),
+            read_only,
+            native_mode: if read_only { "plan" } else { "default" }.to_string(),
             cwd,
             writable_roots,
             current_model: initial_model,
@@ -480,8 +485,8 @@ impl Drop for ClaudeExitGuard {
 
 fn claude_tool_kind(tool_name: &str) -> &'static str {
     match tool_name {
-        "Read" | "Glob" | "Grep" | "LS" | "WebSearch" | "WebFetch" | "TaskList" | "TaskGet"
-        | "TodoRead" => "read",
+        "Read" | "Glob" | "Grep" | "LS" | "TaskList" | "TaskGet" | "TodoRead" => "read",
+        "WebSearch" | "WebFetch" => "fetch",
         "Edit" | "Write" | "MultiEdit" | "NotebookEdit" => "edit",
         _ => "execute",
     }
@@ -611,27 +616,35 @@ fn build_claude_user_content(
 fn apply_claude_approval_level(
     transport: &ClaudeTransport,
     state: &Mutex<ClaudeState>,
+    mode_sync_lock: &Mutex<()>,
     target_level: AcpApprovalLevel,
+    leave_read_only: bool,
 ) -> Result<(), String> {
-    // Keep Claude in `"default"` for Ask, Auto-edits, and Full access so `can_use_tool` always
-    // routes through Ghostex's allow-once policy (`acp/approval.rs`) and AskUserQuestion /
-    // ExitPlanMode always prompt the user. Use Claude's native `"auto"` mode only for `Auto`.
+    let _mode_guard = mode_sync_lock.lock().unwrap_or_else(|p| p.into_inner());
+    // Keep Claude in `"plan"` while a `--read-only` thread stays at `Ask`, in `"default"` for
+    // Ask / Auto-edits / Full access so `can_use_tool` always routes through Ghostex's allow-once
+    // policy (`acp/approval.rs`) and AskUserQuestion / ExitPlanMode always prompt the user, and
+    // in Claude's native `"auto"` mode only for `Auto`.
+    let (current_native, effective_read_only) = {
+        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+        let ro = if leave_read_only || target_level != AcpApprovalLevel::Ask {
+            false
+        } else {
+            s.read_only
+        };
+        (s.native_mode.clone(), ro)
+    };
     let desired_native = match target_level {
         AcpApprovalLevel::Auto => "auto",
+        AcpApprovalLevel::Ask if effective_read_only => "plan",
         AcpApprovalLevel::Ask | AcpApprovalLevel::AutoEdits | AcpApprovalLevel::FullAccess => {
             "default"
         }
     };
-    let current_native = state
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .native_mode
-        .clone();
     if current_native == desired_native {
-        state
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .approval_level = target_level;
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.approval_level = target_level;
+        s.read_only = effective_read_only;
         return Ok(());
     }
     match transport.control_request(
@@ -644,6 +657,7 @@ fn apply_claude_approval_level(
         Ok(_) => {
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
             s.approval_level = target_level;
+            s.read_only = effective_read_only;
             s.native_mode = desired_native.to_string();
             Ok(())
         }
@@ -655,6 +669,7 @@ fn apply_claude_approval_level(
             // Entering native Auto failed (e.g. account/model doesn't support Auto): stay safely
             // on `"default"` (Ask-equivalent) while recording the requested level.
             s.approval_level = target_level;
+            s.read_only = effective_read_only;
             Ok(())
         }
     }
@@ -793,14 +808,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let transport = Arc::new(ClaudeTransport::new(stdin, &spool_session_id));
     let state = Arc::new(Mutex::new(ClaudeState::new(
         parsed.approval_level,
+        parsed.read_only,
         cwd_path.clone(),
         writable_roots,
         parsed.model.clone(),
         parsed.effort.clone(),
     )));
-    if parsed.read_only {
-        state.lock().unwrap_or_else(|p| p.into_inner()).native_mode = "plan".to_string();
-    }
+    let mode_sync_lock = Arc::new(Mutex::new(()));
     if !parsed.fork_session {
         if let Some(resume_id) = parsed.resume_session_id.as_deref().filter(|s| !s.is_empty()) {
             state
@@ -879,6 +893,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         let t_out = transport.clone();
         let st_out = state.clone();
         let act_out = activity.clone();
+        let mode_lock_out = mode_sync_lock.clone();
         thread::spawn(move || {
             let _exit_guard = ClaudeExitGuard(st_out.clone());
             let reader = BufReader::new(stdout);
@@ -1025,6 +1040,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                         "system" => {
                             if msg.get("subtype").and_then(Value::as_str) == Some("init") {
+                                let _mode_guard =
+                                    mode_lock_out.lock().unwrap_or_else(|p| p.into_inner());
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                                 if let Some(model) = msg
                                     .get("model")
@@ -1152,10 +1169,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             }
                         }
                         "result" => {
-                            let orphaned: Vec<PendingClaudeRequest> = {
+                            let (stale_result, orphaned): (bool, Vec<PendingClaudeRequest>) = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                s.working = false;
-                                s.clear_live_turn_output();
                                 if let Some(model_usage) =
                                     msg.get("modelUsage").and_then(Value::as_object)
                                 {
@@ -1169,8 +1184,21 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                         }
                                     }
                                 }
-                                s.pending_requests.drain(..).collect()
+                                if s.in_flight_turns > 1 {
+                                    // Stale `result` from an interrupted earlier turn while a newer
+                                    // turn is already running: keep the newer turn's state intact.
+                                    s.in_flight_turns -= 1;
+                                    (true, Vec::new())
+                                } else {
+                                    s.in_flight_turns = 0;
+                                    s.working = false;
+                                    s.clear_live_turn_output();
+                                    (false, s.pending_requests.drain(..).collect())
+                                }
                             };
+                            if stale_result {
+                                return;
+                            }
                             for req in orphaned {
                                 let _ = t_out.control_respond_deny(
                                     &req.request_id,
@@ -1236,8 +1264,14 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         }
     }
 
-    // 2. Apply starting approval level cleanly.
-    if let Err(err) = apply_claude_approval_level(&transport, &state, parsed.approval_level) {
+    // 2. Apply starting approval level cleanly (preserving `plan` mode on `--read-only`).
+    if let Err(err) = apply_claude_approval_level(
+        &transport,
+        &state,
+        &mode_sync_lock,
+        parsed.approval_level,
+        false,
+    ) {
         eprintln!("[Claude Non-CLI] Warning: could not sync initial approval level: {err}");
     }
 
@@ -1311,7 +1345,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .unwrap_or_else(|p| p.into_inner())
                         .approval_level;
                     if desired != current {
-                        let _ = apply_claude_approval_level(&transport, &state, desired);
+                        let _ = apply_claude_approval_level(
+                            &transport,
+                            &state,
+                            &mode_sync_lock,
+                            desired,
+                            false,
+                        );
                     }
                 }
                 if reconnecting {
@@ -1346,9 +1386,27 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     ep.ack(id, true, snap, None);
                 }
                 "abort" => {
-                    let _ = transport
+                    let interrupt_res = transport
                         .control_request(json!({ "subtype": "interrupt" }), Duration::from_secs(8));
                     cancel_all_pending_claude(&transport, &state);
+                    let wait_until = SystemTime::now() + Duration::from_secs(2);
+                    while SystemTime::now() < wait_until {
+                        if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                            break;
+                        }
+                        thread::sleep(Duration::from_millis(50));
+                    }
+                    if interrupt_res.is_err()
+                        || state.lock().unwrap_or_else(|p| p.into_inner()).working
+                    {
+                        if let Err(err) = &interrupt_res {
+                            eprintln!("[Claude Non-CLI] Warning: interrupt control_request failed: {err}");
+                        }
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        s.working = false;
+                        s.in_flight_turns = 0;
+                        s.clear_live_turn_output();
+                    }
                     activity.sync();
                     ep.ack(id, true, json!({ "aborted": true }), None);
                 }
@@ -1367,10 +1425,15 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         if let Some(wanted) = target_tool_use_id {
                             s.pending_requests
                                 .iter()
-                                .position(|p| p.tool_use_id.as_deref() == Some(wanted))
+                                .position(|p| {
+                                    !p.is_question && p.tool_use_id.as_deref() == Some(wanted)
+                                })
                                 .and_then(|idx| s.pending_requests.remove(idx))
                         } else {
-                            s.pending_requests.pop_front()
+                            s.pending_requests
+                                .iter()
+                                .position(|p| !p.is_question)
+                                .and_then(|idx| s.pending_requests.remove(idx))
                         }
                     };
                     let Some(req) = req else {
@@ -1390,6 +1453,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             | "n"
                             | "no"
                     );
+                    let leaving_plan = !is_deny && req.tool_name == "ExitPlanMode";
                     let res = if is_deny {
                         transport.control_respond_deny(
                             &req.request_id,
@@ -1406,6 +1470,20 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     };
                     match res {
                         Ok(()) => {
+                            if leaving_plan {
+                                let level = {
+                                    let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                    s.read_only = false;
+                                    s.approval_level
+                                };
+                                let _ = apply_claude_approval_level(
+                                    &transport,
+                                    &state,
+                                    &mode_sync_lock,
+                                    level,
+                                    true,
+                                );
+                            }
                             activity.sync();
                             ep.ack(id, true, json!({ "answered": true }), None);
                         }
@@ -1428,7 +1506,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         if let Some(wanted) = target_tool_use_id {
                             s.pending_requests
                                 .iter()
-                                .position(|p| p.tool_use_id.as_deref() == Some(wanted))
+                                .position(|p| {
+                                    p.is_question && p.tool_use_id.as_deref() == Some(wanted)
+                                })
                                 .and_then(|idx| s.pending_requests.remove(idx))
                         } else {
                             s.pending_requests
@@ -1487,6 +1567,21 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         state.lock().unwrap_or_else(|p| p.into_inner()).current_model = Some(model);
                     }
                     if !effort.is_empty() {
+                        if let Err(err) = transport.control_request(
+                            json!({
+                                "subtype": "apply_flag_settings",
+                                "settings": { "effortLevel": effort },
+                            }),
+                            CLAUDE_CTRL_TIMEOUT,
+                        ) {
+                            ep.ack(
+                                id,
+                                false,
+                                Value::Null,
+                                Some(&format!("Could not update Claude effort level: {err}")),
+                            );
+                            continue;
+                        }
                         state
                             .lock()
                             .unwrap_or_else(|p| p.into_inner())
@@ -1512,7 +1607,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                         continue;
                     };
-                    if let Err(err) = apply_claude_approval_level(&transport, &state, level) {
+                    if let Err(err) = apply_claude_approval_level(
+                        &transport,
+                        &state,
+                        &mode_sync_lock,
+                        level,
+                        level != AcpApprovalLevel::Ask,
+                    ) {
                         ep.ack(id, false, Value::Null, Some(&err));
                         continue;
                     }
@@ -1572,6 +1673,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     let sid = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        s.in_flight_turns = s.in_flight_turns.saturating_add(1);
                         s.clear_live_turn_output();
                         s.native_session_id.clone()
                     };
@@ -1598,7 +1700,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             );
                         }
                         Err(err) => {
-                            state.lock().unwrap_or_else(|p| p.into_inner()).working = false;
+                            {
+                                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                s.in_flight_turns = s.in_flight_turns.saturating_sub(1);
+                                if s.in_flight_turns == 0 {
+                                    s.working = false;
+                                }
+                            }
                             activity.sync();
                             ep.ack(id, false, Value::Null, Some(&err));
                         }
@@ -1659,11 +1767,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
 
     if switch_to_cli_requested {
         drop(signal_guard);
-        let (sid, accept_all) = {
+        let (sid, accept_all, read_only) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
             (
                 s.native_session_id.clone(),
                 s.approval_level.implies_cli_accept_all(),
+                s.read_only,
             )
         };
         return exec_interactive_cli(
@@ -1671,6 +1780,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             parsed.cli_command.as_deref(),
             sid.as_deref(),
             accept_all,
+            read_only,
         );
     }
 

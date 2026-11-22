@@ -145,6 +145,11 @@ enum CodexRequestKind {
     FileChangeApproval,
     PermissionsApproval { permissions: Value },
     UserInput { questions: Vec<Value> },
+    McpElicitation {
+        field_keys: Vec<String>,
+        field_types: Vec<String>,
+        questions: Vec<Value>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -159,46 +164,54 @@ struct PendingCodexRequest {
 
 impl PendingCodexRequest {
     fn is_question(&self) -> bool {
-        matches!(self.kind, CodexRequestKind::UserInput { .. })
+        match &self.kind {
+            CodexRequestKind::UserInput { .. } => true,
+            CodexRequestKind::McpElicitation { questions, .. } => !questions.is_empty(),
+            _ => false,
+        }
     }
 
     fn to_ghostex_prompt(&self) -> Value {
-        if let CodexRequestKind::UserInput { questions } = &self.kind {
-            let formatted: Vec<Value> = questions
-                .iter()
-                .map(|q| {
-                    let options = q
-                        .get("options")
-                        .and_then(Value::as_array)
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|opt| {
-                                    let label = opt.get("label").and_then(Value::as_str)?;
-                                    let mut item = json!({ "label": label });
-                                    if let Some(desc) =
-                                        opt.get("description").and_then(Value::as_str)
-                                    {
-                                        item["description"] = json!(desc);
-                                    }
-                                    Some(item)
-                                })
-                                .collect::<Vec<_>>()
+        if let CodexRequestKind::UserInput { questions }
+        | CodexRequestKind::McpElicitation { questions, .. } = &self.kind
+        {
+            if !questions.is_empty() {
+                let formatted: Vec<Value> = questions
+                    .iter()
+                    .map(|q| {
+                        let options = q
+                            .get("options")
+                            .and_then(Value::as_array)
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|opt| {
+                                        let label = opt.get("label").and_then(Value::as_str)?;
+                                        let mut item = json!({ "label": label });
+                                        if let Some(desc) =
+                                            opt.get("description").and_then(Value::as_str)
+                                        {
+                                            item["description"] = json!(desc);
+                                        }
+                                        Some(item)
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        json!({
+                            "question": q.get("question").and_then(Value::as_str).unwrap_or("Choose an option."),
+                            "header": q.get("header").and_then(Value::as_str).unwrap_or("Question"),
+                            "multiSelect": false,
+                            "allowCustom": q.get("isOther").and_then(Value::as_bool).unwrap_or(true),
+                            "options": options,
                         })
-                        .unwrap_or_default();
-                    json!({
-                        "question": q.get("question").and_then(Value::as_str).unwrap_or("Choose an option."),
-                        "header": q.get("header").and_then(Value::as_str).unwrap_or("Question"),
-                        "multiSelect": false,
-                        "allowCustom": q.get("isOther").and_then(Value::as_bool).unwrap_or(true),
-                        "options": options,
                     })
-                })
-                .collect();
-            return json!({
-                "kind": "question",
-                "toolUseId": self.tool_use_id,
-                "questions": formatted,
-            });
+                    .collect();
+                return json!({
+                    "kind": "question",
+                    "toolUseId": self.tool_use_id,
+                    "questions": formatted,
+                });
+            }
         }
         let mut prompt = json!({
             "kind": "approval",
@@ -245,16 +258,18 @@ struct CodexState {
     thread_id: Option<String>,
     thread_path: Option<String>,
     active_turn_id: Option<String>,
+    ignored_turn_ids: std::collections::HashSet<String>,
     working: bool,
     approval_level: AcpApprovalLevel,
     read_only: bool,
+    has_ghostex_profile: bool,
     cwd: PathBuf,
     writable_roots: Vec<PathBuf>,
     current_model: Option<String>,
     current_effort: Option<String>,
     available_models: Value,
     pending_requests: VecDeque<PendingCodexRequest>,
-    file_change_locations_by_item: HashMap<String, Vec<Value>>,
+    file_change_items: HashMap<String, Value>,
     live_stream_text: String,
     live_stream_started_at: Option<String>,
     live_thought_text: String,
@@ -273,6 +288,7 @@ impl CodexState {
     fn new(
         approval_level: AcpApprovalLevel,
         read_only: bool,
+        has_ghostex_profile: bool,
         cwd: PathBuf,
         writable_roots: Vec<PathBuf>,
         initial_model: Option<String>,
@@ -282,16 +298,18 @@ impl CodexState {
             thread_id: None,
             thread_path: None,
             active_turn_id: None,
+            ignored_turn_ids: std::collections::HashSet::new(),
             working: false,
             approval_level,
             read_only,
+            has_ghostex_profile,
             cwd,
             writable_roots,
             current_model: initial_model,
             current_effort: initial_effort,
             available_models: Value::Array(Vec::new()),
             pending_requests: VecDeque::new(),
-            file_change_locations_by_item: HashMap::new(),
+            file_change_items: HashMap::new(),
             live_stream_text: String::new(),
             live_stream_started_at: None,
             live_thought_text: String::new(),
@@ -520,40 +538,239 @@ fn codex_turn_policies(
     }
 }
 
-fn extract_codex_file_locations(params: &Value) -> Vec<Value> {
+fn approval_level_rank(level: AcpApprovalLevel) -> u8 {
+    match level {
+        AcpApprovalLevel::Ask => 0,
+        AcpApprovalLevel::AutoEdits => 1,
+        AcpApprovalLevel::Auto => 2,
+        AcpApprovalLevel::FullAccess => 3,
+    }
+}
+
+/// Apply a new approval level on Codex: reconcile `read_only`, and when lowering a level while
+/// a turn is active, interrupt the running turn so the stronger policy (`dangerFullAccess` or
+/// `auto_review`) cannot keep running under the weaker UI label.
+fn apply_codex_approval_level(
+    transport: &CodexTransport,
+    state: &Mutex<CodexState>,
+    activity: &CodexActivityReporter,
+    desired: AcpApprovalLevel,
+) {
+    let interrupt_target = {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        let prev = s.approval_level;
+        s.approval_level = desired;
+        if desired != AcpApprovalLevel::Ask {
+            s.read_only = false;
+        }
+        if s.working && approval_level_rank(desired) < approval_level_rank(prev) {
+            if let Some(tid) = s.active_turn_id.clone() {
+                s.ignored_turn_ids.insert(tid);
+            }
+            Some((s.thread_id.clone(), s.active_turn_id.clone()))
+        } else {
+            None
+        }
+    };
+    if let Some((Some(tid), Some(turn_id))) = interrupt_target {
+        cancel_all_pending_codex(transport, state);
+        let _ = transport.call(
+            "turn/interrupt",
+            json!({ "threadId": tid, "turnId": turn_id }),
+            Duration::from_secs(5),
+        );
+        let wait_until = SystemTime::now() + Duration::from_secs(2);
+        while SystemTime::now() < wait_until {
+            if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.working = false;
+        s.active_turn_id = None;
+        s.clear_live_turn_output();
+        drop(s);
+        activity.sync();
+    }
+}
+
+/// Extract every mutated path (including `kind.move_path` / `kind.movePath`) from a Codex
+/// `fileChange` `changes` payload. Never falls back to `grantRoot`, so `grantRoot` can never mask
+/// the actual changed file paths during `Auto-edits` evaluation.
+fn extract_codex_change_locations(changes: &Value) -> Vec<Value> {
     let mut locations = Vec::new();
-    if let Some(changes) = params.get("changes").and_then(Value::as_array) {
-        for c in changes {
+    let push_path = |locs: &mut Vec<Value>, raw: &str| {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty()
+            && !locs
+                .iter()
+                .any(|l| l.get("path").and_then(Value::as_str) == Some(trimmed))
+        {
+            locs.push(json!({ "path": trimmed }));
+        }
+    };
+    if let Some(arr) = changes.as_array() {
+        for c in arr {
             if let Some(path) = c
                 .get("path")
                 .or_else(|| c.get("filePath"))
                 .and_then(Value::as_str)
             {
-                locations.push(json!({ "path": path }));
+                push_path(&mut locations, path);
+            }
+            if let Some(kind_obj) = c.get("kind").and_then(Value::as_object) {
+                for move_key in ["move_path", "movePath"] {
+                    if let Some(mp) = kind_obj.get(move_key).and_then(Value::as_str) {
+                        push_path(&mut locations, mp);
+                    }
+                }
+            }
+            for move_key in ["move_path", "movePath"] {
+                if let Some(mp) = c.get(move_key).and_then(Value::as_str) {
+                    push_path(&mut locations, mp);
+                }
             }
         }
-    }
-    if let Some(changes_obj) = params.get("changes").and_then(Value::as_object) {
-        for key in changes_obj.keys() {
-            locations.push(json!({ "path": key }));
-        }
-    }
-    if let Some(files) = params.get("files").and_then(Value::as_array) {
-        for f in files {
-            if let Some(path) = f
-                .as_str()
-                .or_else(|| f.get("path").and_then(Value::as_str))
-            {
-                locations.push(json!({ "path": path }));
+    } else if let Some(obj) = changes.as_object() {
+        for (key, val) in obj {
+            push_path(&mut locations, key);
+            if let Some(kind_obj) = val.get("kind").and_then(Value::as_object) {
+                for move_key in ["move_path", "movePath"] {
+                    if let Some(mp) = kind_obj.get(move_key).and_then(Value::as_str) {
+                        push_path(&mut locations, mp);
+                    }
+                }
             }
-        }
-    }
-    if locations.is_empty() {
-        if let Some(root) = params.get("grantRoot").and_then(Value::as_str) {
-            locations.push(json!({ "path": root }));
         }
     }
     locations
+}
+
+/// Build Ghostex question items for a Codex `mcpServer/elicitation/request` (`mode: "form"`),
+/// returning `(field_keys, field_types, questions)`.
+fn build_mcp_elicitation_questions(
+    params: &Value,
+) -> (Vec<String>, Vec<String>, Vec<Value>) {
+    let mut field_keys = Vec::new();
+    let mut field_types = Vec::new();
+    let mut questions = Vec::new();
+    let message = params
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or("MCP server requests input");
+    if params.get("mode").and_then(Value::as_str) != Some("form") {
+        return (field_keys, field_types, questions);
+    }
+    let Some(props) = params
+        .pointer("/requestedSchema/properties")
+        .and_then(Value::as_object)
+    else {
+        return (field_keys, field_types, questions);
+    };
+    for (key, schema) in props {
+        let ftype = schema
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or("string")
+            .to_string();
+        let title = schema
+            .get("title")
+            .or_else(|| schema.get("description"))
+            .and_then(Value::as_str)
+            .unwrap_or(key.as_str());
+        let mut options = Vec::new();
+        if ftype == "boolean" {
+            options.push(json!({ "label": "Yes" }));
+            options.push(json!({ "label": "No" }));
+        } else if let Some(enum_vals) = schema.get("enum").and_then(Value::as_array) {
+            for v in enum_vals {
+                if let Some(s) = v.as_str() {
+                    options.push(json!({ "label": s }));
+                }
+            }
+        } else if let Some(one_of) = schema.get("oneOf").and_then(Value::as_array) {
+            for item in one_of {
+                if let Some(label) = item
+                    .get("title")
+                    .or_else(|| item.get("const"))
+                    .and_then(Value::as_str)
+                {
+                    options.push(json!({ "label": label }));
+                }
+            }
+        }
+        field_keys.push(key.clone());
+        field_types.push(ftype);
+        questions.push(json!({
+            "id": key,
+            "header": title,
+            "question": format!("{message}: {title}"),
+            "isOther": options.is_empty(),
+            "options": options,
+        }));
+    }
+    (field_keys, field_types, questions)
+}
+
+fn build_mcp_elicitation_response(
+    field_keys: &[String],
+    field_types: &[String],
+    questions: &[Value],
+    selections: &[Value],
+) -> Value {
+    let mut content = Map::new();
+    for (idx, key) in field_keys.iter().enumerate() {
+        let Some(sel) = selections.get(idx) else {
+            continue;
+        };
+        let options = questions
+            .get(idx)
+            .and_then(|q| q.get("options"))
+            .and_then(Value::as_array);
+        let raw_val = sel
+            .get("other")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                sel.get("indices")
+                    .and_then(Value::as_array)
+                    .and_then(|arr| arr.first())
+                    .and_then(Value::as_u64)
+                    .and_then(|i| options.and_then(|o| o.get(i as usize)))
+                    .and_then(|o| o.get("label").and_then(Value::as_str))
+                    .map(str::to_string)
+            });
+        let Some(val) = raw_val else {
+            continue;
+        };
+        let ftype = field_types.get(idx).map(String::as_str).unwrap_or("string");
+        let json_val = match ftype {
+            "boolean" => Value::Bool(matches!(
+                val.to_ascii_lowercase().as_str(),
+                "yes" | "true" | "1"
+            )),
+            "integer" => val
+                .parse::<i64>()
+                .map(Value::from)
+                .unwrap_or_else(|_| Value::String(val)),
+            "number" => val
+                .parse::<f64>()
+                .ok()
+                .and_then(serde_json::Number::from_f64)
+                .map(Value::Number)
+                .unwrap_or_else(|| Value::String(val)),
+            _ => Value::String(val),
+        };
+        content.insert(key.clone(), json_val);
+    }
+    if content.is_empty() {
+        json!({ "action": "decline" })
+    } else {
+        json!({ "action": "accept", "content": Value::Object(content) })
+    }
 }
 
 fn build_codex_user_input_answers(questions: &[Value], selections: &[Value]) -> Value {
@@ -612,6 +829,9 @@ fn cancel_all_pending_codex(transport: &CodexTransport, state: &Mutex<CodexState
             CodexRequestKind::UserInput { .. } => {
                 let _ = transport.respond(req.rpc_id, json!({ "answers": {} }));
             }
+            CodexRequestKind::McpElicitation { .. } => {
+                let _ = transport.respond(req.rpc_id, json!({ "action": "cancel" }));
+            }
         }
     }
 }
@@ -663,6 +883,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         eprintln!("Invalid Codex Non-CLI command.");
         return 1;
     };
+    let has_ghostex_profile = argv.iter().any(|arg| {
+        let trimmed = arg.trim();
+        trimmed.starts_with("default_permissions=\"ghostex-")
+            || trimmed.starts_with("default_permissions=ghostex-")
+    });
 
     let mut child = match Command::new(&prog)
         .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
@@ -695,6 +920,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let state = Arc::new(Mutex::new(CodexState::new(
         parsed.approval_level,
         parsed.read_only,
+        has_ghostex_profile,
         cwd_path.clone(),
         writable_roots,
         parsed.model.clone(),
@@ -891,19 +1117,35 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                     .get("itemId")
                                     .and_then(Value::as_str)
                                     .map(str::to_string);
-                                let mut locations = extract_codex_file_locations(&params);
-                                let (level, roots, cwd) = {
+                                // Always consult the full cached `item/started` `changes` payload
+                                // first (never letting `grantRoot` hide actual changed paths or
+                                // `kind.move_path`), falling back to `params.changes` / `params.files`
+                                // only when no cached item exists. If neither is present, fail
+                                // closed (`locations: []`, `rawInput: {}`) so `evaluate_permission`
+                                // asks the user.
+                                let (cached_changes, level, roots, cwd) = {
                                     let s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    if locations.is_empty() {
-                                        if let Some(id) = tool_use_id.as_deref() {
-                                            if let Some(cached) =
-                                                s.file_change_locations_by_item.get(id)
-                                            {
-                                                locations = cached.clone();
-                                            }
-                                        }
-                                    }
-                                    (s.approval_level, s.writable_roots.clone(), s.cwd.clone())
+                                    let cached = tool_use_id
+                                        .as_deref()
+                                        .and_then(|id| s.file_change_items.get(id))
+                                        .cloned();
+                                    (
+                                        cached,
+                                        s.approval_level,
+                                        s.writable_roots.clone(),
+                                        s.cwd.clone(),
+                                    )
+                                };
+                                let changes_val = cached_changes
+                                    .or_else(|| params.get("changes").cloned())
+                                    .or_else(|| params.get("files").cloned());
+                                let locations = changes_val
+                                    .as_ref()
+                                    .map(extract_codex_change_locations)
+                                    .unwrap_or_default();
+                                let raw_input = match changes_val {
+                                    Some(c) if !c.is_null() => json!({ "changes": c }),
+                                    _ => json!({}),
                                 };
                                 let summary = locations
                                     .first()
@@ -916,7 +1158,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                     "toolCall": {
                                         "name": "Edit",
                                         "kind": "edit",
-                                        "rawInput": {},
+                                        "rawInput": raw_input,
                                         "locations": locations,
                                     }
                                 });
@@ -1034,6 +1276,53 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                     act_out.sync();
                                 }
                             }
+                            "mcpServer/elicitation/request" => {
+                                let (field_keys, field_types, questions) =
+                                    build_mcp_elicitation_questions(&params);
+                                let server_name = params
+                                    .get("serverName")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("MCP server");
+                                let message = params
+                                    .get("message")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("Input requested");
+                                let url = params
+                                    .get("url")
+                                    .and_then(Value::as_str)
+                                    .map(str::trim)
+                                    .filter(|s| !s.is_empty());
+                                let summary = match url {
+                                    Some(u) => format!("{server_name}: {message} ({u})"),
+                                    None => format!("{server_name}: {message}"),
+                                };
+                                let tool_use_id = params
+                                    .get("elicitationId")
+                                    .or_else(|| params.get("itemId"))
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string);
+                                let pending = PendingCodexRequest {
+                                    rpc_id,
+                                    kind: CodexRequestKind::McpElicitation {
+                                        field_keys,
+                                        field_types,
+                                        questions,
+                                    },
+                                    tool_name: format!("MCP ({server_name})"),
+                                    summary,
+                                    tool_use_id,
+                                    reason: None,
+                                };
+                                let was_empty = {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    let empty = s.pending_requests.is_empty();
+                                    s.pending_requests.push_back(pending);
+                                    empty
+                                };
+                                if was_empty {
+                                    act_out.sync();
+                                }
+                            }
                             other => {
                                 t_out.respond_error(
                                     rpc_id,
@@ -1063,13 +1352,39 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             act_out.sync();
                         }
                         "turn/completed" => {
-                            let orphaned: Vec<PendingCodexRequest> = {
+                            let completed_tid = params
+                                .pointer("/turn/id")
+                                .or_else(|| params.get("turnId"))
+                                .and_then(Value::as_str);
+                            let (stale_turn, orphaned): (bool, Vec<PendingCodexRequest>) = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                s.working = false;
-                                s.active_turn_id = None;
-                                s.clear_live_turn_output();
-                                s.pending_requests.drain(..).collect()
+                                if let Some(done_id) = completed_tid {
+                                    if s.ignored_turn_ids.remove(done_id) {
+                                        (true, Vec::new())
+                                    } else if s
+                                        .active_turn_id
+                                        .as_deref()
+                                        .is_some_and(|active| active != done_id)
+                                    {
+                                        (true, Vec::new())
+                                    } else {
+                                        s.working = false;
+                                        s.active_turn_id = None;
+                                        s.file_change_items.clear();
+                                        s.clear_live_turn_output();
+                                        (false, s.pending_requests.drain(..).collect())
+                                    }
+                                } else {
+                                    s.working = false;
+                                    s.active_turn_id = None;
+                                    s.file_change_items.clear();
+                                    s.clear_live_turn_output();
+                                    (false, s.pending_requests.drain(..).collect())
+                                }
                             };
+                            if stale_turn {
+                                return;
+                            }
                             for req in orphaned {
                                 match req.kind {
                                     CodexRequestKind::CommandApproval
@@ -1083,6 +1398,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                     }
                                     CodexRequestKind::UserInput { .. } => {
                                         let _ = t_out.respond(req.rpc_id, json!({ "answers": {} }));
+                                    }
+                                    CodexRequestKind::McpElicitation { .. } => {
+                                        let _ = t_out
+                                            .respond(req.rpc_id, json!({ "action": "cancel" }));
                                     }
                                 }
                             }
@@ -1132,10 +1451,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                         if let Some(item_id) =
                                             item.get("id").and_then(Value::as_str)
                                         {
-                                            let locs = extract_codex_file_locations(item);
-                                            if !locs.is_empty() {
-                                                s.file_change_locations_by_item
-                                                    .insert(item_id.to_string(), locs);
+                                            if let Some(changes) = item.get("changes") {
+                                                s.file_change_items
+                                                    .insert(item_id.to_string(), changes.clone());
                                             }
                                         }
                                     }
@@ -1151,6 +1469,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                         "item/completed" => {
                             let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            if let Some(item_id) = params
+                                .pointer("/item/id")
+                                .or_else(|| params.get("itemId"))
+                                .and_then(Value::as_str)
+                            {
+                                s.file_change_items.remove(item_id);
+                            }
                             s.live_tool_label = None;
                             s.live_tool_detail = None;
                             s.live_tool_started_at = None;
@@ -1243,6 +1568,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
 
     // 3. Start, fork, or resume thread with explicit approvalPolicy/sandbox so any user-global
     // `approval_policy = "never"` in `~/.codex/config.toml` cannot override Ghostex's level.
+    // When Ghostex passed a custom permission profile (`default_permissions="ghostex-*"`, e.g.
+    // home secret-folder denies or GBot API chat sandbox), omit `sandbox` so Codex enforces the
+    // custom deny profile instead of overriding it.
     let (init_approval, init_reviewer, _init_sandbox_policy) = {
         let s = state.lock().unwrap_or_else(|p| p.into_inner());
         codex_turn_policies(s.approval_level, s.read_only, &s.writable_roots)
@@ -1265,23 +1593,23 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         } else {
             "thread/resume"
         };
-        transport.call(
-            method,
-            json!({
-                "threadId": resume_id,
-                "cwd": cwd,
-                "approvalPolicy": init_approval,
-                "approvalsReviewer": init_reviewer,
-                "sandbox": init_sandbox_mode,
-            }),
-            CODEX_RPC_TIMEOUT,
-        )
+        let mut req_params = Map::new();
+        req_params.insert("threadId".to_string(), json!(resume_id));
+        req_params.insert("cwd".to_string(), json!(cwd));
+        req_params.insert("approvalPolicy".to_string(), init_approval);
+        req_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
+        if !has_ghostex_profile {
+            req_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
+        }
+        transport.call(method, Value::Object(req_params), CODEX_RPC_TIMEOUT)
     } else {
         let mut start_params = Map::new();
         start_params.insert("cwd".to_string(), json!(cwd));
         start_params.insert("approvalPolicy".to_string(), init_approval);
         start_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
-        start_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
+        if !has_ghostex_profile {
+            start_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
+        }
         if let Some(m) = parsed.model.as_deref().filter(|s| !s.is_empty()) {
             start_params.insert("model".to_string(), json!(m));
         }
@@ -1305,7 +1633,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             .pointer("/thread/id")
             .and_then(Value::as_str)
             .map(str::to_string)
-            .or_else(|| parsed.resume_session_id.clone());
+            .or_else(|| {
+                if parsed.fork_session {
+                    None
+                } else {
+                    parsed.resume_session_id.clone()
+                }
+            });
         s.thread_id = tid.clone();
         s.thread_path = thread_res
             .pointer("/thread/path")
@@ -1325,6 +1659,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         }
         tid
     };
+    if parsed.fork_session && thread_id.is_none() {
+        eprintln!("Codex thread/fork did not return a forked thread id.");
+        stop_codex_gracefully(&transport, &mut child, &child_pid);
+        return 1;
+    }
 
     println!(
         "Ghostex Non-CLI Host · {} · Ready (thread: {})",
@@ -1339,6 +1678,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let capabilities = json!([
         "acp",
         "send",
+        "steer",
         "abort",
         "approve",
         "answer_question",
@@ -1386,10 +1726,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     .and_then(Value::as_str)
                     .and_then(AcpApprovalLevel::parse)
                 {
-                    state
+                    let current = state
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
-                        .approval_level = desired;
+                        .approval_level;
+                    if desired != current {
+                        apply_codex_approval_level(&transport, &state, &activity, desired);
+                    }
                 }
                 if reconnecting {
                     reconnecting = false;
@@ -1427,14 +1770,38 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
                         (s.thread_id.clone(), s.active_turn_id.clone())
                     };
-                    if let (Some(tid), Some(turn_id)) = (tid, turn_id) {
-                        let _ = transport.call(
+                    let interrupt_res = if let (Some(tid), Some(turn_id)) = (tid, turn_id.clone()) {
+                        Some(transport.call(
                             "turn/interrupt",
                             json!({ "threadId": tid, "turnId": turn_id }),
                             Duration::from_secs(8),
-                        );
-                    }
+                        ))
+                    } else {
+                        None
+                    };
                     cancel_all_pending_codex(&transport, &state);
+                    let wait_until = SystemTime::now() + Duration::from_secs(2);
+                    while SystemTime::now() < wait_until {
+                        if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                            break;
+                        }
+                        thread::sleep(Duration::from_millis(50));
+                    }
+                    if interrupt_res.as_ref().is_some_and(Result::is_err)
+                        || state.lock().unwrap_or_else(|p| p.into_inner()).working
+                    {
+                        if let Some(Err(err)) = &interrupt_res {
+                            eprintln!("[Codex Non-CLI] Warning: turn/interrupt failed: {err}");
+                        }
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        if let Some(tid_old) = turn_id {
+                            s.ignored_turn_ids.insert(tid_old);
+                        }
+                        s.working = false;
+                        s.active_turn_id = None;
+                        s.file_change_items.clear();
+                        s.clear_live_turn_output();
+                    }
                     activity.sync();
                     ep.ack(id, true, json!({ "aborted": true }), None);
                 }
@@ -1453,10 +1820,15 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         if let Some(wanted) = target_tool_use_id {
                             s.pending_requests
                                 .iter()
-                                .position(|p| p.tool_use_id.as_deref() == Some(wanted))
+                                .position(|p| {
+                                    !p.is_question() && p.tool_use_id.as_deref() == Some(wanted)
+                                })
                                 .and_then(|idx| s.pending_requests.remove(idx))
                         } else {
-                            s.pending_requests.pop_front()
+                            s.pending_requests
+                                .iter()
+                                .position(|p| !p.is_question())
+                                .and_then(|idx| s.pending_requests.remove(idx))
                         }
                     };
                     let Some(req) = req else {
@@ -1493,6 +1865,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                 )
                             }
                         }
+                        CodexRequestKind::McpElicitation { .. } => {
+                            let action = if is_deny { "decline" } else { "accept" };
+                            transport.respond(req.rpc_id, json!({ "action": action }))
+                        }
                         CodexRequestKind::UserInput { .. } => {
                             transport.respond(req.rpc_id, json!({ "answers": {} }))
                         }
@@ -1521,7 +1897,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         if let Some(wanted) = target_tool_use_id {
                             s.pending_requests
                                 .iter()
-                                .position(|p| p.tool_use_id.as_deref() == Some(wanted))
+                                .position(|p| {
+                                    p.is_question() && p.tool_use_id.as_deref() == Some(wanted)
+                                })
                                 .and_then(|idx| s.pending_requests.remove(idx))
                         } else {
                             s.pending_requests
@@ -1538,6 +1916,16 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         CodexRequestKind::UserInput { questions } => {
                             build_codex_user_input_answers(&questions, &selections)
                         }
+                        CodexRequestKind::McpElicitation {
+                            field_keys,
+                            field_types,
+                            questions,
+                        } => build_mcp_elicitation_response(
+                            &field_keys,
+                            &field_types,
+                            &questions,
+                            &selections,
+                        ),
                         _ => json!({ "answers": {} }),
                     };
                     match transport.respond(req.rpc_id, body) {
@@ -1588,18 +1976,130 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                         continue;
                     };
-                    {
-                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        s.approval_level = level;
-                        if level != AcpApprovalLevel::Ask {
-                            s.read_only = false;
-                        }
-                    }
+                    apply_codex_approval_level(&transport, &state, &activity, level);
                     let snap = state
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
                         .snapshot_json();
                     ep.ack(id, true, snap, None);
+                }
+                "steer" => {
+                    let text = params
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string();
+                    let (
+                        is_working,
+                        tid,
+                        turn_id,
+                        level,
+                        read_only,
+                        has_profile,
+                        roots,
+                        model,
+                        effort,
+                    ) = {
+                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        (
+                            s.working,
+                            s.thread_id.clone(),
+                            s.active_turn_id.clone(),
+                            s.approval_level,
+                            s.read_only,
+                            s.has_ghostex_profile,
+                            s.writable_roots.clone(),
+                            s.current_model.clone(),
+                            s.current_effort.clone(),
+                        )
+                    };
+                    let Some(tid) = tid else {
+                        ep.ack(id, false, Value::Null, Some("Codex thread not initialized."));
+                        continue;
+                    };
+                    let input = vec![json!({ "type": "text", "text": text })];
+                    if is_working {
+                        if let Some(ref active_tid) = turn_id {
+                            if transport
+                                .call(
+                                    "turn/steer",
+                                    json!({
+                                        "threadId": tid,
+                                        "expectedTurnId": active_tid,
+                                        "input": input,
+                                    }),
+                                    Duration::from_secs(10),
+                                )
+                                .is_ok()
+                            {
+                                ep.ack(id, true, json!({ "steered": true }), None);
+                                continue;
+                            }
+                        }
+                        cancel_all_pending_codex(&transport, &state);
+                        if let Some(old_turn_id) = turn_id {
+                            state
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .ignored_turn_ids
+                                .insert(old_turn_id.clone());
+                            let _ = transport.call(
+                                "turn/interrupt",
+                                json!({ "threadId": tid, "turnId": old_turn_id }),
+                                Duration::from_secs(5),
+                            );
+                        }
+                        let wait_until = SystemTime::now() + Duration::from_secs(4);
+                        while SystemTime::now() < wait_until {
+                            if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                                break;
+                            }
+                            thread::sleep(Duration::from_millis(50));
+                        }
+                    }
+                    let (approval_policy, reviewer, sandbox_policy) =
+                        codex_turn_policies(level, read_only, &roots);
+                    let mut turn_params = Map::new();
+                    turn_params.insert("threadId".to_string(), json!(tid));
+                    turn_params.insert("input".to_string(), Value::Array(input));
+                    turn_params.insert("cwd".to_string(), json!(cwd));
+                    turn_params.insert("approvalPolicy".to_string(), approval_policy);
+                    turn_params.insert("approvalsReviewer".to_string(), json!(reviewer));
+                    if !has_profile {
+                        turn_params.insert("sandboxPolicy".to_string(), sandbox_policy);
+                    }
+                    if let Some(m) = model.as_deref().filter(|v| !v.is_empty()) {
+                        turn_params.insert("model".to_string(), json!(m));
+                    }
+                    if let Some(e) = effort.as_deref().filter(|v| !v.is_empty()) {
+                        turn_params.insert("effort".to_string(), json!(e));
+                    }
+                    {
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        s.working = true;
+                        s.active_turn_id = None;
+                        s.clear_live_turn_output();
+                    }
+                    match transport.call("turn/start", Value::Object(turn_params), CODEX_RPC_TIMEOUT)
+                    {
+                        Ok(res) => {
+                            if let Some(new_turn_id) =
+                                res.pointer("/turn/id").and_then(Value::as_str)
+                            {
+                                state
+                                    .lock()
+                                    .unwrap_or_else(|p| p.into_inner())
+                                    .active_turn_id = Some(new_turn_id.to_string());
+                            }
+                            activity.sync();
+                            ep.ack(id, true, json!({ "accepted": true, "sessionId": tid }), None);
+                        }
+                        Err(err) => {
+                            state.lock().unwrap_or_else(|p| p.into_inner()).working = false;
+                            activity.sync();
+                            ep.ack(id, false, Value::Null, Some(&err));
+                        }
+                    }
                 }
                 "send" => {
                     let text = params
@@ -1621,7 +2121,17 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
-                    let (is_working, tid, turn_id, level, read_only, roots, model, effort) = {
+                    let (
+                        is_working,
+                        tid,
+                        turn_id,
+                        level,
+                        read_only,
+                        has_profile,
+                        roots,
+                        model,
+                        effort,
+                    ) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
                         (
                             s.working,
@@ -1629,6 +2139,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             s.active_turn_id.clone(),
                             s.approval_level,
                             s.read_only,
+                            s.has_ghostex_profile,
                             s.writable_roots.clone(),
                             s.current_model.clone(),
                             s.current_effort.clone(),
@@ -1669,32 +2180,19 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }));
                     }
                     if is_working && interrupt {
-                        // Prefer Codex's native `turn/steer` when delivering mid-turn input (for
-                        // example an async question answer while Codex is sleeping for input) so
-                        // the running turn wakes immediately without aborting; fall back to
-                        // `turn/interrupt` + `turn/start` if steering is refused.
-                        if let Some(ref active_tid) = turn_id {
-                            if transport
-                                .call(
-                                    "turn/steer",
-                                    json!({
-                                        "threadId": tid,
-                                        "expectedTurnId": active_tid,
-                                        "input": input,
-                                    }),
-                                    Duration::from_secs(10),
-                                )
-                                .is_ok()
-                            {
-                                ep.ack(id, true, json!({ "steered": true }), None);
-                                continue;
-                            }
-                        }
+                        // Interrupt-and-send ALWAYS calls `turn/interrupt` so the new turn starts
+                        // cleanly under the current approval level and sandbox policy (never
+                        // steering into an older turn's stronger policy).
                         cancel_all_pending_codex(&transport, &state);
-                        if let Some(turn_id) = turn_id {
+                        if let Some(old_turn_id) = turn_id {
+                            state
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .ignored_turn_ids
+                                .insert(old_turn_id.clone());
                             let _ = transport.call(
                                 "turn/interrupt",
-                                json!({ "threadId": tid, "turnId": turn_id }),
+                                json!({ "threadId": tid, "turnId": old_turn_id }),
                                 Duration::from_secs(5),
                             );
                         }
@@ -1715,7 +2213,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     turn_params.insert("cwd".to_string(), json!(cwd));
                     turn_params.insert("approvalPolicy".to_string(), approval_policy);
                     turn_params.insert("approvalsReviewer".to_string(), json!(reviewer));
-                    turn_params.insert("sandboxPolicy".to_string(), sandbox_policy);
+                    if !has_profile {
+                        turn_params.insert("sandboxPolicy".to_string(), sandbox_policy);
+                    }
                     if let Some(m) = model.as_deref().filter(|v| !v.is_empty()) {
                         turn_params.insert("model".to_string(), json!(m));
                     }
@@ -1725,6 +2225,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        s.active_turn_id = None;
                         s.clear_live_turn_output();
                     }
                     println!("\r\n[Codex Non-CLI] Turn started...");
@@ -1815,11 +2316,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
 
     if switch_to_cli_requested {
         drop(signal_guard);
-        let (tid, accept_all) = {
+        let (tid, accept_all, read_only) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
             (
                 s.thread_id.clone(),
                 s.approval_level.implies_cli_accept_all(),
+                s.read_only,
             )
         };
         return exec_interactive_cli(
@@ -1827,6 +2329,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             parsed.cli_command.as_deref(),
             tid.as_deref(),
             accept_all,
+            read_only,
         );
     }
 

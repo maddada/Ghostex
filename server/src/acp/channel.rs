@@ -192,6 +192,44 @@ pub(crate) async fn send(
     }
 }
 
+/// Steer a running Non-CLI turn (for example delivering an async question answer to Codex via
+/// `turn/steer`), falling back to `send(..., interrupt: true)` if the host does not advertise
+/// `"steer"`.
+pub(crate) async fn steer(
+    paths: &crate::paths::GxserverPaths,
+    target: &SessionChatSendTarget,
+    text: &str,
+) -> Result<Value, DomainStateError> {
+    if live(&target.project_id, &target.session_id, "steer").is_none() {
+        return send(paths, target, text, &[], true).await;
+    }
+    match request(
+        &target.project_id,
+        &target.session_id,
+        "steer",
+        json!({ "text": text }),
+        Duration::from_secs(20),
+    )
+    .await
+    {
+        Ok(result) => Ok(result),
+        Err(ChannelError::Unsupported(_)) => send(paths, target, text, &[], true).await,
+        Err(ChannelError::Unavailable(_)) => Err(DomainStateError {
+            code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
+            message: "The Non-CLI host is reconnecting. Your answer will be retried automatically."
+                .to_string(),
+        }),
+        Err(ChannelError::Failed(message)) => Err(DomainStateError {
+            code: "invalidState",
+            message,
+        }),
+        Err(ChannelError::NoAnswer) => Err(DomainStateError {
+            code: "deliveryUnconfirmed",
+            message: "The Non-CLI agent took the answer but did not confirm delivery.".to_string(),
+        }),
+    }
+}
+
 /// Cancel an active turn on an ACP session (`session/cancel`).
 pub(crate) async fn abort(project_id: &str, session_id: &str) -> Result<(), DomainStateError> {
     if live(project_id, session_id, "abort").is_none() {
@@ -771,6 +809,7 @@ pub(crate) async fn switch_to_acp(
     state: &AppState,
     project_id: &str,
     session_id: &str,
+    caller_is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
@@ -815,6 +854,20 @@ pub(crate) async fn switch_to_acp(
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
+        let force_ask = crate::coordinators::is_read_only_thread(Some(&runtime_settings))
+            || crate::side_chats::parent_of(&session).is_some()
+            || crate::agents::is_gbot_api_chat(Some(&runtime_settings));
+        let has_stored_level = runtime_settings
+            .get(super::SESSION_ACP_APPROVAL_LEVEL_KEY)
+            .and_then(Value::as_str)
+            .and_then(super::AcpApprovalLevel::parse)
+            .is_some();
+        if force_ask || (!caller_is_user_device && !has_stored_level) {
+            runtime_settings.insert(
+                super::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+                json!(super::AcpApprovalLevel::Ask.as_str()),
+            );
+        }
         runtime_settings.insert(super::SESSION_NON_CLI_ACTIVE_KEY.to_string(), json!(true));
         runtime_settings.insert(super::SESSION_ACP_ACTIVE_KEY.to_string(), json!(true));
         runtime_settings.insert(super::SESSION_ACP_FAMILY_KEY.to_string(), json!(family));

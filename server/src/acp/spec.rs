@@ -479,17 +479,56 @@ fn is_account_wrapper_bin(token: &str) -> bool {
     )
 }
 
-/// Extract safe pass-through flags (`--settings <val>`, `--add-dir <val>`) from a Claude CLI
-/// command so home-secret-folder denial, Ghostex skills, and compaction settings stay active in
-/// Non-CLI mode without leaking conflicting permission/bypass flags.
+/// Sanitize a Claude inline `--settings` JSON object: strip `permissions.allow`,
+/// `permissions.defaultMode`, and `permissions.additionalDirectories` so an agent-supplied or
+/// inherited command can never loosen Ghostex's approval level, while preserving deny rules
+/// (home-secret-folder denies, GBot computer-use denies) and non-permission settings (hooks,
+/// compaction). Returns `None` for non-inline file paths so arbitrary settings files cannot be
+/// smuggled into Non-CLI mode.
+fn sanitize_claude_inline_settings(raw: &str) -> Option<String> {
+    let Ok(serde_json::Value::Object(mut obj)) = serde_json::from_str::<serde_json::Value>(raw.trim())
+    else {
+        return None;
+    };
+    if let Some(perms) = obj
+        .get_mut("permissions")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        perms.remove("allow");
+        perms.remove("defaultMode");
+        perms.remove("additionalDirectories");
+    }
+    serde_json::to_string(&serde_json::Value::Object(obj)).ok()
+}
+
+/// Extract safe pass-through flags (`--settings <sanitized-inline-json>`, `--add-dir <val>`,
+/// `--append-system-prompt`, `--append-system-prompt-file`) from a Claude CLI command so
+/// home-secret-folder denial, GBot computer-use denial, Ghostex skills, and compaction settings
+/// stay active in Non-CLI mode without leaking conflicting permission/bypass flags.
 fn preserved_claude_flags(tokens: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
         let tok = tokens[i].as_str();
-        if matches!(
+        if tok == "--settings" {
+            if let Some(val) = tokens.get(i + 1) {
+                if let Some(sanitized) = sanitize_claude_inline_settings(val) {
+                    out.push("--settings".to_string());
+                    out.push(sanitized);
+                }
+                i += 2;
+                continue;
+            }
+        } else if let Some(val) = tok.strip_prefix("--settings=") {
+            if let Some(sanitized) = sanitize_claude_inline_settings(val) {
+                out.push("--settings".to_string());
+                out.push(sanitized);
+            }
+            i += 1;
+            continue;
+        } else if matches!(
             tok,
-            "--settings" | "--add-dir" | "--append-system-prompt" | "--append-system-prompt-file"
+            "--add-dir" | "--append-system-prompt" | "--append-system-prompt-file"
         ) {
             if let Some(val) = tokens.get(i + 1) {
                 out.push(tok.to_string());
@@ -497,12 +536,86 @@ fn preserved_claude_flags(tokens: &[String]) -> Vec<String> {
                 i += 2;
                 continue;
             }
-        } else if tok.starts_with("--settings=")
-            || tok.starts_with("--add-dir=")
+        } else if tok.starts_with("--add-dir=")
             || tok.starts_with("--append-system-prompt=")
             || tok.starts_with("--append-system-prompt-file=")
         {
             out.push(tok.to_string());
+        }
+        i += 1;
+    }
+    out
+}
+
+/// True when a Codex `-c <expr>` override is one of Ghostex's security/sandbox/feature controls
+/// (home-secret-folder denies, GBot API chat sandbox, GBot computer-use MCP server disables) and
+/// NOT an untrusted `approval_policy` or `sandbox_mode` override.
+fn is_safe_ghostex_codex_config_override(val: &str) -> bool {
+    let trimmed = val.trim();
+    if trimmed.starts_with("permissions.ghostex-") {
+        return true;
+    }
+    if trimmed.starts_with("default_permissions=\"ghostex-")
+        || trimmed.starts_with("default_permissions=ghostex-")
+    {
+        return true;
+    }
+    if let Some(rest) = trimmed.strip_prefix("mcp_servers.") {
+        if let Some(name) = rest.strip_suffix(".enabled=false") {
+            return !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+        }
+    }
+    false
+}
+
+/// Extract Ghostex's safe Codex CLI flags (`-c permissions.ghostex-*`,
+/// `-c default_permissions="ghostex-*"`, `-c mcp_servers.*.enabled=false`, and
+/// `--disable <feature>`) so Non-CLI Codex keeps every Ghostex sandbox, secret-folder denial,
+/// GBot computer-use restriction, and lean-worker flag without forwarding untrusted approval or
+/// sandbox overrides.
+fn preserved_codex_flags(tokens: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < tokens.len() {
+        let tok = tokens[i].as_str();
+        if matches!(tok, "-c" | "--config") {
+            if let Some(val) = tokens.get(i + 1) {
+                if is_safe_ghostex_codex_config_override(val) {
+                    out.push("-c".to_string());
+                    out.push(val.clone());
+                }
+                i += 2;
+                continue;
+            }
+        } else if let Some(val) = tok
+            .strip_prefix("-c=")
+            .or_else(|| tok.strip_prefix("--config="))
+        {
+            if is_safe_ghostex_codex_config_override(val) {
+                out.push("-c".to_string());
+                out.push(val.to_string());
+            }
+            i += 1;
+            continue;
+        } else if tok == "--disable" {
+            if let Some(feature) = tokens.get(i + 1) {
+                if !feature.is_empty() && !feature.starts_with('-') {
+                    out.push("--disable".to_string());
+                    out.push(feature.clone());
+                }
+                i += 2;
+                continue;
+            }
+        } else if let Some(feature) = tok.strip_prefix("--disable=") {
+            if !feature.is_empty() && !feature.starts_with('-') {
+                out.push("--disable".to_string());
+                out.push(feature.to_string());
+            }
+            i += 1;
+            continue;
         }
         i += 1;
     }
@@ -555,6 +668,8 @@ pub fn build_acp_server_argv(
         args.extend(acp_args.iter().map(|s| (*s).to_string()));
         if spec.family == "claude" {
             args.extend(preserved_claude_flags(tail_slice));
+        } else if spec.family == "codex" {
+            args.extend(preserved_codex_flags(tail_slice));
         }
         return Some((envs, first.clone(), args));
     }
@@ -567,17 +682,66 @@ pub fn build_acp_server_argv(
     let mut args: Vec<String> = acp_args.iter().map(|s| (*s).to_string()).collect();
     if spec.family == "claude" && base_tokens.len() > 1 {
         args.extend(preserved_claude_flags(&base_tokens[1..]));
+    } else if spec.family == "codex" && base_tokens.len() > 1 {
+        args.extend(preserved_codex_flags(&base_tokens[1..]));
     }
     Some((envs, program, args))
 }
 
+/// Strip permissive approval/sandbox flags from CLI arguments when switching to Terminal while
+/// downgraded below `Full access` (e.g. `Ask`), keeping Ghostex deny profiles and other flags.
+fn strip_permissive_cli_flags(args: Vec<String>) -> Vec<String> {
+    let mut out = Vec::with_capacity(args.len());
+    let mut i = 0;
+    while i < args.len() {
+        let tok = args[i].as_str();
+        let lower = tok.to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "--dangerously-skip-permissions"
+                | "--dangerously-bypass-approvals-and-sandbox"
+                | "--yolo"
+                | "--full-auto"
+                | "--allow-all"
+                | "--bypass-permissions"
+                | "--accept-all"
+        ) {
+            i += 1;
+            continue;
+        }
+        if matches!(
+            lower.as_str(),
+            "--permission-mode" | "--approval-mode" | "--ask-for-approval" | "-a" | "--sandbox" | "-s"
+        ) {
+            i += 2;
+            continue;
+        }
+        if lower.starts_with("--permission-mode=")
+            || lower.starts_with("--approval-mode=")
+            || lower.starts_with("--ask-for-approval=")
+            || lower.starts_with("-a=")
+            || lower.starts_with("--sandbox=")
+            || lower.starts_with("-s=")
+        {
+            i += 1;
+            continue;
+        }
+        out.push(args[i].clone());
+        i += 1;
+    }
+    out
+}
+
 /// Build `(envs, program, args)` to exec in-place inside `zmx`/`wmx` when the user switches an ACP
-/// session to the interactive CLI terminal.
-pub fn build_cli_switch_argv(
+/// session to the interactive CLI terminal, preserving `--permission-mode plan` /
+/// `--sandbox read-only` for `--read-only` threads and stripping non-bypass permissive flags when
+/// `!accept_all`.
+pub fn build_cli_switch_argv_with_options(
     spec: &AcpAgentSpec,
     cli_command: Option<&str>,
     native_session_id: Option<&str>,
     accept_all: bool,
+    read_only: bool,
 ) -> (Vec<(String, String)>, String, Vec<String>) {
     let (envs, mut base_tokens) = cli_command
         .map(tokenize_cli_command)
@@ -609,6 +773,10 @@ pub fn build_cli_switch_argv(
         wrapper_prefix.push("--share-history".to_string());
     }
 
+    if !accept_all || read_only {
+        inner_args = strip_permissive_cli_flags(inner_args);
+    }
+
     if let Some(id) = native_session_id.map(str::trim).filter(|s| !s.is_empty()) {
         if spec.family == "codex" {
             // `codex resume [OPTIONS] [SESSION_ID]` expects `resume` as the subcommand before
@@ -624,7 +792,15 @@ pub fn build_cli_switch_argv(
         }
     }
 
-    if let Some(flag) = spec.cli_accept_all_flag {
+    if read_only {
+        if spec.family == "claude" {
+            inner_args.push("--permission-mode".to_string());
+            inner_args.push("plan".to_string());
+        } else if spec.family == "codex" {
+            inner_args.push("--sandbox".to_string());
+            inner_args.push("read-only".to_string());
+        }
+    } else if let Some(flag) = spec.cli_accept_all_flag {
         if accept_all {
             if !inner_args.iter().any(|arg| arg == flag) {
                 inner_args.push(flag.to_string());

@@ -458,7 +458,10 @@ pub(crate) fn to_agent_resume_input(
         None => command,
     });
     let acp_read_only = crate::coordinators::is_read_only_thread(Some(&runtime_settings));
-    let acp_approval_level = if acp_read_only {
+    let force_ask = acp_read_only
+        || crate::side_chats::parent_of(session).is_some()
+        || crate::agents::is_gbot_api_chat(Some(&runtime_settings));
+    let acp_approval_level = if force_ask {
         crate::acp::AcpApprovalLevel::Ask
     } else {
         crate::acp::approval::resolve_starting_level(

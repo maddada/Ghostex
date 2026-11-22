@@ -61,6 +61,28 @@ impl GhostexGpuiApp {
                     })
                     .is_some_and(|row| row.non_cli_mode);
                 if is_non_cli {
+                    let remote_target = match &session.machine {
+                        ghostex_gx_core::MachineId::Local => Ok(None),
+                        ghostex_gx_core::MachineId::Remote(machine_id) => self
+                            .gpui_remote_gxserver_request_target(machine_id)
+                            .map(Some)
+                            .ok_or_else(|| {
+                                "Switching a remote Non-CLI session to Terminal is not available in the web build yet."
+                                    .to_string()
+                            }),
+                    };
+                    let target = match remote_target {
+                        Ok(target) => target,
+                        Err(message) => {
+                            self.dispatch_gpui_app_modal_toast(
+                                "warning",
+                                "Could not switch to Terminal",
+                                &message,
+                                cx,
+                            );
+                            return;
+                        }
+                    };
                     let params = json!({
                         "projectId": session.project_id,
                         "sessionId": session.session_id,
@@ -68,7 +90,7 @@ impl GhostexGpuiApp {
                     });
                     cx.spawn(async move |this, cx| {
                         let res = crate::app::gx_store::gx_rpc(
-                            None,
+                            target,
                             "/api/switchSessionAcpToCli",
                             params,
                         )
