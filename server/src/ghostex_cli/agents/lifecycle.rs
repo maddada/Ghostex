@@ -258,7 +258,7 @@ pub(super) fn switch_account(args: &Arguments) -> CliResult<Value> {
         &json!({
             "operation": "switchSession",
             "globalRef": recipient["globalRef"], "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
-            "account": args.account, "force": args.force,
+            "account": args.account, "force": args.force, "userNamed": args.user_named,
         }),
         &flags,
     )

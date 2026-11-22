@@ -238,7 +238,10 @@ pub(crate) fn requested_account(
         }
     }
     let snapshot = super::runtime::current_snapshot();
-    let (account, _) = super::cli::resolve_ready_account(&registry, &snapshot, provider, wanted)?;
+    // The creator named this account itself, so a manual-only one is not refused here (only
+    // `switch-account` asks for `--user-named`; the playbook keeps coordinators off them).
+    let (account, _) =
+        super::cli::resolve_ready_account(&registry, &snapshot, provider, wanted, true)?;
     Ok(account.id.clone())
 }
 /// The account provider of a launcher agent, read the way `apply_new_session` reads it: the icon family, else the agent id.

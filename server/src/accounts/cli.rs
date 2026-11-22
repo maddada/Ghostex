@@ -162,11 +162,19 @@ const SWITCH_WAIT: Duration = Duration::from_secs(90);
 
 /// CDXC:AgentProviders 2026-11-04 WHY:
 /// `switch-account` and `coordinator start-thread --account` name an account the same way (its number, email or id) and refuse the same ones (turned off, or not signed in on this computer), listing the accounts that would work, so the two never disagree about which account a session may use.
+/// CDXC:Coordinators 2026-11-22 DECISION:
+/// User, asked how agents may switch to a manual-only account (context-bloat page): "only when
+/// named". A manual-only account (not available for automatic switching) is refused unless
+/// `user_named` says the user named that account (`switch-account --user-named`, or a person's own
+/// terminal), and "Accounts that would work" lists only the ones Ghostex's automatic switching may
+/// pick (`SavedAccount::auto_switchable`), so a refusal never points an agent at the user's
+/// manual-only account.
 pub(crate) fn resolve_ready_account<'a>(
     registry: &'a Registry,
     snapshot: &Snapshot,
     provider: Provider,
     wanted: &str,
+    user_named: bool,
 ) -> Result<(&'a SavedAccount, String), DomainStateError> {
     let discovered = |account: &SavedAccount| {
         snapshot
@@ -216,12 +224,12 @@ pub(crate) fn resolve_ready_account<'a>(
     let working = || {
         let rows: Vec<String> = accounts
             .iter()
-            .filter(|account| ready(account))
+            .filter(|account| account.auto_switchable() && ready(account))
             .map(|account| describe(account))
             .collect();
         if rows.is_empty() {
             format!(
-                "No saved {} account is signed in on this computer; the user has to sign in to one (Settings > Accounts).",
+                "No saved {} account that agents may switch to on their own is signed in on this computer (ghostex accounts status lists them); ask the user.",
                 provider.id()
             )
         } else {
@@ -248,6 +256,14 @@ pub(crate) fn resolve_ready_account<'a>(
     if target.user_disabled {
         return Err(DomainStateError::bad_request(format!(
             "Account {} ({}) is turned off in Settings > Accounts; turn it on there to use it. {}",
+            target.selector,
+            email(target),
+            working()
+        )));
+    }
+    if !target.eligible && !user_named {
+        return Err(DomainStateError::bad_request(format!(
+            "Account {} ({}) is manual only in Settings > Accounts: an agent may move a session to it only when the user named that account. If the user asked for it, run again with --user-named. {}",
             target.selector,
             email(target),
             working()
@@ -288,7 +304,9 @@ pub(super) fn switch_session(
             "This session is not a Claude or Codex session, so it has no account to switch.",
         )
     })?;
-    let (target, target_email) = resolve_ready_account(&registry, &snapshot, provider, wanted)?;
+    let user_named = params.get("userNamed").and_then(Value::as_bool) == Some(true);
+    let (target, target_email) =
+        resolve_ready_account(&registry, &snapshot, provider, wanted, user_named)?;
     let previous = session
         .pointer("/runtimeSettings/accountId")
         .and_then(Value::as_str)

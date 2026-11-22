@@ -43,6 +43,9 @@ pub(super) struct Arguments {
     pub account: Option<String>,
     /// `--force`: switch-account interrupts a running turn and sends "." after the switch.
     pub force: bool,
+    /// `--user-named`: switch-account moves to a manual-only account because the user named it
+    /// (server/src/accounts/cli.rs `resolve_ready_account`).
+    pub user_named: bool,
     pub json: bool,
     pub help: bool,
     /// `send --main-coordinator`: the recipient is the main coordinator of `--project-id` or
@@ -89,6 +92,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         standalone: false,
         account: None,
         force: false,
+        user_named: false,
         json: false,
         help: args.is_empty(),
         main_coordinator: false,
@@ -131,6 +135,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 });
             }
             "--force" => parsed.force = true,
+            "--user-named" => parsed.user_named = true,
             "--interrupt" | "--queue" | "--with-next" => {
                 if parsed.delivery != Delivery::Normal {
                     return Err(CliError::Other(
@@ -196,9 +201,11 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
             "--request-id is only available for send.".into(),
         ));
     }
-    if (parsed.account.is_some() || parsed.force) && parsed.command != "switch-account" {
+    if (parsed.account.is_some() || parsed.force || parsed.user_named)
+        && parsed.command != "switch-account"
+    {
         return Err(CliError::Other(
-            "--account and --force are only available for switch-account.".into(),
+            "--account, --force and --user-named are only available for switch-account.".into(),
         ));
     }
     if parsed
@@ -456,13 +463,13 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                     if parsed.command == "reload" {
                         "reload <session-ref>"
                     } else {
-                        "switch-account <session-ref> --account <number|email> [--force]"
+                        "switch-account <session-ref> --account <number|email> [--force] [--user-named]"
                     }
                 )));
             }
             if parsed.command == "switch-account" && parsed.account.is_none() {
                 return Err(CliError::Other(
-                    "switch-account requires --account <number|email>. Run ghostex accounts to see them.".into(),
+                    "switch-account requires --account <number|email>. ghostex accounts status says which ones you may use.".into(),
                 ));
             }
         }
