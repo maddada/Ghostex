@@ -31,9 +31,50 @@ const ANTIGRAVITY_SPEC: AcpAgentSpec = AcpAgentSpec {
     cli_accept_all_flag: Some("--dangerously-skip-permissions"),
 };
 
+const CLAUDE_SPEC: AcpAgentSpec = AcpAgentSpec {
+    family: "claude",
+    display_name: "Claude Code",
+    // Native bidirectional stream-json control protocol with stdio permission routing.
+    // Always starts in `--permission-mode default` so Ghostex's four live approval levels are
+    // authoritative and `AskUserQuestion` / `ExitPlanMode` always prompt interactively.
+    acp_argv: &[
+        "claude",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--input-format",
+        "stream-json",
+        "--permission-prompt-tool=stdio",
+        "--include-partial-messages",
+        "--permission-mode",
+        "default",
+    ],
+    default_cli_bin: "claude",
+    cli_resume_flag: "--resume",
+    cli_accept_all_flag: Some("--dangerously-skip-permissions"),
+};
+
+const CODEX_SPEC: AcpAgentSpec = AcpAgentSpec {
+    family: "codex",
+    display_name: "Codex",
+    // Native Codex app-server JSON-RPC over stdio.
+    acp_argv: &[
+        "codex",
+        "app-server",
+        "--stdio",
+        "-c",
+        "thread_unload_delay_secs=0",
+    ],
+    default_cli_bin: "codex",
+    cli_resume_flag: "resume",
+    cli_accept_all_flag: Some("--dangerously-bypass-approvals-and-sandbox"),
+};
+
 pub fn spec_for_family(family: &str) -> Option<&'static AcpAgentSpec> {
     match family.trim().to_ascii_lowercase().as_str() {
         "antigravity" | "antigravity-cli" | "agy" => Some(&ANTIGRAVITY_SPEC),
+        "claude" | "claude-code" => Some(&CLAUDE_SPEC),
+        "codex" | "codex-cli" => Some(&CODEX_SPEC),
         _ => None,
     }
 }
@@ -67,6 +108,16 @@ pub fn transcript_path_for_session(family: &str, native_session_id: &str) -> Opt
             // Return the expected path so the follower binds as soon as the first step lands.
             Some(full)
         }
+        "claude" => crate::session_chat_paths::resolve_session_chat_transcript_path(
+            crate::session_chat::SessionChatTranscriptAgent::Claude,
+            Some(native_session_id),
+            None,
+        ),
+        "codex" => crate::session_chat_paths::resolve_session_chat_transcript_path(
+            crate::session_chat::SessionChatTranscriptAgent::Codex,
+            Some(native_session_id),
+            None,
+        ),
         _ => None,
     }
 }
@@ -378,8 +429,50 @@ fn split_leading_env_assignments(tokens: Vec<String>) -> (Vec<(String, String)>,
     (envs, tokens[idx..].to_vec())
 }
 
-/// Build `(envs, program, args)` to launch the agent's stdio ACP subprocess, respecting any custom
-/// executable configured via `cli_command`.
+fn is_account_wrapper_bin(token: &str) -> bool {
+    let base = token
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(token)
+        .to_ascii_lowercase();
+    matches!(
+        base.as_str(),
+        "cswap" | "cswap.exe" | "xswap" | "xswap.exe"
+    )
+}
+
+/// Extract safe pass-through flags (`--settings <val>`, `--add-dir <val>`) from a Claude CLI
+/// command so home-secret-folder denial, Ghostex skills, and compaction settings stay active in
+/// Non-CLI mode without leaking conflicting permission/bypass flags.
+fn preserved_claude_flags(tokens: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < tokens.len() {
+        let tok = tokens[i].as_str();
+        if matches!(
+            tok,
+            "--settings" | "--add-dir" | "--append-system-prompt" | "--append-system-prompt-file"
+        ) {
+            if let Some(val) = tokens.get(i + 1) {
+                out.push(tok.to_string());
+                out.push(val.clone());
+                i += 2;
+                continue;
+            }
+        } else if tok.starts_with("--settings=")
+            || tok.starts_with("--add-dir=")
+            || tok.starts_with("--append-system-prompt=")
+            || tok.starts_with("--append-system-prompt-file=")
+        {
+            out.push(tok.to_string());
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Build `(envs, program, args)` to launch the agent's stdio ACP/SDK subprocess, respecting custom
+/// executables and account wrappers (`cswap run <N> --share-history -- ...`, `xswap run <N> -- ...`).
 pub fn build_acp_server_argv(
     spec: &AcpAgentSpec,
     cli_command: Option<&str>,
@@ -389,12 +482,54 @@ pub fn build_acp_server_argv(
         .map(tokenize_cli_command)
         .map(split_leading_env_assignments)
         .unwrap_or_default();
+
+    // Preserve `cswap` / `xswap` account wrappers cleanly (and ALWAYS keep `--share-history` on
+    // `cswap` so shared Claude projects/history are never unlinked).
+    if let Some(first) = base_tokens.first().filter(|t| is_account_wrapper_bin(t)) {
+        let is_cswap = first
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(first)
+            .to_ascii_lowercase()
+            .starts_with("cswap");
+        let sep_idx = base_tokens.iter().position(|t| t == "--");
+        let mut args = Vec::new();
+        let tail_slice: &[String];
+        if let Some(sep) = sep_idx {
+            let mut prefix = base_tokens[1..sep].to_vec();
+            if is_cswap && !prefix.iter().any(|t| t == "--share-history") {
+                prefix.push("--share-history".to_string());
+            }
+            args.extend(prefix);
+            args.push("--".to_string());
+            tail_slice = &base_tokens[sep + 1..];
+        } else {
+            let mut prefix = base_tokens[1..].to_vec();
+            if is_cswap && !prefix.iter().any(|t| t == "--share-history") {
+                prefix.push("--share-history".to_string());
+            }
+            args.extend(prefix);
+            args.push("--".to_string());
+            tail_slice = &[];
+        }
+        // Both `cswap run <N> --share-history -- <args>` and `xswap run <N> -- <args>` pass
+        // everything after `--` directly to `claude` or `codex` (never the binary name itself).
+        args.extend(acp_args.iter().map(|s| (*s).to_string()));
+        if spec.family == "claude" {
+            args.extend(preserved_claude_flags(tail_slice));
+        }
+        return Some((envs, first.clone(), args));
+    }
+
     let program = base_tokens
         .first()
         .filter(|s| !s.is_empty())
         .cloned()
         .unwrap_or_else(|| (*default_prog).to_string());
-    let args = acp_args.iter().map(|s| (*s).to_string()).collect();
+    let mut args: Vec<String> = acp_args.iter().map(|s| (*s).to_string()).collect();
+    if spec.family == "claude" && base_tokens.len() > 1 {
+        args.extend(preserved_claude_flags(&base_tokens[1..]));
+    }
     Some((envs, program, args))
 }
 
@@ -414,21 +549,62 @@ pub fn build_cli_switch_argv(
         base_tokens.push(spec.default_cli_bin.to_string());
     }
     let program = base_tokens[0].clone();
-    let mut args = base_tokens[1..].to_vec();
-    if let Some(flag) = spec.cli_accept_all_flag {
-        if accept_all {
-            if !args.iter().any(|arg| arg == flag) {
-                args.push(flag.to_string());
-            }
+    let is_wrapper = is_account_wrapper_bin(&program);
+    let is_cswap = program
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(&program)
+        .to_ascii_lowercase()
+        .starts_with("cswap");
+
+    let (mut wrapper_prefix, mut inner_args) = if is_wrapper {
+        if let Some(sep) = base_tokens.iter().position(|t| t == "--") {
+            (base_tokens[1..sep].to_vec(), base_tokens[sep + 1..].to_vec())
         } else {
-            args.retain(|arg| arg != flag);
+            (base_tokens[1..].to_vec(), Vec::new())
+        }
+    } else {
+        (Vec::new(), base_tokens[1..].to_vec())
+    };
+
+    if is_cswap && !wrapper_prefix.iter().any(|t| t == "--share-history") {
+        wrapper_prefix.push("--share-history".to_string());
+    }
+
+    if let Some(id) = native_session_id.map(str::trim).filter(|s| !s.is_empty()) {
+        if spec.family == "codex" {
+            // `codex resume [OPTIONS] [SESSION_ID]` expects `resume` as the subcommand before
+            // resume-specific flags.
+            if !inner_args.iter().any(|arg| arg == spec.cli_resume_flag) {
+                let mut next = vec![spec.cli_resume_flag.to_string(), id.to_string()];
+                next.extend(inner_args);
+                inner_args = next;
+            }
+        } else if !inner_args.iter().any(|arg| arg == spec.cli_resume_flag) {
+            inner_args.push(spec.cli_resume_flag.to_string());
+            inner_args.push(id.to_string());
         }
     }
-    if let Some(id) = native_session_id.map(str::trim).filter(|s| !s.is_empty()) {
-        if !args.iter().any(|arg| arg == spec.cli_resume_flag) {
-            args.push(spec.cli_resume_flag.to_string());
-            args.push(id.to_string());
+
+    if let Some(flag) = spec.cli_accept_all_flag {
+        if accept_all {
+            if !inner_args.iter().any(|arg| arg == flag) {
+                inner_args.push(flag.to_string());
+            }
+        } else {
+            inner_args.retain(|arg| arg != flag);
         }
+    }
+
+    let mut args = Vec::new();
+    if is_wrapper {
+        args.extend(wrapper_prefix);
+        if !inner_args.is_empty() {
+            args.push("--".to_string());
+            args.extend(inner_args);
+        }
+    } else {
+        args.extend(inner_args);
     }
     (envs, program, args)
 }

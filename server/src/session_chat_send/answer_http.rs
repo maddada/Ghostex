@@ -642,6 +642,35 @@ async fn answer_session_chat_prompt(
         } else {
             None
         };
+        if crate::acp::session_is_acp(&target.session) {
+            if let Some(text) = answer_text {
+                if let Err(error) =
+                    crate::acp::channel::send(&state.paths, &target, &text, &[], true).await
+                {
+                    return domain_error_response(endpoint_path, request_id, error);
+                }
+            }
+            return match crate::session_chat_async_questions::dismiss(
+                state,
+                &target.project_id,
+                &target.session_id,
+                question_id,
+            ) {
+                Ok(()) => routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, json!({ "queued": false })),
+                ),
+                Err(error) => domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "internalError",
+                        message: error.to_string(),
+                    },
+                ),
+            };
+        }
         let session = target.session.clone();
         let id = question_id.to_string();
         let answer = tokio::task::spawn_blocking(move || {

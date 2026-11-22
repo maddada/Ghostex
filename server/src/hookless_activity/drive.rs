@@ -173,6 +173,11 @@ pub(crate) fn hook_superseded(
     let (Some(project_id), Some(session_id)) = (text("projectId"), text("sessionId")) else {
         return false;
     };
+    // Non-CLI (`ghostex acp-host`) sessions own their own authoritative activity and approval
+    // reports; never drop them as hook-superseded.
+    if crate::acp::channel::channel_state(project_id, session_id).is_some() {
+        return false;
+    }
     let pane = (project_id.to_string(), session_id.to_string());
     is_tracked(agent, &pane)
         && super::agent_drive::drive_enabled(&state.paths, agent)
