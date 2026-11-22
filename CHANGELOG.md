@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 11.15.0 - 2026-11-22
+
+**Ghostex 11.15.0 is out.** Four approval levels for Non-CLI sessions on the chat box's Mode button, top and bottom pin groups with discoverable separators on the rail, a Windows wake-from-sleep crash fix, older open pages and forms kept in the dock and Work panel, a scrollable phone pill row, and blurred art behind Live pages on the phone.
+
+### 💬 Chat and approvals
+
+- **Approval levels for Non-CLI sessions:** pick Ask, Auto-edits, Auto or Full access directly from the chat box's Mode button, taking effect on the next permission request without restarting the session, with approval cards explaining why an action paused for review on desktop, web and phone.
+- **Only your own devices can raise approval levels:** agents can lower a session's approval level or turn off Agent approvals: accept all, never raise it or turn accept-all on.
+- **Older waiting pages and forms stay in the dock and Work panel:** unanswered Live pages and forms from earlier in a conversation remain in the dock above the chat box and in the Work panel instead of falling out once they scroll past the loaded rows.
+
+### 🧭 Rail
+
+- **Pin anything to the top or bottom of the rail:** drag any pinned icon, link or separator freely between the top and bottom groups, or use Move to top, Move to bottom and Pin to bottom from right-click menus.
+- **Discoverable rail separators:** add separators from the rail's ⋯ menu (Add separator, Add separator at bottom) or by right-clicking empty rail space, the ⋯ button, or any rail item, and unpinning from a right-click menu closes cleanly instead of morphing into the ⋯ menu.
+
+### 📱 On the phone
+
+- **Scrollable chat box pill row:** the project pill now sits inline as a normal pill in one horizontally scrollable row, so Boost, Links, Session details and the usage ring stay reachable on narrower screens without clipping.
+- **Blurred art behind Live pages:** Live page sheets on the phone now display a blurred backdrop of your theme's artwork, matching desktop.
+
+### 🩹 Fixes and polish
+
+- **Windows wake-from-sleep crash fixed:** Windows no longer crashes on sleep or wake when system power events arrive while a window is closing ([#712](https://github.com/maddada/Ghostex/issues/712)).
+
 ## 11.14.0 - 2026-11-22
 
 **Ghostex 11.14.0 is out.** Art themes with Polar Night as the new default look, Animated backgrounds and a matching floating Theme Editor, opt-in Non-CLI session mode, Find across prompts and agent answers, a redesigned Add Project folder picker, live previews in Settings > Experience, refreshed defaults for new installs, the rail's Links menu, phone Automations, and a wide round of stability and Cloud Box fixes.
