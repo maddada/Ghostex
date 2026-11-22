@@ -323,7 +323,8 @@ fn board_snooze_choices(row: &Value) -> Vec<Value> {
 }
 
 /// A Needs you card's height (unscaled), drawn as its dock row (`board_dock_card`): its title's
-/// lines at the list's width, and the answers' line under it when it has any.
+/// lines at the list's width, any preview/note/command block (including relayed approval commands),
+/// and the answers' line under it when it has any.
 fn dock_card_height(dock: &Value) -> f32 {
     use super::chat_text_look::PROSE_LINE_HEIGHT;
     let room = (BOARD_WIDTH - 2.0 * 10.0 - BADGE_ROOM - 2.0 * 8.0 - 23.0 - 34.0) / 7.0;
@@ -333,31 +334,62 @@ fn dock_card_height(dock: &Value) -> f32 {
     let answers = dock["buttons"].as_array().is_some_and(|b| !b.is_empty())
         || dock["open"].is_object()
         || dock["reply"].is_object();
-    // A Needs you to-do's command chip under it (work_cards.rs `dock_command_chip`): its 3px
-    // sides, a line of the chat's monospace and the 6px under it.
+    // A Needs you command block (`commandLines`: relayed approval command preview + optional
+    // "Show N more lines" row) or single-line command chip (`dock_command_chip`).
     let command = if text(dock, "command").trim().is_empty() {
         0.0
+    } else if dock["commandLines"] == true {
+        let more = dock["commandMore"].as_u64().unwrap_or(0);
+        let shown = if more > 0 && !text(dock, "commandPreview").trim().is_empty() {
+            text(dock, "commandPreview")
+        } else {
+            text(dock, "command")
+        };
+        let code_room = ((BOARD_WIDTH - 2.0 * 10.0 - 2.0 * 8.0 - 16.0) / 7.2).max(20.0);
+        let code_lines: f32 = shown
+            .lines()
+            .map(|line| (line.chars().count() as f32 / code_room).ceil().max(1.0))
+            .sum::<f32>()
+            .max(1.0);
+        6.0 + 8.0 + code_lines * 18.0 + if more > 0 { 22.0 } else { 0.0 } + 6.0
     } else {
         6.0 + 19.0 + 6.0
     };
-    let preview_height = if text(dock, "preview").trim().is_empty() {
+    let note_text = text(&dock["note"], "text");
+    let note_height = if note_text.trim().is_empty() {
         0.0
     } else {
-        PROSE_LINE_HEIGHT
+        let note_lines = (note_text.trim().chars().count() as f32 / room)
+            .ceil()
+            .max(1.0);
+        4.0 + note_lines * PROSE_LINE_HEIGHT
     };
-    // The card's 2px inset and border, the row's 6px sides, the title's lines, the preview line,
-    // the answers' line (6px over a 28px button), the command chip.
+    let preview_text = text(dock, "preview");
+    let preview_height = if preview_text.trim().is_empty() {
+        0.0
+    } else {
+        let preview_lines = (preview_text.trim().chars().count() as f32 / room)
+            .ceil()
+            .max(1.0);
+        preview_lines * PROSE_LINE_HEIGHT
+    };
+    // The card's 2px inset and border, the row's 6px sides, the title's lines, the preview/note,
+    // the answers' line (6px over a 28px button), and the command block/chip.
     2.0 * 3.0
         + 12.0
         + lines * PROSE_LINE_HEIGHT
         + preview_height
+        + note_height
         + if answers { 34.0 } else { 0.0 }
         + command
 }
 
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
 /// and its "N more" line.
-pub(super) fn board_height(board: &Value) -> f32 {
+fn board_height_with<F>(board: &Value, mut enrich_dock: F) -> f32
+where
+    F: FnMut(&Value) -> Value,
+{
     // The header, and room under the last group's line: the panel's own bottom padding cut the
     // last line ("Finished today") when everything fit.
     let mut height = HEADER_HEIGHT + 8.0 + LIST_BOTTOM + super::work_topic::topic_height(board);
@@ -366,7 +398,8 @@ pub(super) fn board_height(board: &Value) -> f32 {
         for row in group["rows"].as_array().into_iter().flatten() {
             height += CARD_GAP
                 + if row["dock"].is_object() {
-                    dock_card_height(&row["dock"])
+                    let enriched = enrich_dock(row);
+                    dock_card_height(&enriched)
                 } else if row["expanded"] == true {
                     expanded_card_height(row).max(CARD_HEIGHT)
                 } else {
@@ -1767,21 +1800,9 @@ impl NativeChatView {
     /// the dock pls but multi line, what ur showing is too different". Supersedes, for Needs you,
     /// the two-line card that opened in place (2026-11-06) and its opened body's click
     /// (2026-11-18): the dock's rows open their target on a click too.
-    fn board_dock_card(
-        &self,
-        row: &Value,
-        inner_width: f32,
-        scroll: &ScrollHandle,
-        group: &str,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let s = p.scale;
-        let key = text(row, "key");
-        let title = text(row, "title");
-        let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
-        let has_menu = !board_menu_entries(row).is_empty();
-        let hover_group = gpui::SharedString::from(format!("chat-board-card-hover:{key}"));
+    /// Enriches a board row's dock payload with any relayed approval card's command block and
+    /// reason note, shared by both `board_dock_card` rendering and `coordinator_board_menu_height`.
+    fn enrich_board_dock(&self, row: &Value) -> (Value, Option<Value>) {
         let relayed = Some(text(&row["openThread"], "sessionId"))
             .filter(|session| !session.is_empty())
             .or_else(|| {
@@ -1789,29 +1810,6 @@ impl NativeChatView {
                     .filter(|session| !session.is_empty())
             })
             .and_then(|session| self.relayed_card_for_thread(&session));
-        let go = Some(row["go"].clone()).filter(Value::is_object);
-        // A page's count follows its draft while the card is drawn, as the dock's row's
-        // does (work_cards.rs `dock_row`).
-        if row["dock"]["page"] == true {
-            if let Some(page_id) = row["dock"]["pageId"].as_str() {
-                self.refresh_page_counts(page_id, cx);
-            }
-        }
-        let look = super::work_cards::DockRowLook {
-            // The card's width less its border.
-            width: Some(inner_width + 2.0 * CARD_PAD),
-            wrap: true,
-            scope: "board:",
-            age: Some(
-                self.board_age_slot(row, &hover_group, p, cx)
-                    .into_any_element(),
-            ),
-            click: go,
-            buttons: relayed
-                .as_ref()
-                .map(|relayed| self.board_relay_buttons(relayed, CHIP_SIZE, true, p, cx)),
-            reference: text(row, "reference"),
-        };
         // A thread's approval is decided from what it would run: its whole command shows on the
         // card as the chat's own approval row draws it (work_cards.rs `dock_command_block`: its
         // first lines, "Show N more lines", a click copies it), with the agent's warning under the
@@ -1840,6 +1838,48 @@ impl NativeChatView {
                 dock["note"] = relayed["reason"].clone();
             }
         }
+        (dock, relayed)
+    }
+
+    fn board_dock_card(
+        &self,
+        row: &Value,
+        inner_width: f32,
+        scroll: &ScrollHandle,
+        group: &str,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let key = text(row, "key");
+        let title = text(row, "title");
+        let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
+        let has_menu = !board_menu_entries(row).is_empty();
+        let hover_group = gpui::SharedString::from(format!("chat-board-card-hover:{key}"));
+        let (dock, relayed) = self.enrich_board_dock(row);
+        let go = Some(row["go"].clone()).filter(Value::is_object);
+        // A page's count follows its draft while the card is drawn, as the dock's row's
+        // does (work_cards.rs `dock_row`).
+        if row["dock"]["page"] == true {
+            if let Some(page_id) = row["dock"]["pageId"].as_str() {
+                self.refresh_page_counts(page_id, cx);
+            }
+        }
+        let look = super::work_cards::DockRowLook {
+            // The card's width less its border.
+            width: Some(inner_width + 2.0 * CARD_PAD),
+            wrap: true,
+            scope: "board:",
+            age: Some(
+                self.board_age_slot(row, &hover_group, p, cx)
+                    .into_any_element(),
+            ),
+            click: go,
+            buttons: relayed
+                .as_ref()
+                .map(|relayed| self.board_relay_buttons(relayed, CHIP_SIZE, true, p, cx)),
+            reference: text(row, "reference"),
+        };
         let move_to = row["moveTo"].clone();
         let menu_key = key.clone();
         div()
@@ -2872,7 +2912,8 @@ impl NativeChatView {
         let board = self.board_value()?;
         let scale = ChatAppearance::current(&self.snapshot).scale;
         let pane = f32::from(self.bounds.get().size.height) / scale;
-        Some(board_height(board).min((pane * 0.7).max(220.0)))
+        let height = board_height_with(board, |row| self.enrich_board_dock(row).0);
+        Some(height.min((pane * 0.7).max(220.0)))
     }
 
     /// The floating card's body, drawn with this view's listeners.

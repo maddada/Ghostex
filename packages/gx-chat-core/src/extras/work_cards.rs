@@ -357,7 +357,7 @@ pub(crate) fn thread_wait_copy(
 
 /// The next clock tick (ms) at which any live usage-limit reset countdown label changes.
 pub(crate) fn reset_countdown_changes_at(state: &ChatState, now_ms: i64) -> Option<i64> {
-    let has_future_reset = crate::extras::work_source::work_of(state)
+    crate::extras::work_source::work_of(state)
         .and_then(|work| work.get("items"))
         .and_then(Value::as_array)
         .into_iter()
@@ -366,8 +366,20 @@ pub(crate) fn reset_countdown_changes_at(state: &ChatState, now_ms: i64) -> Opti
         .flat_map(|item| item["threads"].as_array().into_iter().flatten())
         .filter(|thread| text(thread, "waitKind") == "usageLimit")
         .filter_map(|thread| at_ms(text(thread, "waitResetsAt")))
-        .any(|target| target > now_ms);
-    has_future_reset.then(|| ((now_ms / 60_000) + 1) * 60_000)
+        .filter(|&target| target > now_ms)
+        .map(|target| {
+            let remaining = target - now_ms;
+            let total_minutes = (remaining + 59_999) / 60_000;
+            if remaining <= 60_000 || total_minutes <= 1 {
+                target
+            } else if total_minutes < 24 * 60 {
+                target - (total_minutes - 1) * 60_000
+            } else {
+                let total_hours = total_minutes / 60;
+                target - (total_hours * 60 - 1) * 60_000
+            }
+        })
+        .min()
 }
 
 /// A Needs you dock row for a thread that genuinely needs the user (approval, folder trust,
@@ -591,14 +603,9 @@ pub(crate) fn done_answer_key(item: &Value) -> Option<String> {
         .into_iter()
         .flatten()
         .any(|ask| ask["open"] == true);
-    // A Needs you item promoted because an attached thread is waiting never gets a bare Done
-    // button: it renders its thread-wait row with a direct Open action instead (Q4477).
-    let thread_waiting = waiting_user_thread(item).is_some()
-        || item["threads"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .any(|thread| text(thread, "state") == "waiting");
+    // A Needs you item promoted because an attached thread genuinely needs the user never gets a
+    // bare Done button: it renders its thread-wait row with a direct Open action instead (Q4477).
+    let thread_waiting = waiting_user_thread(item).is_some();
     (text(item, "kind") == "item"
         && text(item, "status") == "needs"
         && !asks_open

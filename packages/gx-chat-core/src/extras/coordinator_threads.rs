@@ -600,7 +600,9 @@ fn parse_rows(rows: Option<&Value>) -> Vec<(String, CoordinatorThreadRow)> {
             let needs_approval = !working && row.get("needsApproval") == Some(&Value::Bool(true));
             let wait_kind = text(row, "waitKind");
             let wait_needs_user = crate::extras::work_cards::thread_wait_needs_user(row);
-            let waiting = !working && (needs_approval || (state == "waiting" && wait_needs_user));
+            let waiting = !working
+                && (needs_approval
+                    || (wait_needs_user && (state == "waiting" || wait_kind == "usageLimit")));
             let paused_on_limit =
                 !working && !waiting && wait_kind == "usageLimit";
             let mut parsed = CoordinatorThreadRow {
@@ -675,14 +677,23 @@ pub fn coordinator_threads_panel(
     if total == 0 {
         return None;
     }
-    // Working, then waiting on the user, then the rest; each newest first (ISO times sort as text).
-    // The summary holds the in-flight and recent rows; the full list holds every thread, so its
-    // recent rows are the newest of the rest and the rows after them are the next pages.
-    let in_flight = |row: &CoordinatorThreadRow| row.working || row.needs_approval || row.waiting;
-    let rank = |row: &CoordinatorThreadRow| match (row.working, in_flight(row)) {
-        (true, _) => 0,
-        (false, true) => 1,
-        (false, false) => 2,
+    // Working, then waiting on the user, then paused on a usage limit, then finished; each newest
+    // first (ISO times sort as text). Paused threads stay visible in-flight (not buried under
+    // collapsed Finished) without incrementing "N need you" or showing the pink alert dot.
+    let paused = |row: &CoordinatorThreadRow| row.status == "paused";
+    let in_flight = |row: &CoordinatorThreadRow| {
+        row.working || row.needs_approval || row.waiting || paused(row)
+    };
+    let rank = |row: &CoordinatorThreadRow| {
+        if row.working {
+            0
+        } else if row.needs_approval || row.waiting {
+            1
+        } else if paused(row) {
+            2
+        } else {
+            3
+        }
     };
     rows.sort_by(|(left_at, left), (right_at, right)| {
         rank(left)
@@ -694,6 +705,7 @@ pub fn coordinator_threads_panel(
     let question = rows
         .iter()
         .any(|(_, row)| row.waiting && !row.needs_approval && !row.working);
+    let paused_count = rows.iter().filter(|(_, row)| paused(row)).count();
     let flying = rows.iter().filter(|(_, row)| in_flight(row)).count();
     let recent = rows
         .iter()
@@ -733,13 +745,19 @@ pub fn coordinator_threads_panel(
     // `activeAt`, `preview` (since 2026-11-18 `nowLine` and `stats`, see `RowStat`) and
     // `agentLogo`; `meta`, `moreLabel` and the rest stay as they were,
     // so the phone's own Workers sheet (AgentPanels.tsx) and older apps are unchanged.
-    let needs_you = flying.saturating_sub(working);
+    let needs_you = rows
+        .iter()
+        .filter(|(_, row)| !row.working && (row.needs_approval || row.waiting))
+        .count();
     let mut header = Vec::new();
     if working > 0 {
         header.push(format!("{working} running"));
     }
     if needs_you > 0 {
         header.push(plural(needs_you, "needs you", "need you"));
+    }
+    if paused_count > 0 {
+        header.push(format!("{paused_count} paused"));
     }
     if let Some(today) = threads.get("today").and_then(Value::as_u64) {
         header.push(format!("{today} today"));

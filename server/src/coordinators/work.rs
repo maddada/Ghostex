@@ -912,12 +912,12 @@ pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Valu
             None => return context.coordinator_on(item),
         }
     }
-    // Keep usage-limit-paused and coordinator-paused threads in In progress with their thread
-    // chip and calm limit pill, rather than promoting to Needs you or dropping to Idle.
-    if let Some(row) = threads.iter().find(|row| thread_has_paused_wait(row)) {
-        return ("moving", thread_owner(row));
-    }
     if matches!(item.status.as_str(), "moving" | "blocked") {
+        // Keep usage-limit-paused and coordinator-paused threads in In progress with their thread
+        // chip and calm limit pill, rather than promoting to Needs you or dropping to Idle.
+        if let Some(row) = threads.iter().find(|row| thread_has_paused_wait(row)) {
+            return ("moving", thread_owner(row));
+        }
         // A thread that still owes work (a job running, a turn cut off) keeps the ball.
         if let Some(row) = threads
             .iter()

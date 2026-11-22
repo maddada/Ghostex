@@ -24,6 +24,7 @@ use serde_json::{Value, json};
 const WORKING_COLOR: u32 = 0xc68a06;
 const APPROVAL_COLOR: u32 = crate::app::native_sidebar::status::APPROVAL_COLOR;
 const QUESTION_COLOR: u32 = crate::app::native_sidebar::status::QUESTION_COLOR;
+const HOLD_COLOR: u32 = 0x7fa1c4;
 
 /// The list's pieces, in unscaled pixels: fixed heights, so the floating menu knows its size before
 /// it opens (`threads_menu_height`).
@@ -75,11 +76,21 @@ fn entries(panel: &Value) -> Vec<Entry<'_>> {
         .copied()
         .filter(|row| matches!(status(row).as_str(), "approval" | "question"))
         .collect();
+    let paused: Vec<&Value> = rows
+        .iter()
+        .copied()
+        .filter(|row| status(row) == "paused")
+        .collect();
     // A row from an older core has no status: it reads finished.
     let finished: Vec<&Value> = rows
         .iter()
         .copied()
-        .filter(|row| !matches!(status(row).as_str(), "working" | "approval" | "question"))
+        .filter(|row| {
+            !matches!(
+                status(row).as_str(),
+                "working" | "approval" | "question" | "paused"
+            )
+        })
         .collect();
     let mut list = Vec::new();
     if !running.is_empty() {
@@ -89,6 +100,10 @@ fn entries(panel: &Value) -> Vec<Entry<'_>> {
     if !needs_you.is_empty() {
         list.push(Entry::Group("Needs you", needs_you.len()));
         list.extend(needs_you.into_iter().map(Entry::Row));
+    }
+    if !paused.is_empty() {
+        list.push(Entry::Group("Paused", paused.len()));
+        list.extend(paused.into_iter().map(Entry::Row));
     }
     if !text(panel, "finishedLabel").is_empty() {
         list.push(Entry::Fold);
@@ -364,6 +379,11 @@ impl NativeChatView {
             "working" => dot(WORKING_COLOR),
             "approval" => dot(APPROVAL_COLOR),
             "question" => dot(QUESTION_COLOR),
+            "paused" => gpui::svg()
+                .path("titlebar/clock.svg")
+                .size(px(12.0 * s))
+                .text_color(rgb(HOLD_COLOR))
+                .into_any_element(),
             _ => gpui::svg()
                 .path("titlebar/circle-check.svg")
                 .size(px(12.0 * s))

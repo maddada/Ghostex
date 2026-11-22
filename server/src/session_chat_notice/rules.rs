@@ -981,6 +981,12 @@ const ANTIGRAVITY_RESOURCE_EXHAUSTED_CORROBORATORS: &[&str] = &[
     "\"code\": 429",
 ];
 
+const ANTIGRAVITY_USAGE_LIMIT_STRICT_CORROBORATORS: &[&str] = &[
+    "Error ID:",
+    "upgrade your subscription",
+    "Resets in",
+];
+
 const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
     kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
     severity: SessionChatTerminalNoticeSeverity::Warning,
@@ -990,6 +996,8 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
     // CDXC:AgentProviders 2026-11-22 WHY: Require Antigravity's error-banner framing
     // (`⚠`, `Error ID:`, `✕`/`✖`, `Error:`, or `upgrade your subscription`) so code, diffs, logs,
     // and assistant replies quoting quota phrases never false-positive as live usage limits.
+    // For `"Usage limit reached"`, require `"Resets in"` or strict Antigravity banner markers
+    // (never bare `"⚠"` or `"Error:"`, which appear in marked handovers and error logs).
     signatures: &[
         NoticeSignature {
             scope: NoticeScope::Banner,
@@ -998,17 +1006,12 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
                 NoticePart::Gap(120),
                 NoticePart::Text("Resets in"),
             ],
-            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
+            corroborators: &[],
         },
         NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[NoticePart::Text("Usage limit reached")],
-            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
-        },
-        NoticeSignature {
-            scope: NoticeScope::Banner,
-            parts: &[NoticePart::Text("usage limit reached")],
-            corroborators: ANTIGRAVITY_QUOTA_BANNER_CORROBORATORS,
+            corroborators: ANTIGRAVITY_USAGE_LIMIT_STRICT_CORROBORATORS,
         },
         NoticeSignature {
             scope: NoticeScope::Banner,

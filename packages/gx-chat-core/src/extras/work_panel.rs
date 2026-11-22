@@ -137,13 +137,7 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
             line = waits;
         }
     }
-    let thread_wait = status == "needs"
-        && waiting_thread.is_some()
-        && !item["asks"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .any(|ask| ask["open"] == true);
+    let thread_wait = status == "needs" && waiting_thread.is_some();
     let mut open_label = String::new();
     let mut wait_kind_str = String::new();
     if let Some(thread) = waiting_thread.filter(|_| thread_wait) {

@@ -229,25 +229,24 @@ fn is_antigravity_session(session: &Value) -> bool {
 pub fn thread_needs_user_approval(session: &Value) -> bool {
     let screen = recorded_screen_wait(session);
     if let Some(wait) = screen.as_ref() {
-        if matches!(
-            wait.kind,
-            ThreadWaitKind::UsageLimit
-                | ThreadWaitKind::AgentExited
-                | ThreadWaitKind::SignIn
-                | ThreadWaitKind::Question
-        ) {
-            return false;
-        }
-        if wait.user_approval || wait.approval || wait.blocking {
+        if wait.user_approval || wait.approval {
             return true;
         }
     }
     if let Some(prompt) = session_chat_prompt_setting(session)
         .and_then(|stored| parse_stored_session_chat_prompt(&stored))
     {
-        // A Connectors card asks as a question, but only the user may grant it.
-        return matches!(prompt, SessionChatInteractivePrompt::Approval { .. })
-            || crate::connectors::is_connector_card(&prompt);
+        // A Connectors card asks as a question, but only the user may grant it. Check stored
+        // approvals ahead of advisory screen notices (usage limits, questions, exited agents) so
+        // a lingering banner never masks a live hook approval or Connectors card.
+        if matches!(prompt, SessionChatInteractivePrompt::Approval { .. })
+            || crate::connectors::is_connector_card(&prompt)
+        {
+            return true;
+        }
+        if screen.is_none() {
+            return false;
+        }
     }
     if screen.is_some() {
         return false;
@@ -270,7 +269,33 @@ pub fn thread_wait_info(session: &Value, state: ThreadState) -> Option<ThreadWai
     if state != ThreadState::Waiting {
         return session_usage_limit_info(session, None, false);
     }
-    if let Some(wait) = recorded_screen_wait(session) {
+    let screen = recorded_screen_wait(session);
+    if let Some(wait) = screen.as_ref().filter(|wait| wait.kind == ThreadWaitKind::Approval) {
+        return Some(ThreadWaitInfo {
+            kind: ThreadWaitKind::Approval,
+            summary: wait.short_summary.clone(),
+            resets_at: None,
+            auto_recover: false,
+            needs_user: true,
+        });
+    }
+    let stored_prompt = session_chat_prompt_setting(session)
+        .and_then(|stored| parse_stored_session_chat_prompt(&stored));
+    // Live stored approvals and Connectors cards take precedence over advisory screen waits
+    // (lingering usage-limit banners, screen questions, exited notices).
+    if let Some(prompt) = stored_prompt.as_ref().filter(|prompt| {
+        matches!(prompt, SessionChatInteractivePrompt::Approval { .. })
+            || crate::connectors::is_connector_card(prompt)
+    }) {
+        return Some(ThreadWaitInfo {
+            kind: ThreadWaitKind::Approval,
+            summary: short_prompt_summary(prompt),
+            resets_at: None,
+            auto_recover: false,
+            needs_user: true,
+        });
+    }
+    if let Some(wait) = screen {
         return Some(match wait.kind {
             ThreadWaitKind::UsageLimit => session_usage_limit_info(
                 session,
@@ -325,21 +350,13 @@ pub fn thread_wait_info(session: &Value, state: ThreadState) -> Option<ThreadWai
             },
         });
     }
-    if let Some(prompt) = session_chat_prompt_setting(session)
-        .and_then(|stored| parse_stored_session_chat_prompt(&stored))
-    {
-        let approval = matches!(prompt, SessionChatInteractivePrompt::Approval { .. })
-            || crate::connectors::is_connector_card(&prompt);
+    if let Some(prompt) = stored_prompt {
         return Some(ThreadWaitInfo {
-            kind: if approval {
-                ThreadWaitKind::Approval
-            } else {
-                ThreadWaitKind::Question
-            },
+            kind: ThreadWaitKind::Question,
             summary: short_prompt_summary(&prompt),
             resets_at: None,
             auto_recover: false,
-            needs_user: approval,
+            needs_user: false,
         });
     }
     if crate::session_chat_async_questions::pending_question_count(session) > 0 {
@@ -583,11 +600,20 @@ fn notice_wait_kind(notice: &SessionChatTerminalNotice) -> ThreadWaitKind {
         SESSION_CHAT_NOTICE_PERMISSION_PROMPT
         | SESSION_CHAT_NOTICE_TRUST_PROMPT
         | SESSION_CHAT_NOTICE_PERMISSIONS_WARNING => ThreadWaitKind::Approval,
-        SESSION_CHAT_NOTICE_LOGIN_EXPIRED | SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN => {
-            ThreadWaitKind::SignIn
-        }
+        SESSION_CHAT_NOTICE_LOGIN_EXPIRED => ThreadWaitKind::SignIn,
+        SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN if notice.blocks_input() => ThreadWaitKind::SignIn,
         SESSION_CHAT_NOTICE_USAGE_LIMIT => ThreadWaitKind::UsageLimit,
         SESSION_CHAT_NOTICE_AGENT_EXITED => ThreadWaitKind::AgentExited,
+        _ if notice.permission_request.is_some()
+            || notice
+                .approval_command
+                .as_deref()
+                .is_some_and(|cmd| !cmd.trim().is_empty())
+            || (notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED
+                && notice.title.to_ascii_lowercase().contains("approv")) =>
+        {
+            ThreadWaitKind::Approval
+        }
         _ => ThreadWaitKind::Other,
     }
 }
@@ -710,11 +736,11 @@ impl ThreadScreenWait {
         // A Codex at a usage limit can sleep inside its turn on the provider's Retry-After (days, through a local proxy), so its hooks say working and its screen never changes. As a working thread it was nudged, which cost one more refused request each time, and its coordinator got "still not moving" every 8 minutes: 206 reports overnight, none of which it could act on. A usage limit on screen now makes the thread wait on it, working or not: one report saying so, no nudges, and the next report once something else happens (accounts/reset_used.rs continues it after a reset).
         let at_limit =
             |notice: &SessionChatTerminalNotice| notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT;
+        // Only blocking sign-in prompts (`loginExpired`, never informational `empryoSignIn`
+        // banners that stay on screen after resolution) turn into a Needs you wait.
         let is_sign_in = |notice: &SessionChatTerminalNotice| {
-            matches!(
-                notice.kind.as_str(),
-                SESSION_CHAT_NOTICE_LOGIN_EXPIRED | SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN
-            )
+            notice.kind == SESSION_CHAT_NOTICE_LOGIN_EXPIRED
+                || (notice.kind == SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN && notice.blocks_input())
         };
         if let Some(notice) = notice.filter(|notice| {
             (notice.blocks_input() || at_limit(notice) || is_sign_in(notice)) && !notice.auto_trust

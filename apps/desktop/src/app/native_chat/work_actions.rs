@@ -201,6 +201,8 @@ impl NativeChatView {
                             this.open_reply_popover(&command, window, cx);
                         } else if command["type"] == "hostAction" {
                             this.run_dock_host_action(&command, window, cx);
+                        } else if command["type"] == "openCoordinatorThread" {
+                            this.open_work_target(command.clone(), window, cx);
                         } else if command.is_object() {
                             this.invoke(command.clone(), cx);
                         }
