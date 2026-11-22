@@ -161,6 +161,33 @@ fn reset_sigpipe() {
 #[cfg(not(unix))]
 fn reset_sigpipe() {}
 
+/// Runs `action` with `SIGPIPE` temporarily ignored on Unix and restores the
+/// previous disposition on drop (including on panic). Use around writes to a
+/// child process's `stdin` pipe that may close early so the caller can handle
+/// `BrokenPipe` and fall through instead of terminating the CLI.
+pub(super) fn with_sigpipe_ignored<T>(action: impl FnOnce() -> T) -> T {
+    #[cfg(unix)]
+    struct Guard(libc::sighandler_t);
+
+    #[cfg(unix)]
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            if self.0 != libc::SIG_ERR {
+                // SAFETY: Restores the signal disposition returned by `libc::signal`.
+                unsafe {
+                    libc::signal(libc::SIGPIPE, self.0);
+                }
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    // SAFETY: Temporarily sets `SIGPIPE` to `SIG_IGN` and saves the prior handler
+    // for `Guard::drop`. Callers run on the CLI's single-threaded paths.
+    let _guard = Guard(unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) });
+    action()
+}
+
 /// CDXC:AgentSandbox 2026-11-18 WHY:
 /// GitHub #669: a Codex whose environment policy hides Ghostex's variables
 /// (`[shell_environment_policy] inherit = "core"`) ran `ghostex needs-you add` and `ghostex secret

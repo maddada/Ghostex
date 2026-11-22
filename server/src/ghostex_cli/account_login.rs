@@ -314,7 +314,7 @@ fn remove_slot(home: &Path, cswap: &Path, number: &str) -> CliResult<()> {
         .map_err(|e| failure(format!("Could not start Claude Swap: {e}")))?;
     // `cswap remove` asks to confirm on its terminal.
     if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(b"y\n");
+        let _ = super::with_sigpipe_ignored(|| stdin.write_all(b"y\n"));
     }
     let removed = child.wait().is_ok_and(|status| status.success());
     let still_listed = helpers::json_command(home, "cswap", &["list", "--json"])
