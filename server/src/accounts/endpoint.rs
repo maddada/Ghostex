@@ -151,6 +151,12 @@ pub(crate) fn dispatch(
     let cached_list = operation == "list"
         && params.get("cachedOnly").and_then(Value::as_bool) == Some(true)
         && state.accounts.snapshot().fetched_at.is_some();
+    // CDXC:Coordinators 2026-11-22 WHY:
+    // `ghostex coordinator status` prints how much room each agent has left on every call, so it
+    // reads the roster as kept (the sidebar's and Settings' last reading, `usageUpdatedAt` on each
+    // row) and never makes a coordinator's status wait on Anthropic's or OpenAI's usage endpoints.
+    let cached_roster =
+        operation == "roster" && params.get("cachedOnly").and_then(Value::as_bool) == Some(true);
     // Usage discovery skips the logins the user turned off, so a fresh gxserver reads the
     // registry before its first poll.
     if !store::loaded() {
@@ -164,6 +170,7 @@ pub(crate) fn dispatch(
     ) || !titlebar_has_accounts
         || cached_titlebar
         || cached_list
+        || cached_roster
     {
         state.accounts.snapshot()
     } else {
@@ -757,10 +764,16 @@ pub(crate) fn dispatch(
         )?;
     }
     // The Cursor, Gemini and Copilot accounts, which only show usage (accounts/usage_only/).
-    if matches!(operation, "list" | "titlebar" | "session") {
+    // CDXC:Coordinators 2026-11-22 DECISION:
+    // User: "coordinators must never burn all the user's usage and get stuck" after every Claude
+    // account hit its weekly limit while Antigravity sat at 0% used. `roster` (`ghostex accounts`,
+    // the room summary in `ghostex coordinator status`) answers them too, so a coordinator sees
+    // every agent's room in one read, not only Claude's and Codex's.
+    if matches!(operation, "list" | "titlebar" | "session" | "roster") {
         let wait = match (operation, params.get("refresh").and_then(Value::as_bool)) {
-            ("list", Some(true)) => super::usage_only::Wait::Always,
+            ("list" | "roster", Some(true)) => super::usage_only::Wait::Always,
             ("list", _) if !cached_list => super::usage_only::Wait::FirstRead,
+            ("roster", _) if !cached_roster => super::usage_only::Wait::FirstRead,
             _ => super::usage_only::Wait::Never,
         };
         value["usageAccounts"] = json!(super::usage_only::rows(

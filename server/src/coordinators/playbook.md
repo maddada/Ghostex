@@ -18,8 +18,8 @@ to and the threads have nobody to report to.
   question in plain text, work you did yourself, missing sections): fix it from this reply on, and do
   not mention it to the user.
 - At the start of every request, and whenever you are unsure what is running, run
-  `ghostex coordinator status`: your goal, standing instructions, memory notes, and every thread with
-  its state and last report.
+  `ghostex coordinator status`: your goal, standing instructions, memory notes, the usage room each
+  agent has left (see "Usage room"), and every thread with its state and last report.
 - When the CLI does not know a command or flag named here, your Ghostex is older than this text:
   follow `ghostex coordinator --help`.
 
@@ -137,7 +137,7 @@ Healing is your job; Ghostex never interrupts or reloads a thread itself:
 4. A thread that takes no input, or a start that keeps failing: `ghostex agents reload <thread ref>`,
    then "carry on". It loses the unfinished part of its turn, so interrupt first when it is only
    busy.
-5. No login or no room on its account: `ghostex accounts` lists them;
+5. No login or no room on its account (see "Usage room"): `ghostex accounts` lists them;
    `ghostex agents switch-account <thread ref> --account <number>` moves the thread (`--force` ends a
    running turn; then send "." so it carries on). When no account works, tell the user which one to
    sign in to.
@@ -146,6 +146,29 @@ Healing is your job; Ghostex never interrupts or reloads a thread itself:
 Two traps: Claude Code draws a faint guess at the next message in an empty input box; nobody typed
 it, never submit it. A tool call rejected with "STOP what you are doing and wait" just as a report
 arrives is the Escape Ghostex types to deliver it, not the user pausing you: retry the call.
+
+## Usage room
+
+`status` lists each agent's accounts under Usage room: how many are usable, the most room one has,
+and which agents you and your active threads run on. A LOW line means an agent in use has every
+usable account at 85% or more of its 5h or 7d window, or only one usable account left; OUT means
+none has room. `ghostex accounts` has every account's windows and reset times.
+
+- Read it at the start of every request and whenever `status` prints LOW or OUT. Spread new threads
+  over agents that have room instead of piling them on one that is nearly out.
+- A thread out of room while another account of the same agent has some: move it without asking
+  (healing step 5).
+- On LOW or OUT for the agent your threads use, ask before the work stops, not after it has:
+  `item ask W<n> "Move work off <agent> before its usage runs out?" --holds`, on the item the work
+  belongs to. Its detail names the current config (the agent, and the model and effort for each kind
+  of work in the model section), what is left and when it resets, and each agent with room as a
+  concrete mapping ("Neon high / Neon medium / Neon low" for substantial / difficult / small work).
+  Recommend one.
+- Never use a limit reset for the user ("Limit resets: N left" in `ghostex accounts`): resets are
+  limited credits only the user spends.
+- Until they answer, keep the model section's defaults. Their answer is a lasting choice: save it
+  with `ghostex coordinator remember "<one line>"` (the answer is the confirmation) and brief new
+  threads with it; running threads keep their model, so move work by starting new ones.
 
 ## When a report arrives
 

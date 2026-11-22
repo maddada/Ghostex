@@ -14,6 +14,11 @@ per window with reset times, which account new sessions use (default), and its r
 sleeping sessions, with a count of stopped ones (--all lists those too). The same reading Settings > Accounts shows; --refresh reads usage
 again instead of using a reading up to two minutes old.
 
+Then the accounts Ghostex reads only for their usage (Settings > Accounts): Gemini, whose
+quota is what Antigravity runs on, Cursor and Copilot, with their state (ready, needsSignIn,
+unavailable, disabled, loading in --json as status) and usage per window with reset times.
+--json lists them under usageAccounts.
+
 CLIProxyAPI hubs and their accounts: ghostex accounts hub --help
 Move a session to another account:   ghostex agents switch-account <session-ref> --account <number|email>
 Restart a stuck session's agent:     ghostex agents reload <session-ref>";
@@ -62,13 +67,18 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         print_json(&json!({
             "ok": true,
             "accounts": roster["accounts"],
+            "usageAccounts": roster["usageAccounts"],
             "helpers": roster["helpers"],
         }));
         return Ok(());
     }
     let rows = roster["accounts"].as_array().cloned().unwrap_or_default();
-    if rows.is_empty() {
-        println!("No Claude or Codex accounts are saved. Add one in Settings > Accounts.");
+    let usage_rows = roster["usageAccounts"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    if rows.is_empty() && usage_rows.is_empty() {
+        println!("No accounts are saved. Add one in Settings > Accounts.");
     }
     for provider in ["claude", "codex"] {
         let accounts: Vec<&Value> = rows
@@ -91,7 +101,102 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         }
         println!();
     }
+    // CDXC:Coordinators 2026-11-22 DECISION:
+    // A coordinator asked to move work off a Claude pool that is out needs to see which other
+    // agents have room. Antigravity's quota is its Google account's Gemini reading, so its
+    // heading says so; these accounts have no number (they never run or switch a session).
+    for (provider, heading) in [
+        ("gemini", "GEMINI (Antigravity quota)"),
+        ("cursor", "CURSOR"),
+        ("copilot", "COPILOT"),
+    ] {
+        let accounts: Vec<&Value> = usage_rows
+            .iter()
+            .filter(|row| row["provider"] == provider)
+            .collect();
+        if accounts.is_empty() {
+            continue;
+        }
+        println!("{heading}");
+        for row in accounts {
+            print_usage_account(row);
+        }
+        println!();
+    }
     Ok(())
+}
+
+/// A Gemini, Cursor or Copilot account (`usageAccounts`, server/src/accounts/usage_only/).
+fn print_usage_account(row: &Value) {
+    let text = |key: &str| row[key].as_str().unwrap_or_default();
+    let label = if text("email").is_empty() {
+        text("name")
+    } else {
+        text("email")
+    };
+    let mut marks = vec![match text("status") {
+        "loginRequired" => "needs sign-in".to_string(),
+        "loading" => "no usage reading yet".to_string(),
+        other => other.to_string(),
+    }];
+    if !text("plan").is_empty() {
+        marks.push(format!("plan {}", text("plan")));
+    }
+    println!("  {:<40} {}", label, marks.join(", "));
+    let usage = usage_text(row);
+    if !usage.is_empty() {
+        let stale = if row["usageStale"] == true {
+            " [last known]"
+        } else {
+            ""
+        };
+        println!("        {usage}{stale}");
+    }
+    let details: Vec<String> = row["details"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|detail| {
+            format!(
+                "{} {}",
+                detail["label"].as_str().unwrap_or_default(),
+                detail["value"].as_str().unwrap_or_default()
+            )
+        })
+        .collect();
+    if !details.is_empty() {
+        println!("        {}", details.join(" · "));
+    }
+    if let Some(error) = row["usageError"].as_str().filter(|error| !error.is_empty()) {
+        println!("        {error}");
+    }
+}
+
+/// "5h 12% (resets Nov 22 09:00) · 7d 4% (resets Nov 27 10:00)" for a row's `usage`.
+fn usage_text(row: &Value) -> String {
+    row["usage"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|window| {
+            let percent = window["usedPercent"].as_f64().unwrap_or(0.0).round();
+            let mut part = format!(
+                "{} {percent}%",
+                window["label"].as_str().unwrap_or_default()
+            );
+            if let Some(at) = window["resetsAt"]
+                .as_str()
+                .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            {
+                part.push_str(&format!(
+                    " (resets {})",
+                    at.with_timezone(&chrono::Local).format("%b %-d %H:%M")
+                ));
+            }
+            part
+        })
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 fn print_account(row: &Value, all_sessions: bool) {
@@ -122,35 +227,14 @@ fn print_account(row: &Value, all_sessions: bool) {
         label,
         marks.join(", ")
     );
-    let usage: Vec<String> = row["usage"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|window| {
-            let percent = window["usedPercent"].as_f64().unwrap_or(0.0).round();
-            let mut part = format!(
-                "{} {percent}%",
-                window["label"].as_str().unwrap_or_default()
-            );
-            if let Some(at) = window["resetsAt"]
-                .as_str()
-                .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
-            {
-                part.push_str(&format!(
-                    " (resets {})",
-                    at.with_timezone(&chrono::Local).format("%b %-d %H:%M")
-                ));
-            }
-            part
-        })
-        .collect();
+    let usage = usage_text(row);
     if !usage.is_empty() {
         let stale = if row["usageStale"] == true {
             " [last known]"
         } else {
             ""
         };
-        println!("        {}{stale}", usage.join(" · "));
+        println!("        {usage}{stale}");
     }
     if let Some(error) = row["usageError"].as_str().filter(|error| !error.is_empty()) {
         println!("        {error}");

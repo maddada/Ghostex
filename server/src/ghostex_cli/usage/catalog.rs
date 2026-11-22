@@ -128,7 +128,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "accounts [--all] [--refresh] [--json]",
-            "List every Claude and Codex account with its state, usage and reset times, the default, and the sessions on it",
+            "List every Claude and Codex account with its state, usage and reset times, the default, and the sessions on it, then the Gemini (Antigravity), Cursor and Copilot usage",
         ),
         format_help_command(
             "accounts hub [list|add|update|remove]",

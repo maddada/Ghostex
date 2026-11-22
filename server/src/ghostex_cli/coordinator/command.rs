@@ -7,7 +7,7 @@ use ghostex_gx_chat_core::protocol::{
 };
 use serde_json::{json, Value};
 
-use super::{acknowledge_threads, board, item, playbook, sleep_threads, threads};
+use super::{acknowledge_threads, board, item, playbook, sleep_threads, threads, usage_room};
 use crate::coordinators::{
     coordinator_launcher_family as agent_family,
     default_coordinator_launcher as default_coordinator_agent, DEFAULT_CLAUDE_COORDINATOR_MODEL,
@@ -728,6 +728,7 @@ fn only_main_coordinator(base: &Flags) -> CliResult<(Value, Flags)> {
 fn status(parsed: &ParsedArgs) -> CliResult<()> {
     let (session, flags, picked) = status_target(parsed)?;
     let mut view = read_view(&session, &flags)?;
+    view["usageRoom"] = usage_room::read(&view, &flags);
     let picked = picked.then(|| {
         format!(
             "No coordinator named, so this is the only main coordinator: {} ({}).",
@@ -785,6 +786,9 @@ pub(super) fn print_status(view: &Value, all: bool) {
         agents::text(coordinator, "title"),
         agents::text(coordinator, "globalRef")
     );
+    if !view["usageRoom"].is_null() {
+        usage_room::print(&view["usageRoom"]);
+    }
     let goal = agents::text(coordinator, "goal");
     println!("Goal: {}", if goal.is_empty() { "(not set)" } else { goal });
     let instructions = agents::text(coordinator, "instructions");

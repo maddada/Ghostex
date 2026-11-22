@@ -163,6 +163,11 @@ STATUS
   session with neither, it describes the only main coordinator (its first line
   says so), or lists the command for each when several projects have one.
   Run from a thread, it describes the thread's coordinator.
+  Its Usage room lines say how much room each agent's accounts have left (from
+  the readings Ghostex keeps; ghostex accounts --refresh reads again), which
+  agents you and your active threads run on, and a LOW or OUT line for an agent
+  in use when every usable account is at 85% or more of its 5h or 7d window,
+  only one usable account of several is left, or none is.
 
 THREADS
   start-thread creates an agent session in the coordinator's project, links it,
