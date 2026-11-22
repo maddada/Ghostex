@@ -26,6 +26,7 @@ pub(crate) const EXCHANGE_ENDPOINT: &str = "/api/settingsSyncExchange";
 pub(crate) async fn handle_settings_sync_exchange(
     state: Arc<AppState>,
     peer: Option<String>,
+    caller_is_phone: bool,
     body: Value,
     request_id: String,
 ) -> RoutedResponse {
@@ -46,10 +47,19 @@ pub(crate) async fn handle_settings_sync_exchange(
         )
     };
     // A paired phone asks with its own client token and its own id (CDXC:SettingsSync 2026-11-06
-    // in gx-core settings_sync `phone_member_id`); a computer's token never speaks for a phone.
+    // in gx-core settings_sync `phone_member_id`); a computer's token never speaks for a phone,
+    // and a paired phone's token never impersonates another computer's `serverId`.
     let phone = text("phoneId")
         .filter(|_| peer.is_none())
         .and_then(|id| ghostex_gx_core::settings_sync::phone_member_id(&id));
+    if caller_is_phone && phone.is_none() {
+        return refuse(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "A paired phone must sync with its phoneId, not another computer's serverId."
+                .to_string(),
+        );
+    }
     let to_phone = phone.is_some();
     let Some(caller) = phone
         .or_else(|| text("serverId").filter(|id| crate::connected_computers::is_server_id(id)))

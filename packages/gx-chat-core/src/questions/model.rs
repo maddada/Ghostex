@@ -68,6 +68,8 @@ pub enum InteractivePrompt {
         summary: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tool_use_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
     },
 }
 

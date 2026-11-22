@@ -602,6 +602,7 @@ async fn each_omp_approval_is_a_claude_permission_request() {
                         tool: "bash".to_string(),
                         summary: Some(command.to_string()),
                         tool_use_id: Some(call.clone()),
+                        reason: None,
                     }),
                     "{label}"
                 );
@@ -923,6 +924,7 @@ async fn an_omp_approval_reads_like_a_claude_one() {
                     tool: tool.to_string(),
                     summary: Some(summary.clone()),
                     tool_use_id: call.map(str::to_string),
+                    reason: None,
                 }),
                 "{agent}: {input}"
             );

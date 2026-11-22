@@ -370,11 +370,25 @@ pub(crate) fn start_session_provider_with_observed_state(
                     .and_then(|session| string_field(&session, "globalRef"))
             },
         );
+        let mut launch_env = coordinator_environment;
         let session_token = crate::security::session_token_for_launch(
             &lifecycle.project_id,
             &lifecycle.session_id,
-            &coordinator_environment,
+            &launch_env,
         );
+        if crate::acp::session_is_acp(&probed_session)
+            || startup_text.contains(" acp-host --agent")
+        {
+            if let Ok(auth_token) = std::fs::read_to_string(&context.auth_token_file) {
+                if let Some(secret) = crate::acp::channel::channel_secret_for_session(
+                    &auth_token,
+                    &lifecycle.project_id,
+                    &lifecycle.session_id,
+                ) {
+                    launch_env.push((crate::acp::channel::ACP_CHANNEL_SECRET_ENV, secret));
+                }
+            }
+        }
         build_zmx_run_command(ZmxRunCommandInput {
             cwd,
             global_session_ref: string_field(&probed_session, "globalRef"),
@@ -385,7 +399,7 @@ pub(crate) fn start_session_provider_with_observed_state(
             session_name: zmx_name.clone(),
             startup_text,
             zmx_executable_path: zmx.executable_path.clone(),
-            coordinator_environment,
+            coordinator_environment: launch_env,
             session_token,
         })
     } else {

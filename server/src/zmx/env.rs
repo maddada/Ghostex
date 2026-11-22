@@ -110,8 +110,10 @@ pub(crate) fn session_identity_environment_keys() -> Vec<&'static str> {
         "GHOSTEX_NATIVE_SESSION_ID",
         "GHOSTEX_SESSION_ID",
         "GHOSTEX_SESSION_STATE_FILE",
-        // A session's own token (crate::security): each session's start sets its own.
+        // A session's own token (crate::security) and ACP host channel secret: each session's
+        // start sets its own, so none may leak across sessions.
         crate::security::SESSION_TOKEN_ENV,
+        crate::acp::channel::ACP_CHANNEL_SECRET_ENV,
         "GHOSTEX_WORKSPACE_ID",
         "GHOSTEX_WORKSPACE_ROOT",
         "VSMUX_AGENT",

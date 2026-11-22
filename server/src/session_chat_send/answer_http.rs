@@ -95,6 +95,7 @@ async fn verify_answer_targets_shown_prompt(
                 tool,
                 summary,
                 tool_use_id,
+                ..
             }) => {
                 tool == shown_tool
                     && summary.as_deref() == shown_summary
@@ -905,11 +906,13 @@ async fn answer_session_chat_prompt(
                         return domain_error_response(endpoint_path, request_id, error);
                     }
                 }
+                let tool_use_id = params.get("toolUseId").and_then(Value::as_str);
                 return match crate::acp::channel::answer_permission(
                     &target.project_id,
                     &target.session_id,
                     decision,
                     option_id,
+                    tool_use_id,
                 )
                 .await
                 {

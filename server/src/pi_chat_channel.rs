@@ -13,10 +13,7 @@
 
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        mpsc, Arc, LazyLock, Mutex,
-    },
+    sync::{mpsc, Arc, LazyLock, Mutex},
     time::{Duration, Instant},
 };
 
@@ -46,6 +43,7 @@ struct Channel {
     polling: u32,
     queue: VecDeque<Value>,
     wake: Arc<Notify>,
+    pending_approval_sync: bool,
 }
 
 enum Outcome {
@@ -55,6 +53,7 @@ enum Outcome {
 }
 
 struct Waiter {
+    channel_key: ChannelKey,
     reply: mpsc::Sender<Outcome>,
     picked: bool,
 }
@@ -65,7 +64,6 @@ static CHANNELS: LazyLock<Mutex<HashMap<ChannelKey, Channel>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static WAITERS: LazyLock<Mutex<HashMap<String, Waiter>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
-static NEXT_COMMAND: AtomicU64 = AtomicU64::new(1);
 
 /// What an open channel said about itself on its last poll.
 #[derive(Clone, Debug)]
@@ -124,6 +122,16 @@ pub(crate) fn live(project_id: &str, session_id: &str) -> Option<ChannelInfo> {
     })
 }
 
+/// Mark an existing ACP channel so its very next poll pushes the persisted `acpApprovalLevel`
+/// once (covering busy/slow `acp-host` dropouts where `instance` did not change).
+pub(crate) fn mark_approval_sync_needed(project_id: &str, session_id: &str) {
+    let mut channels = lock(&CHANNELS);
+    if let Some(channel) = channels.get_mut(&key(project_id, session_id)) {
+        channel.pending_approval_sync = true;
+        channel.wake.notify_one();
+    }
+}
+
 /// Hands `kind` to the session's extension and waits for its acknowledgement. Blocking: call it
 /// from a blocking thread.
 pub(crate) fn request(
@@ -136,18 +144,20 @@ pub(crate) fn request(
     if live(project_id, session_id).is_none() {
         return Err(ChannelError::Unavailable("no open channel"));
     }
-    let id = format!("gx{}", NEXT_COMMAND.fetch_add(1, Ordering::Relaxed));
+    let target_key = key(project_id, session_id);
+    let id = format!("gx-{}", uuid::Uuid::new_v4());
     let (reply, answer) = mpsc::channel();
     lock(&WAITERS).insert(
         id.clone(),
         Waiter {
+            channel_key: target_key.clone(),
             reply,
             picked: false,
         },
     );
     {
         let mut channels = lock(&CHANNELS);
-        let Some(channel) = channels.get_mut(&key(project_id, session_id)) else {
+        let Some(channel) = channels.get_mut(&target_key) else {
             lock(&WAITERS).remove(&id);
             return Err(ChannelError::Unavailable("channel closed"));
         };
@@ -237,7 +247,30 @@ fn drain(queue: &mut VecDeque<Value>) -> Vec<Value> {
     commands
 }
 
-async fn poll(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
+async fn read_persisted_acp_approval_level(
+    state: &crate::server::AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Option<crate::acp::AcpApprovalLevel> {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        let db = crate::storage::open_gxserver_database(&paths).ok()?;
+        let repo = crate::domain::DomainRepository::new(&db, server_id.as_str());
+        let session = repo.get_session(&pid, &sid).ok().flatten()?;
+        crate::acp::approval::stored_session_approval_level(&session)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+async fn poll(
+    state: &crate::server::AppState,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
     let channel_key = channel_key(params)?;
     let agent = read_string(params, "agent").unwrap_or_else(|| "pi".to_string());
     let pid = params.get("pid").and_then(Value::as_u64);
@@ -254,9 +287,12 @@ async fn poll(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let wake = {
+    let is_acp = agent.starts_with("acp:");
+    let mut needs_approval_sync = false;
+    let (wake, immediate_commands) = {
         let mut channels = lock(&CHANNELS);
         let channel = channels.entry(channel_key.clone()).or_insert_with(|| {
+            needs_approval_sync = true;
             log_channel("piChatChannel.opened", &channel_key, &agent, version, pid);
             Channel {
                 agent: agent.clone(),
@@ -268,38 +304,137 @@ async fn poll(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
                 polling: 0,
                 queue: VecDeque::new(),
                 wake: Arc::new(Notify::new()),
+                pending_approval_sync: false,
             }
         });
         if channel.instance != instance {
             // The session's agent was restarted, or Pi replaced its runtime (/new, /resume, reload).
+            needs_approval_sync = true;
             log_channel("piChatChannel.reopened", &channel_key, &agent, version, pid);
             channel.pid = pid;
             channel.instance = instance;
+        }
+        if std::mem::take(&mut channel.pending_approval_sync) {
+            needs_approval_sync = true;
         }
         channel.agent = agent;
         channel.version = version;
         channel.capabilities = capabilities;
         channel.last_seen = Instant::now();
         if !channel.queue.is_empty() {
-            return Ok(json!({ "commands": drain(&mut channel.queue) }));
+            (None, Some(drain(&mut channel.queue)))
+        } else {
+            (Some(channel.wake.clone()), None)
         }
-        channel.polling += 1;
-        channel.wake.clone()
     };
-    let guard = PollGuard(channel_key);
+
+    // Push the persisted ACP approval level ONCE on channel open/reconnect or when an earlier
+    // live `"mode"` command timed out (`pending_approval_sync`). Normal polls never reconcile.
+    let initial_approval_level = if is_acp && needs_approval_sync {
+        read_persisted_acp_approval_level(state, &channel_key.0, &channel_key.1).await
+    } else {
+        None
+    };
+
+    if let Some(commands) = immediate_commands {
+        let mut resp = json!({ "commands": commands });
+        if let Some(level) = initial_approval_level {
+            resp["desiredApprovalLevel"] = json!(level.as_str());
+        }
+        return Ok(resp);
+    }
+    if let Some(level) = initial_approval_level {
+        return Ok(json!({
+            "commands": [],
+            "holdMs": 0,
+            "desiredApprovalLevel": level.as_str(),
+        }));
+    }
+
+    let wake = wake.expect("wake present when no immediate commands");
+    enum PreHold {
+        Commands(Vec<Value>),
+        ApprovalSync,
+        Hold,
+    }
+    let pre_hold = {
+        let mut channels = lock(&CHANNELS);
+        match channels.get_mut(&channel_key) {
+            Some(channel) if !channel.queue.is_empty() => {
+                PreHold::Commands(drain(&mut channel.queue))
+            }
+            Some(channel) if is_acp && channel.pending_approval_sync => {
+                channel.pending_approval_sync = false;
+                PreHold::ApprovalSync
+            }
+            Some(channel) => {
+                channel.polling += 1;
+                PreHold::Hold
+            }
+            None => PreHold::Hold,
+        }
+    };
+    match pre_hold {
+        PreHold::Commands(commands) => return Ok(json!({ "commands": commands })),
+        PreHold::ApprovalSync => {
+            if let Some(level) =
+                read_persisted_acp_approval_level(state, &channel_key.0, &channel_key.1).await
+            {
+                return Ok(json!({
+                    "commands": [],
+                    "holdMs": 0,
+                    "desiredApprovalLevel": level.as_str(),
+                }));
+            }
+            // Persisted level absent; proceed to hold normally.
+            if let Some(channel) = lock(&CHANNELS).get_mut(&channel_key) {
+                channel.polling += 1;
+            }
+        }
+        PreHold::Hold => {}
+    }
+    let guard = PollGuard(channel_key.clone());
     let _ = tokio::time::timeout(POLL_HOLD, wake.notified()).await;
-    let commands = lock(&CHANNELS)
-        .get_mut(&guard.0)
-        .map(|channel| drain(&mut channel.queue))
-        .unwrap_or_default();
+    let (commands, woken_for_approval_sync) = {
+        let mut channels = lock(&CHANNELS);
+        match channels.get_mut(&guard.0) {
+            Some(channel) => (
+                drain(&mut channel.queue),
+                is_acp && std::mem::take(&mut channel.pending_approval_sync),
+            ),
+            None => (Vec::new(), false),
+        }
+    };
     drop(guard);
-    Ok(json!({ "commands": commands, "holdMs": POLL_HOLD.as_millis() as u64 }))
+    let mut resp = json!({ "commands": commands, "holdMs": POLL_HOLD.as_millis() as u64 });
+    if woken_for_approval_sync {
+        if let Some(level) =
+            read_persisted_acp_approval_level(state, &channel_key.0, &channel_key.1).await
+        {
+            resp["desiredApprovalLevel"] = json!(level.as_str());
+        }
+    }
+    Ok(resp)
 }
 
 fn ack(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
+    let caller_key = channel_key(params)?;
     let id = read_string(params, "id")
         .ok_or_else(|| DomainStateError::bad_request("An acknowledgement names its command."))?;
-    let Some(waiter) = lock(&WAITERS).remove(&id) else {
+    let waiter = {
+        let mut waiters = lock(&WAITERS);
+        match waiters.get(&id) {
+            None => return Ok(json!({ "accepted": false })),
+            Some(existing) if existing.channel_key != caller_key => {
+                return Err(DomainStateError {
+                    code: "forbidden",
+                    message: "That chat channel command belongs to another session.".to_string(),
+                });
+            }
+            Some(_) => waiters.remove(&id),
+        }
+    };
+    let Some(waiter) = waiter else {
         return Ok(json!({ "accepted": false }));
     };
     let message =
@@ -342,7 +477,7 @@ pub(crate) async fn dispatch(
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     match read_string(params, "action").as_deref() {
-        Some("poll") => poll(params).await,
+        Some("poll") => poll(state, params).await,
         Some("ack") => ack(params),
         Some("close") => close(params),
         Some("trust") => trust(state, params),

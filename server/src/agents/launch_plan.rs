@@ -94,6 +94,9 @@ pub(crate) fn create_agent_session_params_for_project(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
+    // Starting ACP approval level comes from project/agent/global acceptAll defaults, never from
+    // client-supplied `runtimeSettings` (so a caller cannot override `acceptAllMode: "disabled"`).
+    runtime_settings.remove(crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY);
     let agent_config = resolve_project_agent_config(project, &agent_id, Some(&launch_settings));
     let agent_icon = read_text_from_map(&agent_config, "icon")
         .or_else(|| read_text_from_map(&launch_settings, "icon"));
@@ -685,25 +688,20 @@ pub(crate) fn create_agent_session_params_for_project(
                             .and_then(Value::as_str)
                             .map(str::to_string);
                         let resume_id = read_text_from_map(&runtime_settings, "agentSessionId");
-                        let accept_all_effective =
-                            match read_text_from_map(&agent_config, "acceptAllMode")
-                                .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
-                                .as_deref()
-                            {
-                                Some("enabled" | "acceptAll") => true,
-                                Some("disabled") => false,
-                                _ => settings
-                                    .get("agentAcceptAllEnabled")
-                                    .and_then(Value::as_bool)
-                                    .unwrap_or(false),
-                            };
+                        let approval_level = crate::acp::approval::resolve_starting_level(
+                            &runtime_settings,
+                            &agent_config,
+                            &launch_settings,
+                            &settings,
+                        );
                         let req_model = read_text(params, "agentModel");
                         let req_effort = read_text(params, "agentEffort");
                         let acp_cmd = crate::acp::spec::build_acp_host_launch_command(
                             fam,
                             base_cli_cmd.as_deref(),
                             resume_id.as_deref(),
-                            accept_all_effective,
+                            approval_level,
+                            &[],
                             req_model.as_deref(),
                             req_effort.as_deref(),
                         );
@@ -715,6 +713,10 @@ pub(crate) fn create_agent_session_params_for_project(
                             .insert(crate::acp::SESSION_ACP_ACTIVE_KEY.to_string(), json!(true));
                         runtime_settings
                             .insert(crate::acp::SESSION_ACP_FAMILY_KEY.to_string(), json!(fam));
+                        runtime_settings.insert(
+                            crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+                            json!(approval_level.as_str()),
+                        );
                         plan.insert(
                             "startupText".to_string(),
                             Value::String(as_atuin_ignored_shell_input(&acp_cmd)),

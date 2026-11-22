@@ -334,8 +334,8 @@ pub fn detect_session_chat_terminal_state(
     session_id: &str,
     agent_id: Option<&str>,
 ) -> SessionChatTerminalDetection {
-    // An ACP-mode session reports its live model, effort, and mode directly through `ghostex acp-host`
-    // without terminal screen scraping (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
+    // An ACP-mode session reports its live model, effort, and approval level directly through
+    // `ghostex acp-host` without terminal screen scraping (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
     if let Some(acp_state) = crate::acp::channel::channel_state(project_id, session_id) {
         let model = acp_state
             .get("model")
@@ -366,13 +366,26 @@ pub fn detect_session_chat_terminal_state(
                 source: SessionChatOptionEvidence::Terminal,
             });
         let mode = acp_state
-            .get("mode")
+            .get("approvalLevel")
+            .or_else(|| acp_state.get("mode"))
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
-            .map(|value| SessionChatDetectedChoice {
-                value: value.to_string(),
-                label: value.to_string(),
-                source: SessionChatOptionEvidence::Terminal,
+            .map(|value| match crate::acp::AcpApprovalLevel::parse(value) {
+                Some(level) => SessionChatDetectedChoice {
+                    value: level.as_str().to_string(),
+                    label: level.label().to_string(),
+                    source: SessionChatOptionEvidence::Terminal,
+                },
+                None => SessionChatDetectedChoice {
+                    value: value.to_string(),
+                    label: acp_state
+                        .get("modeLabel")
+                        .and_then(Value::as_str)
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or(value)
+                        .to_string(),
+                    source: SessionChatOptionEvidence::Terminal,
+                },
             });
         let selection = SessionChatDetectedSelection {
             model,
@@ -384,7 +397,32 @@ pub fn detect_session_chat_terminal_state(
         let options = with_checkout_status(repository, project_id, session_id, agent_id, options);
         let mut detection = SessionChatTerminalDetection::default();
         detection.options = options;
+        detection.captured = true;
+        detection.attempted = true;
         return detection;
+    }
+    // While an ACP session is booting or reconnecting its channel, never fall through to CLI TUI
+    // screen scraping; report its persisted approval level instead.
+    if let Some(session) = repository.get_session(project_id, session_id).ok().flatten() {
+        if crate::acp::session_is_acp(&session) {
+            let level = crate::acp::approval::stored_session_approval_level(&session)
+                .unwrap_or_default();
+            let selection = SessionChatDetectedSelection {
+                mode: Some(SessionChatDetectedChoice {
+                    value: level.as_str().to_string(),
+                    label: level.label().to_string(),
+                    source: SessionChatOptionEvidence::Launch,
+                }),
+                ..SessionChatDetectedSelection::default()
+            };
+            let options = Some(SessionChatDetectedOptions::new(selection));
+            let options =
+                with_checkout_status(repository, project_id, session_id, agent_id, options);
+            let mut detection = SessionChatTerminalDetection::default();
+            detection.options = options;
+            detection.attempted = true;
+            return detection;
+        }
     }
     // DeepSeek Harness reports its model and effort through Ghostex's dsh-tui plugin, in the Pi
     // channel's state shape (CDXC:DshChatChannel 2026-11-05 in dsh_chat_plugin.rs).

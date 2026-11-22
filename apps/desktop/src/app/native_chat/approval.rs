@@ -1,6 +1,9 @@
 use super::tone_card::{ToneButton, ToneCardParts, command_box, tone_look};
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
-use gpui::{AnyElement, Context, IntoElement, ParentElement as _, StatefulInteractiveElement as _};
+use gpui::{
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, div, px,
+};
 use serde_json::{Value, json};
 
 impl NativeChatView {
@@ -36,6 +39,45 @@ impl NativeChatView {
                 crate::app::native_chat::tone_card::is_shell_tool(&tool),
                 p,
             ));
+        }
+        let reason = Some(text(card, "approvalReason"))
+            .filter(|r| !r.is_empty())
+            .or_else(|| Some(text(prompt, "reason")).filter(|r| !r.is_empty()));
+        if let Some(reason) = reason {
+            let s = p.scale;
+            let look = tone_look("warning", p);
+            let hue = look.hue.unwrap_or(p.muted);
+            body.push(
+                div()
+                    .id("approval-reason")
+                    .flex()
+                    .items_start()
+                    .gap(px(8.0 * s))
+                    .px(px(10.0 * s))
+                    .py(px(8.0 * s))
+                    .rounded(px(8.0 * s))
+                    .border_1()
+                    .border_color(hue.opacity(0.28))
+                    .bg(hue.opacity(0.08))
+                    .child(
+                        gpui::svg()
+                            .path(look.icon)
+                            .mt(px(2.0 * s))
+                            .size(px(14.0 * s))
+                            .flex_shrink_0()
+                            .text_color(hue),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_size(px(13.0 * s))
+                            .line_height(px(18.0 * s))
+                            .text_color(p.foreground)
+                            .child(reason),
+                    )
+                    .into_any_element(),
+            );
         }
         if card["reconnecting"] == true {
             body.push(super::question::reconnecting_note(p));

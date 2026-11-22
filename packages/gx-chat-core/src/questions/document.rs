@@ -107,6 +107,14 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
             ),
             _ => String::new(),
         },
+        approval_reason: match prompt.as_ref() {
+            Some(InteractivePrompt::Approval { reason, .. }) => reason
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+                .to_string(),
+            _ => String::new(),
+        },
     };
 
     // `questionForms` is assembled beside this family (`document::assemble`), from a kept copy

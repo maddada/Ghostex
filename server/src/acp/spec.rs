@@ -93,7 +93,8 @@ pub fn build_acp_host_launch_command(
     family: &str,
     cli_command: Option<&str>,
     resume_session_id: Option<&str>,
-    accept_all: bool,
+    approval_level: super::AcpApprovalLevel,
+    writable_roots: &[String],
     model: Option<&str>,
     effort: Option<&str>,
 ) -> String {
@@ -101,7 +102,8 @@ pub fn build_acp_host_launch_command(
         family,
         cli_command,
         resume_session_id,
-        accept_all,
+        approval_level,
+        writable_roots,
         model,
         effort,
         cfg!(windows),
@@ -112,7 +114,8 @@ fn build_acp_host_launch_command_for_platform(
     family: &str,
     cli_command: Option<&str>,
     resume_session_id: Option<&str>,
-    accept_all: bool,
+    approval_level: super::AcpApprovalLevel,
+    writable_roots: &[String],
     model: Option<&str>,
     effort: Option<&str>,
     windows: bool,
@@ -141,8 +144,16 @@ fn build_acp_host_launch_command_for_platform(
         parts.push("--resume".to_string());
         parts.push(quote_acp_launch_arg(id, windows));
     }
-    if accept_all {
-        parts.push("--accept-all".to_string());
+    parts.push("--approval-level".to_string());
+    parts.push(quote_acp_launch_arg(approval_level.as_str(), windows));
+    for root in writable_roots
+        .iter()
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        parts.push("--writable-root".to_string());
+        parts.push(quote_acp_launch_arg(root, windows));
     }
     if let Some(m) = model.map(str::trim).filter(|s| !s.is_empty()) {
         parts.push("--model".to_string());
@@ -281,8 +292,12 @@ fn is_valid_env_name(name: &str) -> bool {
 }
 
 fn strip_ps_env_prefix(token: &str) -> Option<&str> {
-    if token.len() > 5 && token[..5].eq_ignore_ascii_case("$env:") {
-        Some(&token[5..])
+    if token
+        .as_bytes()
+        .get(..5)
+        .is_some_and(|head| head.eq_ignore_ascii_case(b"$env:"))
+    {
+        token.get(5..).filter(|rest| !rest.is_empty())
     } else {
         None
     }
@@ -396,11 +411,13 @@ pub fn build_cli_switch_argv(
     }
     let program = base_tokens[0].clone();
     let mut args = base_tokens[1..].to_vec();
-    if accept_all {
-        if let Some(flag) = spec.cli_accept_all_flag {
+    if let Some(flag) = spec.cli_accept_all_flag {
+        if accept_all {
             if !args.iter().any(|arg| arg == flag) {
                 args.push(flag.to_string());
             }
+        } else {
+            args.retain(|arg| arg != flag);
         }
     }
     if let Some(id) = native_session_id.map(str::trim).filter(|s| !s.is_empty()) {

@@ -1207,9 +1207,6 @@ pub(crate) async fn run_provider_model_picker_job(
                         )
                         .await?;
                     }
-                    if let Some(mode) = plan.options.mode.as_deref().filter(|m| !m.is_empty()) {
-                        crate::acp::channel::set_mode(project_id, session_id, mode).await?;
-                    }
                     Ok(())
                 }
                 .await

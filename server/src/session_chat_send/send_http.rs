@@ -72,7 +72,7 @@ pub(crate) async fn handle_send_session_chat_message_http(
         request_id,
         body,
         |state, endpoint_path, request_id, body| async move {
-            send_session_chat_message_attempt(&state, endpoint_path, request_id, &body).await
+            send_session_chat_message_attempt(&state, endpoint_path, request_id, &body, false).await
         },
     )
     .await
@@ -83,6 +83,7 @@ pub(super) async fn send_session_chat_message_attempt(
     endpoint_path: String,
     request_id: String,
     body: &Value,
+    is_user_device: bool,
 ) -> RoutedResponse {
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
@@ -147,10 +148,21 @@ pub(super) async fn send_session_chat_message_attempt(
                     Err(error) => domain_error_response(endpoint_path, request_id, error),
                 },
                 "shift-tab" => {
-                    match crate::acp::channel::cycle_mode(&target.project_id, &target.session_id)
-                        .await
+                    match crate::acp::channel::cycle_mode(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                        is_user_device,
+                    )
+                    .await
                     {
                         Ok(_) => {
+                            if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+                                cache.remove(&crate::server::session_observer_key(
+                                    &target.project_id,
+                                    &target.session_id,
+                                ));
+                            }
                             let agent =
                                 crate::session_chat_follower::session_chat_display_agent_for_session(
                                     &target.session,

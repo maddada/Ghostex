@@ -194,10 +194,10 @@ fn pill(
         let mode = values["modeValue"].as_str().unwrap_or_default();
         // Codex's permission modes take the colour of the Claude mode closest to them.
         let (icon, color) = match mode {
-            "accept-edits" => ("mode-advance", 0xd3bff8),
+            "accept-edits" | "auto-edits" => ("mode-advance", 0xd3bff8),
             "auto" | "approve-for-me" => ("mode-advance", 0xf6daa0),
             "bypass" | "full-access" => ("mode-advance", 0xffb6c5),
-            "manual" | "ask-for-approval" => ("mode-pause", 0xd2d4dc),
+            "manual" | "ask-for-approval" | "ask" => ("mode-pause", 0xd2d4dc),
             "plan" | "read-only" => ("mode-pause", 0xa6ddd8),
             _ => ("mode-pause", 0xd2d4dc),
         };

@@ -47,6 +47,17 @@ pub(crate) fn gate(
             }
         }
     }
+    // Defense-in-depth: enforce accept-all default gating before the early return for
+    // Guest/Extension/Anonymous so future allow-list changes cannot accidentally bypass it.
+    if let Ok(params) = read_domain_rpc_params(body) {
+        if accept_all_default_raise_refused(state, caller, endpoint_path, &params) {
+            return Some(forbidden(
+                endpoint_path,
+                request_id,
+                "Only your own devices can turn on accept-all defaults.",
+            ));
+        }
+    }
     // Guests and extensions keep their own endpoint allow-lists, checked at the auth gate; agents
     // on a connected computer keep theirs too, but answering a prompt or typing into a session
     // here asks like it does for an agent here.
@@ -102,9 +113,10 @@ pub(crate) fn gate(
     require_owner_presence(state, caller, action, body, endpoint_path, request_id).err()
 }
 
-/// Every route that types, sends, queues, answers or interrupts in a session.
+/// Every route that types, sends, queues, answers, changes mode/model, or interrupts in a session.
 const SESSION_INPUT_ROUTES: &[&str] = &[
     "/api/answerSessionChatPrompt",
+    "/api/selectSessionChatModel",
     "/api/sendSessionText",
     "/api/sendSessionEnter",
     "/api/sendSessionMessage",
@@ -117,6 +129,15 @@ const SESSION_INPUT_ROUTES: &[&str] = &[
     // Standing role line injects context on SessionStart or after compaction (agents/standing_role.rs).
     "/api/sessionStandingRole",
 ];
+
+fn requests_mode_change(params: &Map<String, Value>) -> bool {
+    params
+        .get("options")
+        .and_then(Value::as_object)
+        .and_then(|opts| opts.get("mode"))
+        .and_then(Value::as_str)
+        .is_some_and(|mode| !mode.trim().is_empty())
+}
 
 /*
 CDXC:GBots 2026-11-09 WHY:
@@ -141,7 +162,13 @@ fn api_chat_refused(
             project_id: own_project,
             session_id: own_session,
             ..
-        } if own_session == session_id && (project_id.is_empty() || own_project == project_id) => {
+        } if own_session == session_id
+            && (project_id.is_empty() || own_project == project_id)
+            && !(endpoint_path == "/api/selectSessionChatModel" && requests_mode_change(params))
+            && !(endpoint_path == "/api/sendSessionChatMessage"
+                && text(params, "key")
+                    .is_some_and(|key| key.eq_ignore_ascii_case("shift-tab"))) =>
+        {
             false
         }
         _ => crate::gbots::is_api_chat_session(state, project_id, session_id),
@@ -174,6 +201,18 @@ fn relayed_card_refusal(
             }
             let kind = text(params, "kind").unwrap_or_default();
             (crate::coordinators::is_relayed_answer_kind(kind)
+                && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
+            .then_some(RELAYED_CARD_ONLY_YOU)
+        }
+        "/api/selectSessionChatModel" => {
+            (requests_mode_change(params)
+                && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
+            .then_some(RELAYED_CARD_ONLY_YOU)
+        }
+        "/api/sendSessionChatMessage" => {
+            let is_mode_cycle = text(params, "key")
+                .is_some_and(|key| key.eq_ignore_ascii_case("shift-tab"));
+            (is_mode_cycle
                 && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
             .then_some(RELAYED_CARD_ONLY_YOU)
         }
@@ -237,6 +276,226 @@ fn record_allowed(caller: &Principal, request: &ActionRequest) {
         crate::audit::Outcome::Allowed,
         None,
     );
+}
+
+fn custom_agent_identity_key(agent: &Value) -> Option<String> {
+    agent
+        .get("agentId")
+        .or_else(|| agent.get("id"))
+        .and_then(Value::as_str)
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty())
+}
+
+/// Non-user-device callers (`Principal::Session`, guests, extensions) may not raise global,
+/// sidebar-agent, or per-project accept-all defaults (`agentAcceptAllEnabled: true`,
+/// `customAgents[].acceptAllMode: "enabled"`, or clearing `"disabled"` while global
+/// `agentAcceptAllEnabled` is `true`). Your own devices (desktop/web/CLI, paired phones, and
+/// paired computers) are allowed.
+fn accept_all_default_raise_refused(
+    state: &AppState,
+    caller: &Principal,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+) -> bool {
+    use crate::acp::approval::{
+        accept_all_mode_change_raises, command_has_accept_all_flag,
+        global_accept_all_enabled_in_shared_settings, is_accept_all_disabled_value,
+        is_accept_all_enabled_value,
+    };
+
+    if caller.is_user_device() {
+        return false;
+    }
+    match endpoint_path {
+        "/api/updateAgentSettings" => {
+            params.get("agentAcceptAllEnabled").and_then(Value::as_bool) == Some(true)
+        }
+        "/api/dispatchRendererCommand" => {
+            if params.get("action").and_then(Value::as_str) != Some("updateSettingsPatch") {
+                return false;
+            }
+            let Some(payload) = params.get("payload") else {
+                return false;
+            };
+            // Refuse turning on global accept-all or enabling settings-sync categories that could
+            // smuggle `agentAcceptAllEnabled` or `customAgents[].acceptAllMode` from another peer.
+            [
+                "/patch/agentAcceptAllEnabled",
+                "/patch/syncAgentDefaults",
+                "/patch/syncAgents",
+            ]
+            .iter()
+            .any(|ptr| payload.pointer(ptr).and_then(Value::as_bool) == Some(true))
+        }
+        "/api/undoSettingsSyncChange" | "/api/restoreSettingsSyncComputer" => true,
+        "/api/createProject" => {
+            if is_accept_all_enabled_value(params.get("acceptAllMode").and_then(Value::as_str))
+                || is_accept_all_enabled_value(
+                    params
+                        .get("launchSettings")
+                        .and_then(Value::as_object)
+                        .and_then(|ls| ls.get("acceptAllMode"))
+                        .and_then(Value::as_str),
+                )
+            {
+                return true;
+            }
+            params
+                .get("customAgents")
+                .and_then(Value::as_array)
+                .is_some_and(|arr| {
+                    arr.iter().any(|agent| {
+                        is_accept_all_enabled_value(
+                            agent.get("acceptAllMode").and_then(Value::as_str),
+                        ) || agent
+                            .get("command")
+                            .and_then(Value::as_str)
+                            .is_some_and(command_has_accept_all_flag)
+                    })
+                })
+        }
+        "/api/updateProject" => {
+            // Check `contains_key` (not `as_array`/`as_object`) so sending `"customAgents": null`
+            // or `"launchSettings": null` cannot skip the guard and wipe stored `"disabled"` overrides.
+            let has_custom_agents = params.contains_key("customAgents");
+            let has_launch_settings = params.contains_key("launchSettings");
+            let has_top_accept = params.contains_key("acceptAllMode");
+            if !has_custom_agents && !has_launch_settings && !has_top_accept {
+                return false;
+            }
+            let global_enabled = global_accept_all_enabled_in_shared_settings(&state.paths);
+            let stored_project = params
+                .get("projectId")
+                .and_then(Value::as_str)
+                .and_then(|pid| {
+                    let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
+                    let repo =
+                        crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+                    repo.get_project(pid).ok().flatten()
+                });
+            let Some(stored_project) = stored_project else {
+                // Fail closed if we cannot compare against the stored project state.
+                return true;
+            };
+            if has_top_accept {
+                let stored_top = stored_project.get("acceptAllMode").and_then(Value::as_str);
+                let incoming_top = params.get("acceptAllMode").and_then(Value::as_str);
+                if accept_all_mode_change_raises(stored_top, incoming_top, global_enabled) {
+                    return true;
+                }
+            }
+            if has_launch_settings {
+                let stored_launch = stored_project
+                    .pointer("/launchSettings/acceptAllMode")
+                    .and_then(Value::as_str);
+                let incoming_launch = params
+                    .get("launchSettings")
+                    .and_then(Value::as_object)
+                    .and_then(|ls| ls.get("acceptAllMode"))
+                    .and_then(Value::as_str);
+                if accept_all_mode_change_raises(stored_launch, incoming_launch, global_enabled) {
+                    return true;
+                }
+            }
+            if has_custom_agents {
+                let mut stored_modes: std::collections::HashMap<String, Option<String>> =
+                    std::collections::HashMap::new();
+                let mut stored_cmds: std::collections::HashMap<String, String> =
+                    std::collections::HashMap::new();
+                if let Some(stored_arr) = stored_project
+                    .get("customAgents")
+                    .and_then(Value::as_array)
+                {
+                    for agent in stored_arr {
+                        if let Some(key) = custom_agent_identity_key(agent) {
+                            let mode = agent
+                                .get("acceptAllMode")
+                                .and_then(Value::as_str)
+                                .map(|s| s.trim().to_string());
+                            stored_modes.insert(key.clone(), mode);
+                            if let Some(cmd) = agent.get("command").and_then(Value::as_str) {
+                                stored_cmds.insert(key, cmd.to_string());
+                            }
+                        }
+                    }
+                }
+                let empty: Vec<Value> = Vec::new();
+                let incoming_agents = params
+                    .get("customAgents")
+                    .and_then(Value::as_array)
+                    .unwrap_or(&empty);
+                let mut seen_keys: HashSet<String> = HashSet::new();
+                for agent in incoming_agents {
+                    let incoming_mode = agent.get("acceptAllMode").and_then(Value::as_str);
+                    let incoming_cmd = agent.get("command").and_then(Value::as_str);
+                    let Some(key) = custom_agent_identity_key(agent) else {
+                        // Fail closed when an agent entry lacks an identity key and tries to
+                        // enable accept-all (or could mask a disabled agent when global is on).
+                        if is_accept_all_enabled_value(incoming_mode)
+                            || incoming_cmd.is_some_and(command_has_accept_all_flag)
+                            || global_enabled
+                        {
+                            return true;
+                        }
+                        continue;
+                    };
+                    seen_keys.insert(key.clone());
+                    let stored_mode = stored_modes.get(&key).and_then(|m| m.as_deref());
+                    if accept_all_mode_change_raises(stored_mode, incoming_mode, global_enabled) {
+                        return true;
+                    }
+                    if let Some(cmd) = incoming_cmd {
+                        let unchanged = stored_cmds.get(&key).map(String::as_str) == Some(cmd);
+                        if !unchanged && command_has_accept_all_flag(cmd) {
+                            return true;
+                        }
+                    }
+                }
+                // Dropping (or nulling) a stored `"disabled"` agent entry while global
+                // `agentAcceptAllEnabled` is `true` causes that agent to fall back to global accept-all.
+                if global_enabled {
+                    let dropped_disabled = stored_modes.iter().any(|(key, mode)| {
+                        is_accept_all_disabled_value(mode.as_deref()) && !seen_keys.contains(key)
+                    });
+                    if dropped_disabled {
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+        "/api/mutateSidebarHudSettings" => {
+            if params.get("target").and_then(Value::as_str).map(str::trim) != Some("agent") {
+                return false;
+            }
+            let op = params
+                .get("operation")
+                .and_then(Value::as_str)
+                .map(str::trim);
+            if !matches!(op, Some("save" | "delete")) {
+                return false;
+            }
+            let global_enabled = global_accept_all_enabled_in_shared_settings(&state.paths);
+            let projects = crate::storage::open_gxserver_database(&state.paths)
+                .ok()
+                .and_then(|db| {
+                    let repo =
+                        crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+                    repo.list_projects_without_session_history().ok()
+                });
+            let Some(projects) = projects else {
+                // Fail closed if SQLite is unreadable when mutating agent accept-all settings.
+                return true;
+            };
+            crate::sidebar_hud::sidebar_hud_mutation_raises_accept_all(
+                &projects,
+                params,
+                global_enabled,
+            )
+        }
+        _ => false,
+    }
 }
 
 /// Why a caller without `Capability::OwnerSecrets` is refused.

@@ -155,6 +155,8 @@ pub struct SessionChatQueueSnapshot {
     pub later_question_until: Value,
     /// The modes this session's agent cannot use (session_chat_mode_availability.rs).
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
+    /// True while this session runs in Non-CLI (ACP) mode.
+    pub non_cli_mode: bool,
     /// The question forms and pages the user removed without answering (`session_chat_open_questions::read_removed_ids`).
     pub removed_question_ids: Vec<String>,
     /// The pages their agent retired (`visual_pages::read_retired_page_ids`).
@@ -202,6 +204,7 @@ impl SessionChatQueueSnapshot {
             "unavailableModes".to_string(),
             json!(self.unavailable_modes),
         );
+        target.insert("nonCliMode".to_string(), json!(self.non_cli_mode));
         target.insert(
             "removedQuestionIds".to_string(),
             json!(self.removed_question_ids),
@@ -261,6 +264,7 @@ impl SessionChatQueueSnapshot {
         revision.push_str(&serde_json::to_string(&self.later_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.later_question_until).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.unavailable_modes).unwrap_or_default());
+        revision.push_str(if self.non_cli_mode { "|nonCli:1" } else { "|nonCli:0" });
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.retired_page_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.starred_page_ids).unwrap_or_default());
@@ -1241,6 +1245,7 @@ fn read_snapshot(
             unavailable_modes: crate::session_chat_mode_availability::read_unavailable_modes(
                 db, project_id, session_id,
             ),
+            non_cli_mode: read_non_cli_mode(db, project_id, session_id),
             removed_question_ids: crate::session_chat_open_questions::read_removed_ids(
                 db, project_id, session_id,
             ),
@@ -1264,6 +1269,23 @@ fn read_snapshot(
             first_message: crate::session_chat_first_message::read(db, project_id, session_id),
         })
     })
+}
+
+fn read_non_cli_mode(db: &Connection, project_id: &str, session_id: &str) -> bool {
+    let (non_cli, acp): (Option<i64>, Option<i64>) = db
+        .query_row(
+            "SELECT json_extract(runtimeSettingsJson, '$.nonCliMode'), json_extract(runtimeSettingsJson, '$.acpMode') FROM sessions WHERE projectId = ?1 AND sessionId = ?2",
+            params![project_id, session_id],
+            |row| Ok((row.get(0).ok().flatten(), row.get(1).ok().flatten())),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .unwrap_or((None, None));
+    match non_cli {
+        Some(value) => value != 0,
+        None => acp.is_some_and(|value| value != 0),
+    }
 }
 
 fn read_api_retry(db: &Connection, project_id: &str, session_id: &str) -> Option<Value> {

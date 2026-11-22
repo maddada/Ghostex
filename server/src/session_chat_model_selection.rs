@@ -28,6 +28,10 @@ pub struct SelectionOptions {
     /// Codex's permission mode, one of `CODEX_PERMISSION_MODES`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub permissions: Option<String>,
+    /// Internal server-stamped marker: whether an owner device requested the queued mode change.
+    /// Stripped from client input in `read_options` so callers can never forge it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) owner_approved: Option<bool>,
 }
 
 impl SelectionOptions {
@@ -38,21 +42,39 @@ impl SelectionOptions {
 
 pub(crate) fn read_options(
     provider: &str,
+    is_acp: bool,
     params: &Map<String, Value>,
 ) -> Result<SelectionOptions, DomainStateError> {
-    let options: SelectionOptions =
-        serde_json::from_value(params.get("options").cloned().unwrap_or_else(|| json!({})))
-            .map_err(|_| DomainStateError {
-                code: "invalidParams",
-                message: "Invalid chat option selection.".into(),
-            })?;
-    let valid_mode = options.mode.as_deref().is_none_or(|mode| match provider {
-        "opencode" => !mode.trim().is_empty() && mode.len() <= 160,
-        "codex" => matches!(mode, "plan" | "default"),
-        "claude" => matches!(mode, "bypass" | "auto" | "manual" | "accept-edits" | "plan"),
-        "antigravity" => matches!(mode, "default" | "accept-edits" | "auto" | "plan"),
-        _ => false,
-    });
+    let mut raw_options = params.get("options").cloned().unwrap_or_else(|| json!({}));
+    if let Some(obj) = raw_options.as_object_mut() {
+        // Never accept client-supplied `ownerApproved`.
+        obj.remove("ownerApproved");
+    }
+    let mut options: SelectionOptions = serde_json::from_value(raw_options).map_err(|_| {
+        DomainStateError {
+            code: "invalidParams",
+            message: "Invalid chat option selection.".into(),
+        }
+    })?;
+    options.owner_approved = None;
+    if is_acp {
+        if let Some(mode) = options.mode.as_deref() {
+            let level =
+                crate::acp::AcpApprovalLevel::parse(mode).ok_or_else(|| DomainStateError {
+                    code: "invalidParams",
+                    message: "That approval level is not available for this agent.".into(),
+                })?;
+            options.mode = Some(level.as_str().to_string());
+        }
+    }
+    let valid_mode = is_acp
+        || options.mode.as_deref().is_none_or(|mode| match provider {
+            "opencode" => !mode.trim().is_empty() && mode.len() <= 160,
+            "codex" => matches!(mode, "plan" | "default"),
+            "claude" => matches!(mode, "bypass" | "auto" | "manual" | "accept-edits" | "plan"),
+            "antigravity" => matches!(mode, "default" | "accept-edits" | "auto" | "plan"),
+            _ => false,
+        });
     let valid_permissions = options.permissions.as_deref().is_none_or(|value| {
         provider == "codex"
             && crate::session_chat_options::codex_permissions_command(value).is_some()
@@ -254,7 +276,15 @@ pub(crate) fn enqueue(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    enqueue_selection(state, params, false)
+    enqueue_selection(state, params, false, true)
+}
+
+pub(crate) fn enqueue_for_caller(
+    state: &AppState,
+    params: &Map<String, Value>,
+    is_user_device: bool,
+) -> Result<Value, DomainStateError> {
+    enqueue_selection(state, params, false, is_user_device)
 }
 
 /// Queues a change Ghostex makes on its own, unless a pick is already waiting or applying: the
@@ -263,13 +293,14 @@ pub(crate) fn enqueue_unless_pending(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    enqueue_selection(state, params, true)
+    enqueue_selection(state, params, true, true)
 }
 
 fn enqueue_selection(
     state: &AppState,
     params: &Map<String, Value>,
     unless_pending: bool,
+    is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
     let project = params
         .get("projectId")
@@ -305,14 +336,17 @@ fn enqueue_selection(
         .get("effort")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let incoming_options = read_options(&provider, params)?;
+    let is_acp = crate::acp::session_is_acp(&session);
+    let incoming_options = read_options(&provider, is_acp, params)?;
     let scope = read_scope(&provider, params)?;
     if !model.is_empty() || incoming_options.is_empty() {
         validate_selection(&provider, model, effort)?;
-    } else if !matches!(
-        provider.as_str(),
-        "codex" | "claude" | "opencode" | "antigravity"
-    ) || !effort.is_empty()
+    } else if (!is_acp
+        && !matches!(
+            provider.as_str(),
+            "codex" | "claude" | "opencode" | "antigravity"
+        ))
+        || !effort.is_empty()
     {
         return Err(DomainStateError {
             code: "invalidParams",
@@ -357,6 +391,7 @@ fn enqueue_selection(
         .unwrap_or_default();
     if incoming_options.mode.is_some() {
         options.mode = incoming_options.mode;
+        options.owner_approved = Some(is_user_device);
     }
     if incoming_options.permissions.is_some() {
         options.permissions = incoming_options.permissions;
@@ -778,9 +813,11 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                 &state, &project, &session,
             )
             .await;
+            let owner_approved = pending.options.owner_approved.unwrap_or(false);
             let result = crate::session_chat_codex_picker::select_session_chat_model(
                 &state,
                 params.as_object().unwrap(),
+                owner_approved,
             )
             .await;
             if let Some(guard) = first_message {
@@ -885,6 +922,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
             });
             let final_failure = result.as_ref().is_err_and(|error| {
                 error.code == crate::session_chat_codex_picker::UNSUPPORTED_SELECTION_CODE
+                    || error.code == "forbidden"
             });
             if result.is_ok() || final_failure {
                 if let Ok(mut attempts) = unconfirmed_attempts().lock() {

@@ -72,6 +72,7 @@ pub fn open_conversation(
     request: &OpenConversationRequest,
     repository: &DomainRepository<'_>,
     db: &Connection,
+    is_user_device: bool,
     call: &dyn Fn(&str, Value) -> Result<Value, DomainStateError>,
 ) -> Result<Value, DomainStateError> {
     let snapshot = call("/api/readPresentationSnapshot", json!({}))?;
@@ -155,6 +156,7 @@ pub fn open_conversation(
         },
         repository,
         db,
+        is_user_device,
         call,
     )
 }

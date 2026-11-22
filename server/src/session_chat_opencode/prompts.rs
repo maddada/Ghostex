@@ -83,6 +83,7 @@ pub(crate) fn approval_prompt(permission: &Value) -> SessionChatInteractivePromp
                 .unwrap_or_default(),
         ),
         tool_use_id: permission["id"].as_str().map(str::to_string),
+        reason: None,
     }
 }
 

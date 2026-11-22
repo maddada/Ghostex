@@ -332,6 +332,7 @@ pub(crate) mod tests {
                 why: tag.into(),
                 restart: None,
             }]),
+            non_cli_mode: Some(flag),
             removed_question_ids: Some(vec![format!("removed {tag}")]),
             retired_page_ids: Some(vec![format!("retired page {tag}")]),
             starred_page_ids: Some(vec![format!("starred page {tag}")]),
