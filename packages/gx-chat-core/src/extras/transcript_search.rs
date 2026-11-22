@@ -280,15 +280,27 @@ fn message_segments(
     let tools_default = folds.work_open || message["toolsOpen"] == true;
     if body.is_empty() {
         tool_segments(message, folds, in_work_fold, out);
-    } else if reasoning && has_tools && message["thinkingCard"]["calls"].is_string() {
-        // A running thought folds its calls behind its line (`thinking_card.rs`); its text opens
-        // on its own, so only the line and the calls it folds are searched.
-        let key = format!("reasoning:{id}");
+    } else if reasoning && message["thinkingCard"].is_object() {
+        // A thought drawn as a slim Thought line (`thinking_card.rs`): its one-line preview is
+        // visible, its full body opens behind `thinking-card:<id>`, and its folded calls (when
+        // `thinkingCard.calls` is set) open behind `reasoning:<id>`.
+        let preview = match str_of(&message["thinkingCard"], "preview") {
+            preview if preview.is_empty() => str_of(&message["thinkingRow"], "preview"),
+            preview => preview,
+        };
+        let calls_key = format!("reasoning:{id}");
         out.push(Segment {
-            text: str_of(&message["thinkingCard"], "preview"),
-            label: Some(key.clone()),
+            text: preview,
+            label: Some(calls_key.clone()),
         });
-        if folds.open(&key, tools_default) {
+        if folds.open(&format!("thinking-card:{id}"), false) {
+            out.push(markdown(body));
+        }
+        if message["thinkingCard"]["calls"].is_string() {
+            if folds.open(&calls_key, tools_default) {
+                tool_segments(message, folds, in_work_fold, out);
+            }
+        } else if flat || has_tools {
             tool_segments(message, folds, in_work_fold, out);
         }
     } else if reasoning && has_tools {

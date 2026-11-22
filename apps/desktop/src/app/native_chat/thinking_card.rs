@@ -37,7 +37,6 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let card = &message["thinkingCard"];
-        let running = card.is_object();
         let live = card["live"] == true;
         let key = format!("thinking-card:{id}");
         let expanded = self.is_expanded(&key, false);
@@ -46,8 +45,9 @@ impl NativeChatView {
             preview if preview.is_empty() => text(row, "preview"),
             preview => preview,
         };
-        // A Codex reasoning summary is often its headline alone: there is nothing to open.
-        let expandable = running || row["expandable"] != false;
+        // A Codex reasoning summary is often its headline alone: there is nothing to open once it
+        // has finished writing.
+        let expandable = live || row["expandable"] != false;
         let lane = p.thinking_lane();
         let title = if live { "Thinking…" } else { "Thought" };
         // The calls it folds open on a sentence's default: in detailed or verbose mode, or while

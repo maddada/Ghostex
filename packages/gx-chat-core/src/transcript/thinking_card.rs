@@ -4,12 +4,16 @@
 //! written right now (`live`), its newest finished line (`preview`) and, when the thought owns the
 //! calls it made, their count label (`calls`, "3 tool calls"), so a renderer draws a closed row the
 //! reader opens with one click while the agent is still thinking, with its calls folded behind it.
-//! Once the turn settles the rows lose the mark and fold into the turn's "Previous turn" card as
-//! before.
+//! Once the turn settles into a turn fold (`toolsFlat`), the rows lose the mark and list their
+//! calls flat after the `Thought` line; a settled reasoning row drawn outside a turn fold that
+//! still owns calls keeps a closed `thinkingCard` (`live: false`) so it never falls back to the
+//! legacy multi-paragraph reasoning headline disclosure.
 //!
 //! CDXC:SessionChat 2026-10-24 DECISION: User, on Codex's thinking in Simple mode: "thinking has to be switched to a simple expandible area, it can't be this big card like it is now for codex. do same for all the agents we support chat for please". A thought is one slim row shaped like a tool row (brain tile, "Thinking…" while it is written or "Thought" after, then its line), closed by default, one click opening the full text below it; no bordered card. The running turn's thought is drawn that way in every mode, and in Simple mode every thought is, so a run of short Codex reasoning summaries reads as quiet lines between the calls instead of bold paragraphs. Supersedes the 2026-10-23 card look (ferpart's #272 request 1); what that decision chose stays: it starts closed while it streams, shows the newest finished line with no word count, and there is no setting to hide thinking. Drawn by the desktop's `native_chat/thinking_card.rs` and the phone's `ThinkingLine` in `MessageRow.tsx`.
 //!
 //! CDXC:SessionChat 2026-11-02 DECISION: User, asked whether the calls under a running thought stay in view or fold the way Claude's steps fold under its sentences: "Fold them like Claude, for every agent". While a turn runs, a thought that owns calls folds them behind its line the way an agent's sentence folds its calls behind its chevron: the line ends with "N tool calls" and a chevron that opens them, on the same default as a sentence's calls (open in detailed or verbose mode, closed in Simple mode, and open while one of them waits on an approval through `toolsOpen`), separate from the click on the line that opens the thought's text. Supersedes the 2026-10-24 rule that "the calls a thought made stay in view below it". Inside a turn's work fold the calls stay listed flat (`toolsFlat`, the 2026-10-21 decision in `tool_rows.rs`), and with Tool call cards on they stay the card after it.
+//!
+//! CDXC:SessionChat 2026-11-22 WHY: A turn without a final assistant reply (a coordinator turn between thread reports, a turn that ended on tool calls, or a non-working beat before the reply lands) stays outside `CompletedWork`, so its rows are drawn with `Draw::Row` (`toolsFlat` unset) while `RunningThinking` no longer marks them. In Antigravity sessions, where every tool-calling planner step splits its multi-paragraph thinking into a `Reasoning` row right ahead of the tool call, renderers (`native_chat/transcript.rs` and the phone's `MessageRow.tsx`) then hit `else if reasoning && tools`, dumping all paragraphs of `reasoning.headline` inline beside a bare chevron with the tool call underneath. Marking any non-running `Draw::Row` reasoning row that owns unflattened tools with a closed `thinkingCard` (`live: false`, `preview` from `thinkingRow`, and `calls` when it folds regular tool calls) keeps every renderer (desktop, GPUI Web, and phone WASM) on the slim `Thought` row with separate call folding.
 use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 use serde_json::{json, Value};
@@ -61,26 +65,39 @@ impl RunningThinking {
             .then(|| self.live.as_deref() == Some(id))
     }
 
-    /// Adds `thinkingCard` to a projected reasoning row of the running turn. Any other row keeps
-    /// the model it shares with the projection cache.
+    /// Adds `thinkingCard` to a projected reasoning row of the running turn, and to any settled
+    /// reasoning row outside a turn's work fold that owns tool calls. Any other row keeps the
+    /// model it shares with the projection cache.
     pub fn mark(&self, message: &ChatMessage, row: &mut std::sync::Arc<Value>) {
-        if !self.ids.iter().any(|id| id == &message.id) || !row.is_object() {
+        if message.role != ChatRole::Reasoning || !row.is_object() {
             return;
         }
-        let text: String = message
-            .blocks
-            .iter()
-            .filter_map(|block| match block {
-                ChatBlock::Text { text } => Some(text.as_str()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+        let running = self.ids.iter().any(|id| id == &message.id);
+        if !running && !owns_unflattened_tools(row) {
+            return;
+        }
         let calls = folded_calls(row);
+        let card_preview = if running {
+            let text: String = message
+                .blocks
+                .iter()
+                .filter_map(|block| match block {
+                    ChatBlock::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            preview(&text)
+        } else {
+            row["thinkingRow"]["preview"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
+        };
         if let Value::Object(fields) = std::sync::Arc::make_mut(row) {
             let mut card = json!({
-                "live": self.live.as_deref() == Some(message.id.as_str()),
-                "preview": preview(&text),
+                "live": running && self.live.as_deref() == Some(message.id.as_str()),
+                "preview": card_preview,
             });
             if let Some(calls) = calls {
                 card["calls"] = Value::String(calls);
@@ -88,6 +105,20 @@ impl RunningThinking {
             fields.insert("thinkingCard".to_string(), card);
         }
     }
+}
+
+/// Whether a reasoning row owns tool calls outside a turn's work fold and without a tool call card:
+/// the exact condition under which renderers would otherwise fall back to the legacy multi-line
+/// reasoning headline disclosure (`native_chat/transcript.rs`, phone `MessageRow.tsx`).
+fn owns_unflattened_tools(row: &Value) -> bool {
+    row["text"]
+        .as_str()
+        .is_some_and(|text| !text.is_empty())
+        && row["toolsFlat"] != true
+        && !row["toolCard"].is_object()
+        && row["tools"]
+            .as_array()
+            .is_some_and(|tools| !tools.is_empty())
 }
 
 /// The label of the calls a running thought folds behind its line ("3 tool calls"), or `None` when
@@ -256,11 +287,31 @@ mod tests {
     }
 
     #[test]
-    fn a_settled_turn_marks_no_thought() {
+    fn a_settled_turn_marks_only_unflattened_thoughts_with_tools() {
         let messages = running_turn();
+        let settled = RunningThinking::new(&messages, false);
+        // Outside a turn fold, a settled thought that owns calls stays a closed Thought row with
+        // folded calls so renderers do not fall back to the multi-paragraph headline disclosure.
         let mut owner = row(&messages[1], &messages);
-        RunningThinking::new(&messages, false).mark(&messages[1], &mut owner);
-        assert!(owner.get("thinkingCard").is_none());
+        settled.mark(&messages[1], &mut owner);
+        assert_eq!(
+            owner["thinkingCard"],
+            json!({"live": false, "preview": "Reading the first two files.", "calls": "2 tool calls"})
+        );
+        // Inside a turn's work fold (or with Tool call cards on, or with no calls) it stays unmarked.
+        let mut flat = row(&messages[1], &messages);
+        crate::transcript::tool_rows::list_tools_in_work_fold(Arc::make_mut(&mut flat));
+        settled.mark(&messages[1], &mut flat);
+        assert!(flat.get("thinkingCard").is_none());
+
+        let mut carded = row(&messages[1], &messages);
+        Arc::make_mut(&mut carded)["toolCard"] = json!({"count": 2});
+        settled.mark(&messages[1], &mut carded);
+        assert!(carded.get("thinkingCard").is_none());
+
+        let mut plain = row(&messages[2], &messages);
+        settled.mark(&messages[2], &mut plain);
+        assert!(plain.get("thinkingCard").is_none());
     }
 
     #[test]
