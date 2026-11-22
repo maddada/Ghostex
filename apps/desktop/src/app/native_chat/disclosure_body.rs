@@ -131,62 +131,203 @@ pub(super) fn disclosure_body(
         .into_any_element()
 }
 
-/// A quiet fold's rail: an opened Quiet View line's rows (quiet_view.rs) and an opened Reduced or
-/// Agent work Quiet line's steps (quiet_work.rs). The 1px line stays where it was drawn, `line_x`
-/// in from the row's left edge with the content starting at `content_x`; a click anywhere from the
-/// row's left edge up to the content shuts the fold `key` as its header does, with a pointer and a
-/// stronger line while hovered. `bottom` is space under the rows that the line runs down through.
+/// Hover and press state shared across every segment of one quiet fold's rail (`closing_rail`).
 ///
-/// CDXC:SessionChat 2026-11-11 DECISION:
-/// User, of the thin line down an opened Quiet View fold: "make clicking on this line collapse". Every rail in the chat closes its fold when clicked, as the disclosure rails already did (`disclosure_body`): Quiet View's folds and Reduced and Agent work Quiet's opened steps now too, with a pointer and the line drawn stronger while hovered. The chat keeps the header where it is as the fold shuts (`anchor_disclosure_toggle`).
-///
-/// CDXC:SessionChat 2026-11-11 WHY: the target first was a 12px box centred on the line, with a 10px empty gap between it and the content; a checker's clicks just beside the line landed in that gap or on the card and did nothing or opened the card. The target now runs from the row's left edge to the content's edge, about 6px left and 16px right of the line, so no click near the line falls between the two.
-#[allow(clippy::too_many_arguments)]
-pub(super) fn closing_rail(
-    p: &ChatAppearance,
-    key: String,
-    line_x: f32,
-    content_x: f32,
-    gap: f32,
-    bottom: f32,
-    children: impl IntoIterator<Item = AnyElement>,
-    cx: &Context<NativeChatView>,
-) -> AnyElement {
-    let s = p.scale;
-    div()
-        .flex()
-        .min_w_0()
-        .child(
-            div()
-                .id(SharedString::from(format!("quiet-rail:{key}")))
-                .group(RAIL_GROUP)
-                .role(gpui::Role::Button)
-                .aria_label("Collapse")
-                .w(px(content_x * s))
-                .pl(px(line_x * s))
-                .flex_shrink_0()
-                .flex()
-                .chat_cursor_pointer()
-                .child(
-                    div()
-                        .w(px(RAIL_LINE_WIDTH * s))
-                        .bg(p.foreground.opacity(RAIL_LINE_OPACITY))
-                        .group_hover(RAIL_GROUP, |style| style.bg(p.foreground.opacity(0.35))),
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.toggle_marker_disclosure(key.clone(), true, cx);
-                    cx.stop_propagation();
-                })),
-        )
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .flex_1()
-                .min_w_0()
-                .pb(px(bottom * s))
-                .gap(px(gap * s))
-                .children(children),
-        )
-        .into_any_element()
+/// CDXC:SessionChat 2026-11-22 WHY: An opened Quiet View group spans multiple transcript list rows (`line.start..line.end`), so each row draws its own vertical segment of the rail. Giving every segment the same element id (`quiet-rail:{key}`) caused GPUI's `list` (which does not scope element ids per row) to share one `InteractiveElementState::pending_mouse_down` across rows: on mouse-up, the first row's capture listener ran first, saw it was not hovered, and cleared `pending_mouse_down` before the lower row's listener ran, so clicking any segment after the first did nothing. Per-segment `.group(RAIL_GROUP)` also lit only the hovered row's segment, visually splitting the rail at row boundaries. Each segment now carries a unique element id while sharing hover and press state keyed by the disclosure `key`, so hovering anywhere lights the whole rail together and clicking anywhere (including pressing on one row and releasing on another) collapses the group.
+#[derive(Default)]
+pub(super) struct ClosingRailState {
+    /// Segments currently under the pointer: `(disclosure key, segment part, list row index)`.
+    hovered: Vec<(String, String, Option<usize>)>,
+    /// Segment that received a left mouse-down: `(disclosure key, segment part)`.
+    pressed: Option<(String, String)>,
+}
+
+impl ClosingRailState {
+    pub(super) fn is_hovered(&self, key: &str) -> bool {
+        self.hovered.iter().any(|(k, _, _)| k == key)
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.hovered.is_empty()
+    }
+
+    pub(super) fn set_hovered(
+        &mut self,
+        key: &str,
+        part: &str,
+        row: Option<usize>,
+        hovered: bool,
+    ) -> bool {
+        let before = self.is_hovered(key);
+        if hovered {
+            if !self.hovered.iter().any(|(k, p, _)| k == key && p == part) {
+                self.hovered.push((key.to_string(), part.to_string(), row));
+            }
+        } else {
+            self.hovered.retain(|(k, p, _)| !(k == key && p == part));
+        }
+        self.is_hovered(key) != before
+    }
+
+    pub(super) fn press(&mut self, key: &str, part: &str) {
+        self.pressed = Some((key.to_string(), part.to_string()));
+    }
+
+    /// Consumes a press on `key`; returns `true` when mouse-down began on a different segment of
+    /// the same rail, so releasing across a row boundary still collapses the group as one hit area
+    /// while same-segment clicks stay handled by `.on_click`.
+    pub(super) fn release_other_part(&mut self, key: &str, part: &str) -> bool {
+        let cross_segment = self
+            .pressed
+            .as_ref()
+            .is_some_and(|(k, p)| k == key && p != part);
+        if self.pressed.as_ref().is_some_and(|(k, _)| k == key) {
+            self.pressed = None;
+        }
+        cross_segment
+    }
+
+    pub(super) fn clear_pressed(&mut self, key: &str, part: &str) {
+        if self
+            .pressed
+            .as_ref()
+            .is_some_and(|(k, p)| k == key && p == part)
+        {
+            self.pressed = None;
+        }
+    }
+
+    pub(super) fn clear_key(&mut self, key: &str) {
+        self.hovered.retain(|(k, _, _)| k != key);
+        if self.pressed.as_ref().is_some_and(|(k, _)| k == key) {
+            self.pressed = None;
+        }
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.hovered.clear();
+        self.pressed = None;
+    }
+
+    pub(super) fn retain_rows(&mut self, mut keep: impl FnMut(usize) -> bool) -> bool {
+        let before = self.hovered.len();
+        self.hovered.retain(|(_, _, row)| row.is_none_or(&mut keep));
+        self.hovered.len() != before
+    }
+}
+
+impl NativeChatView {
+    /// A quiet fold's rail: an opened Quiet View line's rows (quiet_view.rs) and an opened Reduced
+    /// or Agent work Quiet line's steps (quiet_work.rs). The 1px line stays where it was drawn,
+    /// `line_x` in from the row's left edge with the content starting at `content_x`; a click
+    /// anywhere from the row's left edge up to the content shuts the fold `key` as its header
+    /// does, with a pointer and the whole rail drawn stronger while any segment of it is hovered.
+    /// `part` distinguishes each segment of a multi-row rail so GPUI keeps independent hit state
+    /// and a11y nodes per row while coordinating hover and clicks across the group. `bottom` is
+    /// space under the rows that the line runs down through.
+    ///
+    /// CDXC:SessionChat 2026-11-11 DECISION:
+    /// User, of the thin line down an opened Quiet View fold: "make clicking on this line collapse". Every rail in the chat closes its fold when clicked, as the disclosure rails already did (`disclosure_body`): Quiet View's folds and Reduced and Agent work Quiet's opened steps now too, with a pointer and the line drawn stronger while hovered. The chat keeps the header where it is as the fold shuts (`anchor_disclosure_toggle`).
+    ///
+    /// CDXC:SessionChat 2026-11-11 WHY: the target first was a 12px box centred on the line, with a 10px empty gap between it and the content; a checker's clicks just beside the line landed in that gap or on the card and did nothing or opened the card. The target now runs from the row's left edge to the content's edge, about 6px left and 16px right of the line, so no click near the line falls between the two.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn closing_rail(
+        &self,
+        p: &ChatAppearance,
+        key: String,
+        part: impl Into<String>,
+        row: Option<usize>,
+        line_x: f32,
+        content_x: f32,
+        gap: f32,
+        bottom: f32,
+        children: impl IntoIterator<Item = AnyElement>,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let part = part.into();
+        let line_color = if self.closing_rail.is_hovered(&key) {
+            p.foreground.opacity(0.35)
+        } else {
+            p.foreground.opacity(RAIL_LINE_OPACITY)
+        };
+        let id = SharedString::from(format!("quiet-rail:{key}:{part}"));
+        let hover_key = key.clone();
+        let hover_part = part.clone();
+        let down_key = key.clone();
+        let down_part = part.clone();
+        let up_key = key.clone();
+        let up_part = part.clone();
+        let out_key = key.clone();
+        let out_part = part;
+        let click_key = key;
+        div()
+            .flex()
+            .min_w_0()
+            .child(
+                div()
+                    .id(id)
+                    .role(gpui::Role::Button)
+                    .aria_label("Collapse")
+                    .w(px(content_x * s))
+                    .pl(px(line_x * s))
+                    .flex_shrink_0()
+                    .flex()
+                    .chat_cursor_pointer()
+                    .child(div().w(px(RAIL_LINE_WIDTH * s)).bg(line_color))
+                    .on_hover(cx.listener(move |this, is_hovered: &bool, _, cx| {
+                        if this
+                            .closing_rail
+                            .set_hovered(&hover_key, &hover_part, row, *is_hovered)
+                        {
+                            cx.notify();
+                        }
+                    }))
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(move |this, _, _, _| {
+                            this.closing_rail.press(&down_key, &down_part);
+                        }),
+                    )
+                    .on_mouse_up(
+                        gpui::MouseButton::Left,
+                        cx.listener(move |this, _, _, cx| {
+                            if this.closing_rail.release_other_part(&up_key, &up_part) {
+                                this.closing_rail.clear_key(&up_key);
+                                this.toggle_marker_disclosure(up_key.clone(), true, cx);
+                                cx.stop_propagation();
+                            }
+                        }),
+                    )
+                    .on_mouse_up_out(
+                        gpui::MouseButton::Left,
+                        cx.listener(move |_, _, window, cx| {
+                            let key = out_key.clone();
+                            let part = out_part.clone();
+                            let chat = cx.weak_entity();
+                            window.defer(cx, move |_, cx| {
+                                let _ = chat.update(cx, |this, _| {
+                                    this.closing_rail.clear_pressed(&key, &part);
+                                });
+                            });
+                        }),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.closing_rail.clear_key(&click_key);
+                        this.toggle_marker_disclosure(click_key.clone(), true, cx);
+                        cx.stop_propagation();
+                    })),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_w_0()
+                    .pb(px(bottom * s))
+                    .gap(px(gap * s))
+                    .children(children),
+            )
+            .into_any_element()
+    }
 }

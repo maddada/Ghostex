@@ -67,6 +67,7 @@ impl NativeChatView {
     /// hidden: no footer shows its buttons on a message the pointer is not on.
     pub(super) fn clear_message_hover(&mut self) {
         self.hovered_message = None;
+        self.closing_rail.clear();
     }
 
     /// Measures every row again when the chat look moved: a row whose projected value stays the

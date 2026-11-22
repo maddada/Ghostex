@@ -323,6 +323,7 @@ impl NativeChatView {
         actions: &[Value],
         cx: &mut Context<Self>,
     ) {
+        self.closing_rail.clear_key(key);
         self.anchor_disclosure_toggle(key, !expanded);
         if expanded {
             self.expanded.remove(key);
@@ -351,9 +352,15 @@ impl NativeChatView {
             .pt(px(2.0 * s))
             .pb(px(2.0 * s))
             .min_w_0()
-            .child(super::disclosure_body::closing_rail(
+            .child(self.closing_rail(
                 p,
                 key.to_string(),
+                if self.in_subagent {
+                    "subagent-steps"
+                } else {
+                    "steps"
+                },
+                None,
                 6.0,
                 23.0,
                 0.0,

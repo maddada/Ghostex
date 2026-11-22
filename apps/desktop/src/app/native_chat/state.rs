@@ -195,6 +195,8 @@ pub(crate) struct NativeChatView {
     /// The message under the pointer while Message spacing is Compact, whose footer row shows its
     /// buttons (message_spacing.rs).
     pub(super) hovered_message: Option<String>,
+    /// Shared hover and press state for multi-row quiet fold rails (disclosure_body.rs).
+    pub(super) closing_rail: super::disclosure_body::ClosingRailState,
     /// The message whose ⋯ menu was opened last: its ⋯ stays shown while that menu is up
     /// (message_actions.rs).
     pub(super) message_menu: Option<String>,
@@ -644,6 +646,7 @@ impl NativeChatView {
             quiet_flush_row: false,
             quiet_lines_cache: Default::default(),
             hovered_message: None,
+            closing_rail: Default::default(),
             message_menu: None,
             hidden_work: None,
             disclosure_motion: Default::default(),

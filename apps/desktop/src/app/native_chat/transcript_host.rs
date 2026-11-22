@@ -42,6 +42,14 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         self.images.note_transcript_rows_drawn();
+        if !self.closing_rail.is_empty() {
+            let count = self.list.item_count();
+            self.closing_rail.retain_rows(|row| {
+                row < count
+                    && self.list.item_is_above_viewport(row) != Some(true)
+                    && self.list.item_is_below_viewport(row) != Some(true)
+            });
+        }
         let p = ChatAppearance::current(&self.snapshot).on_window_glass(
             crate::app::helpers::window_glass_active_for(self.main_window),
         );

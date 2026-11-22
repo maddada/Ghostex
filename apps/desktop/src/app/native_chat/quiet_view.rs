@@ -124,26 +124,6 @@ pub(super) struct QuietPlace {
     after: Option<usize>,
 }
 
-/// The rail an opened line's rows sit on, as an opened Reduced line's steps do (quiet_work.rs).
-fn rail(
-    key: &str,
-    rows: Vec<AnyElement>,
-    bottom: f32,
-    p: &ChatAppearance,
-    cx: &Context<NativeChatView>,
-) -> AnyElement {
-    super::disclosure_body::closing_rail(
-        p,
-        key.to_string(),
-        6.0,
-        23.0,
-        RAIL_ROW_GAP,
-        bottom,
-        rows,
-        cx,
-    )
-}
-
 /// The space between the rows on an opened line's rail, between two parts of one row (its work
 /// cards and the row) and between one row and the next alike.
 ///
@@ -298,40 +278,59 @@ impl NativeChatView {
         lines
     }
 
+    /// The rail an opened line's rows sit on, as an opened Reduced line's steps do (quiet_work.rs).
+    #[allow(clippy::too_many_arguments)]
+    fn quiet_rail(
+        &self,
+        key: &str,
+        part: impl Into<String>,
+        row: Option<usize>,
+        rows: Vec<AnyElement>,
+        bottom: f32,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        self.closing_rail(
+            p,
+            key.to_string(),
+            part,
+            row,
+            6.0,
+            23.0,
+            RAIL_ROW_GAP,
+            bottom,
+            rows,
+            cx,
+        )
+    }
+
     /// Draws again the rows of every quiet line whose extent changed with this snapshot.
     ///
     /// CDXC:SessionChat 2026-11-20 DECISION:
     /// User, of an opened "Reports" group: the rail down its left was two pieces with a gap between, and the lower piece did not close the group when clicked. Each row of an opened line draws its own piece of the rail, and a row that is not the line's last carries it on through the gap below (`quiet_row_bottom`, `rail`'s `bottom`). Whether a row is the last one is in the snapshot's `quietView`, not in the row's own item, so when a report or a turn joined a line that was drawn open, the core's splice only held the new rows; the row that used to end the line was not in it, and the list kept it as drawn (the desktop's list holds rows whose item did not change, as `remeasure_on_look_change` and `rowDetails` also have to answer for), so its piece of the rail stopped at its last card with the row gap under it. The web build lays every row out each frame, so it never showed this. The rows of a line whose first row, end, tail or work item lines changed are measured and drawn again, the same way a change of the chat look is.
-    pub(super) fn remeasure_changed_quiet_rows(&self, before: &Value) {
-        let shapes =
-            |snapshot: &Value| -> Vec<(String, usize, usize, Option<usize>, Option<usize>, usize)> {
-                serde_json::from_value::<Vec<QuietStretch>>(
-                    snapshot["quietView"]["stretches"].clone(),
-                )
-                .unwrap_or_default()
-                .into_iter()
-                .map(|line| {
-                    (
-                        line.key,
-                        line.start,
-                        line.end,
-                        line.tail.map(|tail| tail.row),
-                        line.after,
-                        line.cards.len(),
-                    )
-                })
-                .collect()
-            };
-        let (old, new) = (shapes(before), shapes(&self.snapshot));
+    pub(super) fn remeasure_changed_quiet_rows(&mut self, before: &Value) {
+        let stretches = |snapshot: &Value| -> Vec<QuietStretch> {
+            serde_json::from_value(snapshot["quietView"]["stretches"].clone()).unwrap_or_default()
+        };
+        let (old, new) = (stretches(before), stretches(&self.snapshot));
+        for line in &old {
+            if !new
+                .iter()
+                .any(|next| next.key == line.key && self.quiet_open(next))
+            {
+                self.closing_rail.clear_key(&line.key);
+            }
+        }
         let count = self.list.item_count();
         let mut rows: Option<std::ops::Range<usize>> = None;
-        for shape in old
+        for line in old
             .iter()
-            .filter(|shape| !new.contains(shape))
-            .chain(new.iter().filter(|shape| !old.contains(shape)))
+            .filter(|line| !new.contains(line))
+            .chain(new.iter().filter(|line| !old.contains(line)))
         {
-            let end = shape.2.max(shape.4.map_or(0, |after| after + 1));
-            let span = shape.1.min(count)..end.min(count);
+            let start = line.start.min(line.after.unwrap_or(line.start));
+            let end = line.end.max(line.after.map_or(0, |after| after + 1));
+            let span = start.min(count)..end.min(count);
             rows = match rows {
                 Some(rows) => Some(rows.start.min(span.start)..rows.end.max(span.end)),
                 None => Some(span),
@@ -453,7 +452,15 @@ impl NativeChatView {
                         0.0
                     };
                     let gap = if index == line.start { 4.0 } else { 0.0 };
-                    let drawn = rail(&line.key, nested, bottom, p, cx);
+                    let drawn = self.quiet_rail(
+                        &line.key,
+                        index.to_string(),
+                        Some(index),
+                        nested,
+                        bottom,
+                        p,
+                        cx,
+                    );
                     let ends = tail.is_some() || index + 1 >= line.end;
                     let drawn = self.disclosure_part_motion(
                         &line.key,
@@ -553,7 +560,8 @@ impl NativeChatView {
             if open || frame.is_some() {
                 let cards = self.quiet_cards(line);
                 if let Some(stack) = self.work_card_stack(&cards, Some(RAIL_ROW_GAP * s), p, cx) {
-                    let drawn = rail(&line.key, vec![stack], 0.0, p, cx);
+                    let drawn =
+                        self.quiet_rail(&line.key, "after", Some(index), vec![stack], 0.0, p, cx);
                     let drawn = self.disclosure_part_motion(
                         &line.key,
                         "after",
@@ -745,7 +753,7 @@ impl NativeChatView {
                 .iter()
                 .map(|row| self.message_row(row, p, window, cx))
                 .collect();
-            let body = rail(&line.key, drawn, 0.0, p, cx);
+            let body = self.quiet_rail(&line.key, "summary", None, drawn, 0.0, p, cx);
             column = column.child(self.disclosure_body_motion(&line.key, frame, 4.0 * s, body));
         }
         column.into_any_element()

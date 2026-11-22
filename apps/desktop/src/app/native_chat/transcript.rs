@@ -37,6 +37,7 @@ impl NativeChatView {
         expanded: bool,
         cx: &mut Context<Self>,
     ) {
+        self.closing_rail.clear_key(&id);
         self.anchor_disclosure_toggle(&id, !expanded);
         if expanded {
             self.expanded.remove(&id);
