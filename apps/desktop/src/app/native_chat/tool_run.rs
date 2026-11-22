@@ -234,6 +234,7 @@ impl NativeChatView {
                     key.clone(),
                     text(message, "simpleToolLabel"),
                     expanded,
+                    expanded || motion.is_some(),
                     p,
                     cx,
                 )
@@ -691,6 +692,7 @@ impl NativeChatView {
         key: String,
         label: String,
         expanded: bool,
+        body_visible: bool,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -714,7 +716,7 @@ impl NativeChatView {
                 .text_color(p.foreground)
                 .chat_cursor_pointer()
                 .hover(move |style| style.bg(hover)),
-            expanded,
+            body_visible,
             p,
         )
         .child(shape.tile("titlebar/tool.svg", p))
