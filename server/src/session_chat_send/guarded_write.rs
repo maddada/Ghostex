@@ -237,7 +237,11 @@ pub(crate) fn note_session_chat_prompt_card(
 }
 
 /// Whether an approval or question card arrived by hook at or after `since`.
-fn prompt_card_arrived_since(project_id: &str, session_id: &str, since: Instant) -> bool {
+pub(super) fn prompt_card_arrived_since(
+    project_id: &str,
+    session_id: &str,
+    since: Instant,
+) -> bool {
     prompt_card_arrivals().lock().is_ok_and(|arrivals| {
         arrivals
             .get(&format!("{project_id}:{session_id}"))

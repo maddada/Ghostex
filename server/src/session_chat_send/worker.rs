@@ -37,6 +37,7 @@ pub(super) async fn run_session_chat_send_worker(
         let mut composer_agent: Option<String> = None;
         let mut clear_pending = false;
         let mut mid_turn_probe: Option<AgentMidTurnProbe> = None;
+        let mut antigravity_queued_escape: Option<AntigravityQueuedEscapeGuard> = None;
         for step in steps {
             if job_generation != generation.load(Ordering::SeqCst) {
                 outcome = Err(SessionChatSendError::not_attempted(
@@ -366,7 +367,7 @@ pub(super) async fn run_session_chat_send_worker(
                     agent,
                     transcript,
                 } => {
-                    if queued_prompt_escape_is_stale(
+                    match queued_prompt_escape_check(
                         &project_id,
                         &session_id,
                         &zmx_name,
@@ -376,22 +377,35 @@ pub(super) async fn run_session_chat_send_worker(
                     )
                     .await
                     {
-                        crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
-                            "sessionChatSendDroppedStaleEscape",
-                            &project_id,
-                            &session_id,
-                            "The play button's Escape was dropped: since the click a message was submitted or the agent started a prompt, or no prompt waits in the agent's queue.",
-                            &[],
-                        );
-                        break;
+                        QueuedPromptEscapeVerdict::DropStale => {
+                            crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
+                                "sessionChatSendDroppedStaleEscape",
+                                &project_id,
+                                &session_id,
+                                "The play button's Escape was dropped: since the click a message was submitted or the agent started a prompt, or no prompt waits in the agent's queue.",
+                                &[],
+                            );
+                            break;
+                        }
+                        QueuedPromptEscapeVerdict::Proceed(guard) => {
+                            antigravity_queued_escape = guard;
+                        }
                     }
                 }
                 SessionChatSendStep::SubmitAntigravityPoppedQueue => {
+                    let Some(guard) = antigravity_queued_escape
+                        .take()
+                        .filter(|guard| guard.confirmed_queue)
+                    else {
+                        continue;
+                    };
                     if let Err(error) = submit_antigravity_popped_queue(
                         &project_id,
                         &session_id,
                         &zmx_name,
                         &source,
+                        guard,
+                        job_started,
                         &|| job_generation != generation.load(Ordering::SeqCst),
                     )
                     .await

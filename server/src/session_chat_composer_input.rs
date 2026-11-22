@@ -92,15 +92,16 @@ pub(super) fn antigravity_input_region(lines: &[String]) -> Option<Range<usize>>
     rule_input_region(&lines[..=head], &['>'])
 }
 
-/// The plain VT-parsed screen lines, the top rule row, the input row range (`start..bottom_rule`),
+/// The plain ANSI-stripped screen lines (via `strip_ansi_sgr`, preserving `ESC[nC]` cursor-forward
+/// spaces and skipping OSC-8 resets), the top rule row, the input row range (`start..bottom_rule`),
 /// and the first footer row below the bottommost horizontal rule of Antigravity CLI's live
 /// composer, or `None` when the composer is not on screen.
 pub(crate) fn antigravity_composer_lines(
     screen: &str,
 ) -> Option<(Vec<String>, usize, Range<usize>, usize)> {
-    let plain: Vec<String> = styled_lines(screen)
-        .into_iter()
-        .map(|line| line.text)
+    let plain: Vec<String> = screen
+        .lines()
+        .map(crate::session_chat_options::strip_ansi_sgr)
         .collect();
     let region = antigravity_input_region(&plain)?;
     let head = plain[..region.start]
