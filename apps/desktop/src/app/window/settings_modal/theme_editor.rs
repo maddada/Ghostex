@@ -1303,7 +1303,7 @@ impl GpuiThemeEditorWindow {
                 "float-bg",
                 &[
                     ("art", "Art"),
-                    ("live", "Live"),
+                    ("live", "Animated"),
                     ("transparent", "Glass"),
                     ("solid", "Solid"),
                 ],
@@ -1520,6 +1520,86 @@ impl GpuiThemeEditorWindow {
                     .children(tiles)
                     .into_any_element(),
             );
+            let speed = values.f64("windowGlassLiveSpeed");
+            let speed_saver = self.tracked_slider_saver(
+                "float-live-speed",
+                &["windowGlassLiveSpeed"],
+                |store, value, commit, cx| {
+                    let rounded = (value * 4.0).round() / 4.0;
+                    if commit {
+                        store.update_setting("windowGlassLiveSpeed", json!(rounded), cx);
+                    } else {
+                        store.update_setting_debounced(
+                            "windowGlassLiveSpeed",
+                            json!(rounded),
+                            cx,
+                        );
+                    }
+                },
+                cx,
+            );
+            content.push(self.compact_slider_row(
+                p,
+                "Speed",
+                format!("{speed:.2}x"),
+                SliderBinding {
+                    key: "float-live-speed",
+                    min: 0.25,
+                    max: 2.0,
+                    step: 0.25,
+                },
+                speed,
+                speed_saver,
+                window,
+                cx,
+            ));
+            let bright = values.f64("windowGlassLiveBrightness");
+            let bright_saver = self.tracked_slider_saver(
+                "float-live-brightness",
+                &["windowGlassLiveBrightness"],
+                |store, value, commit, cx| {
+                    if commit {
+                        store.update_setting(
+                            "windowGlassLiveBrightness",
+                            json!(value.round()),
+                            cx,
+                        );
+                    } else {
+                        store.update_setting_debounced(
+                            "windowGlassLiveBrightness",
+                            json!(value.round()),
+                            cx,
+                        );
+                    }
+                },
+                cx,
+            );
+            content.push(self.compact_slider_row(
+                p,
+                "Brightness",
+                format!("{}%", bright.round() as i64),
+                SliderBinding {
+                    key: "float-live-brightness",
+                    min: 10.0,
+                    max: 100.0,
+                    step: 1.0,
+                },
+                bright,
+                bright_saver,
+                window,
+                cx,
+            ));
+            let plugged = values.bool("windowGlassVideoOnlyOnPower");
+            content.push(self.compact_toggle_row(
+                p,
+                "float-live-power",
+                "Play only when plugged in",
+                plugged,
+                |editor, checked, cx| {
+                    editor.save_one("windowGlassVideoOnlyOnPower", json!(checked), cx)
+                },
+                cx,
+            ));
         }
         Self::section_box(p, content)
     }
@@ -2127,86 +2207,6 @@ impl GpuiThemeEditorWindow {
                 cx,
             ));
             if more_open {
-                let speed = values.f64("windowGlassLiveSpeed");
-                let speed_saver = self.tracked_slider_saver(
-                    "float-live-speed",
-                    &["windowGlassLiveSpeed"],
-                    |store, value, commit, cx| {
-                        let rounded = (value * 10.0).round() / 10.0;
-                        if commit {
-                            store.update_setting("windowGlassLiveSpeed", json!(rounded), cx);
-                        } else {
-                            store.update_setting_debounced(
-                                "windowGlassLiveSpeed",
-                                json!(rounded),
-                                cx,
-                            );
-                        }
-                    },
-                    cx,
-                );
-                content.push(self.compact_slider_row(
-                    p,
-                    "Live speed",
-                    format!("{speed:.1}x"),
-                    SliderBinding {
-                        key: "float-live-speed",
-                        min: 0.1,
-                        max: 2.0,
-                        step: 0.1,
-                    },
-                    speed,
-                    speed_saver,
-                    window,
-                    cx,
-                ));
-                let bright = values.f64("windowGlassLiveBrightness");
-                let bright_saver = self.tracked_slider_saver(
-                    "float-live-brightness",
-                    &["windowGlassLiveBrightness"],
-                    |store, value, commit, cx| {
-                        if commit {
-                            store.update_setting(
-                                "windowGlassLiveBrightness",
-                                json!(value.round()),
-                                cx,
-                            );
-                        } else {
-                            store.update_setting_debounced(
-                                "windowGlassLiveBrightness",
-                                json!(value.round()),
-                                cx,
-                            );
-                        }
-                    },
-                    cx,
-                );
-                content.push(self.compact_slider_row(
-                    p,
-                    "Live brightness",
-                    format!("{}%", bright.round() as i64),
-                    SliderBinding {
-                        key: "float-live-brightness",
-                        min: 0.0,
-                        max: 100.0,
-                        step: 1.0,
-                    },
-                    bright,
-                    bright_saver,
-                    window,
-                    cx,
-                ));
-                let plugged = values.bool("windowGlassVideoOnlyOnPower");
-                content.push(self.compact_toggle_row(
-                    p,
-                    "float-live-power",
-                    "Play only when plugged in",
-                    plugged,
-                    |editor, checked, cx| {
-                        editor.save_one("windowGlassVideoOnlyOnPower", json!(checked), cx)
-                    },
-                    cx,
-                ));
                 let menu_blur = values.f64("windowGlassMenuBlurRadius");
                 let menu_blur_saver = self.tracked_slider_saver(
                     "float-menu-blur",

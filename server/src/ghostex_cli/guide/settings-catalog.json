@@ -4430,7 +4430,7 @@
     {
       "key": "windowGlassSource",
       "title": "Behind the glass",
-      "subtitle": "Fully transparent (everything behind the window, blurred), your wallpaper, a picture you choose, or Live: a calm animation in your theme colours or your own video.",
+      "subtitle": "Fully transparent (everything behind the window, blurred), your wallpaper, a picture you choose, or Animated: a calm animation in your theme colours or your own video.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4453,7 +4453,7 @@
           "value": "customImage"
         },
         {
-          "label": "Live",
+          "label": "Animated",
           "value": "live"
         }
       ],
@@ -4462,7 +4462,7 @@
     {
       "key": "windowGlassSameForLightAndDark",
       "title": "Same for light and dark",
-      "subtitle": "Use the dark-mode picture, video, Live background and tints in light mode too. Turn off to pick them for light mode separately.",
+      "subtitle": "Use the dark-mode picture, video, Animated background and tints in light mode too. Turn off to pick them for light mode separately.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4476,7 +4476,7 @@
     {
       "key": "windowGlassImagePlacement",
       "title": "Picture position",
-      "subtitle": "Where the wallpaper, custom picture or your own Live video sits behind the glass. Stays with the desktop can trail the window while you drag it.",
+      "subtitle": "Where the wallpaper, custom picture or your own video sits behind the glass. Stays with the desktop can trail the window while you drag it.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4528,7 +4528,7 @@
     {
       "key": "windowGlassVideoDark",
       "title": "Your video for dark mode",
-      "subtitle": "The video file the glass plays in dark mode when Live is set to Your video.",
+      "subtitle": "The video file the glass plays in dark mode when Animated is set to Your video.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4542,7 +4542,7 @@
     {
       "key": "windowGlassVideoLight",
       "title": "Your video for light mode",
-      "subtitle": "The video file the glass plays in light mode when Live is set to Your video.",
+      "subtitle": "The video file the glass plays in light mode when Animated is set to Your video.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4556,7 +4556,7 @@
     {
       "key": "windowGlassVideoOnlyOnPower",
       "title": "Play only when plugged in",
-      "subtitle": "Pause the Live animation or video while your computer runs on battery. It always pauses when Ghostex is in the background.",
+      "subtitle": "Pause the animation or video while your computer runs on battery. It always pauses when Ghostex is in the background.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4569,8 +4569,8 @@
     },
     {
       "key": "windowGlassLiveStyleDark",
-      "title": "Live background for dark mode",
-      "subtitle": "The animation, or your own video, the glass shows in dark mode when Live shows behind the glass.",
+      "title": "Animated background for dark mode",
+      "subtitle": "The animation, or your own video, the glass shows in dark mode when Animated shows behind the glass.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4621,8 +4621,8 @@
     },
     {
       "key": "windowGlassLiveStyleLight",
-      "title": "Live background for light mode",
-      "subtitle": "The animation, or your own video, the glass shows in light mode when Live shows behind the glass.",
+      "title": "Animated background for light mode",
+      "subtitle": "The animation, or your own video, the glass shows in light mode when Animated shows behind the glass.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4673,8 +4673,8 @@
     },
     {
       "key": "windowGlassLiveSpeed",
-      "title": "Live background speed",
-      "subtitle": "How fast the Live animation moves, from a quarter of its pace to twice as fast.",
+      "title": "Animated background speed",
+      "subtitle": "How fast the Animated background moves, from a quarter of its pace to twice as fast.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4682,13 +4682,13 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 0.3,
+      "default": 1,
       "agentWritable": true
     },
     {
       "key": "windowGlassLiveBrightness",
-      "title": "Live background brightness",
-      "subtitle": "How bright the Live animation glows behind the glass. Lower keeps it a subtle glow.",
+      "title": "Animated background brightness",
+      "subtitle": "How bright the Animated background glows behind the glass. Lower keeps it a subtle glow.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4696,7 +4696,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 25,
+      "default": 80,
       "agentWritable": true
     },
     {

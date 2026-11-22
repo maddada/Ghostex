@@ -20,7 +20,7 @@ static WINDOW_GLASS_LIVE: std::sync::Mutex<WindowGlassLive> =
         style_dark: String::new(),
         style_light: String::new(),
         speed: 1.0,
-        brightness: 0.60,
+        brightness: 0.80,
         only_on_power: true,
         colors_dark: [[0.0; 3]; 3],
         colors_light: [[0.0; 3]; 3],
@@ -66,8 +66,8 @@ pub(crate) fn refresh_window_glass_live(object: &serde_json::Map<String, serde_j
         .unwrap_or_default()
         .to_string()
     };
-    // A key the file does not hold reads as the catalog's default (Live, 0.3 and 25 since
-    // 2026-11-21), not a copy of an older one.
+    // A key the file does not hold reads as the catalog's default (Animated, 1.0 and 80 since
+    // 2026-11-22), not a copy of an older one.
     let catalog_default = |key: &str| {
         ghostex_settings_catalog::availability::default_value_on(
             ghostex_settings_catalog::Platform::current(),
@@ -106,7 +106,7 @@ pub(crate) fn refresh_window_glass_live(object: &serde_json::Map<String, serde_j
         legacy_video,
     );
     live.speed = number("windowGlassLiveSpeed").map_or(1.0, |speed| speed.clamp(0.25, 2.0) as f32);
-    live.brightness = number("windowGlassLiveBrightness").map_or(0.60, |brightness| {
+    live.brightness = number("windowGlassLiveBrightness").map_or(0.80, |brightness| {
         (brightness.clamp(10.0, 100.0) / 100.0) as f32
     });
     live.only_on_power = object
@@ -199,8 +199,11 @@ fn live_background_colors(
     contrast_points: f64,
 ) -> [[f32; 3]; 3] {
     let vivid = ((4.0 - contrast_points) / 16.0).clamp(0.0, 1.0) as f32;
-    // CDXC:Theming 2026-11-21 (Q4388 subtle rule): Live backgrounds shown at 70% of their colour.
-    let saturation = (0.35 + 0.5 * vivid) * 0.70;
+    // CDXC:Theming 2026-11-22 DECISION: User: "Make the effect for Animated more noticeable by
+    // default: it's super not apparent now by default." Supersedes the 2026-11-21 70% saturation
+    // cap; keeps the theme's own hues vivid enough to read clearly through the default glass tints
+    // in both dark and light mode while keeping text readable.
+    let saturation = 0.50 + 0.45 * vivid;
     let (tint_hue, tint_saturation, _) = hsl_of(tint);
     let (accent_hue, accent_saturation, _) = hsl_of(accent);
     let (hue, second_hue, saturation) = if tint_saturation >= 0.08 {
@@ -217,15 +220,15 @@ fn live_background_colors(
     };
     if light {
         [
-            rgb_of_hsl(hue, saturation * 0.35, 0.93),
-            rgb_of_hsl(hue, saturation * 0.8, 0.80),
-            rgb_of_hsl(second_hue, saturation * 0.9, 0.70),
+            rgb_of_hsl(hue, saturation * 0.35, 0.94),
+            rgb_of_hsl(hue, saturation * 0.85, 0.72),
+            rgb_of_hsl(second_hue, saturation * 0.95, 0.55),
         ]
     } else {
         [
             rgb_of_hsl(hue, saturation * 0.5, 0.09),
-            rgb_of_hsl(hue, saturation, 0.46),
-            rgb_of_hsl(second_hue, saturation, 0.66),
+            rgb_of_hsl(hue, saturation, 0.52),
+            rgb_of_hsl(second_hue, saturation, 0.72),
         ]
     }
 }

@@ -12,7 +12,7 @@ use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::{
     SizedButtonSize, SizedButtonVariant, SliderBinding, SliderSaver, reset_key, segmented_field,
     select_field, setting_row, settings_sized_button, slider_number_field,
-    slider_number_field_with, stock_segmented, toggle_field, toggle_field_with, tooltip_text,
+    slider_number_field_with, stock_segmented, toggle_field_with, tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{SettingsStore, post_store_message};
@@ -51,10 +51,18 @@ pub(crate) const GLASS_PAIRS: [(&str, &str); 5] = [
     ),
 ];
 
+/// Where Strength sits on the page: in Window transparency, under an artwork, or under Animated.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum StrengthLocation {
+    Transparency,
+    UnderArt,
+    UnderAnimated,
+}
+
 /// `shared_settings::window_glass_same_for_light_and_dark`, which the app's glass follows: the
 /// saved switch, else on unless a pair was already set apart (both values saved and different).
 /// Kept in step by hand; the preview binary has no `shared_settings`.
-fn same_for_light_and_dark(values: &super::super::super::store::SettingsValues) -> bool {
+pub(super) fn same_for_light_and_dark(values: &super::super::super::store::SettingsValues) -> bool {
     let object = values.map();
     if let Some(same) = object
         .get("windowGlassSameForLightAndDark")
@@ -308,15 +316,18 @@ impl ThemeTab {
         if glass_on && visible("windowGlassSource") {
             rows.push(self.show_behind_row(t, &source, cx));
         }
-        if glass_on && visible("windowGlass") {
-            rows.push(self.strength_row(t, false, window, cx));
+        // When Animated shows in this appearance, its Strength (and Blur for Your video) sit
+        // directly under the Animated gallery above, so Window transparency doesn't repeat them.
+        let animated_above = artwork::live_shows(&values, dark) && !t.searching;
+        if glass_on && !animated_above && visible("windowGlass") {
+            rows.push(self.strength_row(t, StrengthLocation::Transparency, window, cx));
         }
         let blur_hidden = ghostex_settings_catalog::availability::row_hidden(
             ghostex_settings_catalog::Platform::current(),
             "windowGlassBlurRadius",
             |key| Some(values.string(key)),
         );
-        if glass_on && visible("windowGlassBlurRadius") && !blur_hidden {
+        if glass_on && !animated_above && visible("windowGlassBlurRadius") && !blur_hidden {
             rows.push(slider_number_field(
                 self,
                 &p,
@@ -326,7 +337,7 @@ impl ThemeTab {
                     if cfg!(target_os = "macos") {
                         "How soft what shows behind the window looks, in points. 0 shows it sharp."
                     } else {
-                        "How soft the wallpaper or Live video behind the window looks, in points. 0 shows it sharp. Fully transparent uses your system's own blur."
+                        "How soft the wallpaper or video behind the window looks, in points. 0 shows it sharp. Fully transparent uses your system's own blur."
                     },
                 )
                 .icon(ICON_BLUR),
@@ -362,7 +373,7 @@ impl ThemeTab {
                 &p,
                 "theme-more-transparency",
                 "More transparency options",
-                "Same for light and dark, wallpaper position, Live speed, sidebar and work area tints, menu blur",
+                "Same for light and dark, wallpaper position, sidebar and work area tints, menu blur",
                 shown,
                 move |page, _window, cx| page.set_more_open(MoreGroup::Transparency, !open, cx),
                 cx,
@@ -381,13 +392,13 @@ impl ThemeTab {
             .map(IntoElement::into_any_element)
     }
 
-    /// Strength: how much of what is behind (the desktop, Live or the artwork) shows through the
-    /// sidebar and the work area. `under_art`: the row under Themes' Artwork strip, indented like
-    /// Dimming and Blur beside it.
+    /// Strength: how much of what is behind (the desktop, Animated or the artwork) shows through
+    /// the sidebar and the work area. Under Artwork or Animated it is indented like the controls
+    /// beside it.
     pub(super) fn strength_row(
         &mut self,
         t: &ThemeCx,
-        under_art: bool,
+        location: StrengthLocation,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -404,8 +415,10 @@ impl ThemeTab {
         );
         let description = if exact.is_none() {
             "Tuned by hand under More transparency options; moving this sets the tints from the slider again, keeping the difference between the sidebar and the work area."
-        } else if under_art {
+        } else if location == StrengthLocation::UnderArt {
             "Higher shows more of the artwork through the sidebar and the work area."
+        } else if location == StrengthLocation::UnderAnimated {
+            "Higher shows more of the animated background through the sidebar and the work area."
         } else if windows_blur_shown(&values)
             && values.string("windowGlassWindowsBlur") == "acrylic"
         {
@@ -414,10 +427,10 @@ impl ThemeTab {
             "Higher shows more of what is behind the window."
         };
         let spec = t.spec_plain("windowGlassSidebarOpacityDark", "Strength", description);
-        let spec = if under_art {
-            spec.dependent()
-        } else {
+        let spec = if location == StrengthLocation::Transparency {
             spec.icon(ICON_STRENGTH)
+        } else {
+            spec.dependent()
         };
         slider_number_field_with(
             self,
@@ -486,7 +499,7 @@ impl ThemeTab {
         let p = t.p;
         let description = match source {
             "live" => {
-                "Live, picked in Artwork above, shows behind the glass now. Pick one of these to see through the window instead."
+                "Animated, picked in Artwork above, shows behind the glass now. Pick one of these to see through the window instead."
             }
             "customImage" => {
                 "A picture you chose earlier shows behind the glass now. Pick one of these to see through the window instead, or put any picture behind the window with Your image\u{2026} in Artwork above."
@@ -615,7 +628,7 @@ impl ThemeTab {
                 t.spec(
                     "windowGlassSameForLightAndDark",
                     "Same for light and dark",
-                    "Use the dark-mode Live background and tints in light mode too. Turn off to pick them for light mode separately.",
+                    "Use the dark-mode Animated background and tints in light mode too. Turn off to pick them for light mode separately.",
                 ),
                 same,
                 Some(reset_key::<Self>("windowGlassSameForLightAndDark")),
@@ -634,26 +647,10 @@ impl ThemeTab {
                 cx,
             ));
         }
-        let uses_picture = source != "desktopAndWindows";
-        let appearances: Vec<bool> = if single {
-            vec![false]
-        } else {
-            vec![false, true]
-        };
-        let live_slots: Vec<String> = appearances
-            .iter()
-            .map(|light| {
-                values.string(if *light {
-                    "windowGlassLiveStyleLight"
-                } else {
-                    "windowGlassLiveStyleDark"
-                })
-            })
-            .collect();
-        let live_uses_animation = live_slots.iter().any(|style| style != "video");
-        let live_uses_video = live_slots.iter().any(|style| style == "video");
-        // A Live animation is drawn over the window itself, so only a video has a position to pick.
-        let uses_placement = uses_picture && (source != "live" || live_uses_video);
+        // Video position, Speed, Brightness and Play only when plugged in live directly under the
+        // Animated gallery in Artwork above (artwork.rs); here only Wallpaper / legacy Picture has
+        // a position to pick.
+        let uses_placement = source == "wallpaper" || source == "customImage";
         if uses_placement && t.visible("windowGlassImagePlacement") {
             let options = settings_catalog()
                 .options(module::SETTINGS, "WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS");
@@ -664,10 +661,10 @@ impl ThemeTab {
                 "windowGlassImagePlacement",
                 t.spec(
                     "windowGlassImagePlacement",
-                    match source.as_str() {
-                        "wallpaper" => "Wallpaper position",
-                        "live" => "Video position",
-                        _ => "Picture position",
+                    if source == "wallpaper" {
+                        "Wallpaper position"
+                    } else {
+                        "Picture position"
                     },
                     "Stays with the desktop can trail the window while you drag it.",
                 ),
@@ -679,62 +676,6 @@ impl ThemeTab {
                     page.save("windowGlassImagePlacement", json!(next), cx)
                 },
                 window,
-                cx,
-            ));
-        }
-        if source == "live" && live_uses_animation && t.visible("windowGlassLiveSpeed") {
-            rows.push(slider_number_field(
-                self,
-                &p,
-                t.spec(
-                    "windowGlassLiveSpeed",
-                    "Live speed",
-                    "How fast the Live animation moves. 1 is its own calm pace. Your own video plays as it is.",
-                ),
-                Some(reset_key::<Self>("windowGlassLiveSpeed")),
-                SliderBinding {
-                    key: "windowGlassLiveSpeed",
-                    min: number("MIN_WINDOW_GLASS_LIVE_SPEED"),
-                    max: number("MAX_WINDOW_GLASS_LIVE_SPEED"),
-                    step: 0.25,
-                },
-                values.f64("windowGlassLiveSpeed"),
-                window,
-                cx,
-            ));
-        }
-        if source == "live" && live_uses_animation && t.visible("windowGlassLiveBrightness") {
-            rows.push(slider_number_field(
-                self,
-                &p,
-                t.spec(
-                    "windowGlassLiveBrightness",
-                    "Live brightness",
-                    "How bright the Live animation glows behind the glass. Lower keeps it a subtle glow.",
-                ),
-                Some(reset_key::<Self>("windowGlassLiveBrightness")),
-                SliderBinding {
-                    key: "windowGlassLiveBrightness",
-                    min: number("MIN_WINDOW_GLASS_LIVE_BRIGHTNESS"),
-                    max: number("MAX_WINDOW_GLASS_LIVE_BRIGHTNESS"),
-                    step: 1.0,
-                },
-                values.f64("windowGlassLiveBrightness"),
-                window,
-                cx,
-            ));
-        }
-        if source == "live" && t.visible("windowGlassVideoOnlyOnPower") {
-            rows.push(toggle_field(
-                self,
-                &p,
-                "windowGlassVideoOnlyOnPower",
-                t.spec(
-                    "windowGlassVideoOnlyOnPower",
-                    "Play only when plugged in",
-                    "Pause the Live animation or video while your computer runs on battery. It always pauses while Ghostex is in the background or hidden.",
-                ),
-                values.bool("windowGlassVideoOnlyOnPower"),
                 cx,
             ));
         }
@@ -909,7 +850,7 @@ impl ThemeTab {
                     .text_size(px(12.0))
                     .line_height(px(17.14))
                     .text_color(hsla(p.muted))
-                    .child("Animations are drawn live in your theme colours."),
+                    .child("Animations are drawn in your theme colours."),
             );
         let ring = p.ring;
         let hover_border = p.foreground_alpha(0.22);

@@ -1084,7 +1084,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("windowArtImageLight", J::Str("")),
     ("savedThemes", J::Arr(&[])),
     ("windowGlass", J::Str("auto")),
-    // Live since 2026-11-21, the default dark look's glass (see `darkThemePreset`); Desktop and windows before.
+    // Animated (stored as "live") since 2026-11-21, the default dark look's glass (see `darkThemePreset`); Desktop and windows before.
     ("windowGlassSource", J::Str("live")),
     ("windowGlassImagePlacement", J::Str("static")),
     ("windowGlassSameForLightAndDark", J::Bool(true)),
@@ -1095,9 +1095,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("windowGlassVideoOnlyOnPower", J::Bool(true)),
     ("windowGlassLiveStyleDark", J::Str("ink")),
     ("windowGlassLiveStyleLight", J::Str("drift")),
-    // 0.3 and 25 since 2026-11-21 (see `darkThemePreset`); 1 and 60 before.
-    ("windowGlassLiveSpeed", J::Num(0.3)),
-    ("windowGlassLiveBrightness", J::Num(25.0)),
+    // CDXC:Theming 2026-11-22 DECISION: User: "Make the effect for Animated more noticeable by default: it's super not apparent now by default." Raised from 0.3 and 25 (2026-11-21) to 1.0 and 80 so motion is clearly visible on first pick while keeping text readable.
+    ("windowGlassLiveSpeed", J::Num(1.0)),
+    ("windowGlassLiveBrightness", J::Num(80.0)),
     ("windowGlassBlurRadius", J::Num(4.0)),
     ("windowGlassWindowsBlur", J::Str("acrylic")),
     // CDXC:Theming 2026-11-20 DECISION: User (Q4288): "yes, make pane gap 6 and menu blur 17 defaults too", from their own look (see `darkThemePreset`). Menu blur applies in light mode too. Supersedes 20.

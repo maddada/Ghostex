@@ -10,8 +10,8 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::{module, settings_catalog};
 use super::super::super::fields::{
-    ButtonVariant, SizedButtonSize, SizedButtonVariant, SliderBinding, reset_key, settings_icon,
-    settings_icon_button, settings_sized_button, slider_number_field,
+    ButtonVariant, SizedButtonSize, SizedButtonVariant, SliderBinding, reset_key, select_field,
+    settings_icon, settings_icon_button, settings_sized_button, slider_number_field, toggle_field,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsValues;
@@ -19,6 +19,7 @@ use super::colours::preview_scheme_dark;
 use super::controls::indented_row;
 use super::presets::{TileSpec, theme_tile};
 use super::prompt_gallery::{gallery_themes, screenshot_preview};
+use super::transparency::{StrengthLocation, same_for_light_and_dark};
 use super::{ThemeCx, ThemeTab, gallery};
 use ghostex_settings_catalog::{YOUR_IMAGE_ART_ID, artwork_by_id, your_image_key};
 use gpui::prelude::FluentBuilder as _;
@@ -28,7 +29,7 @@ use gpui::{
     div, img, point, px,
 };
 use gpui_component::{h_flex, v_flex};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, json};
 use std::path::PathBuf;
 
 /// The art setting of one appearance.
@@ -180,7 +181,7 @@ impl ThemeTab {
                 if picked == Backdrop::YourImage && your_image_path(&values, dark).is_none() {
                     rows.push(indented_row(self.no_picture_line(&p, dark, cx)));
                 }
-                rows.push(self.strength_row(t, true, window, cx));
+                rows.push(self.strength_row(t, StrengthLocation::UnderArt, window, cx));
                 for (key, title, subtitle) in [
                     (
                         "windowArtDim",
@@ -214,12 +215,7 @@ impl ThemeTab {
             }
             Backdrop::Live => {
                 let glass = values.string("windowGlass");
-                let single = glass == "auto"
-                    || values
-                        .map()
-                        .get("windowGlassSameForLightAndDark")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(true);
+                let single = glass == "auto" || same_for_light_and_dark(&values);
                 rows.push(indented_row(self.live_gallery(
                     &p,
                     &values,
@@ -227,8 +223,156 @@ impl ThemeTab {
                     t.native_picker,
                     cx,
                 )));
+                rows.extend(self.animated_control_rows(t, single, window, cx));
             }
             Backdrop::None => {}
+        }
+        rows
+    }
+
+    /// Controls directly under the Animated gallery: Strength, Speed and Brightness (for
+    /// animations), Blur and Video position (for Your video), and Play only when plugged in.
+    fn animated_control_rows(
+        &mut self,
+        t: &ThemeCx,
+        single: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let p = t.p;
+        let values = t.values.clone();
+        let appearances: Vec<bool> = if single {
+            vec![false]
+        } else {
+            vec![false, true]
+        };
+        let slots: Vec<String> = appearances
+            .iter()
+            .map(|light| {
+                values.string(if *light {
+                    "windowGlassLiveStyleLight"
+                } else {
+                    "windowGlassLiveStyleDark"
+                })
+            })
+            .collect();
+        let uses_animation = slots.iter().any(|style| style != "video");
+        let uses_video = slots.iter().any(|style| style == "video");
+        let number = |name: &str| settings_catalog().number(module::SETTINGS, name);
+        let mut rows: Vec<AnyElement> = Vec::new();
+        if !t.searching || t.visible("windowGlassSidebarOpacityDark") || t.visible("windowGlass") {
+            rows.push(self.strength_row(t, StrengthLocation::UnderAnimated, window, cx));
+        }
+        if uses_animation && (!t.searching || t.visible("windowGlassLiveSpeed")) {
+            rows.push(slider_number_field(
+                self,
+                &p,
+                t.spec(
+                    "windowGlassLiveSpeed",
+                    "Speed",
+                    "How fast the animation moves. 1 is its own calm pace. Your own video plays as it is.",
+                )
+                .dependent(),
+                Some(reset_key::<Self>("windowGlassLiveSpeed")),
+                SliderBinding {
+                    key: "windowGlassLiveSpeed",
+                    min: number("MIN_WINDOW_GLASS_LIVE_SPEED"),
+                    max: number("MAX_WINDOW_GLASS_LIVE_SPEED"),
+                    step: 0.25,
+                },
+                values.f64("windowGlassLiveSpeed"),
+                window,
+                cx,
+            ));
+        }
+        if uses_animation && (!t.searching || t.visible("windowGlassLiveBrightness")) {
+            rows.push(slider_number_field(
+                self,
+                &p,
+                t.spec(
+                    "windowGlassLiveBrightness",
+                    "Brightness",
+                    "How bright the animation glows behind the glass. Lower keeps it a subtle glow.",
+                )
+                .dependent(),
+                Some(reset_key::<Self>("windowGlassLiveBrightness")),
+                SliderBinding {
+                    key: "windowGlassLiveBrightness",
+                    min: number("MIN_WINDOW_GLASS_LIVE_BRIGHTNESS"),
+                    max: number("MAX_WINDOW_GLASS_LIVE_BRIGHTNESS"),
+                    step: 1.0,
+                },
+                values.f64("windowGlassLiveBrightness"),
+                window,
+                cx,
+            ));
+        }
+        let blur_hidden = ghostex_settings_catalog::availability::row_hidden(
+            ghostex_settings_catalog::Platform::current(),
+            "windowGlassBlurRadius",
+            |key| Some(values.string(key)),
+        );
+        if uses_video && !blur_hidden && (!t.searching || t.visible("windowGlassBlurRadius")) {
+            rows.push(slider_number_field(
+                self,
+                &p,
+                t.spec(
+                    "windowGlassBlurRadius",
+                    "Blur",
+                    "How soft your video looks behind the window, in points. 0 shows it sharp.",
+                )
+                .dependent(),
+                Some(reset_key::<Self>("windowGlassBlurRadius")),
+                SliderBinding {
+                    key: "windowGlassBlurRadius",
+                    min: number("MIN_WINDOW_GLASS_BLUR_RADIUS"),
+                    max: number("MAX_WINDOW_GLASS_BLUR_RADIUS"),
+                    step: 1.0,
+                },
+                values.f64("windowGlassBlurRadius"),
+                window,
+                cx,
+            ));
+        }
+        if uses_video && (!t.searching || t.visible("windowGlassImagePlacement")) {
+            let options = settings_catalog()
+                .options(module::SETTINGS, "WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS");
+            let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
+            rows.push(select_field(
+                self,
+                &p,
+                "windowGlassImagePlacement",
+                t.spec(
+                    "windowGlassImagePlacement",
+                    "Video position",
+                    "Stays with the desktop can trail the window while you drag it.",
+                )
+                .dependent(),
+                Some(reset_key::<Self>("windowGlassImagePlacement")),
+                &options,
+                &values.choice("windowGlassImagePlacement", &allowed),
+                None,
+                |page: &mut Self, next, _window, cx| {
+                    page.save("windowGlassImagePlacement", json!(next), cx)
+                },
+                window,
+                cx,
+            ));
+        }
+        if !t.searching || t.visible("windowGlassVideoOnlyOnPower") {
+            rows.push(toggle_field(
+                self,
+                &p,
+                "windowGlassVideoOnlyOnPower",
+                t.spec(
+                    "windowGlassVideoOnlyOnPower",
+                    "Play only when plugged in",
+                    "Pause the animation or video while your computer runs on battery. It always pauses while Ghostex is in the background or hidden.",
+                )
+                .dependent(),
+                values.bool("windowGlassVideoOnlyOnPower"),
+                cx,
+            ));
         }
         rows
     }
@@ -395,7 +539,7 @@ impl ThemeTab {
             move |page, _window, cx| page.pick_your_image(dark, yours_picked, cx),
             cx,
         ));
-        // Live: the poster of the style that shows in this appearance.
+        // Animated: the poster of the style that shows in this appearance.
         let style = values.string(if dark || values.string("windowGlass") == "auto" {
             "windowGlassLiveStyleDark"
         } else {
@@ -416,8 +560,8 @@ impl ThemeTab {
             p,
             TileSpec {
                 id: "theme-artwork-live".into(),
-                name: "Live: a calm animation in your theme colours, or your own video".into(),
-                label: "Live".into(),
+                name: "Animated: a calm animation in your theme colours, or your own video".into(),
+                label: "Animated".into(),
                 dark,
                 caption: None,
                 selected: *picked == Backdrop::Live,

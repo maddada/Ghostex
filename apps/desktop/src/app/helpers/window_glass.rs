@@ -1039,16 +1039,29 @@ pub(crate) fn window_shell_background() -> Hsla {
     }
 }
 
+/// Softens the glass tint slightly when an Animated shader plays behind the window: the default
+/// 88% dark / 93% light tints protect against busy desktop windows, but over Ghostex's own calm
+/// animation they hid ~90% of it. Endpoints stay exact (0 stays fully clear, 1 stays fully solid),
+/// so Strength and manual tints remain monotonic and responsive.
+fn animated_glass_alpha(alpha: f32, light: bool) -> f32 {
+    if !window_art::window_art_active() && window_glass_live::window_glass_live().is_some() {
+        alpha.clamp(0.0, 1.0).powf(if light { 2.5 } else { 2.0 })
+    } else {
+        alpha
+    }
+}
+
 /// The sidebar's own tint under glass: its chrome colour over the blurred desktop, painted by the
 /// sidebar and by the chrome that belongs to its column (its resize divider, the floating panel's
 /// rail).
 pub(crate) fn sidebar_glass_tint() -> Hsla {
-    let alpha = if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
+    let light = CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed);
+    let alpha = if light {
         load_glass_alpha(&SIDEBAR_GLASS_PERCENT_LIGHT)
     } else {
         load_glass_alpha(&SIDEBAR_GLASS_PERCENT_DARK)
     };
-    titlebar_background().opacity(alpha)
+    titlebar_background().opacity(animated_glass_alpha(alpha, light))
 }
 
 /// The workspace column's fill: under glass its own tint straight over the blurred desktop.
@@ -1064,11 +1077,13 @@ pub(crate) fn workspace_column_background() -> Hsla {
 /// How much of the blurred desktop the work area's tint covers in the current appearance
 /// (`windowGlassWorkAreaTintDark` / `Light`).
 pub(crate) fn work_area_glass_alpha() -> f32 {
-    if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
+    let light = CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed);
+    let alpha = if light {
         load_glass_alpha(&WORK_AREA_GLASS_PERCENT_LIGHT)
     } else {
         load_glass_alpha(&WORK_AREA_GLASS_PERCENT_DARK)
-    }
+    };
+    animated_glass_alpha(alpha, light)
 }
 
 /// Fills for surfaces inside the workspace column. Under glass the column has already tinted the

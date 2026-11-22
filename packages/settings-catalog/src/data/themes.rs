@@ -269,7 +269,7 @@ pub const ARTWORKS: &[Artwork] = &[
 /// The background choices, in the order Settings shows them.
 pub const BACKGROUNDS: &[(&str, &str)] = &[
     ("art", "Art"),
-    ("live", "Live"),
+    ("live", "Animated"),
     ("transparent", "Glass"),
     ("solid", "Solid"),
 ];
@@ -610,9 +610,9 @@ fn gallery_theme(look: &J) -> Theme {
         .then(|| {
             Some((
                 all.get("windowGlassLiveStyleDark")?.to_string(),
-                all.get("windowGlassLiveSpeed").unwrap_or("0.3").to_string(),
+                all.get("windowGlassLiveSpeed").unwrap_or("1").to_string(),
                 all.get("windowGlassLiveBrightness")
-                    .unwrap_or("30")
+                    .unwrap_or("80")
                     .to_string(),
             ))
         })
@@ -674,7 +674,7 @@ fn default_theme(platform: Platform) -> Theme {
         dark: true,
         partner: None,
         prompt: Some(
-            "Put Ghostex's own look back: its default colours, glass and Live background.".into(),
+            "Put Ghostex's own look back: its default colours, glass and Animated background.".into(),
         ),
         live: Some((
             shipped("windowGlassLiveStyleDark"),

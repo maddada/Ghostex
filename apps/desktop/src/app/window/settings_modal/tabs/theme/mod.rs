@@ -90,9 +90,6 @@ impl MoreGroup {
             MoreGroup::Colours => &["themeSidebarContrast", "themeWorkAreaContrast"],
             MoreGroup::Transparency => &[
                 "windowGlassSameForLightAndDark",
-                "windowGlassVideoOnlyOnPower",
-                "windowGlassLiveSpeed",
-                "windowGlassLiveBrightness",
                 "windowGlassImagePlacement",
                 "windowGlassSidebarOpacityDark",
                 "windowGlassWorkAreaTintDark",
@@ -1020,6 +1017,14 @@ impl ThemeTab {
                 "windowArtBlur",
                 "windowArtImage",
                 "windowArtImageLight",
+                "windowGlassLiveStyleDark",
+                "windowGlassLiveStyleLight",
+                "windowGlassLiveSpeed",
+                "windowGlassLiveBrightness",
+                "windowGlassVideoOnlyOnPower",
+                "windowGlassVideoDark",
+                "windowGlassVideoLight",
+                "windowGlassImagePlacement",
             ]
             .iter()
             .any(|key| t.visible(key))

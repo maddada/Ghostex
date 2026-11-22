@@ -595,7 +595,7 @@ impl GpuiOnboardingWindow {
             .children(
                 [
                     ("art", "Art"),
-                    ("live", "Live"),
+                    ("live", "Animated"),
                     ("transparent", "Glass"),
                     ("solid", "Solid"),
                 ]

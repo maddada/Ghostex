@@ -872,5 +872,5 @@ pub const WINDOW_GLASS_SOURCE_OPTIONS: &[Opt] = &[
     opt("Fully transparent", "desktopAndWindows"),
     opt("Wallpaper only", "wallpaper"),
     opt("Custom image", "customImage"),
-    opt("Live", "live"),
+    opt("Animated", "live"),
 ];
