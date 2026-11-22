@@ -18,6 +18,39 @@ pub(crate) const AGENTS_GUIDE_MD: &str = include_str!("guide.md");
 /// in one usage line.
 pub(crate) const AGENTS_GUIDE_LEADS_MD: &str = include_str!("guide_leads.md");
 
+fn focused_help(command: &str) {
+    let full = include_str!("help.txt");
+    let prefix = format!("  ghostex agents {command}");
+    let mut copying = false;
+    for line in full.lines().skip_while(|line| *line != "USAGE").skip(1) {
+        if !line.starts_with(' ') && !line.is_empty() {
+            break;
+        }
+        if line.starts_with("  ghostex ") {
+            copying = line.starts_with(&prefix)
+                && line[prefix.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| c.is_whitespace());
+        }
+        if copying {
+            println!("{line}");
+        }
+    }
+    println!(
+        "\nFull reference: ghostex agents --help --all. Working habits: ghostex agents guide."
+    );
+}
+
+const SHORT_HELP: &str = "ghostex agents: create, message and manage agent sessions.
+  whoami | types | list [--all]
+  create <agent-id> --title <title> --task <text>|--body-file <path>
+  send <ref> <text>|--body-file <path> [--interrupt|--queue|--with-next]
+  switch-account <ref> --account <n> | reload <ref> | close <ref>
+  wait-reply <ref> | held | unhold <ref> | role | link | unlink | links
+  <verb> --help shows its usage; --help --all shows the full reference.
+  ghostex agents guide explains the habits.";
+
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
     if args.first().map(String::as_str) == Some("guide") {
         match args.get(1).map(String::as_str) {
@@ -28,12 +61,16 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     }
     let args = arguments::parse(args)?;
     if args.help {
-        if matches!(args.command.as_str(), "link" | "unlink" | "links") {
+        if args.all {
+            print!("{}", include_str!("help.txt"));
+        } else if matches!(args.command.as_str(), "link" | "unlink" | "links") {
             print!("{}", include_str!("help_link.txt"));
         } else if args.command == "role" {
             print!("{}", include_str!("help_role.txt"));
+        } else if args.command.is_empty() {
+            println!("{SHORT_HELP}");
         } else {
-            print!("{}", include_str!("help.txt"));
+            focused_help(&args.command);
         }
         return Ok(());
     }

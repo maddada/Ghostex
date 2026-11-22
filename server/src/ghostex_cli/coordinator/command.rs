@@ -30,7 +30,34 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             .iter()
             .any(|arg| arg == "-h" || arg == "--help" || arg == "help");
     if wants_help {
-        print!("{}", include_str!("help.txt"));
+        let full = include_str!("help.txt");
+        if args.iter().any(|arg| arg == "--all") {
+            print!("{full}");
+        } else if let Some(command) = args
+            .first()
+            .filter(|arg| !matches!(arg.as_str(), "help" | "-h" | "--help"))
+        {
+            let prefix = format!("  ghostex coordinator {command}");
+            let mut copying = false;
+            for line in full.lines().skip_while(|line| *line != "USAGE").skip(1) {
+                if !line.starts_with(' ') && !line.is_empty() {
+                    break;
+                }
+                if line.starts_with("  ghostex ") {
+                    copying = line.starts_with(&prefix)
+                        && line[prefix.len()..]
+                            .chars()
+                            .next()
+                            .is_none_or(|c| c.is_whitespace());
+                }
+                if copying {
+                    println!("{line}");
+                }
+            }
+            println!("\nFull reference: ghostex coordinator --help --all.");
+        } else {
+            println!("ghostex coordinator: manage a coordinator and its threads.\n  create | promote | make-main | options | list | status | start-thread\n  link | unlink | rename | rename-self | resolve | reopen\n  item | board | remember | forget | set-goal | set-instructions\n  guide | playbook | set-playbook | next-tag\n  <verb> --help shows its usage; --help --all shows the full reference.");
+        }
         return Ok(());
     }
     let command = args[0].as_str();
