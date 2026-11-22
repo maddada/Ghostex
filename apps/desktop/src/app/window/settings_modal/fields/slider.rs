@@ -92,7 +92,9 @@ fn save_value<V: SettingsPage>(
         .get(key)
         .and_then(|state| state.saver.clone())
     {
-        saver(&store, value, commit, cx);
+        // `save_value` runs while `page` is leased by a slider/input subscription or key listener,
+        // so deferring lets a `SliderSaver` update the page entity without re-entering it (#709).
+        cx.defer(move |cx| saver(&store, value, commit, cx));
         return;
     }
     let value = if value.fract() == 0.0 {

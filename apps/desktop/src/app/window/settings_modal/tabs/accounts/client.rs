@@ -170,7 +170,7 @@ impl AccountsClient {
     ) {
         if !self.connected(cx) {
             if let Some(done) = done {
-                done(false, cx);
+                cx.defer(move |cx| done(false, cx));
             }
             return;
         }
@@ -236,7 +236,7 @@ impl AccountsClient {
             )
         };
         if !connected {
-            reply(Err("The computer connection is unavailable.".into()), cx);
+            cx.defer(move |cx| reply(Err("The computer connection is unavailable.".into()), cx));
             return;
         }
         store_machine_gxserver_rpc(

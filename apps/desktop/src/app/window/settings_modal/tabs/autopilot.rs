@@ -517,8 +517,11 @@ impl AutopilotTab {
                 return;
             }
             let seconds = (value.round().clamp(1.0, 10.0) * 60.0) as u64;
-            let _ = page.update(cx, |page, cx| {
-                page.set(json!({ "sweepSeconds": seconds }), cx)
+            let page = page.clone();
+            cx.defer(move |cx| {
+                let _ = page.update(cx, |page, cx| {
+                    page.set(json!({ "sweepSeconds": seconds }), cx)
+                });
             });
         });
         rows.push(slider_number_field_with(

@@ -235,7 +235,10 @@ fn save_color<V: SettingsPage>(
         .get(key)
         .and_then(|state| state.saver.clone())
     {
-        saver(&store, value, commit, cx);
+        // `save_color` runs while `page` is leased by an input subscription or click/drag handler,
+        // so deferring lets a `ColorSaver` update the page entity without re-entering it.
+        let value = value.to_string();
+        cx.defer(move |cx| saver(&store, &value, commit, cx));
         return;
     }
     let value = json!(value);
