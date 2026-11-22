@@ -264,7 +264,11 @@ impl SessionChatQueueSnapshot {
         revision.push_str(&serde_json::to_string(&self.later_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.later_question_until).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.unavailable_modes).unwrap_or_default());
-        revision.push_str(if self.non_cli_mode { "|nonCli:1" } else { "|nonCli:0" });
+        revision.push_str(if self.non_cli_mode {
+            "|nonCli:1"
+        } else {
+            "|nonCli:0"
+        });
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.retired_page_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.starred_page_ids).unwrap_or_default());

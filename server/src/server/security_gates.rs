@@ -164,7 +164,8 @@ fn api_chat_refused(
             ..
         } if own_session == session_id
             && (project_id.is_empty() || own_project == project_id)
-            && !(endpoint_path == "/api/selectSessionChatModel" && requests_mode_change(params))
+            && !(endpoint_path == "/api/selectSessionChatModel"
+                && requests_mode_change(params))
             && !(endpoint_path == "/api/sendSessionChatMessage"
                 && text(params, "key")
                     .is_some_and(|key| key.eq_ignore_ascii_case("shift-tab"))) =>
@@ -204,14 +205,12 @@ fn relayed_card_refusal(
                 && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
             .then_some(RELAYED_CARD_ONLY_YOU)
         }
-        "/api/selectSessionChatModel" => {
-            (requests_mode_change(params)
-                && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
-            .then_some(RELAYED_CARD_ONLY_YOU)
-        }
+        "/api/selectSessionChatModel" => (requests_mode_change(params)
+            && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
+        .then_some(RELAYED_CARD_ONLY_YOU),
         "/api/sendSessionChatMessage" => {
-            let is_mode_cycle = text(params, "key")
-                .is_some_and(|key| key.eq_ignore_ascii_case("shift-tab"));
+            let is_mode_cycle =
+                text(params, "key").is_some_and(|key| key.eq_ignore_ascii_case("shift-tab"));
             (is_mode_cycle
                 && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
             .then_some(RELAYED_CARD_ONLY_YOU)
@@ -370,8 +369,10 @@ fn accept_all_default_raise_refused(
                 .and_then(Value::as_str)
                 .and_then(|pid| {
                     let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
-                    let repo =
-                        crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+                    let repo = crate::domain::DomainRepository::new(
+                        &db,
+                        state.metadata.server_id.as_str(),
+                    );
                     repo.get_project(pid).ok().flatten()
                 });
             let Some(stored_project) = stored_project else {
@@ -403,9 +404,8 @@ fn accept_all_default_raise_refused(
                     std::collections::HashMap::new();
                 let mut stored_cmds: std::collections::HashMap<String, String> =
                     std::collections::HashMap::new();
-                if let Some(stored_arr) = stored_project
-                    .get("customAgents")
-                    .and_then(Value::as_array)
+                if let Some(stored_arr) =
+                    stored_project.get("customAgents").and_then(Value::as_array)
                 {
                     for agent in stored_arr {
                         if let Some(key) = custom_agent_identity_key(agent) {
@@ -480,8 +480,10 @@ fn accept_all_default_raise_refused(
             let projects = crate::storage::open_gxserver_database(&state.paths)
                 .ok()
                 .and_then(|db| {
-                    let repo =
-                        crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+                    let repo = crate::domain::DomainRepository::new(
+                        &db,
+                        state.metadata.server_id.as_str(),
+                    );
                     repo.list_projects_without_session_history().ok()
                 });
             let Some(projects) = projects else {

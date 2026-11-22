@@ -50,12 +50,11 @@ pub(crate) fn read_options(
         // Never accept client-supplied `ownerApproved`.
         obj.remove("ownerApproved");
     }
-    let mut options: SelectionOptions = serde_json::from_value(raw_options).map_err(|_| {
-        DomainStateError {
+    let mut options: SelectionOptions =
+        serde_json::from_value(raw_options).map_err(|_| DomainStateError {
             code: "invalidParams",
             message: "Invalid chat option selection.".into(),
-        }
-    })?;
+        })?;
     options.owner_approved = None;
     if is_acp {
         if let Some(mode) = options.mode.as_deref() {

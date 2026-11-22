@@ -23,9 +23,9 @@ use crate::constants::{
 };
 
 use super::approval::{
-    AcpApprovalLevel, AcpPermissionOption, PermissionDecision, canonicalize_writable_roots,
-    evaluate_permission, find_advertised_auto_mode_id, find_advertised_default_mode_id,
-    is_auto_or_bypass_mode_id,
+    canonicalize_writable_roots, evaluate_permission, find_advertised_auto_mode_id,
+    find_advertised_default_mode_id, is_auto_or_bypass_mode_id, AcpApprovalLevel,
+    AcpPermissionOption, PermissionDecision,
 };
 use super::spec::{
     build_acp_server_argv, build_cli_switch_argv, spec_for_family, transcript_path_for_session,
@@ -959,7 +959,8 @@ fn resync_native_mode_if_drifted(
         (expected != AcpApprovalLevel::Auto && still_in_auto).then_some(s.approval_level)
     };
     if let Some(level) = target_level {
-        if let Err(err) = apply_approval_level_and_sync_native_mode_locked(transport, state, level) {
+        if let Err(err) = apply_approval_level_and_sync_native_mode_locked(transport, state, level)
+        {
             eprintln!(
                 "[ACP] Warning: agent switched to native mode `{drifted_mode}` while level is {}: {err}",
                 level.label()
@@ -1049,9 +1050,7 @@ fn apply_approval_level_and_sync_native_mode_locked(
             s.in_flight_target_level = None;
             if was_auto_or_bypass && !is_auto_target {
                 s.native_auto_active = true;
-                return Err(format!(
-                    "Could not leave the agent's automatic mode: {err}"
-                ));
+                return Err(format!("Could not leave the agent's automatic mode: {err}"));
             }
             // Entering native Auto failed: stay safely on the non-auto native mode (behaving like
             // Ask) while recording the requested level.
@@ -1214,7 +1213,8 @@ pub fn run(args: &[String]) -> i32 {
         writable_roots,
     )));
     let mode_sync_lock = Arc::new(Mutex::new(()));
-    let activity = ActivityReporter::start(endpoint.clone(), state.clone(), spec.family.to_string());
+    let activity =
+        ActivityReporter::start(endpoint.clone(), state.clone(), spec.family.to_string());
     let shutting_down = Arc::new(AtomicBool::new(false));
 
     // Watch for SIGTERM/SIGHUP/SIGINT so the ACP subprocess is stopped promptly even while the
@@ -1399,9 +1399,8 @@ pub fn run(args: &[String]) -> i32 {
                                         let mut s =
                                             st_out.lock().unwrap_or_else(|p| p.into_inner());
                                         s.current_mode = Some(mode_id.to_string());
-                                        let expected = s
-                                            .in_flight_target_level
-                                            .unwrap_or(s.approval_level);
+                                        let expected =
+                                            s.in_flight_target_level.unwrap_or(s.approval_level);
                                         if is_auto_or_bypass_mode_id(mode_id) {
                                             s.native_auto_active = true;
                                             expected != AcpApprovalLevel::Auto
@@ -1419,10 +1418,7 @@ pub fn run(args: &[String]) -> i32 {
                                         let drifted = mode_id.to_string();
                                         thread::spawn(move || {
                                             resync_native_mode_if_drifted(
-                                                &t_sync,
-                                                &st_sync,
-                                                &lock_sync,
-                                                &drifted,
+                                                &t_sync, &st_sync, &lock_sync, &drifted,
                                             );
                                         });
                                     }
@@ -1439,7 +1435,9 @@ pub fn run(args: &[String]) -> i32 {
                     }
                 }));
                 if handle_res.is_err() {
-                    eprintln!("[ACP] Warning: recovered from panic while handling ACP stdout message.");
+                    eprintln!(
+                        "[ACP] Warning: recovered from panic while handling ACP stdout message."
+                    );
                 }
             }
         });

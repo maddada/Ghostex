@@ -98,10 +98,11 @@ pub(super) async fn route_agents_http(
                     .and_then(Value::as_str)
                     .map(str::trim)
                     .unwrap_or_default();
-                let matches_self = match crate::agent_hooks::probing::parse_global_session_ref(reference) {
-                    (Some(pid), Some(sid)) => pid == *own_project && sid == *own_session,
-                    _ => false,
-                };
+                let matches_self =
+                    match crate::agent_hooks::probing::parse_global_session_ref(reference) {
+                        (Some(pid), Some(sid)) => pid == *own_project && sid == *own_session,
+                        _ => false,
+                    };
                 if !matches_self {
                     return Ok(domain_error_response(
                         endpoint.path,

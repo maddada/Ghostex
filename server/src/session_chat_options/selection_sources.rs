@@ -1008,8 +1008,8 @@ pub(crate) fn detect_session_chat_stored_options(
         .flatten()
         .filter(crate::acp::session_is_acp)
         .map(|session| {
-            let level = crate::acp::approval::stored_session_approval_level(&session)
-                .unwrap_or_default();
+            let level =
+                crate::acp::approval::stored_session_approval_level(&session).unwrap_or_default();
             SessionChatDetectedChoice {
                 value: level.as_str().to_string(),
                 label: level.label().to_string(),

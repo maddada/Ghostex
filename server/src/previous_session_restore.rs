@@ -91,9 +91,8 @@ pub fn restore_previous_session(
                     .pointer("/launchSettings/acceptAllMode")
                     .and_then(Value::as_str),
             );
-            let has_elevated_level =
-                crate::acp::approval::stored_session_approval_level(session)
-                    .is_some_and(|level| level != crate::acp::AcpApprovalLevel::Ask);
+            let has_elevated_level = crate::acp::approval::stored_session_approval_level(session)
+                .is_some_and(|level| level != crate::acp::AcpApprovalLevel::Ask);
             let has_elevated_cmd = [
                 "/launchSettings/startupText",
                 "/launchSettings/agentCommand",
@@ -143,7 +142,10 @@ pub fn restore_previous_session(
                     launch.remove("acceptAllMode");
                 }
             }
-            if let Some(rt) = obj.get_mut("runtimeSettings").and_then(Value::as_object_mut) {
+            if let Some(rt) = obj
+                .get_mut("runtimeSettings")
+                .and_then(Value::as_object_mut)
+            {
                 rt.remove(crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY);
             }
         }
@@ -446,7 +448,8 @@ mod tests {
             session_id: session_id.clone(),
             reason: "test".to_string(),
         };
-        let answer = restore_previous_session(&request, &repository, &db, true, &call).expect("restore");
+        let answer =
+            restore_previous_session(&request, &repository, &db, true, &call).expect("restore");
         let restored_id = answer["sessionId"].as_str().expect("restored id");
         assert_ne!(restored_id, session_id);
         let restored = repository
@@ -577,7 +580,8 @@ mod tests {
             session_id: coordinator.clone(),
             reason: "test".to_string(),
         };
-        let answer = restore_previous_session(&request, &repository, &db, true, &call).expect("restore");
+        let answer =
+            restore_previous_session(&request, &repository, &db, true, &call).expect("restore");
         let restored = (
             project_id.clone(),
             answer["sessionId"]

@@ -153,9 +153,7 @@ pub fn accept_all_mode_change_raises(
 
 /// Read the global `agentAcceptAllEnabled` boolean from shared settings or SQLite `agents.settings.v1`
 /// (`true` if either enables it, `false` if both are off/absent).
-pub fn global_accept_all_enabled_in_shared_settings(
-    paths: &crate::paths::GxserverPaths,
-) -> bool {
+pub fn global_accept_all_enabled_in_shared_settings(paths: &crate::paths::GxserverPaths) -> bool {
     let shared_enabled = crate::shared_settings_file::read_shared_settings(paths)
         .and_then(|v| v.pointer("/agentAcceptAllEnabled").and_then(Value::as_bool))
         .unwrap_or(false);
@@ -181,8 +179,10 @@ pub fn command_has_accept_all_flag(cmd: &str) -> bool {
     let tokens: Vec<String> = lower
         .split_whitespace()
         .map(|tok| {
-            tok.trim_matches(|c: char| matches!(c, '\'' | '"' | ';' | '&' | '|' | '(' | ')' | '\r' | '\n'))
-                .to_string()
+            tok.trim_matches(|c: char| {
+                matches!(c, '\'' | '"' | ';' | '&' | '|' | '(' | ')' | '\r' | '\n')
+            })
+            .to_string()
         })
         .filter(|tok| !tok.is_empty())
         .collect();
@@ -285,9 +285,8 @@ pub fn guard_create_session_params(
             if command_has_accept_all_flag(cmd) {
                 return Err(DomainStateError {
                     code: "forbidden",
-                    message:
-                        "Only your own devices can pass accept-all flags in an agent command."
-                            .to_string(),
+                    message: "Only your own devices can pass accept-all flags in an agent command."
+                        .to_string(),
                 });
             }
         }
@@ -311,13 +310,14 @@ pub fn guard_create_session_params(
                 }
             }
             let has_raw_startup = value_has_non_empty_text(launch.get("startupText"));
-            let has_raw_plan =
-                strip_raw_launch_plan && launch.get("agentLaunchPlan").is_some_and(|v| !v.is_null());
+            let has_raw_plan = strip_raw_launch_plan
+                && launch.get("agentLaunchPlan").is_some_and(|v| !v.is_null());
             if has_raw_plan || has_raw_startup {
                 return Err(DomainStateError {
                     code: "forbidden",
-                    message: "Only your own devices can supply a raw launch plan or startup command."
-                        .to_string(),
+                    message:
+                        "Only your own devices can supply a raw launch plan or startup command."
+                            .to_string(),
                 });
             }
         }
@@ -368,9 +368,7 @@ pub fn guard_update_session_params(
         .unwrap_or(AcpApprovalLevel::Ask);
 
     if cleaned.contains_key("runtimeSettings") {
-        let is_object = cleaned
-            .get("runtimeSettings")
-            .is_some_and(Value::is_object);
+        let is_object = cleaned.get("runtimeSettings").is_some_and(Value::is_object);
         if !is_object {
             // Passing `"runtimeSettings": null` (or a non-object) would overwrite the stored
             // runtime object with `{}` in `merge_session_update`, wiping `acpApprovalLevel`.
@@ -433,11 +431,8 @@ pub fn guard_update_session_params(
         let incoming_accept = incoming_launch
             .and_then(|m| m.get("acceptAllMode"))
             .and_then(Value::as_str);
-        if accept_all_mode_change_raises(
-            stored_accept,
-            incoming_accept,
-            global_accept_all_enabled,
-        ) {
+        if accept_all_mode_change_raises(stored_accept, incoming_accept, global_accept_all_enabled)
+        {
             return Err(DomainStateError {
                 code: "forbidden",
                 message: "Only your own devices can enable accept-all on a session.".to_string(),
@@ -492,7 +487,9 @@ pub fn guard_update_session_params(
 /// Read the remembered per-session ACP approval level from `session.runtimeSettings`, if set.
 pub fn stored_session_approval_level(session: &Value) -> Option<AcpApprovalLevel> {
     session
-        .pointer(&format!("/runtimeSettings/{SESSION_ACP_APPROVAL_LEVEL_KEY}"))
+        .pointer(&format!(
+            "/runtimeSettings/{SESSION_ACP_APPROVAL_LEVEL_KEY}"
+        ))
         .and_then(Value::as_str)
         .and_then(AcpApprovalLevel::parse)
 }
@@ -508,9 +505,8 @@ pub fn resolve_starting_level(
     launch_settings: &Map<String, Value>,
     global_settings: &Map<String, Value>,
 ) -> AcpApprovalLevel {
-    if let Some(remembered) =
-        read_trimmed_str(runtime_settings, SESSION_ACP_APPROVAL_LEVEL_KEY)
-            .and_then(AcpApprovalLevel::parse)
+    if let Some(remembered) = read_trimmed_str(runtime_settings, SESSION_ACP_APPROVAL_LEVEL_KEY)
+        .and_then(AcpApprovalLevel::parse)
     {
         return remembered;
     }
@@ -1013,9 +1009,7 @@ fn has_windows_percent_env(text: &str) -> bool {
         if bytes[i] == b'%' {
             let start = i + 1;
             let mut end = start;
-            while end < bytes.len()
-                && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_')
-            {
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
                 end += 1;
             }
             if end > start && bytes.get(end) == Some(&b'%') {
@@ -1180,13 +1174,19 @@ fn push_unique(paths: &mut Vec<String>, path: &str) {
 /// to) `writable_roots`, but NOT treated as mutation targets themselves (so `cwd: "<project_root>"`
 /// does not fail strict `resolved != root`).
 fn is_context_dir_key(norm: &str) -> bool {
-    matches!(norm, "cwd" | "workdir" | "workingdirectory" | "root" | "rootdir")
+    matches!(
+        norm,
+        "cwd" | "workdir" | "workingdirectory" | "root" | "rootdir"
+    )
 }
 
 /// Directory keys that act as execution context on `kind == "edit"` when another target path is
 /// present, but stay strict mutation targets on `delete`/`move` (or when alone).
 fn is_edit_context_dir_key(norm: &str) -> bool {
-    matches!(norm, "directory" | "dir" | "dirpath" | "folder" | "folderpath")
+    matches!(
+        norm,
+        "directory" | "dir" | "dirpath" | "folder" | "folderpath"
+    )
 }
 
 /// Allowlisted single-target path keys for file mutation tools.
@@ -1287,8 +1287,15 @@ fn target_key_is_edit_snippet(obj: &Map<String, Value>, is_edit_kind: bool) -> b
         }
         if matches!(
             norm.as_str(),
-            "source" | "sourcepath" | "src" | "srcpath" | "sourcefile" | "from" | "frompath"
-                | "oldpath" | "oldfile"
+            "source"
+                | "sourcepath"
+                | "src"
+                | "srcpath"
+                | "sourcefile"
+                | "from"
+                | "frompath"
+                | "oldpath"
+                | "oldfile"
         ) {
             has_source_key = true;
         }
@@ -1338,13 +1345,7 @@ fn is_path_list_or_map_key(norm: &str) -> bool {
 fn is_patch_key(norm: &str) -> bool {
     matches!(
         norm,
-        "patch"
-            | "patchtext"
-            | "diff"
-            | "difftext"
-            | "unifieddiff"
-            | "input"
-            | "rawpatch"
+        "patch" | "patchtext" | "diff" | "difftext" | "unifieddiff" | "input" | "rawpatch"
     )
 }
 
@@ -1845,7 +1846,10 @@ fn collect_allowlisted_value(
                         Value::String(s)
                             if in_raw_input
                                 && is_patch_tool
-                                && matches!(norm.as_str(), "content" | "text" | "body" | "data") =>
+                                && matches!(
+                                    norm.as_str(),
+                                    "content" | "text" | "body" | "data"
+                                ) =>
                         {
                             if !collect_patch_paths(s, &mut out.raw_input_paths) {
                                 return false;
@@ -1916,10 +1920,7 @@ fn extract_mutation_targets(params: &Value) -> Option<ExtractedTargets> {
                 push_unique(&mut out.location_paths, path);
                 if let Some(uri) = obj.get("uri") {
                     if !uri.is_null() {
-                        let uri_str = uri
-                            .as_str()
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty())?;
+                        let uri_str = uri.as_str().map(str::trim).filter(|s| !s.is_empty())?;
                         push_unique(&mut out.location_paths, uri_str);
                     }
                 }
@@ -1949,14 +1950,7 @@ fn extract_mutation_targets(params: &Value) -> Option<ExtractedTargets> {
 
     if let Some(raw_input) = tool_call.get("rawInput") {
         if !raw_input.is_null()
-            && !collect_allowlisted_value(
-                raw_input,
-                is_edit_kind,
-                is_patch_tool,
-                true,
-                &mut out,
-                0,
-            )
+            && !collect_allowlisted_value(raw_input, is_edit_kind, is_patch_tool, true, &mut out, 0)
         {
             return None;
         }

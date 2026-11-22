@@ -403,10 +403,14 @@ pub fn detect_session_chat_terminal_state(
     }
     // While an ACP session is booting or reconnecting its channel, never fall through to CLI TUI
     // screen scraping; report its persisted approval level instead.
-    if let Some(session) = repository.get_session(project_id, session_id).ok().flatten() {
+    if let Some(session) = repository
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten()
+    {
         if crate::acp::session_is_acp(&session) {
-            let level = crate::acp::approval::stored_session_approval_level(&session)
-                .unwrap_or_default();
+            let level =
+                crate::acp::approval::stored_session_approval_level(&session).unwrap_or_default();
             let selection = SessionChatDetectedSelection {
                 mode: Some(SessionChatDetectedChoice {
                     value: level.as_str().to_string(),

@@ -1746,13 +1746,8 @@ pub(crate) async fn select_session_chat_model(
             ));
         }
         if model_change {
-            crate::acp::channel::set_model(
-                &target.project_id,
-                &target.session_id,
-                &model,
-                &effort,
-            )
-            .await?;
+            crate::acp::channel::set_model(&target.project_id, &target.session_id, &model, &effort)
+                .await?;
         }
         if let Some(mode) = options.mode.as_deref().filter(|m| !m.is_empty()) {
             crate::acp::channel::set_approval_level(
