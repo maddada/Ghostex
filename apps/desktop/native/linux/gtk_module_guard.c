@@ -20,35 +20,43 @@ executable; LD_PRELOAD set from main is too late.
 #define _GNU_SOURCE
 
 #include <dlfcn.h>
-#include <pthread.h>
 #include <stdarg.h>
 #include <string.h>
 
-static int is_empty_gtk_modules_pin(const char *name, const char *value) {
-    return name != NULL && value != NULL && strcmp(name, "gtk-modules") == 0 && value[0] == '\0';
-}
+typedef void (*g_object_set_valist_fn)(void *, const char *, va_list);
+typedef int (*g_module_close_fn)(void *);
+typedef const char *(*g_module_name_fn)(void *);
 
-static void (*object_set_valist)(void *, const char *, va_list) = NULL;
+static void *object_set_valist_slot = NULL;
+static void *real_module_close_slot = NULL;
+static void *module_name_slot = NULL;
 
-static void resolve_object_set(void) {
-    object_set_valist = (void (*)(void *, const char *, va_list))dlsym(RTLD_NEXT, "g_object_set_valist");
+static void *resolve_symbol(void **slot, void *handle, const char *symbol) {
+    void *fn = __atomic_load_n(slot, __ATOMIC_ACQUIRE);
+    if (fn != NULL) {
+        return fn;
+    }
+    fn = dlsym(handle, symbol);
+    if (fn != NULL) {
+        __atomic_store_n(slot, fn, __ATOMIC_RELEASE);
+    }
+    return fn;
 }
 
 __attribute__((visibility("default"))) void g_object_set(void *object, const char *first_property, ...) {
-    static pthread_once_t once = PTHREAD_ONCE_INIT;
-    pthread_once(&once, resolve_object_set);
-
-    if (first_property != NULL) {
+    if (first_property != NULL && strcmp(first_property, "gtk-modules") == 0) {
         va_list peek;
         va_start(peek, first_property);
         const char *value = va_arg(peek, const char *);
         const char *next = va_arg(peek, const char *);
         va_end(peek);
-        if (is_empty_gtk_modules_pin(first_property, value) && next == NULL) {
+        if (value != NULL && value[0] == '\0' && next == NULL) {
             return;
         }
     }
 
+    g_object_set_valist_fn object_set_valist =
+        (g_object_set_valist_fn)resolve_symbol(&object_set_valist_slot, RTLD_NEXT, "g_object_set_valist");
     if (object_set_valist == NULL) {
         return;
     }
@@ -58,15 +66,12 @@ __attribute__((visibility("default"))) void g_object_set(void *object, const cha
     va_end(args);
 }
 
-static int (*real_module_close)(void *) = NULL;
-static const char *(*module_name)(void *) = NULL;
-
-static void resolve_module_close(void) {
-    real_module_close = (int (*)(void *))dlsym(RTLD_NEXT, "g_module_close");
-    module_name = (const char *(*)(void *))dlsym(RTLD_DEFAULT, "g_module_name");
-}
-
 static int is_kept_gtk_module(void *module) {
+    if (module == NULL) {
+        return 0;
+    }
+    g_module_name_fn module_name =
+        (g_module_name_fn)resolve_symbol(&module_name_slot, RTLD_DEFAULT, "g_module_name");
     if (module_name == NULL) {
         return 0;
     }
@@ -80,11 +85,11 @@ static int is_kept_gtk_module(void *module) {
 }
 
 __attribute__((visibility("default"))) int g_module_close(void *module) {
-    static pthread_once_t once = PTHREAD_ONCE_INIT;
-    pthread_once(&once, resolve_module_close);
     if (is_kept_gtk_module(module)) {
         return 1;
     }
+    g_module_close_fn real_module_close =
+        (g_module_close_fn)resolve_symbol(&real_module_close_slot, RTLD_NEXT, "g_module_close");
     if (real_module_close == NULL) {
         return 0;
     }

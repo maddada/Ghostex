@@ -857,14 +857,16 @@ fn link_linux_gtk_module_guard(manifest_dir: &Path) {
         .flag("-fno-function-sections")
         .flag("-fno-data-sections");
     build.compile("ghostex_gtk_module_guard");
-    let archive = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"))
-        .join("libghostex_gtk_module_guard.a");
+    let archive =
+        PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("libghostex_gtk_module_guard.a");
+    println!("cargo:rustc-link-arg-bin=ghostex-gpui=-Wl,--whole-archive");
     println!(
-        "cargo:rustc-link-arg=-Wl,--whole-archive,{},--no-whole-archive",
+        "cargo:rustc-link-arg-bin=ghostex-gpui={}",
         archive.display()
     );
-    println!("cargo:rustc-link-arg=-Wl,--export-dynamic-symbol=g_object_set");
-    println!("cargo:rustc-link-arg=-Wl,--export-dynamic-symbol=g_module_close");
+    println!("cargo:rustc-link-arg-bin=ghostex-gpui=-Wl,--no-whole-archive");
+    println!("cargo:rustc-link-arg-bin=ghostex-gpui=-Wl,--export-dynamic-symbol=g_object_set");
+    println!("cargo:rustc-link-arg-bin=ghostex-gpui=-Wl,--export-dynamic-symbol=g_module_close");
 }
 
 fn main() {
