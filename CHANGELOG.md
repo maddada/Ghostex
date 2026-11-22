@@ -2,6 +2,76 @@
 
 ## Unreleased
 
+## 11.14.0 - 2026-11-22
+
+**Ghostex 11.14.0 is out.** Art themes with Polar Night as the new default look, Animated backgrounds and a matching floating Theme Editor, opt-in Non-CLI session mode, Find across prompts and agent answers, a redesigned Add Project folder picker, live previews in Settings > Experience, refreshed defaults for new installs, the rail's Links menu, phone Automations, and a wide round of stability and Cloud Box fixes.
+
+### 🎨 Themes and look
+
+- **Art themes and on-demand artwork:** six new Art themes (Moonwater, Glasshouse, Red Earth, Deep Current, Night Garden and Nocturne Canyon) join 32 artworks in one Artwork strip, so any artwork or your own image can sit behind any theme. Artworks download on demand instead of bloating the app, the 20 presets set their full palette colours, and every theme tile is a live preview screenshot.
+- **Polar Night is the new default look:** new installs start on Polar Night with Polar's ice-blue accent in dark mode and Everforest Light in light mode, on both the computer and the phone. Your current look stays as it is.
+- **Animated backgrounds:** Live backgrounds are now called Animated, with controls directly under the previews and brighter defaults.
+- **Floating Theme Editor, Your themes and Ask Ghostex AI theming:** the floating Theme Editor matches Settings > Themes (with the Artwork strip, Animated controls and Window transparency), Your themes lets you save, rename, update and delete custom looks with multi-step Undo, onboarding adds a Make it yours step, and "Design a theme with Ask Ghostex AI" can style your workspace and offer custom artwork.
+- **Blurred art behind Live pages:** Live page popup windows now display blurred Art and Animated backdrops behind the page.
+- **On the phone:** Settings > Themes brings Polar Night and Everforest Light defaults, Polar blue, Art themes, the on-demand Artwork picker, screen art backdrops and Appearance sync.
+
+### 💬 Chat, Find and session modes
+
+- **Opt-in Non-CLI session mode:** pick between Agent CLI (default interactive terminal) and Non-CLI (structured ACP host, starting with Antigravity) per agent in Settings > Agents, with reload survival, image attachments, persisted approvals and a switch-to-Terminal option.
+- **Find searches prompts and agent answers:** prompt-history search (`ghostex f` and Desktop Find) now indexes both your prompts and closing agent answers, with an All / Prompts / Answers toggle.
+- **Compact and delta handovers:** a Final answers only toggle in Handoff / Export keeps handovers concise, and you can hand over only new turns directly into an existing live session.
+- **Chat Status Line and Session details:** Chat Status Line is now an opt-in built-in extension (off by default); Session details shows Overview and Limits as collapsible sections, Customize session details tucks already-visible rows into a folded More group, the branch moves into Changes, and the Background pill jumps straight to Background tasks (desktop, web and phone).
+- **Compact before sending and smoother chat box motion:** Ghostex waits for idle compaction before auto-sleeping a Claude session, asks whether to compact on Enter after an idle gap (desktop and phone), and glides smoothly when the chat box collapses or expands.
+- **Triple backticks stay visible:** typing triple backticks in the chat box no longer stacks onto one character under fonts whose backtick has zero advance (such as Euclid Circular A).
+- **Boost tip cleanup:** the Boost tip shows only before your first message without overlapping or sticking on screen, and the Try a Boost row is removed on desktop and phone.
+- **Answering pills and dock polish:** hovering a sent message's answering pill shows what it answers and clicks jump right to it; the dock's "N more" line names how many rows are done versus waiting; dock counts and the working strip match at 13pt (desktop and phone); Quiet View's collapse rail works across every row; boxed tool cards keep square header corners while closing; and settled reasoning rows stay on the Thought card.
+
+### 🧭 Rail, sidebar and projects
+
+- **Links in the rail menu and rail separators:** custom links move to Links in the rail's ⋯ menu and pin straight onto the rail with a searchable icon picker, Edit and Change icon actions, draggable rail separators, a straight drag-drop indicator, and the side panel Browser's full toolbar on link pages. Saved links with matching icons also arrive in the phone's ☰ menu.
+- **Computer icons on hover:** computer icons on session rows stay hidden until hover by default so multi-computer lists look calmer.
+- **Redesigned Add Project picker:** Add Project is now a column folder browser with a right-hand preview pane, a Suggested grid of unadded Git repositories, and a places sidebar (Home, drives, WSL distros, common roots, Recent, Pinned and Computers), with matching Places and Suggested repos on the phone.
+- **Cross-computer project History:** a project's History lists closed sessions across every connected computer while Separate by machine is off.
+- **Sidebar polish:** under glass the rail is slightly more solid so Dock and Stage Manager icons stay muted behind it, collapsed-rail tooltips stay one line wide, Collapse All shows inward arrows, and lead sessions fold like coordinators with a crew badge and a Workers pill and popover in lead chats.
+
+### ⚙️ Settings and Experience
+
+- **Live preview in Settings > Experience:** trying a level card or Custom switch highlights what comes in or hides on a live preview of Ghostex before you click Apply (or Cancel to put it back), and the chat box expand button is now called Maximize chat box.
+- **Refreshed defaults for new installs and clearer wording:** updated 18 built-in defaults (including Claude as the default prompt and title agent, Spaces on and following the active session, sleeping sessions when parking, board layout for tasks, muted thinking, softer two-tone completion sound and Lux voice; saved settings stay untouched), clarified the Moving section and Active projects labels, aligned Remote page icons, and locked sideways swipes to horizontal Settings strips.
+
+### 👤 Accounts, usage and Autopilot
+
+- **Accounts no-room notice with one-click fixes:** when no account has room, the limit card names accounts turned off here (Turn on), not signed in on this computer (Sign in), or manual-only with room (Use it for this session), on desktop and phone.
+- **Usage CLI shows refill times and limit resets:** `ghostex accounts status` and coordinator usage print one compact line per account with remaining limit resets, window reset times and whether agents may switch to it; coordinators never count manual-only or turned-off accounts as room and include the limit-reset option in LOW/OUT hints.
+- **Antigravity quota handling and exhausted pool recovery:** Ghostex reads Gemini and Antigravity quota resets, shows quota countdowns and card actions on desktop and phone, sends Grok Bot alerts, and handles exhausted account pools cleanly in Autopilot and coordinators while keeping limit-paused threads out of Needs you.
+- **Installed-only agent launches and model picker:** chats never start on an agent CLI that isn't installed (showing a clear notice to install or pick another), setup saves the default it shows, and the model picker lists installed agents with a "+" button to Settings > Agents (desktop and phone).
+- **Consistent 5h-over-7d usage display:** compact usage views show the 5h limit above the 7d limit and fix duplicate "resets in resets" wording.
+
+### ✨ Ask Ghostex AI and coordinators
+
+- **Ask Ghostex AI fixes and bug reporting:** Ask Ghostex AI opens straight in Chat so home-folder trust prompts stay hidden, shows its first message once, closes cleanly so the next open starts fresh with its memory intact, adds Earlier Chats (desktop and phone), counts open sessions like the sidebar, and helps troubleshoot Ghostex or file bug reports with a Report a bug chip on its welcome card.
+- **Standing role line and leaner coordinator CLI:** ordinary sessions can carry a per-session standing role line ([#678](https://github.com/maddada/Ghostex/issues/678)), `ghostex coordinator status` prints a compact snapshot with focused subcommands (`threads`, `memory`, `usage`, `thread`), `item list --check` prints only items needing attention, work items are named in plain words, send receipts and terminal reads are compact, and `coordinator next-tag` run from a thread reads its coordinator's next tag.
+
+### ☁️ Cloud Boxes, permissions and security
+
+- **Cloud Boxes reliability:** the computer that creates a Cloud Box can open multiple chats and multiple boxes at once without stalling or sharing keys, unpaired devices lose access to running boxes right away, idle attach links close after three minutes, private GitHub repos prompt clearly for a GitHub login without leaking origin tokens, a session error no longer marks a healthy box failed, and Instabox lists only its supported 4x8 size.
+- **Clearer OS permission dialogs and bundled updates:** macOS Keep Awake and Remote Login dialogs and helpers carry the Ghostex name and icon, Settings > Security explains each helper, Windows `gxserver.exe` and `wmx.exe` carry Ghostex descriptions, and the Code view updates to VS Code 1.146.0 (code-server 4.146.0) with Node 24.22.3 alongside bundled SQLite 3.54.1 and zip security updates.
+
+### 📱 On the phone
+
+- **Automations screen:** view, pause, resume, triage and run each computer's scheduled automations directly from the phone ([#708](https://github.com/maddada/Ghostex/issues/708)).
+- **Android terminal selection crash fix:** switching or detaching a terminal session ends its text selection so Copy on a stale selection bar can no longer crash the app ([#705](https://github.com/maddada/Ghostex/issues/705); ships in the new Android app build).
+
+### 🩹 Fixes and polish
+
+- **Fixed a crash when changing the interval slider in Settings > Autopilot** (or custom colour pickers and disconnected-account replies) ([#709](https://github.com/maddada/Ghostex/issues/709)).
+- **Linux: changing the desktop theme on KDE Plasma no longer crashes Ghostex** ([#706](https://github.com/maddada/Ghostex/pull/706)), thanks to @vbasky.
+- **Remote project automations now route to the computer that owns the project** instead of failing with "Project not found" ([#707](https://github.com/maddada/Ghostex/issues/707)).
+- **Antigravity 1.5.14 Orchestrator statusline parsing** fixes model-change timeouts and held queued messages ([#703](https://github.com/maddada/Ghostex/issues/703)), and queued prompts popped by the play button now submit cleanly.
+- **One press always stops Live page dictation,** and cancelling a dictation offers Restore (desktop and phone).
+- **Completed work items stay out of Needs you** after post-done asks or Done, and background-only or stale work no longer keeps a chat stuck on Thinking.
+- **Stopped Easy Connect runtimes never leave orphaned helpers behind.**
+
 ## 11.13.0 - 2026-11-21
 
 **Ghostex 11.13.0 is out.** Ask Ghostex AI greets you with a welcome card and helps you set up, a tidier rail and sidebar, Hide Space, Mark as read in the dock, Fetch latest models, a new default dark look, linked Live pages you can answer, Screenshot mode, Claude limit resets, and a long list of fixes.
