@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use super::conversation::Input;
-use super::focus_tests::{test_state, Call};
+use super::focus_tests::{Call, test_state};
 use super::{feature, registry};
 
 fn write_settings(state: &crate::server::AppState, settings: serde_json::Value) {

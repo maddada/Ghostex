@@ -208,7 +208,9 @@ mod tests {
         let ids: Vec<&str> = joined.iter().map(|message| message.id.as_str()).collect();
         assert_eq!(
             ids,
-            ["u1", "r1", "c1", "c1:out", "c2", "x1", "c2:out", "a1", "r3", "c3"]
+            [
+                "u1", "r1", "c1", "c1:out", "c2", "x1", "c2:out", "a1", "r3", "c3"
+            ]
         );
         // The stretch after the reply is still open for the append stream.
         assert_eq!(stretch.open.map(|open| open.id).as_deref(), Some("r3"));

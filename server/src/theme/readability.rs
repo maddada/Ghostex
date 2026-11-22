@@ -11,7 +11,7 @@ use ghostex_settings_catalog::dark_chrome::relative_luminance;
 use ghostex_settings_catalog::theme_colours::{
     resolved_custom_sidebar_titlebar_background_for_variant, work_area_background_for_variant,
 };
-use ghostex_settings_catalog::theme_roles::{parse_role_value, saved_role, RoleValue};
+use ghostex_settings_catalog::theme_roles::{RoleValue, parse_role_value, saved_role};
 use serde_json::{Map, Value};
 
 use super::look::current;
@@ -123,8 +123,9 @@ fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: 
     let page = channels(page_rgb);
     let side = sidebar(settings, light);
     let text_on = |fill: [f64; 3]| {
-        role(settings, light, "text")
-            .map_or(default_text(light), |text| over(text, light, fill, page_rgb))
+        role(settings, light, "text").map_or(default_text(light), |text| {
+            over(text, light, fill, page_rgb)
+        })
     };
     let mut push = |id: &str, text: String, extra: Vec<String>| {
         let mut keys = vec![role_key(light, id)];

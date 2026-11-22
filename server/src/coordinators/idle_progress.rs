@@ -1,7 +1,7 @@
 //! How far an idle thread's watch got (idle_wait.rs), kept on the thread's row (migration 0077), so
 //! a gxserver restart resumes its rounds instead of reporting, and nudging, the current one again.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::records::sql_error;
 use crate::domain::DomainStateError;

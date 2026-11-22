@@ -1,11 +1,11 @@
 //! The limits a provider puts on the dynamic parts of `session.update`, and the log line a refused
 //! session leaves behind.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::provider::{
-    openai_transcription_prompt, xai_keyterms, Provider, OPENAI_TRANSCRIPTION_PROMPT_MAX_CHARS,
-    XAI_KEYTERMS_MAX_COUNT, XAI_KEYTERM_MAX_CHARS,
+    OPENAI_TRANSCRIPTION_PROMPT_MAX_CHARS, Provider, XAI_KEYTERM_MAX_CHARS, XAI_KEYTERMS_MAX_COUNT,
+    openai_transcription_prompt, xai_keyterms,
 };
 
 fn terms(names: &[&str]) -> Vec<String> {
@@ -84,9 +84,10 @@ fn xai_keeps_at_most_100_terms_of_50_characters() {
     names.insert(3, "y".repeat(XAI_KEYTERM_MAX_CHARS + 1));
     let kept = xai_keyterms(&names);
     assert_eq!(kept.len(), XAI_KEYTERMS_MAX_COUNT);
-    assert!(kept
-        .iter()
-        .all(|term| term.chars().count() <= XAI_KEYTERM_MAX_CHARS));
+    assert!(
+        kept.iter()
+            .all(|term| term.chars().count() <= XAI_KEYTERM_MAX_CHARS)
+    );
     assert_eq!(
         kept[3], "Project 3",
         "an over-long term is dropped, not cut"
@@ -159,10 +160,12 @@ fn a_refused_session_is_findable_in_the_log_with_the_providers_sentence() {
     assert_eq!(line["event"], "voiceAgent.sessionRefused");
     assert_eq!(line["details"]["provider"], "openai");
     assert_eq!(line["details"]["eventType"], "error");
-    assert!(line["error"]
-        .as_str()
-        .unwrap_or_default()
-        .contains("string too long"));
+    assert!(
+        line["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("string too long")
+    );
     assert!(
         text.contains("voice"),
         "`ghostex logs --grep voice` matches"

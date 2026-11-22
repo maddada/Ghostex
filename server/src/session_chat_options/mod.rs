@@ -41,13 +41,13 @@ use std::{
     time::Duration,
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
 use crate::domain::DomainRepository;
 use crate::events::GxserverEventHub;
 use crate::paths::GxserverPaths;
-use crate::server::{read_runtime_text, session_observer_key, AppState, SessionChatFollowerEntry};
+use crate::server::{AppState, SessionChatFollowerEntry, read_runtime_text, session_observer_key};
 use crate::session_chat_follower::{is_session_chat_followable_session, session_chat_hook_working};
 use crate::storage::open_gxserver_database;
 use std::collections::HashMap;

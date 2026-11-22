@@ -127,7 +127,7 @@ pub(crate) fn requested_agentbox_provider(
         Some(_) => {
             return Err(DomainStateError::bad_request(
                 "runLocation must be a string such as \"local\" or \"agentbox:docker\".",
-            ))
+            ));
         }
     };
     // Claude cloud is not a box (server/src/claude_cloud/create.rs settles it).

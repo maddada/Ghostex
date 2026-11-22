@@ -200,8 +200,8 @@ pub fn merge_session_chat_terminal_notices(
 /// Superseding the identity match of the same day: the resumed CLI repaints the old limit from its transcript with different glyphs and wording ("⏺ … esc or type to cancel" for the "⚠ … esc to cancel" spinner line), so an identity captured before the switch never matched the replay.
 /// The card came back after the switch, blocked the composer with "Clear it in the terminal before sending", and held the continuation dot. The suppression is now by kind: every usage-limit notice stays hidden until the transcript proves a new limit.
 /// SEE-ALSO: server/src/accounts/endpoint.rs (select), server/src/accounts/recovery.rs (restore_session), server/src/session_chat_options/detector.rs (detect_blocking, composer readiness).
-fn suppressed_account_usage_notices(
-) -> &'static Mutex<HashMap<String, chrono::DateTime<chrono::Utc>>> {
+fn suppressed_account_usage_notices()
+-> &'static Mutex<HashMap<String, chrono::DateTime<chrono::Utc>>> {
     static NOTICES: OnceLock<Mutex<HashMap<String, chrono::DateTime<chrono::Utc>>>> =
         OnceLock::new();
     NOTICES.get_or_init(|| Mutex::new(HashMap::new()))

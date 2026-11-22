@@ -3,14 +3,14 @@
 //! They answer with Workspaces off too: Issues Workflow does not need it (a project then uses the
 //! workspace it is stored in, Personal for most).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 use crate::work_mode::{
-    dismiss_work_notice, github_projects_status_json, pick_command_tracker,
-    refresh_github_projects_access, remember_team_work_tracker, resolve_work_mode_project,
-    stored_workspace_work_tracker, work_notice_dismissed, work_source, workspace_work_tracker,
-    TicketDraft, TicketScope, WorkSourceId,
+    TicketDraft, TicketScope, WorkSourceId, dismiss_work_notice, github_projects_status_json,
+    pick_command_tracker, refresh_github_projects_access, remember_team_work_tracker,
+    resolve_work_mode_project, stored_workspace_work_tracker, work_notice_dismissed, work_source,
+    workspace_work_tracker,
 };
 use crate::workspaces::{
     find_workspace_id, project_workspace_id, read_sidebar_workspaces, update_workspace_in,

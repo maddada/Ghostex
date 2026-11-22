@@ -13,13 +13,13 @@ use crate::presentation::{
     effective_lifecycle_state, presentation_activity, working_only_in_background,
 };
 use crate::session_chat_interactive::{
-    parse_stored_session_chat_prompt, SessionChatInteractivePrompt,
+    SessionChatInteractivePrompt, parse_stored_session_chat_prompt,
 };
 use crate::session_chat_notice::{
-    SessionChatTerminalNotice, SESSION_CHAT_NOTICE_AGENT_EXITED,
-    SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN, SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
-    SESSION_CHAT_NOTICE_PERMISSIONS_WARNING, SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
-    SESSION_CHAT_NOTICE_TRUST_PROMPT, SESSION_CHAT_NOTICE_USAGE_LIMIT,
+    SESSION_CHAT_NOTICE_AGENT_EXITED, SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN,
+    SESSION_CHAT_NOTICE_LOGIN_EXPIRED, SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
+    SESSION_CHAT_NOTICE_PERMISSIONS_WARNING, SESSION_CHAT_NOTICE_TRUST_PROMPT,
+    SESSION_CHAT_NOTICE_USAGE_LIMIT, SessionChatTerminalNotice,
 };
 use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;
 
@@ -270,7 +270,10 @@ pub fn thread_wait_info(session: &Value, state: ThreadState) -> Option<ThreadWai
         return session_usage_limit_info(session, None, false);
     }
     let screen = recorded_screen_wait(session);
-    if let Some(wait) = screen.as_ref().filter(|wait| wait.kind == ThreadWaitKind::Approval) {
+    if let Some(wait) = screen
+        .as_ref()
+        .filter(|wait| wait.kind == ThreadWaitKind::Approval)
+    {
         return Some(ThreadWaitInfo {
             kind: ThreadWaitKind::Approval,
             summary: wait.short_summary.clone(),
@@ -609,7 +612,8 @@ fn notice_wait_kind(notice: &SessionChatTerminalNotice) -> ThreadWaitKind {
                 .approval_command
                 .as_deref()
                 .is_some_and(|cmd| !cmd.trim().is_empty())
-            || (notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED
+            || (notice.kind
+                == crate::session_chat_notice::SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED
                 && notice.title.to_ascii_lowercase().contains("approv")) =>
         {
             ThreadWaitKind::Approval
@@ -760,7 +764,10 @@ impl ThreadScreenWait {
             let user_approval = matches!(kind, ThreadWaitKind::Approval);
             // Usage limits and exited agents never count as user-approval blocking screens.
             let blocking = notice.blocks_input()
-                && !matches!(kind, ThreadWaitKind::UsageLimit | ThreadWaitKind::AgentExited);
+                && !matches!(
+                    kind,
+                    ThreadWaitKind::UsageLimit | ThreadWaitKind::AgentExited
+                );
             return Some(Self {
                 prompt: ThreadPrompt {
                     key: format!("notice:{}:{}", notice.kind, notice.title),
@@ -843,16 +850,22 @@ fn screen_fix(notice: &SessionChatTerminalNotice, thread_ref: &str) -> Option<St
                 "Wait for its quota to reset, or switch models in that thread.".to_string(),
             );
         }
-        return Some(format!("It moves to another automatic account by itself or continues when the limit resets. {switch}."));
+        return Some(format!(
+            "It moves to another automatic account by itself or continues when the limit resets. {switch}."
+        ));
     }
     // A start that failed fails the same way on a reload; when its saved chat came back empty after a crash, nothing brings that conversation back.
     if notice.start_failed() {
         return Some(
             if notice.detail.as_deref() == Some(crate::session_chat_start_failure::LOST_CHAT_DETAIL)
             {
-                format!("Its conversation was lost, so a reload cannot resume it. Start a new thread with the task, pointing it at the work already on disk (`ghostex read-text {thread_ref}` shows the last screen).")
+                format!(
+                    "Its conversation was lost, so a reload cannot resume it. Start a new thread with the task, pointing it at the work already on disk (`ghostex read-text {thread_ref}` shows the last screen)."
+                )
             } else {
-                format!("A reload starts it the same way, so fix what `ghostex read-text {thread_ref}` shows first, then run `ghostex agents reload {thread_ref}`.")
+                format!(
+                    "A reload starts it the same way, so fix what `ghostex read-text {thread_ref}` shows first, then run `ghostex agents reload {thread_ref}`."
+                )
             },
         );
     }

@@ -13,8 +13,8 @@ use std::hash::{Hash, Hasher};
 use serde_json::Value;
 
 use super::stall::{
-    describe_row, is_ghostex_nudge, quiet_round_ms, screen_fingerprint, test_scaled,
-    NUDGE_GRACE_MS, SCREEN_SAMPLE_AFTER_MS, STALL_CHECK_EVERY_MS,
+    NUDGE_GRACE_MS, SCREEN_SAMPLE_AFTER_MS, STALL_CHECK_EVERY_MS, describe_row, is_ghostex_nudge,
+    quiet_round_ms, screen_fingerprint, test_scaled,
 };
 use crate::session_chat::SessionChatMessage;
 

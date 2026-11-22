@@ -1,6 +1,6 @@
 use super::*;
 use crate::session_chat_composer::{
-    detect_session_chat_composer_ready, grok_composer_input_text, SessionChatComposerState,
+    SessionChatComposerState, detect_session_chat_composer_ready, grok_composer_input_text,
 };
 
 /// CDXC:Drafts 2026-09-07 WHY:

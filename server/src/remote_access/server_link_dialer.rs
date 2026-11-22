@@ -11,22 +11,22 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, bail, Context, Result};
-use serde_json::{json, Value};
+use anyhow::{Context, Result, anyhow, bail};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::ghostex_cli::tailcat_tunnel::{start_tailcat_tunnel, TailcatForwardPlan, TailcatTunnel};
+use crate::ghostex_cli::tailcat_tunnel::{TailcatForwardPlan, TailcatTunnel, start_tailcat_tunnel};
 use crate::paths::GxserverPaths;
 use crate::security::Principal;
 use crate::server::AppState;
 
 use super::computer_pairing::{
-    computer_pairing_status, device_public_key, device_sign, load_or_create_device_key,
-    start_computer_pairing_with, ComputerPairingCode, LinkPairing,
+    ComputerPairingCode, LinkPairing, computer_pairing_status, device_public_key, device_sign,
+    load_or_create_device_key, start_computer_pairing_with,
 };
 use super::server_links::{
-    self as links, ConnectBackCode, LinkState, OutgoingLink, ReverseAsk, ServerLinkAsk,
-    SERVER_LINK_ENDPOINT,
+    self as links, ConnectBackCode, LinkState, OutgoingLink, ReverseAsk, SERVER_LINK_ENDPOINT,
+    ServerLinkAsk,
 };
 
 /// How often a linked computer is asked for a fresh grant (it lasts 180 s there).
@@ -167,7 +167,9 @@ pub fn start_link_pairing(
         bail!("{message}")
     };
     if started.get("serverLink").and_then(Value::as_bool) != Some(true) {
-        return cancel("The other computer's Ghostex is too old for server links. Update Ghostex there, then try again.");
+        return cancel(
+            "The other computer's Ghostex is too old for server links. Update Ghostex there, then try again.",
+        );
     }
     let server_id = started
         .get("serverId")
@@ -207,7 +209,9 @@ pub fn start_link_pairing(
         && (crate::connected_computers::find(&server_id).is_some()
             || crate::connected_computers::has_grant(&server_id))
     {
-        return cancel("That computer is already connected here through the Ghostex app, so it can't link as a server too.");
+        return cancel(
+            "That computer is already connected here through the Ghostex app, so it can't link as a server too.",
+        );
     }
     // Another link already holds that server id under a different key: refused, not replaced.
     let held = links::read(paths).outgoing.iter().any(|link| {
@@ -730,7 +734,10 @@ pub fn forget_link(paths: &GxserverPaths, link: &OutgoingLink, tell: bool) -> bo
             if let (Some(own), Ok(port)) = (own, ensure_tunnel(link, server_id)) {
                 match ask(paths, port, &own, server_id, "unlink", false, None) {
                     Ok(_) => told = true,
-                    Err((code, message)) => eprintln!("[gxserver] server link to {}: couldn't tell it ({code}: {message}); it ends there at its next renewal", link.name),
+                    Err((code, message)) => eprintln!(
+                        "[gxserver] server link to {}: couldn't tell it ({code}: {message}); it ends there at its next renewal",
+                        link.name
+                    ),
                 }
             }
         }

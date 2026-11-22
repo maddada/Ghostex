@@ -17,17 +17,17 @@
 use std::fs;
 use std::path::PathBuf;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainRepository;
 use crate::server::{AppState, ProjectWorktreeOperationError};
 use crate::session_chat_queue_runtime::{
-    send_session_chat_message_internal, SessionChatMessageSource,
+    SessionChatMessageSource, send_session_chat_message_internal,
 };
 use crate::storage::open_gxserver_database;
 use crate::work_mode::{
-    create_github_issue, origin_repo, plan_pull_request, start_work_on_ticket, work_targets,
-    NewGithubIssue, WorkSourceId,
+    NewGithubIssue, WorkSourceId, create_github_issue, origin_repo, plan_pull_request,
+    start_work_on_ticket, work_targets,
 };
 use crate::workspaces::{project_workspace_id, read_sidebar_workspaces};
 use crate::worktree_sessions::read_worktree_session_marker;
@@ -35,7 +35,7 @@ use crate::worktree_sessions::read_worktree_session_marker;
 use super::commands::CommandOutcome;
 use super::connections::TeamConnection;
 use super::slack_requirements::summarize_requirements_in_background;
-use crate::cloud_runner::{cloud_runner, CloudStartRequest, MAX_CLOUD_PROMPT_CHARS};
+use crate::cloud_runner::{CloudStartRequest, MAX_CLOUD_PROMPT_CHARS, cloud_runner};
 
 const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
 

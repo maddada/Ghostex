@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const PROTOCOL: &str = "hermes-gateway-v1";
 const TICKET_PREFIX: &str = "hermes-gateway-ticket.";
@@ -179,7 +179,7 @@ fn discover(home: &Path) -> Result<Endpoint, GatewayError> {
                     api_origin: api_origin.to_string(),
                     profile_id,
                     instance_id: instance_id.to_string(),
-                })
+                });
             }
             _ => last = unavailable("this gateway does not serve the session's Hermes profile"),
         }
@@ -267,7 +267,7 @@ impl Gateway {
                         std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
                     ) =>
                 {
-                    continue
+                    continue;
                 }
                 Err(error) => return Err(unavailable(error)),
             };
@@ -319,7 +319,7 @@ fn attach(session: &Value) -> Result<(Gateway, String, Snapshot), GatewayError> 
         Ok(snapshot) => snapshot,
         // An unknown or foreign session is one this gateway cannot drive: the screen still can.
         Err(GatewayError::Refused(reason)) => {
-            return Err(unavailable(format!("session.resume: {reason}")))
+            return Err(unavailable(format!("session.resume: {reason}")));
         }
         Err(error) => return Err(error),
     };
@@ -668,9 +668,9 @@ pub(crate) fn enrich_notice(
     notice: &mut Option<crate::session_chat_notice::SessionChatTerminalNotice>,
 ) {
     use crate::session_chat_notice::{
-        SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
-        SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
-        SESSION_CHAT_NOTICE_HERMES_INPUT_BLOCKED,
+        SESSION_CHAT_NOTICE_HERMES_INPUT_BLOCKED, SessionChatTerminalNotice,
+        SessionChatTerminalNoticeAction, SessionChatTerminalNoticeSeverity,
+        SessionChatTerminalNoticeSource,
     };
     if notice
         .as_ref()

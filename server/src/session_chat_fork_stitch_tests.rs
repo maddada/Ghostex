@@ -1,6 +1,6 @@
 use super::*;
 use crate::session_chat_decode_codex::{decode_codex_transcript_line, decode_codex_turn_lifecycle};
-use crate::session_chat_follower::{follower_drain_once, FollowerDrainOutcome, FollowerFileState};
+use crate::session_chat_follower::{FollowerDrainOutcome, FollowerFileState, follower_drain_once};
 use std::io::Write;
 
 fn append(path: &Path, row: Value) {

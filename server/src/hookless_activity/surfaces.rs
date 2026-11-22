@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use super::claude::{expected_transcript_path, transcript_path, ClaudeObserver};
+use super::claude::{ClaudeObserver, expected_transcript_path, transcript_path};
 use crate::paths::GxserverPaths;
 
 #[derive(Default)]

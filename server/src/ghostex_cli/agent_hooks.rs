@@ -6,9 +6,9 @@
 use crate::ghostex_cli::{
     args::parse_args,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const HELP: &str = "See, install, and remove Ghostex's session resume hooks for each agent CLI.
 
@@ -61,7 +61,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         other => {
             return Err(CliError::Other(format!(
                 "Unknown agent-hooks command: {other}. Use status, install, or uninstall."
-            )))
+            )));
         }
     };
     // gxserver reads an unknown or empty agent list as every agent, so names are checked here.

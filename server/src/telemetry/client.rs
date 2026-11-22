@@ -12,7 +12,7 @@ events), which is why hardcoding it is correct rather than a leak.
 
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub const DEFAULT_POSTHOG_HOST: &str = "https://us.i.posthog.com";
 pub const DEFAULT_POSTHOG_KEY: &str = "phc_toCQPnkxNYAhQMZCZAexLg3yAwUT2RMA9725nccyFdvc";

@@ -210,9 +210,13 @@ pub(crate) fn status(tool: ToolId, home: &Path) -> (Status, Option<Grants>) {
         return (Status::unsupported(reason), None);
     }
     let plan = if trycua {
-        format!("Runs Trycua's official installer ({TRYCUA_INSTALL}) in the background (from GitHub instead when cua.ai does not answer), starts CuaDriver, then installs its cua-driver skill and Ghostex Computer Use. Someone at that Mac then allows Accessibility and Screen Recording.")
+        format!(
+            "Runs Trycua's official installer ({TRYCUA_INSTALL}) in the background (from GitHub instead when cua.ai does not answer), starts CuaDriver, then installs its cua-driver skill and Ghostex Computer Use. Someone at that Mac then allows Accessibility and Screen Recording."
+        )
     } else {
-        format!("Runs SpaceO's official installer from GitHub ({SPACEO_INSTALL}) in the background, keeps SpaceO running as its own background service, then installs Ghostex SpaceO. Someone at that Mac then allows Accessibility and Screen Recording.")
+        format!(
+            "Runs SpaceO's official installer from GitHub ({SPACEO_INSTALL}) in the background, keeps SpaceO running as its own background service, then installs Ghostex SpaceO. Someone at that Mac then allows Accessibility and Screen Recording."
+        )
     };
     let mut status = Status::new(plan);
     let executable = if trycua {

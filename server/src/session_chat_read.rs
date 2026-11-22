@@ -1,20 +1,20 @@
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::protocol::rpc_success;
 use crate::server::{
-    domain_error_response, read_runtime_text, routed_json, session_observer_key, AppState,
-    RoutedResponse,
+    AppState, RoutedResponse, domain_error_response, read_runtime_text, routed_json,
+    session_observer_key,
 };
 use crate::session_chat_follower::{
     is_session_chat_followable_session, session_chat_display_agent_for_session,
     session_chat_hook_working,
 };
 use crate::session_chat_options::{
-    cached_session_chat_screen_state, cached_session_chat_terminal_notice,
-    SessionChatOptionDetector,
+    SessionChatOptionDetector, cached_session_chat_screen_state,
+    cached_session_chat_terminal_notice,
 };
 use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /*
 CDXC:Mobile 2026-07-31:
@@ -694,21 +694,25 @@ pub(crate) async fn handle_read_session_chat_http(
     // strength (CDXC:MarkedHandovers 2026-10-20 in packages/gx-chat-core/src/transcript/marked_sections.rs).
     result.insert(
         "markedHeadingStrength".to_string(),
-        json!(crate::session_chat_catch_up::chat_setting_number(
-            &state.paths,
-            "markedHandoversHeadingStrength"
-        )
-        .unwrap_or(60.0)),
+        json!(
+            crate::session_chat_catch_up::chat_setting_number(
+                &state.paths,
+                "markedHandoversHeadingStrength"
+            )
+            .unwrap_or(60.0)
+        ),
     );
     // Text strength rides every read too, so the phone draws the computer's strength
     // (CDXC:SessionChat 2026-10-31 in packages/gx-chat-core/src/transcript/text_strength.rs).
     result.insert(
         "chatTextStrength".to_string(),
-        json!(crate::session_chat_catch_up::chat_setting_number(
-            &state.paths,
-            "sessionChatTextStrengthPercent"
-        )
-        .unwrap_or(0.0)),
+        json!(
+            crate::session_chat_catch_up::chat_setting_number(
+                &state.paths,
+                "sessionChatTextStrengthPercent"
+            )
+            .unwrap_or(0.0)
+        ),
     );
     // The chat look rides every read too, so the phone draws the computer's look; an unset key is
     // sent as its default, so switching back to Default reaches the phone

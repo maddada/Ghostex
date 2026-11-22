@@ -5,11 +5,11 @@
 //! CDXC:Cli 2026-11-11 WHY:
 //! No command listed project ids, so an agent creating a session dug them out of gxserver's state JSON (GitHub #557). This reads `/api/listProjects` and nothing else, so it is read-only, and `--computer` works as for `ghostex sessions` because that endpoint is one a connected computer may answer. Hidden system projects are not the user's and are never listed; parked projects (Recent Projects) only with `--all`.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::args::parse_args;
 use super::output::print_json;
-use super::rpc::{call_gxserver_rpc, CliResult};
+use super::rpc::{CliResult, call_gxserver_rpc};
 
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);

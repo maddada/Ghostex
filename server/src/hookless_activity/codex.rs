@@ -16,7 +16,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::comparison::ActivityEvent;
 use crate::server::{read_runtime_text, read_session_text};
@@ -524,9 +524,11 @@ mod tests {
             .map(|event| event.event_name.as_str())
             .collect();
         assert_eq!(names, ["SessionStart", "UserPromptSubmit"]);
-        assert!(events
-            .iter()
-            .all(|event| event.agent_session_id.as_deref() == Some(NEW)));
+        assert!(
+            events
+                .iter()
+                .all(|event| event.agent_session_id.as_deref() == Some(NEW))
+        );
     }
 
     /// A rollout whose first line is not written yet is looked at again on the next scan.

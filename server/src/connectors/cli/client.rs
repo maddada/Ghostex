@@ -7,11 +7,11 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::paths::GxserverPaths;
 
-use super::tools::{config_dir, CliTool};
+use super::tools::{CliTool, config_dir};
 
 const CLIENT_FILE: &str = "client_secret.json";
 /// Marks `client_secret.json` as the workspace's own choice, not a copy of the usual one.

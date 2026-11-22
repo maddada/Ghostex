@@ -10,7 +10,7 @@
 //! installed part, with Install running on that computer. These items install only on a click:
 //! they are never `canUpdate` (Update all and "Update automatically" skip them) and never `topBar`
 //! (the top bar's count stays real updates).
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::items::{agent_icon, definition, method_label};
 

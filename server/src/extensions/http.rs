@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{
     domain::read_domain_rpc_params,
     protocol::{rpc_error, rpc_success},
-    server::{routed_json, AppState, RoutedResponse},
+    server::{AppState, RoutedResponse, routed_json},
 };
 
 use super::{ExtensionError, ExtensionLaunchContext, ExtensionResult, ExtensionStatePatch};

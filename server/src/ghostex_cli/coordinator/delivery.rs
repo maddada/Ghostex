@@ -1,12 +1,12 @@
 //! `start-thread` waits until the new thread's transcript records its brief.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
 use crate::ghostex_cli::{
     agents,
     args::Flags,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
 
 /// How long `start-thread` waits for the brief to start a turn: an agent boots, then its input

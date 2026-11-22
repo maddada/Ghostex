@@ -6,7 +6,7 @@
 //! The security review of M12 (finding 7): "computer use" only added a paragraph to the brief, so with it off a GBot chat at Full could still drive the screen. What each agent can be held to: Claude Code's deny rules keep it from those MCP servers' tools and from running their commands through its Bash tool (a prefix rule, so a command that hides the name, such as one inside a script, still runs); Codex turns those MCP servers off for this launch (only the ones its config names, since naming an unknown one stops Codex from starting) but has no rule for a shell command, so a Codex GBot at Full can still start their command-line tools from a shell. GBot Settings says so. The setting is read from the chat's own record (`computerUse` on `runtimeSettings.gbot`, or `gbotHome` on a computer the GBot was given), stamped when the chat is opened, so a change applies to the GBot's next chats.
 //! SEE-ALSO: server/src/agents/home_secret_folders.rs (the same two launch hooks), server/src/gbots/session.rs and server/src/gbots/computer/remote_chat.rs (where `computerUse` is stamped).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::quote_shell_arg;
 

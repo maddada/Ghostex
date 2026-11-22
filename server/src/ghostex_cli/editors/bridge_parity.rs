@@ -58,8 +58,10 @@ pub(super) fn floating_editor_environment() -> Value {
     let mut environment = Map::new();
     environment.insert(
         "HOME".to_string(),
-        json!(std::env::var("HOME")
-            .unwrap_or_else(|_| rpc::home_dir().to_string_lossy().into_owned())),
+        json!(
+            std::env::var("HOME")
+                .unwrap_or_else(|_| rpc::home_dir().to_string_lossy().into_owned())
+        ),
     );
     environment.insert("LANG".to_string(), json!(env_or("LANG", "en_US.UTF-8")));
     environment.insert(

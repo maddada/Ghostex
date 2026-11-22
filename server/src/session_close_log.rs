@@ -14,7 +14,7 @@
 //! web build's sources), server/src/ghostex_cli/wait/lifecycle.rs (`ghostex kill --close-source`),
 //! apps/mobile/app/src/commands/ghostexCli.ts (the phone's).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 

@@ -2,10 +2,10 @@
 //! `ghostex security log`.
 
 use axum::http::StatusCode;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::protocol::{rpc_error, rpc_success};
-use crate::server::{routed_json, RoutedResponse};
+use crate::server::{RoutedResponse, routed_json};
 
 pub(crate) const SECURITY_LOG_ENDPOINT: &str = "/api/securityLog";
 const DEFAULT_LIMIT: usize = 100;

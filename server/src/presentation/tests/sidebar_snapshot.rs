@@ -1,5 +1,5 @@
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::*;
 use crate::{domain::DomainRepository, paths::get_gxserver_paths};
@@ -647,9 +647,11 @@ fn snapshot_projects_provider_actions_observation_and_tooltip_like_typescript() 
         missing.get("tooltip").and_then(Value::as_str),
         Some("Missing Provider - Projection - /workspace/projection - codex - build")
     );
-    assert!(!serde_json::to_string(missing)
-        .expect("serialize row")
-        .contains("private terminal title"));
+    assert!(
+        !serde_json::to_string(missing)
+            .expect("serialize row")
+            .contains("private terminal title")
+    );
 
     let unknown = sessions
         .iter()

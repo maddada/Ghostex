@@ -23,11 +23,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::agents::helpers::object_from_value;
 use crate::domain::{
-    find_project_by_path_in, normalize_project_root_path, DomainRepository, DomainResult,
+    DomainRepository, DomainResult, find_project_by_path_in, normalize_project_root_path,
 };
 use crate::paths::GxserverPaths;
 
@@ -452,9 +452,11 @@ mod tests {
             .expect("the user's project");
         assert_eq!(home_project["launchSettings"], json!({}));
 
-        assert!(sync_bot_projects(&repository, &profiles)
-            .expect("second sync")
-            .is_empty());
+        assert!(
+            sync_bot_projects(&repository, &profiles)
+                .expect("second sync")
+                .is_empty()
+        );
     }
 
     #[test]

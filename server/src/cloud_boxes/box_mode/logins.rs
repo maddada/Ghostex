@@ -11,8 +11,8 @@
 use std::path::{Path, PathBuf};
 
 use ghostex_gx_protocol::cloud_box::{
-    box_files, BoxInjectedAccount, BoxSecretsFile, BoxWriteBackItem, BoxWriteBackResult,
-    CloudProviderId,
+    BoxInjectedAccount, BoxSecretsFile, BoxWriteBackItem, BoxWriteBackResult, CloudProviderId,
+    box_files,
 };
 use serde::{Deserialize, Serialize};
 

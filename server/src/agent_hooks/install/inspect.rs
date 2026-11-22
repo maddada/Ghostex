@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::agent_hooks::config::{
-    all_hook_events, hook_format, hook_marker, nested_event_timeout,
-    pi_extension_path_is_loader_visible, HookDefinition, HookFormat, HookPaths,
+    HookDefinition, HookFormat, HookPaths, all_hook_events, hook_format, hook_marker,
+    nested_event_timeout, pi_extension_path_is_loader_visible,
 };
 use crate::agent_hooks::plugin_sources::{
     command_for_agent, current_plugin_marker, yaml_double_quote,

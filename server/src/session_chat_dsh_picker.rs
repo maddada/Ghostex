@@ -128,13 +128,13 @@ pub(super) async fn dsh_channel_pick(
     {
         Ok(state) => state,
         Err(reason @ (ChannelError::Unavailable(_) | ChannelError::Unsupported(_))) => {
-            return fallback(&reason.to_string())
+            return fallback(&reason.to_string());
         }
         Err(ChannelError::Failed(message)) => {
             return Some(Err(unsupported_selection(format!(
                 "DeepSeek Harness did not switch to {}: {message}",
                 plan.model
-            ))))
+            ))));
         }
         Err(ChannelError::NoAnswer) => return Some(Err(picker_timeout("model switch"))),
     };

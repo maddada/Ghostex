@@ -1,6 +1,6 @@
 use super::*;
 use crate::paths::get_gxserver_paths;
-use std::sync::{mpsc, Arc, Barrier};
+use std::sync::{Arc, Barrier, mpsc};
 
 #[test]
 fn warn_log_redacts_private_values() {

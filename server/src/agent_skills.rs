@@ -4,7 +4,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{agent_skills_remote, domain::DomainStateError, paths::GxserverPaths};
 
@@ -497,10 +497,10 @@ pub fn agent_skill_global_dir(home_dir: &Path, agent_id: &str) -> Option<PathBuf
             return Some(home_dir.join(CANONICAL_AGENT_SKILLS_DIR));
         }
         "claude-code" => {
-            return Some(ghostex_paths::agent_homes::claude_default_home(home_dir).join("skills"))
+            return Some(ghostex_paths::agent_homes::claude_default_home(home_dir).join("skills"));
         }
         "codex" => {
-            return Some(ghostex_paths::agent_homes::codex_default_home(home_dir).join("skills"))
+            return Some(ghostex_paths::agent_homes::codex_default_home(home_dir).join("skills"));
         }
         "pi" => ".pi/agent/skills",
         "antigravity" => ".gemini/antigravity/skills",

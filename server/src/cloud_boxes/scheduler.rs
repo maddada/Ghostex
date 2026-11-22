@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ghostex_gx_protocol::cloud_box::{
-    setting_keys, CloudBoxState, DEFAULT_DELETE_STOPPED_AFTER_DAYS,
+    CloudBoxState, DEFAULT_DELETE_STOPPED_AFTER_DAYS, setting_keys,
 };
 use serde_json::Value;
 

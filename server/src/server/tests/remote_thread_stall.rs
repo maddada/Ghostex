@@ -3,7 +3,7 @@
 
 use super::*;
 
-use crate::server::coordinator_remote_runtime::{tick_at, RemoteReport, RemoteSupervisorMemory};
+use crate::server::coordinator_remote_runtime::{RemoteReport, RemoteSupervisorMemory, tick_at};
 
 const MINUTE: i64 = 60_000;
 
@@ -252,9 +252,11 @@ async fn a_remote_thread_quiet_mid_turn_is_reported_not_moving_until_it_writes_a
     grown.push_str("{\"type\":\"user\",\"uuid\":\"r1\",\"timestamp\":\"2026-11-06T10:20:00.000Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"ok\"}]}}\n");
     std::fs::write(&remote.transcript, grown).expect("grow transcript");
     // (30 seconds after the last read, when the next one is due.)
-    assert!(pass(&remote, &memory, start + 9 * MINUTE + 5_000)
-        .await
-        .is_empty());
+    assert!(
+        pass(&remote, &memory, start + 9 * MINUTE + 5_000)
+            .await
+            .is_empty()
+    );
     assert!(pass(&remote, &memory, start + 16 * MINUTE).await.is_empty());
     crate::connected_computers::tests::reset();
 }

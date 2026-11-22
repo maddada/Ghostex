@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::*;
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::presentation::{project_session_title_projection, DEFAULT_TERMINAL_SESSION_TITLE};
+use crate::presentation::{DEFAULT_TERMINAL_SESSION_TITLE, project_session_title_projection};
 use crate::session_status::compute_activity_update;
 
 /// `current` is the caller's already-loaded row for `project_id`/`session_id`;

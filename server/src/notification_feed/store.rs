@@ -1,7 +1,7 @@
-use rusqlite::{params, Connection, OptionalExtension};
-use serde_json::{json, Value};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Value, json};
 
-use crate::domain::{now_iso, sql_error, DomainRepository, DomainResult, DomainStateError};
+use crate::domain::{DomainRepository, DomainResult, DomainStateError, now_iso, sql_error};
 
 /// Newest rows the read endpoint returns. Mirrors NOTIFICATION_FEED_READ_LIMIT in the shared contract.
 pub(crate) const NOTIFICATION_FEED_READ_LIMIT: usize = 40;

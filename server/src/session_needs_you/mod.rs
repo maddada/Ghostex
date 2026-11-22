@@ -21,8 +21,8 @@ mod store;
 mod thread;
 
 pub(crate) use api::{
-    handle_needs_you_request, highest_tag, insert_needs_you, needs_you_identity,
-    route_board_answer, turn_ended, SESSION_NEEDS_YOU_ENDPOINT,
+    SESSION_NEEDS_YOU_ENDPOINT, handle_needs_you_request, highest_tag, insert_needs_you,
+    needs_you_identity, route_board_answer, turn_ended,
 };
 pub(crate) use store::open_count;
 pub(crate) use thread::{forward_answer, thread_ask_of};

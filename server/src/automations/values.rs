@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use chrono::Utc;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{domain::DomainStateError, zmx::ZmxEndpointError};
 
@@ -37,11 +37,7 @@ pub(super) fn required_value_text(value: &Value, key: &str) -> Result<String, Do
 }
 
 pub(super) fn bool_to_int(value: bool) -> i64 {
-    if value {
-        1
-    } else {
-        0
-    }
+    if value { 1 } else { 0 }
 }
 
 pub(super) fn parse_json_value(text: &str) -> Value {

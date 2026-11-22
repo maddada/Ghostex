@@ -13,7 +13,7 @@ one extra event.
 */
 
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub const ANALYTICS_STATE_METADATA_KEY: &str = "analytics.state.v1";
 pub const LAST_HEARTBEAT_AT_KEY: &str = "lastHeartbeatAt";

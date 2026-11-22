@@ -10,7 +10,7 @@
 use std::fs;
 use std::time::Duration;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::platform::process::background_command;

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs, path::Path};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::*;
 use crate::{
@@ -383,9 +383,11 @@ fn zmx_process_identity_scan_skips_a_headless_claude_an_app_started() {
         &[terminal.clone(), agent.clone()],
         "  name=S90-P2g64-G11n7\tpid=68956\tclients=1\tcreated=1792101080\tstart_dir=/repo\n  name=S90-P2g64-G1iza\tpid=57047\tclients=1\tcreated=1792101080\tstart_dir=/repo",
     );
-    assert!(identities
-        .get(&terminal)
-        .is_none_or(|identity| identity.agent_id.is_none()));
+    assert!(
+        identities
+            .get(&terminal)
+            .is_none_or(|identity| identity.agent_id.is_none())
+    );
     let identity = identities.get(&agent).expect("identity");
     assert_eq!(identity.agent_id.as_deref(), Some("claude"));
     assert_eq!(
@@ -425,18 +427,18 @@ fn zmx_process_identity_parser_prefers_live_codex_child() {
 #[test]
 fn codex_rollout_path_resolves_exact_session_identity() {
     let path = Path::new(
-            "/home/person/.codex/sessions/2026/08/07/rollout-2026-08-07T08-15-34-019fda6e-fdbe-7570-a4fd-347e9e0bfb40.jsonl",
-        );
+        "/home/person/.codex/sessions/2026/08/07/rollout-2026-08-07T08-15-34-019fda6e-fdbe-7570-a4fd-347e9e0bfb40.jsonl",
+    );
     assert_eq!(
         codex_session_id_from_transcript_path(path).as_deref(),
         Some("019fda6e-fdbe-7570-a4fd-347e9e0bfb40")
     );
     assert_eq!(
-            codex_session_id_from_transcript_path(Path::new(
-                "/home/person/.codex/archive/rollout-2026-08-07T08-15-34-019fda6e-fdbe-7570-a4fd-347e9e0bfb40.jsonl"
-            )),
-            None
-        );
+        codex_session_id_from_transcript_path(Path::new(
+            "/home/person/.codex/archive/rollout-2026-08-07T08-15-34-019fda6e-fdbe-7570-a4fd-347e9e0bfb40.jsonl"
+        )),
+        None
+    );
 }
 
 #[test]
@@ -478,7 +480,9 @@ fn codex_process_with_two_open_root_rollouts_names_the_one_written_last() {
         let path = sessions.join(format!("rollout-2026-11-11T17-41-35-{id}.jsonl"));
         fs::write(
             &path,
-            format!("{{\"type\":\"session_meta\",\"payload\":{{\"id\":\"{id}\",\"source\":\"cli\"}}}}\n"),
+            format!(
+                "{{\"type\":\"session_meta\",\"payload\":{{\"id\":\"{id}\",\"source\":\"cli\"}}}}\n"
+            ),
         )
         .expect("rollout");
         path
@@ -617,11 +621,15 @@ fn send_payload_validation_uses_utf8_byte_cap() {
         .expect_err("empty text rejected");
     assert_eq!(error.code, "badRequest");
     let rocket = "\u{1F680}";
-    assert!(read_interaction_text(
-        Some(&json!(rocket.repeat(GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES / 4))),
-        "sendSessionText",
-    )
-    .is_ok());
+    assert!(
+        read_interaction_text(
+            Some(&json!(
+                rocket.repeat(GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES / 4)
+            )),
+            "sendSessionText",
+        )
+        .is_ok()
+    );
     let oversized = "x".repeat(GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES + 1);
     let error = read_interaction_text(Some(&json!(oversized)), "sendSessionText")
         .expect_err("oversized text rejected");

@@ -6,9 +6,9 @@
 //! User: "please also allow me to pick which account to run the cloud session on somehow (like we allow for claude code regular local sessions)". A cloud session that has not started on claude.ai yet (waiting for its task, or its start failed) can move to another saved Claude account; its start then runs `claude --cloud` on that account's login (start.rs `runner_for`) and its claude.ai page opens in that account's Browser profile. A running session stays on its account: it lives there on claude.ai, so its accounts read reports the account and refuses a pick.
 
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use super::record::{session_cloud_record, CloudState};
+use super::record::{CloudState, session_cloud_record};
 use super::start::save;
 use crate::accounts::model::Provider;
 use crate::domain::{DomainRepository, DomainStateError};

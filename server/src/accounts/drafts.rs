@@ -2,7 +2,7 @@ use crate::{
     agents,
     domain::{DomainRepository, DomainStateError},
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// CDXC:Drafts 2026-09-09 WHY:
 /// Claude and Codex publish a conversation ID before receiving a prompt. Account changes must rebuild a draft's fresh launch even when that ID exists, or deleting its old plan leaves a sleeping draft with no agent command to reopen.

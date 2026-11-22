@@ -1,8 +1,8 @@
 //! Secret routes: agents' secret requests (crate::secret_requests) and the secret providers of
 //! Settings > Secrets (crate::secret_providers).
 
-use crate::secret_providers::{handle_secret_providers_http, SECRET_PROVIDER_ENDPOINTS};
-use crate::secret_requests::{handle_secret_request_http, SECRET_REQUEST_ENDPOINTS};
+use crate::secret_providers::{SECRET_PROVIDER_ENDPOINTS, handle_secret_providers_http};
+use crate::secret_requests::{SECRET_REQUEST_ENDPOINTS, handle_secret_request_http};
 
 use super::*;
 

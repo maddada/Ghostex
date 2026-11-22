@@ -15,7 +15,7 @@
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 
@@ -149,7 +149,7 @@ pub fn handle(db: &Connection, params: &Map<String, Value>) -> Result<Value, Dom
         other => {
             return Err(DomainStateError::bad_request(format!(
                 "Unknown sessionReplyDrafts op {other}. Use list, set or drop."
-            )))
+            )));
         }
     }
     if changed {

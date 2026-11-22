@@ -4,13 +4,13 @@
 //! SEE-ALSO: server/src/session_links/ (the rules), server/src/server/session_links_sync.rs (the
 //! pass these kick), server/src/ghostex_cli/session_links.rs (`ghostex link`).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 use crate::session_links::{
-    parse_link_input, presentation_session_links, session_link_entries, session_link_mentions,
-    session_repo, stored_session_links, write_session_links, SessionLinkKind, SessionLinkRef,
-    SessionLinkSource, StoredSessionLink,
+    SessionLinkKind, SessionLinkRef, SessionLinkSource, StoredSessionLink, parse_link_input,
+    presentation_session_links, session_link_entries, session_link_mentions, session_repo,
+    stored_session_links, write_session_links,
 };
 
 use super::super::session_links_sync::{spawn_session_links_refresh, want_session_links_now};
@@ -313,7 +313,7 @@ pub(super) async fn route_session_links_http(
                 body_json,
                 token_extension_id,
                 caller,
-            })
+            });
         }
     })
 }
@@ -379,7 +379,7 @@ fn github_number_kind(link: SessionLinkRef) -> Result<SessionLinkRef, DomainStat
         _ => {
             return Err(DomainStateError::bad_request(format!(
                 "#{number} is not a PR or issue in {repo}."
-            )))
+            )));
         }
     };
     Ok(SessionLinkRef::Github {

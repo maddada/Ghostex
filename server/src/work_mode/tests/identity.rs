@@ -2,7 +2,7 @@
 //! are stored by, the link kinds clients draw, and which ticket row a PR folds into when its branch
 //! and body name tickets of more than one source.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::*;
 

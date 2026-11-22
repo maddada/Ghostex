@@ -14,7 +14,7 @@ use crate::storage::open_gxserver_database;
 
 #[path = "session_chat_rewind_codex_state.rs"]
 mod state;
-use state::{pending_rewind, write_pending_rewind, RetainedPrompts};
+use state::{RetainedPrompts, pending_rewind, write_pending_rewind};
 
 const ESCAPE: &str = "\u{1b}[27u";
 const LEFT: &str = "\u{1b}[1;1D";
@@ -94,7 +94,9 @@ pub(super) async fn rewind(
     let pending = pending_rewind(&target.session)?;
     if let Some(pending) = &pending {
         if pending.target_message_id != message_id || pending.zmx_name != target.zmx_name {
-            return Err(agent_busy("The previous Codex rewind still needs synchronization. Retry it before starting another rewind."));
+            return Err(agent_busy(
+                "The previous Codex rewind still needs synchronization. Retry it before starting another rewind.",
+            ));
         }
     } else {
         idle(&target.session)?;
@@ -189,7 +191,7 @@ pub(super) async fn rewind(
             return Err(DomainStateError {
                 code: error.code,
                 message: error.message.clone(),
-            })
+            });
         }
         _ => None,
     };
@@ -860,9 +862,11 @@ mod tests {
         assert!(selected.matches(expected));
         assert!(!selected.matches("first"));
         assert!(!selected.matches(&format!("{expected} more")));
-        assert!(initial_prompt(&screen.replace("\x1b[7m", ""))
-            .unwrap()
-            .matches(expected));
+        assert!(
+            initial_prompt(&screen.replace("\x1b[7m", ""))
+                .unwrap()
+                .matches(expected)
+        );
     }
 
     #[test]
@@ -871,9 +875,11 @@ mod tests {
         let selected = initial_prompt(screen).unwrap();
         assert!(selected.matches("first\n\nsecond\nthird"));
         assert!(!selected.matches("first\n\ndifferent\nthird"));
-        assert!(!initial_prompt(&screen.replace("── 84%", "\n── 84%"))
-            .unwrap()
-            .matches("first second third"));
+        assert!(
+            !initial_prompt(&screen.replace("── 84%", "\n── 84%"))
+                .unwrap()
+                .matches("first second third")
+        );
         assert_ne!(
             selected_prompt(screen),
             selected_prompt(&screen.replace("84%", "72%"))

@@ -14,13 +14,14 @@
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
+        Arc, LazyLock, Mutex,
         atomic::{AtomicU64, Ordering},
-        mpsc, Arc, LazyLock, Mutex,
+        mpsc,
     },
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use tokio::sync::Notify;
 
 use crate::{

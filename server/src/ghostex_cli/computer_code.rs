@@ -25,11 +25,11 @@ use std::collections::HashSet;
 use std::io::{BufRead, IsTerminal, Write};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::args::parse_args;
 use super::output::print_json;
-use super::rpc::{call_gxserver_rpc, CliError, CliResult};
+use super::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 /// As often as the Connect a Computer window asks; the pairing window stays open 60 s after each.
 const POLL_EVERY: Duration = Duration::from_secs(3);
@@ -154,7 +154,9 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         {
             last_waiting = Instant::now();
         } else if last_waiting.elapsed() >= IDLE_LIMIT {
-            println!("Stopped: no computer waited for 10 minutes. Run ghostex computer-code to start again.");
+            println!(
+                "Stopped: no computer waited for 10 minutes. Run ghostex computer-code to start again."
+            );
             return Ok(());
         }
         for device in waiting {
@@ -316,7 +318,9 @@ fn confirm_it_is_you(device_name: &str) -> Result<(), PresenceFailure> {
         ));
     }
     println!("Confirm it's you on this computer to approve {device_name}...");
-    match ghostex_owner_keys::confirm_presence(&format!("Approve {device_name} connecting to this computer")) {
+    match ghostex_owner_keys::confirm_presence(&format!(
+        "Approve {device_name} connecting to this computer"
+    )) {
         Ok(_) => Ok(()),
         Err(ghostex_owner_keys::KeyError::PresenceUnavailable(detail)) => {
             Err(PresenceFailure::Unavailable(format!(

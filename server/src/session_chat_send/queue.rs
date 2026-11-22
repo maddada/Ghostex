@@ -18,8 +18,7 @@ terminal, so only the former may raise a notice.
 pub(super) const SESSION_CHAT_SEND_CANCELLED: &str = "The session chat send was cancelled.";
 /// The refusal of `execute_session_chat_send_if_idle` when another write to the session's terminal
 /// is waiting or running.
-pub(super) const SESSION_CHAT_SEND_WRITES_PENDING: &str =
-    "Another write to the session's terminal (typed keys or a message) is still waiting or running.";
+pub(super) const SESSION_CHAT_SEND_WRITES_PENDING: &str = "Another write to the session's terminal (typed keys or a message) is still waiting or running.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SessionChatSendFailure {

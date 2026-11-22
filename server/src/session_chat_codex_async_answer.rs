@@ -333,7 +333,9 @@ impl Driver<'_> {
                 }
             }
             if Instant::now() >= deadline {
-                return Err(format!("Could not verify {description} in Codex. Your answer is kept here; check the terminal before retrying."));
+                return Err(format!(
+                    "Could not verify {description} in Codex. Your answer is kept here; check the terminal before retrying."
+                ));
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
@@ -630,9 +632,9 @@ impl Driver<'_> {
                 (cursor, recorded)
             })
             .await
-            .map_err(|_| {
-                "Could not verify Codex's recorded answer. Check the terminal before retrying."
-            })?;
+            .map_err(
+                |_| "Could not verify Codex's recorded answer. Check the terminal before retrying.",
+            )?;
             cursor = next_cursor;
             if recorded {
                 return Ok(());
@@ -783,7 +785,9 @@ mod tests {
     #[test]
     fn single_idle_question_containing_of_is_not_a_progress_counter() {
         let title = "Did the chat percentage stay at 66% for the rest of compaction, or did it catch up when you switched back from the terminal?";
-        let screen = format!("• Queued follow-up inputs\n\n  {title}\n\n  Type your answer\n\n  enter submit   ctrl + ] skip   ⌥ + ↓ main prompt");
+        let screen = format!(
+            "• Queued follow-up inputs\n\n  {title}\n\n  Type your answer\n\n  enter submit   ctrl + ] skip   ⌥ + ↓ main prompt"
+        );
         let e = editor(&screen).expect("single question editor remains answerable");
         assert_eq!((e.position, e.count), (1, 1));
         assert!(matches_question(&e, title));

@@ -427,7 +427,7 @@ pub fn powershell_executable() -> String {
 
 #[cfg(windows)]
 fn powershell_script_args(script: &str, profileless: bool) -> Vec<String> {
-    use base64::{engine::general_purpose::STANDARD, Engine};
+    use base64::{Engine, engine::general_purpose::STANDARD};
     let mut args = vec!["-NoLogo".into(), "-NonInteractive".into()];
     if profileless {
         args.push("-NoProfile".into());

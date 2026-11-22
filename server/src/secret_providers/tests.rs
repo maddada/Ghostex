@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{one_password, resolve, resolve_typed_reference, store, SecretReference};
+use super::{SecretReference, one_password, resolve, resolve_typed_reference, store};
 use crate::paths::get_gxserver_paths;
 
 /// A stand-in `op`: `read` answers one known reference with a made-up value and fails otherwise;
@@ -72,9 +72,11 @@ fn a_provider_reads_through_op_and_reports_its_account() {
         "fake-value-123"
     );
     assert!(resolve_typed_reference(&paths, "plain-secret").is_none());
-    assert!(resolve_typed_reference(&paths, "op://bad")
-        .unwrap()
-        .is_err());
+    assert!(
+        resolve_typed_reference(&paths, "op://bad")
+            .unwrap()
+            .is_err()
+    );
 }
 
 #[test]

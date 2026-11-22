@@ -10,12 +10,12 @@ use rusqlite::Connection;
 use serde_json::Value;
 
 use super::keys::BotKey;
-use super::reply::{insert_message, newest_message_in, reply_state, ApiMessage, ReplyState};
+use super::reply::{ApiMessage, ReplyState, insert_message, newest_message_in, reply_state};
 use crate::coordinators::now_iso;
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::gbots::record::{new_id, Bot};
-use crate::gbots::session::{bot_chats, chat_of, create_bot_chat_with, ChatOpening};
-use crate::server::{queue_session_chat_prompt, AppState};
+use crate::gbots::record::{Bot, new_id};
+use crate::gbots::session::{ChatOpening, bot_chats, chat_of, create_bot_chat_with};
+use crate::server::{AppState, queue_session_chat_prompt};
 
 /// The most an app may send in one message.
 pub(crate) const MESSAGE_MAX_CHARS: usize = 48_000;

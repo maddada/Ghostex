@@ -4,12 +4,12 @@
 
 use std::io::Read as _;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::{
     args::Flags,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
 
 /// The team and preset verbs' lines in `ghostex gbots --help`.
@@ -357,7 +357,10 @@ pub(crate) fn run_preset(rest: &[String], flags: &Flags) -> CliResult<()> {
     let verb = rest.get(1).map(String::as_str).unwrap_or("list");
     let answer = match verb {
         "list" => gbots(json!({ "op": "presets" }), flags)?,
-        "show" => gbots(json!({ "op": "preset", "preset": preset_arg(rest, verb)? }), flags)?,
+        "show" => gbots(
+            json!({ "op": "preset", "preset": preset_arg(rest, verb)? }),
+            flags,
+        )?,
         "import" => gbots(
             json!({ "op": "presetSave", "file": read_file_arg(rest, flags, "preset import")? }),
             flags,
@@ -373,17 +376,26 @@ pub(crate) fn run_preset(rest: &[String], flags: &Flags) -> CliResult<()> {
             )?
         }
         "export" => {
-            let answer = gbots(json!({ "op": "presetExport", "preset": preset_arg(rest, verb)? }), flags)?;
+            let answer = gbots(
+                json!({ "op": "presetExport", "preset": preset_arg(rest, verb)? }),
+                flags,
+            )?;
             if let Some(path) = write_out(&answer, flags)? {
-                eprintln!("Exported the preset {} to {path}.", text(&answer["file"], "name"));
+                eprintln!(
+                    "Exported the preset {} to {path}.",
+                    text(&answer["file"], "name")
+                );
             }
             return Ok(());
         }
-        "remove" => gbots(json!({ "op": "presetRemove", "preset": preset_arg(rest, verb)? }), flags)?,
+        "remove" => gbots(
+            json!({ "op": "presetRemove", "preset": preset_arg(rest, verb)? }),
+            flags,
+        )?,
         other_verb => {
             return Err(other(format!(
                 "unknown preset command `{other_verb}`: use list, show, import, save, export or remove.\n\n{TEAM_HELP}"
-            )))
+            )));
         }
     };
     if flags.contains("json") {

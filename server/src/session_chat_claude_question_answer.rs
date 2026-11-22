@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use crate::session_chat::SessionChatQuestion;
 use crate::session_chat_question_liveness::{
-    claude_question_dialog_at_bottom, claude_question_selector_on_screen,
-    claude_question_selector_position, ClaudeQuestionSelectorPosition,
+    ClaudeQuestionSelectorPosition, claude_question_dialog_at_bottom,
+    claude_question_selector_on_screen, claude_question_selector_position,
 };
 use crate::session_chat_question_row_align::write_keys_and_await_repaint;
-use crate::session_chat_send::{capture_session_terminal_text, SESSION_CHAT_INTERRUPT};
+use crate::session_chat_send::{SESSION_CHAT_INTERRUPT, capture_session_terminal_text};
 
 /// Reads of the screen before an answer gives up placing the highlight.
 const READS: usize = 6;

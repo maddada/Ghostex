@@ -3,15 +3,15 @@
 
 use axum::http::StatusCode;
 use ghostex_gx_core::settings_sync::{
-    category_enabled, group_deleted_edit, removed_key, SYNC_CATEGORIES,
+    SYNC_CATEGORIES, category_enabled, group_deleted_edit, removed_key,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::domain::{read_domain_rpc_params, DomainStateError};
+use crate::domain::{DomainStateError, read_domain_rpc_params};
 use crate::protocol::{rpc_error, rpc_success};
-use crate::server::{routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, routed_json};
 
-use super::engine::{now_ms, with_engine, Engine};
+use super::engine::{Engine, now_ms, with_engine};
 use super::store::SyncNote;
 
 pub(crate) const SETTINGS_SYNC_ENDPOINTS: &[&str] = &[

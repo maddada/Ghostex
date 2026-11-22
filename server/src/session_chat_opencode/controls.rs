@@ -1,6 +1,6 @@
-use super::{error, invalidate, snapshot, Client};
+use super::{Client, error, invalidate, snapshot};
 use crate::domain::DomainStateError;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 pub(crate) fn select(id: &str, params: &Map<String, Value>) -> Result<Value, DomainStateError> {
     let client = Client::discover()?;

@@ -38,7 +38,7 @@ pub(super) async fn send_claude_cloud_message(
             return Some(Err(DomainStateError {
                 code: "internalError",
                 message: format!("Claude cloud send task failed: {error}"),
-            }))
+            }));
         }
     }
     unpark_session_after_send(state, project_id, session_id);

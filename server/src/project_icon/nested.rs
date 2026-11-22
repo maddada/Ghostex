@@ -1,4 +1,4 @@
-use super::{discover_icon_in_directory, ProjectIcon};
+use super::{ProjectIcon, discover_icon_in_directory};
 use std::{collections::VecDeque, path::Path};
 
 /// CDXC:Icons 2026-09-24 WHY:

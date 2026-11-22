@@ -3,17 +3,17 @@
 
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::toolchain::require_system_bd;
 use crate::typed_operations::{
-    beads_action_command, finish_beads_action, resolve_beads_cwd, run_beads_action_direct,
-    run_process_command, TypedOperationContext, TypedOperationError,
+    TypedOperationContext, TypedOperationError, beads_action_command, finish_beads_action,
+    resolve_beads_cwd, run_beads_action_direct, run_process_command,
 };
 
-use super::cache::{self, still_current, CachedRead, WorkspaceEntry};
-use super::change::{embedded_noms_dir, read_change_token, ChangeToken};
-use super::discovery::{discover, Discovered, WorkspaceInfo};
+use super::cache::{self, CachedRead, WorkspaceEntry, still_current};
+use super::change::{ChangeToken, embedded_noms_dir, read_change_token};
+use super::discovery::{Discovered, WorkspaceInfo, discover};
 
 /// Today's typed-operation limit; a call that waits this long on another bd call fails as a
 /// timeout, as a slow bd always did.

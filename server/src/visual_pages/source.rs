@@ -10,19 +10,19 @@
 use std::{fs, path::Path};
 
 use axum::http::StatusCode;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
-    domain::{read_domain_rpc_params, DomainStateError},
+    domain::{DomainStateError, read_domain_rpc_params},
     protocol::rpc_success,
-    server::{domain_error_response, routed_json, AppState, RoutedResponse},
+    server::{AppState, RoutedResponse, domain_error_response, routed_json},
 };
 
 use super::{
     prepare::{page_too_large, prepare_page},
     store::{
-        is_page_id, read_record, replace_page_html, source_modified_ms, StoreAnswersError,
-        VISUAL_PAGE_MAX_BYTES,
+        StoreAnswersError, VISUAL_PAGE_MAX_BYTES, is_page_id, read_record, replace_page_html,
+        source_modified_ms,
     },
 };
 

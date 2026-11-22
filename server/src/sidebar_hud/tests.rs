@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::{create_sidebar_hud_settings_mutation, read_sidebar_hud};
 
@@ -18,9 +18,11 @@ fn hides_hidden_default_agents_until_stored() {
         .get("agents")
         .and_then(|value| value.as_array())
         .unwrap();
-    assert!(agents
-        .iter()
-        .all(|agent| agent.get("agentId").and_then(|value| value.as_str()) != Some("rovodev")));
+    assert!(
+        agents
+            .iter()
+            .all(|agent| agent.get("agentId").and_then(|value| value.as_str()) != Some("rovodev"))
+    );
 
     let hud = read_sidebar_hud(
         &[json!({

@@ -32,7 +32,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::session_chat_paths::configured_agent_directory;
 

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::project::gbots_bot_id;
 use super::record::{color_hex, list_bots};

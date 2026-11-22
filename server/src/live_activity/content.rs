@@ -13,7 +13,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// Four rows plus "+N more".
 pub(crate) const MAX_ROWS: usize = 4;

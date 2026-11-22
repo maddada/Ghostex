@@ -6,11 +6,11 @@
 use std::os::unix::fs::PermissionsExt;
 
 use super::*;
-use crate::protocol::{endpoint_for, is_remote_endpoint_allowed, ApiPermission, ListenerKind};
+use crate::protocol::{ApiPermission, ListenerKind, endpoint_for, is_remote_endpoint_allowed};
 use crate::work_mode::{
-    command_work_dir, mutate_credentials, read_credentials, read_work_sources,
     PATH_SPELLS_CREDENTIAL, SAVED_BUT_SHORT_SECRET_UNREMOVABLE, SHORT_SECRET_REMOVED,
-    SHORT_SECRET_UNREMOVABLE, SWITCH_OFFER,
+    SHORT_SECRET_UNREMOVABLE, SWITCH_OFFER, command_work_dir, mutate_credentials, read_credentials,
+    read_work_sources,
 };
 
 struct Routes {
@@ -142,10 +142,12 @@ async fn setting_a_command_shows_its_name_keys_and_absolute_path() {
         json!({ "format": "key-number", "keys": ["ACM", "OPS"] })
     );
     assert_eq!(command["resolvedPath"], json!(routes.program));
-    assert!(command["icon"]
-        .as_str()
-        .unwrap()
-        .starts_with("data:image/svg+xml;base64,"));
+    assert!(
+        command["icon"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:image/svg+xml;base64,")
+    );
     assert_eq!(command["isTracker"], json!(false));
     let (_, read) = routes
         .call("/api/readWorkSource", json!({ "workspaceId": "Work" }))
@@ -295,12 +297,10 @@ async fn generic_workspace_writes_refuse_a_command_tracker() {
     let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
     let current = crate::workspaces::read_sidebar_workspaces(&db).expect("workspaces");
     let patch = json!({ "tracker": "fixture" });
-    assert!(crate::workspaces::update_workspace_in(
-        &current,
-        &workspace_id,
-        patch.as_object().unwrap()
-    )
-    .is_ok());
+    assert!(
+        crate::workspaces::update_workspace_in(&current, &workspace_id, patch.as_object().unwrap())
+            .is_ok()
+    );
 }
 
 #[tokio::test]
@@ -352,9 +352,11 @@ async fn a_failed_check_logs_one_line_without_the_commands_output() {
     routes.answer("error-json");
     let (status, body) = routes.call("/api/setWorkSource", set).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(body["result"]["check"]["error"]
-        .as_str()
-        .is_some_and(|error| error.contains("was rejected")));
+    assert!(
+        body["result"]["check"]["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("was rejected"))
+    );
     let log = fs::read_to_string(&routes.paths.log_file).expect("log");
     let lines: Vec<&str> = log
         .lines()
@@ -499,7 +501,9 @@ async fn a_set_refusal_never_shows_a_stored_value() {
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
         assert_eq!(
             error_text(&body),
-            format!("This command now calls itself \"renamed\"; this workspace's •••• use \"fixture\". {SWITCH_OFFER}")
+            format!(
+                "This command now calls itself \"renamed\"; this workspace's •••• use \"fixture\". {SWITCH_OFFER}"
+            )
         );
     }
     let logged = logged_errors(&routes);
@@ -784,9 +788,11 @@ async fn a_short_value_an_accepted_answer_makes_secret_is_removed() {
             assert_eq!(token["set"], json!(false), "{how}: {body}");
         }
     }
-    assert!(!Value::Object(read_credentials(&routes.paths))
-        .to_string()
-        .contains('ж'));
+    assert!(
+        !Value::Object(read_credentials(&routes.paths))
+            .to_string()
+            .contains('ж')
+    );
     assert_eq!(logged_errors(&routes), Vec::<String>::new());
     let log = fs::read_to_string(&routes.paths.log_file).unwrap_or_default();
     assert!(!log.contains('ж'), "{log}");
@@ -857,9 +863,11 @@ async fn a_refused_answer_removes_a_short_value_it_makes_secret() {
         assert_eq!(token["secret"], json!(true), "{how}: {body}");
         assert_eq!(token["set"], json!(false), "{how}: {body}");
     }
-    assert!(!Value::Object(read_credentials(&routes.paths))
-        .to_string()
-        .contains(r#""zq""#));
+    assert!(
+        !Value::Object(read_credentials(&routes.paths))
+            .to_string()
+            .contains(r#""zq""#)
+    );
     let logged = logged_errors(&routes);
     assert_eq!(logged.len(), 2, "{logged:?}");
     assert!(
@@ -1005,11 +1013,15 @@ async fn a_short_value_kept_by_the_workspace_is_removed_once_an_answer_makes_it_
             .await;
             assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
             answers.push(("dropped", body));
-            format!("{SHORT_SECRET_REMOVED} This command now calls itself \"renamed\"; this workspace's links use \"zq-source\". {SWITCH_OFFER}")
+            format!(
+                "{SHORT_SECRET_REMOVED} This command now calls itself \"renamed\"; this workspace's links use \"zq-source\". {SWITCH_OFFER}"
+            )
         } else {
             let (status, body) = save_logged(&routes, &workspace_id, json!({ "mode": "p" })).await;
             assert_eq!(status, StatusCode::OK, "{body}");
-            format!("{SHORT_SECRET_REMOVED} This command now calls itself \"renamed\"; this workspace's links use \"zq-source\".")
+            format!(
+                "{SHORT_SECRET_REMOVED} This command now calls itself \"renamed\"; this workspace's links use \"zq-source\"."
+            )
         };
         let body = read_source(&routes, &workspace_id).await;
         let command = &body["result"]["command"];
@@ -1045,9 +1057,11 @@ async fn a_short_value_kept_by_the_workspace_is_removed_once_an_answer_makes_it_
             assert!(shown.contains(&&said), "{how}: {body}");
         }
     }
-    assert!(!Value::Object(read_credentials(&routes.paths))
-        .to_string()
-        .contains(r#""zq""#));
+    assert!(
+        !Value::Object(read_credentials(&routes.paths))
+            .to_string()
+            .contains(r#""zq""#)
+    );
 }
 
 /// `zqx`, saved while not secret for `zq-source`, is kept only in storage once a Switch moves the
@@ -1113,9 +1127,11 @@ async fn a_failing_answer_masks_a_value_kept_only_in_storage() {
         );
         assert!(!after.to_string().contains("zqx"), "{how}: {after}");
     }
-    assert!(Value::Object(read_credentials(&routes.paths))
-        .to_string()
-        .contains(r#""zqx""#));
+    assert!(
+        Value::Object(read_credentials(&routes.paths))
+            .to_string()
+            .contains(r#""zqx""#)
+    );
     let log = fs::read_to_string(&routes.paths.log_file).unwrap_or_default();
     let failures = log
         .lines()
@@ -1600,7 +1616,9 @@ async fn nothing_a_credential_save_returns_shows_a_value() {
             stored: json!({}),
             workspace: None,
             values: json!({ "token": "team" }),
-            answer: Some("A workspace connected to a •••• uses its ••••'s tracker; ticket commands are for this computer's workspaces."),
+            answer: Some(
+                "A workspace connected to a •••• uses its ••••'s tracker; ticket commands are for this computer's workspaces.",
+            ),
         },
         Row {
             name: "the team refusal, holding a stored value",
@@ -1608,7 +1626,9 @@ async fn nothing_a_credential_save_returns_shows_a_value() {
             stored: json!({ "token": "team" }),
             workspace: None,
             values: json!({ "token": "tok-new-5" }),
-            answer: Some("A workspace connected to a •••• uses its ••••'s tracker; ticket commands are for this computer's workspaces."),
+            answer: Some(
+                "A workspace connected to a •••• uses its ••••'s tracker; ticket commands are for this computer's workspaces.",
+            ),
         },
         Row {
             name: "an unknown field overlapping a stored secret",
@@ -1648,7 +1668,9 @@ async fn nothing_a_credential_save_returns_shows_a_value() {
             stored: json!({}),
             workspace: None,
             values: json!({ "token": "token" }),
-            answer: Some("•••• can't be saved: its value also appears in the command's credential names, which Ghostex can't hide."),
+            answer: Some(
+                "•••• can't be saved: its value also appears in the command's credential names, which Ghostex can't hide.",
+            ),
         },
         Row {
             name: "the stored values can't be read",
@@ -1930,10 +1952,12 @@ async fn assert_all_survived(routes: &Routes, workspace_id: &str) {
         "{read}"
     );
     let db = open_gxserver_database(&routes.paths).expect("db");
-    assert!(read_work_sources(&db)
-        .expect("read")
-        .workspaces
-        .contains_key(workspace_id));
+    assert!(
+        read_work_sources(&db)
+            .expect("read")
+            .workspaces
+            .contains_key(workspace_id)
+    );
     assert!(
         read_credentials(&routes.paths)["workspaceSourceCredentials"][workspace_id]["fixture"]
             .get("token")

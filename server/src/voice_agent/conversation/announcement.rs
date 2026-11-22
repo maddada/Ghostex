@@ -1,7 +1,7 @@
 //! What the conversation tells the client and the model when a session changes state while it is
 //! open, and the `announcement` frame the client shows for it.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// A session changed state while the conversation was open.
 #[derive(Clone, Debug)]

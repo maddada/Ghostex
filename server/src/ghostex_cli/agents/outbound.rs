@@ -5,10 +5,10 @@
 use super::identity::{self, text};
 use crate::ghostex_cli::{
     args::Flags,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
     selector,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// The agent session running this command and the session it writes to, when the two differ.
 pub(crate) struct AgentWrite {
@@ -177,9 +177,11 @@ mod tests {
         assert_eq!(key["text"], "");
         let mut image = json!({"sessionId": "G4ldy", "text": "", "imagePaths": ["/a.png"]});
         sign_message_payload(&mut image, |body| signed_text(&thread_sender(), body, None));
-        assert!(image["text"]
-            .as_str()
-            .unwrap()
-            .contains("Reply to: S90:P3lv0:G38os"));
+        assert!(
+            image["text"]
+                .as_str()
+                .unwrap()
+                .contains("Reply to: S90:P3lv0:G38os")
+        );
     }
 }

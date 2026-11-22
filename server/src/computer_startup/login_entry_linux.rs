@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use super::{remove_file_if_present, write_if_changed, LoginEntryPlace, AT_LOGIN_COMMAND};
+use super::{AT_LOGIN_COMMAND, LoginEntryPlace, remove_file_if_present, write_if_changed};
 use crate::paths::GxserverPaths;
 
 const FILE_NAME: &str = "ghostex-gxserver.desktop";

@@ -39,8 +39,7 @@ fn free_port() -> Result<u16, String> {
 }
 
 /// What Settings and the CLI say when the saved keys don't open any more.
-const UNREADABLE: &str =
-    "This workspace's saved Executor keys can't be read anymore. Turn Executor on again to give it new ones.";
+const UNREADABLE: &str = "This workspace's saved Executor keys can't be read anymore. Turn Executor on again to give it new ones.";
 
 /// The workspace's saved Executor, or none when it was never turned on.
 pub(super) fn load(

@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-pub use probe::{reach_cached, set_override_file, SystemChecker};
+pub use probe::{SystemChecker, reach_cached, set_override_file};
 pub use watch::{NetworkWatch, Transition};
 
 /// The words every surface shows while the computer is offline.

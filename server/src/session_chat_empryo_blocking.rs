@@ -10,10 +10,10 @@ Tool approvals come from the shared choice panel (session_chat_empryo_question.r
 */
 
 use crate::session_chat_notice::{
-    session_chat_terminal_screen_tail, SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
-    SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
     SESSION_CHAT_NOTICE_EMPRYO_INPUT_BLOCKED, SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN,
-    SESSION_CHAT_NOTICE_TRUST_PROMPT, SESSION_CHAT_NOTICE_USAGE_LIMIT,
+    SESSION_CHAT_NOTICE_TRUST_PROMPT, SESSION_CHAT_NOTICE_USAGE_LIMIT, SessionChatTerminalNotice,
+    SessionChatTerminalNoticeAction, SessionChatTerminalNoticeSeverity,
+    SessionChatTerminalNoticeSource, session_chat_terminal_screen_tail,
 };
 use crate::session_chat_options::strip_ansi_sgr;
 

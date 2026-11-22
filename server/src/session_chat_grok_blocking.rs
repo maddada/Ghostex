@@ -248,9 +248,9 @@ pub fn detect_grok_trust_prompt(
     text: &str,
 ) -> Option<crate::session_chat_notice::SessionChatTerminalNotice> {
     use crate::session_chat_notice::{
-        SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
-        SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
-        SESSION_CHAT_NOTICE_TRUST_PROMPT,
+        SESSION_CHAT_NOTICE_TRUST_PROMPT, SessionChatTerminalNotice,
+        SessionChatTerminalNoticeAction, SessionChatTerminalNoticeSeverity,
+        SessionChatTerminalNoticeSource,
     };
     let lines = scan_lines(text);
     let heading = lines
@@ -301,8 +301,7 @@ pub fn detect_grok_blocking_screen(text: &str) -> Option<GrokBlockingScreen> {
     if latest_keyed_menu_pair(&lines, "new worktree", "ctrl+w", "resume session", "f3").is_some() {
         return Some(GrokBlockingScreen {
             title: "Grok Build is waiting at its start menu",
-            detail:
-                "Start or resume a Grok Build session in the terminal before sending a message.",
+            detail: "Start or resume a Grok Build session in the terminal before sending a message.",
         });
     }
 
@@ -344,8 +343,7 @@ pub fn detect_grok_blocking_screen(text: &str) -> Option<GrokBlockingScreen> {
     {
         return Some(GrokBlockingScreen {
             title: "Grok Build is waiting for authentication",
-            detail:
-                "Finish the browser or pasted-token authentication step before sending a message.",
+            detail: "Finish the browser or pasted-token authentication step before sending a message.",
         });
     }
 
@@ -389,7 +387,11 @@ pub fn detect_grok_blocking_screen(text: &str) -> Option<GrokBlockingScreen> {
         ),
         (
             &["rewind to which turn?", "jump to which turn?"],
-            &["(no preview)", "rewind conversation to", "yes, and don't ask again"],
+            &[
+                "(no preview)",
+                "rewind conversation to",
+                "yes, and don't ask again",
+            ],
             "Grok Build is waiting for a turn choice",
             "Complete or dismiss the rewind or jump chooser in the terminal before sending a message.",
         ),
@@ -426,7 +428,12 @@ pub fn detect_grok_blocking_screen(text: &str) -> Option<GrokBlockingScreen> {
         ),
         (
             &["\u{2191}/\u{2193} navigate"],
-            &["enter:submit", "enter:select", "tab:next answer", "x:dismiss"],
+            &[
+                "enter:submit",
+                "enter:select",
+                "tab:next answer",
+                "x:dismiss",
+            ],
             "Grok Build is waiting for an answer",
             "Answer or dismiss Grok Build's question card in the terminal before sending a message.",
         ),

@@ -9,7 +9,7 @@ use std::sync::{Mutex, OnceLock};
 
 use serde_json::Value;
 
-use crate::session_chat::{read_transcript_file_version, MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES};
+use crate::session_chat::{MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES, read_transcript_file_version};
 use crate::session_chat_fleet_transcript::timestamp;
 
 #[derive(Clone)]

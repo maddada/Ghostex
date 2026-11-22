@@ -27,11 +27,11 @@ use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 
 pub(crate) use home::{
-    brief_section, forward_home, handle_gbots_remote_http, remember_state, GBOTS_REMOTE_ENDPOINT,
+    GBOTS_REMOTE_ENDPOINT, brief_section, forward_home, handle_gbots_remote_http, remember_state,
 };
-pub(crate) use ops::{computer_status, handles, run, ComputerCaller};
+pub(crate) use ops::{ComputerCaller, computer_status, handles, run};
 pub(crate) use remote_chat::remote_chat_summary;
-pub(crate) use store::{list_remote_chats, Place};
+pub(crate) use store::{Place, list_remote_chats};
 
 /// Whether `bot_id` may use the screen and apps of the computer its chats run on.
 pub(crate) fn computer_use(db: &Connection, bot_id: &str) -> bool {

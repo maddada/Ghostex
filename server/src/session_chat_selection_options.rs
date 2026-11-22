@@ -2,9 +2,9 @@
 
 use super::*;
 use crate::session_chat_composer::{
-    detect_session_chat_composer_readiness, SessionChatComposerState,
+    SessionChatComposerState, detect_session_chat_composer_readiness,
 };
-use crate::session_chat_send::{build_session_chat_paste_bytes, SESSION_CHAT_SHIFT_TAB};
+use crate::session_chat_send::{SESSION_CHAT_SHIFT_TAB, build_session_chat_paste_bytes};
 
 fn agent_name(agent: SessionChatOptionAgent) -> &'static str {
     match agent {

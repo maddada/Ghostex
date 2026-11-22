@@ -11,12 +11,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
     agent_skills::{
-        agent_reads_canonical_skills, agent_skill_global_dir, link_skill_into_agent_root,
-        path_string, CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_SKILLS_CLI_AGENT_IDS,
+        CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_SKILLS_CLI_AGENT_IDS, agent_reads_canonical_skills,
+        agent_skill_global_dir, link_skill_into_agent_root, path_string,
     },
     agent_skills_remote::installed_skill_roots,
     paths::GxserverPaths,

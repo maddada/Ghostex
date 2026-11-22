@@ -9,13 +9,13 @@
 use super::*;
 
 use crate::agent_message_deliveries::{
-    expire_unwatched_sends, load_settled_deliveries, settle_send, waiting_sends, WatchedSend,
-    DELIVERY_DELIVERED, DELIVERY_FAILED,
+    DELIVERY_DELIVERED, DELIVERY_FAILED, WatchedSend, expire_unwatched_sends,
+    load_settled_deliveries, settle_send, waiting_sends,
 };
-use crate::coordinators::{self, classify_thread_session, SessionKey, ThreadProgress, ThreadState};
+use crate::coordinators::{self, SessionKey, ThreadProgress, ThreadState, classify_thread_session};
 
 use super::coordinator_runtime::{
-    republish_session_chat, UNDELIVERED_IDLE_MS, UNDELIVERED_MIN_AGE_MS,
+    UNDELIVERED_IDLE_MS, UNDELIVERED_MIN_AGE_MS, republish_session_chat,
 };
 
 const TICK: Duration = Duration::from_secs(3);

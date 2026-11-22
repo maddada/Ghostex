@@ -91,7 +91,7 @@ pub(super) async fn send_pending_box_first_message(
             return Some(Err(DomainStateError {
                 code: "internalError",
                 message: format!("Box launch task failed: {error}"),
-            }))
+            }));
         }
     };
     if !launched.prompt_in_launch {

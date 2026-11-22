@@ -7,10 +7,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::cli::{resolve_agentbox_binary, run_agentbox, STATUS_TIMEOUT};
-use super::location::{is_valid_alias, PROVIDERS, REMOTE_DOCKER_PREFIX};
+use super::cli::{STATUS_TIMEOUT, resolve_agentbox_binary, run_agentbox};
+use super::location::{PROVIDERS, REMOTE_DOCKER_PREFIX, is_valid_alias};
 
 /// How long a doctor run answers `status` before it runs again (unless `refresh`).
 const STATUS_CACHE_TTL: Duration = Duration::from_secs(30);

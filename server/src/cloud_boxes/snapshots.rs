@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ghostex_gx_protocol::cloud_box::{
-    box_verbs, CloudProviderId, CloudSnapshot, CloudSnapshotStatus, SaveSnapshotParams,
+    CloudProviderId, CloudSnapshot, CloudSnapshotStatus, SaveSnapshotParams, box_verbs,
 };
 use serde_json::Value;
 

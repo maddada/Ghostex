@@ -9,19 +9,19 @@
 //! `runtimeSettings.gbot = {botId, openedBy, purpose}` records who opened a chat (`user`, `chief`, later `bot:<id>`, `routine:<id>`, `room:<id>`, `api:<id>`): Chief of Staff closes only chats it opened, never the user's, and later steps send problems to whoever opened it.
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::record::Bot;
 use crate::agents::{apply_created_session_identity, create_agent_session_params_for_project};
 use crate::coordinators::{
-    coordinator_create_params, coordinator_launcher_family, register_created_coordinator,
-    CoordinatorLaunch,
+    CoordinatorLaunch, coordinator_create_params, coordinator_launcher_family,
+    register_created_coordinator,
 };
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::{
-    dispatch_zmx_lifecycle_http_blocking, prepare_coordinator_create_params,
+    AppState, dispatch_zmx_lifecycle_http_blocking, prepare_coordinator_create_params,
     queue_session_chat_prompt, restore_parked_project_for_new_session,
-    schedule_presentation_session_delta, AppState,
+    schedule_presentation_session_delta,
 };
 
 /// The `runtimeSettings` key that marks a GBot chat.
@@ -101,13 +101,16 @@ pub(super) fn first_message(bot: &Bot, family: &str, task: Option<&str>) -> Stri
 ///
 /// CDXC:AgentSkills 2026-11-20 DECISION: User (Q4262 "B"): Ghostex's own skills are retired for CLI help, so the playbook comes from `ghostex gbots guide` (gbots/playbook.md) instead of the `ghostex-gbots` skill. A chat this computer opens on another computer runs that computer's `ghostex`, which is older when it predates the guide; such a computer still installs the skill for a visiting chat (gbots/skill.rs), so the line names it as the way back there.
 fn gbots_guide_line(skill: &str) -> String {
-    format!("{}run `ghostex gbots guide` and follow what it prints for the whole session. If this Ghostex says `guide` is not a gbots command, read the {skill} skill instead.", ghostex_gx_chat_core::composer::skill_invocation::SKILL_LINE_PREFIX)
+    format!(
+        "{}run `ghostex gbots guide` and follow what it prints for the whole session. If this Ghostex says `guide` is not a gbots command, read the {skill} skill instead.",
+        ghostex_gx_chat_core::composer::skill_invocation::SKILL_LINE_PREFIX
+    )
 }
 
 /// `text` with the old GBot first line ("Read and adhere to this skill: $ghostex-gbots", in any
 /// agent's spelling) replaced by [`gbots_guide_line`]; `None` when it has none.
 pub(crate) fn with_current_gbots_line(text: &str) -> Option<String> {
-    use ghostex_gx_chat_core::composer::skill_invocation::{skill_invocation, SKILL_LINE_PREFIX};
+    use ghostex_gx_chat_core::composer::skill_invocation::{SKILL_LINE_PREFIX, skill_invocation};
     for agent in ["claude", "codex", "pi", "opencode"] {
         let skill = skill_invocation(GBOTS_SKILL, Some(agent));
         let Some(rest) = text.strip_prefix(&format!("{SKILL_LINE_PREFIX}{skill}")) else {

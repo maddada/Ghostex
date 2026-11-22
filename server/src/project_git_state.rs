@@ -23,15 +23,15 @@ pub mod checkout;
 mod diff_stats_cache;
 
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::protocol::rpc_success;
 use crate::server::{
-    domain_error_response, routed_json, typed_operation_error_response, AppState, RoutedResponse,
+    AppState, RoutedResponse, domain_error_response, routed_json, typed_operation_error_response,
 };
 use crate::storage::open_gxserver_database;
-use crate::typed_operations::{dispatch_typed_operation_endpoint, TypedOperationError};
+use crate::typed_operations::{TypedOperationError, dispatch_typed_operation_endpoint};
 
 pub const READ_PROJECT_GIT_STATE_ENDPOINT: &str = "/api/readProjectGitState";
 

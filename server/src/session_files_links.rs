@@ -13,11 +13,11 @@ use std::time::SystemTime;
 
 use axum::http::StatusCode;
 use ghostex_gx_chat_core::transcript::files_links::{self as rules, FilesLinksItem};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::protocol::rpc_success;
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
 use crate::storage::open_gxserver_database;
 
 /// Transcript rows per page, the detail pager's own cap (`session_chat_history.rs`).
@@ -334,21 +334,23 @@ async fn read_files_links(state: &AppState, body: &Value) -> Result<Value, Domai
             targets.iter().map(|_| Mutex::new(Vec::new())).collect();
         std::thread::scope(|scope| {
             for _ in 0..workers.min(targets.len()) {
-                scope.spawn(|| loop {
-                    let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let Some(target) = targets.get(index) else {
-                        break;
-                    };
-                    if let Some((agent, path)) = target.transcript.as_ref() {
-                        let items = session_items(
-                            *agent,
-                            path,
-                            target.cwd.as_deref(),
-                            &target.project_id,
-                            &target.session_id,
-                        );
-                        if let Ok(mut list) = lists[index].lock() {
-                            *list = items;
+                scope.spawn(|| {
+                    loop {
+                        let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(target) = targets.get(index) else {
+                            break;
+                        };
+                        if let Some((agent, path)) = target.transcript.as_ref() {
+                            let items = session_items(
+                                *agent,
+                                path,
+                                target.cwd.as_deref(),
+                                &target.project_id,
+                                &target.session_id,
+                            );
+                            if let Ok(mut list) = lists[index].lock() {
+                                *list = items;
+                            }
                         }
                     }
                 });

@@ -7,7 +7,7 @@
 //! only this computer ask (server/src/server/route_http/agents.rs `debug_modal_caller_allowed`).
 
 use ghostex_gx_core::DEBUG_SHOW_MODALS;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::output::print_json;

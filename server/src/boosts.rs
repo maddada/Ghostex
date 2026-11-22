@@ -19,9 +19,9 @@
 use std::path::PathBuf;
 
 use ghostex_gx_chat_core::extras::boosts::{
-    self as core, Boost, CustomBoost, BOOSTS, CUSTOM_ICONS,
+    self as core, BOOSTS, Boost, CUSTOM_ICONS, CustomBoost,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;

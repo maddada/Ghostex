@@ -11,13 +11,13 @@
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::agents::{read_agent_settings, DEFAULT_PROMPT_AGENT_ID};
+use crate::agents::{DEFAULT_PROMPT_AGENT_ID, read_agent_settings};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::{
-    create_worktree_session, schedule_presentation_session_delta, AppState,
-    ProjectWorktreeOperationError,
+    AppState, ProjectWorktreeOperationError, create_worktree_session,
+    schedule_presentation_session_delta,
 };
 use crate::session_git_status::run_gh_command;
 use crate::storage::open_gxserver_database;
@@ -203,7 +203,7 @@ pub(crate) async fn start_work_on_ticket(
         (None, None) => {
             return Err(
                 DomainStateError::bad_request("No branch was found for this ticket.").into(),
-            )
+            );
         }
     }
     let created = create_worktree_session(state, &create).await?;
@@ -372,8 +372,7 @@ pub(crate) fn plan_ticket_work(
 
 /// Why Start refuses a Work page row of a ticket command's ticket in a project of another
 /// workspace.
-pub(crate) const START_IN_THE_ROWS_WORKSPACE: &str =
-    "That ticket was read in another workspace; pick a project of that workspace to start work on it.";
+pub(crate) const START_IN_THE_ROWS_WORKSPACE: &str = "That ticket was read in another workspace; pick a project of that workspace to start work on it.";
 
 /// A Work page row of a ticket command's ticket names the workspace it was read in (`sourceKey`):
 /// another workspace can pin the same id and answer the same ticket ids, so Start works on it
@@ -538,7 +537,7 @@ fn text_param(params: &Map<String, Value>, key: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     use super::*;
 

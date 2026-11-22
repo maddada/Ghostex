@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::paths::GxserverPaths;
@@ -174,8 +174,7 @@ mod tests {
         assert_eq!(saved(&paths), json!({"useAgentHooks": true}));
         // The readers every setting goes through see it.
         assert_eq!(
-            crate::shared_settings_file::read_shared_settings(&paths).expect("settings")
-                ["useAgentHooks"],
+            crate::shared_settings_file::read_shared_settings(&paths).expect("settings")["useAgentHooks"],
             true
         );
     }

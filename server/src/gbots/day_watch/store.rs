@@ -1,7 +1,7 @@
 //! The one `gbots_day_watch` row (migration 0068): the day watch's GBot and routines on this
 //! computer, and when Chief of Staff offered it.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::coordinators::now_iso;
 use crate::domain::DomainStateError;

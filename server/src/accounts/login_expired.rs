@@ -14,14 +14,14 @@ use crate::{
     notification_feed::{
         broadcast_notification_feed_changed,
         store::{
-            insert_notification_feed_row, notification_agent_icon, NewNotificationFeedRow,
-            NOTIFICATION_FEED_KIND_CUSTOM,
+            NOTIFICATION_FEED_KIND_CUSTOM, NewNotificationFeedRow, insert_notification_feed_row,
+            notification_agent_icon,
         },
     },
     server::AppState,
 };
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// What Settings > Accounts and `ghostex accounts` say about a marked account.
 pub(crate) const NOTICE: &str =
@@ -476,7 +476,14 @@ pub(crate) fn recover(
         })
     };
     let Some(target) = replacement(&registry, snapshot, &session, &current) else {
-        super::recovery::save(state, repo, &session, attention("This account's login expired, and no other Claude account set to Automatic is ready. Run /login, reconnect the account in Settings > Accounts, or switch this session to another account."))?;
+        super::recovery::save(
+            state,
+            repo,
+            &session,
+            attention(
+                "This account's login expired, and no other Claude account set to Automatic is ready. Run /login, reconnect the account in Settings > Accounts, or switch this session to another account.",
+            ),
+        )?;
         return Ok(true);
     };
     match endpoint::select(

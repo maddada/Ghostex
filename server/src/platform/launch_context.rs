@@ -1,10 +1,10 @@
 use std::{io, os::windows::io::AsRawHandle, ptr, sync::OnceLock};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use windows_sys::Win32::{
     Security::{
-        EqualSid, IsTokenRestricted, TokenGroups, TokenSessionId, WinNetworkSid,
-        SID_AND_ATTRIBUTES, TOKEN_GROUPS,
+        EqualSid, IsTokenRestricted, SID_AND_ATTRIBUTES, TOKEN_GROUPS, TokenGroups, TokenSessionId,
+        WinNetworkSid,
     },
     System::Threading::{
         GetCurrentProcess, GetProcessMitigationPolicy, ProcessRedirectionTrustPolicy,

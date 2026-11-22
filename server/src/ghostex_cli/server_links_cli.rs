@@ -5,10 +5,10 @@
 
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::args::parse_args;
-use super::rpc::{call_gxserver_rpc, CliError, CliResult};
+use super::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 const ENDPOINT: &str = "/api/serverLinks";
 const POLL_EVERY: Duration = Duration::from_secs(2);
@@ -107,7 +107,9 @@ pub(crate) fn add(args: &[String]) -> CliResult<()> {
         }
         if said_linked {
             if flag(&row, "incoming") && flag(&row, "incomingLive") {
-                println!("Linked both ways: agents on {other} can now use {here} too. Run ghostex computers to see it.");
+                println!(
+                    "Linked both ways: agents on {other} can now use {here} too. Run ghostex computers to see it."
+                );
                 return Ok(());
             }
             if let Some(reverse) = row.get("reverse").filter(|reverse| !reverse.is_null()) {
@@ -121,7 +123,9 @@ pub(crate) fn add(args: &[String]) -> CliResult<()> {
                             "Now {other} asks to link back. Approve it in Ghostex or on your phone, where it asks \"Let {other} link its agents with {here}?\", only if it shows these words: {reverse_words}"
                         );
                     } else {
-                        println!("{other} couldn't be asked to link back yet ({error}). It is asked again in five minutes.");
+                        println!(
+                            "{other} couldn't be asked to link back yet ({error}). It is asked again in five minutes."
+                        );
                     }
                 }
             }
@@ -201,7 +205,7 @@ pub(crate) fn access(args: &[String]) -> CliResult<()> {
         _ => {
             return Err(CliError::Other(
                 "Usage: ghostex computers access <name> on|off".to_string(),
-            ))
+            ));
         }
     };
     let row = pick(wanted)?;

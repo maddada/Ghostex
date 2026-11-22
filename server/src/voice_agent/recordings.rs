@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::paths::GxserverPaths;
 
@@ -112,11 +112,7 @@ impl Recording {
 }
 
 fn audio_format(file: &str) -> &'static str {
-    if file.ends_with(".m4a") {
-        "m4a"
-    } else {
-        "wav"
-    }
+    if file.ends_with(".m4a") { "m4a" } else { "wav" }
 }
 
 pub(super) fn folder(paths: &GxserverPaths) -> PathBuf {

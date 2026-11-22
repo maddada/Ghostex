@@ -1,11 +1,11 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::project_setup::count_project_file_lines;
 use super::values::{
+    CommandSummary, ProcessCommand, TypedOperationContext, TypedOperationError,
     display_unknown_value, normalize_git_commit_message, normalize_git_ref,
     normalize_git_remote_name, normalize_relative_file_path, optional_relative_file_path,
     optional_relative_file_paths, required_relative_file_paths, run_process_command, typed_result,
-    CommandSummary, ProcessCommand, TypedOperationContext, TypedOperationError,
 };
 use super::worktree::parse_git_branch_list;
 
@@ -509,7 +509,7 @@ pub(crate) fn build_git_command(
         _ => {
             return Err(TypedOperationError::bad_request(format!(
                 "Unsupported Git action: {action}"
-            )))
+            )));
         }
     };
     Ok(command)

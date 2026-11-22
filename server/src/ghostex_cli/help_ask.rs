@@ -3,14 +3,14 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::agents::delivery::{
-    chat_shows, transcript_rows_before_send, TranscriptRows,
+    TranscriptRows, chat_shows, transcript_rows_before_send,
 };
-use crate::ghostex_cli::args::{parse_args, Flags};
+use crate::ghostex_cli::args::{Flags, parse_args};
 use crate::ghostex_cli::output::print_json;
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 use crate::ghostex_cli::sessions;
 
 const USAGE: &str = "Usage: ghostex help ask \"<question>\" [--new] [--timeout-seconds N] [--json]

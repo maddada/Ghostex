@@ -2,16 +2,16 @@
 
 use chrono::Utc;
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::records::STARTED_BY_COORDINATOR_KEY;
 use super::records::{
-    acknowledge_thread_pending_message, drop_thread_pending_message, link_thread,
+    COORDINATOR_GOAL_MAX_CHARS, COORDINATOR_INSTRUCTIONS_MAX_CHARS, COORDINATOR_MEMORY_MAX_NOTES,
+    COORDINATOR_MEMORY_NOTE_MAX_CHARS, CoordinatorMemoryNote, CoordinatorRecord, SessionKey,
+    ThreadRecord, acknowledge_thread_pending_message, drop_thread_pending_message, link_thread,
     list_coordinators, list_threads_for, now_iso, read_coordinator, read_thread,
     set_thread_observed_working, set_thread_pending_message, set_thread_resolved, unlink_thread,
-    write_coordinator, CoordinatorMemoryNote, CoordinatorRecord, SessionKey, ThreadRecord,
-    COORDINATOR_GOAL_MAX_CHARS, COORDINATOR_INSTRUCTIONS_MAX_CHARS, COORDINATOR_MEMORY_MAX_NOTES,
-    COORDINATOR_MEMORY_NOTE_MAX_CHARS,
+    write_coordinator,
 };
 use super::state::{ThreadProgress, ThreadState};
 use crate::domain::{DomainRepository, DomainStateError};

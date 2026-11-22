@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use ghostex_gx_protocol::pairing::PairingStatus;
 
@@ -7,7 +7,7 @@ use crate::{
     domain::read_domain_rpc_params,
     protocol::{rpc_error, rpc_success},
     security::Principal,
-    server::{routed_json, AppState, RoutedResponse},
+    server::{AppState, RoutedResponse, routed_json},
     storage::open_gxserver_database,
     tailcat::{
         hold_tailcat_pairing_window_open, read_tailcat_status_payload_for_paths,
@@ -348,7 +348,7 @@ pub(crate) async fn handle_remote_access_http(
                 Ok(ask) => ask,
                 Err(error) => {
                     return RemoteAccessHttpError::bad_request(format!("Bad request: {error}"))
-                        .into_response(endpoint_path, request_id)
+                        .into_response(endpoint_path, request_id);
                 }
             };
             tokio::task::spawn_blocking(move || {
@@ -437,7 +437,7 @@ pub(crate) async fn handle_remote_access_http(
                 Ok(params) => params,
                 Err(error) => {
                     return RemoteAccessHttpError::from(error)
-                        .into_response(endpoint_path, request_id)
+                        .into_response(endpoint_path, request_id);
                 }
             };
             let own_server_id = state.metadata.server_id.clone();
@@ -518,7 +518,7 @@ pub(crate) async fn handle_remote_access_http(
                 Ok(params) => params,
                 Err(error) => {
                     return RemoteAccessHttpError::from(error)
-                        .into_response(endpoint_path, request_id)
+                        .into_response(endpoint_path, request_id);
                 }
             };
             // Read here: the address lives in this task, not on the blocking pool.
@@ -595,7 +595,7 @@ pub(crate) async fn handle_remote_access_http(
                 Ok(ask) => ask,
                 Err(error) => {
                     return RemoteAccessHttpError::from(error)
-                        .into_response(endpoint_path, request_id)
+                        .into_response(endpoint_path, request_id);
                 }
             };
             tokio::task::spawn_blocking(move || {
@@ -655,7 +655,7 @@ pub(crate) async fn handle_remote_access_http(
                 Ok(code) => code,
                 Err(error) => {
                     return RemoteAccessHttpError::bad_request(format!("{error:#}"))
-                        .into_response(endpoint_path, request_id)
+                        .into_response(endpoint_path, request_id);
                 }
             };
             tokio::task::spawn_blocking(move || {
@@ -784,7 +784,7 @@ pub(crate) async fn handle_remote_access_http(
                     Ok(ask) => ask,
                     Err(error) => {
                         return RemoteAccessHttpError::bad_request(format!("Bad request: {error}"))
-                            .into_response(endpoint_path, request_id)
+                            .into_response(endpoint_path, request_id);
                     }
                 };
             let own_server_id = state.metadata.server_id.clone();
@@ -831,7 +831,7 @@ pub(crate) async fn handle_remote_access_http(
                 Ok(ask) => ask,
                 Err(error) => {
                     return RemoteAccessHttpError::from(error)
-                        .into_response(endpoint_path, request_id)
+                        .into_response(endpoint_path, request_id);
                 }
             };
             tokio::task::spawn_blocking(move || {

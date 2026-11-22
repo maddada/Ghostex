@@ -15,8 +15,8 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use ruzstd::decoding::errors::{FrameDecoderError, ReadFrameHeaderError};
 use ruzstd::decoding::StreamingDecoder;
+use ruzstd::decoding::errors::{FrameDecoderError, ReadFrameHeaderError};
 
 const COMPRESSED_SUFFIX: &str = ".zst";
 static MIRROR_WRITE_LOCK: Mutex<()> = Mutex::new(());
@@ -152,7 +152,7 @@ const MIRROR_MAX_UNREAD: std::time::Duration =
 /// Deletes the mirror copies unread for [`MIRROR_MAX_UNREAD`], and decode leftovers a crash or a
 /// killed daemon left behind.
 pub(crate) fn prune_unread_mirrors(now: std::time::SystemTime) -> crate::storage_cleanup::Tally {
-    use crate::storage_cleanup::{prune_tree, Since};
+    use crate::storage_cleanup::{Since, prune_tree};
     let _guard = MIRROR_WRITE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -170,7 +170,7 @@ fn prune_tree_matching(
     now: std::time::SystemTime,
     matches: fn(&str) -> bool,
 ) -> crate::storage_cleanup::Tally {
-    use crate::storage_cleanup::{is_older, remove_file, Since, Tally, DAY};
+    use crate::storage_cleanup::{DAY, Since, Tally, is_older, remove_file};
     let mut tally = Tally::default();
     let Ok(entries) = fs::read_dir(dir) else {
         return tally;

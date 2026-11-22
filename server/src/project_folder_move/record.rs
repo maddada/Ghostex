@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension as _};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::journal::Journal;
 use super::path_match::MovedRoot;

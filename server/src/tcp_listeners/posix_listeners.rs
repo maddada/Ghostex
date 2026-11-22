@@ -1,12 +1,12 @@
 //! Listening TCP sockets on macOS and Linux, read from `lsof` or `ss`.
 use std::io::Read;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 
 use crate::platform::shell::command_shell;
 

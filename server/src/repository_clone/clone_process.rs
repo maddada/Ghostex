@@ -1,11 +1,11 @@
 use std::{collections::HashMap, env, sync::Arc, time::Duration};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     process::{Child, Command},
-    sync::{mpsc, Mutex},
-    time::{sleep, Instant},
+    sync::{Mutex, mpsc},
+    time::{Instant, sleep},
 };
 
 use super::*;

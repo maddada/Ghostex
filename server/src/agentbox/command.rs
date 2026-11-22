@@ -1,7 +1,7 @@
 //! The `agentbox …` command text Ghostex runs: box launch, re-attach, and the setup commands the
 //! Cloud Boxes page runs in a command pane.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::location::{
     is_cloud_provider, is_valid_alias, is_valid_ssh_target, provider_label, provider_spec,
@@ -294,7 +294,7 @@ pub(crate) fn terminal_command(params: &Map<String, Value>) -> Result<Value, Dom
         _ => {
             return Err(DomainStateError::bad_request(format!(
                 "\"{command}\" is not an agentbox terminal command."
-            )))
+            )));
         }
     };
     Ok(json!({ "command": text, "title": title }))

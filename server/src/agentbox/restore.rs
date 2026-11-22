@@ -1,6 +1,6 @@
 //! How a box session comes back after a reboot, sleep, wire cycle or any provider restart.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::command::box_attach_command;
 use super::create::with_claude_sign_in;

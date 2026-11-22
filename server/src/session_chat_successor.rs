@@ -12,10 +12,10 @@ use serde_json::{Map, Value};
 use crate::session_chat::*;
 use crate::session_chat_decode_claude::claude_content_blocks;
 use crate::session_chat_paths::{
-    is_claude_sidechain_transcript_name, read_transcript_head_complete_lines,
-    CLAUDE_EMBEDDED_ID_SCAN_HEAD_BYTES,
+    CLAUDE_EMBEDDED_ID_SCAN_HEAD_BYTES, is_claude_sidechain_transcript_name,
+    read_transcript_head_complete_lines,
 };
-use crate::session_chat_tail::{find_last_complete_line_end, TailLineAccumulator};
+use crate::session_chat_tail::{TailLineAccumulator, find_last_complete_line_end};
 
 /// Reverse-scan budget for "when did this transcript last carry a real
 /// conversation row". The dead file in the 2026-08-02 repro had its last

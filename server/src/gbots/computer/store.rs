@@ -3,8 +3,8 @@
 
 use std::collections::HashMap;
 
-use rusqlite::{params, Connection, OptionalExtension, Row};
-use serde_json::{json, Value};
+use rusqlite::{Connection, OptionalExtension, Row, params};
+use serde_json::{Value, json};
 
 use crate::coordinators::now_iso;
 use crate::domain::DomainStateError;

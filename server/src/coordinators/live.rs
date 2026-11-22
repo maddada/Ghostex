@@ -13,7 +13,7 @@ use serde_json::Value;
 
 use super::idle_wait::IdleWaitReason;
 use super::records::SessionKey;
-use super::state::{classify_thread_session, ThreadProgress, ThreadState};
+use super::state::{ThreadProgress, ThreadState, classify_thread_session};
 
 /// One open thread as the supervisor last saw it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -71,11 +71,7 @@ pub fn classify_thread_live(
         .and_then(session_key)
         .and_then(|(project_id, session_id)| thread_live(&project_id, &session_id))
         .is_some_and(|live| live.working);
-    if working {
-        ThreadState::Working
-    } else {
-        state
-    }
+    if working { ThreadState::Working } else { state }
 }
 
 /// Whether Auto Sleep must leave a thread awake: it works by its transcript, or its last turn

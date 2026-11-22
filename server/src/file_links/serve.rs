@@ -6,7 +6,7 @@ use std::{
 
 use axum::{
     body::Body,
-    http::{header, HeaderMap, HeaderValue, Method, Response, StatusCode},
+    http::{HeaderMap, HeaderValue, Method, Response, StatusCode, header},
     response::IntoResponse,
 };
 

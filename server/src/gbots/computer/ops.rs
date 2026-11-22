@@ -3,7 +3,7 @@
 //! use).
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::store::{self, BotComputer, Place};
 use crate::domain::{DomainRepository, DomainStateError};
@@ -337,7 +337,9 @@ fn pick(
             .chain(boxes.iter().map(|row| row.name.clone()))
             .collect();
         return Err(DomainStateError::not_found(if names.is_empty() {
-            format!("There's no connected computer or Cloud Box called {wanted}. Connect a computer in Settings > Remote, or start a Cloud Box first.")
+            format!(
+                "There's no connected computer or Cloud Box called {wanted}. Connect a computer in Settings > Remote, or start a Cloud Box first."
+            )
         } else {
             format!(
                 "There's no connected computer or Cloud Box called {wanted}. Pick one of: {}.",

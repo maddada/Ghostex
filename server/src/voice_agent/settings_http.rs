@@ -6,13 +6,13 @@
 //! The voice and the speed are the computer's settings, shared by every client, so the phone saves them here instead of keeping its own. The write goes through the running desktop app's `updateSettingsPatch` (CDXC:Settings 2026-09-09: settings writes go through the app, never a direct file write); this endpoint only checks the values first, so a remote client can change these two settings and nothing else.
 
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::keys;
 use super::provider::Provider;
 use crate::domain::read_domain_rpc_params;
 use crate::protocol::{rpc_error, rpc_success};
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
 
 const RENDERER_TIMEOUT_MS: u64 = 5_000;
 
@@ -46,7 +46,7 @@ pub(crate) async fn handle_set_voice_agent_settings_http(
                     endpoint_path,
                     request_id,
                     "provider must be xai or openai.".to_string(),
-                )
+                );
             }
         },
         None => keys::selected_provider(&state.paths),

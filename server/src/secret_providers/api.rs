@@ -4,12 +4,12 @@
 use std::sync::Arc;
 
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::store::{self, SecretReference};
-use crate::domain::{read_domain_rpc_params, DomainStateError};
+use crate::domain::{DomainStateError, read_domain_rpc_params};
 use crate::protocol::rpc_success;
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
 
 pub(crate) const SECRET_PROVIDER_ENDPOINTS: &[&str] = &[
     "/api/readSecretProviders",

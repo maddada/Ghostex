@@ -1,6 +1,6 @@
 //! The goal cell Codex prints for `/goal`, lifted out of its local command output.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// CDXC:SessionChat 2026-09-06 WHY:
 /// Codex prints a `/goal` result as one info cell, `• Goal <status> Objective: <text>`, and then keeps working, so the screen diff behind the local command output grew with the whole agent turn.

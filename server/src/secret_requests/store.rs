@@ -104,7 +104,9 @@ impl SecretRequestError {
             Self::NotFound => "This secret request no longer exists.",
             Self::AlreadyAnswered => "This secret request was already answered.",
             Self::Ended => "The agent that asked stopped waiting, so this secret was not saved.",
-            Self::TooMany => "This session already has several secret requests waiting. Answer or decline those first.",
+            Self::TooMany => {
+                "This session already has several secret requests waiting. Answer or decline those first."
+            }
             Self::StoreFailed => "Could not save the secret privately. Try again.",
         }
     }
@@ -308,10 +310,10 @@ pub(crate) fn answer(
     match request.status {
         SecretRequestStatus::Pending => {}
         SecretRequestStatus::Saved | SecretRequestStatus::Declined => {
-            return Err(SecretRequestError::AlreadyAnswered)
+            return Err(SecretRequestError::AlreadyAnswered);
         }
         SecretRequestStatus::TimedOut | SecretRequestStatus::Cancelled => {
-            return Err(SecretRequestError::Ended)
+            return Err(SecretRequestError::Ended);
         }
     }
     match answer {

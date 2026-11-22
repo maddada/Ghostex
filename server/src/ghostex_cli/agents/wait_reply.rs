@@ -12,12 +12,12 @@
 
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::arguments::Arguments;
 use super::identity::{self, text};
 use crate::ghostex_cli::args::Flags;
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 use crate::ghostex_cli::selector;
 
 const DEFAULT_TIMEOUT_SECONDS: f64 = 600.0;
@@ -107,7 +107,7 @@ pub(super) fn wait_reply(args: &Arguments) -> CliResult<Value> {
     };
     let contains = match &args.contains {
         Some(needle) if needle.trim().is_empty() => {
-            return Err(CliError::Other("--contains needs text to look for.".into()))
+            return Err(CliError::Other("--contains needs text to look for.".into()));
         }
         Some(needle) => Some(needle.to_lowercase()),
         None => None,

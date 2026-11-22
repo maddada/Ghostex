@@ -13,7 +13,7 @@ mod registry;
 mod repair;
 
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(crate) use record::MOVED_FOLDER_SESSION_RUNTIME_KEY;
 pub(crate) use registry::{
@@ -136,7 +136,10 @@ pub(crate) fn move_project_folder(
         registry::end_moving(&journal.project_id);
         return Err(DomainStateError::bad_request(
             if fs_ops::is_in_use_error(&error) {
-                format!("Something on this computer still has files open in {}. Close editors, terminals and Explorer windows using it, then try again. Nothing was changed.", journal.old_path)
+                format!(
+                    "Something on this computer still has files open in {}. Close editors, terminals and Explorer windows using it, then try again. Nothing was changed.",
+                    journal.old_path
+                )
             } else if error.kind() == std::io::ErrorKind::AlreadyExists {
                 format!(
                     "{} appeared while moving, so nothing was changed.",
@@ -156,19 +159,19 @@ pub(crate) fn move_project_folder(
         Ok(recorded) => recorded,
         Err(error) => {
             return match fs_ops::rename_no_replace(&new, &old, journal.case_only) {
-            Ok(()) => {
-                journal::remove_journal(root_dir, &journal.project_id);
-                registry::end_moving(&journal.project_id);
-                Err(conflict(format!(
-                    "Ghostex could not record the move ({}), so the folder was put back. Nothing was changed.",
-                    error.message
-                )))
-            }
-            Err(back) => Err(conflict(format!(
-                "The folder moved to {}, but Ghostex could not record it ({}) or move it back ({back}). Ghostex finishes recording it at its next start; until then the project's sessions can't start.",
-                journal.new_path, error.message
-            ))),
-        };
+                Ok(()) => {
+                    journal::remove_journal(root_dir, &journal.project_id);
+                    registry::end_moving(&journal.project_id);
+                    Err(conflict(format!(
+                        "Ghostex could not record the move ({}), so the folder was put back. Nothing was changed.",
+                        error.message
+                    )))
+                }
+                Err(back) => Err(conflict(format!(
+                    "The folder moved to {}, but Ghostex could not record it ({}) or move it back ({back}). Ghostex finishes recording it at its next start; until then the project's sessions can't start.",
+                    journal.new_path, error.message
+                ))),
+            };
         }
     };
     finish(paths, db, journal, Some(recorded))
@@ -268,11 +271,15 @@ pub(crate) fn recover_on_startup(paths: &GxserverPaths, server_id: &str) {
         match next_step(journal.clone()) {
             Next::Forget => {
                 journal::remove_journal(&paths.root_dir, &project_id);
-                eprintln!("[gxserver] folder move of {project_id}: the folder never moved; forgot the move.");
+                eprintln!(
+                    "[gxserver] folder move of {project_id}: the folder never moved; forgot the move."
+                );
             }
             Next::Stuck(why) => {
                 registry::keep_moving(journal.project_ids.clone(), journal.root());
-                eprintln!("[gxserver] folder move of {project_id} stopped at {phase} and can't be finished on its own ({why}). Its sessions can't start until ghostex move-project-folder --project-id {project_id} --resume or --abandon.");
+                eprintln!(
+                    "[gxserver] folder move of {project_id} stopped at {phase} and can't be finished on its own ({why}). Its sessions can't start until ghostex move-project-folder --project-id {project_id} --resume or --abandon."
+                );
             }
             Next::Finish(journal) => {
                 registry::keep_moving(journal.project_ids.clone(), journal.root());
@@ -284,8 +291,13 @@ pub(crate) fn recover_on_startup(paths: &GxserverPaths, server_id: &str) {
                 .and_then(|db| finish(paths, &db, journal, None));
                 let _ = server_id;
                 match outcome {
-                    Ok((result, _)) => eprintln!("[gxserver] folder move of {project_id} stopped at {phase}; finished it: {result}"),
-                    Err(error) => eprintln!("[gxserver] folder move of {project_id} stopped at {phase}; finishing it failed: {}", error.message),
+                    Ok((result, _)) => eprintln!(
+                        "[gxserver] folder move of {project_id} stopped at {phase}; finished it: {result}"
+                    ),
+                    Err(error) => eprintln!(
+                        "[gxserver] folder move of {project_id} stopped at {phase}; finishing it failed: {}",
+                        error.message
+                    ),
                 }
             }
         }
@@ -330,11 +342,7 @@ pub(crate) fn resume(
 
 /// The shell's move command, for the steps a user takes by hand.
 fn move_command() -> &'static str {
-    if cfg!(windows) {
-        "move"
-    } else {
-        "mv"
-    }
+    if cfg!(windows) { "move" } else { "mv" }
 }
 
 /// What to do by hand when the disk can't say whether the move happened: both folders exist, or
@@ -364,9 +372,14 @@ pub(crate) fn abandon(paths: &GxserverPaths, project_id: &str) -> Result<Value, 
     if let Next::Finish(_) = next_step(journal.clone()) {
         let (old, new) = (&journal.old_path, &journal.new_path);
         let undo = if matches!(journal.phase, Phase::Planned | Phase::Moved) {
-            format!("To undo it instead, move the folder back by hand ({} \"{new}\" \"{old}\"), then run --abandon.", move_command())
+            format!(
+                "To undo it instead, move the folder back by hand ({} \"{new}\" \"{old}\"), then run --abandon.",
+                move_command()
+            )
         } else {
-            format!("Ghostex already names the new folder, so to undo it, finish it with --resume, then move it back with ghostex move-project-folder --project-id {project_id} \"{old}\".")
+            format!(
+                "Ghostex already names the new folder, so to undo it, finish it with --resume, then move it back with ghostex move-project-folder --project-id {project_id} \"{old}\"."
+            )
         };
         return Err(conflict(format!(
             "This move can still be finished: the folder is at {new}. Run ghostex move-project-folder --project-id {project_id} --resume instead. {undo}"

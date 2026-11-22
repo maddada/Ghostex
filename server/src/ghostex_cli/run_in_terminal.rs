@@ -3,12 +3,12 @@
 //! CDXC:SessionChat 2026-10-24 WHY: the phone reaches this computer only through the CLI, so its Run in terminal is this verb. Like the desktop (User: "please make clicking on the floating terminal button that we added add that command to a terminal in the commands panel not a new terminal session in the sidebar"), it types into the project's Commands panel terminal when one is running and idle, which the phone then opens as its tab. Without one it makes a new plain terminal in the chat session's own folder rather than a Commands panel session, which the desktop's panel, whose layout is its own, would never show. It never types into the agent's terminal, where the agent would read the command as a prompt. The output names the terminal it used.
 //! SEE-ALSO: `command_terminal_create_params` in packages/gx-core/src/session_create/params.rs builds the same create for the desktop; packages/gx-chat-core/src/transcript/run_command.rs decides what runs.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::actions::resolve_cli_cwd;
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 /// A terminal's title: the command's first line, cut to the length a sidebar row shows.
 fn terminal_title(command: &str) -> String {

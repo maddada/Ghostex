@@ -43,8 +43,8 @@ use std::{
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -52,20 +52,19 @@ use std::{
 use serde_json::{Map, Value};
 
 use crate::session_chat::{
-    is_noise_message, parse_json_object, read_incremental_transcript_messages,
-    resolve_session_chat_transcript_agent, resolve_session_chat_transcript_path,
-    session_chat_line_decoder, text_block, SessionChatBlock, SessionChatIncrementalState,
-    SessionChatLineDecoder, SessionChatMessage, SessionChatRole, SessionChatSource,
-    SessionChatTranscriptAgent,
+    SessionChatBlock, SessionChatIncrementalState, SessionChatLineDecoder, SessionChatMessage,
+    SessionChatRole, SessionChatSource, SessionChatTranscriptAgent, is_noise_message,
+    parse_json_object, read_incremental_transcript_messages, resolve_session_chat_transcript_agent,
+    resolve_session_chat_transcript_path, session_chat_line_decoder, text_block,
 };
 use crate::session_chat_notice::{
-    classify_session_chat_terminal_notice, clear_session_chat_send_verdict,
-    session_chat_delivery_mismatch_notice, session_chat_notice_key,
-    session_chat_screen_shows_queued_input, session_chat_terminal_screen_tail,
-    session_chat_watchdog_notice, set_session_chat_watchdog_notice, SessionChatTerminalNotice,
-    SessionChatTerminalNoticeAction, SessionChatTerminalNoticeSeverity,
-    SessionChatTerminalNoticeSource, SESSION_CHAT_NOTICE_DELIVERY_FAILED,
-    SESSION_CHAT_NOTICE_QUEUED_INPUT,
+    SESSION_CHAT_NOTICE_DELIVERY_FAILED, SESSION_CHAT_NOTICE_QUEUED_INPUT,
+    SessionChatTerminalNotice, SessionChatTerminalNoticeAction, SessionChatTerminalNoticeSeverity,
+    SessionChatTerminalNoticeSource, classify_session_chat_terminal_notice,
+    clear_session_chat_send_verdict, session_chat_delivery_mismatch_notice,
+    session_chat_notice_key, session_chat_screen_shows_queued_input,
+    session_chat_terminal_screen_tail, session_chat_watchdog_notice,
+    set_session_chat_watchdog_notice,
 };
 use crate::session_chat_options::session_chat_option_agent;
 

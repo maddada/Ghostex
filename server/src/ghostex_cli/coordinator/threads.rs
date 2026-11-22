@@ -1,16 +1,16 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::command::{
     flag_text, launch_settings_for, read_view, resolve_session, resolve_thread_session,
     server_flags, target_coordinator, text_or_file,
 };
-use super::delivery::{confirm_brief_started, BriefOutcome};
-use crate::coordinators::{agent_message, thread_brief, BriefContext, MessageSender};
+use super::delivery::{BriefOutcome, confirm_brief_started};
+use crate::coordinators::{BriefContext, MessageSender, agent_message, thread_brief};
 use crate::ghostex_cli::{
     agents,
     args::ParsedArgs,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
 
 fn sender(row: &Value) -> MessageSender {
@@ -368,8 +368,16 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         agents::confirm_coordinator_delivery(coordinator, &thread, &brief_send_id, &flags);
     }
     let (status, note) = match &outcome {
-        BriefOutcome::Started => ("started", "Its transcript shows the brief: it is working on it.".to_string()),
-        BriefOutcome::Pending(reason) => ("pending", format!("Its brief has not started yet: {reason}. Ghostex keeps watching and reports to you if it never arrives; do not start another thread or resend the brief.")),
+        BriefOutcome::Started => (
+            "started",
+            "Its transcript shows the brief: it is working on it.".to_string(),
+        ),
+        BriefOutcome::Pending(reason) => (
+            "pending",
+            format!(
+                "Its brief has not started yet: {reason}. Ghostex keeps watching and reports to you if it never arrives; do not start another thread or resend the brief."
+            ),
+        ),
     };
     let mut result = json!({
         "ok": true,
@@ -506,7 +514,10 @@ pub(super) fn unlink(parsed: &ParsedArgs) -> CliResult<()> {
         if parsed.flags.truthy("json") {
             print_json(&result);
         } else {
-            println!("{reference} is no longer a thread of {}; its session keeps running on its computer.", agents::text(&coordinator, "title"));
+            println!(
+                "{reference} is no longer a thread of {}; its session keeps running on its computer.",
+                agents::text(&coordinator, "title")
+            );
         }
         return Ok(());
     }

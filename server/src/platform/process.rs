@@ -57,11 +57,7 @@ pub(crate) fn hidden_console_flags() -> u32 {
         let window = GetConsoleWindow();
         window.is_null() || IsWindowVisible(window) == 0
     });
-    if shares {
-        0
-    } else {
-        CREATE_NO_WINDOW
-    }
+    if shares { 0 } else { CREATE_NO_WINDOW }
 }
 
 /// A `Command` for background work that never shows a console window (`NoConsoleWindow`).
@@ -76,7 +72,7 @@ pub(crate) fn background_command(program: impl AsRef<OsStr>) -> Command {
 #[cfg(windows)]
 pub(crate) fn suppress_helper_error_dialogs() {
     use windows_sys::Win32::System::Diagnostics::Debug::{
-        GetErrorMode, SetErrorMode, SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX,
+        GetErrorMode, SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX, SetErrorMode,
     };
     unsafe {
         SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
@@ -95,9 +91,9 @@ pub(crate) fn end_with_server(pid: u32) {
             Foundation::CloseHandle,
             System::{
                 JobObjects::{
-                    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-                    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-                    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+                    SetInformationJobObject,
                 },
                 Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE},
             },
@@ -331,8 +327,8 @@ fn spawn_in_job(command: &mut Command) -> std::io::Result<ProcessTree> {
 fn command_job() -> std::io::Result<std::os::windows::io::OwnedHandle> {
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
     use windows_sys::Win32::System::JobObjects::{
-        CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_BREAKAWAY_OK,
+        CreateJobObjectW, JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JobObjectExtendedLimitInformation, SetInformationJobObject,
     };
     let job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
     if job.is_null() {
@@ -459,8 +455,8 @@ pub(crate) fn process_image_path(pid: u32) -> Option<std::path::PathBuf> {
     use windows_sys::Win32::{
         Foundation::CloseHandle,
         System::Threading::{
-            OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-            PROCESS_QUERY_LIMITED_INFORMATION,
+            OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+            QueryFullProcessImageNameW,
         },
     };
     if pid == 0 {
@@ -488,7 +484,7 @@ pub(crate) fn process_ids() -> Vec<u32> {
     use windows_sys::Win32::{
         Foundation::{CloseHandle, INVALID_HANDLE_VALUE},
         System::Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
             TH32CS_SNAPPROCESS,
         },
     };
@@ -516,8 +512,8 @@ pub(crate) fn terminate_process(pid: u32, wait: std::time::Duration) -> bool {
     use windows_sys::Win32::{
         Foundation::{CloseHandle, WAIT_OBJECT_0},
         System::Threading::{
-            OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
-            PROCESS_TERMINATE,
+            OpenProcess, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess,
+            WaitForSingleObject,
         },
     };
     if pid == 0 || pid == std::process::id() {
@@ -601,7 +597,7 @@ fn image_superseded_at(
 fn windows_file_identity(path: &std::path::Path) -> Option<FileIdentity> {
     use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
     use windows_sys::Win32::Storage::FileSystem::{
-        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_READ_ATTRIBUTES,
+        BY_HANDLE_FILE_INFORMATION, FILE_READ_ATTRIBUTES, GetFileInformationByHandle,
     };
     let file = std::fs::OpenOptions::new()
         .access_mode(FILE_READ_ATTRIBUTES)
@@ -701,7 +697,7 @@ pub(crate) fn spawn_server(executable: &OsStr) -> std::io::Result<u32> {
 
 #[cfg(all(test, windows))]
 mod process_tree_tests {
-    use super::{process_is_alive, ProcessTree};
+    use super::{ProcessTree, process_is_alive};
     use std::{
         process::{Command, Stdio},
         time::{Duration, Instant},
@@ -795,7 +791,7 @@ mod process_tree_tests {
 
 #[cfg(all(test, unix))]
 mod tests {
-    use super::{image_superseded_at, FileIdentity};
+    use super::{FileIdentity, image_superseded_at};
     use std::{os::unix::fs::MetadataExt, path::Path};
 
     // The same comparison Windows makes, fed the device and inode the Unix filesystem keeps for each file.

@@ -24,9 +24,9 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::platform::process::{background_command, run_bounded, Keep, RunLimits};
+use crate::platform::process::{Keep, RunLimits, background_command, run_bounded};
 
 /// How many changed files and commits one repository lists; the counts are always whole.
 const LIST_LIMIT: usize = 20;
@@ -396,11 +396,13 @@ pub(crate) fn parallel_map<T: Send, R: Send>(
     let answers = std::sync::Mutex::new((0..total).map(|_| None).collect::<Vec<Option<R>>>());
     std::thread::scope(|scope| {
         for _ in 0..READERS.min(total) {
-            scope.spawn(|| loop {
-                let next = queue.lock().unwrap_or_else(|p| p.into_inner()).next();
-                let Some((index, item)) = next else { break };
-                let answer = read(item);
-                answers.lock().unwrap_or_else(|p| p.into_inner())[index] = Some(answer);
+            scope.spawn(|| {
+                loop {
+                    let next = queue.lock().unwrap_or_else(|p| p.into_inner()).next();
+                    let Some((index, item)) = next else { break };
+                    let answer = read(item);
+                    answers.lock().unwrap_or_else(|p| p.into_inner())[index] = Some(answer);
+                }
             });
         }
     });

@@ -6,9 +6,9 @@
 //! User (Q2103 A, mockup "Researcher added"): Chief of Staff "adds it, tells you, Undo": the card's title says the bot was added, one line says what it runs on and what it works on, and its buttons are Undo and Open settings. After Undo it reads "Researcher removed" with "Undone". The desktop and web chat (apps/desktop/src/app/native_chat/gbot_card.rs) and the phone (apps/mobile/app/src/chat/native/transcript/GbotCard.tsx) draw the same card.
 
 use ghostex_gx_protocol::chat_card::GBOT_ADDED;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use super::record::{color_hex, Bot};
+use super::record::{Bot, color_hex};
 
 /// The card a GBot Chief of Staff added carries.
 pub(crate) fn gbot_added_card(change_id: &str, bot: &Bot) -> Value {

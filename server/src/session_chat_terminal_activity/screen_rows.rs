@@ -302,11 +302,13 @@ blank row or marker.
 */
 fn claude_tool_gutter_text(rows: &[ScreenRow], gutter: usize) -> Option<String> {
     let gutter_indent = rows[gutter].indent;
-    let mut lines = vec![rows[gutter]
-        .text
-        .trim_start_matches(CLAUDE_TOOL_OUTPUT_MARKER)
-        .trim()
-        .to_string()];
+    let mut lines = vec![
+        rows[gutter]
+            .text
+            .trim_start_matches(CLAUDE_TOOL_OUTPUT_MARKER)
+            .trim()
+            .to_string(),
+    ];
     for row in &rows[gutter + 1..] {
         if lines.len() >= CLAUDE_TOOL_DETAIL_MAX_ROWS
             || row.after_blank

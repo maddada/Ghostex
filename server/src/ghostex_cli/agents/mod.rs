@@ -11,6 +11,6 @@ mod visibility;
 mod wait_reply;
 
 pub(super) use command::run;
-pub(super) use delivery::{chat_shows, confirm_coordinator_delivery, TranscriptRows};
+pub(super) use delivery::{TranscriptRows, chat_shows, confirm_coordinator_delivery};
 pub(super) use identity::{caller, inventory_flags, resolve_names, summary, text};
 pub(super) use visibility::require_launchable_agent;

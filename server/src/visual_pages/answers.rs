@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
 use axum::{
-    body::{to_bytes, Body},
-    http::{header, HeaderValue, Response, StatusCode},
+    body::{Body, to_bytes},
+    http::{HeaderValue, Response, StatusCode, header},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::server::{AppState, RoutedResponse};
 
 use super::{
     serve::VISUAL_PAGE_ROUTE_PREFIX,
-    store::{note_delivery, store_answers, StoreAnswersError},
+    store::{StoreAnswersError, note_delivery, store_answers},
 };
 
 pub(crate) const VISUAL_PAGE_ANSWERS_SUFFIX: &str = "/answers";
@@ -57,7 +57,7 @@ pub(crate) async fn submit(
             return reply(
                 StatusCode::BAD_REQUEST,
                 json!({"ok": false, "error": "Send {\"answers\": …} as JSON."}),
-            )
+            );
         }
     };
     let state_dir = state.paths.root_dir.clone();
@@ -73,25 +73,25 @@ pub(crate) async fn submit(
             return reply(
                 StatusCode::NOT_FOUND,
                 json!({"ok": false, "error": "No such page."}),
-            )
+            );
         }
         Ok(Err(StoreAnswersError::AlreadyAnswered(answered_at))) => {
             return reply(
                 StatusCode::CONFLICT,
                 json!({"ok": false, "error": "These answers were already sent.", "answeredAt": answered_at}),
-            )
+            );
         }
         Ok(Err(StoreAnswersError::Io(error))) => {
             return reply(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 json!({"ok": false, "error": format!("The answers could not be saved: {error}")}),
-            )
+            );
         }
         Err(_) => {
             return reply(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 json!({"ok": false, "error": "The answers could not be saved."}),
-            )
+            );
         }
     };
     let answered_at = record["answeredAt"].clone();

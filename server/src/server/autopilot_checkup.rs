@@ -155,7 +155,9 @@ pub(super) fn look(
             .all(|text| text.len() >= 20 && *text == repeated[0])
     {
         return Some(why(
-            &format!("It said the same thing {LOOP_REPEATS} times in a row, so it looks stuck in a loop."),
+            &format!(
+                "It said the same thing {LOOP_REPEATS} times in a row, so it looks stuck in a loop."
+            ),
             look.gate,
             look.session,
         ));

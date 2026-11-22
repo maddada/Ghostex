@@ -3,8 +3,8 @@
 use super::selection_options::ready;
 use super::*;
 use crate::session_chat_options::{
-    codex_permissions_choice, codex_permissions_command, codex_permissions_on_screen,
-    SessionChatOptionEvidence,
+    SessionChatOptionEvidence, codex_permissions_choice, codex_permissions_command,
+    codex_permissions_on_screen,
 };
 
 const FULL_ACCESS_TITLE: &str = "Enable full access?";

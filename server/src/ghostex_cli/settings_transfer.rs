@@ -9,17 +9,17 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use ghostex_gx_core::settings_transfer::{
-    describe_transfer_value, export_file_name, export_settings_document, plan_settings_import,
-    ExportSource, ImportPlan,
+    ExportSource, ImportPlan, describe_transfer_value, export_file_name, export_settings_document,
+    plan_settings_import,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::actions::send_gxserver_cli_action;
-use crate::ghostex_cli::args::{parse_args, Flags};
+use crate::ghostex_cli::args::{Flags, parse_args};
 use crate::ghostex_cli::output::print_json;
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 
-use super::settings::{read_settings_file, values_equal, SETTINGS_UPDATE_SOURCE};
+use super::settings::{SETTINGS_UPDATE_SOURCE, read_settings_file, values_equal};
 
 const IMPORT_CONFIRM_TIMEOUT: Duration = Duration::from_secs(5);
 const IMPORT_POLL_INTERVAL: Duration = Duration::from_millis(100);

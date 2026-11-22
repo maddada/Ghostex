@@ -1,6 +1,6 @@
 use serde_json::{Map, Value};
 
-use super::args::{parse_boolean, Flags};
+use super::args::{Flags, parse_boolean};
 use super::rpc::{CliError, CliResult};
 
 /// CDXC:SessionChat 2026-09-12 WHY:

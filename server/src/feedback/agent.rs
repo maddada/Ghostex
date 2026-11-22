@@ -6,21 +6,21 @@
 use std::path::{Path, PathBuf};
 
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::agents::{
     apply_created_session_identity, create_agent_session_params_for_project, read_agent_settings,
 };
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::protocol::rpc_success;
 use crate::server::{
-    domain_error_response, queue_session_chat_prompt, restore_parked_project_for_new_session,
-    routed_json, schedule_presentation_project_delta, schedule_presentation_session_delta,
-    AppState, RoutedResponse,
+    AppState, RoutedResponse, domain_error_response, queue_session_chat_prompt,
+    restore_parked_project_for_new_session, routed_json, schedule_presentation_project_delta,
+    schedule_presentation_session_delta,
 };
 use crate::sidebar_hud::sidebar_agent_buttons_from_projects;
 use crate::storage::open_gxserver_database;
-use crate::zmx::{dispatch_zmx_lifecycle_endpoint, ZmxEndpointError, ZmxServerContext};
+use crate::zmx::{ZmxEndpointError, ZmxServerContext, dispatch_zmx_lifecycle_endpoint};
 
 use super::brief::{new_report_folder, report_steps, save_screenshots, screenshot_lines};
 use super::brief_wait::wait_for_feedback_agent_brief;

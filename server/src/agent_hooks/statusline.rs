@@ -28,7 +28,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 
@@ -722,11 +722,12 @@ fn exit_when_parent_exits() {
         Wdk::System::Threading::{NtQueryInformationProcess, ProcessBasicInformation},
         Win32::{
             Foundation::{
-                CloseHandle, GetLastError, ERROR_INVALID_PARAMETER, FILETIME, WAIT_OBJECT_0,
+                CloseHandle, ERROR_INVALID_PARAMETER, FILETIME, GetLastError, WAIT_OBJECT_0,
             },
             System::Threading::{
-                GetCurrentProcess, GetProcessTimes, OpenProcess, WaitForSingleObject, INFINITE,
+                GetCurrentProcess, GetProcessTimes, INFINITE, OpenProcess,
                 PROCESS_BASIC_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+                WaitForSingleObject,
             },
         },
     };
@@ -862,9 +863,9 @@ fn kill_children_with_this_process() {
         Foundation::CloseHandle,
         System::{
             JobObjects::{
-                AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-                SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+                SetInformationJobObject,
             },
             Threading::GetCurrentProcess,
         },

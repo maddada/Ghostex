@@ -10,9 +10,8 @@ use serde_json::Value;
 use crate::paths::GxserverPaths;
 
 use super::config::{
-    pi_extension_paths, resolve_config_directory, resolve_omp_agent_directory, HookPaths,
-    AMP_PLUGIN_MARKER, HOOK_DEFINITIONS, OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER,
-    PI_EXTENSION_MARKER,
+    AMP_PLUGIN_MARKER, HOOK_DEFINITIONS, HookPaths, OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER,
+    PI_EXTENSION_MARKER, pi_extension_paths, resolve_config_directory, resolve_omp_agent_directory,
 };
 use super::install::read_json_object;
 use super::probing::{list_profile_hook_paths, normalize_environment_path, read_file_text};
@@ -209,11 +208,10 @@ pub(crate) fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec
             paths
         }
         "claude" => {
-            let mut paths =
-                vec![
-                    ghostex_paths::agent_homes::claude_default_home(&hook_paths.home_dir)
-                        .join("settings.json"),
-                ];
+            let mut paths = vec![
+                ghostex_paths::agent_homes::claude_default_home(&hook_paths.home_dir)
+                    .join("settings.json"),
+            ];
             paths.extend(list_profile_hook_paths(
                 &hook_paths.home_dir,
                 ".claude-profiles",
@@ -236,51 +234,63 @@ pub(crate) fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec
                 config_dir.join("cli.json"),
             ]
         }
-        "amp" => vec![hook_paths
-            .home_dir
-            .join(".config")
-            .join("amp")
-            .join("plugins")
-            .join("ghostex-session.ts")],
+        "amp" => vec![
+            hook_paths
+                .home_dir
+                .join(".config")
+                .join("amp")
+                .join("plugins")
+                .join("ghostex-session.ts"),
+        ],
         "pi" => pi_extension_paths(&hook_paths.home_dir, hook_paths.respect_config_environment),
-        "omp" => vec![resolve_omp_agent_directory(
-            &hook_paths.home_dir,
-            hook_paths.respect_config_environment,
-        )
-        .join("extensions")
-        .join("ghostex-omp-session.ts")],
+        "omp" => vec![
+            resolve_omp_agent_directory(
+                &hook_paths.home_dir,
+                hook_paths.respect_config_environment,
+            )
+            .join("extensions")
+            .join("ghostex-omp-session.ts"),
+        ],
         "grok" => {
-            vec![resolve_config_directory(
-                &hook_paths.home_dir,
-                hook_paths.respect_config_environment,
-                "GROK_HOME",
-                ".grok/hooks",
-                None,
-            )
-            .join("ghostex-session.json")]
+            vec![
+                resolve_config_directory(
+                    &hook_paths.home_dir,
+                    hook_paths.respect_config_environment,
+                    "GROK_HOME",
+                    ".grok/hooks",
+                    None,
+                )
+                .join("ghostex-session.json"),
+            ]
         }
-        "antigravity" => vec![hook_paths
-            .home_dir
-            .join(".gemini")
-            .join("config")
-            .join("hooks.json")],
-        "kiro" => vec![resolve_config_directory(
-            &hook_paths.home_dir,
-            hook_paths.respect_config_environment,
-            "KIRO_HOME",
-            ".kiro/agents",
-            Some("agents"),
-        )
-        .join("ghostex.json")],
-        "copilot" => {
-            vec![resolve_config_directory(
+        "antigravity" => vec![
+            hook_paths
+                .home_dir
+                .join(".gemini")
+                .join("config")
+                .join("hooks.json"),
+        ],
+        "kiro" => vec![
+            resolve_config_directory(
                 &hook_paths.home_dir,
                 hook_paths.respect_config_environment,
-                "COPILOT_HOME",
-                ".copilot",
-                None,
+                "KIRO_HOME",
+                ".kiro/agents",
+                Some("agents"),
             )
-            .join("config.json")]
+            .join("ghostex.json"),
+        ],
+        "copilot" => {
+            vec![
+                resolve_config_directory(
+                    &hook_paths.home_dir,
+                    hook_paths.respect_config_environment,
+                    "COPILOT_HOME",
+                    ".copilot",
+                    None,
+                )
+                .join("config.json"),
+            ]
         }
         "droid" => vec![hook_paths.home_dir.join(".factory").join("settings.json")],
         "rovodev" => vec![hook_paths.home_dir.join(".rovodev").join("config.yml")],
@@ -305,23 +315,27 @@ pub(crate) fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec
             );
             paths
         }
-        "codebuddy" => vec![resolve_config_directory(
-            &hook_paths.home_dir,
-            hook_paths.respect_config_environment,
-            "CODEBUDDY_CONFIG_DIR",
-            ".codebuddy",
-            None,
-        )
-        .join("settings.json")],
-        "qoder" => {
-            vec![resolve_config_directory(
+        "codebuddy" => vec![
+            resolve_config_directory(
                 &hook_paths.home_dir,
                 hook_paths.respect_config_environment,
-                "QODER_CONFIG_DIR",
-                ".qoder",
+                "CODEBUDDY_CONFIG_DIR",
+                ".codebuddy",
                 None,
             )
-            .join("settings.json")]
+            .join("settings.json"),
+        ],
+        "qoder" => {
+            vec![
+                resolve_config_directory(
+                    &hook_paths.home_dir,
+                    hook_paths.respect_config_environment,
+                    "QODER_CONFIG_DIR",
+                    ".qoder",
+                    None,
+                )
+                .join("settings.json"),
+            ]
         }
         "empryo" => vec![super::config::empryo_home(hook_paths).join("hooks.json")],
         /*
@@ -329,28 +343,36 @@ pub(crate) fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec
         `~/.kimi` tree is deliberately left alone: writing both would install
         the same hooks twice for anyone mid-migration.
         */
-        "kimi" => vec![resolve_config_directory(
-            &hook_paths.home_dir,
-            hook_paths.respect_config_environment,
-            "KIMI_CODE_HOME",
-            ".kimi-code",
-            None,
-        )
-        .join("config.toml")],
+        "kimi" => vec![
+            resolve_config_directory(
+                &hook_paths.home_dir,
+                hook_paths.respect_config_environment,
+                "KIMI_CODE_HOME",
+                ".kimi-code",
+                None,
+            )
+            .join("config.toml"),
+        ],
         "mastra" => vec![hook_paths.home_dir.join(".mastracode/hooks.json")],
-        "openclaude" => vec![hook_paths
-            .home_dir
-            .join(".openclaude")
-            .join("settings.json")],
-        "command-code" => vec![hook_paths
-            .home_dir
-            .join(".commandcode")
-            .join("settings.json")],
-        "devin" => vec![hook_paths
-            .home_dir
-            .join(".config")
-            .join("devin")
-            .join("config.json")],
+        "openclaude" => vec![
+            hook_paths
+                .home_dir
+                .join(".openclaude")
+                .join("settings.json"),
+        ],
+        "command-code" => vec![
+            hook_paths
+                .home_dir
+                .join(".commandcode")
+                .join("settings.json"),
+        ],
+        "devin" => vec![
+            hook_paths
+                .home_dir
+                .join(".config")
+                .join("devin")
+                .join("config.json"),
+        ],
         _ => Vec::new(),
     }
 }

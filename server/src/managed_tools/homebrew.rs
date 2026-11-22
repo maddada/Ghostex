@@ -191,7 +191,7 @@ fn ask_password(log: &Log) -> Result<String, String> {
             Err(PasswordError::NotAdmin) => {
                 return Err(
                     "Installing Homebrew needs an administrator account on this Mac.".into(),
-                )
+                );
             }
             Err(PasswordError::Wrong) => {
                 message = "That password didn't work. Enter your Mac password to install Homebrew.";

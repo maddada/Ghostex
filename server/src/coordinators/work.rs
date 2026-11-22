@@ -26,11 +26,11 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Local, NaiveDate, Utc};
-use rusqlite::{params, Connection, OptionalExtension, Row};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::records::{now_iso, sql_error, SessionKey};
+use super::records::{SessionKey, now_iso, sql_error};
 use crate::domain::DomainStateError;
 
 /// The statuses, in the order the Work panel lists them: Needs you first. `idle` (Not being worked
@@ -848,10 +848,10 @@ fn bare_work_item_ids_in_title<'a>(text: &str, items: &'a [WorkItem]) -> Vec<&'a
                 } else {
                     let next = chars[end];
                     let domain_dot = next == '.'
-                        && chars.get(end + 1).is_some_and(|after| after.is_alphanumeric());
-                    !next.is_alphanumeric()
-                        && !matches!(next, '-' | '_' | '/')
-                        && !domain_dot
+                        && chars
+                            .get(end + 1)
+                            .is_some_and(|after| after.is_alphanumeric());
+                    !next.is_alphanumeric() && !matches!(next, '-' | '_' | '/') && !domain_dot
                 };
                 if right_ok {
                     let digits: String = chars[start..end].iter().collect();
@@ -1862,7 +1862,15 @@ pub fn handle_work_request(
             if chore {
                 item.updated_at = now.clone();
             } else {
-                item.record("step", if done { format!("Done: {words}") } else { words }, &now);
+                item.record(
+                    "step",
+                    if done {
+                        format!("Done: {words}")
+                    } else {
+                        words
+                    },
+                    &now,
+                );
             }
         }
         "ask" => {
@@ -1923,13 +1931,13 @@ pub fn handle_work_request(
         "wait" => {
             let on = param_list(params, "on");
             if on.is_empty() {
-                return Err(bad("Say what it waits on: --on W12, --on Q12, --on release, --on ota, --on rebuild or --on \"words\"."));
+                return Err(bad(
+                    "Say what it waits on: --on W12, --on Q12, --on release, --on ota, --on rebuild or --on \"words\".",
+                ));
             }
-            if let Some(refusal) = super::user_handoff::wait_refusal(
-                &name,
-                &on,
-                param_text(params, "text").as_deref(),
-            ) {
+            if let Some(refusal) =
+                super::user_handoff::wait_refusal(&name, &on, param_text(params, "text").as_deref())
+            {
                 return Err(bad(refusal));
             }
             let until = param_text(params, "until").unwrap_or_default();
@@ -1942,7 +1950,11 @@ pub fn handle_work_request(
                 .iter()
                 .map(|on| WorkWait {
                     on: question_tag(on)
-                        .or_else(|| item_number_of(on).filter(|_| on.trim().len() < 12).map(|number| format!("W{number}")))
+                        .or_else(|| {
+                            item_number_of(on)
+                                .filter(|_| on.trim().len() < 12)
+                                .map(|number| format!("W{number}"))
+                        })
                         .or_else(|| wait_event(on).map(str::to_string))
                         .unwrap_or_else(|| on.clone()),
                     until: until.clone(),
@@ -1965,9 +1977,13 @@ pub fn handle_work_request(
                         .and_then(|number| others.iter().find(|other| other.number == number))
                         .map(|other| other.title.clone())
                         .or_else(|| {
-                            others.iter().flat_map(|other| other.asks.iter()).find_map(|ask| {
-                                (!ask.tag.is_empty() && ask.tag == wait.on).then(|| ask.text.clone())
-                            })
+                            others
+                                .iter()
+                                .flat_map(|other| other.asks.iter())
+                                .find_map(|ask| {
+                                    (!ask.tag.is_empty() && ask.tag == wait.on)
+                                        .then(|| ask.text.clone())
+                                })
                         })
                         .or_else(|| {
                             wait_event(&wait.on).map(|kind| wait_event_words(kind).to_string())
@@ -2042,7 +2058,10 @@ pub fn handle_work_request(
             if let Some(index) = task {
                 let ask = &mut item.asks[index];
                 if !ask.is_open() {
-                    return Err(bad(format!("{name} was already answered: {}.", ask.answered)));
+                    return Err(bad(format!(
+                        "{name} was already answered: {}.",
+                        ask.answered
+                    )));
                 }
                 ask.answered = given.clone();
                 ask.settled_at = Some(now.clone());
@@ -2066,13 +2085,23 @@ pub fn handle_work_request(
             if !ask.answered.is_empty() || !ask.is_open() {
                 return Err(bad(format!(
                     "{name} was already answered: {}.",
-                    if ask.answered.is_empty() { "withdrawn" } else { ask.answered.as_str() }
+                    if ask.answered.is_empty() {
+                        "withdrawn"
+                    } else {
+                        ask.answered.as_str()
+                    }
                 )));
             }
             ask.answered = given.clone();
             ask.settled_at = Some(now.clone());
             let tag = ask.tag.clone();
-            item.record("answer", format!("{tag}: {given}").trim_start_matches(": ").to_string(), &now);
+            item.record(
+                "answer",
+                format!("{tag}: {given}")
+                    .trim_start_matches(": ")
+                    .to_string(),
+                &now,
+            );
             finish_if_only_asking(&mut item, &now);
         }
         // The user snoozed an open ask for `hours` from its card (1, 6 or 24), or cancelled it:
@@ -2107,13 +2136,31 @@ pub fn handle_work_request(
                 .asks
                 .iter_mut()
                 .find(|ask| tag.as_ref().is_none_or(|tag| ask.tag == *tag))
-                .ok_or_else(|| bad(format!("{name} has no ask{}.", tag.as_ref().map(|tag| format!(" {tag}")).unwrap_or_default())))?;
+                .ok_or_else(|| {
+                    bad(format!(
+                        "{name} has no ask{}.",
+                        tag.as_ref()
+                            .map(|tag| format!(" {tag}"))
+                            .unwrap_or_default()
+                    ))
+                })?;
             if !ask.is_open() {
-                return Err(bad(format!("{name} was already answered: {}.", if ask.answered.is_empty() { "withdrawn" } else { ask.answered.as_str() })));
+                return Err(bad(format!(
+                    "{name} was already answered: {}.",
+                    if ask.answered.is_empty() {
+                        "withdrawn"
+                    } else {
+                        ask.answered.as_str()
+                    }
+                )));
             }
             ask.answered = given.chars().take(2_000).collect();
             ask.settled_at = Some(now.clone());
-            let words = format!("{}: {}", ask.tag, ask.answered.chars().take(120).collect::<String>());
+            let words = format!(
+                "{}: {}",
+                ask.tag,
+                ask.answered.chars().take(120).collect::<String>()
+            );
             item.record("answer", words, &now);
             finish_if_only_asking(&mut item, &now);
         }
@@ -2125,7 +2172,14 @@ pub fn handle_work_request(
                 .iter_mut()
                 .filter(|ask| ask.is_open())
                 .find(|ask| tag.as_ref().is_none_or(|tag| ask.tag == *tag))
-                .ok_or_else(|| bad(format!("{name} has no open ask{}.", tag.as_ref().map(|tag| format!(" {tag}")).unwrap_or_default())))?;
+                .ok_or_else(|| {
+                    bad(format!(
+                        "{name} has no open ask{}.",
+                        tag.as_ref()
+                            .map(|tag| format!(" {tag}"))
+                            .unwrap_or_default()
+                    ))
+                })?;
             if op == "cancel" {
                 ask.settled_at = Some(now.clone());
                 ask.withdrawn = true;
@@ -2134,7 +2188,11 @@ pub fn handle_work_request(
                 let title: String = ask.text.split_whitespace().collect::<Vec<_>>().join(" ");
                 let title: String = title.replace('"', "'").chars().take(80).collect();
                 let name = format!("{reference} {}", ask.tag);
-                let name = if title.is_empty() { name } else { format!("{name} \"{title}\"") };
+                let name = if title.is_empty() {
+                    name
+                } else {
+                    format!("{name} \"{title}\"")
+                };
                 crate::session_chat_dismissed::record(db, &key.0, &key.1, name.trim());
                 let words = format!("{} dismissed by the user", ask.tag);
                 item.record("settle", words.trim().to_string(), &now);
@@ -2164,7 +2222,14 @@ pub fn handle_work_request(
                 .iter_mut()
                 .filter(|ask| ask.is_open())
                 .find(|ask| tag.as_ref().is_none_or(|tag| ask.tag == *tag))
-                .ok_or_else(|| bad(format!("{name} has no open ask{}.", tag.as_ref().map(|tag| format!(" {tag}")).unwrap_or_default())))?;
+                .ok_or_else(|| {
+                    bad(format!(
+                        "{name} has no open ask{}.",
+                        tag.as_ref()
+                            .map(|tag| format!(" {tag}"))
+                            .unwrap_or_default()
+                    ))
+                })?;
             ask.settled_at = Some(now.clone());
             if withdraw {
                 ask.withdrawn = true;
@@ -2193,7 +2258,7 @@ pub fn handle_work_request(
         other => {
             return Err(bad(format!(
                 "Unknown work request {other}. Use list, add, now, step, ask, wait, done, drop, restore, edit, answer, settle or tag."
-            )))
+            )));
         }
     }
     write_work_item(db, key, &item)?;

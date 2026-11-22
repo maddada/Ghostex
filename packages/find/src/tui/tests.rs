@@ -1,6 +1,6 @@
 use super::input::parse_sgr_mouse;
 use super::*;
-use crate::index::{day_key, SearchIndex, SECONDS_PER_DAY, UNKNOWN_DAY_KEY};
+use crate::index::{SECONDS_PER_DAY, SearchIndex, UNKNOWN_DAY_KEY, day_key};
 use crate::unicode as uni;
 
 fn visible_cols_no_ansi(s: &str) -> usize {

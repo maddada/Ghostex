@@ -4,7 +4,7 @@
 use super::{drafts, endpoint, launch, model::*, recovery, store};
 use crate::domain::{DomainRepository, DomainStateError};
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Returns the row the wake should launch: `session` itself, or the row rebound to an account with room.
 pub(crate) fn rebind_exhausted(

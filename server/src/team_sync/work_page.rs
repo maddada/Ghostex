@@ -13,12 +13,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::paths::GxserverPaths;
-use crate::work_mode::{media_embed, pull_request_url_parts, TeamTicketFacts, WorkProjectInput};
+use crate::work_mode::{TeamTicketFacts, WorkProjectInput, media_embed, pull_request_url_parts};
 
-use super::connections::{read_team_connection, TeamConnection};
+use super::connections::{TeamConnection, read_team_connection};
 use super::convex_http::ConvexCallKind;
 use super::operations::member_call;
 
@@ -59,7 +59,9 @@ fn number(value: &Value, pointer: &str) -> u64 {
 pub(super) fn team_error(connection: &TeamConnection, error: String) -> String {
     let team = connection.team_name.as_deref().unwrap_or("the team");
     if error.contains("Could not find public function") {
-        format!("Team {team}: its Convex functions are older than this Ghostex. Run `ghostex team deploy` to update them.")
+        format!(
+            "Team {team}: its Convex functions are older than this Ghostex. Run `ghostex team deploy` to update them."
+        )
     } else {
         format!("Team {team}: {error}")
     }

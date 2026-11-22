@@ -8,4 +8,4 @@ mod registry;
 mod serve;
 
 pub(crate) use registry::{file_link_path, link_path};
-pub(crate) use serve::{serve, FILE_LINK_ROUTE_PREFIX};
+pub(crate) use serve::{FILE_LINK_ROUTE_PREFIX, serve};

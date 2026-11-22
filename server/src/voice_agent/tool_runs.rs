@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Runs are forgotten after this many, oldest first (a call's finish comes right after its start).
 const KEPT_RUNS: usize = 16;
@@ -179,7 +179,7 @@ impl Run {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     use super::ToolRuns;
 

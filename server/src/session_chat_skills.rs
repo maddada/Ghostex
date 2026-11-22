@@ -8,14 +8,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::agent_skills::GHOSTEX_AGENT_SKILL_NAMES;
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::paths::GxserverPaths;
 use crate::protocol::rpc_success;
 use crate::server::{
-    domain_error_response, read_runtime_text, routed_json, AppState, RoutedResponse,
+    AppState, RoutedResponse, domain_error_response, read_runtime_text, routed_json,
 };
 use crate::session_chat_agent_tasks::claude_config_directory;
 use crate::session_chat_follower::session_chat_display_agent_for_session;
@@ -1089,7 +1089,7 @@ fn ghostex_skill_description(skill_name: &str) -> Option<String> {
 mod tests {
     use std::{fs, path::Path};
 
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tempfile::tempdir;
 
     use super::{discover_claude_plugin_skills, read_session_chat_skills};
@@ -1423,7 +1423,7 @@ pub(crate) async fn handle_read_session_chat_skills_http(
                     code: "internalError",
                     message: "Session chat skills could not be read.".to_string(),
                 },
-            )
+            );
         }
     };
     routed_json(

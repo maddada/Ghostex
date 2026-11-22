@@ -13,9 +13,9 @@ use serde_json::Value;
 
 use super::{
     file_page::page_for_file,
-    prepare::{inline_local_images, PAGE_CONTENT_SECURITY_POLICY},
+    prepare::{PAGE_CONTENT_SECURITY_POLICY, inline_local_images},
     serve::{with_page_state, with_read_only},
-    store::{read_page, read_record, VISUAL_PAGE_MAX_BYTES},
+    store::{VISUAL_PAGE_MAX_BYTES, read_page, read_record},
 };
 
 /// The note on a page a guest may read but not answer.

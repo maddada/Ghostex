@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::session_chat_options::{launch_command_selection, SessionChatOptionAgent};
+use crate::session_chat_options::{SessionChatOptionAgent, launch_command_selection};
 
 /// The levels on Claude's effort rail. Ultracode is not one of them: `--effort ultracode` turns
 /// the switch on and stays as it is.

@@ -9,15 +9,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::accounts::model::{Provider, SavedAccount};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::session_chat_notice::{
-    SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
-    SessionChatTerminalNoticeActionKind, SessionChatTerminalNoticeSeverity,
-    SESSION_CHAT_NOTICE_ACTION_RECONNECT,
+    SESSION_CHAT_NOTICE_ACTION_RECONNECT, SessionChatTerminalNotice,
+    SessionChatTerminalNoticeAction, SessionChatTerminalNoticeActionKind,
+    SessionChatTerminalNoticeSeverity,
 };
 use crate::storage::open_gxserver_database;
 
@@ -152,7 +152,9 @@ pub(crate) fn enrich_notice(
             notice.severity = SessionChatTerminalNoticeSeverity::Warning;
             (
                 "Finish signing in".to_string(),
-                format!("Finish signing in to {name} in your browser. The chat continues as soon as you're done."),
+                format!(
+                    "Finish signing in to {name} in your browser. The chat continues as soon as you're done."
+                ),
                 None,
             )
         }
@@ -163,7 +165,9 @@ pub(crate) fn enrich_notice(
         ),
         _ => (
             format!("{name} is signed out"),
-            format!("{agent}'s login for this account expired. Sign in again, or switch this chat to another account. Queued messages wait until then."),
+            format!(
+                "{agent}'s login for this account expired. Sign in again, or switch this chat to another account. Queued messages wait until then."
+            ),
             Some(LABEL),
         ),
     };
@@ -437,7 +441,7 @@ async fn finish(
                 break Err(job["error"]
                     .as_str()
                     .unwrap_or("The sign-in did not finish.")
-                    .to_string())
+                    .to_string());
             }
             _ => {}
         }

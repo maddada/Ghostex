@@ -2,11 +2,11 @@
 //! it, and list the history (server/src/theme/). Run in an agent's session, `set` prints the
 //! "Theme changed" card line its chat draws (packages/gx-protocol/src/chat_card.rs).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::ghostex_cli::args::{parse_args, Flags};
+use crate::ghostex_cli::args::{Flags, parse_args};
 use crate::ghostex_cli::output::print_json;
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, caller_session_from_env, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc, caller_session_from_env};
 
 pub(crate) const THEME_HELP: &str =
     "Ghostex Theme - restyle Ghostex: read the look settings, change them, undo
@@ -139,7 +139,9 @@ fn print_items(change: &Value, undone: bool) {
 
 /// The themes of Settings > Themes, one per line, the applied one marked.
 fn print_themes(themes: &Value) {
-    println!("Themes (apply one with `ghostex theme apply <id> [--background art|live|transparent|solid]`)");
+    println!(
+        "Themes (apply one with `ghostex theme apply <id> [--background art|live|transparent|solid]`)"
+    );
     let mut group = String::new();
     for theme in themes.as_array().into_iter().flatten() {
         let this = match text(theme, "kind") {

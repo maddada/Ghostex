@@ -8,25 +8,25 @@
 //! SEE-ALSO: server/src/feedback/agent.rs (the same server-side create), server/src/server/route_http/sessions.rs (`/api/createAgentSession`, whose coordinator steps this repeats).
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::record::{read_record, write_record, ChiefRecord, EarlierChat};
+use super::record::{ChiefRecord, EarlierChat, read_record, write_record};
 use crate::agents::{
     apply_created_session_identity, create_agent_session_params_for_project, read_agent_settings,
 };
 use crate::coordinators::{
-    coordinator_create_params, coordinator_launcher_family, now_iso, read_coordinator,
-    register_created_coordinator, write_coordinator, CoordinatorLaunch, SessionKey,
+    CoordinatorLaunch, SessionKey, coordinator_create_params, coordinator_launcher_family, now_iso,
+    read_coordinator, register_created_coordinator, write_coordinator,
 };
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::{
-    dispatch_zmx_lifecycle_http_blocking, prepare_coordinator_create_params,
+    AppState, dispatch_zmx_lifecycle_http_blocking, prepare_coordinator_create_params,
     restore_parked_project_for_new_session, schedule_presentation_session_delta,
-    start_orchestrator_role, AppState,
+    start_orchestrator_role,
 };
 use crate::sidebar_hud::sidebar_agent_buttons_from_projects;
 use crate::storage::open_gxserver_database;
-use crate::zmx::{dispatch_zmx_lifecycle_endpoint, ZmxEndpointError, ZmxServerContext};
+use crate::zmx::{ZmxEndpointError, ZmxServerContext, dispatch_zmx_lifecycle_endpoint};
 
 /// Chief's goal, shown in Coordinator Details.
 const CHIEF_GOAL: &str =

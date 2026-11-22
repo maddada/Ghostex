@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::server::AppState;
 
@@ -89,7 +89,7 @@ async fn permission(
         Rule::Never => {
             return Permission::Refused(format!(
                 "This workspace's Connectors rules never let agents run {named}."
-            ))
+            ));
         }
         Rule::Ask => {
             cards::ask(

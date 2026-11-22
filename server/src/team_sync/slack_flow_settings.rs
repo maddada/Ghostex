@@ -5,7 +5,7 @@
 use std::io::Write;
 use std::process::Stdio;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::paths::GxserverPaths;
 

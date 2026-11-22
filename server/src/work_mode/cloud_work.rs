@@ -21,10 +21,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::cloud_runner::{
-    cloud_provider, CloudStartRequest, CLOUD_PROVIDERS, MAX_CLOUD_PROMPT_CHARS,
+    CLOUD_PROVIDERS, CloudStartRequest, MAX_CLOUD_PROMPT_CHARS, cloud_provider,
 };
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::paths::GxserverPaths;

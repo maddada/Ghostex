@@ -387,7 +387,7 @@ pub(crate) fn read(text: &str) -> Result<ReadFile, String> {
         other => {
             return Err(format!(
                 "That file's kind is {other}; Ghostex reads team and preset files."
-            ))
+            ));
         }
     };
     let mut left_out: Vec<String> = root

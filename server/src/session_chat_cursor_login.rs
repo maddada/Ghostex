@@ -12,9 +12,9 @@
 //! SEE-ALSO: packages/gx-chat-core/src/questions/terminal_dialog_copy.rs (`cursor_sign_in_copy` writes the browser step's card copy), server/src/session_chat_notice/rules.rs (the signed-out exit rule).
 
 use crate::session_chat_notice::{
-    session_chat_terminal_screen_tail, SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
+    SESSION_CHAT_NOTICE_LOGIN_EXPIRED, SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
     SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
-    SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
+    session_chat_terminal_screen_tail,
 };
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
 use crate::session_chat_terminal_dialog::TerminalDialog;

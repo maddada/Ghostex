@@ -1,5 +1,5 @@
 #[cfg(test)]
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[cfg(test)]
 use crate::ghostex_cli::args::parse_args;
@@ -194,9 +194,10 @@ mod tests {
             Some(&json!({}))
         );
         for tool in &tools[1..] {
-            assert!(tool
-                .pointer("/inputSchema/properties/pageId/description")
-                .is_some());
+            assert!(
+                tool.pointer("/inputSchema/properties/pageId/description")
+                    .is_some()
+            );
         }
         assert_eq!(
             tools[2].pointer("/inputSchema/required"),
@@ -262,24 +263,27 @@ mod tests {
     #[test]
     fn handle_ignores_notifications_and_id_less_messages() {
         let mut state = test_state();
-        assert!(handle_browser_mcp_message(
-            &json!({ "method": "notifications/initialized" }),
-            &mut state
-        )
-        .is_none());
-        assert!(handle_browser_mcp_message(
-            &json!({ "id": 9, "method": "notifications/initialized" }),
-            &mut state
-        )
-        .is_none());
+        assert!(
+            handle_browser_mcp_message(
+                &json!({ "method": "notifications/initialized" }),
+                &mut state
+            )
+            .is_none()
+        );
+        assert!(
+            handle_browser_mcp_message(
+                &json!({ "id": 9, "method": "notifications/initialized" }),
+                &mut state
+            )
+            .is_none()
+        );
         assert!(
             handle_browser_mcp_message(&json!({ "method": "tools/list" }), &mut state).is_none()
         );
-        assert!(handle_browser_mcp_message(
-            &json!({ "id": null, "method": "tools/list" }),
-            &mut state
-        )
-        .is_none());
+        assert!(
+            handle_browser_mcp_message(&json!({ "id": null, "method": "tools/list" }), &mut state)
+                .is_none()
+        );
         assert!(handle_browser_mcp_message(&json!("not an object"), &mut state).is_none());
     }
 

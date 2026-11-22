@@ -15,11 +15,11 @@
 use super::*;
 
 use crate::memory_guard::{
-    self as guard, alive_members, session_usage, signal_processes, snapshot_user_processes,
-    ChildGroup, PressureLevel, SessionUsage, Step, StopSignal,
+    self as guard, ChildGroup, PressureLevel, SessionUsage, Step, StopSignal, alive_members,
+    session_usage, signal_processes, snapshot_user_processes,
 };
 use crate::session_chat_notice::{
-    set_session_chat_watchdog_notice, SessionChatTerminalNoticeSeverity,
+    SessionChatTerminalNoticeSeverity, set_session_chat_watchdog_notice,
 };
 
 type Key = (String, String);
@@ -165,20 +165,22 @@ fn measure(state: &AppState) -> Vec<Candidate> {
 }
 
 fn sizes(candidates: &[Candidate]) -> Value {
-    json!(candidates
-        .iter()
-        .take(5)
-        .map(|candidate| json!({
-            "projectId": candidate.key.0,
-            "sessionId": candidate.key.1,
-            "bytes": candidate.usage.total,
-            "agentBytes": candidate.usage.agent_bytes,
-            "biggestCommand": candidate.usage.groups.first().map(|group| json!({
-                "label": group.label,
-                "bytes": group.bytes,
-            })),
-        }))
-        .collect::<Vec<_>>())
+    json!(
+        candidates
+            .iter()
+            .take(5)
+            .map(|candidate| json!({
+                "projectId": candidate.key.0,
+                "sessionId": candidate.key.1,
+                "bytes": candidate.usage.total,
+                "agentBytes": candidate.usage.agent_bytes,
+                "biggestCommand": candidate.usage.groups.first().map(|group| json!({
+                    "label": group.label,
+                    "bytes": group.bytes,
+                })),
+            }))
+            .collect::<Vec<_>>()
+    )
 }
 
 /// One tick's decision. BLOCKING (settings file, SQLite, a process scan while under pressure).

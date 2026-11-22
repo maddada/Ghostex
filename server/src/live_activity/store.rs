@@ -18,7 +18,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::paths::GxserverPaths;
-use crate::push::{is_printable_id, token_fingerprint, DEVICE_ID_MAX, MACHINE_ID_MAX};
+use crate::push::{DEVICE_ID_MAX, MACHINE_ID_MAX, is_printable_id, token_fingerprint};
 
 const STORE_FILE_NAME: &str = "live-activity-registrations.json";
 const STORE_TEMP_FILE_NAME: &str = "live-activity-registrations.json.tmp";

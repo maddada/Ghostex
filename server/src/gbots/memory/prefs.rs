@@ -2,10 +2,10 @@
 //! user (how they like answers, names, time zone). Every bot's brief and generated instruction
 //! files include them; only the user and Chief of Staff change them (`ghostex gbots prefs set`).
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::domain::DomainStateError;
-use crate::gbots::folder::{gbots_dir, read_preferences, write_atomic, PREFERENCES_FILE};
+use crate::gbots::folder::{PREFERENCES_FILE, gbots_dir, read_preferences, write_atomic};
 use crate::paths::GxserverPaths;
 
 /// Lines of shared preferences that load into a bot.

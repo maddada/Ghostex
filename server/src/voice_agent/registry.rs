@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use super::conversation::Input;

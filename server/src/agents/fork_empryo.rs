@@ -5,7 +5,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::*;
 use crate::domain::DomainStateError;

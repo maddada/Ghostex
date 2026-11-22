@@ -7,7 +7,7 @@ use std::{
 
 use serde_json::Value;
 
-use super::cli::{run_agentbox, STOP_TIMEOUT};
+use super::cli::{STOP_TIMEOUT, run_agentbox};
 use super::session::session_agentbox;
 use crate::domain::DomainRepository;
 

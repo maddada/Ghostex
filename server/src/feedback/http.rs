@@ -1,15 +1,15 @@
 //! `POST /api/draftFeedback` and `POST /api/sendFeedback`.
 
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{
     domain::read_domain_rpc_params,
     protocol::{rpc_error, rpc_success},
-    server::{routed_json, RoutedResponse},
+    server::{RoutedResponse, routed_json},
 };
 
-use super::draft::{draft_title, github_username, with_reporter, FeedbackClient};
+use super::draft::{FeedbackClient, draft_title, github_username, with_reporter};
 use super::relay::FeedbackSubmission;
 
 /// `draftFeedback { app, message, githubUsername? }` answers `{ title, body, footer }`: the issue

@@ -1,6 +1,6 @@
 //! Claude usage-limit reset grants: Anthropic's `cedar_ember` program, read and claimed over the same OAuth API Claude Code uses.
 use super::model::ResetCredit;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -407,7 +407,7 @@ fn fetch_block(home: &Path, slot: &ClaudeSlot) -> Result<Value, String> {
             Err(ureq::Error::StatusCode(429)) => {
                 return Err(
                     "Anthropic is limiting usage requests. Resets will refresh later.".into(),
-                )
+                );
             }
             Err(_) => return Err("Resets could not be read. Ghostex will try again.".into()),
         }
@@ -615,7 +615,7 @@ pub(crate) fn claim(
             Ok(response) => response,
             Err(ureq::Error::StatusCode(401 | 403)) => continue,
             Err(ureq::Error::StatusCode(429)) => {
-                return Outcome::failed("Anthropic is limiting requests. Try again in a moment.")
+                return Outcome::failed("Anthropic is limiting requests. Try again in a moment.");
             }
             Err(_) => {
                 forget(slot);
@@ -704,10 +704,12 @@ mod keychain_read_tests {
             .and_then(|reads| reads.get(&key).cloned());
         assert!(kept.is_some_and(|(until, text)| text.is_none() && until > Instant::now()));
         forget_keychain_reads();
-        assert!(KEYCHAIN_READS
-            .lock()
-            .unwrap()
-            .as_ref()
-            .is_none_or(|reads| !reads.contains_key(&key)));
+        assert!(
+            KEYCHAIN_READS
+                .lock()
+                .unwrap()
+                .as_ref()
+                .is_none_or(|reads| !reads.contains_key(&key))
+        );
     }
 }

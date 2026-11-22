@@ -440,8 +440,7 @@ pub fn detect_codex_blocking_screen(text: &str) -> Option<CodexBlockingScreen> {
         if !composer_after(&lines, index) {
             return Some(CodexBlockingScreen {
                 title: "Codex is waiting to continue",
-                detail:
-                    "A Codex setup or migration screen is waiting for confirmation in the terminal.",
+                detail: "A Codex setup or migration screen is waiting for confirmation in the terminal.",
             });
         }
     }

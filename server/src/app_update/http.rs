@@ -2,12 +2,12 @@
 use axum::http::StatusCode;
 use serde_json::{Map, Value};
 
-use super::record::{now_iso, read_settled_record, write_record, PendingInstall};
-use super::status::{ask_app, compose_status, AppAnswer};
+use super::record::{PendingInstall, now_iso, read_settled_record, write_record};
+use super::status::{AppAnswer, ask_app, compose_status};
 use crate::constants::GXSERVER_VERSION;
 use crate::domain::read_domain_rpc_params;
 use crate::protocol::{rpc_error, rpc_success};
-use crate::server::{routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, routed_json};
 
 pub(crate) async fn handle_app_update_http(
     state: &AppState,

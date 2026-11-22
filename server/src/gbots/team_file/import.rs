@@ -10,19 +10,19 @@
 //! Importing is yours alone (your computer, phone or terminal, which ask for your approval first, like adding one GBot): a team file is text from outside, and the GBots it adds may be answered for and directed by Chief of Staff, so Chief of Staff and other agents may read a file's preview but not import it. Undo is refused once an imported GBot was changed since, so it never throws a later change away; remove that GBot first, or the others one by one.
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::format::{read, FileBot, Kind, ReadFile, NOTES_TOPIC_MAX_BYTES};
+use super::format::{FileBot, Kind, NOTES_TOPIC_MAX_BYTES, ReadFile, read};
 use crate::coordinators::now_iso;
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::gbots::changes::Change;
-use crate::gbots::departments::{self, list_departments, read_department, Department};
-use crate::gbots::folder::{bot_folder, MEMORY_FILE};
+use crate::gbots::departments::{self, Department, list_departments, read_department};
+use crate::gbots::folder::{MEMORY_FILE, bot_folder};
 use crate::gbots::memory::{
-    commit_memory, read_memory_file, redact, topic_path, within_budget, FileChange,
-    MEMORY_MAX_BYTES, MEMORY_MAX_LINES,
+    FileChange, MEMORY_MAX_BYTES, MEMORY_MAX_LINES, commit_memory, read_memory_file, redact,
+    topic_path, within_budget,
 };
-use crate::gbots::record::{list_bots, new_id, read_bot, Bot, NAME_MAX_CHARS};
+use crate::gbots::record::{Bot, NAME_MAX_CHARS, list_bots, new_id, read_bot};
 use crate::server::AppState;
 
 pub(crate) const TEAM_CHANGE: &str = "teamFileAdded";
@@ -291,8 +291,12 @@ pub(crate) fn preview_value(plan: &Plan) -> Value {
         }
     }
     let approval_sentence = match plan.approval.as_str() {
-        "full" => "They run on Codex at Full access, as every new Codex GBot does; change that in GBot Settings.",
-        _ => "They ask before they act (approval Ask), as every new GBot does; change that in GBot Settings.",
+        "full" => {
+            "They run on Codex at Full access, as every new Codex GBot does; change that in GBot Settings."
+        }
+        _ => {
+            "They ask before they act (approval Ask), as every new GBot does; change that in GBot Settings."
+        }
     };
     json!({
         "kind": file.kind.as_str(),

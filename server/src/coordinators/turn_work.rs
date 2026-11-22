@@ -21,12 +21,12 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Instant, SystemTime};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::records::SessionKey;
 use crate::session_chat::{SessionChatBlock, SessionChatMessage, SessionChatRole};
 use crate::session_chat_queue_runtime::SessionChatTranscriptGate;
-use crate::session_chat_tail::{read_session_chat_tail_page, SessionChatTailPage};
+use crate::session_chat_tail::{SessionChatTailPage, read_session_chat_tail_page};
 
 /// Rows read per page while walking back to the turn's prompt.
 const PAGE_ROWS: usize = 200;

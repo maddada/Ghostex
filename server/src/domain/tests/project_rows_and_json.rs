@@ -1,6 +1,6 @@
 use super::*;
 use rusqlite::OptionalExtension;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[test]
 fn add_project_path_repairs_visibility_metadata_for_existing_path() {

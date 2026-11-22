@@ -15,14 +15,14 @@
 
 use std::sync::Arc;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::paths::GxserverPaths;
 use crate::server::AppState;
 use crate::work_mode::{linear_api_key, verify_linear_api_key};
 
-use super::connections::{read_team_connections, store_team_connection, TeamConnection};
+use super::connections::{TeamConnection, read_team_connections, store_team_connection};
 use super::convex_http::ConvexCallKind;
 use super::operations::{connection_for, member_call, required, text};
 

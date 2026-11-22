@@ -15,8 +15,8 @@ use std::{
     path::PathBuf,
     process::Stdio,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex, MutexGuard,
+        atomic::{AtomicBool, Ordering},
     },
     thread,
     time::{Duration, Instant},

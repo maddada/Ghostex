@@ -43,24 +43,24 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{
     agents::identity::normalize_agent_id,
     logging::{GxserverLogInput, LogLevel},
     server::AppState,
     session_chat::{
-        resolve_session_chat_transcript_agent, SessionChatBlock, SessionChatMessage,
-        SessionChatRole, SessionChatSource, SessionChatTailPage, SessionChatTurnLifecycle,
-        SessionChatTurnLifecycleState,
+        SessionChatBlock, SessionChatMessage, SessionChatRole, SessionChatSource,
+        SessionChatTailPage, SessionChatTurnLifecycle, SessionChatTurnLifecycleState,
+        resolve_session_chat_transcript_agent,
     },
     session_chat_composer::{
         claude_composer_input_text, grok_composer_input_text, session_chat_composer_agent_id,
     },
     session_chat_follower::session_chat_agent_for_session,
     session_chat_send::{
-        build_session_chat_clear_input_steps, capture_session_terminal_text,
-        enqueue_session_chat_send, SessionChatSendTarget,
+        SessionChatSendTarget, build_session_chat_clear_input_steps, capture_session_terminal_text,
+        enqueue_session_chat_send,
     },
 };
 

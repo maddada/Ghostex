@@ -1,7 +1,7 @@
 //! What gxserver makes of a command source's JSON: which `info` answers it accepts, how a
 //! ticket's fields are checked and cut, and which rows, comments and fields reach clients.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::*;
 

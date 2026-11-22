@@ -5,15 +5,15 @@
 use std::sync::Mutex;
 
 use base64::Engine as _;
-use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_ASN1_SIGNING};
+use ring::signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair, KeyPair};
 
 use super::*;
 use crate::remote_access::tailnet_owner::TailnetOwnerCheck;
 use crate::remote_access::{
-    begin_ssh_pairing, pairing_status, parse_signed_ask, parse_ssh_pairing_params, PairingContext,
-    RemotePairingRepository,
+    PairingContext, RemotePairingRepository, begin_ssh_pairing, pairing_status, parse_signed_ask,
+    parse_ssh_pairing_params,
 };
-use ghostex_gx_protocol::pairing::{pairing_status_payload, PairingStatus, DEVICE_KEY_ALGORITHM};
+use ghostex_gx_protocol::pairing::{DEVICE_KEY_ALGORITHM, PairingStatus, pairing_status_payload};
 
 const TAILCAT_KEY: &str =
     "nodekey:1111111111111111111111111111111111111111111111111111111111111111";
@@ -219,9 +219,11 @@ fn the_owners_own_tailnet_phone_pairs_for_easy_connect_without_a_click() {
     let answer = computer.status(&phone, &started.started.pending_id);
     assert_eq!(answer.status, PairingStatus::Approved);
     let approved = answer.approved.expect("approved answer");
-    assert!(approved["deviceApiToken"]
-        .as_str()
-        .is_some_and(|token| !token.is_empty()));
+    assert!(
+        approved["deviceApiToken"]
+            .as_str()
+            .is_some_and(|token| !token.is_empty())
+    );
 
     let devices = computer.devices();
     assert_eq!(devices.len(), 1);

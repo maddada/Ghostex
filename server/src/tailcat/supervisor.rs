@@ -2,7 +2,7 @@ use std::{
     fs,
     path::PathBuf,
     process::{Child, Command, Stdio},
-    sync::{mpsc, Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -916,11 +916,7 @@ fn wait_for_stop(stop_rx: &mpsc::Receiver<mpsc::SyncSender<()>>, wait: Duration)
 fn read_address_blob(addr_file: &std::path::Path) -> Option<String> {
     let text = fs::read_to_string(addr_file).ok()?;
     let token = text.trim().to_string();
-    if token.is_empty() {
-        None
-    } else {
-        Some(token)
-    }
+    if token.is_empty() { None } else { Some(token) }
 }
 
 /// tailcat's `--allow` entry that admits no client (`tailcat serve --allow=none`).

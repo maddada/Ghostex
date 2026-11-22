@@ -25,9 +25,9 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
-use super::records::{sql_error, thread_from_row, THREAD_COLUMNS};
+use super::records::{THREAD_COLUMNS, sql_error, thread_from_row};
 use super::{SessionKey, ThreadRecord};
 use crate::domain::DomainStateError;
 

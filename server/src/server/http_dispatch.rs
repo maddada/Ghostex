@@ -2,12 +2,12 @@ use axum::{
     body::Body,
     http::{Request, Response, StatusCode},
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::{convert::Infallible, net::SocketAddr, sync::Arc, time::Instant};
 
 use crate::{
-    domain::{read_domain_rpc_params, DomainRepository, DomainStateError},
-    logging::{log_level_from_status, DiagnosticLogScenario, GxserverLogInput},
+    domain::{DomainRepository, DomainStateError, read_domain_rpc_params},
+    logging::{DiagnosticLogScenario, GxserverLogInput, log_level_from_status},
     protocol::rpc_success_of,
     storage::open_gxserver_database,
 };

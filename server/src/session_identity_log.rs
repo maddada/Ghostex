@@ -4,7 +4,7 @@
 use std::cell::RefCell;
 use std::marker::PhantomData;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 #[cfg(not(test))]
 use crate::logging::GxserverLogger;

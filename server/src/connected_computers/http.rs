@@ -2,12 +2,12 @@
 //! desktop app tells gxserver which computers it is connected to.
 
 use axum::http::StatusCode;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
     domain::read_domain_rpc_params,
     protocol::{rpc_error, rpc_success},
-    server::{routed_json, AppState, RoutedResponse},
+    server::{AppState, RoutedResponse, routed_json},
 };
 
 use super::registry::{self, Registration};

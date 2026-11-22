@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use axum::{
     body::Body,
-    http::{header, HeaderValue, Response, StatusCode},
+    http::{HeaderValue, Response, StatusCode, header},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::server::{AppState, RoutedResponse};
-use crate::session_chat_files::{write_session_chat_image, SESSION_CHAT_IMAGE_MAX_BYTES};
+use crate::session_chat_files::{SESSION_CHAT_IMAGE_MAX_BYTES, write_session_chat_image};
 
 use super::{
     answers::reply,

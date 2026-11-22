@@ -23,11 +23,11 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::protocol::rpc_success;
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
 use crate::storage::open_gxserver_database;
 
 /// How long the ahead, behind and changed-file counts are reused for one folder.
@@ -182,7 +182,7 @@ fn account_text(value: &Value, hide_emails: bool) -> Value {
 /// answered. `computer` is that machine's own name in every case.
 fn location(session: &Value) -> Value {
     let computer = crate::connected_computers::this_computer_name();
-    use ghostex_gx_protocol::cloud_box::{SessionCloudBoxRuntime, CLOUD_BOX_RUNTIME_SETTINGS_KEY};
+    use ghostex_gx_protocol::cloud_box::{CLOUD_BOX_RUNTIME_SETTINGS_KEY, SessionCloudBoxRuntime};
     let cloud_box = session
         .get("runtimeSettings")
         .and_then(|settings| settings.get(CLOUD_BOX_RUNTIME_SETTINGS_KEY))
@@ -264,10 +264,12 @@ fn read_counts(cwd: &str) -> Value {
         "--ignore-submodules=dirty",
     ])
     .map_or(Value::Null, |status| {
-        json!(status
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .count())
+        json!(
+            status
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .count()
+        )
     });
     let value = json!({
         "upstream": upstream,

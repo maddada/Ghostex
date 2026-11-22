@@ -236,9 +236,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                                 ""
                             }
                         ),
-                        "switched" => format!(
-                            "{reference} now runs on {target}; {restarted}."
-                        ),
+                        "switched" => format!("{reference} now runs on {target}; {restarted}."),
                         "switchedWhileAsleep" => format!(
                             "{reference} is asleep; it starts on {target} the next time it wakes (a message to it wakes it)."
                         ),
@@ -270,7 +268,9 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 print_json(&result);
             } else {
                 let reference = identity::text(&result["session"], "globalRef");
-                println!("{reference} reloaded: its agent was stopped and started again on the same conversation.");
+                println!(
+                    "{reference} reloaded: its agent was stopped and started again on the same conversation."
+                );
             }
         }
         "types" => {

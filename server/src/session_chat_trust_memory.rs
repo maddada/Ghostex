@@ -7,18 +7,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::session_chat_notice::{
-    classify_session_chat_terminal_notice, SessionChatTerminalNotice,
-    SessionChatTerminalNoticeAction, SessionChatTerminalNoticeActionKind,
-    SESSION_CHAT_NOTICE_TRUST_PROMPT,
+    SESSION_CHAT_NOTICE_TRUST_PROMPT, SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
+    SessionChatTerminalNoticeActionKind, classify_session_chat_terminal_notice,
 };
-use crate::session_chat_options::{session_chat_option_agent, SessionChatOptionAgent};
+use crate::session_chat_options::{SessionChatOptionAgent, session_chat_option_agent};
 use crate::session_chat_send::{
-    build_terminal_picker_answer_steps, capture_session_terminal_text, execute_session_chat_send,
-    SessionChatSendStep, SessionChatSendTarget,
+    SessionChatSendStep, SessionChatSendTarget, build_terminal_picker_answer_steps,
+    capture_session_terminal_text, execute_session_chat_send,
 };
 
 /*

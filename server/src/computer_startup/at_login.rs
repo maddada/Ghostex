@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::ComputerStartupSettings;
 use crate::{

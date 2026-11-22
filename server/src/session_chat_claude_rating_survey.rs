@@ -226,16 +226,18 @@ mod tests {
     #[test]
     fn the_survey_screen_is_closable_for_a_send_and_no_question_for_the_user() {
         use crate::session_chat_composer::{
-            detect_session_chat_composer_readiness, SessionChatComposerState,
+            SessionChatComposerState, detect_session_chat_composer_readiness,
         };
         let notice = crate::session_chat_notice::classify_session_chat_terminal_notice(
             Some("claude"),
             STUCK_SCREEN,
         );
         // No card the user must answer and nothing that fails the queued row.
-        assert!(notice
-            .as_ref()
-            .is_none_or(|notice| !notice.is_answerable() && !notice.blocks_queued_delivery()));
+        assert!(
+            notice
+                .as_ref()
+                .is_none_or(|notice| !notice.is_answerable() && !notice.blocks_queued_delivery())
+        );
         let readiness =
             detect_session_chat_composer_readiness(Some("claude"), STUCK_SCREEN, notice.as_ref());
         assert_eq!(readiness.state, SessionChatComposerState::NotReady);
@@ -251,8 +253,10 @@ mod tests {
             "✻ Cooked for 27s\n● Bash(rm -rf build)\nBash command\n  rm -rf build\nDo you want to proceed?\n❯ 1. Yes\n  2. Yes, and don't ask again for rm commands in /tmp/x\n  3. No, and tell Claude what to do differently (esc)",
             "● How is Claude doing this session? (optional)\n❯ 1. Bad\n  2. Fine\n  3. Good\n  4. Type something.\nEnter to select · ↑/↓ to navigate · Esc to cancel",
         ] {
-            let notice =
-                crate::session_chat_notice::classify_session_chat_terminal_notice(Some("claude"), screen);
+            let notice = crate::session_chat_notice::classify_session_chat_terminal_notice(
+                Some("claude"),
+                screen,
+            );
             let readiness =
                 detect_session_chat_composer_readiness(Some("claude"), screen, notice.as_ref());
             assert!(!readiness.should_dismiss(), "{screen}: {readiness:?}");

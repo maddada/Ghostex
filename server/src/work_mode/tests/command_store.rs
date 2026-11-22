@@ -8,10 +8,10 @@ use std::collections::{BTreeSet, HashMap};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::paths::{get_gxserver_paths, GxserverPaths};
-use crate::storage::{initialize_gxserver_storage, open_gxserver_database, GxserverDatabase};
+use crate::paths::{GxserverPaths, get_gxserver_paths};
+use crate::storage::{GxserverDatabase, initialize_gxserver_storage, open_gxserver_database};
 
 use super::*;
 
@@ -414,9 +414,11 @@ fn only_declared_single_line_credentials_are_stored() {
     }
     assert!(refused(json!({ "token": "x".repeat(4097) })).contains("longer than 4 KB"));
     assert!(refused(json!({ "token": 7 })).contains("must be text or null"));
-    assert!(!store
-        .credentials()
-        .contains_key("workspaceSourceCredentials"));
+    assert!(
+        !store
+            .credentials()
+            .contains_key("workspaceSourceCredentials")
+    );
     assert!(matches!(
         set_work_source_credentials(&store.db, &store.paths, &store.ws("ws-none"), &Map::new()),
         Err(WorkSourceError::Refused(text)) if text == "Set the ticket command first."
@@ -460,9 +462,11 @@ fn a_secret_of_one_or_two_characters_is_refused_when_it_is_saved() {
             other => panic!("{value:?} not refused: {other:?}"),
         }
     }
-    assert!(!store
-        .credentials()
-        .contains_key("workspaceSourceCredentials"));
+    assert!(
+        !store
+            .credentials()
+            .contains_key("workspaceSourceCredentials")
+    );
     // Characters no id or path here holds, so nothing else refuses it.
     save(json!({ "token": " ж€✓ " })).expect("3 characters are kept");
     // Blank clears the field, as `null` does.
@@ -874,13 +878,10 @@ fn a_damaged_credentials_file_is_never_written_over() {
         // A deletion can't tell whether the file holds the workspace's credentials. It runs in a
         // transaction, as the route runs it, which the error rolls back.
         let transaction = store.db.unchecked_transaction().expect("transaction");
-        assert!(delete_workspace_work_source(
-            &store.db,
-            &store.paths,
-            &workspace_id,
-            &no_references
-        )
-        .is_err());
+        assert!(
+            delete_workspace_work_source(&store.db, &store.paths, &workspace_id, &no_references)
+                .is_err()
+        );
         drop(transaction);
         assert!(store.sources().workspaces.contains_key(&workspace_id));
         assert_eq!(std::fs::read_to_string(&file).expect("read"), damaged);
@@ -1017,19 +1018,25 @@ fn deleting_a_workspace_removes_its_command_and_credentials() {
     assert!(!sources.workspaces.contains_key(&store.ws("ws-a")));
     assert!(sources.retired.is_empty(), "ws-b still pins it");
     let credentials = store.credentials();
-    assert!(credentials["workspaceSourceCredentials"]
-        .get(&store.ws("ws-a"))
-        .is_none());
-    assert!(credentials["workspaceSourceCredentials"]
-        .get(&store.ws("ws-b"))
-        .is_some());
+    assert!(
+        credentials["workspaceSourceCredentials"]
+            .get(&store.ws("ws-a"))
+            .is_none()
+    );
+    assert!(
+        credentials["workspaceSourceCredentials"]
+            .get(&store.ws("ws-b"))
+            .is_some()
+    );
     delete_workspace_work_source(&store.db, &store.paths, &store.ws("ws-b"), &no_references)
         .expect("deleted")
         .commit();
     assert_eq!(store.sources().retired[0].id, "fixture");
-    assert!(!store
-        .credentials()
-        .contains_key("workspaceSourceCredentials"));
+    assert!(
+        !store
+            .credentials()
+            .contains_key("workspaceSourceCredentials")
+    );
 }
 
 fn retired(index: usize) -> RetiredSource {
@@ -1096,11 +1103,13 @@ fn only_a_new_id_can_hit_the_bound() {
     write_work_sources(&store.db, &sources).expect("seed");
     let command = store.set("ws-a", false).expect("a known id pins");
     assert_eq!(command.source_id, "fixture");
-    assert!(!store
-        .sources()
-        .retired
-        .iter()
-        .any(|retired| retired.id == "fixture"));
+    assert!(
+        !store
+            .sources()
+            .retired
+            .iter()
+            .any(|retired| retired.id == "fixture")
+    );
 }
 
 #[test]
@@ -1317,9 +1326,11 @@ fn a_value_that_appears_in_what_cant_be_masked_is_refused() {
             other => panic!("{value}: not refused: {other:?}"),
         }
     }
-    assert!(!store
-        .credentials()
-        .contains_key("workspaceSourceCredentials"));
+    assert!(
+        !store
+            .credentials()
+            .contains_key("workspaceSourceCredentials")
+    );
 }
 
 #[test]
@@ -1374,9 +1385,11 @@ fn a_check_clears_what_an_earlier_one_left_behind() {
     let workspace_id = store.ws("ws-a");
     store.answer("info-renamed");
     refusal(store.set("ws-a", false));
-    assert!(store.sources().workspaces[&workspace_id]
-        .offered_id
-        .is_some());
+    assert!(
+        store.sources().workspaces[&workspace_id]
+            .offered_id
+            .is_some()
+    );
     // An accepted check with the pinned id clears the offer.
     store.answer("good");
     let CredentialsSaved { command, .. } = set_work_source_credentials(
@@ -1440,10 +1453,12 @@ fn the_summary_masks_every_text_it_returns() {
     .expect("stored");
     let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false, false);
     assert!(!summary.to_string().contains(&secret), "{summary}");
-    assert!(summary["command"]["checkedAt"]
-        .as_str()
-        .unwrap()
-        .starts_with("••••"));
+    assert!(
+        summary["command"]["checkedAt"]
+            .as_str()
+            .unwrap()
+            .starts_with("••••")
+    );
 }
 
 #[test]
@@ -1676,9 +1691,11 @@ fn a_rolled_back_deletion_leaves_the_command_and_its_credentials() {
     let deletion =
         delete_workspace_work_source(&transaction, &store.paths, &workspace_id, &no_references)
             .expect("deleted");
-    assert!(!store
-        .credentials()
-        .contains_key("workspaceSourceCredentials"));
+    assert!(
+        !store
+            .credentials()
+            .contains_key("workspaceSourceCredentials")
+    );
     // What follows fails: the transaction rolls back and the credentials are put back.
     drop(transaction);
     deletion.undo(&store.paths).expect("undone");

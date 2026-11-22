@@ -41,23 +41,22 @@ fn notice_from_rule(
         rule.title,
     )
     .with_input_blocking(rule.blocks_input)
-    .with_detail(match evidence
-        .as_deref()
-        .and_then(limit_reset)
-        .or_else(|| {
+    .with_detail(
+        match evidence.as_deref().and_then(limit_reset).or_else(|| {
             (rule.detail == ANTIGRAVITY_USAGE_LIMIT_DETAIL)
                 .then(|| limit_reset(screen.window(NoticeScope::Banner)))
                 .flatten()
         }) {
-        Some(reset)
-            if rule.detail == CLAUDE_USAGE_LIMIT_DETAIL
-                || rule.detail == ANTIGRAVITY_USAGE_LIMIT_DETAIL =>
-        {
-            rule.detail
-                .replacen("usage limit.", &format!("usage limit ({reset})."), 1)
-        }
-        _ => rule.detail.to_string(),
-    })
+            Some(reset)
+                if rule.detail == CLAUDE_USAGE_LIMIT_DETAIL
+                    || rule.detail == ANTIGRAVITY_USAGE_LIMIT_DETAIL =>
+            {
+                rule.detail
+                    .replacen("usage limit.", &format!("usage limit ({reset})."), 1)
+            }
+            _ => rule.detail.to_string(),
+        },
+    )
     .with_details(evidence)
     .with_screen_tail(screen.screen_tail())
     .with_actions(
@@ -129,8 +128,7 @@ fn is_duration_unit_word(word: &str) -> bool {
 }
 
 fn is_go_duration_token(token: &str) -> bool {
-    crate::accounts::hub::cooldown::go_duration(token)
-        .is_some_and(|d| d > chrono::Duration::zero())
+    crate::accounts::hub::cooldown::go_duration(token).is_some_and(|d| d > chrono::Duration::zero())
 }
 
 fn spaced_unit_seconds(num: i64, unit: &str) -> Option<i64> {
@@ -201,7 +199,9 @@ pub(crate) fn parse_notice_reset_duration(
         notice.detail.clone().unwrap_or_default(),
         tail.lines().map(str::trim).collect::<Vec<_>>().join(" "),
     ];
-    texts.iter().find_map(|text| parse_reset_duration_text(text))
+    texts
+        .iter()
+        .find_map(|text| parse_reset_duration_text(text))
 }
 
 pub(crate) fn parse_reset_duration_text(text: &str) -> Option<chrono::Duration> {

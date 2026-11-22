@@ -9,13 +9,13 @@ use std::{
 };
 
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::store::{self, NewSecretRequest, SecretAnswer, SecretRequestError, SecretRequestStatus};
-use crate::domain::{read_domain_rpc_params, DomainStateError};
+use crate::domain::{DomainStateError, read_domain_rpc_params};
 use crate::protocol::{rpc_error, rpc_success};
 use crate::security::{Capability, Principal};
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
 
 pub(crate) const SECRET_REQUEST_ENDPOINTS: &[&str] = &[
     "/api/createSecretRequest",
@@ -254,7 +254,7 @@ async fn answer(
         _ => {
             return Err(DomainStateError::bad_request(
                 "answer.type must be save or decline.",
-            ))
+            ));
         }
     };
     let paths = state.paths.clone();

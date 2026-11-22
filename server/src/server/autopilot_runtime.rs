@@ -924,7 +924,10 @@ fn decide(
     let (rule, saw, text) = match reason {
         IdleWaitReason::Queued(count) => (
             "parked-job-finished",
-            format!("It stopped with {count} finished background job result{} waiting.", if count == 1 { "" } else { "s" }),
+            format!(
+                "It stopped with {count} finished background job result{} waiting.",
+                if count == 1 { "" } else { "s" }
+            ),
             "Ghostex: [Autopilot] your background job finished: read its result and carry on with your task.",
         ),
         IdleWaitReason::SaidWaiting => (
@@ -939,7 +942,8 @@ fn decide(
         ),
         IdleWaitReason::TurnCutOff => (
             "cut-off",
-            "Its turn was cut off before it ended (asleep, restarted or stopped mid-turn).".to_string(),
+            "Its turn was cut off before it ended (asleep, restarted or stopped mid-turn)."
+                .to_string(),
             "Ghostex: [Autopilot] your last turn was cut off before it ended: carry on where you left off, or say you're finished.",
         ),
         IdleWaitReason::JobRunning => return None,
@@ -1000,16 +1004,31 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
                     .await
                     .unwrap_or(false);
                     if used {
-                        log(&state, &plan, "Used one of its account's limit resets: no other account had room. It carries on by itself.", Outcome::Done);
+                        log(
+                            &state,
+                            &plan,
+                            "Used one of its account's limit resets: no other account had room. It carries on by itself.",
+                            Outcome::Done,
+                        );
                         finish(&memory, &key, None, now, |pilot| pilot.limit_parked = true);
                         return;
                     }
-                    log(&state, &plan, "Left it for you: no other account is signed in with room. It continues when its limit resets.", Outcome::Parked);
+                    log(
+                        &state,
+                        &plan,
+                        "Left it for you: no other account is signed in with room. It continues when its limit resets.",
+                        Outcome::Parked,
+                    );
                     finish(&memory, &key, None, now, |pilot| pilot.limit_parked = true);
                     return;
                 }
                 Ok(Ok(crate::accounts::autopilot::AutopilotSwitch::NotSwitchable)) => {
-                    log(&state, &plan, "Left it for you: it runs on its own login, so it waits for its limit to reset.", Outcome::Parked);
+                    log(
+                        &state,
+                        &plan,
+                        "Left it for you: it runs on its own login, so it waits for its limit to reset.",
+                        Outcome::Parked,
+                    );
                     finish(&memory, &key, None, now, |pilot| pilot.limit_parked = true);
                     return;
                 }
@@ -1063,7 +1082,9 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
                         None => log(
                             &state,
                             &plan,
-                            &format!("Declined it and told the agent to carry on without it. Left for you: {note}"),
+                            &format!(
+                                "Declined it and told the agent to carry on without it. Left for you: {note}"
+                            ),
                             Outcome::Parked,
                         ),
                     }
@@ -1104,7 +1125,7 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
         }
         Act::Forms => {
             use crate::voice_agent::question_forms::{
-                autopilot_answer_recommended, AutopilotForms,
+                AutopilotForms, autopilot_answer_recommended,
             };
             match autopilot_answer_recommended(&state, &key.0, &key.1).await {
                 Ok(AutopilotForms::Answered(picked)) => {
@@ -1244,7 +1265,7 @@ pub(super) async fn answer_with_picks(
                     return Err(format!(
                         "No pick for the question \"{}\".",
                         question.question
-                    ))
+                    ));
                 }
             });
         }

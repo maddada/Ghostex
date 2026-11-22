@@ -29,8 +29,8 @@ only agy's status line below it; the TUI erases the panel once it is answered.
 
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
 use crate::session_chat_resume_prompt::{
-    parse_picker_row, SessionChatTerminalPicker, SessionChatTerminalPickerKind,
-    SessionChatTerminalPickerRow,
+    SessionChatTerminalPicker, SessionChatTerminalPickerKind, SessionChatTerminalPickerRow,
+    parse_picker_row,
 };
 
 const REQUEST_LEAD: &str = "Requesting permission for:";

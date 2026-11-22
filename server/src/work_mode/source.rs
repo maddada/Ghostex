@@ -11,7 +11,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::paths::GxserverPaths;
 

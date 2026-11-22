@@ -6,8 +6,8 @@ use serde_json::{Map, Value};
 
 use super::beads::{normalize_beads_dependency_type, normalize_beads_estimate};
 use super::values::{
-    normalize_issue_id, normalize_nullish_required_text, normalize_required_text,
-    nullish_value_to_string, ProcessCommand, TypedOperationError,
+    ProcessCommand, TypedOperationError, normalize_issue_id, normalize_nullish_required_text,
+    normalize_required_text, nullish_value_to_string,
 };
 
 /// The bd config key the Board's hidden built-in columns live in: in the workspace database, next
@@ -115,7 +115,7 @@ pub(crate) fn build_beads_view_command(
         _ => {
             return Err(TypedOperationError::bad_request(format!(
                 "Unsupported Beads action: {action}"
-            )))
+            )));
         }
     };
     Ok(ProcessCommand::new(bd_executable_path, args, cwd))

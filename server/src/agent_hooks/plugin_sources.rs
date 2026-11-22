@@ -4,7 +4,7 @@ use super::chat_channel_source::chat_channel_source;
 #[cfg(not(windows))]
 use super::config::command_agent;
 use super::config::{
-    HookDefinition, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
+    AMP_PLUGIN_MARKER, HookDefinition, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
     OMP_EXTENSION_MARKER, PI_EXTENSION_MARKER,
 };
 use super::probing::path_string;

@@ -1,7 +1,7 @@
 //! Workspace routes (crate::workspaces): read, create, update and delete workspaces, and move a
 //! project into one.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{
     constants::GXSERVER_PROTOCOL_VERSION,
@@ -11,12 +11,12 @@ use crate::{
         read_sidebar_project_collections, update_sidebar_project_collections,
     },
     sidebar_spaces::rehome_sidebar_spaces_for_workspaces,
-    work_mode::{store_linear_api_key, LinearKeyScope},
+    work_mode::{LinearKeyScope, store_linear_api_key},
     workspaces::{
-        assign_machine_workspace_in, assign_remote_project_workspace_in, create_workspace_in,
-        delete_workspace_in, find_workspace_id, move_project_to_workspace, read_sidebar_workspaces,
-        reapply_workspace_defaults, resolve_project_reference, update_workspace_in,
-        write_sidebar_workspaces, DEFAULT_WORKSPACE_ID,
+        DEFAULT_WORKSPACE_ID, assign_machine_workspace_in, assign_remote_project_workspace_in,
+        create_workspace_in, delete_workspace_in, find_workspace_id, move_project_to_workspace,
+        read_sidebar_workspaces, reapply_workspace_defaults, resolve_project_reference,
+        update_workspace_in, write_sidebar_workspaces,
     },
 };
 
@@ -253,7 +253,7 @@ pub(super) async fn route_workspaces_http(
                 body_json,
                 token_extension_id,
                 caller,
-            })
+            });
         }
     })
 }

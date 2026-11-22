@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::linear::{linear_graphql, project_linear_key};
 

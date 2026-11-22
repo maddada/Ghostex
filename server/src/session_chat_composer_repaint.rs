@@ -2,14 +2,14 @@ use std::time::Instant;
 
 use crate::agents::identity::normalize_agent_id;
 use crate::session_chat_composer::{
-    detect_session_chat_composer_readiness, wait_for_session_chat_composer,
-    SessionChatComposerReadiness, SessionChatComposerState, SessionChatComposerWait,
-    SessionChatComposerWaitPolicy, SESSION_CHAT_COMPOSER_POLL_MS,
+    SESSION_CHAT_COMPOSER_POLL_MS, SessionChatComposerReadiness, SessionChatComposerState,
+    SessionChatComposerWait, SessionChatComposerWaitPolicy, detect_session_chat_composer_readiness,
+    wait_for_session_chat_composer,
 };
 
 use super::{
-    capture_session_terminal_text, write_session_chat_payload, SessionChatSendError,
-    SessionChatSendFailure,
+    SessionChatSendError, SessionChatSendFailure, capture_session_terminal_text,
+    write_session_chat_payload,
 };
 
 /// CDXC:SessionChat 2026-09-23 WHY:

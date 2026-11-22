@@ -108,11 +108,15 @@ mod tests {
     #[test]
     fn reads_the_reset_from_each_shape_of_the_refusal() {
         assert_eq!(
-            reset_in("API Error: Request rejected (429) · All credentials for model claude-opus-5-5 are cooling down (reset after 1h10m0s)"),
+            reset_in(
+                "API Error: Request rejected (429) · All credentials for model claude-opus-5-5 are cooling down (reset after 1h10m0s)"
+            ),
             Some(Duration::seconds(4200))
         );
         assert_eq!(
-            reset_in("All credentials for model claude-sonnet-5-5 are cooling down via provider claude (reset after 2h)"),
+            reset_in(
+                "All credentials for model claude-sonnet-5-5 are cooling down via provider claude (reset after 2h)"
+            ),
             Some(Duration::seconds(7200))
         );
         assert_eq!(

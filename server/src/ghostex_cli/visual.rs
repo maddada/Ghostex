@@ -14,7 +14,7 @@ use std::{
     sync::Arc,
 };
 
-use ghostex_gx_visual::{render, scene_to_svg, Theme, Visual, MAX_SOURCE_BYTES};
+use ghostex_gx_visual::{MAX_SOURCE_BYTES, Theme, Visual, render, scene_to_svg};
 
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::ghostex_cli::{skills, usage, visual_page_check};
@@ -261,7 +261,9 @@ fn report_question_form(
         )));
     }
     if !mended.is_empty() {
-        println!("The chat shows it, but write it the standard way (other Ghostex versions may not read it):");
+        println!(
+            "The chat shows it, but write it the standard way (other Ghostex versions may not read it):"
+        );
         for fix in mended {
             println!("- {fix}");
         }

@@ -3,7 +3,7 @@
 //! A periodic fresh observation renews the client clock lease; missing evidence pauses the roster instead of animating historical work indefinitely.
 
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 const AGENT_FLEET_MAIN_AGENT: &str = "main";
 

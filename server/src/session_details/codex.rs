@@ -12,10 +12,10 @@ use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::server::AppState;
-use crate::session_chat::{read_transcript_file_version, TranscriptFileVersion};
+use crate::session_chat::{TranscriptFileVersion, read_transcript_file_version};
 use crate::session_chat_fleet_transcript::timestamp;
 
 /// Rollouts kept scanned in memory.

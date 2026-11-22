@@ -161,11 +161,12 @@ async fn voice_mode_lists_and_works_on_a_connected_computers_sessions() {
     assert_eq!(rows[0]["project"], "Ghostex");
     assert!(listed.get("unavailableComputers").is_none());
     // Every request went through the relay with the token the other computer gave this one.
-    assert!(seen
-        .lock()
-        .unwrap()
-        .iter()
-        .all(|(_, authorization, _)| authorization == &format!("Bearer {PEER_TOKEN}")));
+    assert!(
+        seen.lock()
+            .unwrap()
+            .iter()
+            .all(|(_, authorization, _)| authorization == &format!("Bearer {PEER_TOKEN}"))
+    );
     let projects = tool("list_projects", json!({})).await;
     assert_eq!(projects["projects"][0]["computer"], "Omarchy", "{projects}");
 
@@ -241,9 +242,11 @@ async fn voice_mode_lists_and_works_on_a_connected_computers_sessions() {
     assert_eq!(shown["shown"], true, "{shown}");
     assert_eq!(shown["session"]["ref"], "S9r:P1:G1");
     // The two refusals and the show sent nothing but the session list reads.
-    assert!(paths_seen(&seen)[before..]
-        .iter()
-        .all(|path| path == "/api/listSessions" || path == "/api/listProjects"));
+    assert!(
+        paths_seen(&seen)[before..]
+            .iter()
+            .all(|path| path == "/api/listSessions" || path == "/api/listProjects")
+    );
 
     // A new agent in that computer's project starts there, with its first prompt.
     let started = tool(

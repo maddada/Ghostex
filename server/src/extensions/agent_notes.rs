@@ -6,7 +6,7 @@
 
 use crate::paths::GxserverPaths;
 
-use super::{read_manifest, read_store, ExtensionPermission};
+use super::{ExtensionPermission, read_manifest, read_store};
 
 /// The `agentNote` of every installed extension that is on and was granted `agents.note`, in
 /// extension id order. Read fresh from the store at each launch, so turning the extension off,

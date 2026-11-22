@@ -20,15 +20,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use ghostex_gx_protocol::collab_component::{
-    SidecarEvent, COLLAB_COMPONENT, COLLAB_SIDECAR_BINARY,
+    COLLAB_COMPONENT, COLLAB_SIDECAR_BINARY, SidecarEvent,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::server::AppState;
 
 pub(crate) const TITLE: &str = "Collab";
-pub(crate) const DESCRIPTION: &str =
-    "Share a chat through a link that opens it in a browser. People you share with need its code; their messages wait for your approval.";
+pub(crate) const DESCRIPTION: &str = "Share a chat through a link that opens it in a browser. People you share with need its code; their messages wait for your approval.";
 
 /// The installed component.
 #[derive(Clone, Debug, PartialEq, Eq)]

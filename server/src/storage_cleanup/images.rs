@@ -7,7 +7,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use super::files::{is_older, prune_tree, remove_file, Since, Tally, DAY};
+use super::files::{DAY, Since, Tally, is_older, prune_tree, remove_file};
 
 /// CDXC:ServerDaemon 2026-11-03 DECISION:
 /// User chose: screenshots in the image folder are deleted 60 days after they were written, except folders named for something kept on purpose (`release-*`, `youtube-*`).

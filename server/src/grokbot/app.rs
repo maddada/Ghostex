@@ -23,11 +23,7 @@ pub(crate) fn desktop_app_state() -> &'static str {
             .stderr(std::process::Stdio::null())
             .status()
             .is_ok_and(|status| status.success());
-        if running {
-            "running"
-        } else {
-            "found"
-        }
+        if running { "running" } else { "found" }
     }
     #[cfg(not(target_os = "macos"))]
     {

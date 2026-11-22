@@ -16,8 +16,8 @@ use serde_json::Value;
 use super::{
     prepare::prepare_page,
     store::{
-        read_record, replace_page_html, source_modified_ms, visual_pages_dir, write_page,
-        VISUAL_PAGE_MAX_BYTES,
+        VISUAL_PAGE_MAX_BYTES, read_record, replace_page_html, source_modified_ms,
+        visual_pages_dir, write_page,
     },
     version::is_current_layout,
 };

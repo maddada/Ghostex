@@ -10,10 +10,10 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::comparison::ActivityEvent;
-use super::drive::{agent_drive_reason, OBSERVER_MARK};
+use super::drive::{OBSERVER_MARK, agent_drive_reason};
 use crate::logging::{DiagnosticLogScenario, GxserverLogInput, LogLevel};
 use crate::paths::GxserverPaths;
 use crate::server::AppState;
@@ -366,10 +366,12 @@ mod tests {
         assert!(busy.iter().all(|event| !event.baseline));
         assert_eq!(hook_params(&busy[0]).expect("params")["status"], "working");
         // A session whose baseline ends on its turn's end is left as it is.
-        assert!(baseline_events(&[
-            event("codex", "UserPromptSubmit").baseline(),
-            event("codex", "Stop").baseline(),
-        ])
-        .is_empty());
+        assert!(
+            baseline_events(&[
+                event("codex", "UserPromptSubmit").baseline(),
+                event("codex", "Stop").baseline(),
+            ])
+            .is_empty()
+        );
     }
 }

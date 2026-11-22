@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use crate::ghostex_cli::args::{parse_json_value, Flags};
-use crate::ghostex_cli::rpc::{ghostex_home, project_id_from_global_ref, CliError, CliResult};
+use crate::ghostex_cli::args::{Flags, parse_json_value};
+use crate::ghostex_cli::rpc::{CliError, CliResult, ghostex_home, project_id_from_global_ref};
 use crate::ghostex_cli::sessions;
 use crate::ghostex_cli::sessions::{js_coalesce, js_string, js_template, js_truthy};
 
@@ -553,9 +553,11 @@ mod tests {
         let matches = resolve("zmx/g-0601-000003", &sessions, &flags).expect("ok");
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0]["sessionId"], json!("G3"));
-        assert!(resolve("tmux/g-0601-000003", &sessions, &flags)
-            .expect("ok")
-            .is_empty());
+        assert!(
+            resolve("tmux/g-0601-000003", &sessions, &flags)
+                .expect("ok")
+                .is_empty()
+        );
     }
 
     #[test]

@@ -2,14 +2,14 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::platform::shell::command_shell;
 
 use super::values::{
-    expand_user_path, is_path_inside, json_value_to_javascript_string, normalize_path_string,
-    run_process_command, typed_result, CommandSummary, ProcessCommand, TypedOperationContext,
-    TypedOperationError, SETUP_COMMAND_LIMIT_BYTES,
+    CommandSummary, ProcessCommand, SETUP_COMMAND_LIMIT_BYTES, TypedOperationContext,
+    TypedOperationError, expand_user_path, is_path_inside, json_value_to_javascript_string,
+    normalize_path_string, run_process_command, typed_result,
 };
 
 pub(crate) async fn run_project_setup_command(

@@ -1,4 +1,4 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::args::{FlagValue, Flags};
 use crate::ghostex_cli::rpc::{self, CliError, CliResult};
@@ -188,7 +188,7 @@ pub(super) fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResu
         Some(_) => {
             return Err(CliError::Other(
                 "create-session --cwd needs a folder.".to_string(),
-            ))
+            ));
         }
     }
     params.insert("kind".to_string(), json!("terminal"));
@@ -290,7 +290,7 @@ pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> C
             Some(_) => {
                 return Err(CliError::Other(format!(
                     "create-agent {flag} needs a value."
-                )))
+                )));
             }
         }
     }
@@ -308,7 +308,7 @@ pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> C
             return Err(CliError::Other(
                 "create-agent --run-on needs a location such as local, docker or hetzner."
                     .to_string(),
-            ))
+            ));
         }
     }
     // CDXC:SessionChat 2026-09-09 SEE-ALSO:

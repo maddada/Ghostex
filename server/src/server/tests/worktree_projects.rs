@@ -80,11 +80,13 @@ async fn delete_worktree_project_route_removes_clean_checkout_and_local_branch()
     )
     .await;
     let body = response_json(projects.response).await;
-    assert!(!body["result"]["projects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|project| project["projectId"] == worktree_project["projectId"]));
+    assert!(
+        !body["result"]["projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|project| project["projectId"] == worktree_project["projectId"])
+    );
 }
 
 #[tokio::test]
@@ -670,11 +672,13 @@ async fn delete_worktree_project_route_force_removes_dirty_checkout_and_warns_fo
         body["result"]["checkoutRemoval"],
         json!({ "forced": true, "retriedForSubmodules": false })
     );
-    assert!(body["result"]["warnings"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|warning| warning["kind"] == "remoteBranchDeleteFailed"));
+    assert!(
+        body["result"]["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|warning| warning["kind"] == "remoteBranchDeleteFailed")
+    );
     assert!(!worktree.exists());
 
     let projects = route_http(
@@ -684,11 +688,13 @@ async fn delete_worktree_project_route_force_removes_dirty_checkout_and_warns_fo
     )
     .await;
     let body = response_json(projects.response).await;
-    assert!(!body["result"]["projects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|project| project["projectId"] == worktree_project["projectId"]));
+    assert!(
+        !body["result"]["projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|project| project["projectId"] == worktree_project["projectId"])
+    );
 }
 
 #[tokio::test]

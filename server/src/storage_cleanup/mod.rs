@@ -10,7 +10,7 @@ mod logs;
 mod sessions;
 
 pub(crate) use backups::prune_backups;
-pub(crate) use files::{is_older, prune_tree, remove_file, Since, Tally, DAY};
+pub(crate) use files::{DAY, Since, Tally, is_older, prune_tree, remove_file};
 pub(crate) use images::prune_images;
 pub(crate) use logs::prune_logs;
-pub(crate) use sessions::{expired_closed_sessions, CLOSED_SESSION_MAX_IDLE};
+pub(crate) use sessions::{CLOSED_SESSION_MAX_IDLE, expired_closed_sessions};

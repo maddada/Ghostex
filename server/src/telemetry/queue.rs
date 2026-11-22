@@ -22,7 +22,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::paths::GxserverPaths;
 

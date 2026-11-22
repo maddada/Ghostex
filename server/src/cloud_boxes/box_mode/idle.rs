@@ -10,7 +10,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use ghostex_gx_protocol::cloud_box::{BoxBootTicket, BoxIdleStatus, CloudProviderId};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::state;
 use crate::ghostex_cli::{args::Flags, rpc};
@@ -155,7 +155,7 @@ fn stop_self(provider: &CloudProviderId) -> Result<(), String> {
             return Err(format!(
                 "{} pauses idle boxes itself; Ghostex does not stop them.",
                 other.label()
-            ))
+            ));
         }
     }
     .map_err(|error| format!("Can't stop the box: {error}"))?;

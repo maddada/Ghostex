@@ -298,7 +298,7 @@ pub fn check_with(
         Err(error) => {
             return TailnetOwnerCheck::ask(format!(
                 "could not read the SSH login's sockets: {error}"
-            ))
+            ));
         }
     };
     let Some(session) = files.iter().find(|process| process.pid == pid) else {
@@ -314,7 +314,7 @@ pub fn check_with(
         Err(error) => {
             return TailnetOwnerCheck::ask(format!(
                 "could not read the SSH login's parent: {error}"
-            ))
+            ));
         }
     }
     let peer_ip = match tailnet_peer(&session.connections) {

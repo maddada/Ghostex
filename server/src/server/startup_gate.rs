@@ -2,15 +2,15 @@
 
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     time::Instant,
 };
 
 use axum::{
     body::Body,
-    http::{header, HeaderValue, Method, Request, Response, StatusCode},
+    http::{HeaderValue, Method, Request, Response, StatusCode, header},
     middleware::Next,
 };
 use serde_json::json;
@@ -18,7 +18,7 @@ use serde_json::json;
 use crate::constants::{GXSERVER_PRODUCT, GXSERVER_PROTOCOL_VERSION};
 use ghostex_gx_protocol::{SERVER_STARTING_ERROR, SERVER_STARTING_RETRY_AFTER_MS};
 
-use super::{apply_cors_headers, json_response, AppState};
+use super::{AppState, apply_cors_headers, json_response};
 
 /// CDXC:ServerDaemon 2026-10-22 DECISION:
 /// User: "Yes, do both": gxserver answers "starting" while it holds its port but is not ready, and a startup that hangs is replaced. gxserver used to take its port and then spend seconds to minutes in startup work (the zmx/wmx wire check above all, whose wmx.exe starts antivirus can slow without limit) before serving, so clients connected and got no answer ("Could not read gxserver response") and a hung startup was never replaced. The port is now served from the moment it is taken; until startup finishes every request except a CORS preflight gets HTTP 503 `{ok:false, error:"serverStarting", state:"starting", step, startingForMs, retryAfterMs}`, and nothing behind it runs, so a client may resend the request; every client that used to wait in the listen backlog does so (packages/gx-protocol/src/starting.rs). Older clients and older gxservers already read a non-2xx health answer as "no daemon answering yet", so mixed versions during an update behave as before, only faster.

@@ -1,5 +1,5 @@
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::*;
 use crate::domain::DomainStateError;

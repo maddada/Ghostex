@@ -34,7 +34,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use toml_edit::{DocumentMut, Item, Table};
 

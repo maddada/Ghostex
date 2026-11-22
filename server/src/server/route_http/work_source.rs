@@ -2,18 +2,18 @@
 //! clearing its path, and storing its credentials. Each may run the command's `info`, so they run
 //! off the async runtime. They answer with Workspaces off too, like the tracker routes.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::work_mode::{
-    clear_work_source, log_work_source_failure, proposed_values_mask, read_work_sources,
-    referenced_source_ids, set_work_source, set_work_source_credentials,
-    stored_workspace_work_tracker, work_source_summary, CheckFailure, CommandEnv, CommandFailure,
-    SourcePath, WorkSourceChange, WorkSourceError, WorkspaceCommand,
+    CheckFailure, CommandEnv, CommandFailure, SourcePath, WorkSourceChange, WorkSourceError,
+    WorkspaceCommand, clear_work_source, log_work_source_failure, proposed_values_mask,
+    read_work_sources, referenced_source_ids, set_work_source, set_work_source_credentials,
+    stored_workspace_work_tracker, work_source_summary,
 };
 use crate::workspaces::{
-    find_workspace_id, read_sidebar_workspaces, DEFAULT_WORKSPACE_ID, NO_SUCH_WORKSPACE,
+    DEFAULT_WORKSPACE_ID, NO_SUCH_WORKSPACE, find_workspace_id, read_sidebar_workspaces,
 };
 
 use super::*;
@@ -150,7 +150,7 @@ fn set_command(
         _ => {
             return Err(DomainStateError::bad_request(
                 "Pass path: the ticket command's path, or null to clear it; or check: true to check it again.",
-            ))
+            ));
         }
     };
     let answer = summary(state, db, &workspace_id).map_err(|error| masked(&mask, error))?;

@@ -473,11 +473,7 @@ pub(crate) fn resolve_git_root_for_existing_directory(
         Ok(path) => path_to_string(&path),
         Err(_) => {
             let trimmed = root.trim_end_matches('/').to_string();
-            if trimmed.is_empty() {
-                root
-            } else {
-                trimmed
-            }
+            if trimmed.is_empty() { root } else { trimmed }
         }
     }))
 }

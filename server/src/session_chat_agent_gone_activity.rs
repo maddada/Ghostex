@@ -6,7 +6,7 @@ use std::sync::{LazyLock, Mutex};
 
 use serde_json::Value;
 
-use crate::agents::{stored_activity_is_working, GoneActivityGuard};
+use crate::agents::{GoneActivityGuard, stored_activity_is_working};
 use crate::domain::DomainRepository;
 use crate::server::AppState;
 use crate::storage::open_gxserver_database;

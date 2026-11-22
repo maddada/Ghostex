@@ -5,8 +5,8 @@ use std::{
     io::{Read, Write},
     process::{Command, ExitStatus, Stdio},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     thread::JoinHandle,
     time::{Duration, Instant},

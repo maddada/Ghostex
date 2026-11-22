@@ -272,14 +272,14 @@ impl Ops {
                 Some(machine) if machine.state == CloudBoxState::Failed => {
                     return Err(machine
                         .error
-                        .unwrap_or_else(|| "The box failed to start.".to_string()))
+                        .unwrap_or_else(|| "The box failed to start.".to_string()));
                 }
                 None => return Err("The provider no longer has this box.".to_string()),
                 _ if started.elapsed() > MACHINE_WAIT => {
                     return Err(format!(
                         "The box did not start within {} minutes.",
                         MACHINE_WAIT.as_secs() / 60
-                    ))
+                    ));
                 }
                 _ => std::thread::sleep(Duration::from_secs(2)),
             }
@@ -468,7 +468,7 @@ impl Ops {
     ) -> Result<Option<ProviderSnapshot>, String> {
         let found = match self {
             Ops::Local { home } => {
-                return local_provider::snapshot_exists(home, provider_snapshot_id)
+                return local_provider::snapshot_exists(home, provider_snapshot_id);
             }
             Ops::Instabox { key } => call(
                 instabox::get_snapshot_request(key, provider_snapshot_id),
@@ -489,7 +489,7 @@ impl Ops {
     pub(super) fn delete_snapshot(&self, provider_snapshot_id: &str) -> Result<(), String> {
         let result = match self {
             Ops::Local { home } => {
-                return local_provider::delete_snapshot_image(home, provider_snapshot_id)
+                return local_provider::delete_snapshot_image(home, provider_snapshot_id);
             }
             Ops::Instabox { key } => call(
                 instabox::delete_snapshot_request(

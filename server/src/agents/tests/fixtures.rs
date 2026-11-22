@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::*;
 use crate::{

@@ -5,7 +5,7 @@ use std::path::Path;
 use ghostex_settings_catalog::MarkedHandovers;
 
 use super::*;
-use crate::paths::{get_gxserver_paths, GxserverPaths};
+use crate::paths::{GxserverPaths, get_gxserver_paths};
 
 /// CDXC:MarkedHandovers 2026-10-17 DECISION:
 /// User: "please allow launching an orchestrator without the reply style so the orchestrator answers normally. but put "Not recommended" and make it an advanced setting". Supersedes the 2026-10-11 "force the marked handovers for coordinators/orchestrator threads and their children": threads always get this note, orchestrators get it unless Orchestrators answer without markers (`orchestratorPlainReplies`, off by default) is on, and every other agent session Ghostex starts gets it only while the Marked handovers setting is on (off by default). The agent otherwise writes as it does today. The note goes into every such session's prompt, so it stays short and plain.
@@ -228,7 +228,9 @@ fn with_copilot_note(command: &str, text: &str, path: &std::path::Path) -> Strin
     let dir = dir.to_string_lossy();
     if cfg!(windows) {
         let dir = dir.replace('\'', "''");
-        format!("$env:{COPILOT_INSTRUCTIONS_DIRS}='{dir},' + $env:{COPILOT_INSTRUCTIONS_DIRS}; {command}")
+        format!(
+            "$env:{COPILOT_INSTRUCTIONS_DIRS}='{dir},' + $env:{COPILOT_INSTRUCTIONS_DIRS}; {command}"
+        )
     } else {
         let dir = dir
             .replace('\\', "\\\\")

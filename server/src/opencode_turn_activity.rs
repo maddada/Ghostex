@@ -8,11 +8,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 
 use crate::agents::dispatch_agent_endpoint;
 use crate::domain::DomainRepository;
-use crate::server::{read_session_text, session_observer_key, AppState};
+use crate::server::{AppState, read_session_text, session_observer_key};
 use crate::storage::open_gxserver_database;
 
 /// How far OpenCode's idle stamp may sit before the hook's working stamp and still end that

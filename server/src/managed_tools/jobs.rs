@@ -1,7 +1,7 @@
 //! Install jobs: one at a time across every tool and agent CLI, with their output kept for the
 //! page that started them (and any page opened later).
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     sync::{Arc, LazyLock, Mutex},

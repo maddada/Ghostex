@@ -11,19 +11,19 @@ use super::{
     store,
 };
 use crate::{
-    agent_model_pickers::{wait_for_claude_prompt, Hidden, ENTER, ESCAPE},
+    agent_model_pickers::{ENTER, ESCAPE, Hidden, wait_for_claude_prompt},
     domain::DomainStateError,
     server::AppState,
 };
-use jiff::{civil, tz::TimeZone, Timestamp};
+use jiff::{Timestamp, civil, tz::TimeZone};
 use portable_pty::CommandBuilder;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::{
     collections::HashSet,
     io::{Read, Write},
     path::Path,
     process::Stdio,
-    sync::{mpsc, Mutex},
+    sync::{Mutex, mpsc},
     time::{Duration, Instant},
 };
 

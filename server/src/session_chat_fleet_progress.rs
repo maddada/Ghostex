@@ -3,7 +3,7 @@
 //! Match the footer's lifetime counter against the original launch and the latest idle boundary, not the current time or resumed turn start. A frozen counter must still identify the same child minutes later.
 
 use crate::session_chat_agent_fleet::{
-    agent_fleet_block_start, normalized_screen_lines, SessionChatSubAgent,
+    SessionChatSubAgent, agent_fleet_block_start, normalized_screen_lines,
 };
 use crate::session_chat_terminal_activity::parse_elapsed_seconds;
 

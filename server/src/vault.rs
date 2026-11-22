@@ -11,10 +11,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::Aes256Gcm;
-use base64::engine::general_purpose::STANDARD as BASE64;
+use aes_gcm::aead::{Aead, KeyInit};
 use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use rand::Rng;
 
 use crate::paths::GxserverPaths;

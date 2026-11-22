@@ -409,7 +409,7 @@ pub fn interactive_session_picker(sessions: &[Value]) -> CliResult<Option<Value>
 }
 
 fn run_picker_loop(model: &PickerModel, output: &mut std::io::Stdout) -> CliResult<Option<Value>> {
-    use crossterm::event::{read, Event, KeyCode, KeyEventKind, KeyModifiers};
+    use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers, read};
     let mut selected_session_index = 0usize;
     let mut viewport_start = 0usize;
     viewport_start = render_session_picker(model, selected_session_index, viewport_start, output)?;

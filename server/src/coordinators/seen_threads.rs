@@ -2,9 +2,9 @@
 
 use std::collections::BTreeSet;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::records::{list_threads_for, SessionKey};
+use super::records::{SessionKey, list_threads_for};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::storage::open_gxserver_database;

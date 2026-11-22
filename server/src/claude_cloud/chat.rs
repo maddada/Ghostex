@@ -1,9 +1,9 @@
 //! A cloud session's conversation for its terminal client (`conversation`), and chat sends to a
 //! cloud session: they go to claude.ai, never into its terminal.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::record::{session_cloud_record, CloudState};
+use super::record::{CloudState, session_cloud_record};
 use super::remote;
 use super::start::{load, open, send_to_cloud_session, start_cloud_session};
 use crate::domain::{DomainRepository, DomainStateError};

@@ -1,9 +1,9 @@
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
     agents::read_agent_settings,
-    domain::{read_domain_rpc_params, DomainRepository, DomainStateError},
+    domain::{DomainRepository, DomainStateError, read_domain_rpc_params},
     sidebar_hud::read_sidebar_hud,
     storage::open_gxserver_database,
 };

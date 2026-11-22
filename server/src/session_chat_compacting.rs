@@ -12,7 +12,7 @@ and the daemon-owned prompt queue agree even when no client is connected.
 
 use std::sync::{Arc, Mutex};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
 use crate::domain::DomainRepository;

@@ -11,12 +11,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use tokio::sync::Notify;
 
-use super::github::{read_branch, status_line, BranchReport};
-use super::page_status::{apply_observed, Observed};
-use super::record::{session_cloud_record, CloudState};
+use super::github::{BranchReport, read_branch, status_line};
+use super::page_status::{Observed, apply_observed};
+use super::record::{CloudState, session_cloud_record};
 use super::remote::{self, RemoteStatus};
 use super::start::{load, open, save};
 use crate::domain::DomainRepository;

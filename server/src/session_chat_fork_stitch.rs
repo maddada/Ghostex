@@ -4,19 +4,19 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::session_chat::{
-    parse_json_object, timestamp_ms, SessionChatBlock, SessionChatMessage, SessionChatRole,
-    SessionChatSource, SessionChatTranscriptAgent,
+    SessionChatBlock, SessionChatMessage, SessionChatRole, SessionChatSource,
+    SessionChatTranscriptAgent, parse_json_object, timestamp_ms,
 };
 use crate::session_chat_paths::read_transcript_head_complete_lines;
 use crate::session_chat_successor::{
-    codex_rollout_id, codex_rollout_session_id, collect_all_codex_day_directories,
-    read_codex_session_meta, SUCCESSOR_CHAIN_LIMIT,
+    SUCCESSOR_CHAIN_LIMIT, codex_rollout_id, codex_rollout_session_id,
+    collect_all_codex_day_directories, read_codex_session_meta,
 };
 use crate::session_chat_tail::{
-    read_session_chat_tail_page, SessionChatTailFileResult, SessionChatTailPage,
+    SessionChatTailFileResult, SessionChatTailPage, read_session_chat_tail_page,
 };
 
 #[cfg(test)]

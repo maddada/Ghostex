@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 
 use crate::agent_hooks::config::{
-    all_hook_events, command_agent, hook_format, nested_event_timeout, nested_timeout,
-    HookDefinition, HookFormat, HookPaths,
+    HookDefinition, HookFormat, HookPaths, all_hook_events, command_agent, hook_format,
+    nested_event_timeout, nested_timeout,
 };
 use crate::agent_hooks::probing::{
     io_error, json_error, path_string, read_config_text, write_config_file,
@@ -131,8 +131,10 @@ pub(super) fn merge_json_hook(
                     {
                         hook.insert(
                             "timeout".to_string(),
-                            json!(nested_event_timeout(definition.agent_id, event_name)
-                                .unwrap_or(5000)),
+                            json!(
+                                nested_event_timeout(definition.agent_id, event_name)
+                                    .unwrap_or(5000)
+                            ),
                         );
                     }
                     group.insert("hooks".to_string(), Value::Array(vec![Value::Object(hook)]));

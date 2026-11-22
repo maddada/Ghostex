@@ -1,8 +1,8 @@
 //! Stop, delete and attach. Every function blocks; call from `spawn_blocking`.
 
 use ghostex_gx_protocol::cloud_box::{
-    box_verbs, error_codes, BoxWorkStatus, CloudBox, CloudBoxConnectInfo, CloudBoxSessionRow,
-    CloudBoxState, CloudProviderId, CLOUD_BOX_TRANSPORT_TAILCAT,
+    BoxWorkStatus, CLOUD_BOX_TRANSPORT_TAILCAT, CloudBox, CloudBoxConnectInfo, CloudBoxSessionRow,
+    CloudBoxState, CloudProviderId, box_verbs, error_codes,
 };
 
 use super::ops::{Ops, Target};
@@ -99,7 +99,7 @@ pub(super) fn delete(
                 return Err(DomainStateError {
                     code: error_codes::HAS_UNPUSHED_WORK,
                     message: format!("{} has unpushed work: push it, or delete anyway.", row.name),
-                })
+                });
             }
             None => {
                 return Err(DomainStateError {
@@ -108,7 +108,7 @@ pub(super) fn delete(
                         "Couldn't check {} for unpushed work. Push its branch, or delete anyway.",
                         row.name
                     ),
-                })
+                });
             }
         }
     }

@@ -7,13 +7,13 @@
 use std::path::PathBuf;
 
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::record::{read_bot, require_bot};
-use super::session::{create_bot_chat_with, ChatOpening};
+use super::session::{ChatOpening, create_bot_chat_with};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::paths::GxserverPaths;
-use crate::server::{queue_session_chat_prompt, AppState};
+use crate::server::{AppState, queue_session_chat_prompt};
 
 /// Whether a due routine of `bot_id` may run now.
 pub(crate) enum RoutineGate {

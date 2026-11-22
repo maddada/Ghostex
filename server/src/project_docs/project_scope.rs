@@ -4,7 +4,7 @@
 //! CDXC:Docs 2026-09-27 SEE-ALSO: `manage_list_project_directory` and `manage_search_project` in `apps/desktop/src/app/helpers/manage_docs_listing.rs` answer the same requests for a local project; `packages/project-docs/src/project.rs` holds the skip list and the search both use.
 
 use super::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::hash_map::DefaultHasher,
     fs,

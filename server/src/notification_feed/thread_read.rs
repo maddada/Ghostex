@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use rusqlite::{params, OptionalExtension};
-use serde_json::{json, Map, Value};
+use rusqlite::{OptionalExtension, params};
+use serde_json::{Map, Value, json};
 
-use crate::domain::{sql_error, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, sql_error};
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::server::AppState;
 use crate::storage::open_gxserver_database_with_busy_timeout;

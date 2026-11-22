@@ -9,9 +9,9 @@
 use std::io::Write;
 
 use axum::body::Body;
-use axum::http::{header, HeaderMap, HeaderValue, Response};
-use flate2::write::{DeflateEncoder, GzEncoder};
+use axum::http::{HeaderMap, HeaderValue, Response, header};
 use flate2::Compression;
+use flate2::write::{DeflateEncoder, GzEncoder};
 
 /// The request header a client sends to ask for gzipped answers (with `Accept-Encoding: gzip`).
 pub(crate) const COMPRESS_HEADER: &str = "x-gxserver-compress";

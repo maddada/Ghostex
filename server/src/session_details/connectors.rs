@@ -8,11 +8,11 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::server::AppState;
 
-use super::scan::{mcp_server_key, TranscriptFacts};
+use super::scan::{TranscriptFacts, mcp_server_key};
 
 /// The MCP server Ghostex Connectors adds to every Claude launch (connectors/agent/launch.rs).
 const CONNECTORS_SERVER: &str = "ghostex-connectors";

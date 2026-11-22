@@ -46,7 +46,7 @@ fn asset() -> Result<Asset, String> {
             "849890026dc2b468ca042d1b1845ee8e42dee9c94d7ad493e0cb4ea63b1e244c",
         ),
         (Os::Windows, Arch::Arm64) => {
-            return Err("Executor has no build for Windows on Arm.".to_string())
+            return Err("Executor has no build for Windows on Arm.".to_string());
         }
     };
     if platform::os() == Os::Linux && platform::glibc_version().is_none() {
@@ -125,7 +125,7 @@ pub(super) fn install(log: &Log) -> Result<(), String> {
             return Err(format!(
                 "Executor was unpacked but reported version {} instead of {VERSION}.",
                 other.unwrap_or_else(|| "nothing".to_string())
-            ))
+            ));
         }
     }
     remove_other_versions();

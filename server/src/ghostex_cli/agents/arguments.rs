@@ -187,7 +187,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
             value if value.starts_with('-') => {
                 return Err(CliError::Other(format!(
                     "Unknown option: {value}. See ghostex agents --help."
-                )))
+                )));
             }
             value if parsed.command.is_empty() => parsed.command = value.to_owned(),
             value => parsed.positional.push(value.to_owned()),
@@ -410,12 +410,17 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 "link" if parsed.positional.len() != 1 || parsed.lead.is_none() || parsed.all => {
                     Some("ghostex agents link <session-ref> --lead <session-ref|self>")
                 }
-                "unlink" if (parsed.positional.len() == 1) == parsed.all
-                    || parsed.positional.len() > 1 =>
+                "unlink"
+                    if (parsed.positional.len() == 1) == parsed.all
+                        || parsed.positional.len() > 1 =>
                 {
-                    Some("ghostex agents unlink <session-ref> (or --all for every session linked to you)")
+                    Some(
+                        "ghostex agents unlink <session-ref> (or --all for every session linked to you)",
+                    )
                 }
-                "links" if !parsed.positional.is_empty() => Some("ghostex agents links [--all] [--json]"),
+                "links" if !parsed.positional.is_empty() => {
+                    Some("ghostex agents links [--all] [--json]")
+                }
                 _ => None,
             };
             if let Some(usage) = usage {
@@ -476,7 +481,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         other => {
             return Err(CliError::Other(format!(
                 "Unknown agents command: {other}. See ghostex agents --help."
-            )))
+            )));
         }
     }
     Ok(parsed)

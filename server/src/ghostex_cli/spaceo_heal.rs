@@ -3,10 +3,10 @@
 
 use std::io::{BufRead, IsTerminal, Write};
 
-use ghostex_spaceo_heal::{repair, Outcome, Spaceo, State};
+use ghostex_spaceo_heal::{Outcome, Spaceo, State, repair};
 
 use crate::ghostex_cli::args::parse_args;
-use crate::ghostex_cli::rpc::{ghostex_home, home_dir, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, ghostex_home, home_dir};
 
 /// Environment variables coding agents set for the commands they run.
 const AGENT_ENV_MARKERS: [&str; 7] = [

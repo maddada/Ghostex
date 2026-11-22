@@ -20,8 +20,8 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::agent_hooks::probing::{
-    agent_cli_presence, cached_shell_command_found, probe_command_in_user_shell,
-    refresh_cli_environment, CliPresence, ShellCommandProbe,
+    CliPresence, ShellCommandProbe, agent_cli_presence, cached_shell_command_found,
+    probe_command_in_user_shell, refresh_cli_environment,
 };
 use crate::domain::DomainStateError;
 

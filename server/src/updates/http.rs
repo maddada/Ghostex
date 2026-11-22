@@ -4,12 +4,12 @@
 //! answer is `{ items, running, auto, checkedAt, unchecked }`, `auto` being the ids whose switch is
 //! on (items.rs `checks` for the last two).
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::{install, items, store};
 use crate::domain::read_domain_rpc_params;
 use crate::protocol::{rpc_error, rpc_success};
-use crate::server::{routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, routed_json};
 
 pub(crate) async fn handle_updates_http(
     state: &AppState,
@@ -120,7 +120,7 @@ fn update_all_ids(items: &[Value]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{endpoint_for, is_remote_endpoint_allowed, ApiPermission, ListenerKind};
+    use crate::protocol::{ApiPermission, ListenerKind, endpoint_for, is_remote_endpoint_allowed};
 
     #[test]
     fn update_all_runs_updates_and_never_installs() {

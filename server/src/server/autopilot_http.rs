@@ -194,7 +194,7 @@ fn handle(
                 None => {
                     return Err(DomainStateError::bad_request(
                         "on is required (true or false), or toggle: true.",
-                    ))
+                    ));
                 }
             };
             Some(saved(autopilot::update_config(&state.paths, |config| {
@@ -204,7 +204,7 @@ fn handle(
         other => {
             return Err(DomainStateError::bad_request(format!(
                 "Unknown op \"{other}\": use read, set, setProject or setSession."
-            )))
+            )));
         }
     };
     if let Some(after) = &after {

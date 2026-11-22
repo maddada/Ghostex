@@ -5,9 +5,9 @@
 //! User: "i wanna still see usage of each account in bottom of sidebar as i do now without having to login to each one in cswap or xswap". Every account a hub pools shows a meter at the bottom of the sidebar, beside the Claude Swap and Codex Swap ones, until the user turns it off in that account's pane. The user's hubs hold the management key on the hub's own computer only (Q4202 "1A"): the gxserver there reads the hub, and the other computers show its meters through their connection to it, so a row's id names the login (`hub-<provider>-<hash of email and workspace>`), not the hub, and the same login read by two computers shows once.
 //! SEE-ALSO: apps/desktop/src/app/titlebar/account_usage.rs (`refresh_titlebar_accounts`, `distinct_accounts`), apps/desktop/src/app/window/settings_modal/tabs/accounts/hubs.rs.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::{reading, store, AccountReading, FRESH_FOR};
+use super::{AccountReading, FRESH_FOR, reading, store};
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 

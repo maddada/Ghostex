@@ -16,18 +16,18 @@ use std::time::{Duration, Instant};
 
 use axum::http::StatusCode;
 use ghostex_gx_protocol::chat_card::THEME_CHANGED;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::gallery;
 use super::journal::{self, Item, ThemeChange, Who};
 use super::look;
 use super::readability;
 use crate::coordinators::now_iso;
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::ghostex_cli::settings as catalog;
 use crate::protocol::{rpc_error, rpc_success};
 use crate::security::Principal;
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
 use crate::storage::open_gxserver_database;
 
 pub(crate) const THEME_ENDPOINT: &str = "/api/theme";
@@ -144,7 +144,7 @@ fn problem(
             return Some((
                 "alreadyUndone",
                 "That change was already undone.".to_string(),
-            ))
+            ));
         }
         (false, false) => {
             return Some(("conflict", "That change is not undone.".to_string()));

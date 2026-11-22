@@ -17,7 +17,7 @@
 //! apps/desktop/src/notification_feed/mod.rs, packages/shared/notification-feed/notification-feed-contract.ts.
 
 use chrono::Utc;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, LogLevel};
@@ -25,10 +25,10 @@ use crate::server::AppState;
 use crate::storage::open_gxserver_database_with_busy_timeout;
 
 use super::api::broadcast_notification_feed_changed;
-use super::producer::{session_row_heading, OBSERVER_BUSY_TIMEOUT};
+use super::producer::{OBSERVER_BUSY_TIMEOUT, session_row_heading};
 use super::store::{
-    insert_notification_feed_row, notification_agent_icon, NewNotificationFeedRow,
-    NOTIFICATION_FEED_KIND_FAILED,
+    NOTIFICATION_FEED_KIND_FAILED, NewNotificationFeedRow, insert_notification_feed_row,
+    notification_agent_icon,
 };
 
 /// The body of every failed row.

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
@@ -623,10 +623,12 @@ fn synthesized_item(
                 ) {
                     item[kind.field()] = value.clone();
                 }
-                item["assignedToMe"] = json!(ticket
-                    .pointer("/assignee/isMe")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false));
+                item["assignedToMe"] = json!(
+                    ticket
+                        .pointer("/assignee/isMe")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+                );
             }
         }
         WorkItemRef::PullRequest(selector) => {
@@ -636,9 +638,11 @@ fn synthesized_item(
             let state = text(pull_request, "state").unwrap_or_else(|| "open".to_string());
             item["key"] = json!(format!("pr:{selector}"));
             item["kind"] = json!("pullRequest");
-            item["id"] = json!(number
-                .map(|n| format!("#{n}"))
-                .unwrap_or_else(|| selector.clone()));
+            item["id"] = json!(
+                number
+                    .map(|n| format!("#{n}"))
+                    .unwrap_or_else(|| selector.clone())
+            );
             item["pullRequestRef"] = json!(selector);
             item["title"] =
                 json!(text(pull_request, "title").unwrap_or_else(|| "Pull request".to_string()));

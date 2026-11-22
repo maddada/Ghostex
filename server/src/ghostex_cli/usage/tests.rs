@@ -68,6 +68,8 @@ fn cli_skill_help_routes_to_specialized_workflows() {
 
 #[test]
 fn generate_title_usage_keeps_literal_shell_parameter_expansion() {
-    assert!(generate_title_usage()
-        .contains("ghostex rename-session \"$GHOSTEX_GLOBAL_SESSION_REF\" \"<title>\""));
+    assert!(
+        generate_title_usage()
+            .contains("ghostex rename-session \"$GHOSTEX_GLOBAL_SESSION_REF\" \"<title>\"")
+    );
 }

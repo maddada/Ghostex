@@ -3,7 +3,7 @@ use crate::{
     domain::{DomainRepository, DomainStateError},
     server::AppState,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 #[cfg(unix)]
 use std::collections::HashMap;
 use std::collections::HashSet;

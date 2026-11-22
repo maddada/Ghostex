@@ -1,6 +1,6 @@
 //! When each agent launcher was last used, for the Settings › Agents roster.
 
-use crate::domain::{sql_error, DomainRepository, DomainResult};
+use crate::domain::{DomainRepository, DomainResult, sql_error};
 use std::collections::HashMap;
 
 impl DomainRepository<'_> {

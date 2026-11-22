@@ -14,7 +14,7 @@
 //! the marker decides success. The same approach is in the desktop's Keep Awake installer
 //! (apps/desktop/native/macos/GpuiLidSleepHelperClient.m).
 
-use std::ffi::{c_char, c_void, CString};
+use std::ffi::{CString, c_char, c_void};
 use std::fs::File;
 use std::io::Read;
 use std::os::fd::FromRawFd;

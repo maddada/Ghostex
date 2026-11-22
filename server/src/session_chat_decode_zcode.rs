@@ -195,11 +195,13 @@ mod tests {
         assert!(
             matches!(&tool.blocks[1], SessionChatBlock::ToolResult { is_error: Some(true), output, call_id: None, patch: None } if output == "Exit 1")
         );
-        assert!(decode_zcode_transcript_line(
-            &row(json!({"type":"text","text":"hidden","ignored":true})),
-            "fallback"
-        )
-        .is_none());
+        assert!(
+            decode_zcode_transcript_line(
+                &row(json!({"type":"text","text":"hidden","ignored":true})),
+                "fallback"
+            )
+            .is_none()
+        );
         let mut lifecycle = json!({"kind":"lifecycle","info":{"role":"assistant","finish":"tool-calls","time":{"completed":1000},"anchor":{"turnId":"turn_test"}}});
         assert!(decode_zcode_turn_lifecycle(&lifecycle.to_string(), "fallback").is_none());
         lifecycle["info"]["finish"] = json!("stop");

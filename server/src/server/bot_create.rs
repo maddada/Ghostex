@@ -8,17 +8,17 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::{
-    domain_error_response, handle_domain_http, schedule_presentation_project_delta, value_text,
-    AppState, RoutedResponse,
+    AppState, RoutedResponse, domain_error_response, handle_domain_http,
+    schedule_presentation_project_delta, value_text,
 };
 use crate::bot_projects::{
     bot_profile, discover_bot_profiles, hermes_profile_create_args, hermes_refusal,
     is_new_bot_profile_name, new_bot_profile, sync_bot_projects,
 };
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::session_chat_hermes::hermes_home;
 
 /// `hermes profile create` copies a few files and writes a wrapper script; a minute is plenty.

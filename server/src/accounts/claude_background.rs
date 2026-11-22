@@ -93,7 +93,9 @@ impl BackgroundSession {
                 ))
             })?;
         if !output.status.success() {
-            return Err(failure("Claude could not check or stop the background conversation. Check the terminal before retrying."));
+            return Err(failure(
+                "Claude could not check or stop the background conversation. Check the terminal before retrying.",
+            ));
         }
         Ok(output.stdout)
     }

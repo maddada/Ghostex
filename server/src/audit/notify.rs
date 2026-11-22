@@ -10,8 +10,8 @@ use std::sync::{Arc, OnceLock};
 
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::notification_feed::store::{
-    insert_notification_feed_row, NewNotificationFeedRow, NOTIFICATION_FEED_KIND_SECURITY,
-    SECURITY_NOTIFICATION_PROJECT_ID,
+    NOTIFICATION_FEED_KIND_SECURITY, NewNotificationFeedRow, SECURITY_NOTIFICATION_PROJECT_ID,
+    insert_notification_feed_row,
 };
 use crate::server::AppState;
 

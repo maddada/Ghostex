@@ -25,23 +25,23 @@ mod session_tokens;
 
 pub(crate) use approvals::random_b64;
 pub use approvals::{
-    expired_message, params_digest, ActionRequest, ApprovalError, ApprovalStore, Created,
-    APPROVED_TTL_MS, GONE_MESSAGE, PENDING_TTL_MS,
+    APPROVED_TTL_MS, ActionRequest, ApprovalError, ApprovalStore, Created, GONE_MESSAGE,
+    PENDING_TTL_MS, expired_message, params_digest,
 };
 pub use approver_keys::{
-    approver_key_id, key_id_of, verify_approval_signature, ApproverKeyError, ApproverKeys,
+    ApproverKeyError, ApproverKeys, approver_key_id, key_id_of, verify_approval_signature,
 };
-pub use capability::{route_access, Capability, Principal, RouteAccess, SessionRole};
+pub use capability::{Capability, Principal, RouteAccess, SessionRole, route_access};
 pub use events::SecurityEvent;
 pub use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
-pub use owner::{KeyRenamed, OwnerChallenges, OwnerError, OWNER_CHALLENGE_TTL_MS};
+pub use owner::{KeyRenamed, OWNER_CHALLENGE_TTL_MS, OwnerChallenges, OwnerError};
 pub use policy::{
-    opens_door, DOOR_SESSION_ENDPOINTS, DOOR_SESSION_TTL_MS, EASY_CONNECT_ENABLE,
-    FIRST_KEY_HANDOFF_FILE, OWNER_KEY_RESUME, TOKEN_FILE_CODE_WINDOW_MS,
+    DOOR_SESSION_ENDPOINTS, DOOR_SESSION_TTL_MS, EASY_CONNECT_ENABLE, FIRST_KEY_HANDOFF_FILE,
+    OWNER_KEY_RESUME, TOKEN_FILE_CODE_WINDOW_MS, opens_door,
 };
-pub use presence::{requester_for, PresenceGrant, PresenceOutcome};
+pub use presence::{PresenceGrant, PresenceOutcome, requester_for};
 pub use session_tokens::{
-    SessionTokens, OWNER_TOKEN_PREFIX, SESSION_TOKEN_ENV, SESSION_TOKEN_PREFIX,
+    OWNER_TOKEN_PREFIX, SESSION_TOKEN_ENV, SESSION_TOKEN_PREFIX, SessionTokens,
 };
 
 use std::{path::PathBuf, sync::Arc};
@@ -175,7 +175,9 @@ impl SecurityState {
         state.session_tokens.restore(saved.session_tokens);
         let dropped = state.session_tokens.restore_owner(saved.owner_sessions);
         if dropped > 0 {
-            eprintln!("[gxserver] dropped {dropped} saved full owner session(s): only door sessions are kept");
+            eprintln!(
+                "[gxserver] dropped {dropped} saved full owner session(s): only door sessions are kept"
+            );
         }
         state.session_tokens.restore_door(saved.door_sessions);
         *state

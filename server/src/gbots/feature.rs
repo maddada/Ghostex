@@ -36,7 +36,9 @@ pub(crate) fn gbots_off_message(paths: &GxserverPaths) -> String {
     if crate::chief::chief_on(paths) {
         built_in_extensions::turned_off_on_message(GBOTS, &computer)
     } else {
-        format!("GBots need Main Hub, which is turned off on {computer}. Turn on Main Hub, then GBots, in Settings > Extensions; from another computer, pick {computer} at the top of that page first.")
+        format!(
+            "GBots need Main Hub, which is turned off on {computer}. Turn on Main Hub, then GBots, in Settings > Extensions; from another computer, pick {computer} at the top of that page first."
+        )
     }
 }
 

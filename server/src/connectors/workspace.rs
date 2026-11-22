@@ -9,8 +9,8 @@ use serde_json::Value;
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 use crate::workspaces::{
-    find_workspace_id, project_workspace_id, read_sidebar_workspaces, workspaces_feature_enabled,
-    DEFAULT_WORKSPACE_ID,
+    DEFAULT_WORKSPACE_ID, find_workspace_id, project_workspace_id, read_sidebar_workspaces,
+    workspaces_feature_enabled,
 };
 
 /// A workspace as the Connectors page lists it.

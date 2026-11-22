@@ -1,6 +1,6 @@
 use super::*;
 use rusqlite::params;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 fn stash_params(content: &str, project_id: Option<&str>) -> Map<String, Value> {
     let mut params = Map::new();

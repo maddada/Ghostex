@@ -2,10 +2,10 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::value::RawValue;
 use serde_json::Value;
+use serde_json::value::RawValue;
 
-use crate::domain::{project_from_row, project_row_from_sql, DomainResult};
+use crate::domain::{DomainResult, project_from_row, project_row_from_sql};
 
 const MAX_DATABASES: usize = 4;
 

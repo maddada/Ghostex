@@ -14,8 +14,8 @@ use std::{
     io::Write,
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
     },
     thread,
     time::{Duration, Instant},

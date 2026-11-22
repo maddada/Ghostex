@@ -4,24 +4,24 @@ use std::{
     collections::HashMap,
     future::Future,
     sync::{
-        atomic::{AtomicI64, Ordering},
         Mutex, OnceLock,
+        atomic::{AtomicI64, Ordering},
     },
     time::Duration,
 };
 
 use axum::{
-    body::{to_bytes, Body},
-    http::{header::CONTENT_LENGTH, Response, StatusCode},
+    body::{Body, to_bytes},
+    http::{Response, StatusCode, header::CONTENT_LENGTH},
 };
-use rusqlite::{params, Connection, OptionalExtension};
-use serde_json::{json, Map, Value};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Map, Value, json};
 use tokio::sync::watch;
 
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::paths::GxserverPaths;
 use crate::protocol::rpc_success;
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
 use crate::storage::open_gxserver_database;
 
 /// The RPC param (and result field) that names one send.
@@ -484,7 +484,7 @@ where
                 };
             }
             Ok(Begin::Sent(result)) => {
-                return replay(endpoint_path, request_id, result, &send_request_id)
+                return replay(endpoint_path, request_id, result, &send_request_id);
             }
             Ok(Begin::InFlight(mut done)) => {
                 if tokio::time::timeout(IN_FLIGHT_WAIT, done.wait_for(|done| *done))

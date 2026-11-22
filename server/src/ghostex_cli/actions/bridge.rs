@@ -1,6 +1,6 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::ghostex_cli::args::{parse_args, FlagValue, Flags};
+use crate::ghostex_cli::args::{FlagValue, Flags, parse_args};
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
 use crate::ghostex_cli::rpc::{self, CliError, CliResult};
 use crate::ghostex_cli::{selector, sessions};

@@ -7,7 +7,7 @@
 //! Plan piece 15: the bot folder stays on its home computer. A chat on another computer works in a folder there (`~/GBots/<name>` unless picked, added as a project there) and is marked `runtimeSettings.gbotHome`, so its own `ghostex gbots brief` and `ghostex gbots memory …` go back to the home gxserver (home.rs), never to a copy of the files. Work handed to it with `ghostex gbots ask` is linked as the sender's thread on another computer (`coordinator_remote_threads`), so its reports reach the sender through the supervisor that already watches threads on other computers.
 
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::link;
 use super::store::{self, BotComputer, RemoteChat};
@@ -16,7 +16,7 @@ use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 
 use super::super::record::Bot;
-use super::super::session::{bot_agent_rows, check_agent, ChatOpening};
+use super::super::session::{ChatOpening, bot_agent_rows, check_agent};
 
 /// The `runtimeSettings` key that marks a session as a chat of another computer's GBot.
 pub(crate) const HOME_KEY: &str = "gbotHome";

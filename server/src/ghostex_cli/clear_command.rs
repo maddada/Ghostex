@@ -7,11 +7,11 @@
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::ghostex_cli::args::{parse_args, Flags};
+use crate::ghostex_cli::args::{Flags, parse_args};
 use crate::ghostex_cli::output::print_json;
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 use crate::ghostex_cli::{selector, usage};
 
 const ENDPOINT: &str = "/api/clearSessionConversation";
@@ -159,8 +159,12 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
         print_json(&result);
     } else {
         match &wait {
-            None => println!("Sent {command} to {reference}; not waiting for the new conversation."),
-            Some(Some(id)) => println!("Cleared {reference} with {command}. New conversation: {id}"),
+            None => {
+                println!("Sent {command} to {reference}; not waiting for the new conversation.")
+            }
+            Some(Some(id)) => {
+                println!("Cleared {reference} with {command}. New conversation: {id}")
+            }
             Some(None) if late => println!(
                 "Sent {command} to {reference}; not confirmed yet. {}",
                 late_note(agent)

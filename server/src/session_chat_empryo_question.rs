@@ -7,9 +7,9 @@ use crate::session_chat::{
     SessionChatQuestionSelection,
 };
 use crate::session_chat_notice::{
-    SessionChatTerminalNotice, SessionChatTerminalNoticeAction, SessionChatTerminalNoticeChoice,
+    SESSION_CHAT_NOTICE_PERMISSION_PROMPT, SessionChatTerminalNotice,
+    SessionChatTerminalNoticeAction, SessionChatTerminalNoticeChoice,
     SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
-    SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
 };
 use crate::session_chat_send::AskAnswerKeyGroup;
 

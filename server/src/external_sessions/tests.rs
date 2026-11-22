@@ -6,7 +6,7 @@ use crate::{
     storage::{initialize_gxserver_storage, open_gxserver_database},
 };
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::{fs, path::Path};
 
 /// ZCode's CLI store with one interactive conversation in `cwd`, closed the way a ZCode that quits

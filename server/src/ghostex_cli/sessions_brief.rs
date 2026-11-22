@@ -1,6 +1,6 @@
 //! The short session rows `ghostex sessions --json` prints unless `--full` asks for the inventory.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::agents;
 use crate::ghostex_cli::args::Flags;

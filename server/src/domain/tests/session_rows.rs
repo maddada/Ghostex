@@ -1,6 +1,6 @@
 use super::*;
 use crate::ids::is_gxserver_session_id;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 #[test]
 fn optional_project_id_rejects_whitespace_filter_ids() {
@@ -95,9 +95,11 @@ fn restored_session_ids_reject_invalid_provided_values() {
             .expect("clear params"),
         )
         .expect("restore id cleared");
-    assert!(object_field(&cleared, "hiddenMetadata")
-        .get("restoredFromSessionId")
-        .is_none());
+    assert!(
+        object_field(&cleared, "hiddenMetadata")
+            .get("restoredFromSessionId")
+            .is_none()
+    );
 
     let error = repository
         .update_session(
@@ -624,9 +626,11 @@ fn update_and_remove_crud_paths_report_not_found_for_unvalidated_ids() {
         )
         .expect_err("invalid session lookup is not found");
     assert_eq!(missing_session.code, "notFound");
-    assert!(missing_session
-        .message
-        .contains("/session-local does not exist."));
+    assert!(
+        missing_session
+            .message
+            .contains("/session-local does not exist.")
+    );
 
     let missing_remove = repository
         .remove_session(json!({}).as_object().expect("remove session params"))

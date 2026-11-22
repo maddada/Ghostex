@@ -2,12 +2,12 @@
 //! preferences every GBot reads. gxserver does the work (server/src/gbots/memory/) and decides who
 //! may; in a GBot's own chat `--bot` is not needed.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::{
     args::Flags,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
 
 pub(super) const MEMORY_HELP: &str = "  ghostex gbots memory show [--bot <bot>] [--json]
@@ -103,11 +103,14 @@ pub(super) fn run_memory(rest: &[String], flags: &Flags) -> CliResult<()> {
             let mut params = with("memoryEdit", flags, &[("topic", "topic"), ("base", "base")]);
             let body = match read_file_flag(flags, "file")? {
                 Some(body) => body,
-                None => flags.string_value("text").map(str::to_string).ok_or_else(|| {
-                    CliError::Other(
-                        "Give the new text: --file <path> or --text <text>.".to_string(),
-                    )
-                })?,
+                None => flags
+                    .string_value("text")
+                    .map(str::to_string)
+                    .ok_or_else(|| {
+                        CliError::Other(
+                            "Give the new text: --file <path> or --text <text>.".to_string(),
+                        )
+                    })?,
             };
             params.insert("text".into(), json!(body));
             params
@@ -142,7 +145,7 @@ pub(super) fn run_memory(rest: &[String], flags: &Flags) -> CliResult<()> {
         other => {
             return Err(CliError::Other(format!(
                 "unknown memory command `{other}`. Use show, add, forget, edit, undo, journal, topics, topic or log.\n\n{MEMORY_HELP}"
-            )))
+            )));
         }
     };
     params.retain(|_, value| !value.is_null());
@@ -285,7 +288,9 @@ fn print_memory(verb: &str, answer: &Value) {
         "topics" => {
             let topics = answer["topics"].as_array().cloned().unwrap_or_default();
             if topics.is_empty() {
-                println!("No topics yet. Start one with `ghostex gbots memory add --topic <name> \"<text>\"`.");
+                println!(
+                    "No topics yet. Start one with `ghostex gbots memory add --topic <name> \"<text>\"`."
+                );
             }
             for topic in topics {
                 println!(
@@ -324,7 +329,7 @@ pub(super) fn run_prefs(rest: &[String], flags: &Flags) -> CliResult<()> {
         other => {
             return Err(CliError::Other(format!(
                 "unknown prefs command `{other}`. Use show or set."
-            )))
+            )));
         }
     };
     let answer = gbots(params, flags)?;

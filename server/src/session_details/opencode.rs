@@ -8,10 +8,10 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::server::read_runtime_text;
-use crate::session_chat_opencode::{safe_id, snapshot, Client};
+use crate::session_chat_opencode::{Client, safe_id, snapshot};
 
 /// How long the model list (for the context window) is reused.
 const MODELS_FRESH_FOR: Duration = Duration::from_secs(5 * 60);

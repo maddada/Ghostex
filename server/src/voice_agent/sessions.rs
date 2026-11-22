@@ -6,11 +6,11 @@
 
 use std::sync::Arc;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::computers::{self, Computer, Unavailable};
 use crate::coordinators::{
-    classify_thread_session, thread_needs_user_approval, thread_prompt, ThreadProgress, ThreadState,
+    ThreadProgress, ThreadState, classify_thread_session, thread_needs_user_approval, thread_prompt,
 };
 use crate::domain::DomainRepository;
 use crate::server::AppState;

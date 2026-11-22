@@ -5,7 +5,7 @@
 
 use serde_json::json;
 
-use super::hex::{manifest_target, Target};
+use super::hex::{Target, manifest_target};
 
 fn manifest(url: &str) -> serde_json::Value {
     json!({
@@ -42,12 +42,14 @@ fn the_feed_download_is_resolved_against_the_feed() {
 
 #[test]
 fn a_feed_without_https_a_size_or_a_checksum_is_refused() {
-    assert!(manifest_target(
-        &manifest("http://example.com/Hex.zip"),
-        "macos-arm64",
-        "https://anoma.ly"
-    )
-    .is_err());
+    assert!(
+        manifest_target(
+            &manifest("http://example.com/Hex.zip"),
+            "macos-arm64",
+            "https://anoma.ly"
+        )
+        .is_err()
+    );
     assert!(manifest_target(&manifest("/Hex.zip"), "windows-x64", "https://anoma.ly").is_err());
     let mut no_hash = manifest("/Hex.zip");
     no_hash["release"]["targets"]["macos-arm64"]["sha256"] = json!("abc");
@@ -79,7 +81,7 @@ mod mac {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    use super::super::hex::{find_mac, install_mac, Found};
+    use super::super::hex::{Found, find_mac, install_mac};
     use super::super::jobs::Log;
 
     /// A minimal `Hex.app` with `bundle_id`, as a folder inside `dir`.
@@ -201,11 +203,13 @@ mod mac {
         assert!(error.contains("isn't signed by Hex's developer"), "{error}");
         assert!(!apps.path().join("Hex.app").exists());
         assert_eq!(std::fs::read_dir(apps.path()).unwrap().count(), 0);
-        assert!(lines
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|line| line.contains("Checksum verified")));
+        assert!(
+            lines
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|line| line.contains("Checksum verified"))
+        );
     }
 
     #[test]

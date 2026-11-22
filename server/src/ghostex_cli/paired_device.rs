@@ -2,7 +2,7 @@ use serde_json::json;
 
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 /*
 CDXC:RemotePairing 2026-09-03:

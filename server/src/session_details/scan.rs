@@ -11,7 +11,7 @@ use std::sync::{Mutex, OnceLock};
 
 use serde_json::Value;
 
-use crate::session_chat::{read_transcript_file_version, TranscriptFileVersion};
+use crate::session_chat::{TranscriptFileVersion, read_transcript_file_version};
 use crate::session_chat_fleet_transcript::timestamp;
 
 /// Transcripts kept scanned in memory; the oldest goes first.

@@ -5,8 +5,8 @@
 
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
         OnceLock,
+        atomic::{AtomicBool, Ordering},
     },
     time::{Duration as StdDuration, Instant},
 };
@@ -141,7 +141,12 @@ pub(super) async fn heal_refused_send(
         .await;
         match retried {
             Ok(()) => {
-                record(state, target, "sessionChatSendHealedAfterRepaint", "Claude's screen was repainted and the message was typed once more; it went through.");
+                record(
+                    state,
+                    target,
+                    "sessionChatSendHealedAfterRepaint",
+                    "Claude's screen was repainted and the message was typed once more; it went through.",
+                );
                 return SendHeal::Delivered;
             }
             Err(error) if error.cancelled() => return SendHeal::GaveUp(None),

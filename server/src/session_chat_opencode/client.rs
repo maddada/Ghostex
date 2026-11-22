@@ -4,8 +4,8 @@
 //! OpenCode owns mutable messages and session controls in its shared service, not a JSONL transcript or a per-terminal agent process. Read its authenticated service registration and public API; never infer conversation identity from another client's server process.
 
 use crate::domain::DomainStateError;
-use base64::{engine::general_purpose::STANDARD, Engine as _};
-use serde_json::{json, Value};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use serde_json::{Value, json};
 use std::{fs, io::Cursor, path::PathBuf, time::Duration};
 
 /// CDXC:Clipboard 2026-11-01 DECISION: User chose to shrink OpenCode images at send to about 7.5 MB raw, after the shared upload accepts up to 32 MiB.

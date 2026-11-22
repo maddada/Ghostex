@@ -6,12 +6,12 @@
 //! The previous GBots marked its bot projects `launchSettings.gbotId` and published `botKind`/`botProfile`; native GBots use a new key (`gbotsBotId`) and a new presentation field (`gbotsBot`), so neither a computer still on an older release nor the one-time clean-up of the previous GBots (retire.rs) ever takes one for the other. `isBot` keeps Ghostex's automatic carry-on messages (Autopilot, self-heal, stall nudges) away from bot chats, as for every bot (bot_projects.rs). A project's `systemKind` can't hold a new value without a table rebuild, so the mark lives in `launchSettings`.
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::record::Bot;
 use crate::agents::helpers::object_from_value;
-use crate::domain::{normalize_project_root_path, DomainRepository, DomainStateError};
-use crate::server::{schedule_presentation_project_delta, AppState};
+use crate::domain::{DomainRepository, DomainStateError, normalize_project_root_path};
+use crate::server::{AppState, schedule_presentation_project_delta};
 
 /// The `launchSettings` key naming the GBot a project stands for.
 pub(crate) const BOT_PROJECT_KEY: &str = "gbotsBotId";

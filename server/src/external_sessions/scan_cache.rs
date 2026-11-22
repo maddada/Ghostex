@@ -1,7 +1,7 @@
 use super::error;
 use crate::domain::DomainStateError;
 use rusqlite::Connection;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::{collections::HashMap, fs, io, path::Path};
 

@@ -12,19 +12,19 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::session_git_status::effective_session_git_cwd;
 use crate::work_mode::{
+    LinearIssueRead, ManualPullRequest, TicketRef, TicketScope, WorkSourceId,
     cached_linear_issue_read, cached_work_github_issue, cached_work_github_issue_url,
     cached_work_pull_request, cached_work_repo, manual_work_links, project_linear_key,
-    ticket_link_value, work_source, work_targets, LinearIssueRead, ManualPullRequest, TicketRef,
-    TicketScope, WorkSourceId,
+    ticket_link_value, work_source, work_targets,
 };
 
 use super::{
-    linear_issue_url, parse_github_url, stored_session_links, SessionLinkKind, SessionLinkRef,
-    SessionLinkSource,
+    SessionLinkKind, SessionLinkRef, SessionLinkSource, linear_issue_url, parse_github_url,
+    stored_session_links,
 };
 
 /// Suggestions a session sends at most: the lists show five and a "Show all" row for the rest

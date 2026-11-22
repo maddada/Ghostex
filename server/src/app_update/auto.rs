@@ -6,8 +6,8 @@ use serde_json::Value;
 use tokio::sync::Notify;
 
 use super::http::start_install;
-use super::record::{age_ms, now_iso, read_settled_record, write_record, AutoAttempt};
-use super::status::{ask_app, AppAnswer};
+use super::record::{AutoAttempt, age_ms, now_iso, read_settled_record, write_record};
+use super::status::{AppAnswer, ask_app};
 use crate::domain::DomainRepository;
 use crate::presentation::presentation_activity;
 use crate::server::AppState;

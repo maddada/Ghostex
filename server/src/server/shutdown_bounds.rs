@@ -9,7 +9,7 @@ use crate::{
     session_chat_follower::stop_all_session_chat_followers,
 };
 
-use super::{stop_all_zmx_title_observers, AppState};
+use super::{AppState, stop_all_zmx_title_observers};
 
 /// How long requests already in flight when the stop arrives may keep the listener's drain going.
 pub(super) const HTTP_DRAIN_LIMIT: Duration = Duration::from_secs(3);

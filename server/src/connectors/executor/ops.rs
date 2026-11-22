@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::managed_tools::jobs;
 use crate::paths::GxserverPaths;

@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use crate::domain::{
-    session_from_row, session_row_from_sql, sql_error, DomainRepository, DomainResult,
+    DomainRepository, DomainResult, session_from_row, session_row_from_sql, sql_error,
 };
 
 impl DomainRepository<'_> {

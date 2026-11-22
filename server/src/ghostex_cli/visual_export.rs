@@ -5,11 +5,11 @@
 
 use std::{fs, path::PathBuf};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::rpc::{
-    request_gxserver_rpc, resolve_gxserver_server_target, CliError, CliResult,
+    CliError, CliResult, request_gxserver_rpc, resolve_gxserver_server_target,
 };
 use crate::visual_pages::EXPORT_VISUAL_PAGE_ENDPOINT;
 

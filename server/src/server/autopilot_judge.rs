@@ -14,13 +14,13 @@ use super::*;
 use std::sync::OnceLock;
 
 use axum::body::Body;
-use axum::http::{header, Method, Request};
+use axum::http::{Method, Request, header};
 
 use crate::autopilot::{self, AutopilotConfig, SupervisorModel};
 use crate::coordinators::SessionKey;
 use crate::presentation::presentation_activity;
 
-use crate::autopilot::{SupervisorRecord, SUPERVISOR_TITLE};
+use crate::autopilot::{SUPERVISOR_TITLE, SupervisorRecord};
 /// Least time between two wakes.
 const WAKE_GAP_MS: i64 = 60_000;
 /// A wake that the supervisor has not finished after this long lets the next one through.
@@ -417,16 +417,15 @@ async fn wake(
             }
         }
         None => {
-            let pick = if crate::accounts::autopilot::agent_has_room(
-                &state.paths,
-                preferred.launch().0,
-            ) {
-                preferred
-            } else if crate::accounts::autopilot::agent_has_room(&state.paths, other.launch().0) {
-                other
-            } else {
-                return Err(PARKED_NO_USAGE.to_string());
-            };
+            let pick =
+                if crate::accounts::autopilot::agent_has_room(&state.paths, preferred.launch().0) {
+                    preferred
+                } else if crate::accounts::autopilot::agent_has_room(&state.paths, other.launch().0)
+                {
+                    other
+                } else {
+                    return Err(PARKED_NO_USAGE.to_string());
+                };
             start_supervisor_for(state, pick)
                 .await
                 .map_err(|error| format!("Couldn't start the supervisor: {error}"))?

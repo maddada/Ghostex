@@ -24,7 +24,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;

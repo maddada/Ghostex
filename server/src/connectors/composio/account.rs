@@ -26,12 +26,10 @@ pub(crate) const NOT_CONNECTED: &str =
     "Composio isn't connected in this workspace. Sign in with `ghostex connectors sign-in`.";
 pub(crate) const EXPIRED: &str =
     "This workspace's Composio sign-in expired. Sign in again with `ghostex connectors sign-in`.";
-pub(crate) const UNREADABLE: &str =
-    "This workspace's Composio sign-in can't be read anymore. Sign in again with `ghostex connectors sign-in`.";
+pub(crate) const UNREADABLE: &str = "This workspace's Composio sign-in can't be read anymore. Sign in again with `ghostex connectors sign-in`.";
 const NO_SIGN_IN: &str =
     "No Composio sign-in is in progress. Start it again with `ghostex connectors sign-in`.";
-pub(super) const STALE_LINK: &str =
-    "This sign-in link is out of date. Start the Composio sign-in again with `ghostex connectors sign-in`.";
+pub(super) const STALE_LINK: &str = "This sign-in link is out of date. Start the Composio sign-in again with `ghostex connectors sign-in`.";
 /// How long a started sign-in waits for Composio's redirect.
 const SIGN_IN_TTL_MS: i64 = 10 * 60 * 1000;
 const DIDNT_COMPLETE: &str = "Composio sign-in didn't complete. Try again.";

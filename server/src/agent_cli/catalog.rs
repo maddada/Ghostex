@@ -263,7 +263,9 @@ pub(crate) fn methods(
                 // User: "Antigravity's Update says it updates itself instead of re-running a script that does nothing". Its installer stops at "already installed" and the CLI updates itself in the background while it runs, so the method names no command and says so.
                 let name = crate::sidebar_hud::default_agent_name(&definition.agent_id)
                     .unwrap_or(&definition.binary);
-                let reason = format!("{name} updates itself in the background while it runs, so there is nothing for Ghostex to run. Start a new session to use the newest version.");
+                let reason = format!(
+                    "{name} updates itself in the background while it runs, so there is nothing for Ghostex to run. Start a new session to use the newest version."
+                );
                 method.command = String::new();
                 method.plan = reason.clone();
                 method.unavailable_reason = Some(reason);
@@ -643,7 +645,9 @@ pub(crate) fn self_method(definition: &Definition) -> Option<Method> {
         "self",
         "Built-in updater",
         command.into(),
-        format!("Runs {command}, the CLI's own updater, which updates it the way it was installed. No password needed."),
+        format!(
+            "Runs {command}, the CLI's own updater, which updates it the way it was installed. No password needed."
+        ),
     ))
 }
 
@@ -861,12 +865,16 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["npm"]
         );
-        assert!(methods[0]
-            .command
-            .starts_with("npm install -g @deepseek-ai/dsh@latest "));
-        assert!(methods[0]
-            .command
-            .contains(" @deepseek-harness-tui/dsh-tui@latest && dsh-tui update"));
+        assert!(
+            methods[0]
+                .command
+                .starts_with("npm install -g @deepseek-ai/dsh@latest ")
+        );
+        assert!(
+            methods[0]
+                .command
+                .contains(" @deepseek-harness-tui/dsh-tui@latest && dsh-tui update")
+        );
         assert_eq!(definition.self_updater(), Some("dsh-tui update"));
     }
 
@@ -977,16 +985,21 @@ mod tests {
             if definition.agent_id == "antigravity" {
                 let native = elsewhere.iter().find(|m| m.id == "native").unwrap();
                 assert!(native.command.is_empty());
-                assert!(native
-                    .unavailable_reason
-                    .as_deref()
-                    .is_some_and(|reason| reason.contains("updates itself")));
+                assert!(
+                    native
+                        .unavailable_reason
+                        .as_deref()
+                        .is_some_and(|reason| reason.contains("updates itself"))
+                );
             }
             println!(
                 "{:<14} not on mise: {:<28} default {:?}\n{:<14} mise tool:   {:<28} default {:?}\n{:<14} mise node:   {:<28} default {:?}",
                 definition.agent_id,
                 ids(&off),
-                off.iter().find(|m| m.unavailable_reason.is_none()).or(off.first()).map(|m| &m.command),
+                off.iter()
+                    .find(|m| m.unavailable_reason.is_none())
+                    .or(off.first())
+                    .map(|m| &m.command),
                 "",
                 ids(&on),
                 on[0].command,

@@ -1,7 +1,7 @@
 //! How a side chat starts: its marker on the session row, its title, and the agent command
 //! without accept-all.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// The runtime setting that makes a session a side chat, holding its main session's id.
 pub(crate) const PARENT_KEY: &str = "sideChatParentSessionId";

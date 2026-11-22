@@ -223,9 +223,11 @@ async fn an_existing_worktree_is_opened_as_its_project_with_no_new_branch() {
         "it was not a project before"
     );
     assert_eq!(project["worktree"]["parentProjectId"], json!(project_id));
-    assert!(project["path"]
-        .as_str()
-        .is_some_and(|path| path.ends_with("existing-parent-feature")));
+    assert!(
+        project["path"]
+            .as_str()
+            .is_some_and(|path| path.ends_with("existing-parent-feature"))
+    );
     assert_eq!(
         run_git_for_server_test(&parent, &["branch", "--list"]),
         branches_before

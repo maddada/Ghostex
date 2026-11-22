@@ -131,10 +131,12 @@ async fn an_agent_reaches_a_connected_computer_and_its_switch_cuts_both_ways() {
     assert_eq!(refused.response.status(), StatusCode::NOT_FOUND);
     let body = response_json(refused.response).await;
     assert_eq!(body["error"], "computerNotConnected");
-    assert!(body["message"]
-        .as_str()
-        .unwrap()
-        .contains("Settings > Remote"));
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("Settings > Remote")
+    );
 
     // The other computer gives this one a token of its own; this one never holds its full token.
     let token_for_local = grant(&remote, "S6l", true, false).await.expect("a token");
@@ -418,7 +420,7 @@ fn set_activity(state: &Arc<AppState>, key: &(String, String), activity: Value) 
 /// its computer is not connected it is left alone.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_thread_on_another_computer_reports_its_turns_to_the_coordinator_here() {
-    use super::coordinator_remote_runtime::{tick, RemoteReport, RemoteSupervisorMemory};
+    use super::coordinator_remote_runtime::{RemoteReport, RemoteSupervisorMemory, tick};
 
     let _serial = crate::connected_computers::tests::serial();
     let (_remote_dir, remote) = temp_state("S5t");
@@ -595,7 +597,7 @@ async fn a_thread_on_another_computer_reports_its_turns_to_the_coordinator_here(
 /// read again, and a session left out of the snapshot but still running is not closed.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_turn_finished_between_two_passes_is_noticed_from_the_rows_activity_time() {
-    use super::coordinator_remote_runtime::{tick, RemoteReport, RemoteSupervisorMemory};
+    use super::coordinator_remote_runtime::{RemoteReport, RemoteSupervisorMemory, tick};
 
     let _serial = crate::connected_computers::tests::serial();
     crate::connected_computers::tests::reset();

@@ -546,7 +546,7 @@ pub(crate) fn handle_agent_hook_http(
                 Some(endpoint_path),
                 StatusCode::INTERNAL_SERVER_ERROR,
                 rpc_error("internalError", error.message, Some(request_id)),
-            )
+            );
         }
     };
     /*

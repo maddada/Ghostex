@@ -18,12 +18,12 @@ use std::time::{Duration, Instant};
 use ghostex_gx_protocol::cloud_box::{
     AgentLoginsResult, BoxInjectedAccount, CloudAgentLogin, CloudAgentLoginState,
 };
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
 
 use super::params::internal;
 use crate::accounts::model::Provider;
-use crate::accounts::setup_terminal::{LoginTerminal, COLS, ROWS};
+use crate::accounts::setup_terminal::{COLS, LoginTerminal, ROWS};
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 use crate::server::AppState;
@@ -35,10 +35,8 @@ const SETUP_TOKEN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const CLAUDE_TOKEN_PREFIX: &str = "sk-ant-oat01-";
 /// How much of `claude setup-token`'s raw output is kept to find the page's link in.
 const RAW_OUTPUT_LIMIT: usize = 256 * 1024;
-const CLAUDE_READY_DETAIL: &str =
-    "Boxes use a one-year box token, so this computer stays signed in. claude.ai connectors and Remote Control don't work on a box.";
-const CODEX_READY_DETAIL: &str =
-    "Boxes get a fresh copy of this login at boot and send refreshed sign-ins back to this computer.";
+const CLAUDE_READY_DETAIL: &str = "Boxes use a one-year box token, so this computer stays signed in. claude.ai connectors and Remote Control don't work on a box.";
+const CODEX_READY_DETAIL: &str = "Boxes get a fresh copy of this login at boot and send refreshed sign-ins back to this computer.";
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

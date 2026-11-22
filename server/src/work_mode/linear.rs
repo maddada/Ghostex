@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const LINEAR_GRAPHQL_URL: &str = "https://api.linear.app/graphql";
 const LINEAR_TIMEOUT: Duration = Duration::from_secs(10);

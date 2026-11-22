@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use rusqlite::{Connection, OptionalExtension};
 
 use super::{SessionForkFacts, SessionForkFamilies};
-use crate::domain::{sql_error, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, sql_error};
 
 const MAX_DATABASES: usize = 4;
 const MAX_CACHED_SESSIONS: usize = 16_384;

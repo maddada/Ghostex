@@ -37,9 +37,9 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::records::{list_open_threads, now_iso, SessionKey};
+use super::records::{SessionKey, list_open_threads, now_iso};
 use crate::domain::DomainRepository;
 use crate::session_chat_notice::{
     SessionChatTerminalNotice, SessionChatTerminalNoticeAction,

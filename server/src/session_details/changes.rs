@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::session_git_status::{
     PullRequestState, SessionGitStatusProber, SessionPullRequest, SystemSessionGitStatusProber,

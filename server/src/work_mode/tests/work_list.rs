@@ -1,6 +1,6 @@
 //! `/api/listWorkItems`: the rows a Linear and a GitHub workspace list, with their PRs folded in.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::*;
 

@@ -1,10 +1,10 @@
 //! `ghostex autopilot`: turn Autopilot on and off, read what it did, and take a project or a
 //! session out of it (`/api/autopilot`, server/src/server/autopilot_http.rs).
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::args::Flags;
-use super::rpc::{call_gxserver_rpc, CliError, CliResult};
+use super::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 const HELP: &str =
     "Usage: ghostex autopilot [status|on|off|log|project|session|read-only-plan|limit-resets|checkup] [--json]
@@ -162,7 +162,7 @@ pub(crate) fn autopilot_command(args: &[String]) -> CliResult<()> {
         Some(other) => {
             return Err(CliError::Other(format!(
                 "Unknown autopilot command \"{other}\".\n\n{HELP}"
-            )))
+            )));
         }
     };
     if json_out {

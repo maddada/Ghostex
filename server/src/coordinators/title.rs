@@ -6,7 +6,7 @@ use rusqlite::Connection;
 use serde_json::Value;
 
 use super::records::{read_coordinator, read_thread};
-use super::role::{coordinator_role_is_skill, COORDINATOR_SKILL_ONLY_START_SETTING};
+use super::role::{COORDINATOR_SKILL_ONLY_START_SETTING, coordinator_role_is_skill};
 
 /// True for an orchestrator that started with nothing but the skill line (a handoff, whose message
 /// waits as a draft, or a `create` with no task): its placeholder "Coordinator" stays, because

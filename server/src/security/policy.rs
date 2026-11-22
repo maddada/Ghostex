@@ -438,7 +438,7 @@ CDXC:Security 2026-11-08 DECISION:
 impl SecurityState {
     /// Whether `caller` may do `action` without a card (see the decision above).
     pub fn skips_approval(&self, caller: &Principal, action: &ActionRequest) -> bool {
-        use ghostex_gx_protocol::approval::{asks_when, AsksWhen};
+        use ghostex_gx_protocol::approval::{AsksWhen, asks_when};
         // A pairing code for the token file, and another owner key: only the door's keepers
         // (CDXC:Security 2026-11-16 below).
         if matches!(

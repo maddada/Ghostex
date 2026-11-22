@@ -7,9 +7,9 @@
 //! A runaway Chief of Staff must not fill the sidebar with bots, so its adds are capped on the server: 4 in any 15 minutes (the plan's "4 per turn"; gxserver can't see turns) and 12 a day. More at once goes to the user as a proposal (the playbook's questions form), which the user accepts before anything is added.
 
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use super::record::{bot_summary, read_bot, Bot};
+use super::record::{Bot, bot_summary, read_bot};
 use crate::domain::DomainStateError;
 
 /// GBots Chief of Staff may add in any 15 minutes, and in any day.
@@ -178,17 +178,23 @@ pub(crate) fn undo_problem(
         .or(change.before.as_ref())
         .map(|bot| bot.name.clone())
         .unwrap_or_else(|| "That GBot".to_string());
-    Ok(match (change.kind.as_str(), current, change.after.as_ref()) {
-        ("botAdded" | "botEdited", None, _) => Some(format!("{name} was removed since.")),
-        ("botAdded" | "botEdited", Some(current), Some(after)) if !same_persona(&current, after) => Some(format!(
-            "{name} was changed since, so Undo would lose that change. Change or remove it in its GBot Settings instead."
-        )),
-        ("botAdded" | "botEdited", Some(_), Some(_)) => None,
-        ("botRemoved", ..) => Some(format!(
-            "A removed GBot can't come back with Undo; its folder is in the Trash. Add {name} again instead."
-        )),
-        _ => Some("Only adding or changing a GBot can be undone.".to_string()),
-    })
+    Ok(
+        match (change.kind.as_str(), current, change.after.as_ref()) {
+            ("botAdded" | "botEdited", None, _) => Some(format!("{name} was removed since.")),
+            ("botAdded" | "botEdited", Some(current), Some(after))
+                if !same_persona(&current, after) =>
+            {
+                Some(format!(
+                    "{name} was changed since, so Undo would lose that change. Change or remove it in its GBot Settings instead."
+                ))
+            }
+            ("botAdded" | "botEdited", Some(_), Some(_)) => None,
+            ("botRemoved", ..) => Some(format!(
+                "A removed GBot can't come back with Undo; its folder is in the Trash. Add {name} again instead."
+            )),
+            _ => Some("Only adding or changing a GBot can be undone.".to_string()),
+        },
+    )
 }
 
 /// A change as `/api/gbots` answers it; `bot` is the bot as it is now, when it still exists.
@@ -285,7 +291,7 @@ pub(crate) fn undo(
         _ => {
             return Err(DomainStateError::bad_request(
                 "Only adding or changing a GBot can be undone.",
-            ))
+            ));
         }
     };
     mark_undone(db, &change.change_id)?;

@@ -4,7 +4,7 @@ use std::{
     net::TcpListener,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{mpsc, Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -14,9 +14,9 @@ use axum::http::HeaderMap;
 use crate::platform::shell::{command_shell, shell_quote};
 
 use super::{
-    new_extension_token, request_bearer_token, tokens_equal, ExtensionBadge, ExtensionError,
-    ExtensionLaunchContext, ExtensionManifest, ExtensionResult, ExtensionRuntimeState,
-    ExtensionRuntimeStatus,
+    ExtensionBadge, ExtensionError, ExtensionLaunchContext, ExtensionManifest, ExtensionResult,
+    ExtensionRuntimeState, ExtensionRuntimeStatus, new_extension_token, request_bearer_token,
+    tokens_equal,
 };
 
 const READINESS_POLL_INTERVAL: Duration = Duration::from_millis(100);

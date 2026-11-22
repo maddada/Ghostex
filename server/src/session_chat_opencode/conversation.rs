@@ -10,13 +10,13 @@
 //! `opencode --session <id>`. A running terminal with no id yet still reports its own conversation.
 //! SEE-ALSO: server/src/session_chat_queue_runtime/send.rs, server/src/session_chat_follower/registry.rs (followability).
 
-use super::{error, safe_id, Client};
+use super::{Client, error, safe_id};
 use crate::{
     domain::{DomainRepository, DomainStateError},
     server::AppState,
     storage::open_gxserver_database,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::{
     sync::Mutex,
     time::{Duration, Instant},

@@ -6,15 +6,15 @@
 
 use std::collections::BTreeMap;
 
-use rusqlite::{params, Connection};
-use serde_json::{json, Map, Value};
+use rusqlite::{Connection, params};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 
 use super::{
-    hold_work_source_writer, parse_github_project_reference, stored_values, work_source,
-    workspace_command, CommandSourceId, WorkSourceError, WorkSourceId,
+    CommandSourceId, WorkSourceError, WorkSourceId, hold_work_source_writer,
+    parse_github_project_reference, stored_values, work_source, workspace_command,
 };
 
 /// Why a request's `tickets` names a ticket command the session's workspace doesn't read. Quotes
@@ -415,7 +415,7 @@ pub(crate) fn merge_work_links(
                 _ => {
                     return Err(DomainStateError::bad_request(
                         "tickets must map a ticket command's id to its ticket IDs.",
-                    ))
+                    ));
                 }
             }
         }

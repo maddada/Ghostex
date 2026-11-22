@@ -5,10 +5,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use ghostex_gx_protocol::cloud_box::{
-    box_files, box_private_dir, box_verbs, BoxBootResult, BoxBootTicket, BoxInjectedAccount,
+    BOX_BOOT_TICKET_VERSION, BOX_GHOSTEX_BIN, BoxBootResult, BoxBootTicket, BoxInjectedAccount,
     BoxPrepareSessionRequest, BoxPrepareSessionResult, BoxSecretFile, BoxSecretVar, BoxSecretsFile,
-    CloudBoxDraftRef, CloudProviderId, ProjectCloudBoxSettings, BOX_BOOT_TICKET_VERSION,
-    BOX_GHOSTEX_BIN, DEFAULT_IDLE_STOP_MINUTES,
+    CloudBoxDraftRef, CloudProviderId, DEFAULT_IDLE_STOP_MINUTES, ProjectCloudBoxSettings,
+    box_files, box_private_dir, box_verbs,
 };
 use serde_json::Value;
 
@@ -411,7 +411,7 @@ fn draft_model_choice(
     session: &Value,
     agent_id: &str,
 ) -> (Option<String>, Option<String>) {
-    use crate::session_chat_options::{session_chat_option_agent, SessionChatOptionAgent};
+    use crate::session_chat_options::{SessionChatOptionAgent, session_chat_option_agent};
     let agent = crate::session_chat_follower::session_chat_agent_for_session(session)
         .unwrap_or_else(|| agent_id.to_string());
     let (agent, family) = match session_chat_option_agent(Some(&agent)) {

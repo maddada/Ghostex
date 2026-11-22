@@ -5,10 +5,10 @@
 use crate::ghostex_cli::{
     args::parse_args,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
     selector, sessions,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const HELP: &str = "Run agent sessions in agentbox boxes (Docker on this computer, or a cloud).
 
@@ -123,7 +123,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         other => {
             return Err(CliError::Other(format!(
                 "Unknown agentbox command: {other}\n\n{HELP}"
-            )))
+            )));
         }
     }
     Ok(())

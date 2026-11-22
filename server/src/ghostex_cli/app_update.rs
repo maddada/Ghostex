@@ -1,12 +1,12 @@
 //! `ghostex app-update`: read, check, install and the keep-up-to-date switch of a computer's Ghostex app (`--server <profile>` for another computer).
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::{
     args::parse_args,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
 
 /// How long `install --wait` follows an install, through the restart, before it gives up.
@@ -46,7 +46,7 @@ fn auto_command(args: &[String]) -> CliResult<()> {
         _ => {
             return Err(CliError::Other(
                 "Usage: ghostex app-update auto on|off".to_string(),
-            ))
+            ));
         }
     };
     let result = call_gxserver_rpc(

@@ -1,7 +1,7 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::args::Flags;
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, project_id_from_global_ref, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc, project_id_from_global_ref};
 
 use super::*;
 

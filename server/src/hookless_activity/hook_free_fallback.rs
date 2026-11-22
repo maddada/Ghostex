@@ -14,14 +14,14 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::claude::ClaudeObserver;
 use super::codex::CodexObserver;
 use crate::agent_hooks::hook_free;
 use crate::domain::DomainStateError;
 use crate::logging::{DiagnosticLogScenario, GxserverLogInput, LogLevel};
-use crate::server::{read_session_text, AppState};
+use crate::server::{AppState, read_session_text};
 use crate::session_chat_notice::{
     SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
     SessionChatTerminalNoticeActionKind, SessionChatTerminalNoticeSeverity,
@@ -810,11 +810,11 @@ mod tests {
         let card = fallback_card("claude", Unseen::NoSessionRecord);
         assert_eq!(card.kind, FALLBACK_NOTICE_KIND);
         assert_eq!(card.title, "Claude's hooks turned on");
-        assert!(card
-            .detail
-            .as_deref()
-            .unwrap_or_default()
-            .starts_with("Ghostex is using Claude's hooks for this session because it can't read"));
+        assert!(
+            card.detail.as_deref().unwrap_or_default().starts_with(
+                "Ghostex is using Claude's hooks for this session because it can't read"
+            )
+        );
         let opencode = fallback_card("opencode", Unseen::ServiceUnreachable);
         assert_eq!(opencode.title, "OpenCode's plugin turned on");
         assert!(fallback_notice("Py", "Gy").is_none());
@@ -825,11 +825,12 @@ mod tests {
         let card = ask_card("claude", Unseen::NoSessionRecord);
         assert_eq!(card.kind, ASK_NOTICE_KIND);
         assert_eq!(card.title, "Turn on Claude's hooks?");
-        assert!(card
-            .detail
-            .as_deref()
-            .unwrap_or_default()
-            .starts_with("Ghostex can't follow Claude in this session because it can't read"));
+        assert!(
+            card.detail
+                .as_deref()
+                .unwrap_or_default()
+                .starts_with("Ghostex can't follow Claude in this session because it can't read")
+        );
         assert_eq!(card.actions.len(), 1);
         assert_eq!(card.actions[0].id, ACTION_TURN_ON_HOOK);
         assert_eq!(card.actions[0].label, "Turn on hooks");

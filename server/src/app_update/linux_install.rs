@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const RELEASE_TAG_URL: &str = "https://github.com/maddada/Ghostex/releases/tag/v";
 const RELEASE_LATEST_URL: &str = "https://github.com/maddada/Ghostex/releases/latest";

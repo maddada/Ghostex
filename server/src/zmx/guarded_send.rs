@@ -6,11 +6,11 @@
 use std::io::{Read, Write};
 
 #[cfg(unix)]
-use super::ipc_frame::{parse_zmx_ipc_header, zmx_ipc_header, ZMX_IPC_HEADER_BYTES};
+use super::ipc_frame::{ZMX_IPC_HEADER_BYTES, parse_zmx_ipc_header, zmx_ipc_header};
 #[cfg(unix)]
 use super::screen_capture::{
-    read_zmx_screen_capture_reply, request_zmx_session_screen_capture,
     ZMX_IPC_HISTORY_FORMAT_PLAIN, ZMX_SCREEN_CAPTURE_SCROLLBACK_ROWS,
+    read_zmx_screen_capture_reply, request_zmx_session_screen_capture,
 };
 
 /// `ipc.Tag.SendAcked`: `Send` plus a receipt.

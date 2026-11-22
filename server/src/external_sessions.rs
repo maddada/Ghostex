@@ -9,7 +9,7 @@ use crate::{
 };
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},

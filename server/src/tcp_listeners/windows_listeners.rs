@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::mem::{offset_of, size_of, zeroed};
 use std::net::{Ipv4Addr, Ipv6Addr};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use windows_sys::Win32::{
     Foundation::{CloseHandle, INVALID_HANDLE_VALUE},
     NetworkManagement::IpHelper::{
@@ -11,7 +11,7 @@ use windows_sys::Win32::{
         MIB_TCPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_LISTENER,
     },
     System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
         TH32CS_SNAPPROCESS,
     },
 };

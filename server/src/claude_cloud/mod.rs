@@ -21,7 +21,7 @@ pub(crate) use account_pick::{cloud_session_accounts, select_cloud_account};
 pub(crate) use chat::send_chat_text;
 pub(crate) use endpoint::claude_cloud_action;
 pub(crate) use poller::{notification_text, start_claude_cloud_poller, wake_claude_cloud_poller};
-pub(crate) use work::{add_started_cloud_session, StartedCloudSession};
+pub(crate) use work::{StartedCloudSession, add_started_cloud_session};
 
 pub(crate) use create::{
     cloud_create_params, pick_claude_account, prepare_cloud_runtime, strip_client_record,

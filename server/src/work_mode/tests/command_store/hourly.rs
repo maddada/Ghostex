@@ -8,8 +8,8 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use super::cards::{
-    calls, card_pass, log_lines, pin, plan_of, project_id, project_in, release, store_values,
-    token_of, HANDSHAKE,
+    HANDSHAKE, calls, card_pass, log_lines, pin, plan_of, project_id, project_in, release,
+    store_values, token_of,
 };
 use super::published::{command_source, record_pinning};
 use super::*;
@@ -143,11 +143,12 @@ fn an_hourly_check_removes_a_short_value_it_makes_secret() {
     );
     let kept = record(&store, &workspace_id);
     assert_eq!(kept.last_error.as_deref(), Some(SHORT_SECRET_REMOVED));
-    assert!(kept
-        .info
-        .credentials
-        .iter()
-        .any(|field| field.name == "pin" && field.secret));
+    assert!(
+        kept.info
+            .credentials
+            .iter()
+            .any(|field| field.name == "pin" && field.secret)
+    );
 }
 
 /// A failing check is logged once, without the command's words, and the card pass doesn't ask
@@ -299,9 +300,11 @@ fn a_change_waits_for_the_hourly_check_to_start_and_the_check_keeps_nothing() {
         });
     }
     // Planned, not started: the change waits.
-    assert!(change_done
-        .recv_timeout(Duration::from_millis(200))
-        .is_err());
+    assert!(
+        change_done
+            .recv_timeout(Duration::from_millis(200))
+            .is_err()
+    );
     resume.send(()).expect("resume");
     change_done.recv_timeout(HANDSHAKE).expect("changed");
     checking.join().expect("checked");

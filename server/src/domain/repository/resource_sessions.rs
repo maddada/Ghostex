@@ -1,8 +1,8 @@
 //! Resource ownership is independent of sidebar visibility and provider probe caches.
 
-use crate::domain::{sql_error, DomainRepository, DomainResult};
+use crate::domain::{DomainRepository, DomainResult, sql_error};
 use crate::ids::create_zmx_session_name;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 
 impl DomainRepository<'_> {

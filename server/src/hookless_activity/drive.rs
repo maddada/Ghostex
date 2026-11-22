@@ -15,7 +15,7 @@ use std::path::Path;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::comparison::ActivityEvent;
 use crate::agent_hooks::hook_free;

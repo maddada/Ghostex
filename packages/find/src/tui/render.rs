@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use crate::agent::ALL_AGENTS;
-use crate::scan::{project_display_name, Record, Usage};
+use crate::scan::{Record, Usage, project_display_name};
 use crate::unicode as uni;
 
 use super::*;

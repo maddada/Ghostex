@@ -5,8 +5,8 @@ use crate::session_chat_send::sender_mark::AsUserLog;
 use std::time::Duration;
 
 use axum::{
-    body::{to_bytes, Body},
-    http::{header, HeaderMap, HeaderValue, Method, Response, StatusCode},
+    body::{Body, to_bytes},
+    http::{HeaderMap, HeaderValue, Method, Response, StatusCode, header},
 };
 use serde_json::json;
 
@@ -15,7 +15,7 @@ use crate::{
     paths::GxserverPaths,
     protocol::rpc_error,
     security::Principal,
-    server::{json_response, routed_json, RoutedResponse},
+    server::{RoutedResponse, json_response, routed_json},
 };
 
 use super::registry;
@@ -154,7 +154,7 @@ pub(crate) async fn relay(
                     "badRequest",
                     message.to_string(),
                     request_id,
-                )
+                );
             }
         }
     } else if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) {
@@ -169,7 +169,7 @@ pub(crate) async fn relay(
                     "badRequest",
                     message.to_string(),
                     request_id,
-                )
+                );
             }
         }
     } else if forwarded == "/api/createAgentSession" {
@@ -184,7 +184,7 @@ pub(crate) async fn relay(
                     "badRequest",
                     message.to_string(),
                     request_id,
-                )
+                );
             }
         }
     } else {

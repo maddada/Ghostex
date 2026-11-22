@@ -97,9 +97,9 @@ pub fn detect_pi_trust_prompt(
     text: &str,
 ) -> Option<crate::session_chat_notice::SessionChatTerminalNotice> {
     use crate::session_chat_notice::{
-        SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
-        SessionChatTerminalNoticeChoice, SessionChatTerminalNoticeSeverity,
-        SessionChatTerminalNoticeSource, SESSION_CHAT_NOTICE_TRUST_PROMPT,
+        SESSION_CHAT_NOTICE_TRUST_PROMPT, SessionChatTerminalNotice,
+        SessionChatTerminalNoticeAction, SessionChatTerminalNoticeChoice,
+        SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
     };
     let lines = scan_lines(text);
     let frame = active_frame(&lines)?;
@@ -225,8 +225,7 @@ pub fn detect_pi_blocking_screen(text: &str) -> Option<PiBlockingScreen> {
     if folded.contains("delete session?") {
         return Some(PiBlockingScreen {
             title: "Pi is waiting for confirmation",
-            detail:
-                "Confirm or cancel the session deletion in the terminal before sending a message.",
+            detail: "Confirm or cancel the session deletion in the terminal before sending a message.",
         });
     }
 

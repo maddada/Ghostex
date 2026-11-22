@@ -1,11 +1,11 @@
 //! Session routes: create, list, update, order, settle/snooze and remove sessions, the presentation snapshot, coordinators, close-after-done, keep-awake leases, previous sessions and fork branches, and session title generation.
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
     agents::{apply_created_session_identity, create_agent_session_params_for_project},
-    domain::{read_optional_project_id, read_project_id, read_session_id, DomainStateError},
+    domain::{DomainStateError, read_optional_project_id, read_project_id, read_session_id},
     presentation::{list_previous_sessions, list_session_fork_branches},
     session_lifecycle,
 };
@@ -964,7 +964,7 @@ pub(super) async fn route_sessions_http(
                 body_json,
                 token_extension_id,
                 caller,
-            })
+            });
         }
     })
 }

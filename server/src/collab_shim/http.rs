@@ -19,19 +19,19 @@ use std::time::Duration;
 
 use axum::body::to_bytes;
 use axum::http::{HeaderMap, StatusCode};
-use ghostex_gx_protocol::approval::{SensitiveAction, APPROVAL_ID_PARAM};
+use ghostex_gx_protocol::approval::{APPROVAL_ID_PARAM, SensitiveAction};
 use ghostex_gx_protocol::collab_component::{
-    GrantInfo, HostCall, OwnerCall, OwnerReply, PresenceNeed, ShareScope, SidecarEvent,
-    COLLAB_COMPONENT, COLLAB_HOST_ENDPOINT, COLLAB_VIEWER_HEADER,
+    COLLAB_COMPONENT, COLLAB_HOST_ENDPOINT, COLLAB_VIEWER_HEADER, GrantInfo, HostCall, OwnerCall,
+    OwnerReply, PresenceNeed, ShareScope, SidecarEvent,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
-use crate::domain::read_domain_rpc_params;
 use crate::domain::DomainRepository;
+use crate::domain::read_domain_rpc_params;
 use crate::protocol::{rpc_error, rpc_success};
 use crate::security::{ActionRequest, PresenceGrant, PresenceOutcome, Principal};
-use crate::server::{routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, routed_json};
 use crate::storage::open_gxserver_database;
 
 use super::{install, registry, sidecar};
@@ -787,7 +787,7 @@ pub(crate) async fn handle_host_http(
                 StatusCode::BAD_REQUEST,
                 "badRequest",
                 "Unknown Collab host call.",
-            )
+            );
         }
     };
     match host_call(state, call).await {

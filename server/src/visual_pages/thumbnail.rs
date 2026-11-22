@@ -16,15 +16,15 @@ use std::{fs, path::Path};
 
 use axum::http::StatusCode;
 use base64::Engine as _;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
-    domain::{read_domain_rpc_params, DomainStateError},
+    domain::{DomainStateError, read_domain_rpc_params},
     protocol::rpc_success,
-    server::{domain_error_response, routed_json, AppState, RoutedResponse},
+    server::{AppState, RoutedResponse, domain_error_response, routed_json},
 };
 
-use super::store::{is_page_id, note_thumbnail, read_record, visual_pages_dir, StoreAnswersError};
+use super::store::{StoreAnswersError, is_page_id, note_thumbnail, read_record, visual_pages_dir};
 
 pub(crate) const READ_VISUAL_PAGE_THUMBNAIL_ENDPOINT: &str = "/api/readVisualPageThumbnail";
 pub(crate) const STORE_VISUAL_PAGE_THUMBNAIL_ENDPOINT: &str = "/api/storeVisualPageThumbnail";
@@ -259,8 +259,7 @@ mod tests {
         );
         // Gone.
         assert_eq!(
-            picture_state(dir.path(), "0123456789abcdef0123456789abcdef", false)
-                ["backgroundPicture"],
+            picture_state(dir.path(), "0123456789abcdef0123456789abcdef", false)["backgroundPicture"],
             false
         );
     }

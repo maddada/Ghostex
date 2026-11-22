@@ -180,7 +180,9 @@ impl Work {
             scope,
             "gbotWorking",
             format!("{} is {doing}.", bot.name),
-            format!("Working: your chat is {doing}. Tell the user in a few words, as yourself, unless you just said the same."),
+            format!(
+                "Working: your chat is {doing}. Tell the user in a few words, as yourself, unless you just said the same."
+            ),
         ))
     }
 }

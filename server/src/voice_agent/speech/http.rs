@@ -12,12 +12,12 @@
 //!   (`retired.rs`) and nothing polishes any more (CDXC:Dictate 2026-11-10 in transcribe.rs)
 
 use axum::http::StatusCode;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::{dictate, hex, languages, retired, settings, superwhisper};
-use crate::domain::{read_domain_rpc_params, DomainStateError};
+use crate::domain::{DomainStateError, read_domain_rpc_params};
 use crate::protocol::rpc_success;
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
 use crate::voice_agent::keys::{self, KeyState};
 use crate::voice_agent::provider::Provider;
 

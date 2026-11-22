@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use super::{remove_file_if_present, write_if_changed, LoginEntryPlace, AT_LOGIN_COMMAND};
+use super::{AT_LOGIN_COMMAND, LoginEntryPlace, remove_file_if_present, write_if_changed};
 use crate::paths::GxserverPaths;
 
 /// CDXC:ComputerStartup 2026-11-06 WHY: the entry is its own LaunchAgent, not RunAtLoad on the app's gxserver job (the app rewrites that plist with RunAtLoad off on every start so loading it never starts gxserver, CDXC:ServerDaemon 2026-07-10) and not the login-recovery agent (each gxserver start kickstarts that one, which would open the app at every restart). Only the plist is written: launchd loads ~/Library/LaunchAgents at the next login, and bootstrapping it now would run it at once. `gxserver --at-login` starts gxserver through the app's launchd job, so the server lands in the desktop login with Keychain access (CDXC:ServerDaemon 2026-10-25 in server/src/cli.rs). `AssociatedBundleIdentifiers` names Ghostex, so Login Items in System Settings lists it under Ghostex.

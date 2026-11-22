@@ -678,9 +678,11 @@ async fn export_session_transcript_includes_coordinator_goal_and_instructions() 
             "instructions": "Keep every thread scoped to one module.",
         })
     );
-    assert!(body["result"]["markdown"]
-        .as_str()
-        .is_some_and(|markdown| markdown.contains("Ship the coordinator handoff")));
+    assert!(
+        body["result"]["markdown"]
+            .as_str()
+            .is_some_and(|markdown| markdown.contains("Ship the coordinator handoff"))
+    );
 
     let exported_plain = route_http(
         state,

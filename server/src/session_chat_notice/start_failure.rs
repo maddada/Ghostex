@@ -431,9 +431,11 @@ mod tests {
         ] {
             let notice = agent_start_failure_notice(&format!("{error}{prompt}\n"))
                 .unwrap_or_else(|| panic!("no failed start under {prompt:?}"));
-            assert!(notice
-                .error_lines
-                .is_some_and(|lines| lines.starts_with("Cannot use this model: Auto Balance.")));
+            assert!(
+                notice
+                    .error_lines
+                    .is_some_and(|lines| lines.starts_with("Cannot use this model: Auto Balance."))
+            );
         }
         // A running agent's own rows are not prompts.
         for row in [
@@ -455,7 +457,9 @@ mod tests {
         .expect("a failed start");
         assert_eq!(
             notice.error_lines.as_deref(),
-            Some("PS C:\\Users\\me> cswap run 3 --share-history -- claude\n--share-history is not supported on Windows yet")
+            Some(
+                "PS C:\\Users\\me> cswap run 3 --share-history -- claude\n--share-history is not supported on Windows yet"
+            )
         );
     }
 }
@@ -514,13 +518,17 @@ mod missing_command_tests {
             Some("/opt/tools/dsh-tui"),
         );
         assert_eq!(elsewhere.title, "This terminal can't find dsh-tui");
-        assert!(elsewhere
-            .detail
-            .unwrap()
-            .contains("installed at /opt/tools/dsh-tui"));
-        assert!(elsewhere
-            .actions
-            .iter()
-            .any(|action| action.id == SESSION_CHAT_NOTICE_ACTION_RETRY_START));
+        assert!(
+            elsewhere
+                .detail
+                .unwrap()
+                .contains("installed at /opt/tools/dsh-tui")
+        );
+        assert!(
+            elsewhere
+                .actions
+                .iter()
+                .any(|action| action.id == SESSION_CHAT_NOTICE_ACTION_RETRY_START)
+        );
     }
 }

@@ -1,6 +1,6 @@
 use std::{fs, io::Write, sync::Mutex};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::server::{AppState, RoutedResponse};
 

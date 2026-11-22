@@ -6,8 +6,8 @@ use serde_json::json;
 use crate::{
     extensions::handle_extensions_http,
     feedback::{
-        handle_feedback_brief_http, handle_feedback_http, handle_start_feedback_agent_http,
-        FEEDBACK_BRIEF_ENDPOINT,
+        FEEDBACK_BRIEF_ENDPOINT, handle_feedback_brief_http, handle_feedback_http,
+        handle_start_feedback_agent_http,
     },
     protocol::rpc_success,
     remote_access::handle_remote_access_http,
@@ -285,7 +285,7 @@ pub(super) async fn route_control_http(
                 body_json,
                 token_extension_id,
                 caller,
-            })
+            });
         }
     })
 }

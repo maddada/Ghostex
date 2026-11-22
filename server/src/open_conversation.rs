@@ -14,7 +14,7 @@
 //! apps/desktop/src/app/stashed_prompt_jump.rs (the desktop caller).
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::{DomainRepository, DomainStateError};
 

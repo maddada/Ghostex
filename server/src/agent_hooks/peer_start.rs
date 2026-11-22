@@ -6,10 +6,10 @@
 //! Reporter (GitHub issue #431, a Mac driving two headless Linux computers that run only gxserver): "the thread runs on the remote machine fine, but its turn-end report never reaches the coordinator … The remote `~/.claude/settings.json` has no Ghostex hooks." Only the desktop's Hooks Required dialog installed a hook before a launch, and an agent on another computer never sees that dialog, so a headless computer never got one. A start from another computer now installs the agent's hook when it is missing (never over a hook the user turned off or another Ghostex owns, and never when the CLI isn't there); Settings > Agents with the computer picked and `ghostex agent-hooks install --computer` install the rest.
 //! SEE-ALSO: server/src/server/route_http/dispatch.rs (calls this for a connected computer's token), apps/desktop/src/app/gx_store/create/agent.rs (the Hooks Required dialog a start from the desktop goes through).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{
-    domain::{read_domain_rpc_params, DomainRepository},
+    domain::{DomainRepository, read_domain_rpc_params},
     logging::{GxserverLogInput, LogLevel},
     paths::GxserverPaths,
     server::AppState,

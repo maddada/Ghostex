@@ -11,12 +11,12 @@ use std::{
 use windows_sys::Win32::{
     Foundation::{HANDLE, INVALID_HANDLE_VALUE},
     Security::{
-        EqualSid, GetSidIdentifierAuthority, GetSidSubAuthority, GetSidSubAuthorityCount,
-        TokenSessionId, TokenUser, PSID, TOKEN_QUERY, TOKEN_USER,
+        EqualSid, GetSidIdentifierAuthority, GetSidSubAuthority, GetSidSubAuthorityCount, PSID,
+        TOKEN_QUERY, TOKEN_USER, TokenSessionId, TokenUser,
     },
     System::{
         Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
             TH32CS_SNAPPROCESS,
         },
         Threading::{OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION},
@@ -24,7 +24,7 @@ use windows_sys::Win32::{
 };
 
 use super::{
-    desktop_shell::{shell_execute_from_desktop, ShowWindow},
+    desktop_shell::{ShowWindow, shell_execute_from_desktop},
     launch_context,
     process::background_command,
     standard_user::{current_process_token, token_information},

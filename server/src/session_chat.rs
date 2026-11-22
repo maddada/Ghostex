@@ -12,7 +12,7 @@ use std::os::unix::fs::{FileExt, MetadataExt};
 use std::os::windows::fs::{FileExt, MetadataExt};
 
 pub use crate::session_chat_file_patch::{SessionChatPatchHunk, SessionChatToolPatch};
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -1204,7 +1204,7 @@ fn transcript_file_identity(_file_path: &Path, metadata: &fs::Metadata) -> io::R
 fn transcript_file_identity(file_path: &Path, _metadata: &fs::Metadata) -> io::Result<String> {
     use std::{mem::zeroed, os::windows::io::AsRawHandle};
     use windows_sys::Win32::Storage::FileSystem::{
-        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
     };
 
     let file = File::open(file_path)?;

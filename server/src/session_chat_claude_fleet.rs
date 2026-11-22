@@ -10,11 +10,11 @@ use std::sync::{Mutex, OnceLock};
 use serde_json::Value;
 
 use crate::session_chat::{
-    read_transcript_file_version, SessionChatTranscriptAgent, TranscriptFileVersion,
-    MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES,
+    MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES, SessionChatTranscriptAgent, TranscriptFileVersion,
+    read_transcript_file_version,
 };
 use crate::session_chat_agent_fleet::{SessionChatAgentFleet, SessionChatSubAgent};
-use crate::session_chat_fleet_transcript::{latest_child_turn, parse_time, timestamp, ChildTurn};
+use crate::session_chat_fleet_transcript::{ChildTurn, latest_child_turn, parse_time, timestamp};
 
 #[derive(Clone, Default)]
 struct Launch {

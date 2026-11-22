@@ -12,7 +12,7 @@ use std::{
 use crate::agent_cli::latest::{is_newer, version_in};
 use crate::domain::DomainStateError;
 use crate::server::AppState;
-use crate::session_chat_codex_dialog::{codex_update_method, CodexUpdatePrompt};
+use crate::session_chat_codex_dialog::{CodexUpdatePrompt, codex_update_method};
 use crate::session_chat_send::SessionChatSendTarget;
 
 /// What "Update now" does for the copy of Codex this session runs.
@@ -72,7 +72,9 @@ pub(crate) fn plan(
             },
             (_, reason) => UpdatePlan::Explain(format!(
                 "This session runs Codex from {executable}, installed with {label}, and Ghostex can't update it here{}. Update it with {label}, then start Codex again.",
-                reason.map(|reason| format!(": {reason}")).unwrap_or_default()
+                reason
+                    .map(|reason| format!(": {reason}"))
+                    .unwrap_or_default()
             )),
         };
     }
@@ -226,11 +228,15 @@ impl PendingUpdate {
                         User (Q74): a second Update now press on another session while an update runs waits for the running update and then re-plans, instead of failing. Once the other update ends, the copy is read again: a finished update leaves only the restart, a failed one is tried again with whatever method now owns the copy.
                         */
                         if crate::agent_cli::endpoint::job_active(&home, "codex") {
-                            show("Another update of Codex is running. Waiting for it to finish, then checking this session's copy again.");
+                            show(
+                                "Another update of Codex is running. Waiting for it to finish, then checking this session's copy again.",
+                            );
                             let started = Instant::now();
                             while crate::agent_cli::endpoint::job_active(&home, "codex") {
                                 if started.elapsed() > UPDATE_WAIT {
-                                    show("The other update of Codex did not finish within 20 minutes, so nothing was updated here. Choose Update now again later.");
+                                    show(
+                                        "The other update of Codex did not finish within 20 minutes, so nothing was updated here. Choose Update now again later.",
+                                    );
                                     return;
                                 }
                                 tokio::time::sleep(Duration::from_secs(1)).await;
@@ -261,13 +267,17 @@ impl PendingUpdate {
                                 plan = UpdatePlan::Ghostex { method_id, command };
                             }
                             Err(reason) => {
-                                show(&format!("The update did not finish, so Codex keeps running its current version.\n{reason}"));
+                                show(&format!(
+                                    "The update did not finish, so Codex keeps running its current version.\n{reason}"
+                                ));
                                 return;
                             }
                         }
                     }
                     UpdatePlan::AlreadyCurrent { version } => {
-                        show(&format!("Codex {version} is already installed for this session. Restarting Codex here once it is idle so it runs that version."));
+                        show(&format!(
+                            "Codex {version} is already installed for this session. Restarting Codex here once it is idle so it runs that version."
+                        ));
                         break;
                     }
                     UpdatePlan::Explain(message) => {

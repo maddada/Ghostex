@@ -9,14 +9,14 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::domain::DomainRepository;
 use crate::session_chat_notice::SessionChatTerminalNotice;
 use crate::session_chat_options::normalize_spaces;
 use crate::session_chat_send::{
-    capture_session_terminal_text_vt, execute_session_chat_send, write_session_chat_payload,
-    SessionChatSendStep,
+    SessionChatSendStep, capture_session_terminal_text_vt, execute_session_chat_send,
+    write_session_chat_payload,
 };
 
 // ---------------------------------------------------------------------------

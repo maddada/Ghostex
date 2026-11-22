@@ -39,7 +39,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
     constants::GXSERVER_PROTOCOL_VERSION,

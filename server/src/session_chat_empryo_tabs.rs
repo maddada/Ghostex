@@ -14,8 +14,8 @@ use serde_json::Value;
 
 use crate::domain::DomainRepository;
 use crate::session_chat_send::{
-    capture_session_terminal_text_vt, execute_session_chat_send, write_session_chat_payload,
-    SessionChatSendStep,
+    SessionChatSendStep, capture_session_terminal_text_vt, execute_session_chat_send,
+    write_session_chat_payload,
 };
 
 /// Empryo's next-tab and previous-tab keys (Ctrl+] and Ctrl+\).

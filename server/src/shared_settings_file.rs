@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use crate::{
     logging::{GxserverLogInput, GxserverLogger, LogLevel},
-    paths::{get_gxserver_paths, GxserverPaths},
+    paths::{GxserverPaths, get_gxserver_paths},
 };
 
 const SETTINGS_FILE_NAME: &str = "native-sidebar-settings.json";

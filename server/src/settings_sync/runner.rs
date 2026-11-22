@@ -3,14 +3,14 @@
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::Notify;
 
 use crate::connected_computers::ConnectedComputer;
 use crate::server::AppState;
 
 use super::engine::{now_ms, with_engine};
-use super::exchange::{ask, broadcast_notes, broadcast_spaces_named_apart, Asked};
+use super::exchange::{Asked, ask, broadcast_notes, broadcast_spaces_named_apart};
 
 /// How often every connected computer is asked when nothing changed here.
 const EXCHANGE_EVERY: Duration = Duration::from_secs(15);

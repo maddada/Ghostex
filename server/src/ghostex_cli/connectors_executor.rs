@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::args::Flags;
 use super::connectors::slow;
@@ -50,25 +50,47 @@ pub(super) fn executor_command(
         }
         "disable" | "off" => {
             call("/api/disableExecutor", &params, flags)?;
-            println!("Executor is off in this workspace. Its apps and sign-ins are kept for when you turn it on again.");
+            println!(
+                "Executor is off in this workspace. Its apps and sign-ins are kept for when you turn it on again."
+            );
             Ok(())
         }
         "catalog" | "search" => {
             params.insert("query".to_string(), json!(args.join(" ")));
             let result = call("/api/searchExecutorCatalog", &params, flags)?;
-            let apps = result.get("apps").and_then(Value::as_array).cloned().unwrap_or_default();
+            let apps = result
+                .get("apps")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
             if apps.is_empty() {
                 println!("No catalog app matches.");
             }
             for app in apps {
-                let text = |key: &str| app.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
+                let text = |key: &str| {
+                    app.get(key)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string()
+                };
                 let sign_in = app
                     .get("signIn")
                     .and_then(Value::as_array)
-                    .map(|kinds| kinds.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", "))
+                    .map(|kinds| {
+                        kinds
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
                     .filter(|kinds| !kinds.is_empty())
                     .unwrap_or_else(|| "no sign-in".to_string());
-                println!("{}  {}  ({sign_in})\n    {}", text("id"), text("name"), text("description"));
+                println!(
+                    "{}  {}  ({sign_in})\n    {}",
+                    text("id"),
+                    text("name"),
+                    text("description")
+                );
             }
             Ok(())
         }
@@ -99,7 +121,10 @@ pub(super) fn executor_command(
         "connect" => {
             params.insert("app".to_string(), json!(args.join(" ")));
             let result = call("/api/connectExecutorApp", &params, flags)?;
-            let name = result.get("name").and_then(Value::as_str).unwrap_or("The app");
+            let name = result
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("The app");
             match result.get("url").and_then(Value::as_str) {
                 Some(url) => {
                     println!("Sign in to {name} in your browser:\n{url}");
@@ -116,7 +141,10 @@ pub(super) fn executor_command(
             let result = call("/api/removeExecutorApp", &params, flags)?;
             println!(
                 "Removed {}.",
-                result.get("removed").and_then(Value::as_str).unwrap_or("the app")
+                result
+                    .get("removed")
+                    .and_then(Value::as_str)
+                    .unwrap_or("the app")
             );
             Ok(())
         }
@@ -135,15 +163,22 @@ pub(super) fn executor_command(
                 ));
             };
             let input = match flags.string_value("args") {
-                Some(text) => serde_json::from_str::<Value>(text)
-                    .map_err(|error| CliError::Other(format!("--args is not valid JSON: {error}")))?,
+                Some(text) => serde_json::from_str::<Value>(text).map_err(|error| {
+                    CliError::Other(format!("--args is not valid JSON: {error}"))
+                })?,
                 None => json!({}),
             };
             params.insert("app".to_string(), json!(app));
             params.insert("tool".to_string(), json!(tool));
             params.insert("input".to_string(), input);
             let result = call("/api/callExecutorTool", &params, flags)?;
-            println!("{}", result.get("output").and_then(Value::as_str).unwrap_or_default());
+            println!(
+                "{}",
+                result
+                    .get("output")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+            );
             Ok(())
         }
         other => Err(CliError::Other(format!(

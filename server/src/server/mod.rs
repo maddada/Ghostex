@@ -1,17 +1,17 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use axum::{
-    body::{to_bytes, Body},
+    body::{Body, to_bytes},
     extract::{
-        ws::{rejection::WebSocketUpgradeRejection, Message, WebSocket, WebSocketUpgrade},
         State,
+        ws::{Message, WebSocket, WebSocketUpgrade, rejection::WebSocketUpgradeRejection},
     },
     http::{
-        header::{self, HeaderName, HeaderValue},
         HeaderMap, Method, Response, StatusCode, Uri,
+        header::{self, HeaderName, HeaderValue},
     },
 };
 use futures_util::{SinkExt, StreamExt};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 #[cfg(test)]
 use std::process::Command as StdCommand;
@@ -35,15 +35,15 @@ use crate::{
         uninstall_agent_hooks,
     },
     agents::{
+        AgentEndpointError, FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY,
+        FIRST_USER_INPUT_DRAFT_STATUS_KEY, FIRST_USER_INPUT_DRAFT_UPDATED_AT_KEY,
         agent_metadata_title_revision, apply_created_session_identity,
         apply_live_process_session_identity, create_agent_session_params_for_project,
         default_agent_command, dispatch_agent_endpoint, get_visible_terminal_title,
         is_terminal_auto_working_directory_title, normalize_agent_hook_event_activity,
         one_shot_text_job_command, read_agent_settings, read_first_user_input_draft,
         read_text_from_map, reconcile_agent_metadata_title_for_session,
-        resolve_project_agent_config, terminal_title_indicates_agent_identity, AgentEndpointError,
-        FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY, FIRST_USER_INPUT_DRAFT_STATUS_KEY,
-        FIRST_USER_INPUT_DRAFT_UPDATED_AT_KEY,
+        resolve_project_agent_config, terminal_title_indicates_agent_identity,
     },
     auth::{is_authorized_client_headers, is_authorized_client_token},
     automations::handle_automation_endpoint,
@@ -53,13 +53,13 @@ use crate::{
         GXSERVER_PROTOCOL_HEADER, GXSERVER_PROTOCOL_VERSION,
     },
     domain::{
-        read_domain_rpc_params, read_project_id, read_session_id, DomainRepository,
-        DomainStateError,
+        DomainRepository, DomainStateError, read_domain_rpc_params, read_project_id,
+        read_session_id,
     },
     events::EventClientSender,
     ids::is_gxserver_project_id,
     logging::{
-        query_gxserver_logs, DiagnosticLogScenario, GxserverLogInput, LogLevel, LogQueryError,
+        DiagnosticLogScenario, GxserverLogInput, LogLevel, LogQueryError, query_gxserver_logs,
     },
     paths::GxserverPaths,
     platform::shell::command_shell,
@@ -69,34 +69,33 @@ use crate::{
     },
     project_docs, project_git_remote, project_icon,
     protocol::{
-        protocol_mismatch_error, rpc_error, rpc_success, ApiPermission, MinimalHealthResponse,
-        ServerHealthResponse,
+        ApiPermission, MinimalHealthResponse, ServerHealthResponse, protocol_mismatch_error,
+        rpc_error, rpc_success,
     },
     repository_clone::{
-        dispatch_repository_clone_endpoint, RepositoryCloneError, RepositoryCloneRuntime,
+        RepositoryCloneError, RepositoryCloneRuntime, dispatch_repository_clone_endpoint,
     },
     session_chat_follower::sync_session_chat_followers_for_all_sessions,
     session_git_status, session_keep_awake, session_lifecycle,
     session_status::{agent_activity_presentation_refresh_delay_ms, iso_from_ms},
     sidebar_hud::read_sidebar_hud_commands_by_project,
     sidebar_spaces::prune_sidebar_spaces_for_collections,
-    source_control::{dispatch_source_control_endpoint, SourceControlError},
+    source_control::{SourceControlError, dispatch_source_control_endpoint},
     storage::{open_gxserver_database, open_gxserver_database_with_busy_timeout},
-    terminal_ws::{handle_terminal_socket, TerminalWsState},
+    terminal_ws::{TerminalWsState, handle_terminal_socket},
     toolchain::{get_gxserver_tool_statuses, require_bundled_zmx, require_system_bd},
     typed_operations::{
-        create_pull_request_for_project, dispatch_typed_operation_endpoint,
+        TypedOperationError, create_pull_request_for_project, dispatch_typed_operation_endpoint,
         dispatch_worktree_path_operation, typed_operation_log_details, typed_operation_log_level,
-        TypedOperationError,
     },
     worktree_sessions,
     zmx::{
-        append_zmx_endpoint_error_context, compensate_created_workspace_terminal,
-        create_started_workspace_terminal, dispatch_zmx_lifecycle_endpoint,
-        dispatch_zmx_session_interaction_endpoint, get_persisted_provider_startup_text_for_session,
-        merge_session_with_renderer_result, prepare_focus_session_renderer_command,
-        read_cached_zmx_existing_session_names, read_cached_zmx_session_process_identities,
-        ZmxEndpointError, ZmxServerContext,
+        ZmxEndpointError, ZmxServerContext, append_zmx_endpoint_error_context,
+        compensate_created_workspace_terminal, create_started_workspace_terminal,
+        dispatch_zmx_lifecycle_endpoint, dispatch_zmx_session_interaction_endpoint,
+        get_persisted_provider_startup_text_for_session, merge_session_with_renderer_result,
+        prepare_focus_session_renderer_command, read_cached_zmx_existing_session_names,
+        read_cached_zmx_session_process_identities,
     },
 };
 
@@ -172,8 +171,8 @@ mod session_self_heal_runtime;
 mod session_stall_runtime;
 mod sessions_list_stream;
 mod stall_watch;
-pub(crate) use crate::collab_shim::http::{handle_collab_http, COLLAB_ENDPOINTS};
-pub(crate) use autopilot_http::{handle_autopilot_http, AUTOPILOT_ENDPOINTS};
+pub(crate) use crate::collab_shim::http::{COLLAB_ENDPOINTS, handle_collab_http};
+pub(crate) use autopilot_http::{AUTOPILOT_ENDPOINTS, handle_autopilot_http};
 pub(crate) use boosts_http::handle_boosts_http;
 pub(crate) use http_dispatch::{blocking_section, request_client_address};
 pub(crate) use security_http::require_owner_presence;

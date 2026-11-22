@@ -2,7 +2,7 @@
 //! waiting-first list, names and refs that tell two computers apart, and the routes a tool takes.
 //! The end-to-end check through a real relay is `server/tests/voice_remote_sessions.rs`.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::computers::{self, Computer, Unavailable};
 use super::sessions::{self, Match, ProjectInfo, SessionInfo, ThreadParent, VoiceState};

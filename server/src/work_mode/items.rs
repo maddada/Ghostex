@@ -14,12 +14,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::presentation::{presentation_activity, project_session_title};
 use crate::server::AppState;
-use crate::session_git_status::{gh_cli_is_available, PullRequestState};
+use crate::session_git_status::{PullRequestState, gh_cli_is_available};
 use crate::storage::open_gxserver_database;
 
 use super::*;

@@ -18,7 +18,7 @@ use serde_json::{Map, Value};
 
 use crate::paths::GxserverPaths;
 
-use super::connections::{read_team_connection, TeamConnection};
+use super::connections::{TeamConnection, read_team_connection};
 use super::convex_http::ConvexCallKind;
 use super::operations::member_call;
 

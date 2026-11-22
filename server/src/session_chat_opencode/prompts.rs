@@ -1,6 +1,6 @@
-use super::{error, invalidate, safe_id, snapshot, Client, Snapshot};
+use super::{Client, Snapshot, error, invalidate, safe_id, snapshot};
 use crate::{domain::DomainStateError, session_chat::*};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// The form fields the chat asks. A `hidden` field is left out (OpenCode answers it with its
 /// default unless one is supplied); a field with a `when` condition is asked like the others, says
@@ -32,11 +32,7 @@ fn condition_holds(field: &Value, answers: &Map<String, Value>) -> bool {
         Value::Array(values) => values.contains(&when["value"]),
         other => other == &when["value"],
     };
-    if when["op"] == "neq" {
-        !equal
-    } else {
-        equal
-    }
+    if when["op"] == "neq" { !equal } else { equal }
 }
 
 fn condition_label(field: &Value, fields: &[&Value]) -> Option<String> {

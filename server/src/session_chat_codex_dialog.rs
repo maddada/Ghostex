@@ -1,13 +1,13 @@
 //! Codex-owned dialogs projected into the shared chat notice card.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::domain::DomainStateError;
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
 use crate::session_chat_send::{
-    capture_session_terminal_text, execute_session_chat_send, SessionChatSendStep,
-    SessionChatSendTarget, SESSION_CHAT_INTERRUPT,
+    SESSION_CHAT_INTERRUPT, SessionChatSendStep, SessionChatSendTarget,
+    capture_session_terminal_text, execute_session_chat_send,
 };
 
 use crate::session_chat_terminal_dialog::{TerminalDialog, TerminalDialogRow};

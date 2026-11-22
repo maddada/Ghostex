@@ -17,7 +17,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::agent_hooks::statusline::{
     cursor_statusline_payload_path, read_statusline_payload_file,
@@ -25,8 +25,8 @@ use crate::agent_hooks::statusline::{
 use crate::domain::DomainRepository;
 use crate::session_chat_options::{SessionChatContextUsage, SessionChatDetectedSelection};
 use crate::session_git_status::{
-    cached_session_git_status, effective_session_git_cwd, probe_git_status_with,
-    run_git_probe_command, SessionGitStatus,
+    SessionGitStatus, cached_session_git_status, effective_session_git_cwd, probe_git_status_with,
+    run_git_probe_command,
 };
 
 const GIT_TTL: Duration = Duration::from_secs(30);

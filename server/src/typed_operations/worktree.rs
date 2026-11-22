@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::beads::ensure_beads_git_hooks;
 use super::values::{
-    display_unknown_value, is_allowed_git_ref, is_path_inside, normalize_absolute_path,
-    normalize_git_ref, normalize_optional_git_ref, normalize_path_string, run_process_command,
-    typed_result, ProcessCommand, TypedOperationContext, TypedOperationError,
+    ProcessCommand, TypedOperationContext, TypedOperationError, display_unknown_value,
+    is_allowed_git_ref, is_path_inside, normalize_absolute_path, normalize_git_ref,
+    normalize_optional_git_ref, normalize_path_string, run_process_command, typed_result,
 };
 
 pub(crate) async fn run_worktree_action(
@@ -167,7 +167,7 @@ pub(crate) fn build_worktree_command(
         _ => {
             return Err(TypedOperationError::bad_request(format!(
                 "Unsupported worktree action: {action}"
-            )))
+            )));
         }
     })
 }

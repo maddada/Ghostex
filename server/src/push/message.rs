@@ -1,6 +1,6 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::registration::{is_printable_id, NOTIFICATION_ID_MAX, SESSION_ID_MAX};
+use super::registration::{NOTIFICATION_ID_MAX, SESSION_ID_MAX, is_printable_id};
 use super::store::{AlertChoice, PushKinds, PushRegistration};
 
 /// How long an alert may wait for the phone, counted from the event.

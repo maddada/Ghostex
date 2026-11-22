@@ -14,17 +14,17 @@
 use std::time::Duration;
 
 use axum::http::StatusCode;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt as _;
 
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::paths::GxserverPaths;
 use crate::protocol::rpc_success;
 use crate::server::{
-    argument_title_generation_command, domain_error_response,
+    AppState, RoutedResponse, argument_title_generation_command, domain_error_response,
     internal_prompt_generation_environment, normalize_title_generation_agent, quote_shell_arg,
     read_runtime_text, read_session_text, read_title_generation_command, routed_json,
-    stdin_title_generation_command, AppState, RoutedResponse,
+    stdin_title_generation_command,
 };
 use crate::storage::open_gxserver_database;
 
@@ -486,7 +486,9 @@ async fn run_agent(
     let missing = || {
         failure(
             "agentUnavailable",
-            format!("Catch Me Up uses {label} (`{binary}`), which isn't installed on this computer. Install it, or pick another Title Generation Agent in Settings > Agents."),
+            format!(
+                "Catch Me Up uses {label} (`{binary}`), which isn't installed on this computer. Install it, or pick another Title Generation Agent in Settings > Agents."
+            ),
         )
     };
     let mut process = child.spawn().map_err(|_| missing())?;

@@ -7,9 +7,9 @@
 
 use std::path::PathBuf;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::format::{read, FileBot, Kind, StarterNotes, TeamFile, FORMAT, VERSION};
+use super::format::{FORMAT, FileBot, Kind, StarterNotes, TeamFile, VERSION, read};
 use crate::coordinators::now_iso;
 use crate::domain::DomainStateError;
 use crate::gbots::folder::{gbots_dir, write_atomic};

@@ -193,7 +193,7 @@ pub fn remove_runtime_metadata(paths: &GxserverPaths, owner: &RuntimeMetadata) -
         Ok(text) => text,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(error) => {
-            return Err(error).with_context(|| "read gxserver runtime metadata before removal")
+            return Err(error).with_context(|| "read gxserver runtime metadata before removal");
         }
     };
     let current: RuntimeMetadata = serde_json::from_str(&text)
@@ -311,9 +311,11 @@ mod tests {
         let error = read_build_identity_from_package_root(temp.path(), "0.1.0")
             .expect_err("invalid identity should fail");
 
-        assert!(error
-            .to_string()
-            .contains("Invalid gxserver build identity"));
+        assert!(
+            error
+                .to_string()
+                .contains("Invalid gxserver build identity")
+        );
     }
 
     #[test]
@@ -372,8 +374,10 @@ mod tests {
         assert_eq!(read.started_at, metadata.started_at);
         assert_eq!(read.version, metadata.version);
         remove_runtime_metadata(&paths, &metadata).expect("remove metadata");
-        assert!(read_runtime_metadata(&paths)
-            .expect("read removed metadata")
-            .is_none());
+        assert!(
+            read_runtime_metadata(&paths)
+                .expect("read removed metadata")
+                .is_none()
+        );
     }
 }

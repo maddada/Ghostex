@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::{
     args::parse_args,
@@ -8,7 +8,7 @@ use crate::ghostex_cli::{
     rpc::{CliError, CliResult},
     usage::ports_usage,
 };
-use crate::tcp_listeners::listener_discovery::{read_all_tcp_listeners, TcpListenerDetail};
+use crate::tcp_listeners::listener_discovery::{TcpListenerDetail, read_all_tcp_listeners};
 
 /*
 CDXC:Resources 2026-09-02:

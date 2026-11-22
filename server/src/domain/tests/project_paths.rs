@@ -1,5 +1,5 @@
 use super::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 
 #[test]
@@ -273,10 +273,12 @@ fn missing_project_folder_blocks_session_insertion_until_relocated() {
         )
         .expect_err("missing project folder blocks session creation");
     assert_eq!(error.code, "projectPathUnavailable");
-    assert!(repository
-        .list_sessions(Some(&project_id))
-        .expect("sessions")
-        .is_empty());
+    assert!(
+        repository
+            .list_sessions(Some(&project_id))
+            .expect("sessions")
+            .is_empty()
+    );
 
     let relocated = repository
         .relocate_project(

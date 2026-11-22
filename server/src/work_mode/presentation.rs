@@ -1,7 +1,7 @@
 //! What a work-mode session publishes: which PR, issues and Linear project it is linked to, and
 //! its branch title. Pure cache reads, so the presentation projection can call it per row.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::session_git_status::{cached_session_git_status, effective_session_git_cwd};
 

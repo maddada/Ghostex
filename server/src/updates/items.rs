@@ -10,12 +10,12 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use ghostex_settings_catalog::update_checks::{update_check_interval_in, UpdateCheckKind};
+use ghostex_settings_catalog::update_checks::{UpdateCheckKind, update_check_interval_in};
 
 use super::store;
-use crate::agent_cli::catalog::{Definition, CATALOG};
+use crate::agent_cli::catalog::{CATALOG, Definition};
 use crate::agent_cli::latest::version_in;
 use crate::domain::DomainRepository;
 use crate::presentation::presentation_activity;
@@ -1300,7 +1300,7 @@ async fn app_item(state: &AppState) -> Value {
 
 #[cfg(test)]
 mod hex_tests {
-    use super::{tool_item, Usage};
+    use super::{Usage, tool_item};
     use serde_json::json;
 
     fn hex(installed: bool, actions: &[&str], extra: serde_json::Value) -> serde_json::Value {

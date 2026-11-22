@@ -1,16 +1,16 @@
 use std::collections::HashSet;
 
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde_json::{Map, Value};
 
 use crate::domain::{
-    are_project_worktree_metadata_equal, detect_registered_git_worktree_metadata,
-    find_project_by_path_in, merge_project_update, normalize_existing_directory_path,
-    normalize_project_input, normalize_project_root_path, normalize_project_system_kind,
-    normalize_project_visibility, now_iso, path_basename, project_from_row, project_insert_params,
-    project_insert_values, project_row_from_sql, project_row_without_session_history_from_sql,
-    read_optional_text, read_string_field, read_unvalidated_project_lookup_id,
-    recent_project_from_project, sql_error, DomainRepository, DomainResult, DomainStateError,
+    DomainRepository, DomainResult, DomainStateError, are_project_worktree_metadata_equal,
+    detect_registered_git_worktree_metadata, find_project_by_path_in, merge_project_update,
+    normalize_existing_directory_path, normalize_project_input, normalize_project_root_path,
+    normalize_project_system_kind, normalize_project_visibility, now_iso, path_basename,
+    project_from_row, project_insert_params, project_insert_values, project_row_from_sql,
+    project_row_without_session_history_from_sql, read_optional_text, read_string_field,
+    read_unvalidated_project_lookup_id, recent_project_from_project, sql_error,
 };
 use crate::ids::create_project_id;
 
@@ -98,8 +98,7 @@ impl Drop for PlacementGuard {
 }
 
 /// The refusal when a placement change would take the placement lock after SQLite's.
-pub(crate) const PLACEMENT_CHANGE_IN_TRANSACTION: &str =
-    "A project's workspace can't change inside a transaction that started without the placement lock.";
+pub(crate) const PLACEMENT_CHANGE_IN_TRANSACTION: &str = "A project's workspace can't change inside a transaction that started without the placement lock.";
 
 /// The error when a project changed under every attempt of an update (`update_project`).
 pub(crate) const PROJECT_CHANGED_DURING_UPDATE: &str =
@@ -199,9 +198,8 @@ pub(crate) fn pause_project_update(
 /// One notice per project, sent when a change to its placement is about to take
 /// `hold_project_placement` (`notify_project_placement`).
 #[cfg(test)]
-fn placement_notices(
-) -> std::sync::MutexGuard<'static, std::collections::HashMap<String, std::sync::mpsc::Sender<()>>>
-{
+fn placement_notices()
+-> std::sync::MutexGuard<'static, std::collections::HashMap<String, std::sync::mpsc::Sender<()>>> {
     static NOTICES: std::sync::OnceLock<
         std::sync::Mutex<std::collections::HashMap<String, std::sync::mpsc::Sender<()>>>,
     > = std::sync::OnceLock::new();

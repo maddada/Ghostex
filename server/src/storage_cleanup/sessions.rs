@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 use super::files::DAY;
 

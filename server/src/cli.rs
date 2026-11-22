@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde_json::{Map, Value};
 
 use crate::{
@@ -23,7 +23,7 @@ use crate::{
         is_build_identity_reusable, is_process_running, read_current_build_identity,
         read_runtime_metadata,
     },
-    server::{run_gxserver_foreground, GxserverForegroundOptions},
+    server::{GxserverForegroundOptions, run_gxserver_foreground},
 };
 
 pub async fn run_from_env() -> Result<()> {
@@ -607,7 +607,7 @@ async fn start_gxserver_in_user_desktop(
 #[cfg(windows)]
 async fn hand_off_windows_foreground_start() -> Result<Option<String>> {
     use crate::platform::{
-        desktop_session::{server_placement, ServerPlacement},
+        desktop_session::{ServerPlacement, server_placement},
         process::spawn_server,
         standard_user::current_process_is_elevated,
     };
@@ -717,7 +717,9 @@ async fn stop_gxserver_and_sessions(build_identity: &str, version: &str) -> Resu
         .and_then(Value::as_u64)
         .unwrap_or(0);
     Ok(StatusResponse {
-        message: format!("gxserver control plane stopped after stop-all. zmx sessions killed: {killed}; failed: {failed}."),
+        message: format!(
+            "gxserver control plane stopped after stop-all. zmx sessions killed: {killed}; failed: {failed}."
+        ),
         ok: failed == 0,
         ..stopped
     })

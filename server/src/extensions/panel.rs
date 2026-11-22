@@ -21,15 +21,15 @@ use std::{
 };
 
 use ghostex_gx_protocol::extension_panel::{
-    ChecklistItem, PanelAction, PanelBlockBody, PanelDocument, PanelMenuItem, PanelRow,
-    EXTENSION_PANEL_SCHEMA, WEB_BLOCK_HEIGHT_MAX, WEB_BLOCK_HEIGHT_MIN,
+    ChecklistItem, EXTENSION_PANEL_SCHEMA, PanelAction, PanelBlockBody, PanelDocument,
+    PanelMenuItem, PanelRow, WEB_BLOCK_HEIGHT_MAX, WEB_BLOCK_HEIGHT_MIN,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use tokio::sync::broadcast;
 
 use super::{
-    validate_relative_path, ExtensionError, ExtensionKind, ExtensionManifest, ExtensionPermission,
-    ExtensionResult,
+    ExtensionError, ExtensionKind, ExtensionManifest, ExtensionPermission, ExtensionResult,
+    validate_relative_path,
 };
 
 /// The largest panel document, as JSON.
@@ -532,7 +532,7 @@ impl PanelStore {
                 return Err(ExtensionError::internal(format!(
                     "Could not read panel {}: {error}",
                     path.display()
-                )))
+                )));
             }
         };
         let saved: Value = serde_json::from_slice(&bytes).map_err(|error| {

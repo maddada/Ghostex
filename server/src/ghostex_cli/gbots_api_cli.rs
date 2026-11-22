@@ -1,12 +1,12 @@
 //! `ghostex gbots api …`: a GBot's API, which lets an app or script message it with a key
 //! (server/src/gbots/api/).
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::{
     args::Flags,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
 
 /// The API verbs' lines in `ghostex gbots --help`.
@@ -40,7 +40,7 @@ pub(crate) fn run_api(rest: &[String], flags: &Flags) -> CliResult<()> {
         (Some("status" | "on" | "new-key" | "off" | "share-memory") | None, _) => {
             return Err(CliError::Other(
                 "Name the GBot: ghostex gbots api status|on|new-key|off <bot>.".to_string(),
-            ))
+            ));
         }
         (Some(bot), _) => ("status", bot.to_string()),
     };
@@ -64,7 +64,7 @@ pub(crate) fn run_api(rest: &[String], flags: &Flags) -> CliResult<()> {
             _ => {
                 return Err(CliError::Other(
                     "Say on or off: ghostex gbots api share-memory <bot> on|off.".to_string(),
-                ))
+                ));
             }
         };
         params["on"] = json!(on);

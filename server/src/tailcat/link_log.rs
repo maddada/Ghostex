@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
@@ -134,11 +134,7 @@ fn classify_path(endpoint: &str) -> &'static str {
                 || (ip.segments()[0] & 0xffc0) == 0xfe80
         }
     };
-    if local {
-        "lan"
-    } else {
-        "internet"
-    }
+    if local { "lan" } else { "internet" }
 }
 
 /// Which helper a log belongs to, for the records.

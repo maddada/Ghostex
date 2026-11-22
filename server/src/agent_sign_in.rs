@@ -14,10 +14,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, PtySize};
-use serde_json::{json, Map, Value};
+use portable_pty::{ChildKiller, CommandBuilder, PtySize, native_pty_system};
+use serde_json::{Map, Value, json};
 
-use crate::accounts::setup_terminal::{LoginTerminal, COLS, ROWS};
+use crate::accounts::setup_terminal::{COLS, LoginTerminal, ROWS};
 use crate::domain::DomainStateError;
 use crate::server::AppState;
 

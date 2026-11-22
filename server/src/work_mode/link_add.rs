@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use rusqlite::Connection;
 
@@ -192,7 +192,7 @@ pub(crate) fn expand_added_work_links(
             .or_default()
             .push(json!(ticket.id)),
         None if !names_command_ticket && !ADD_KEYS.iter().any(|key| params.contains_key(*key)) => {
-            return Ok(None)
+            return Ok(None);
         }
         None => {}
     }

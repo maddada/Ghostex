@@ -2,15 +2,15 @@
 
 use std::{os::windows::ffi::OsStrExt, path::Path};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use windows_sys::Win32::{
     Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS},
     System::Registry::{
-        RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ,
+        HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW,
     },
 };
 
-use super::{remove_file_if_present, write_if_changed, LoginEntryPlace, AT_LOGIN_COMMAND};
+use super::{AT_LOGIN_COMMAND, LoginEntryPlace, remove_file_if_present, write_if_changed};
 use crate::paths::GxserverPaths;
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";

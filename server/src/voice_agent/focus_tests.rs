@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::{SinkExt as _, StreamExt as _};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, mpsc};
 use tokio_tungstenite::tungstenite::Message as WsMessage;
@@ -396,16 +396,18 @@ async fn the_focused_configuration_offers_only_its_tools() {
         );
     }
     let all = tools::definitions(None);
-    assert!(all
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|tool| tool["name"] == "list_sessions"));
-    assert!(!all
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|tool| tool["name"] == "widen_call"));
+    assert!(
+        all.as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "list_sessions")
+    );
+    assert!(
+        !all.as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "widen_call")
+    );
     let instructions = prompt::instructions(Some(&scope("P1:T1")));
     assert!(instructions.contains("This call is about one session only: \"Voice mode\""));
     assert!(!instructions.contains("list_sessions"));
@@ -517,10 +519,11 @@ async fn a_closed_session_is_said_once_and_the_call_goes_on() {
     assert!(told.contains("\"Voice mode fixes\" was closed."));
     // Still closed on the next poll: nothing new.
     call.tx.send(Input::Sessions(Arc::new(without))).unwrap();
-    assert!(call
-        .client_frames("focus", Duration::from_millis(400))
-        .await
-        .is_empty());
+    assert!(
+        call.client_frames("focus", Duration::from_millis(400))
+            .await
+            .is_empty()
+    );
     // The call is still there.
     assert!(registry::sender(&call.id).is_some());
     call.end();
@@ -537,10 +540,12 @@ async fn the_client_widens_and_moves_the_same_call() {
     let update = call.session_update().await;
     assert!(tool_names(&update).contains("list_sessions"));
     assert!(!tool_names(&update).contains("widen_call"));
-    assert!(update["session"]["instructions"]
-        .as_str()
-        .unwrap()
-        .contains("call list_sessions"));
+    assert!(
+        update["session"]["instructions"]
+            .as_str()
+            .unwrap()
+            .contains("call list_sessions")
+    );
     assert_eq!(update["session"]["voice"], "eve");
     assert_eq!(call.client_frame("focus").await["focus"], Value::Null);
     let widened = call.model_message("[Ghostex focus]").await;
@@ -557,18 +562,21 @@ async fn the_client_widens_and_moves_the_same_call() {
     let update = call.session_update().await;
     assert!(tool_names(&update).contains("widen_call"));
     assert!(!tool_names(&update).contains("list_sessions"));
-    assert!(update["session"]["instructions"]
-        .as_str()
-        .unwrap()
-        .contains("\"Main Coordinator\""));
+    assert!(
+        update["session"]["instructions"]
+            .as_str()
+            .unwrap()
+            .contains("\"Main Coordinator\"")
+    );
     assert_eq!(
         call.client_frame("focus").await["focus"]["title"],
         "Main Coordinator"
     );
-    assert!(call
-        .model_message("moved this call")
-        .await
-        .contains("\"Main Coordinator\""));
+    assert!(
+        call.model_message("moved this call")
+            .await
+            .contains("\"Main Coordinator\"")
+    );
 
     // Asking for the scope it already has only answers it.
     call.tx
@@ -734,10 +742,12 @@ async fn a_remote_client_shows_the_session_and_no_follow_happens_here() {
     let memory = ToolMemory::new(true);
     let screen = tools::run(&state, &memory, "get_active_session", &json!({})).await;
     assert!(screen.ok);
-    assert!(screen.output["desktop"]
-        .as_str()
-        .unwrap()
-        .contains("another computer"));
+    assert!(
+        screen.output["desktop"]
+            .as_str()
+            .unwrap()
+            .contains("another computer")
+    );
 }
 
 #[test]

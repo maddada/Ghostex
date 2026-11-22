@@ -1,9 +1,9 @@
 use super::identity::text;
 use crate::ghostex_cli::{
     args::Flags,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// The launcher row of `agent_id` (the Agents roster's row for a hidden one; `Null` from a gxserver
 /// without the roster), or the refusal.

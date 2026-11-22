@@ -22,9 +22,9 @@ use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use rand::RngExt;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::session_git_status::{resolve_default_branch, DefaultBranch};
+use crate::session_git_status::{DefaultBranch, resolve_default_branch};
 
 /// Every branch gxserver creates for a worktree session starts here.
 pub const WORKTREE_TEMP_BRANCH_PREFIX: &str = "ghostex/";
@@ -908,9 +908,11 @@ mod tests {
         for _ in 0..64 {
             let suffix = create_temp_branch_suffix();
             assert_eq!(suffix.len(), 8);
-            assert!(suffix
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+            assert!(
+                suffix
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            );
             assert!(is_worktree_temp_branch(&temp_branch_name(&suffix)));
         }
     }

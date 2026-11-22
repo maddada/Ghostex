@@ -19,7 +19,7 @@ use crate::{
     domain::{DomainRepository, DomainStateError},
     server::AppState,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// The Settings > Accounts switch, a shared setting gxserver reads (default on).
 pub(crate) const SETTING: &str = "claudeFableFallbackToOpus";

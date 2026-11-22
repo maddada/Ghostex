@@ -2,15 +2,15 @@
 //! Linear ticket or a ticket command's ticket, and the teams and Linear projects the Create Linear
 //! ticket dialog offers.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 use crate::protocol::rpc_success;
 use crate::work_mode::{
-    default_linear_team_id, list_linear_projects, list_linear_teams, project_linear_identifiers,
-    project_work_tracker, resolve_work_mode_project, start_work_on_ticket, work_repo_of,
-    work_source, CommandProject, CommandVerb, CreateOutcome, TicketDraft, TicketScope,
-    WorkCredentials, WorkSourceId, CREATE_WRITER_WAIT,
+    CREATE_WRITER_WAIT, CommandProject, CommandVerb, CreateOutcome, TicketDraft, TicketScope,
+    WorkCredentials, WorkSourceId, default_linear_team_id, list_linear_projects, list_linear_teams,
+    project_linear_identifiers, project_work_tracker, resolve_work_mode_project,
+    start_work_on_ticket, work_repo_of, work_source,
 };
 
 use super::super::work_mode_sync::spawn_work_mode_refresh;
@@ -96,7 +96,7 @@ pub(super) async fn route_work_tickets_http(
                 body_json,
                 token_extension_id,
                 caller,
-            })
+            });
         }
     })
 }

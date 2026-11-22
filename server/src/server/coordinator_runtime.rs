@@ -9,16 +9,16 @@
 use super::*;
 
 use crate::coordinators::{
-    self, agent_message, classify_thread_session, clear_thread_pending_message,
-    record_thread_report, report_body, set_thread_observed_working, set_thread_resolved,
-    MessageSender, SessionKey, ThreadProgress, ThreadRecord, ThreadReport, ThreadState,
+    self, MessageSender, SessionKey, ThreadProgress, ThreadRecord, ThreadReport, ThreadState,
+    agent_message, classify_thread_session, clear_thread_pending_message, record_thread_report,
+    report_body, set_thread_observed_working, set_thread_resolved,
 };
 use crate::presentation::effective_lifecycle_state;
 use crate::session_chat_queue_runtime::SessionChatTranscriptGate;
 
 use super::coordinator_report_retry::{
-    announce_round, clear_retry, init_report_retry, pause_for_outage, pause_for_usage_limit,
-    record_failed_round, waits_for_retry, FailureStreak,
+    FailureStreak, announce_round, clear_retry, init_report_retry, pause_for_outage,
+    pause_for_usage_limit, record_failed_round, waits_for_retry,
 };
 
 const TICK: Duration = Duration::from_secs(2);
@@ -2015,8 +2015,10 @@ fn refresh_thread_screen_waits(
             let agent = crate::session_chat_composer::session_chat_composer_agent_id(&session);
             // Probe Antigravity threads (which surface permission pickers and quota banners only on
             // screen) as well as screen-only agents, bounded by the detector's own 5s cache TTL.
-            if (crate::session_chat_options::session_chat_questions_only_on_screen(agent.as_deref())
-                && crate::presentation::presentation_activity(&session, &generated_at) == "working")
+            if (crate::session_chat_options::session_chat_questions_only_on_screen(
+                agent.as_deref(),
+            ) && crate::presentation::presentation_activity(&session, &generated_at)
+                == "working")
                 || agent.as_deref() == Some("antigravity")
             {
                 detector.detect_blocking(
@@ -2191,7 +2193,7 @@ pub(crate) async fn handle_promote_coordinator_http(
                         code: "internalError",
                         message: format!("SQLite gxserver state error: {error}"),
                     },
-                )
+                );
             }
         };
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
@@ -2355,7 +2357,7 @@ pub(crate) fn handle_coordinator_http(
 #[cfg(test)]
 mod skill_only_start_tests {
     use super::prepare_coordinator_create_params;
-    use serde_json::{json, Map, Value};
+    use serde_json::{Map, Value, json};
 
     fn prepared(coordinator: Value) -> Value {
         let params = json!({ "coordinator": coordinator });
@@ -2375,9 +2377,11 @@ mod skill_only_start_tests {
     #[test]
     fn a_coordinator_with_a_first_request_is_not() {
         let params = prepared(json!({ "firstRequest": "Fix the build" }));
-        assert!(params["runtimeSettings"]
-            .get("coordinatorSkillOnlyStart")
-            .is_none());
+        assert!(
+            params["runtimeSettings"]
+                .get("coordinatorSkillOnlyStart")
+                .is_none()
+        );
     }
 }
 

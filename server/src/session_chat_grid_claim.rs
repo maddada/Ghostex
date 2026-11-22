@@ -11,11 +11,11 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use chrono::Utc;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::domain::{read_project_id, read_session_id};
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::server::{read_session_text, AppState};
+use crate::domain::{read_project_id, read_session_id};
+use crate::server::{AppState, read_session_text};
 use crate::storage::open_gxserver_database;
 
 /// Default lease when a client sends none; a client renews well inside it.

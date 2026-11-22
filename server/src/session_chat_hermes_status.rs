@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, Row};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainRepository;
 use crate::server::read_runtime_text;

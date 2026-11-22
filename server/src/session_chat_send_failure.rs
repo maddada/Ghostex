@@ -11,19 +11,20 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use tokio::sync::Notify;
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::notification_feed::store::{
-    bounded_notification_body, insert_notification_feed_row, mark_session_send_failure_read,
-    notification_agent_icon, NewNotificationFeedRow, NOTIFICATION_FEED_KIND_SEND_FAILED,
+    NOTIFICATION_FEED_KIND_SEND_FAILED, NewNotificationFeedRow, bounded_notification_body,
+    insert_notification_feed_row, mark_session_send_failure_read, notification_agent_icon,
 };
 use crate::server::AppState;
 use crate::session_chat_compacting::SessionChatCompactingPublisher;
 use crate::session_chat_notice::{
-    SessionChatTerminalNotice, SessionChatTerminalNoticeAction, SessionChatTerminalNoticeSeverity,
-    SessionChatTerminalNoticeSource, SESSION_CHAT_NOTICE_DELIVERY_FAILED,
+    SESSION_CHAT_NOTICE_DELIVERY_FAILED, SessionChatTerminalNotice,
+    SessionChatTerminalNoticeAction, SessionChatTerminalNoticeSeverity,
+    SessionChatTerminalNoticeSource,
 };
 use crate::storage::open_gxserver_database;
 
@@ -148,11 +149,9 @@ fn heal_reason_sentence(reason: &str) -> Option<String> {
         "the session could not be read"
         | "the session could not be put to sleep"
         | "the session could not be started again"
-        | "the restart record could not be read" => {
-            "Ghostex could not restart the agent."
-        }
+        | "the restart record could not be read" => "Ghostex could not restart the agent.",
         "The agent took the message into its input box but kept it there; it was not restarted." => {
-            return None
+            return None;
         }
         crate::session_chat_queue_runtime::RESTART_CANNOT_HELP_MESSAGE_IN_BOX => {
             "The message is in the agent's input box, so Ghostex did not restart the agent."
@@ -1046,11 +1045,13 @@ mod tests {
     fn the_card_carries_the_logged_reason_and_keeps_its_time() {
         let notice = send_failed_notice(&failure(SendFailureNext::RetryOrFix));
         assert_eq!(notice.title, "Message not sent");
-        assert!(notice
-            .detail
-            .as_deref()
-            .unwrap()
-            .starts_with("The agent stayed in the middle of a turn for five minutes"));
+        assert!(
+            notice
+                .detail
+                .as_deref()
+                .unwrap()
+                .starts_with("The agent stayed in the middle of a turn for five minutes")
+        );
         assert_eq!(notice.detected_at, "2026-10-31T00:00:00.000Z");
         assert!(notice.to_value().pointer("/sendFailure/promptId").is_some());
     }

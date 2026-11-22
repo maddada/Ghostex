@@ -894,27 +894,31 @@ fn other_omp_custom_messages_carry_their_type_alone_and_hidden_ones_stay_hidden(
         launch.blocks,
         vec![text_block("Supervised process completed web (exit 0)")]
     );
-    assert!(decode_pi_transcript_line(
-        &omp_custom_record(
-            "advisor",
-            false,
-            json!({ "notes": [{ "note": "x", "severity": "nit" }] }),
-            "<advisory>\nx\n</advisory>",
-        ),
-        "fb",
-    )
-    .is_none());
+    assert!(
+        decode_pi_transcript_line(
+            &omp_custom_record(
+                "advisor",
+                false,
+                json!({ "notes": [{ "note": "x", "severity": "nit" }] }),
+                "<advisory>\nx\n</advisory>",
+            ),
+            "fb",
+        )
+        .is_none()
+    );
     // The same record shown is a row with its type: only `display: false` hides it.
-    assert!(decode_pi_transcript_line(
-        &omp_custom_record(
-            "advisor",
-            true,
-            json!({ "notes": [{ "note": "x", "severity": "nit" }] }),
-            "<advisory>\nx\n</advisory>",
-        ),
-        "fb",
-    )
-    .is_some_and(|row| row.custom_message.is_some()));
+    assert!(
+        decode_pi_transcript_line(
+            &omp_custom_record(
+                "advisor",
+                true,
+                json!({ "notes": [{ "note": "x", "severity": "nit" }] }),
+                "<advisory>\nx\n</advisory>",
+            ),
+            "fb",
+        )
+        .is_some_and(|row| row.custom_message.is_some())
+    );
 }
 
 #[test]

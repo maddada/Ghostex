@@ -3,11 +3,11 @@ use windows_sys::{
     Wdk::System::Threading::{NtQueryInformationProcess, ProcessHandleInformation},
     Win32::{
         Foundation::{
-            CloseHandle, DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE,
+            CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE,
             STATUS_INFO_LENGTH_MISMATCH,
         },
         Storage::FileSystem::{
-            GetFileType, GetFinalPathNameByHandleW, FILE_NAME_OPENED, FILE_TYPE_DISK,
+            FILE_NAME_OPENED, FILE_TYPE_DISK, GetFileType, GetFinalPathNameByHandleW,
         },
         System::Threading::{
             GetCurrentProcess, OpenProcess, PROCESS_DUP_HANDLE, PROCESS_QUERY_INFORMATION,

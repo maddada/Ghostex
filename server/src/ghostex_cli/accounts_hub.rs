@@ -6,12 +6,12 @@
 
 use std::io::{IsTerminal, Read};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::{
     args::Flags,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
 
 pub(super) const HELP: &str = "Usage: ghostex accounts hub [list] [--json]

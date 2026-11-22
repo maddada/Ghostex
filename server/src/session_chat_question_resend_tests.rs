@@ -65,28 +65,34 @@ fn it_fires_once_per_broken_block() {
     let first = form_to_resend(&[user("Plan it."), reply(BROKEN)]).expect("asks about it");
     let asked = resend_message(&first);
     // The resend is in the transcript: the same block is not asked about again.
-    assert!(form_to_resend(&[
-        user("Plan it."),
-        reply(BROKEN),
-        user(&asked),
-        reply(READABLE)
-    ])
-    .is_none());
-    assert!(form_to_resend(&[
-        user("Plan it."),
-        reply(BROKEN),
-        user(&asked),
-        reply("Busy.")
-    ])
-    .is_none());
+    assert!(
+        form_to_resend(&[
+            user("Plan it."),
+            reply(BROKEN),
+            user(&asked),
+            reply(READABLE)
+        ])
+        .is_none()
+    );
+    assert!(
+        form_to_resend(&[
+            user("Plan it."),
+            reply(BROKEN),
+            user(&asked),
+            reply("Busy.")
+        ])
+        .is_none()
+    );
     // A block the agent has since re-asked in a readable form is left alone.
-    assert!(form_to_resend(&[
-        user("Plan it."),
-        reply(BROKEN),
-        user("Go on."),
-        reply(READABLE)
-    ])
-    .is_none());
+    assert!(
+        form_to_resend(&[
+            user("Plan it."),
+            reply(BROKEN),
+            user("Go on."),
+            reply(READABLE)
+        ])
+        .is_none()
+    );
     // Two turn ends seen for one block (or the next turn end before the resend reaches the
     // transcript) claim it once.
     assert!(claim(&first.id));
@@ -99,13 +105,15 @@ fn an_agent_that_keeps_failing_is_asked_at_most_twice_in_a_row() {
     let first = form_to_resend(&[user("Plan it."), reply(BROKEN)]).unwrap();
     let second = form_to_resend(&[user(&resend_message(&first)), reply(&other)]).unwrap();
     let third = BROKEN.replace("Which layout?", "Which font?");
-    assert!(form_to_resend(&[
-        user("Plan it."),
-        reply(BROKEN),
-        user(&resend_message(&first)),
-        reply(&other),
-        user(&resend_message(&second)),
-        reply(&third),
-    ])
-    .is_none());
+    assert!(
+        form_to_resend(&[
+            user("Plan it."),
+            reply(BROKEN),
+            user(&resend_message(&first)),
+            reply(&other),
+            user(&resend_message(&second)),
+            reply(&third),
+        ])
+        .is_none()
+    );
 }

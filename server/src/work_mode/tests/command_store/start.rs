@@ -8,9 +8,9 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use super::cards::{
-    calls, exact_read, pin, plan_of, project_id, project_in, store_values, token_of, HANDSHAKE,
+    HANDSHAKE, calls, exact_read, pin, plan_of, project_id, project_in, store_values, token_of,
 };
-use super::details::{open, wait_for_calls, Released};
+use super::details::{Released, open, wait_for_calls};
 use super::published::{command_source, record_pinning};
 use super::*;
 

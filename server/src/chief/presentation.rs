@@ -3,7 +3,7 @@
 //! own sessions at the home folder.
 
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::record::read_record;
 use crate::domain::DomainRepository;

@@ -4,11 +4,11 @@
 use std::time::Duration;
 
 use base64::Engine as _;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::draft::{
-    github_username, utf16_len, with_reporter, FeedbackClient, FEEDBACK_BODY_MAX_UNITS,
-    FEEDBACK_TITLE_MAX_UNITS,
+    FEEDBACK_BODY_MAX_UNITS, FEEDBACK_TITLE_MAX_UNITS, FeedbackClient, github_username, utf16_len,
+    with_reporter,
 };
 
 /// CDXC:Feedback 2026-10-04 WHY:

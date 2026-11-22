@@ -1,7 +1,7 @@
 //! Asking this computer's Ghostex app about its updater, and the status every client reads.
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::record::{now_iso, read_settled_record, write_record, AppUpdateRecord, InstallResult};
+use super::record::{AppUpdateRecord, InstallResult, now_iso, read_settled_record, write_record};
 use crate::constants::GXSERVER_VERSION;
 use crate::server::AppState;
 

@@ -1,15 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::actions;
-use crate::ghostex_cli::args::{parse_args, parse_boolean, Flags};
+use crate::ghostex_cli::args::{Flags, parse_args, parse_boolean};
 use crate::ghostex_cli::launchers;
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json, timestamp_slug};
 use crate::ghostex_cli::rpc::{
-    call_gxserver_rpc, compact_object, fetch_gxserver_health, ghostex_home, ghostex_logs_home,
-    resolve_gxserver_server_target, CliError, CliResult,
+    CliError, CliResult, call_gxserver_rpc, compact_object, fetch_gxserver_health, ghostex_home,
+    ghostex_logs_home, resolve_gxserver_server_target,
 };
 
 /*

@@ -7,10 +7,10 @@
 //! User (Q4262 "B"): Ghostex's own skills are retired for CLI help, superseding "the skill stays for people who invoke it by name" above: the ghostex-visuals skill is gone, its text lives on as visual_guide.md beside this file, and `ghostex visual guide` is the only way agents read it (the remaining `ghostex` skill sends them here).
 //! SEE-ALSO: server/src/ghostex_cli/visual_guide.md (the text), packages/gx-chat-core/src/extras/boosts.rs (the prompts that point here), server/src/ghostex_cli/agent_guide.rs.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::args::Flags;
-use super::rpc::{call_gxserver_rpc, CliError, CliResult};
+use super::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 const SKILL: &str = include_str!("visual_guide.md");
 const EXAMPLE: &str = include_str!("visual_guide_example.html");
@@ -100,7 +100,9 @@ fn guide_text(topic: &str) -> Option<String> {
             let (_, after_export) = rest.split_once("### Live pages with questions")?;
             let (questions, _) =
                 after_export.split_once("### Lists you ask about: picks on rows")?;
-            format!("{opening}\n{before_export}\n### Live pages with questions{questions}\nFor exports: `ghostex visual guide pages export`. For row picks: `ghostex visual guide pages picks`.\n")
+            format!(
+                "{opening}\n{before_export}\n### Live pages with questions{questions}\nFor exports: `ghostex visual guide pages export`. For row picks: `ghostex visual guide pages picks`.\n"
+            )
         }
         "pages-export" => {
             let pages = section("Live pages")?;
@@ -140,7 +142,7 @@ pub(crate) fn guide_command(args: &[String]) -> CliResult<()> {
             Some(_) => {
                 return Err(CliError::Other(format!(
                     "Unknown pages topic.\n\n{GUIDE_HELP}"
-                )))
+                )));
             }
             None => topic,
         }
@@ -240,7 +242,7 @@ pub(crate) fn boosts_command(args: &[String]) -> CliResult<()> {
         other => {
             return Err(CliError::Other(format!(
                 "Unknown boosts command: {other}\n\n{BOOSTS_HELP}"
-            )))
+            )));
         }
     };
     if json_out {

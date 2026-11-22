@@ -6,7 +6,7 @@ use super::session::session_agentbox;
 use crate::domain::DomainRepository;
 use crate::paths::GxserverPaths;
 use crate::session_chat_composer::{
-    wait_for_session_chat_composer_by_ids, SessionChatComposerWait, SessionChatComposerWaitPolicy,
+    SessionChatComposerWait, SessionChatComposerWaitPolicy, wait_for_session_chat_composer_by_ids,
 };
 use crate::storage::open_gxserver_database;
 

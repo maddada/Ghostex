@@ -7,7 +7,7 @@
 //! A box can't reach this computer's gxserver (home pushes to the box; nothing comes back but what home reads), so a chat there can't run `ghostex gbots brief` or save memory. Its first message therefore carries the whole brief, and tells it to end its final message with a "To remember:" list instead of saving memory itself; the user or Chief of Staff keeps what matters. A box only runs code of a project with a repository, so a GBot on a Cloud Box works in that box's project.
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::store::BotComputer;
 use crate::domain::{DomainRepository, DomainStateError};
@@ -31,7 +31,11 @@ fn first_message(
     let mut text = format!(
         "You are {}{}, one of the user's GBots, working on the Cloud Box {}. Your brief is below. From the box, `ghostex gbots` commands can't reach the computer that keeps your memory, so don't run them: when something should be remembered, end your final message with a short \"To remember:\" list and the user or Ghostex AI saves it.\n\n{brief}",
         bot.name,
-        if bot.title.is_empty() { String::new() } else { format!(", {}", bot.title) },
+        if bot.title.is_empty() {
+            String::new()
+        } else {
+            format!(", {}", bot.title)
+        },
         computer.label(),
     );
     match task.map(str::trim).filter(|task| !task.is_empty()) {

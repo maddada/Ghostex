@@ -6,15 +6,15 @@ use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::paths::GxserverPaths;
 
+use super::ComposioConnectStart;
 use super::account::{self, with_live};
 use super::http::clip;
 use super::names::pretty_name;
 use super::tools::call_tool;
-use super::ComposioConnectStart;
 
 const MANAGE_CONNECTIONS: &str = "COMPOSIO_MANAGE_CONNECTIONS";
 const WATCH_EVERY: Duration = Duration::from_secs(4);

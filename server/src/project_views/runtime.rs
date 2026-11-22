@@ -1,6 +1,6 @@
-use super::resolve::{resolve, text, Plan};
-use anyhow::{bail, Context, Result};
-use serde_json::{json, Value};
+use super::resolve::{Plan, resolve, text};
+use anyhow::{Context, Result, bail};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
@@ -9,8 +9,8 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -122,7 +122,7 @@ pub(super) fn operation(params: Value, api_port: u16) -> Result<Value> {
         Err(error) => {
             return Ok(
                 json!({"state":"unconfigured","available":error.downcast_ref::<super::resolve::SetupRequired>().is_some(),"error":format!("{error:#}")}),
-            )
+            );
         }
     };
     if text(&params["view"]["source"], "kind") == "website"

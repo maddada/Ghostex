@@ -3,7 +3,7 @@ use super::{
     endpoint::{account_id, new_saved_account},
     model::{DiscoveredAccount, NewSessionAccount, Provider, Registry, SavedAccount},
 };
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 use std::collections::HashSet;
 

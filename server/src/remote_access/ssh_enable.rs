@@ -81,12 +81,11 @@ pub fn enable_ssh_access(port: u16, install: bool) -> SshEnableResult {
 #[cfg(target_os = "macos")]
 const MACOS_REMOTE_LOGIN_SCRIPT: &str = "/bin/launchctl enable system/com.openssh.sshd && (/bin/launchctl print system/com.openssh.sshd >/dev/null 2>&1 || /bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist)";
 #[cfg(target_os = "macos")]
-const MACOS_REMOTE_LOGIN_PROMPT: &str =
-    "Ghostex needs your password to turn on Remote Login, so your other devices can connect to this Mac over SSH.";
+const MACOS_REMOTE_LOGIN_PROMPT: &str = "Ghostex needs your password to turn on Remote Login, so your other devices can connect to this Mac over SSH.";
 
 #[cfg(target_os = "macos")]
 fn run_privileged_enable(_install: bool) -> SshEnableResult {
-    use super::macos_administrator::{run_as_administrator, AdministratorRun};
+    use super::macos_administrator::{AdministratorRun, run_as_administrator};
     match run_as_administrator(MACOS_REMOTE_LOGIN_SCRIPT, MACOS_REMOTE_LOGIN_PROMPT, true) {
         AdministratorRun::Succeeded => return enabled(),
         AdministratorRun::Cancelled => return cancelled(),
@@ -161,10 +160,10 @@ for a feature Windows already counts as installed.
 #[cfg(windows)]
 mod windows_enable {
     use super::super::windows_elevation::{
-        run_elevated_powershell, EXIT_LAUNCH_FAILED, EXIT_NO_DESKTOP, EXIT_NO_EXIT_CODE,
-        EXIT_NO_PROCESS, EXIT_UAC_CANCELLED,
+        EXIT_LAUNCH_FAILED, EXIT_NO_DESKTOP, EXIT_NO_EXIT_CODE, EXIT_NO_PROCESS,
+        EXIT_UAC_CANCELLED, run_elevated_powershell,
     };
-    use super::{cancelled, enabled, failed, SshEnableResult};
+    use super::{SshEnableResult, cancelled, enabled, failed};
 
     // Exit codes chosen by the elevated script.
     const EXIT_CAPABILITY_FAILED: i32 = 2;
@@ -317,8 +316,8 @@ fn run_privileged_enable(_install: bool) -> SshEnableResult {
 // immediately instead of waiting for a terminal that does not exist.
 #[cfg(all(unix, not(target_os = "macos")))]
 fn run_privileged_enable(install: bool) -> SshEnableResult {
-    use super::ssh_install::{install_command_hint, LinuxPackageManager};
-    use super::ssh_status::{probe_linux_ssh_units, LinuxSshProbe};
+    use super::ssh_install::{LinuxPackageManager, install_command_hint};
+    use super::ssh_status::{LinuxSshProbe, probe_linux_ssh_units};
 
     let units = match probe_linux_ssh_units() {
         LinuxSshProbe::NoSystemctl => {
@@ -379,13 +378,9 @@ fn run_pkexec(script: &str, manual: &str, failure: impl Fn(&str) -> String) -> S
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return failed(format!(
                 "pkexec (polkit) is not installed, so Ghostex cannot show an administrator prompt. Run `{manual}` in a terminal instead."
-            ))
+            ));
         }
-        Err(error) => {
-            return failed(format!(
-                "Could not open the administrator prompt: {error}."
-            ))
-        }
+        Err(error) => return failed(format!("Could not open the administrator prompt: {error}.")),
     };
     if output.status.success() {
         return enabled();

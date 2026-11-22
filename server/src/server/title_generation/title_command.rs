@@ -193,7 +193,9 @@ pub(crate) fn stdin_title_generation_command(agent: &str, command: &str) -> Opti
             // `--no-session-persistence`: like Codex's `--ephemeral`, no transcript is written, so
             // the job never comes back as a sidebar session (`external_sessions` imports Claude
             // transcripts by their folder).
-            format!("{command} -p --permission-mode dontAsk --model claude-haiku-5-5 --effort low --no-session-persistence")
+            format!(
+                "{command} -p --permission-mode dontAsk --model claude-haiku-5-5 --effort low --no-session-persistence"
+            )
         }
         "empryo" => {
             format!("{command} --headless --quiet --no-genome --marionette-mode none --max-steps 1")

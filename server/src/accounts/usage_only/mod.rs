@@ -18,7 +18,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use super::model::UsageWindow;
@@ -385,7 +385,7 @@ pub(crate) fn handle(
         _ => {
             return Err(DomainStateError::bad_request(
                 "That can't be done to a usage-only account.",
-            ))
+            ));
         }
     }
     .map_err(io_error)?;

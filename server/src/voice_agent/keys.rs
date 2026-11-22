@@ -359,7 +359,7 @@ pub(super) fn check_key(provider: Provider, key: &str) -> KeyCheck {
     let mut response = match response {
         Ok(response) => response,
         Err(error) => {
-            return KeyCheck::Unreachable(format!("Couldn't reach {}: {error}", provider.label()))
+            return KeyCheck::Unreachable(format!("Couldn't reach {}: {error}", provider.label()));
         }
     };
     let status = response.status().as_u16();

@@ -4,9 +4,9 @@
 use crate::ghostex_cli::{
     args::parse_args,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
 const HELP: &str = "Install, update, and check the agent CLIs Ghostex runs.

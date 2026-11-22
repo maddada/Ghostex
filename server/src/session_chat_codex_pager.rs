@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use crate::domain::DomainRepository;
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
 use crate::session_chat_send::{
-    capture_session_terminal_text, execute_session_chat_send, write_session_chat_payload,
-    SessionChatSendStep,
+    SessionChatSendStep, capture_session_terminal_text, execute_session_chat_send,
+    write_session_chat_payload,
 };
 use crate::session_chat_terminal_dialog::TerminalDialog;
 

@@ -2,9 +2,9 @@
 //! whole thread, or the parts of it that matter, in one command.
 
 use chrono::TimeZone;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::ghostex_cli::args::{parse_args, Flags};
+use crate::ghostex_cli::args::{Flags, parse_args};
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
 use crate::ghostex_cli::rpc::{self, CliError, CliResult};
 use crate::ghostex_cli::{actions, selector};
@@ -227,7 +227,7 @@ impl ReaderOptions {
             None if flags.contains("grep") => {
                 return Err(CliError::Other(
                     "--grep needs text to search for.".to_string(),
-                ))
+                ));
             }
             None => None,
         };

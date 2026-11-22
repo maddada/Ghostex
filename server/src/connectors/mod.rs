@@ -18,7 +18,7 @@ pub(crate) use cli::{
     set_connector_cli_client, sign_in_connector_cli, sign_out_connector_cli, with_project_cli_env,
     with_project_cli_env_for_resume,
 };
-pub(crate) use composio::{serve_oauth_redirect, OAUTH_REDIRECT_PATH};
+pub(crate) use composio::{OAUTH_REDIRECT_PATH, serve_oauth_redirect};
 pub(crate) use events::*;
 pub(crate) use executor_api::*;
 pub(crate) use gate::*;

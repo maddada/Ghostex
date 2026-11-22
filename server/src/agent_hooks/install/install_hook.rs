@@ -3,14 +3,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::domain::DomainStateError;
 
-use crate::agent_hooks::codex_trust::{follow_codex_hook_trust, CodexTrustWriteMode};
+use crate::agent_hooks::codex_trust::{CodexTrustWriteMode, follow_codex_hook_trust};
 #[cfg(test)]
 use crate::agent_hooks::config::all_hook_events;
-use crate::agent_hooks::config::{hook_format, HookDefinition, HookFormat, HookPaths};
+use crate::agent_hooks::config::{HookDefinition, HookFormat, HookPaths, hook_format};
 use crate::agent_hooks::plugin_sources::{build_plugin_file_source, command_for_agent};
 use crate::agent_hooks::probing::{io_error, json_error, path_string, read_file_text};
 use crate::agent_hooks::resolution::provider_hook_paths;

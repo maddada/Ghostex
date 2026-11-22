@@ -1,9 +1,9 @@
 use base64::Engine as _;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::args::{multi_value_flag, parse_args};
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 /// How long a send may take: five 5 MB screenshots on a slow line, as the pop-up allows
 /// (gxserver gives the relay 170 seconds).

@@ -71,13 +71,13 @@ pub(crate) fn run_elevated_powershell(
     let output = match crate::platform::process::run_bounded(command, limits) {
         Ok(output) => output,
         Err(crate::platform::process::Unfinished::TimedOut(_)) => {
-            return Err(PROMPT_NOT_ANSWERED.to_string())
+            return Err(PROMPT_NOT_ANSWERED.to_string());
         }
         Err(crate::platform::process::Unfinished::Start(error)) => {
-            return Err(format!("Could not open the administrator prompt: {error}."))
+            return Err(format!("Could not open the administrator prompt: {error}."));
         }
         Err(crate::platform::process::Unfinished::TooLarge(_)) => {
-            return Err("Could not open the administrator prompt.".to_string())
+            return Err("Could not open the administrator prompt.".to_string());
         }
     };
     Ok(ElevatedRun {

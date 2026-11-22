@@ -9,24 +9,24 @@
 //! A frame carries only a summary: the threads in flight (working, or waiting on an answer or the user's approval) and the `recent` ones (active in the last two hours, which "Show recent" adds; the user's 2026-10-11 decision in the core), the total and a `revision` of the full list. With ~95 threads the whole list was ~30KB on every chat state frame. The full list, resolved threads included, is read once when the user opens the panel's "N more" row (`/api/readCoordinatorThreads`), and read again when the revision moves while it stays open, so every thread stays reachable. The two-hour boundary is decided here on every tick, so a thread ageing out changes the summary and republishes it.
 //! SEE-ALSO: packages/gx-chat-core/src/extras/coordinator_threads.rs (the panel and the read), packages/gx-core/src/sidebar_view/threads.rs (`RECENT_THREAD_MS`, the sidebar's same two hours).
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::brief::report_headline;
 use super::endpoint::session_title_of;
-use super::live::{thread_live, ThreadLive};
-use super::records::{list_coordinators, SessionKey, ThreadRecord};
-use super::remote_threads::{list_remote_threads, RemoteThreadRecord};
+use super::live::{ThreadLive, thread_live};
+use super::records::{SessionKey, ThreadRecord, list_coordinators};
+use super::remote_threads::{RemoteThreadRecord, list_remote_threads};
 use super::state::{
-    classify_thread_session, thread_needs_user_approval, thread_wait_info, waiting_prompt,
-    ThreadProgress, ThreadState,
+    ThreadProgress, ThreadState, classify_thread_session, thread_needs_user_approval,
+    thread_wait_info, waiting_prompt,
 };
 use crate::domain::DomainRepository;
 use crate::presentation::{effective_lifecycle_state, now_iso};

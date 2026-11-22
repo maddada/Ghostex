@@ -1,18 +1,18 @@
 use std::collections::HashSet;
 
-use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 use serde_json::{Map, Value};
 
 use crate::domain::repository::project::MAX_ID_GENERATION_ATTEMPTS;
 use crate::domain::{
+    DomainRepository, DomainResult, DomainStateError, ProjectPathState, SessionLifecycleFields,
     insert_optional_string, merge_session_update, normalize_create_agent_session_params,
     normalize_domain_lifecycle_state, normalize_existing_directory_path, normalize_session_input,
     normalize_session_order_ids, normalize_settled_override, normalize_zmx_provider_state, now_iso,
     path_basename, project_path_state, read_optional_text, read_project_id, read_string_field,
     read_unvalidated_project_lookup_id, read_unvalidated_session_lookup_id,
     reject_stopped_session_revive, session_from_row, session_insert_params, session_row_from_sql,
-    sql_error, DomainRepository, DomainResult, DomainStateError, ProjectPathState,
-    SessionLifecycleFields,
+    sql_error,
 };
 use crate::ids::{create_session_id, create_zmx_session_name, is_gxserver_project_id};
 
@@ -82,7 +82,9 @@ impl<'a> DomainRepository<'a> {
                     .and_then(Value::as_str)
                     .unwrap_or_default();
                 if !std::path::Path::new(cwd).is_dir() {
-                    return Err(DomainStateError::bad_request("The original project folder no longer exists. Restore it before resuming this conversation."));
+                    return Err(DomainStateError::bad_request(
+                        "The original project folder no longer exists. Restore it before resuming this conversation.",
+                    ));
                 }
                 if !source
                     .pointer("/runtimeSettings/agentSessionPath")

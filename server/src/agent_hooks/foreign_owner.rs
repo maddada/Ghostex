@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::config::{hook_format, HookDefinition, HookFormat};
+use super::config::{HookDefinition, HookFormat, hook_format};
 use super::probing::read_file_text;
 
 /// True only in a portable copy, when a Ghostex hook in `config_paths` names a gxserver that

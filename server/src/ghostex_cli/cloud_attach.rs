@@ -18,15 +18,15 @@ use std::io::Write as _;
 
 use futures_util::{SinkExt as _, StreamExt as _};
 use ghostex_gx_protocol::cloud_box::{
-    CloudBoxConnectInfo, CLOUD_BOXES_ROUTE, CLOUD_BOX_TRANSPORT_DIRECT, CLOUD_BOX_TRANSPORT_TAILCAT,
+    CLOUD_BOX_TRANSPORT_DIRECT, CLOUD_BOX_TRANSPORT_TAILCAT, CLOUD_BOXES_ROUTE, CloudBoxConnectInfo,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::ghostex_cli::{
     args::Flags,
-    rpc::{call_gxserver_rpc, CliError, CliResult, GXSERVER_LOCAL_API_HOST},
-    tailcat_tunnel::{start_tailcat_tunnel, TailcatForwardPlan},
+    rpc::{CliError, CliResult, GXSERVER_LOCAL_API_HOST, call_gxserver_rpc},
+    tailcat_tunnel::{TailcatForwardPlan, start_tailcat_tunnel},
 };
 
 /// Restores the terminal's mode when the attach ends, however it ends.

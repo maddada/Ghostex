@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::store::{self, QueuedNote};
 use crate::paths::GxserverPaths;
@@ -133,7 +133,9 @@ pub(crate) fn post(url: &str, key: &str, body: &Value) -> Result<(), PostFailure
         200..=299 => Ok(()),
         401 | 403 => Err(failure(
             "keyRefused",
-            format!("Grok Bot refused the key (HTTP {status}). Copy the routine's current key and connect again."),
+            format!(
+                "Grok Bot refused the key (HTTP {status}). Copy the routine's current key and connect again."
+            ),
         )),
         404 => Err(failure(
             "notFound",
@@ -141,7 +143,9 @@ pub(crate) fn post(url: &str, key: &str, body: &Value) -> Result<(), PostFailure
         )),
         _ => Err(failure(
             "notStarted",
-            format!("Grok Bot didn't start the routine (HTTP {status}). Check the routine isn't paused."),
+            format!(
+                "Grok Bot didn't start the routine (HTTP {status}). Check the routine isn't paused."
+            ),
         )),
     }
 }

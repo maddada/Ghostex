@@ -10,9 +10,9 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Utc};
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::records::{now_iso, SessionKey};
+use super::records::{SessionKey, now_iso};
 
 /// `{ "<projectId>:<sessionId>": ["<previous turn start>", "<current turn start>"] }`.
 const TURNS_METADATA_KEY: &str = "coordinatorTurnStarts";

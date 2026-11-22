@@ -712,7 +712,7 @@ pub(crate) fn build_commit_message_generation_shell_command(
                     "{} does not support background commit message generation.",
                     agent.name
                 ),
-            })
+            });
         }
     })
 }

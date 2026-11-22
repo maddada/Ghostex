@@ -14,7 +14,7 @@ mod watch;
 
 use std::sync::Arc;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::keys;
 use super::provider::Provider;
@@ -24,7 +24,7 @@ use crate::server::AppState;
 
 pub(super) use prompt::{briefing_message, instructions, reply_message};
 pub(super) use reply::finished_announcement;
-pub(super) use tools::{definitions, refusal, talk, TOOLS};
+pub(super) use tools::{TOOLS, definitions, refusal, talk};
 pub(super) use watch::watch;
 
 /// The words for a client asking to move or widen a call with a GBot.

@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::event_mapping::env_string;
 use super::install::{parent_process_id, read_json_object};
@@ -150,11 +150,7 @@ fn store_entry(
 
 fn read_store(store_path: &Path) -> Value {
     let data = read_json_object(&read_file_text(store_path));
-    if data.is_object() {
-        data
-    } else {
-        json!({})
-    }
+    if data.is_object() { data } else { json!({}) }
 }
 
 /// True when the stored entry already carries these identity fields and no other entry on the same surface is newer, which is everything a reader can observe.

@@ -1,6 +1,6 @@
 //! What this Ghostex does with a command from its member's queue.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::server::AppState;
 

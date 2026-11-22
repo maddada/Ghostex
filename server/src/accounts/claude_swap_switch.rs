@@ -216,7 +216,7 @@ pub(crate) fn user_of(paths: &[PathBuf]) -> Option<String> {
 fn opened_elsewhere(file: &Path) -> bool {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, GetLastError, ERROR_SHARING_VIOLATION, INVALID_HANDLE_VALUE},
+        Foundation::{CloseHandle, ERROR_SHARING_VIOLATION, GetLastError, INVALID_HANDLE_VALUE},
         Storage::FileSystem::{
             CreateFileW, DELETE, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
             OPEN_EXISTING,

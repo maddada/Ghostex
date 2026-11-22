@@ -16,7 +16,7 @@
 
 use super::*;
 
-use crate::session_auto_sleep::{sessions_to_sleep, sweep_allowed, AutoSleepSettings};
+use crate::session_auto_sleep::{AutoSleepSettings, sessions_to_sleep, sweep_allowed};
 
 /// How often the sweep runs (the runtime's `GPUI_AUTO_SLEEP_MONITOR_INTERVAL_MS`).
 const SWEEP_INTERVAL: Duration = Duration::from_secs(60);

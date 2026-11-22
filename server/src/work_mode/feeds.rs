@@ -7,11 +7,11 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::session_git_status::{
-    gh_cli_is_available, parse_gh_pull_request_state, run_gh_command, run_git_probe_command,
-    PullRequestState,
+    PullRequestState, gh_cli_is_available, parse_gh_pull_request_state, run_gh_command,
+    run_git_probe_command,
 };
 
 use super::*;

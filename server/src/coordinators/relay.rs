@@ -11,15 +11,15 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::records::SessionKey;
 use crate::agents::session_chat_prompt_setting;
-use crate::connectors::{connector_card_outcome, ConnectorCardAnswer, CONNECTOR_CARD_LABELS};
+use crate::connectors::{CONNECTOR_CARD_LABELS, ConnectorCardAnswer, connector_card_outcome};
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 use crate::session_chat_interactive::{
-    parse_stored_session_chat_prompt, SessionChatInteractivePrompt,
+    SessionChatInteractivePrompt, parse_stored_session_chat_prompt,
 };
 
 /// How long an ended card stays in the coordinator's chat with its outcome.
@@ -792,10 +792,12 @@ mod tests {
         });
         let refused = begin_relayed_answer(&db, &repository, &thread, other.as_object().unwrap())
             .expect("a relayed answer");
-        assert!(refused
-            .unwrap_err()
-            .message
-            .contains("not one of this coordinator's threads"));
+        assert!(
+            refused
+                .unwrap_err()
+                .message
+                .contains("not one of this coordinator's threads")
+        );
     }
 
     #[test]
@@ -807,8 +809,10 @@ mod tests {
         let cards = cards.as_array().unwrap();
         assert_eq!(cards[0]["status"], "open");
         assert_eq!(cards[0]["key"], "b");
-        assert!(cards
-            .iter()
-            .any(|card| card["key"] == "a" && card["status"] == "movedOn"));
+        assert!(
+            cards
+                .iter()
+                .any(|card| card["key"] == "a" && card["status"] == "movedOn")
+        );
     }
 }

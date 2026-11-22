@@ -4,10 +4,10 @@
 //! CDXC:ClaudeCloud 2026-10-23 DECISION:
 //! User: "also we need to think to how to detect working vs attention from the html page itself". While the session's claude.ai page is open in Ghostex's Browser, what it shows drives the row: working (orange), needs you (blue), and a turn that ended (Done). Anything the page reader cannot recognise is `unknown` and changes nothing, so the branch and pull request status (poller.rs) is what remains.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::poller::send_activity;
-use super::record::{normalized_session_url, session_cloud_record, CloudState, RECORD_KEY};
+use super::record::{CloudState, RECORD_KEY, normalized_session_url, session_cloud_record};
 use super::start::{load, open, save};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;

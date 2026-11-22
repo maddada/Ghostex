@@ -5,7 +5,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use rusqlite::{Transaction, TransactionBehavior};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::agents::{
     apply_created_session_identity, create_agent_session_params_for_project, read_agent_settings,
@@ -1226,10 +1226,12 @@ mod tests {
         .expect_err("link persistence must fail");
 
         assert_eq!(error.code, "internalError");
-        assert!(repository
-            .list_sessions(Some(&board.project_id))
-            .expect("sessions")
-            .is_empty());
+        assert!(
+            repository
+                .list_sessions(Some(&board.project_id))
+                .expect("sessions")
+                .is_empty()
+        );
         assert!(read_board_links(&board).is_empty());
     }
 

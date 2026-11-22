@@ -1,4 +1,4 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::args::Flags;
 use crate::ghostex_cli::rpc::{self, CliError, CliResult};
@@ -410,7 +410,7 @@ fn save_gxserver_command(payload: &Value, flags: &Flags) -> CliResult<Value> {
         _ => {
             return Err(CliError::Other(
                 "save-command --type must be terminal or browser.".to_string(),
-            ))
+            ));
         }
     };
     let command_id = string_or_empty(payload.get("commandId")).trim().to_string();

@@ -16,7 +16,7 @@ use crate::domain::DomainStateError;
 
 use super::config::HookPaths;
 use super::probing::{io_error, read_config_text, write_config_file};
-use super::statusline::{register_statusline, unregister_statusline, StatuslineAgent};
+use super::statusline::{StatuslineAgent, register_statusline, unregister_statusline};
 
 /// `cli-config.json` beside the `hooks.json` a Cursor install writes.
 pub(crate) fn cursor_cli_config_path(hooks_path: &Path) -> Option<PathBuf> {

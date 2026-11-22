@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
-use super::{client, store, AccountReading};
+use super::{AccountReading, client, store};
 use crate::accounts::model::UsageWindow;
 use crate::paths::GxserverPaths;
 

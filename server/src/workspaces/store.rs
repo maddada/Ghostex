@@ -2,7 +2,7 @@
 //! the metadata table, normalized on every read and write like the Spaces document.
 
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 

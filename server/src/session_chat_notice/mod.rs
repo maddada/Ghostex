@@ -43,10 +43,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::session_chat_options::{
-    normalize_spaces, session_chat_option_agent, strip_ansi_sgr, SessionChatOptionAgent,
+    SessionChatOptionAgent, normalize_spaces, session_chat_option_agent, strip_ansi_sgr,
 };
 
 mod classify;

@@ -4,11 +4,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::protocol::rpc_success;
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
 use crate::session_git_status::run_git_probe_command;
 use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
@@ -234,7 +234,7 @@ pub(crate) async fn handle_read_session_chat_files_http(
                         code: "internalError",
                         message: "Session chat files could not be listed.".to_string(),
                     },
-                )
+                );
             }
         };
     routed_json(
@@ -348,7 +348,7 @@ pub(crate) fn write_session_chat_image(
 /// other picture (`readSessionChatImage`), on every client. The name comes from the bytes, so
 /// reading the transcript again finds the file it wrote the first time instead of writing another.
 pub(crate) fn tool_picture_path(base64_data: &str) -> Option<std::path::PathBuf> {
-    use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
     use sha2::{Digest, Sha256};
     let base64_data = base64_data.trim();
     if base64_data.is_empty() {
@@ -387,7 +387,7 @@ pub(crate) fn handle_save_session_chat_image_http(
     request_id: String,
     body: &Value,
 ) -> RoutedResponse {
-    use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
@@ -603,7 +603,7 @@ pub(crate) fn handle_save_session_chat_attachment_http(
     request_id: String,
     body: &Value,
 ) -> RoutedResponse {
-    use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
@@ -832,7 +832,7 @@ pub(crate) fn handle_read_session_chat_image_http(
     body: &Value,
     session_folder: impl FnOnce(&serde_json::Map<String, Value>) -> Option<std::path::PathBuf>,
 ) -> RoutedResponse {
-    use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),

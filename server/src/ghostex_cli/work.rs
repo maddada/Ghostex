@@ -9,7 +9,7 @@ use serde_json::json;
 use super::args::parse_args;
 use super::coordinator;
 use super::output::print_json;
-use super::rpc::{call_gxserver_rpc, CliError, CliResult};
+use super::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 const HELP: &str = include_str!("work_help.txt");
 

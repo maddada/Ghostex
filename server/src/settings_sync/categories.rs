@@ -10,7 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ghostex_gx_core::settings_sync::{
-    category_setting_values, hlc_wall_ms, key_category, seed_hlc, setting_of_sync_key, SyncEntry,
+    SyncEntry, category_setting_values, hlc_wall_ms, key_category, seed_hlc, setting_of_sync_key,
 };
 use serde_json::{Map, Value};
 
@@ -19,7 +19,7 @@ use crate::domain::DomainStateError;
 use super::engine::Engine;
 use super::lists_bridge::LIST_CATEGORIES;
 use super::sidebar_tags::is_session_tag_key;
-use super::spaces_bridge::{project_repo_keys, KeyBy};
+use super::spaces_bridge::{KeyBy, project_repo_keys};
 
 /// Every category but Spaces, in Settings > Sync order.
 const VALUE_CATEGORIES: [&str; 8] = [

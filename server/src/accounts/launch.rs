@@ -4,7 +4,7 @@ use crate::{
     domain::{DomainRepository, DomainStateError},
 };
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
 
 /// CDXC:AgentProviders 2026-09-07 DECISION:
@@ -627,7 +627,9 @@ pub(crate) fn validate_session(
         return Err(account_refusal(
             session,
             provider,
-            &format!("{label}, which was removed from Ghostex. Switch the session to another account before resuming it"),
+            &format!(
+                "{label}, which was removed from Ghostex. Switch the session to another account before resuming it"
+            ),
         ));
     };
     validate_identity(&home()?, account).map_err(|_| {
@@ -727,7 +729,9 @@ pub(crate) fn validate_identity(
         Provider::Claude => super::claude_resets::swap_root(home).join("sequence.json"),
     };
     let fail = || {
-        DomainStateError::bad_request("The saved account changed or is unavailable. Refresh Accounts and reconnect it before resuming.")
+        DomainStateError::bad_request(
+            "The saved account changed or is unavailable. Refresh Accounts and reconnect it before resuming.",
+        )
     };
     let raw = std::fs::read(path).map_err(|_| fail())?;
     let data: Value = serde_json::from_slice(&raw).map_err(|_| fail())?;

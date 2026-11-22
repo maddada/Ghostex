@@ -12,7 +12,7 @@
 
 use std::{path::PathBuf, sync::OnceLock, time::Duration};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
     logging::{DiagnosticLogScenario, GxserverLogInput, GxserverLogger, LogLevel},

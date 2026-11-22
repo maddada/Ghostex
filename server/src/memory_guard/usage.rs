@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::processes::{memory_bytes, Member, ProcessRow};
+use super::processes::{Member, ProcessRow, memory_bytes};
 
 /// A session smaller than this is never touched: the memory is going somewhere else.
 const MIN_SESSION_BYTES: u64 = 2 << 30;

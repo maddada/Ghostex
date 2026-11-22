@@ -3,16 +3,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::rpc::{
-    request_gxserver_rpc, resolve_gxserver_server_target, CliError, CliResult,
+    CliError, CliResult, request_gxserver_rpc, resolve_gxserver_server_target,
 };
 use crate::ghostex_cli::visual_page_check;
 use crate::visual_pages::{
-    is_current_layout, page_too_large, prepare_page, PAGE_VERSION_META_TAG,
-    PUBLISH_VISUAL_PAGE_ENDPOINT, VISUAL_PAGE_MAX_BYTES,
+    PAGE_VERSION_META_TAG, PUBLISH_VISUAL_PAGE_ENDPOINT, VISUAL_PAGE_MAX_BYTES, is_current_layout,
+    page_too_large, prepare_page,
 };
 
 /// `ghostex show <file.html> [--title <text>] [--json]`: publishes a self-contained HTML page

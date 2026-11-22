@@ -1,9 +1,9 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::{
     args::parse_args,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
 
 pub fn tailcat_command(args: &[String]) -> CliResult<()> {

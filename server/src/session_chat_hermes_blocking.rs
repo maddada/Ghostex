@@ -286,9 +286,9 @@ pub fn detect_hermes_hook_trust(
     text: &str,
 ) -> Option<crate::session_chat_notice::SessionChatTerminalNotice> {
     use crate::session_chat_notice::{
-        SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
-        SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
-        SESSION_CHAT_NOTICE_PERMISSIONS_WARNING,
+        SESSION_CHAT_NOTICE_PERMISSIONS_WARNING, SessionChatTerminalNotice,
+        SessionChatTerminalNoticeAction, SessionChatTerminalNoticeSeverity,
+        SessionChatTerminalNoticeSource,
     };
     let lines = scan_lines(text);
     if lines.last()?.trim() != "Allow this hook to run? [y/N]:" {

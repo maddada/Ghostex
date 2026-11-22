@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::server::read_runtime_text;
 

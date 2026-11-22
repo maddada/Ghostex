@@ -1,10 +1,10 @@
 //! The box a session runs in, read from `runtimeSettings.agentbox`.
 
-use rusqlite::{params, Connection};
-use serde_json::{json, Value};
+use rusqlite::{Connection, params};
+use serde_json::{Value, json};
 
 use super::location::{
-    is_valid_box_name, provider_label, provider_spec, remote_docker_alias, AGENTBOX_AGENTS,
+    AGENTBOX_AGENTS, is_valid_box_name, provider_label, provider_spec, remote_docker_alias,
 };
 use crate::domain::DomainStateError;
 

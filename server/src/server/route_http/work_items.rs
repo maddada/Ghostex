@@ -3,19 +3,19 @@
 
 use std::time::Duration;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 use crate::protocol::rpc_success;
 use crate::team_sync::{
-    apply_team_ticket_summaries, read_team_flow_steps, refresh_team_ticket_summaries,
-    store_team_flow_steps, team_tickets_by_workspace, TeamFlowSteps,
+    TeamFlowSteps, apply_team_ticket_summaries, read_team_flow_steps,
+    refresh_team_ticket_summaries, store_team_flow_steps, team_tickets_by_workspace,
 };
 use crate::work_mode::{
-    build_work_list, default_team_flow_steps, load_work_projects, read_work_item,
-    refresh_work_feeds, resolve_team_flow, share_work_item_with_sidebar, store_team_flow,
-    team_flow_rule_catalog, validate_team_flow_steps, work_feed_plan, work_feeds_stale,
-    TeamFlowScope, WorkItemRef,
+    TeamFlowScope, WorkItemRef, build_work_list, default_team_flow_steps, load_work_projects,
+    read_work_item, refresh_work_feeds, resolve_team_flow, share_work_item_with_sidebar,
+    store_team_flow, team_flow_rule_catalog, validate_team_flow_steps, work_feed_plan,
+    work_feeds_stale,
 };
 
 use super::super::work_mode_sync::spawn_work_mode_refresh;
@@ -162,9 +162,14 @@ async fn list_work_items(
     let paths = state.paths.clone();
     list["githubProjects"] = tokio::task::spawn_blocking(move || {
         let mut status = crate::work_mode::github_projects_status_json();
-        status["noticeDismissed"] = json!(crate::storage::open_gxserver_database(&paths)
-            .ok()
-            .is_some_and(|db| crate::work_mode::work_notice_dismissed(&db, "githubProjectsScope")));
+        status["noticeDismissed"] = json!(
+            crate::storage::open_gxserver_database(&paths)
+                .ok()
+                .is_some_and(|db| crate::work_mode::work_notice_dismissed(
+                    &db,
+                    "githubProjectsScope"
+                ))
+        );
         status
     })
     .await

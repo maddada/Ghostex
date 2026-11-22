@@ -17,7 +17,7 @@ mod delivery;
 mod feature;
 mod store;
 
-pub(crate) use api::{handle, notify_internal, resume_delivery, GROKBOT_ENDPOINT};
+pub(crate) use api::{GROKBOT_ENDPOINT, handle, notify_internal, resume_delivery};
 pub(crate) use feature::TURNED_OFF;
 
 /// What the user pastes into the Grok Bot bot (`ghostex grokbot instructions`).

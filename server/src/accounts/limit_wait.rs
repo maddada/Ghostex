@@ -7,10 +7,10 @@ use crate::{
     notification_feed::{
         broadcast_notification_feed_changed,
         store::{
-            account_notification_session_id, dismiss_notification, insert_notification_feed_row,
-            mark_notification_read, notification_agent_icon, NewNotificationFeedRow,
             ACCOUNT_NOTIFICATION_PROJECT_ID, NOTIFICATION_FEED_KIND_CUSTOM,
-            NOTIFICATION_FEED_KIND_FAILED,
+            NOTIFICATION_FEED_KIND_FAILED, NewNotificationFeedRow, account_notification_session_id,
+            dismiss_notification, insert_notification_feed_row, mark_notification_read,
+            notification_agent_icon,
         },
     },
     server::AppState,
@@ -18,7 +18,7 @@ use crate::{
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{Mutex, OnceLock},
@@ -529,8 +529,14 @@ pub(crate) fn acknowledge(
     }
     let mut to_update: Vec<Value> = Vec::new();
     let clicked_key = (
-        clicked["projectId"].as_str().unwrap_or_default().to_string(),
-        clicked["sessionId"].as_str().unwrap_or_default().to_string(),
+        clicked["projectId"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
+        clicked["sessionId"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
     );
     for session in repo.list_sessions_excluding_stopped(None)? {
         let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
@@ -570,7 +576,10 @@ pub(crate) fn acknowledge(
         else {
             continue;
         };
-        let Some(wait) = recovery.get_mut("accountWait").and_then(Value::as_object_mut) else {
+        let Some(wait) = recovery
+            .get_mut("accountWait")
+            .and_then(Value::as_object_mut)
+        else {
             continue;
         };
         if wait.get("acknowledgedAt").and_then(Value::as_str).is_some() {
@@ -582,7 +591,8 @@ pub(crate) fn acknowledge(
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(key(pid, sid), wait_value);
-        let updated = endpoint::update_session_members(repo, &session, &runtime, &["accountRecovery"])?;
+        let updated =
+            endpoint::update_session_members(repo, &session, &runtime, &["accountRecovery"])?;
         endpoint::publish(state, repo, &updated)?;
         crate::session_chat_options::session_chat_terminal_notice_publisher(state, pid, sid)();
     }

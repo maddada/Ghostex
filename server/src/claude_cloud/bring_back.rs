@@ -4,9 +4,9 @@
 //! CDXC:ClaudeCloud 2026-10-23 DECISION:
 //! User picked "into a new worktree; the new local row takes over and the cloud row parks". A new worktree never touches the project folder (teleport needs a clean checkout and checks out the session's branch). The local session runs on the Claude account the cloud session started on, because teleport only finds sessions of the same claude.ai account.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::record::{session_cloud_record, CloudState};
+use super::record::{CloudState, session_cloud_record};
 use super::start::{load, open, save};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;

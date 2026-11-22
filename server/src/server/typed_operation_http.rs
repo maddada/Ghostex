@@ -110,17 +110,21 @@ pub(crate) fn typed_operation_scope_rejection_details(
     details.insert("errorType".to_string(), json!("GxserverProjectPathError"));
     details.insert(
         "hasProjectId".to_string(),
-        json!(params
-            .get("projectId")
-            .and_then(Value::as_str)
-            .is_some_and(|value| !value.trim().is_empty())),
+        json!(
+            params
+                .get("projectId")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty())
+        ),
     );
     details.insert(
         "hasProjectPath".to_string(),
-        json!(params
-            .get("projectPath")
-            .and_then(Value::as_str)
-            .is_some_and(|value| !value.trim().is_empty())),
+        json!(
+            params
+                .get("projectPath")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty())
+        ),
     );
     Value::Object(details)
 }

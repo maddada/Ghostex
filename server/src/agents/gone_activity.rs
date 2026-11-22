@@ -3,7 +3,7 @@
 //! absence the caller saw still stands (no agent was started since).
 
 use rusqlite::{Transaction, TransactionBehavior};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::*;
 use crate::domain::{DomainRepository, DomainStateError};

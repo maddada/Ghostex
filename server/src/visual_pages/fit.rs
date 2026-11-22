@@ -241,7 +241,7 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
 
 #[cfg(test)]
 mod tests {
-    use super::super::builtin::{current_block, with_current_block, BUILTIN_END, BUILTIN_START};
+    use super::super::builtin::{BUILTIN_END, BUILTIN_START, current_block, with_current_block};
     use super::super::kit::KIT_SCRIPT;
     use super::super::prepare::PAGE_CONTENT_SECURITY_POLICY;
     use super::*;

@@ -10,7 +10,7 @@ pub(crate) mod runtime;
 pub(crate) mod store;
 
 pub(crate) use registration::{
-    handle_register_live_activity_http, LIVE_ACTIVITY_PUSH_CAPABILITY,
-    REGISTER_LIVE_ACTIVITY_ENDPOINT,
+    LIVE_ACTIVITY_PUSH_CAPABILITY, REGISTER_LIVE_ACTIVITY_ENDPOINT,
+    handle_register_live_activity_http,
 };
 pub(crate) use runtime::LiveActivityRuntime;

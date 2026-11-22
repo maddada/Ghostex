@@ -4,10 +4,10 @@ use super::{
 };
 use crate::ghostex_cli::{
     args::Flags,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
     selector,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
@@ -230,20 +230,35 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         if read_chat(&read_payload, DELIVERY_ROWS_BEFORE, &flags)
             .is_some_and(|chat| chat_shows(&chat, &body, &TranscriptRows::Known(HashSet::new())))
         {
-            ("delivered", "This request id was already sent and the recipient's transcript shows the message; Ghostex did not type it again.")
+            (
+                "delivered",
+                "This request id was already sent and the recipient's transcript shows the message; Ghostex did not type it again.",
+            )
         } else {
-            ("accepted", "This request id was already sent; Ghostex did not type it again. The recipient's transcript does not show it yet. Read its chat before sending a new message.")
+            (
+                "accepted",
+                "This request id was already sent; Ghostex did not type it again. The recipient's transcript does not show it yet. Read its chat before sending a new message.",
+            )
         }
     } else if result["alreadyHeld"] == json!(true) {
-        ("pending", "The same message is already waiting for the recipient to start, so Ghostex did not queue it again; it is typed once the recipient's input box appears.")
+        (
+            "pending",
+            "The same message is already waiting for the recipient to start, so Ghostex did not queue it again; it is typed once the recipient's input box appears.",
+        )
     } else if let Some(note) = compacted.as_deref() {
         ("pending", note)
     } else if transcript_shows(&read_payload, &body, &rows_before, &flags) {
         ("delivered", "The recipient's transcript shows the message.")
     } else if !receipt["queuedPromptId"].is_null() {
-        ("pending", "The recipient is still starting; Ghostex types the message as soon as its input box appears. Read its chat before sending it again.")
+        (
+            "pending",
+            "The recipient is still starting; Ghostex types the message as soon as its input box appears. Read its chat before sending it again.",
+        )
     } else {
-        ("accepted", "Ghostex typed and submitted the message, but the recipient's transcript does not show it yet; a busy agent takes it at its next input boundary. Read its chat before sending it again.")
+        (
+            "accepted",
+            "Ghostex typed and submitted the message, but the recipient's transcript does not show it yet; a busy agent takes it at its next input boundary. Read its chat before sending it again.",
+        )
     };
     if let Some(sender) = &sender {
         if status == "delivered" {

@@ -6,14 +6,14 @@ use std::{
 };
 
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::actions::send_gxserver_cli_action;
-use crate::ghostex_cli::args::{parse_args, Flags};
+use crate::ghostex_cli::args::{Flags, parse_args};
 use crate::ghostex_cli::output::print_json;
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::ghostex_cli::settings::{
-    read_settings_file, settings_catalog_json, SETTINGS_UPDATE_SOURCE,
+    SETTINGS_UPDATE_SOURCE, read_settings_file, settings_catalog_json,
 };
 use crate::ghostex_cli::usage;
 
@@ -538,8 +538,12 @@ fn list_command(args: &[String]) -> CliResult<()> {
     if !is_mac() {
         println!("On Windows and Linux, cmd in a chord means Ctrl.");
     }
-    println!("Change one with `ghostex settings hotkeys set <id> <keys>`; `none` unassigns it and `ghostex settings hotkeys reset <id>` restores its default.");
-    println!("These apply outside a terminal; add --terminal for the keys that apply while a terminal has the keyboard.");
+    println!(
+        "Change one with `ghostex settings hotkeys set <id> <keys>`; `none` unassigns it and `ghostex settings hotkeys reset <id>` restores its default."
+    );
+    println!(
+        "These apply outside a terminal; add --terminal for the keys that apply while a terminal has the keyboard."
+    );
     Ok(())
 }
 
@@ -604,7 +608,9 @@ fn list_terminal_command(parsed: &crate::ghostex_cli::args::ParsedArgs) -> CliRe
     if !is_mac() {
         println!("On Windows and Linux, cmd in a chord means Ctrl.");
     }
-    println!("These apply while a terminal has the keyboard. Change one with `ghostex settings hotkeys set <id> <keys> --terminal`; `reset <id> --terminal` makes it follow the normal key again.");
+    println!(
+        "These apply while a terminal has the keyboard. Change one with `ghostex settings hotkeys set <id> <keys> --terminal`; `reset <id> --terminal` makes it follow the normal key again."
+    );
     Ok(())
 }
 

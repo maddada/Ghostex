@@ -16,11 +16,11 @@ use std::sync::{Mutex, OnceLock};
 use axum::http::StatusCode;
 use ghostex_gx_protocol::{ChatViewField, ChatViewPick};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::domain::{read_domain_rpc_params, DomainStateError};
+use crate::domain::{DomainStateError, read_domain_rpc_params};
 use crate::protocol::rpc_success;
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
 
 const STORE_FILE: &str = "session-chat-views.json";
 /// The most chats kept; past it the chat picked longest ago is dropped.

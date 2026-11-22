@@ -1,11 +1,11 @@
 use std::{
     collections::VecDeque,
-    sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, PoisonError},
+    sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, mpsc},
     thread::JoinHandle,
     time::Duration,
 };
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
     domain::DomainRepository,
@@ -19,10 +19,10 @@ use super::{
     expo::{ExpoClient, Failure, ReceiptState, ReceiptsOutcome, SendOutcome},
     limiter::prune_budgets,
     message::{
-        alert_message, silent_message, AgentStartEvent, AlertEvent, AlertKind, ALERT_TTL_MS,
-        SILENT_TTL_MS,
+        ALERT_TTL_MS, AgentStartEvent, AlertEvent, AlertKind, SILENT_TTL_MS, alert_message,
+        silent_message,
     },
-    store::{token_fingerprint, AlertChoice, PendingReceipt, PushRegistrationStore, PushStoreData},
+    store::{AlertChoice, PendingReceipt, PushRegistrationStore, PushStoreData, token_fingerprint},
 };
 
 /// Alert jobs (one per event and phone) waiting to be sent, retried or fanned out.

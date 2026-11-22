@@ -13,26 +13,26 @@ use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::Value;
 
-use super::{schedule_presentation_session_delta, AppState};
+use super::{AppState, schedule_presentation_session_delta};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::session_git_status::{
-    cached_session_git_status, effective_session_git_cwd, gh_cli_is_available,
-    PullRequestDisposition,
+    PullRequestDisposition, cached_session_git_status, effective_session_git_cwd,
+    gh_cli_is_available,
 };
 use crate::session_links::{
+    MENTIONED_BY_USER, SessionLinkKind, SessionLinkRef, SessionLinkSource, StoredSessionLink,
     forget_session_link_mentions_except, needs_full_scan, of_linear_team, parse_github_url,
     presentation_session_links, remember_session_link_mentions, scan_transcript,
     session_link_entries, session_links_read_snapshot, stored_session_links, write_session_links,
-    SessionLinkKind, SessionLinkRef, SessionLinkSource, StoredSessionLink, MENTIONED_BY_USER,
 };
 use crate::storage::open_gxserver_database;
 use crate::work_mode::{
-    cached_linear_team_keys, cached_work_github_issue_url, cached_work_pull_request,
+    GithubRead, cached_linear_team_keys, cached_work_github_issue_url, cached_work_pull_request,
     cached_work_repo, cached_work_repos, github_link_read_due, github_read_due, github_read_known,
     github_read_max_age, linear_api_key, linear_key_fingerprint, refresh_github_reads,
     refresh_linear_issues, refresh_linear_team_keys, refresh_work_repo,
-    remember_project_linear_key, seed_github_read, session_is_idle, work_branch, GithubRead,
+    remember_project_linear_key, seed_github_read, session_is_idle, work_branch,
 };
 
 /// `gh` calls one pass may make (work mode's pass has its own).

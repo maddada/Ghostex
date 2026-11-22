@@ -5,16 +5,16 @@
 //! A retry restarts the chat on its own conversation (the sleep-and-wake `ghostex agents reload` runs, session_chat_agent_restart.rs) and tells it to carry on; a routine run that never opened a chat is run again instead. It is refused after two retries and re-briefs of one problem (then Chief of Staff tells the user), while the chat is working (nothing to restart), and once the chat finished a turn after the report (it moved on; read it first), so a retry never cuts off work that recovered on its own.
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::store::{
-    insert_problem, list_problems, live_problem_for_chat, new_problem, problem_summary,
-    read_problem, save_problem, Problem, MAX_ATTEMPTS, NEEDS_YOU,
+    MAX_ATTEMPTS, NEEDS_YOU, Problem, insert_problem, list_problems, live_problem_for_chat,
+    new_problem, problem_summary, read_problem, save_problem,
 };
 use crate::coordinators::now_iso;
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::gbots::record::read_bot;
-use crate::server::{queue_session_chat_prompt, AppState};
+use crate::server::{AppState, queue_session_chat_prompt};
 use crate::storage::open_gxserver_database;
 
 /// A flag's text is kept to this many characters.
@@ -261,7 +261,9 @@ fn flag(
     super::report::send_report(state, db, &mut problem);
     let told = match problem.reported_to.as_deref() {
         Some("user") => "the user was notified (there is no Ghostex AI to tell)",
-        Some("muted") => "this chat raised too many flags this hour, so nobody was told; wait, or say it in your reply",
+        Some("muted") => {
+            "this chat raised too many flags this hour, so nobody was told; wait, or say it in your reply"
+        }
         Some(_) => "Ghostex AI was told",
         None => "Ghostex AI will be told in a moment",
     };
@@ -364,7 +366,9 @@ pub(crate) async fn retry(
                     &state,
                     &project,
                     &session,
-                    &format!("Ghostex restarted this chat for Ghostex AI {what}, on the same conversation. Check where you were and carry on."),
+                    &format!(
+                        "Ghostex restarted this chat for Ghostex AI {what}, on the same conversation. Check where you were and carry on."
+                    ),
                     true,
                 );
             }
@@ -408,7 +412,8 @@ fn plan_retry(
     let plan = match live_chat(&repository, &problem)? {
         Some(session) => {
             let now_iso = crate::presentation::now_iso();
-            let working = crate::presentation::presentation_activity(&session, &now_iso) == "working"
+            let working = crate::presentation::presentation_activity(&session, &now_iso)
+                == "working"
                 && crate::presentation::session_attributes::effective_lifecycle_state(&session)
                     == "running"
                 && !crate::session_self_heal::daemon_lost(
@@ -442,7 +447,7 @@ fn plan_retry(
             None => {
                 return Err(conflict(format!(
                     "{id} has no chat or routine to retry. Close it with `ghostex gbots problem close {id}`."
-                )))
+                )));
             }
         },
     };

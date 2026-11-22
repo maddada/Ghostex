@@ -124,7 +124,7 @@ fn current() -> Option<BootMark> {
 fn current() -> Option<BootMark> {
     use windows_sys::Win32::{
         Foundation::CloseHandle,
-        Security::{GetTokenInformation, TokenStatistics, TOKEN_QUERY, TOKEN_STATISTICS},
+        Security::{GetTokenInformation, TOKEN_QUERY, TOKEN_STATISTICS, TokenStatistics},
         System::{
             Threading::{GetCurrentProcess, OpenProcessToken},
             WindowsProgramming::QueryInterruptTime,

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::delayed_sends::{
     insert_delayed_send_presentation_payload, insert_delayed_send_session_projection,

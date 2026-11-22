@@ -1,7 +1,7 @@
 //! Which workspace a project belongs to (`launchSettings.workspaceId`) and moving a project between
 //! workspaces.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::{DomainRepository, DomainStateError};
 
@@ -383,12 +383,12 @@ pub(crate) fn resolve_project_reference(
         .collect();
     match named.as_slice() {
         [only] => {
-            return id_of(only).ok_or_else(|| DomainStateError::bad_request("No project id."))
+            return id_of(only).ok_or_else(|| DomainStateError::bad_request("No project id."));
         }
         [_, _, ..] => {
             return Err(DomainStateError::bad_request(format!(
                 "Several projects are named \"{reference}\"; pass its id or folder."
-            )))
+            )));
         }
         [] => {}
     }

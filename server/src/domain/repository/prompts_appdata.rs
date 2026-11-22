@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use rusqlite::{params, Connection, OptionalExtension};
-use serde_json::{json, Map, Value};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Map, Value, json};
 
 use crate::domain::repository::project::MAX_ID_GENERATION_ATTEMPTS;
 use crate::domain::{
-    now_iso, optional_trimmed_string_param, required_string_param, sql_error, DomainRepository,
-    DomainResult, DomainStateError,
+    DomainRepository, DomainResult, DomainStateError, now_iso, optional_trimmed_string_param,
+    required_string_param, sql_error,
 };
 use crate::presentation::read_runtime_text;
 
@@ -344,10 +344,12 @@ impl<'a> DomainRepository<'a> {
                 if let Some(object) = prompt.as_object_mut() {
                     object.insert(
                         "tagIds".to_string(),
-                        json!(tag_ids_by_prompt
-                            .get(&prompt_id)
-                            .cloned()
-                            .unwrap_or_default()),
+                        json!(
+                            tag_ids_by_prompt
+                                .get(&prompt_id)
+                                .cloned()
+                                .unwrap_or_default()
+                        ),
                     );
                 }
                 prompt

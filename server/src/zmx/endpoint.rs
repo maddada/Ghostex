@@ -1,11 +1,11 @@
 use std::sync::OnceLock;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{
     agents::apply_created_session_identity,
     constants::GXSERVER_PROTOCOL_VERSION,
-    domain::{read_project_id, DomainRepository, DomainStateError},
+    domain::{DomainRepository, DomainStateError, read_project_id},
     logging::{DiagnosticLogScenario, GxserverLogInput, GxserverLogger, LogLevel},
     paths::get_gxserver_paths,
     toolchain::require_bundled_zmx,
@@ -138,7 +138,7 @@ pub(crate) fn create_started_workspace_terminal(
         None => {
             return Err(
                 DomainStateError::corrupt_state("Created terminal missing projectId.").into(),
-            )
+            );
         }
     };
     let created_session_id = match string_field(&created, "sessionId") {
@@ -146,7 +146,7 @@ pub(crate) fn create_started_workspace_terminal(
         None => {
             return Err(
                 DomainStateError::corrupt_state("Created terminal missing sessionId.").into(),
-            )
+            );
         }
     };
     let session = match apply_created_session_identity(repository, &created, &create_params) {
@@ -479,7 +479,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                         "Invalid session transition action: {}.",
                         js_string(params.get("action"))
                     ))
-                    .into())
+                    .into());
                 }
             };
             if action == "sleep" {
@@ -717,7 +717,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
             return Err(DomainStateError::not_found(format!(
                 "{endpoint_path} is not a gxserver zmx lifecycle endpoint."
             ))
-            .into())
+            .into());
         }
     };
     let presentation_session = session_target_from_lifecycle_result(&result);
@@ -1276,8 +1276,8 @@ separate delayed Enter) between bursts.
 /// The bundled provider receives these bytes on stdin; the user's existing terminal shell owns their interpretation.
 pub(crate) fn session_chat_zmx_write(zmx_name: &str, payload: &str) -> Result<i32, String> {
     use super::input_chunks::{
-        unfinished_paste_end, zmx_input_chunks, ZMX_INPUT_DRAIN_WAIT, ZMX_INPUT_STALL_LIMIT,
-        ZMX_SEND_BUFFER_FULL_MESSAGE,
+        ZMX_INPUT_DRAIN_WAIT, ZMX_INPUT_STALL_LIMIT, ZMX_SEND_BUFFER_FULL_MESSAGE,
+        unfinished_paste_end, zmx_input_chunks,
     };
     let zmx = require_bundled_zmx()?;
     let write = |chunk: &str| {
@@ -1358,9 +1358,11 @@ mod staged_message_tests {
             "\u{1b}[200~You are continuing from \"A\" in B.\r\r[A Handoff](/tmp/a.md)\r\r\u{1b}[201~"
         );
         // Nothing outside the paste frame is a line break, so nothing submits.
-        assert!(written
-            .iter()
-            .all(|write| !matches!(write.as_str(), "\r" | "\n")));
+        assert!(
+            written
+                .iter()
+                .all(|write| !matches!(write.as_str(), "\r" | "\n"))
+        );
     }
 
     #[test]

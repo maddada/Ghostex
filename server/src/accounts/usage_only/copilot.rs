@@ -1,7 +1,7 @@
 //! GitHub Copilot: GitHub's device sign-in (a code to type on github.com), and the account's
 //! Copilot quota for the month.
 
-use super::http::{self, agent, answer, Failure};
+use super::http::{self, Failure, agent, answer};
 use super::signin::{Progress, SignedIn};
 use super::store::{Credential, UsageAccount};
 use super::{Detail, Reading};
@@ -57,12 +57,12 @@ pub(crate) fn sign_in(progress: &Progress) -> Result<SignedIn, Failure> {
             Some("authorization_pending") => {}
             Some("slow_down") => interval += 5,
             Some("expired_token") => {
-                return Err(Failure::Unavailable("The code expired. Try again.".into()))
+                return Err(Failure::Unavailable("The code expired. Try again.".into()));
             }
             Some("access_denied") => {
                 return Err(Failure::Unavailable(
                     "The sign-in was declined on GitHub.".into(),
-                ))
+                ));
             }
             _ => return Err(reply.unavailable("GitHub sign-in")),
         }

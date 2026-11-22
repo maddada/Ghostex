@@ -4,8 +4,8 @@
 use ghostex_gx_cloud::provider::ProviderMachine;
 use ghostex_gx_cloud::{boat, instabox};
 use ghostex_gx_protocol::cloud_box::{
-    error_codes, setting_keys, CloudBoxState, CloudProviderId, CloudSpend, CloudSpendLine,
-    CloudSpendScope, CloudSpendState,
+    CloudBoxState, CloudProviderId, CloudSpend, CloudSpendLine, CloudSpendScope, CloudSpendState,
+    error_codes, setting_keys,
 };
 use serde_json::Value;
 

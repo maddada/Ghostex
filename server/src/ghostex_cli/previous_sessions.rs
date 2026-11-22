@@ -12,11 +12,11 @@
 //! SEE-ALSO: apps/mobile/app/src/sessions/sessionSearch.ts (the phone's caller and matching rules),
 //! server/src/previous_session_restore.rs.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::ghostex_cli::args::{parse_args, Flags};
+use crate::ghostex_cli::args::{Flags, parse_args};
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 /// The page size the desktop's Sessions search asks for (`SESSIONS_PAGE_SIZE` in gx-core).
 const DEFAULT_LIMIT: u64 = 80;

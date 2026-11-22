@@ -7,8 +7,8 @@
 //! CDXC:SessionLinks 2026-10-24 DECISION:
 //! User: "when a link is gone i see that i can't bring it back why not?", "i mean when i hit x button twice on it". A removed link keeps what it was (`removedItems`: where it came from), the lists show it under a collapsed "Removed (N)" group with Restore, and right after a removal its row reads "Removed · Undo" for a few seconds. Restoring takes it off `removed`, puts it back as it was, and from then on it can join by itself again.
 
-use rusqlite::{params, Connection};
-use serde_json::{json, Map, Value};
+use rusqlite::{Connection, params};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 

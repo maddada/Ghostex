@@ -15,9 +15,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 use crate::server::AppState;
@@ -874,7 +874,7 @@ pub(crate) async fn handle_first_message_http(
     let params = match crate::domain::read_domain_rpc_params(body) {
         Ok(params) => params,
         Err(error) => {
-            return crate::server::domain_error_response(endpoint_path, request_id, error)
+            return crate::server::domain_error_response(endpoint_path, request_id, error);
         }
     };
     let text = |key: &str| {

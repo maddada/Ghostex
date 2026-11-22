@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::{DomainRepository, DomainStateError, SessionLifecycleFields};
 use crate::session_lifecycle::is_snoozed_by_clock;

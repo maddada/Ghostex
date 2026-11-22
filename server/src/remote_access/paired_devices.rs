@@ -1,18 +1,18 @@
 use anyhow::Result;
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::auth::{DeviceApiTokens, DeviceTokenEntry};
 use crate::paths::GxserverPaths;
 use crate::security::{Principal, SecurityEvent, SecurityState};
 use crate::tailcat::{
-    change_tailcat_client_keys, normalize_tailcat_client_keys, reconcile_tailcat_runtime,
-    with_tailcat_state, TailcatRuntime,
+    TailcatRuntime, change_tailcat_client_keys, normalize_tailcat_client_keys,
+    reconcile_tailcat_runtime, with_tailcat_state,
 };
 
-use super::authorized_keys::{remove_authorized_key, AdministratorApprovalDeclined};
+use super::authorized_keys::{AdministratorApprovalDeclined, remove_authorized_key};
 use super::repository::{PairedDeviceStatus, RemotePairedDeviceRecord, RemotePairingRepository};
-use crate::push::{remove_device_push_registrations, PushRegistrationStore};
+use crate::push::{PushRegistrationStore, remove_device_push_registrations};
 
 /// Wire shape of `GxserverPairedDevice` in `packages/shared/gxserver-protocol-health.ts`.
 /// `status` is `paired`, or `legacy` for a phone paired before 11.0.1 that must pair again (it

@@ -1,11 +1,11 @@
 //! `ghostex gbots routine …`: a GBot's routines (server/src/gbots/routines.rs).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::{
     args::Flags,
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
 
 /// The routine verbs' lines in `ghostex gbots --help`.
@@ -175,8 +175,8 @@ pub(crate) fn run_routine(rest: &[String], flags: &Flags) -> CliResult<()> {
         }
         other => {
             return Err(CliError::Other(format!(
-            "Unknown routine verb {other}: use list, add, edit, pause, resume, remove or run-now."
-        )))
+                "Unknown routine verb {other}: use list, add, edit, pause, resume, remove or run-now."
+            )));
         }
     };
     if flags.contains("json") {

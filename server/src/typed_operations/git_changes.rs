@@ -10,11 +10,11 @@
 //! against HEAD. Untracked files are part of both, as new files, because they are what an agent
 //! most often adds. Renames are not detected (`-M`): a renamed file is a deletion and an addition,
 //! so every hunk the view shows can be reverted on its own path.
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::values::{
-    normalize_relative_file_path, run_process_command, CommandOutput, ProcessCommand,
-    TypedOperationContext, TypedOperationError,
+    CommandOutput, ProcessCommand, TypedOperationContext, TypedOperationError,
+    normalize_relative_file_path, run_process_command,
 };
 use crate::session_git_status::{resolve_default_branch, run_git_probe_command};
 

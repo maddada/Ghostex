@@ -1,12 +1,12 @@
 //! `ghostex gbots department …`: GBots' departments (server/src/gbots/departments.rs), and the
 //! `--department` / `--lead` flags of `ghostex gbots create` and `edit`.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ghostex_cli::{
     args::{FlagValue, Flags},
     output::print_json,
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
 };
 
 /// The department verbs' lines in `ghostex gbots --help`.
@@ -151,7 +151,7 @@ pub(crate) fn run_department(rest: &[String], flags: &Flags) -> CliResult<()> {
         other => {
             return Err(CliError::Other(format!(
                 "unknown department command `{other}`: use list, show, create, edit, set-lead or remove.\n\n{DEPARTMENT_HELP}"
-            )))
+            )));
         }
     };
     if flags.contains("json") {

@@ -12,13 +12,13 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::super::record::read_bot;
 use super::super::routine_runs::SettledRoutineRun;
 use super::text::{chief_brief_message, chief_heads_up_message};
 use crate::domain::DomainRepository;
-use crate::server::{queue_session_chat_prompt, AppState};
+use crate::server::{AppState, queue_session_chat_prompt};
 
 /// How long after a hand-off Chief of Staff's reply still counts as the brief.
 const REPLY_WINDOW: Duration = Duration::from_secs(3 * 60 * 60);

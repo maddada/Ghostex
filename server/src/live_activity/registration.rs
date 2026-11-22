@@ -20,21 +20,21 @@
 use std::collections::HashSet;
 
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{
     domain::read_domain_rpc_params,
     paths::GxserverPaths,
     protocol::{rpc_error, rpc_success},
-    push::{is_printable_id, MACHINE_ID_MAX},
+    push::{MACHINE_ID_MAX, is_printable_id},
     remote_access::RemotePairingRepository,
-    server::{routed_json, AppState, RoutedResponse},
+    server::{AppState, RoutedResponse, routed_json},
     storage::open_gxserver_database,
 };
 
 use super::store::{
-    is_live_activity_token, LiveActivityEnvironment, LiveActivityPhone, LiveActivityStore,
-    PhoneComputer, MAX_PHONE_COMPUTERS,
+    LiveActivityEnvironment, LiveActivityPhone, LiveActivityStore, MAX_PHONE_COMPUTERS,
+    PhoneComputer, is_live_activity_token,
 };
 
 pub(crate) const REGISTER_LIVE_ACTIVITY_ENDPOINT: &str = "/api/registerLiveActivity";
@@ -265,7 +265,7 @@ fn parse(body: &Value) -> Result<Request, RegistrationError> {
                 Some(_) => {
                     return Err(RegistrationError::bad_request(
                         "environment must be production or sandbox.",
-                    ))
+                    ));
                 }
             };
             let session_names = match params.get("sessionNames") {

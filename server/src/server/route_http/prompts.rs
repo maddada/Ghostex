@@ -173,7 +173,7 @@ pub(super) async fn route_prompts_http(
                 body_json,
                 token_extension_id,
                 caller,
-            })
+            });
         }
     })
 }

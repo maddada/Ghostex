@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::ghostex_cli::args::{parse_args, Flags};
+use crate::ghostex_cli::args::{Flags, parse_args};
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::ghostex_cli::{launchers, picker, selector, sessions};
 
@@ -144,11 +144,7 @@ fn build_zmx_attach_or_resume_command_with(
     };
     let cwd = {
         let trimmed = cwd_raw.trim();
-        if trimmed.is_empty() {
-            "."
-        } else {
-            trimmed
-        }
+        if trimmed.is_empty() { "." } else { trimmed }
     };
     let keepalive_shell_assignment = if darwin {
         "zmx_keepalive_shell=${SHELL:-/bin/zsh}".to_string()

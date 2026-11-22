@@ -7,7 +7,7 @@ use std::{
 };
 
 #[cfg(unix)]
-use super::ipc_frame::{parse_zmx_ipc_header, zmx_ipc_header, ZMX_IPC_HEADER_BYTES};
+use super::ipc_frame::{ZMX_IPC_HEADER_BYTES, parse_zmx_ipc_header, zmx_ipc_header};
 
 #[cfg(not(unix))]
 use crate::toolchain::require_bundled_zmx;

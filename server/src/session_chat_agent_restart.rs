@@ -7,13 +7,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::session_chat_notice::{
-    classify_session_chat_terminal_notice, session_chat_screen_ends_with_shell_prompt,
     SESSION_CHAT_NOTICE_ACTION_SIGN_IN, SESSION_CHAT_NOTICE_AGENT_EXITED,
+    classify_session_chat_terminal_notice, session_chat_screen_ends_with_shell_prompt,
 };
 use crate::session_chat_send::resolve_session_chat_send_target;
 use crate::storage::open_gxserver_database;
@@ -39,52 +39,52 @@ pub(crate) async fn restart(
     match params.get("actionId").and_then(Value::as_str) {
         Some(SESSION_CHAT_NOTICE_ACTION_SIGN_IN) => return sign_in(state, params).await,
         Some(crate::zmx::LOST_FOLDER_ACCESS_ACTION_RESTART) => {
-            return crate::zmx::restart_after_lost_folder_access(state, params).await
+            return crate::zmx::restart_after_lost_folder_access(state, params).await;
         }
         Some(crate::memory_guard::ACTION_RESUME) => {
-            return crate::server::resume_after_memory_stop(state, params).await
+            return crate::server::resume_after_memory_stop(state, params).await;
         }
         Some(crate::accounts::reset_used::ACTION_RESET_USED) => {
-            return crate::accounts::reset_used::answer(state, params).await
+            return crate::accounts::reset_used::answer(state, params).await;
         }
         Some(crate::accounts::quota_wait::ACTION_WAIT_FOR_RESET) => {
-            return crate::accounts::quota_wait::answer_wait_for_reset(state, params).await
+            return crate::accounts::quota_wait::answer_wait_for_reset(state, params).await;
         }
         Some(crate::accounts::quota_wait::ACTION_DISMISS_USAGE_LIMIT) => {
-            return crate::accounts::quota_wait::answer_dismiss(state, params).await
+            return crate::accounts::quota_wait::answer_dismiss(state, params).await;
         }
         Some(crate::coordinators::CARRY_ON_STOPPED_THREADS) => {
-            return crate::coordinators::answer_stopped_threads(state, params, true).await
+            return crate::coordinators::answer_stopped_threads(state, params, true).await;
         }
         Some(crate::coordinators::DISMISS_STOPPED_THREADS) => {
-            return crate::coordinators::answer_stopped_threads(state, params, false).await
+            return crate::coordinators::answer_stopped_threads(state, params, false).await;
         }
         Some(crate::session_chat_notice::SESSION_CHAT_NOTICE_ACTION_RECONNECT) => {
-            return crate::session_chat_account_sign_in::reconnect(state, params).await
+            return crate::session_chat_account_sign_in::reconnect(state, params).await;
         }
         Some(crate::agent_cli::opencode::ACTION_INSTALL) => {
-            return install_opencode2(state, params).await
+            return install_opencode2(state, params).await;
         }
         Some(crate::session_chat_notice::SESSION_CHAT_NOTICE_ACTION_INSTALL_AGENT) => {
-            return install_agent_cli(state, params).await
+            return install_agent_cli(state, params).await;
         }
         Some(crate::agent_cli::opencode::ACTION_RESTART) => {
-            return restart_on_opencode2(state, params).await
+            return restart_on_opencode2(state, params).await;
         }
         Some(crate::session_chat_conversation_unreported::ACTION_INSTALL_AND_RESTART) => {
-            return crate::session_chat_conversation_unreported::answer(state, params, true).await
+            return crate::session_chat_conversation_unreported::answer(state, params, true).await;
         }
         Some(crate::session_chat_conversation_unreported::ACTION_RESTART) => {
-            return crate::session_chat_conversation_unreported::answer(state, params, false).await
+            return crate::session_chat_conversation_unreported::answer(state, params, false).await;
         }
         Some(crate::hookless_activity::ACTION_UPDATE_CODEX) => {
-            return crate::hookless_activity::answer_codex_update(state, params).await
+            return crate::hookless_activity::answer_codex_update(state, params).await;
         }
         Some(crate::hookless_activity::ACTION_TURN_ON_HOOK) => {
-            return crate::hookless_activity::answer_ask_notice(state, params).await
+            return crate::hookless_activity::answer_ask_notice(state, params).await;
         }
         Some(crate::hookless_activity::ACTION_RESTART_FOR_HOOK) => {
-            return crate::hookless_activity::answer_fallback_notice(state, params).await
+            return crate::hookless_activity::answer_fallback_notice(state, params).await;
         }
         _ => {}
     }

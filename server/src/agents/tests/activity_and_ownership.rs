@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::*;
 use crate::{domain::DomainRepository, session_status::compute_activity_update};
@@ -155,10 +155,12 @@ fn codex_stop_hook_enters_attention_from_working() {
         .and_then(Value::as_object)
         .expect("activity");
     assert_eq!(activity.get("activity"), Some(&json!("attention")));
-    assert!(activity
-        .get("attentionEventId")
-        .and_then(Value::as_str)
-        .is_some());
+    assert!(
+        activity
+            .get("attentionEventId")
+            .and_then(Value::as_str)
+            .is_some()
+    );
 }
 
 /*
@@ -238,25 +240,29 @@ fn transcript_successor_identity_write_is_compare_and_set() {
         .to_string();
 
     // A hook that landed after the follower read the identity must win.
-    assert!(!apply_transcript_successor_session_identity(
-        &repository,
-        &project_id,
-        &session_id,
-        Some("some-other-session"),
-        "successor-session",
-        "/Users/test/.claude/projects/demo/successor-session.jsonl",
-    )
-    .expect("stale expectation refused"));
+    assert!(
+        !apply_transcript_successor_session_identity(
+            &repository,
+            &project_id,
+            &session_id,
+            Some("some-other-session"),
+            "successor-session",
+            "/Users/test/.claude/projects/demo/successor-session.jsonl",
+        )
+        .expect("stale expectation refused")
+    );
 
-    assert!(apply_transcript_successor_session_identity(
-        &repository,
-        &project_id,
-        &session_id,
-        Some("stale-session"),
-        "successor-session",
-        "/Users/test/.claude/projects/demo/successor-session.jsonl",
-    )
-    .expect("successor identity applied"));
+    assert!(
+        apply_transcript_successor_session_identity(
+            &repository,
+            &project_id,
+            &session_id,
+            Some("stale-session"),
+            "successor-session",
+            "/Users/test/.claude/projects/demo/successor-session.jsonl",
+        )
+        .expect("successor identity applied")
+    );
 
     let stored = repository
         .get_session(&project_id, &session_id)
@@ -276,13 +282,15 @@ fn transcript_successor_identity_write_is_compare_and_set() {
     assert_eq!(stored.get("agentId"), Some(&json!("claude")));
 
     // Re-running the same adoption is a no-op, not a churn write.
-    assert!(!apply_transcript_successor_session_identity(
-        &repository,
-        &project_id,
-        &session_id,
-        Some("successor-session"),
-        "successor-session",
-        "/Users/test/.claude/projects/demo/successor-session.jsonl",
-    )
-    .expect("idempotent adoption"));
+    assert!(
+        !apply_transcript_successor_session_identity(
+            &repository,
+            &project_id,
+            &session_id,
+            Some("successor-session"),
+            "successor-session",
+            "/Users/test/.claude/projects/demo/successor-session.jsonl",
+        )
+        .expect("idempotent adoption")
+    );
 }

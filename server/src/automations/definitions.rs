@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use chrono::Utc;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 

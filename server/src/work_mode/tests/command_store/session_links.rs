@@ -3,7 +3,7 @@
 //! its title and state, and `Unavailable` with the last title when the command can't be asked.
 
 use crate::session_links::{
-    presentation_session_links, session_links_read_snapshot, SessionLinkKind, SessionLinkRef,
+    SessionLinkKind, SessionLinkRef, presentation_session_links, session_links_read_snapshot,
 };
 
 use super::cards::{exact_read, pin, project_in, session_on_acm_12};

@@ -2,7 +2,7 @@
 //!
 //! SEE-ALSO: recovery.rs (`plan_session`, the restart branch), agents/resume_plan.rs (`agent_conversation_written`), session_chat_queue_runtime/send_heal.rs (`has_conversation_to_resume`, which cannot be used here: it answers yes for every Claude session that has an id).
 use chrono::Utc;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 pub(super) const NO_CONVERSATION: &str = "No saved conversation is available to resume.";
 

@@ -1,8 +1,8 @@
 //! CDXC:SessionStatus 2026-09-10 WHY:
 //! Subagent liveness belongs to the latest persisted child turn, including turns resumed after an earlier completion. Read complete records from the tail and cache by file identity/version; a partial final write is not a new lifecycle event.
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io;
@@ -12,10 +12,10 @@ use std::sync::{Mutex, OnceLock};
 use serde_json::Value;
 
 use crate::session_chat::{
-    read_exact_at, read_transcript_file_version, SessionChatTranscriptAgent,
-    SessionChatTurnLifecycleState, TranscriptFileVersion, TAIL_CHUNK_BYTES,
+    SessionChatTranscriptAgent, SessionChatTurnLifecycleState, TAIL_CHUNK_BYTES,
+    TranscriptFileVersion, read_exact_at, read_transcript_file_version,
 };
-use crate::session_chat_tail::{find_last_complete_line_end, TailLineAccumulator};
+use crate::session_chat_tail::{TailLineAccumulator, find_last_complete_line_end};
 
 #[derive(Clone, Debug)]
 pub(crate) struct ChildTurn {

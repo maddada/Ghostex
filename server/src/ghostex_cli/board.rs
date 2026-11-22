@@ -1,8 +1,8 @@
 use serde_json::{Map, Value};
 
-use crate::ghostex_cli::args::{parse_args, ParsedArgs};
+use crate::ghostex_cli::args::{ParsedArgs, parse_args};
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 use crate::ghostex_cli::selector;
 
 /*

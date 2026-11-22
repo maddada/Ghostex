@@ -30,7 +30,7 @@ Rules this module commits to:
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 

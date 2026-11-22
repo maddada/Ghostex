@@ -20,7 +20,7 @@
 //!   `[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)`, so its answers reach Ghostex
 //!   as UTF-8. `.bat` and `.cmd` files are never run (`runner.rs`).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::*;
 
@@ -57,8 +57,7 @@ const MAX_TIME_BYTES: usize = 40;
 /// Added where a row or an answer was refused only because a field Ghostex can't mask holds a
 /// secret credential's value: a short credential (a team number such as `7`) declared without
 /// `"secret": false` is secret, and would refuse every ticket id containing it.
-const NOT_SECRET_HINT: &str =
-    "if that credential isn't secret, such as a team number, the command's info should mark it \"secret\": false";
+const NOT_SECRET_HINT: &str = "if that credential isn't secret, such as a team number, the command's info should mark it \"secret\": false";
 
 /// What an error message from the command is cut to.
 pub(crate) const MAX_MESSAGE_CHARS: usize = 300;
@@ -330,7 +329,7 @@ pub(crate) fn parse_info(answer: &Value, guard: &AnswerGuard) -> Result<CommandI
         Some(Value::Array(_)) => {
             return Err(format!(
                 "credentials has more than {MAX_CREDENTIAL_FIELDS} fields"
-            ))
+            ));
         }
         _ => return Err("credentials is missing".to_string()),
     };

@@ -2,11 +2,11 @@
 //! `show G9jt7.M12` for another chat's) or lists them (`list`), so a reference such as "do it like
 //! M12" can be looked up in full (server/src/chat_message_numbers.rs).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use crate::ghostex_cli::args::{parse_args, ParsedArgs};
+use crate::ghostex_cli::args::{ParsedArgs, parse_args};
 use crate::ghostex_cli::output::print_json;
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 use crate::ghostex_cli::{notify, selector, usage};
 
 /// Every flag that takes a value in `message show|list` or in send-message (the alias
@@ -126,7 +126,7 @@ pub fn message_command(args: &[String]) -> CliResult<()> {
             return Err(CliError::Other(format!(
                 "Unknown message command: {other}\n\n{}",
                 usage::message_usage()
-            )))
+            )));
         }
     }
     let answer = call_gxserver_rpc(

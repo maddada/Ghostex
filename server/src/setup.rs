@@ -9,7 +9,7 @@ use std::{
 
 #[cfg(unix)]
 use anyhow::Context;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 #[cfg(unix)]
 use crate::config::read_selected_local_api_port;
@@ -96,7 +96,7 @@ fn parse_setup_args(args: &[String]) -> Result<SetupOptions> {
         Some(other) => {
             return Err(anyhow!(
                 "Unknown gxserver setup --analytics-role value: {other}"
-            ))
+            ));
         }
     };
     let install_root = match install_root {
@@ -718,9 +718,10 @@ mod tests {
         activate_release_package(root, &release, "release-good", false).expect("activate");
         assert!(root.join("package").is_symlink());
         assert!(root.join("package/bin/zmx").is_file());
-        assert!(root
-            .join("package.backup.release-good/bin/zmx")
-            .is_symlink());
+        assert!(
+            root.join("package.backup.release-good/bin/zmx")
+                .is_symlink()
+        );
     }
 
     /// Two upgrades on macOS: each release ends up in the same `current` folder, so the programs
@@ -812,9 +813,10 @@ mod tests {
         assert!(!root.join("releases/release-2222").exists());
         assert!(!root.join("package.backup.release-0000").exists());
         assert!(running_zmx.is_file());
-        assert!(root
-            .join("releases/replaced-by-release-3333/bin/zmx")
-            .is_file());
+        assert!(
+            root.join("releases/replaced-by-release-3333/bin/zmx")
+                .is_file()
+        );
         assert!(root.join("releases/release-note.txt").is_file());
         assert!(root.join("current/bin/zmx").is_file());
         assert!(root.join("state").is_dir());
@@ -841,9 +843,11 @@ mod tests {
     #[test]
     fn running_programs_include_this_test() {
         let this = fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
-        assert!(running_executable_paths()
-            .iter()
-            .any(|path| fs::canonicalize(path).ok().as_ref() == Some(&this)));
+        assert!(
+            running_executable_paths()
+                .iter()
+                .any(|path| fs::canonicalize(path).ok().as_ref() == Some(&this))
+        );
     }
 
     #[test]

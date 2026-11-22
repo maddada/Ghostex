@@ -3,10 +3,10 @@ use super::{
     identity::{self, text},
 };
 use crate::ghostex_cli::{
-    rpc::{call_gxserver_rpc, CliError, CliResult},
+    rpc::{CliError, CliResult, call_gxserver_rpc},
     selector, sessions,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(super) fn types(args: &Arguments) -> CliResult<Value> {
     let hud = call_gxserver_rpc("/api/readSidebarHud", &json!({}), &args.flags)?;

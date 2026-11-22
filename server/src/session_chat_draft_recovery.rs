@@ -4,7 +4,7 @@
 
 use crate::{domain::DomainStateError, session_chat_draft_versions::DraftVersion};
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::Serialize;
 
 fn sql_error(error: rusqlite::Error) -> DomainStateError {

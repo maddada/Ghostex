@@ -30,8 +30,8 @@ struct GitWorktreeTopologyProbe {
 const GIT_WORKTREE_TOPOLOGY_PROBE_TTL: Duration = Duration::from_secs(60);
 
 #[allow(clippy::type_complexity)]
-fn git_worktree_topology_probe_cache(
-) -> &'static Mutex<HashMap<String, (Instant, Option<GitWorktreeTopologyProbe>)>> {
+fn git_worktree_topology_probe_cache()
+-> &'static Mutex<HashMap<String, (Instant, Option<GitWorktreeTopologyProbe>)>> {
     static CACHE: OnceLock<Mutex<HashMap<String, (Instant, Option<GitWorktreeTopologyProbe>)>>> =
         OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))

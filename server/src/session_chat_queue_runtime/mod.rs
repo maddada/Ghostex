@@ -48,19 +48,19 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::Value;
 use tokio::sync::broadcast;
 
-use crate::domain::{read_domain_rpc_params, DomainStateError};
+use crate::domain::{DomainStateError, read_domain_rpc_params};
 use crate::protocol::rpc_success;
 use crate::server::{
-    domain_error_response, read_runtime_text, routed_json, schedule_presentation_session_delta,
-    session_observer_key, AppState, RoutedResponse,
+    AppState, RoutedResponse, domain_error_response, read_runtime_text, routed_json,
+    schedule_presentation_session_delta, session_observer_key,
 };
 use crate::session_chat_composer::SessionChatComposerReadiness;
 use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_chat_options::{
-    cached_session_chat_composer_readiness, cached_session_chat_screen_state,
-    cached_session_chat_terminal_notice, emit_session_chat_options_state_frame,
-    schedule_session_chat_option_redetect, session_chat_terminal_notice_publisher,
-    session_chat_watchdog_state_reader, SessionChatOptionDetector,
+    SessionChatOptionDetector, cached_session_chat_composer_readiness,
+    cached_session_chat_screen_state, cached_session_chat_terminal_notice,
+    emit_session_chat_options_state_frame, schedule_session_chat_option_redetect,
+    session_chat_terminal_notice_publisher, session_chat_watchdog_state_reader,
 };
 use crate::session_chat_send::resolve_session_chat_send_target;
 use crate::{
@@ -68,20 +68,20 @@ use crate::{
     paths::GxserverPaths,
     presentation::presentation_activity,
     session_chat::{
-        read_session_chat_tail_page, resolve_session_chat_transcript_agent,
-        resolve_session_chat_transcript_path, SessionChatTailPage, SessionChatTurnLifecycleState,
+        SessionChatTailPage, SessionChatTurnLifecycleState, read_session_chat_tail_page,
+        resolve_session_chat_transcript_agent, resolve_session_chat_transcript_path,
     },
     session_chat_notice::SessionChatTerminalNotice,
     session_chat_queue::{
+        SessionChatQueuePublisherFactory, SessionChatQueueSenderFactory,
         deliver_session_chat_queued_prompt, fail_session_chat_queued_prompt,
         list_sessions_with_pending_queue, read_session_chat_queue_snapshot_with,
-        SessionChatQueuePublisherFactory, SessionChatQueueSenderFactory,
     },
     session_status::is_turn_complete_attention,
     storage::open_gxserver_database,
 };
 use axum::http::StatusCode;
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 
 mod box_first_send;
 mod cloud_send;

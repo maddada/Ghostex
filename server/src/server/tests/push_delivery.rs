@@ -5,10 +5,10 @@
 use super::*;
 use crate::notification_feed::store::read_notification_feed_state;
 use crate::push::{
+    PushRuntime,
     expo::ExpoClient,
     fake_expo::{Captured, FakeExpo},
     runtime::SystemClock,
-    PushRuntime,
 };
 use std::time::Duration;
 

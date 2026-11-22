@@ -27,10 +27,10 @@ use std::process::Stdio;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde_json::Value;
 
-use crate::accounts::setup_terminal::{LoginTerminal, COLS, ROWS};
+use crate::accounts::setup_terminal::{COLS, LoginTerminal, ROWS};
 use crate::platform::process::background_command;
 
 /// Claude Code's `--cloud` takes the prompt as one command-line argument; Windows caps a command

@@ -9,11 +9,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
+use super::UsageProvider;
 use super::http::Failure;
 use super::store::{self, Credential, UsageAccount};
-use super::UsageProvider;
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 

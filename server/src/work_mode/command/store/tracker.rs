@@ -4,7 +4,7 @@
 //! command another change has just cleared or switched from.
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;

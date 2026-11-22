@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use rusqlite::Connection;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{
     domain::{DomainRepository, DomainStateError},
@@ -217,7 +217,7 @@ pub fn dispatch_agent_endpoint(
             return Err(DomainStateError::not_found(format!(
                 "{endpoint_path} is not a gxserver agent endpoint."
             ))
-            .into())
+            .into());
         }
     };
     if let Some(transaction) = transaction {

@@ -22,11 +22,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use chrono::Utc;
-use rusqlite::{params, Connection, OptionalExtension};
-use serde_json::{json, Map, Value};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Map, Value, json};
 
-use super::records::{now_iso, sql_error, SessionKey};
-use super::work::{work_value, WorkItem};
+use super::records::{SessionKey, now_iso, sql_error};
+use super::work::{WorkItem, work_value};
 use crate::domain::DomainStateError;
 
 /// The extension that turns work items on for ordinary sessions. Its id stays the one Thread

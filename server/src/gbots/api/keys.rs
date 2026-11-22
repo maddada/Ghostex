@@ -1,10 +1,10 @@
 //! `gbots_bot_keys`: a GBot's API key, kept as its SHA-256 only. A GBot's API is on while it has a
 //! key that is not revoked; "New key" revokes that row and adds another, turning it off revokes it.
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rand::Rng as _;
-use rusqlite::{params, Connection, OptionalExtension, Row};
-use serde_json::{json, Value};
+use rusqlite::{Connection, OptionalExtension, Row, params};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::coordinators::now_iso;

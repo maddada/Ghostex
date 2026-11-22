@@ -3,10 +3,10 @@ use std::process::Command;
 #[cfg(any(target_os = "linux", test))]
 use std::process::Stdio;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ghostex_cli::args::Flags;
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 /*
 CDXC:Cli 2026-07-13:
@@ -1480,9 +1480,11 @@ mod tests {
     #[test]
     fn gxserver_launch_prefers_native_binary_and_supports_js_fallback() {
         let root = temp_root("gxserver");
-        assert!(resolve_gxserver_cli_launch_from_root(&root)
-            .expect("no launch")
-            .is_none());
+        assert!(
+            resolve_gxserver_cli_launch_from_root(&root)
+                .expect("no launch")
+                .is_none()
+        );
 
         let js_cli = root
             .join("gxserver")
@@ -1502,9 +1504,11 @@ mod tests {
         {
             // A staged but non-executable binary is a hard error, not a fallback.
             let error = resolve_gxserver_cli_launch_from_root(&root).expect_err("not executable");
-            assert!(error
-                .to_string()
-                .starts_with("gxserver binary is not executable: "));
+            assert!(
+                error
+                    .to_string()
+                    .starts_with("gxserver binary is not executable: ")
+            );
             make_executable(&bin);
         }
         let launch = resolve_gxserver_cli_launch_from_root(&root)

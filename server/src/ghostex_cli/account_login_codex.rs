@@ -19,7 +19,7 @@
 //! SEE-ALSO: `reported_outcome` in server/src/accounts/setup.rs reads the result file.
 use super::account_login::LoginFailure;
 use crate::accounts::{codex_identity, helpers, model::Provider};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     ffi::OsString,
     io::{Read, Write},
@@ -376,7 +376,7 @@ fn run_xswap(
                 ok: false,
                 stdout: String::new(),
                 stderr: format!("xswap: could not start Codex Swap: {error}"),
-            }
+            };
         }
     };
     // Cancelling the login ends this process; on Windows xswap and its Codex must end with it.

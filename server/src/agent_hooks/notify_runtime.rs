@@ -6,8 +6,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use serde_json::{json, Map, Value};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
+use serde_json::{Map, Value, json};
 
 use crate::{
     constants::{GXSERVER_PROTOCOL_HEADER, GXSERVER_PROTOCOL_VERSION},

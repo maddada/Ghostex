@@ -31,7 +31,7 @@ mod session;
 mod sweep;
 mod welcome;
 
-pub(crate) use endpoint::{handle_chief_http, CHIEF_ENDPOINT};
+pub(crate) use endpoint::{CHIEF_ENDPOINT, handle_chief_http};
 pub(crate) use feature::{
     chief_off_message, chief_on, chief_shown, refuses_message, remember_chief_shown,
 };

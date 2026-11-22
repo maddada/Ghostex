@@ -4,9 +4,9 @@
 //! bot), `briefSeen` (sent by `ghostex grokbot brief`), `confirmApp`, `confirmTest` `{arrived}`
 //! and `openApp` (opens the Grok Bot desktop app). No answer ever carries the key.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::delivery::{self, files_lock, now_ms, MAX_QUEUE};
+use super::delivery::{self, MAX_QUEUE, files_lock, now_ms};
 use super::store::{self, Connection, QueuedNote, Setup};
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
@@ -83,7 +83,7 @@ fn checked_url(url: &str) -> Result<String, DomainStateError> {
         _ => {
             return Err(DomainStateError::bad_request(
                 "The webhook address must start with https://.",
-            ))
+            ));
         }
     }
     if !parsed.username().is_empty() || parsed.password().is_some() {
@@ -439,9 +439,12 @@ pub(crate) fn handle(
             .map(|()| json!({ "opened": true }))
             .map_err(DomainStateError::bad_request),
         "confirmTest" => {
-            let arrived = params.get("arrived").and_then(Value::as_bool).ok_or_else(|| {
-                DomainStateError::bad_request("arrived (true or false) is required.")
-            })?;
+            let arrived = params
+                .get("arrived")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| {
+                    DomainStateError::bad_request("arrived (true or false) is required.")
+                })?;
             mark(paths, |setup| setup.test_arrived = Some(arrived))
         }
         other => Err(DomainStateError::bad_request(format!(

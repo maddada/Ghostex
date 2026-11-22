@@ -13,10 +13,10 @@
 //! server/src/session_chat_queue_runtime/send.rs (`coordinator_playbook_note`),
 //! server/src/ghostex_cli/agents/role.rs.
 
-use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
-use serde_json::{json, Map, Value};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
+use serde_json::{Map, Value, json};
 
-use crate::coordinators::{now_iso, sql_error, SessionKey};
+use crate::coordinators::{SessionKey, now_iso, sql_error};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::ids::create_global_session_ref;
 use crate::security::Principal;
@@ -254,9 +254,9 @@ pub(crate) fn session_start_context(
 ) -> Option<String> {
     let role = standing_role.map(str::trim).filter(|role| !role.is_empty());
     match (coordinator_context, role) {
-        (Some(coordinator), Some(role)) => {
-            Some(format!("{coordinator}\n\nStanding role for this session: {role}"))
-        }
+        (Some(coordinator), Some(role)) => Some(format!(
+            "{coordinator}\n\nStanding role for this session: {role}"
+        )),
         (Some(coordinator), None) => Some(coordinator.to_string()),
         (None, Some(role)) => match source {
             "clear" => Some(format!(
@@ -371,16 +371,15 @@ fn authorize_caller(
             if !mutates || is_self {
                 return Ok(());
             }
-            let is_coordinator = crate::coordinators::read_coordinator(db, &target.0, &target.1)?
-                .is_some();
+            let is_coordinator =
+                crate::coordinators::read_coordinator(db, &target.0, &target.1)?.is_some();
             if is_coordinator || is_chief {
                 return Err(forbidden(
                     "A session cannot change the standing role of a coordinator or Chief of Staff.",
                 ));
             }
-            let leads_target =
-                crate::agents::lead_links::read_lead_link(db, &target.0, &target.1)?
-                    .is_some_and(|link| link.lead_key() == caller_key);
+            let leads_target = crate::agents::lead_links::read_lead_link(db, &target.0, &target.1)?
+                .is_some_and(|link| link.lead_key() == caller_key);
             let owns_thread = crate::coordinators::read_thread(db, &target.0, &target.1)?
                 .is_some_and(|thread| thread.coordinator_key() == caller_key);
             if leads_target || owns_thread {
@@ -413,9 +412,11 @@ fn authorize_caller(
             }
             Ok(())
         }
-        Principal::Guest { .. } | Principal::Extension { .. } | Principal::Anonymous => Err(
-            forbidden("Only the user or an agent session can read or change a session's standing role."),
-        ),
+        Principal::Guest { .. } | Principal::Extension { .. } | Principal::Anonymous => {
+            Err(forbidden(
+                "Only the user or an agent session can read or change a session's standing role.",
+            ))
+        }
     }
 }
 
@@ -437,9 +438,10 @@ pub fn handle_standing_role_endpoint(
             "Unknown standing role op \"{op}\"."
         )));
     }
-    let (Some(project_id), Some(session_id)) =
-        (param_text(params, "projectId"), param_text(params, "sessionId"))
-    else {
+    let (Some(project_id), Some(session_id)) = (
+        param_text(params, "projectId"),
+        param_text(params, "sessionId"),
+    ) else {
         return Err(DomainStateError::bad_request(
             "This standing role request needs projectId and sessionId.",
         ));

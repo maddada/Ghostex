@@ -2,12 +2,12 @@
 //! `iconRefs=1` on the `sessionsList` stream send `discoveredIconRef` in place of
 //! `discoveredIconDataUrl`; `ghostex sessions --json --project-icons <ref,…>` answers the data URLs.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::ghostex_cli::args::{FlagValue, Flags};
 use crate::ghostex_cli::output::print_json;
-use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
+use crate::ghostex_cli::rpc::{CliError, CliResult, call_gxserver_rpc};
 
 /// The most refs one `--project-icons` request may name.
 const PROJECT_ICONS_MAX: usize = 32;

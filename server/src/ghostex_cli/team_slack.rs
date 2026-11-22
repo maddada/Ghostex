@@ -4,9 +4,9 @@
 
 use std::io::{IsTerminal, Read};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
-use super::args::{parse_args, Flags};
+use super::args::{Flags, parse_args};
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 use super::selector::resolve_cli_session_selector;
@@ -55,7 +55,7 @@ pub(super) fn flow_command(rest: &[String], flags: &Flags) -> CliResult<()> {
                     other => {
                         return Err(CliError::Other(format!(
                             "--default-run is cloud or local, not \"{other}\"."
-                        )))
+                        )));
                     }
                 };
                 params.insert("defaultRunPlace".to_string(), json!(place));
@@ -202,7 +202,7 @@ pub(super) fn own_linear_key_command(rest: &[String], flags: &Flags) -> CliResul
         _ => {
             return Err(CliError::Other(
                 "Use: ghostex team own-linear-key on|off [--workspace name]".to_string(),
-            ))
+            ));
         }
     };
     let mut params = workspace_params(flags)?;
@@ -220,7 +220,7 @@ pub(super) fn slack_command(args: &[String]) -> CliResult<()> {
         _ => {
             return Err(CliError::Other(
                 "Use: ghostex slack post --session <session> \"<text>\" [--final]".to_string(),
-            ))
+            ));
         }
     }
     let mut words: Vec<String> = parsed.rest[1..].to_vec();
