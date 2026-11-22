@@ -113,7 +113,7 @@ pub(crate) fn gate(
     require_owner_presence(state, caller, action, body, endpoint_path, request_id).err()
 }
 
-/// Every route that types, sends, queues, answers, changes mode/model, or interrupts in a session.
+/// Every route that types, sends, queues, answers, changes mode/model, switches ACP/CLI, or interrupts in a session.
 const SESSION_INPUT_ROUTES: &[&str] = &[
     "/api/answerSessionChatPrompt",
     "/api/selectSessionChatModel",
@@ -124,6 +124,8 @@ const SESSION_INPUT_ROUTES: &[&str] = &[
     "/api/queueSessionChatPrompt",
     "/api/updateSessionChatQueuedPrompt",
     "/api/interruptSessionChat",
+    "/api/switchSessionAcpToCli",
+    "/api/switchSessionCliToAcp",
     // `ghostex clear-command` types the agent's own clear command (session_clear_http.rs).
     "/api/clearSessionConversation",
     // Standing role line injects context on SessionStart or after compaction (agents/standing_role.rs).
@@ -164,6 +166,10 @@ fn api_chat_refused(
             ..
         } if own_session == session_id
             && (project_id.is_empty() || own_project == project_id)
+            && !matches!(
+                endpoint_path,
+                "/api/switchSessionAcpToCli" | "/api/switchSessionCliToAcp"
+            )
             && !(endpoint_path == "/api/selectSessionChatModel"
                 && requests_mode_change(params))
             && !(endpoint_path == "/api/sendSessionChatMessage"
@@ -219,7 +225,9 @@ fn relayed_card_refusal(
         "/api/sendSessionText"
         | "/api/sendSessionEnter"
         | "/api/sendSessionMessage"
-        | "/api/clearSessionConversation" => {
+        | "/api/clearSessionConversation"
+        | "/api/switchSessionAcpToCli"
+        | "/api/switchSessionCliToAcp" => {
             let typed = params
                 .get("text")
                 .and_then(Value::as_str)
