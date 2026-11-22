@@ -727,6 +727,20 @@ pub(crate) fn build_agent_resume_command(
             OmpWakeReference::None => (agent_id == "empryo").then(|| agent_command.to_string()),
         },
         "codex" => {
+            if input.acp_mode {
+                let resume_ref = codex_exact_reference
+                    .as_deref()
+                    .filter(|exact| !is_uuid(exact) || codex_rollout_written(input, exact));
+                return Some(crate::acp::spec::build_acp_host_launch_command(
+                    "codex",
+                    Some(agent_command),
+                    resume_ref,
+                    input.acp_approval_level,
+                    &[],
+                    None,
+                    None,
+                ));
+            }
             let reference = codex_reference?;
             // See `codex_rollout_written`: a thread Codex never saved starts fresh.
             if codex_exact_reference
@@ -755,6 +769,21 @@ pub(crate) fn build_agent_resume_command(
             }
         }
         "claude" => {
+            if input.acp_mode {
+                let resume_ref = claude_exact_reference.as_deref().filter(|exact| {
+                    get_claude_session_id(Some(exact))
+                        .is_none_or(|id| claude_transcript_written(input, &id))
+                });
+                return Some(crate::acp::spec::build_acp_host_launch_command(
+                    "claude",
+                    Some(agent_command),
+                    resume_ref,
+                    input.acp_approval_level,
+                    &[],
+                    None,
+                    None,
+                ));
+            }
             // CDXC:SessionChat 2026-10-09 WHY:
             // A session whose Claude has no conversation yet has nothing to lose, so a wake starts it fresh under the same session id instead of resuming. A wake used to resume whatever id the session held, and a Claude that quit before its first message printed "No conversation found with session ID" and fell back to the shell, so the automatic send recovery and Fix it (session_chat_queue_runtime/send_heal.rs) both failed on it. Every wake now follows the account switch's rule (CDXC:AgentProviders 2026-10-04 above).
             if let Some(id) = claude_exact_reference
