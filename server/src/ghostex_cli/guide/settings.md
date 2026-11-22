@@ -371,6 +371,7 @@ How to use this file:
 - **gpuiTitlebarOpenTargetByProject** `gpuiTitlebarOpenTargetByProject` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **trustProjectFoldersConfirmedAt** `trustProjectFoldersConfirmedAt` (text, default (empty)) [not agent-writable]: App-managed state saved with the settings; not a user preference.
 - **agentsTidyUpOfferDismissed** `agentsTidyUpOfferDismissed` (boolean, default false) [not agent-writable]: App-managed state saved with the settings; not a user preference.
+- **customLinks** `customLinks` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **sessionLinksFoldedGroups** `sessionLinksFoldedGroups` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **settingsModalNavigation** `settingsModalNavigation` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **projectWebsiteViews** `projectWebsiteViews` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.

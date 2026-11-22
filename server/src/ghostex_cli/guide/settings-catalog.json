@@ -9902,6 +9902,18 @@
       "agentWritable": false
     },
     {
+      "key": "customLinks",
+      "title": "customLinks",
+      "subtitle": "App-managed state saved with the settings; not a user preference.",
+      "tab": "about",
+      "tabTitle": "About",
+      "section": "internalState",
+      "sectionTitle": "Internal state (not user settings)",
+      "type": "json",
+      "default": [],
+      "agentWritable": false
+    },
+    {
       "key": "sessionLinksFoldedGroups",
       "title": "sessionLinksFoldedGroups",
       "subtitle": "App-managed state saved with the settings; not a user preference.",
