@@ -758,6 +758,7 @@ pub(crate) fn dispatch(
     if operation == "roster" {
         super::cli::roster(
             &repository,
+            &registry,
             &snapshot,
             &mut value,
             params.get("allSessions").and_then(Value::as_bool) == Some(true),

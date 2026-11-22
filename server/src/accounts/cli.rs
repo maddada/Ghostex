@@ -21,6 +21,7 @@ use std::{
 /// sleeping) are the ones a caller can act on, and hundreds of stopped rows buried them.
 pub(super) fn roster(
     repository: &DomainRepository<'_>,
+    registry: &Registry,
     snapshot: &Snapshot,
     value: &mut Value,
     all_sessions: bool,
@@ -81,6 +82,16 @@ pub(super) fn roster(
                 window["label"] = json!(short_label(reading));
             }
         }
+        // CDXC:Coordinators 2026-11-22 DECISION:
+        // User (context-bloat page, fixes 4 and 5): an agent may move a thread only to an account
+        // Ghostex's own automatic switching would pick (`SavedAccount::auto_switchable`): manual
+        // only means only when the user names it, turned off or signed out means never. The roster
+        // carries that rule so `ghostex accounts status`, the coordinator's Usage room and the app
+        // never disagree.
+        let saved = registry.accounts.iter().find(|account| account.id == id);
+        row["autoSwitchable"] = json!(saved.is_some_and(SavedAccount::auto_switchable));
+        row["loginExpired"] =
+            json!(saved.is_some_and(|account| account.login_expired_at.is_some()));
         row["sessions"] = json!(sessions.remove(&id).unwrap_or_default());
         row["stoppedSessionCount"] = json!(stopped.remove(&id).unwrap_or(0));
     }
