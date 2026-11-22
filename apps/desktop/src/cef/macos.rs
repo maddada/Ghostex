@@ -426,7 +426,7 @@ pub extern "C" fn GhostexGpuiCEFRunMessageLoop() {
     crate::crash_report::note_cef_phase("messageLoopStart");
     crate::support_logs::append(
         crate::support_logs::GpuiSupportLog::HostLifecycle,
-        "gpui.cef.messageLoopStarted",
+        "gpui.cef.phase.messageLoopStart",
         serde_json::json!({ "pid": std::process::id() }),
     );
     cef::run_message_loop();

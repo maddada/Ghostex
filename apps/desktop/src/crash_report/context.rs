@@ -58,6 +58,19 @@ fn clean_event_name(event: &str) -> String {
         .collect()
 }
 
+fn cef_phase_rank(phase: &str) -> u8 {
+    match phase {
+        "loadLibraryStart" => 1,
+        "loadLibraryDone" => 2,
+        "executeProcessDone" => 3,
+        "initializeStart" => 4,
+        "initializeDone" => 5,
+        "messageLoopStart" => 6,
+        "contextInitialized" => 7,
+        _ => 0,
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn apply_tags(state: &mut State) {
     for (key, value) in [
@@ -75,9 +88,9 @@ fn apply_tags(state: &mut State) {
     state.tags_applied_at = Some(Instant::now());
 }
 
-fn push_event(state: &mut State, name: String) {
+fn push_event(state: &mut State, name: String) -> bool {
     if state.recent.back().is_some_and(|(_, last)| *last == name) {
-        return;
+        return false;
     }
     state
         .recent
@@ -86,17 +99,8 @@ fn push_event(state: &mut State, name: String) {
         state.recent.pop_front();
     }
     #[cfg(target_os = "macos")]
-    {
-        handler::add_breadcrumb(&name);
-        // The handler starts on its own thread after the terminal library starts and begins with
-        // an empty scope, so tags set before then are lost: hand them over again now and then.
-        let stale = state
-            .tags_applied_at
-            .is_none_or(|applied| applied.elapsed().as_secs() >= 5);
-        if stale {
-            apply_tags(state);
-        }
-    }
+    handler::add_breadcrumb(&name);
+    true
 }
 
 /// Notes that `event` happened (a support log event name such as `gpui.cefRuntime.ready`). The
@@ -109,7 +113,20 @@ pub(crate) fn note_event(event: &str) {
     let Ok(mut state) = STATE.lock() else {
         return;
     };
-    push_event(&mut state, name);
+    if !push_event(&mut state, name) {
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // The handler starts on its own thread after the terminal library starts and begins with
+        // an empty scope, so tags set before then are lost: hand them over again now and then.
+        let stale = state
+            .tags_applied_at
+            .is_none_or(|applied| applied.elapsed().as_secs() >= 5);
+        if stale {
+            apply_tags(&mut state);
+        }
+    }
 }
 
 /// Notes what is on screen: the view (`Agents`, `Browser`, ...) and where the keyboard is
@@ -128,6 +145,9 @@ pub(crate) fn note_screen(view: &'static str, focus: &'static str) {
 }
 
 /// Notes a fixed-label CEF startup milestone in the crash breadcrumbs and `ghostex.cef_phase` tag.
+/// Chronological breadcrumbs are always recorded; `ghostex.cef_phase` only advances monotonically
+/// so a synchronous `on_context_initialized` inside `cef::initialize` is never overwritten by
+/// `initializeDone` or `messageLoopStart`.
 #[cfg_attr(
     not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
     allow(dead_code)
@@ -136,7 +156,9 @@ pub(crate) fn note_cef_phase(phase: &'static str) {
     let Ok(mut state) = STATE.lock() else {
         return;
     };
-    state.cef_phase = phase;
+    if cef_phase_rank(phase) > cef_phase_rank(state.cef_phase) {
+        state.cef_phase = phase;
+    }
     let breadcrumb = clean_event_name(&format!("gpui.cef.phase.{phase}"));
     if !breadcrumb.is_empty() {
         push_event(&mut state, breadcrumb);

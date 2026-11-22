@@ -358,7 +358,8 @@ impl Images {
                             })
                             // Without dashes: plain hex is what the report's scrubber keeps
                             // (a dashed id reads as a key to it).
-                            .map(|id| id.replace('-', ""));
+                            .map(|id| id.replace('-', ""))
+                            .filter(|id| !id.is_empty());
                         Some(Image {
                             base,
                             size,
@@ -409,15 +410,13 @@ impl Minidump {
     const CONTEXT_AMD64: u32 = 0x0010_0000;
 
     fn u32_at(bytes: &[u8], offset: usize) -> Option<u32> {
-        Some(u32::from_le_bytes(
-            bytes.get(offset..offset + 4)?.try_into().ok()?,
-        ))
+        let end = offset.checked_add(4)?;
+        Some(u32::from_le_bytes(bytes.get(offset..end)?.try_into().ok()?))
     }
 
     fn u64_at(bytes: &[u8], offset: usize) -> Option<u64> {
-        Some(u64::from_le_bytes(
-            bytes.get(offset..offset + 8)?.try_into().ok()?,
-        ))
+        let end = offset.checked_add(8)?;
+        Some(u64::from_le_bytes(bytes.get(offset..end)?.try_into().ok()?))
     }
 
     /// The (size, offset) of the first stream of `kind`.
@@ -428,7 +427,7 @@ impl Minidump {
         let count = Self::u32_at(bytes, 8)? as usize;
         let directory = Self::u32_at(bytes, 12)? as usize;
         (0..count.min(1024)).find_map(|index| {
-            let entry = directory + index * 12;
+            let entry = directory.checked_add(index * 12)?;
             (Self::u32_at(bytes, entry)? == kind).then(|| {
                 Some((
                     Self::u32_at(bytes, entry + 4)? as usize,
@@ -451,7 +450,8 @@ impl Minidump {
             };
             let mut frame = fp;
             for _ in 0..STACK_MAX_FRAMES * 2 {
-                let (Some(next), Some(ret)) = (read(frame), read(frame.wrapping_add(8))) else {
+                let (Some(next), Some(ret)) = (read(frame), frame.checked_add(8).and_then(read))
+                else {
                     break;
                 };
                 let ret = ret & address_mask;
@@ -473,11 +473,11 @@ impl Minidump {
         // address, ...: 152 bytes), then the thread's context location.
         let (_, exception) = Self::stream(bytes, Self::EXCEPTION_STREAM)?;
         let thread_id = Self::u32_at(bytes, exception)?;
-        let code = Self::u32_at(bytes, exception + 8)?;
-        let flags = Self::u32_at(bytes, exception + 12)?;
-        let address = Self::u64_at(bytes, exception + 24)?;
-        let context_size = Self::u32_at(bytes, exception + 160)? as usize;
-        let context_at = Self::u32_at(bytes, exception + 164)? as usize;
+        let code = Self::u32_at(bytes, exception.checked_add(8)?)?;
+        let flags = Self::u32_at(bytes, exception.checked_add(12)?)?;
+        let address = Self::u64_at(bytes, exception.checked_add(24)?)?;
+        let context_size = Self::u32_at(bytes, exception.checked_add(160)?)? as usize;
+        let context_at = Self::u32_at(bytes, exception.checked_add(164)?)? as usize;
         let context = bytes.get(context_at..context_at.checked_add(context_size)?)?;
         let stack = Self::thread_stack(bytes, thread_id);
         let frames = Self::walk_frames(context, stack)?;
@@ -504,15 +504,32 @@ impl Minidump {
         })
     }
 
+    /// The byte offset of the first 48-byte `MDRawThread` entry and the validated thread count in
+    /// `THREAD_LIST_STREAM`.
+    fn thread_list_bounds(bytes: &[u8]) -> Option<(usize, usize)> {
+        // MDRawThreadList: a 4-byte count (optionally padded for alignment), then 48-byte
+        // MDRawThread entries ending the stream.
+        let (size, list) = Self::stream(bytes, Self::THREAD_LIST_STREAM)?;
+        if list.checked_add(size)? > bytes.len() {
+            return None;
+        }
+        let count = Self::u32_at(bytes, list)? as usize;
+        let entries = count.checked_mul(48)?;
+        let pad = size.checked_sub(entries)?;
+        if pad < 4 {
+            return None;
+        }
+        let first = list.checked_add(pad)?;
+        Some((first, count))
+    }
+
     /// The thread list's first thread (the process's main thread: Breakpad lists the task's
     /// threads in the order the kernel gives them, main first): its id, saved stack and context.
     fn first_thread(bytes: &[u8]) -> Option<(u32, Option<(u64, &[u8])>, Option<&[u8]>)> {
-        let (size, list) = Self::stream(bytes, Self::THREAD_LIST_STREAM)?;
-        let count = Self::u32_at(bytes, list)? as usize;
+        let (first, count) = Self::thread_list_bounds(bytes)?;
         if count == 0 {
             return None;
         }
-        let first = (list + size).checked_sub(count.checked_mul(48)?)?;
         let thread_id = Self::u32_at(bytes, first)?;
         let stack = Self::entry_stack(bytes, first);
         let context = (|| {
@@ -557,11 +574,7 @@ impl Minidump {
 
     /// The start address and bytes of `thread_id`'s saved stack.
     fn thread_stack(bytes: &[u8], thread_id: u32) -> Option<(u64, &[u8])> {
-        // MDRawThreadList: a count, then 48-byte MDRawThread entries that end the stream (the
-        // writer may pad after the count, so they are found from the end).
-        let (size, list) = Self::stream(bytes, Self::THREAD_LIST_STREAM)?;
-        let count = Self::u32_at(bytes, list)? as usize;
-        let first = (list + size).checked_sub(count.checked_mul(48)?)?;
+        let (first, count) = Self::thread_list_bounds(bytes)?;
         (0..count).find_map(|index| {
             let entry = first + index * 48;
             if Self::u32_at(bytes, entry)? != thread_id {
