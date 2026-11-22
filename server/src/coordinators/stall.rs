@@ -240,6 +240,25 @@ impl StallWatch {
         if now - self.quiet_since() < test_scaled(SCREEN_SAMPLE_AFTER_MS) {
             return;
         }
+        // Non-CLI (ACP / SDK) sessions have a static host log in their zmx PTY; read the host's
+        // live protocol event clock (`lastEventAtMs`) instead of fingerprinting PTY text.
+        if crate::acp::session_is_acp(session) {
+            if let (Some(project_id), Some(session_id)) = (
+                session.get("projectId").and_then(Value::as_str),
+                session.get("sessionId").and_then(Value::as_str),
+            ) {
+                if let Some(last_event_ms) =
+                    crate::acp::channel::channel_state(project_id, session_id)
+                        .and_then(|st| st.get("lastEventAtMs").and_then(Value::as_i64))
+                        .filter(|at| *at > 0)
+                {
+                    if !in_grace {
+                        self.count_output(Some(last_event_ms));
+                    }
+                }
+            }
+            return;
+        }
         let Some(fingerprint) = screen_fingerprint_of(session) else {
             return;
         };

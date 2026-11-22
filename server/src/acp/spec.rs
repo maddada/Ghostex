@@ -153,6 +153,33 @@ pub fn build_acp_host_launch_command(
     model: Option<&str>,
     effort: Option<&str>,
 ) -> String {
+    build_acp_host_launch_command_with_options(
+        family,
+        cli_command,
+        resume_session_id,
+        approval_level,
+        writable_roots,
+        model,
+        effort,
+        false,
+        false,
+    )
+}
+
+/// Build the `ghostex acp-host` launch command with optional `--fork-session` (for side chats and
+/// session forks) and `--read-only` (for `start-thread --read-only`).
+#[allow(clippy::too_many_arguments)]
+pub fn build_acp_host_launch_command_with_options(
+    family: &str,
+    cli_command: Option<&str>,
+    resume_session_id: Option<&str>,
+    approval_level: super::AcpApprovalLevel,
+    writable_roots: &[String],
+    model: Option<&str>,
+    effort: Option<&str>,
+    fork_session: bool,
+    read_only: bool,
+) -> String {
     build_acp_host_launch_command_for_platform(
         family,
         cli_command,
@@ -161,10 +188,13 @@ pub fn build_acp_host_launch_command(
         writable_roots,
         model,
         effort,
+        fork_session,
+        read_only,
         cfg!(windows),
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_acp_host_launch_command_for_platform(
     family: &str,
     cli_command: Option<&str>,
@@ -173,6 +203,8 @@ fn build_acp_host_launch_command_for_platform(
     writable_roots: &[String],
     model: Option<&str>,
     effort: Option<&str>,
+    fork_session: bool,
+    read_only: bool,
     windows: bool,
 ) -> String {
     let mut parts = if windows {
@@ -198,6 +230,12 @@ fn build_acp_host_launch_command_for_platform(
     if let Some(id) = resume_session_id.map(str::trim).filter(|s| !s.is_empty()) {
         parts.push("--resume".to_string());
         parts.push(quote_acp_launch_arg(id, windows));
+        if fork_session {
+            parts.push("--fork-session".to_string());
+        }
+    }
+    if read_only {
+        parts.push("--read-only".to_string());
     }
     parts.push("--approval-level".to_string());
     parts.push(quote_acp_launch_arg(approval_level.as_str(), windows));
