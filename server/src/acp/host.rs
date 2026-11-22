@@ -83,6 +83,8 @@ pub(super) struct HostArgs {
     pub(super) family: String,
     pub(super) cli_command: Option<String>,
     pub(super) resume_session_id: Option<String>,
+    pub(super) fork_session: bool,
+    pub(super) read_only: bool,
     pub(super) approval_level: AcpApprovalLevel,
     pub(super) writable_roots: Vec<PathBuf>,
     pub(super) model: Option<String>,
@@ -93,6 +95,8 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
     let mut family = String::new();
     let mut cli_command = None;
     let mut resume_session_id = None;
+    let mut fork_session = false;
+    let mut read_only = false;
     let mut approval_level = AcpApprovalLevel::Ask;
     let mut writable_roots = Vec::new();
     let mut model = None;
@@ -112,6 +116,8 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
                 i += 1;
                 resume_session_id = args.get(i).cloned();
             }
+            "--fork-session" => fork_session = true,
+            "--read-only" => read_only = true,
             "--accept-all" => approval_level = AcpApprovalLevel::FullAccess,
             "--approval-level" => {
                 i += 1;
@@ -144,6 +150,8 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
         family,
         cli_command,
         resume_session_id,
+        fork_session,
+        read_only,
         approval_level,
         writable_roots,
         model,

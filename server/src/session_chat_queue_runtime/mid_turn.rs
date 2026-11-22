@@ -60,29 +60,45 @@ async fn agent_mid_turn(
     agent: Option<&str>,
     readings: &Arc<Mutex<MidTurnReadings>>,
 ) -> bool {
+    let project_id_for_acp = project_id.clone();
+    let session_id_for_acp = session_id.clone();
     let transcript_readings = readings.clone();
-    let working = tokio::task::spawn_blocking(move || {
+    let (working, is_acp) = tokio::task::spawn_blocking(move || {
         let mut params = Map::new();
         params.insert("projectId".to_string(), json!(project_id));
         params.insert("sessionId".to_string(), json!(session_id));
         let Ok(target) = resolve_session_chat_send_target(&state, &params, "sendMidTurn") else {
-            return false;
+            return (false, false);
         };
         let session = target.session;
+        let is_acp = crate::acp::session_is_acp(&session);
         if crate::session_chat_send::transcript_pending_question_prompt(&session).is_some() {
-            return false;
+            return (false, is_acp);
         }
-        crate::session_chat_follower::session_chat_hook_working(&session)
+        let working = crate::session_chat_follower::session_chat_hook_working(&session)
             || crate::session_chat_compacting::session_chat_compacting_detected_at(&session)
                 .is_some()
             || transcript_readings
                 .lock()
-                .is_ok_and(|mut readings| readings.transcript.is_working(&session))
+                .is_ok_and(|mut readings| readings.transcript.is_working(&session));
+        (working, is_acp)
     })
     .await
-    .unwrap_or(false);
+    .unwrap_or((false, false));
     if !working {
         return false;
+    }
+    if is_acp {
+        // Non-CLI sessions report pending approvals/questions and liveness over their structured
+        // channel; never scrape their host PTY as a CLI terminal screen.
+        return crate::acp::channel::channel_state(&project_id_for_acp, &session_id_for_acp)
+            .is_some_and(|st| {
+                st.get("pendingPermissionCount")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+                    == 0
+                    && st.get("childExited").and_then(Value::as_bool) != Some(true)
+            });
     }
     let dialog_on_screen = crate::session_chat_send::capture_session_terminal_text(zmx_name)
         .await

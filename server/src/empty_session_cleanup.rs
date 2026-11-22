@@ -78,6 +78,7 @@ pub(crate) struct EmptySessionCandidate {
     pub session_id: String,
     pub zmx_name: String,
     pub agent_id: String,
+    pub is_acp: bool,
 }
 
 /// The new session's project siblings that are empty as far as gxserver's own state can tell.
@@ -127,6 +128,7 @@ pub(crate) fn empty_session_candidates(
             session_id: session_id.to_string(),
             zmx_name,
             agent_id,
+            is_acp: crate::acp::session_is_acp(&session),
         });
     }
     Ok(candidates)

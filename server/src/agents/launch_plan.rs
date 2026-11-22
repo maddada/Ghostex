@@ -688,23 +688,31 @@ pub(crate) fn create_agent_session_params_for_project(
                             .and_then(Value::as_str)
                             .map(str::to_string);
                         let resume_id = read_text_from_map(&runtime_settings, "agentSessionId");
-                        let approval_level = crate::acp::approval::resolve_starting_level(
-                            &runtime_settings,
-                            &agent_config,
-                            &launch_settings,
-                            &settings,
-                        );
+                        let read_only_acp = read_only_family.is_some();
+                        let approval_level = if read_only_acp {
+                            crate::acp::AcpApprovalLevel::Ask
+                        } else {
+                            crate::acp::approval::resolve_starting_level(
+                                &runtime_settings,
+                                &agent_config,
+                                &launch_settings,
+                                &settings,
+                            )
+                        };
                         let req_model = read_text(params, "agentModel");
                         let req_effort = read_text(params, "agentEffort");
-                        let acp_cmd = crate::acp::spec::build_acp_host_launch_command(
-                            fam,
-                            base_cli_cmd.as_deref(),
-                            resume_id.as_deref(),
-                            approval_level,
-                            &[],
-                            req_model.as_deref(),
-                            req_effort.as_deref(),
-                        );
+                        let acp_cmd =
+                            crate::acp::spec::build_acp_host_launch_command_with_options(
+                                fam,
+                                base_cli_cmd.as_deref(),
+                                resume_id.as_deref(),
+                                approval_level,
+                                &[],
+                                req_model.as_deref(),
+                                req_effort.as_deref(),
+                                false,
+                                read_only_acp,
+                            );
                         runtime_settings.insert(
                             crate::acp::SESSION_NON_CLI_ACTIVE_KEY.to_string(),
                             json!(true),
