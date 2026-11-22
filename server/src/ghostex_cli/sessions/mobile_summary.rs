@@ -1007,6 +1007,8 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     // dot beside the send-failure dot; absent while not blocked, which is also what an older daemon sends.
     insert_js(&mut map, "blockedSince", &[s("blockedSince")]);
     insert_js(&mut map, "blockedReason", &[s("blockedReason")]);
+    insert_js(&mut map, "quotaResetsAt", &[s("quotaResetsAt")]);
+    insert_js(&mut map, "quotaWaitState", &[s("quotaWaitState")]);
     insert_js(
         &mut map,
         "closeAfterDoneDeadlineAt",
