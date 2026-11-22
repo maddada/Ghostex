@@ -896,7 +896,7 @@ impl NativeChatView {
                 boxed_header_corners(
                     this.px(px(shape.padding_x * s))
                         .h(px(shape.header_height(s))),
-                    expanded && has_detail,
+                    (expanded || motion.is_some()) && has_detail,
                     p,
                 )
             })
@@ -1013,14 +1013,7 @@ impl NativeChatView {
                     .text_color(color),
             );
         }
-        let mut row = div()
-            .flex()
-            .flex_col()
-            .min_w_0()
-            .w_full()
-            .gap(px(4.0 * s))
-            // Under a header that fills the card, the detail keeps the rows' inset.
-            .when(flush, |this| this.pb(px(BOXED_BODY_PAD * s)));
+        let mut row = div().flex().flex_col().min_w_0().w_full().gap(px(4.0 * s));
         row = row.child(if subagent.is_empty() {
             trigger.into_any_element()
         } else {
@@ -1058,8 +1051,12 @@ impl NativeChatView {
         if (expanded || motion.is_some()) && has_detail {
             if let Some(body) = self.tool_detail_body(&key, message_id, index, tool, p, cx) {
                 let body = if flush {
+                    // Under a header that fills the card, the detail keeps the rows' inset;
+                    // keeping the bottom pad on the detail body (not the closed row) lets the
+                    // collapsed card stay 44px tall and its hover fill reach the bottom border.
                     div()
                         .px(px((shape.padding_x - ROW_PAD_X) * s))
+                        .pb(px(BOXED_BODY_PAD * s))
                         .child(body)
                         .into_any_element()
                 } else {
