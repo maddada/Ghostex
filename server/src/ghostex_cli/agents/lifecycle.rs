@@ -81,6 +81,9 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     if let Some(effort) = &args.effort {
         payload["agentEffort"] = json!(effort);
     }
+    if let Some(role) = &standing_role {
+        payload["standingRole"] = json!(role);
+    }
     // `--lead`: the link rules are checked before anything is created.
     let lead = args
         .lead
@@ -113,16 +116,21 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
             },
         )
     });
-    // `--role`: set before the provider starts so the agent's initial SessionStart hook sees it.
-    let role_set = standing_role.as_deref().map(|role| {
-        super::role::set_session_role(session, role, &flags).map_err(|error| {
-            let error = error.to_string();
-            format!(
-                "Created {reference}, but setting its standing role failed: {}. Do not create another session.",
-                error.trim_end_matches('.')
-            )
+    // `--role`: stored atomically by `/api/createAgentSession` on current gxservers; fall back to
+    // `/api/sessionStandingRole` only if an older remote gxserver ignored `standingRole`.
+    let role_set = if let Some(saved) = created.get("standingRole").and_then(Value::as_str) {
+        Some(Ok(json!({ "role": saved })))
+    } else {
+        standing_role.as_deref().map(|role| {
+            super::role::set_session_role(session, role, &flags).map_err(|error| {
+                let error = error.to_string();
+                format!(
+                    "Created {reference}, but setting its standing role failed: {}. Do not create another session.",
+                    error.trim_end_matches('.')
+                )
+            })
         })
-    });
+    };
     // Retain the created identity if startup fails so a retry does not create a duplicate.
     let provider = call_gxserver_rpc("/api/startSessionProvider", &json!({
         "globalRef": reference, "projectId": session["projectId"], "sessionId": session["sessionId"],

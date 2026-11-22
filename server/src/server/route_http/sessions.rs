@@ -121,6 +121,18 @@ pub(super) async fn route_sessions_http(
                 let family = crate::agents::requested_agent_family_id(db, &project, &params);
                 crate::agent_model_pins::apply_coordinator_choice(&mut params, family.as_deref());
                 let params = &params;
+                // Validate optional standingRole upfront so bad values fail before creating a row.
+                let standing_role = match params.get("standingRole") {
+                    Some(Value::Null) | None => None,
+                    Some(Value::String(raw)) => {
+                        Some(crate::agents::standing_role::normalize_standing_role(raw)?)
+                    }
+                    Some(_) => {
+                        return Err(DomainStateError::bad_request(
+                            "standingRole must be a string.",
+                        ));
+                    }
+                };
                 let create_params = create_agent_session_params_for_project(db, &project, params)?;
                 let created_session = repository.create_session(&create_params, false)?;
                 crate::agents::turn_create_cap::record_turn_create(turn_create);
@@ -137,6 +149,19 @@ pub(super) async fn route_sessions_http(
                 );
                 let project_id = value_text(&session, "projectId")?;
                 let session_id = value_text(&session, "sessionId")?;
+                let saved_standing_role = if let Some(role) = standing_role.as_deref() {
+                    Some(
+                        crate::agents::standing_role::write_standing_role(
+                            db,
+                            &(project_id.clone(), session_id.clone()),
+                            role,
+                            Some(&session),
+                        )?
+                        .role,
+                    )
+                } else {
+                    None
+                };
                 // Queued before the response, so the skill line goes ahead of anything a client
                 // queues next. The session and its coordinator record are committed, so a failure
                 // from here on is reported, not raised.
@@ -199,6 +224,9 @@ pub(super) async fn route_sessions_http(
                     log.record(role_error.clone().map_or(Ok(()), Err));
                 }
                 let mut response = json!({ "session": session });
+                if let Some(role) = saved_standing_role {
+                    response["standingRole"] = json!(role);
+                }
                 if let Some(role_error) = role_error {
                     response["coordinatorRoleError"] = json!(role_error);
                 }
@@ -626,12 +654,33 @@ pub(super) async fn route_sessions_http(
                 request_id,
                 &body_json,
                 |repository, db, params, _| {
+                    let project_id = params
+                        .get("projectId")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .unwrap_or_default();
+                    let session_id = params
+                        .get("sessionId")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .unwrap_or_default();
+                    let is_api_chat =
+                        crate::gbots::is_api_chat_session(&state, project_id, session_id);
+                    let is_chief = crate::chief::chief_key(&state.paths).is_some_and(
+                        |(chief_project, chief_session)| {
+                            chief_project == project_id && chief_session == session_id
+                        },
+                    );
+                    let chief_on = crate::chief::chief_on(&state.paths);
                     crate::agents::standing_role::handle_standing_role_endpoint(
                         &caller,
                         db,
                         repository,
                         state.metadata.server_id.as_str(),
                         params,
+                        is_api_chat,
+                        is_chief,
+                        chief_on,
                     )
                 },
             )

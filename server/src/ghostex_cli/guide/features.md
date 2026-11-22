@@ -4172,8 +4172,10 @@ compaction). `agents role set "<line>" [--session <ref>]`, `agents role show
 [--session <ref>]`, and `agents role clear [--session <ref>]` (also `--role` on
 `agents link`) manage a session's standing role line directly: Claude Code and
 Codex receive it via their `SessionStart` hook on `clear`, `compact`, and
-`startup`, and other agents receive it once with the next delivered message
-after compaction. An agent turned off in
+`startup`, ZCode, Antigravity, Kiro, CodeBuddy, and Qoder receive it on
+`SessionStart` (`agentSpawn` on Kiro, skipped on resume and fork), and agents
+emitting `Context compacted` in their transcripts (OpenCode, Copilot, Hermes)
+receive it once with the next delivered message after compaction. An agent turned off in
 Settings > Agents is not listed, and `agents create`, `create-agent`,
 `run-agent`, `coordinator create`/`start-thread --agent` and `board start-work
 --agent` refuse it, naming the agents to use instead, unless `--allow-hidden` is

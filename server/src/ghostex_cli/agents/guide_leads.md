@@ -65,9 +65,11 @@ compaction:
   `--role "<line>"` on `agents create` and `agents link`.
 - Claude Code and Codex receive the line via their `SessionStart` hook after
   `/clear`, compaction, and fresh startup (never on resume or fork).
-- Agents whose hooks cannot inject `SessionStart` context on compaction (such
-  as Antigravity and OpenCode) receive it once with the next delivered message
-  after compaction.
+- `ZCode`, `Antigravity`, `Kiro`, `CodeBuddy`, and `Qoder` receive it on
+  `SessionStart` (`agentSpawn` on Kiro), skipped on resume and fork.
+- Agents whose hooks cannot inject `SessionStart` context on compaction and
+  whose transcripts emit `Context compacted` (`OpenCode`, `Copilot`, `Hermes`)
+  receive it once with the next delivered message after compaction.
 - Inspect or remove it with `ghostex agents role show` and
   `ghostex agents role clear` (`--json` supported).
 

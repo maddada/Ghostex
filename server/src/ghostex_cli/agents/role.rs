@@ -50,11 +50,9 @@ fn resolve_target(session_ref: Option<&str>, flags: &Flags) -> CliResult<(Value,
             "Pass --session <session-ref> when targeting another server or computer.".into(),
         ));
     }
-    let session = identity::caller().map_err(|_| {
-        CliError::Other(
-            "Cannot identify the caller. Run inside a Ghostex agent session, or pass --session <session-ref>.".into(),
-        )
-    })?;
+    let session = identity::caller_with_no_session_hint(
+        "Cannot identify the caller. Run inside a Ghostex agent session, or pass --session <session-ref>.",
+    )?;
     let flags = identity::inventory_flags(flags, text(&session, "globalRef"))?;
     Ok((session, flags))
 }

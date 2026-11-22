@@ -25,6 +25,9 @@ pub(crate) fn refusal(
     endpoint: &str,
     body: &[u8],
 ) -> Option<&'static str> {
+    if endpoint == crate::agents::standing_role::SESSION_STANDING_ROLE_ENDPOINT {
+        return standing_role_refusal(db, caller, server_id, body);
+    }
     if !THREAD_LINK_ENDPOINTS.contains(&endpoint) {
         return None;
     }
@@ -74,4 +77,57 @@ pub(super) fn session_ids(body: &[u8]) -> Option<(String, String)> {
             .map(str::to_string)
     };
     Some((text("projectId")?, text("sessionId")?))
+}
+
+/// Standing role relay rule: owner devices and the user's own terminal (`LocalAgent`) may reach
+/// ordinary remote sessions (the receiving gxserver still blocks coordinators, Chief and GBot API
+/// chats from peers). A local agent session (`Principal::Session`) may read (`show`) across
+/// computers, but may `set` or `clear` only on its own remote coordinator threads.
+fn standing_role_refusal(
+    db: Option<&Connection>,
+    caller: &Principal,
+    server_id: &str,
+    body: &[u8],
+) -> Option<&'static str> {
+    if matches!(
+        caller,
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
+    ) {
+        return None;
+    }
+    let op = serde_json::from_slice::<Value>(body)
+        .ok()
+        .and_then(|body| body.pointer("/params/op").and_then(Value::as_str).map(str::to_string))
+        .unwrap_or_default();
+    let Principal::Session {
+        project_id: caller_project,
+        session_id: caller_session,
+        ..
+    } = caller
+    else {
+        return Some("Only the user or an agent session can read or change a standing role.");
+    };
+    if op == "show" {
+        return None;
+    }
+    let ids = session_ids(body);
+    let thread = db.and_then(|db| {
+        let (project_id, session_id) = ids?;
+        crate::coordinators::read_remote_thread(
+            db,
+            &(server_id.to_string(), project_id, session_id),
+        )
+        .ok()
+        .flatten()
+    });
+    match thread {
+        Some(thread)
+            if thread.coordinator_key() == (caller_project.clone(), caller_session.clone()) =>
+        {
+            None
+        }
+        _ => Some(
+            "A session can only change the standing role of its own remote threads on another computer.",
+        ),
+    }
 }

@@ -63,8 +63,9 @@ CHOOSE AND CREATE
 
   --role sets a short standing role line (up to 600 characters) that Ghostex
   hands back to the session after /clear or compaction (SessionStart hook on
-  Claude Code and Codex; next delivered message after compaction on other
-  agents). Manage it later with `ghostex agents role set|show|clear` (see
+  Claude Code, Codex, ZCode, Antigravity, Kiro, CodeBuddy and Qoder; next
+  delivered message after compaction on OpenCode, Copilot and Hermes). Manage
+  it later with `ghostex agents role set|show|clear` (see
   `ghostex agents role --help`).
 
   Run by a coordinator, create also makes the new session one of its

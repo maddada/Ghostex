@@ -39,6 +39,10 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     "/api/sendSessionChatMessage",
     // What `agents send --with-next` holds there: `agents held` and `agents unhold`.
     "/api/heldWithNext",
+    // Per-session standing role line (`agents role set|show|clear` and `agents create --role`).
+    // Relay enforces remote-thread ownership for agent sessions (thread_scope.rs), and the
+    // receiving gxserver refuses coordinator, Chief, and GBot API chat mutations from peers.
+    "/api/sessionStandingRole",
     "/api/queueSessionChatPrompt",
     "/api/updateSessionChatQueuedPrompt",
     "/api/answerSessionChatPrompt",

@@ -50,6 +50,15 @@ pub(crate) fn caller() -> CliResult<Value> {
     agent_from(lookup_caller()?)
 }
 
+/// Like [`caller`], using `no_session_hint` when no session environment is present while
+/// preserving gxserver connection/timeout and ambiguous-session errors intact.
+pub(crate) fn caller_with_no_session_hint(no_session_hint: &str) -> CliResult<Value> {
+    match lookup_caller()? {
+        CallerLookup::NoSession => Err(CliError::Other(no_session_hint.to_string())),
+        other => agent_from(other),
+    }
+}
+
 fn agent_from(lookup: CallerLookup) -> CliResult<Value> {
     match lookup {
         CallerLookup::Agent(caller) => Ok(caller),

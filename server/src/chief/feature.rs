@@ -57,6 +57,7 @@ const MESSAGE_ROUTES: &[&str] = &[
     "/api/sendSessionMessage",
     "/api/sendSessionText",
     "/api/sendSessionEnter",
+    "/api/sessionStandingRole",
 ];
 
 /*

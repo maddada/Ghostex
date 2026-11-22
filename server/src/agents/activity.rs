@@ -610,8 +610,8 @@ fn coordinator_session_start_context(
             && read_text(params, "eventName")
                 .is_some_and(|event| event.eq_ignore_ascii_case("agentSpawn")));
     let source = read_text(params, "hookSource").unwrap_or_default();
-    let resumed = source == "resume";
-    if !(SESSION_START_NOTE_AGENTS.contains(&agent.as_str()) && is_session_start) || resumed {
+    let keeps_context = matches!(source.as_str(), "resume" | "fork");
+    if !(SESSION_START_NOTE_AGENTS.contains(&agent.as_str()) && is_session_start) || keeps_context {
         return Ok(None);
     }
     let coordinator = crate::coordinators::read_coordinator(
@@ -642,6 +642,14 @@ fn coordinator_session_start_context(
         &lifecycle.session_id,
     )
     .map(|record| {
+        if source == "compact" {
+            let key = (lifecycle.project_id.clone(), lifecycle.session_id.clone());
+            crate::agents::standing_role::note_hook_compaction(
+                repository.connection(),
+                &key,
+                session,
+            );
+        }
         crate::agents::standing_role::session_start_note_for_other_agent(&record.role, &source)
     });
     let parts = [

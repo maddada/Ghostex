@@ -114,6 +114,8 @@ const SESSION_INPUT_ROUTES: &[&str] = &[
     "/api/interruptSessionChat",
     // `ghostex clear-command` types the agent's own clear command (session_clear_http.rs).
     "/api/clearSessionConversation",
+    // Standing role line injects context on SessionStart or after compaction (agents/standing_role.rs).
+    "/api/sessionStandingRole",
 ];
 
 /*

@@ -13,13 +13,16 @@ USAGE
 DETAILS
   - Without --session, targets the calling Ghostex session (resolved from
     GHOSTEX_GLOBAL_SESSION_REF / GHOSTEX_SESSION_ID). Pass --session <ref> to
-    inspect or update another session (including on another computer via its
-    global ref or --computer <name>).
+    inspect or update another session (a session can change its own standing
+    role, a session linked to it as lead, or one of its own threads; the user
+    can change any session).
   - Trimmed to one line, at most 600 characters; blank lines are rejected
     (use clear to remove a standing role).
   - Claude Code and Codex receive the line via their SessionStart hook on
     clear, compact and startup (not on resume or fork).
-  - Agents whose hooks cannot inject SessionStart context on compaction
-    (such as Antigravity and OpenCode) receive it once with the next delivered
-    message after compaction.
+  - ZCode, Antigravity, Kiro, CodeBuddy and Qoder receive it on SessionStart
+    (agentSpawn on Kiro), skipped on resume and fork.
+  - Agents whose hooks cannot inject SessionStart context on compaction and
+    whose transcripts emit Context compacted (OpenCode, Copilot, Hermes)
+    receive it once with the next delivered message after compaction.
   - Survives gxserver restarts and Previous Sessions restore.

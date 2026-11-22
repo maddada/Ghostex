@@ -235,6 +235,15 @@ pub fn record_standing_role_compaction(db: &Connection, key: &SessionKey, compac
     });
 }
 
+/// Records the session's current transcript compaction marker (if any) when a `SessionStart` hook
+/// already handed the standing role back on `source == "compact"`, preventing a duplicate delivery
+/// on the next message for agents in `SESSION_START_NOTE_AGENTS`.
+pub fn note_hook_compaction(db: &Connection, key: &SessionKey, session: &Value) {
+    if let Some(compaction) = crate::coordinators::newest_compaction_for_session(session) {
+        record_standing_role_compaction(db, key, &compaction);
+    }
+}
+
 /// Combines coordinator `SessionStart` context (if any) with a session's standing role line on
 /// Claude and Codex `SessionStart` (`clear`, `compact`, `startup`). Returns `None` for `resume`,
 /// `fork`, and any other source whose conversation still holds its earlier context.
@@ -322,31 +331,112 @@ fn param_text(params: &Map<String, Value>, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-fn caller_allowed(caller: &Principal) -> bool {
-    matches!(
-        caller,
-        Principal::Owner { .. }
-            | Principal::Device { .. }
-            | Principal::LocalAgent
-            | Principal::Session { .. }
-            | Principal::Peer { .. }
-    )
+fn forbidden(message: impl Into<String>) -> DomainStateError {
+    DomainStateError {
+        code: "forbidden",
+        message: message.into(),
+    }
+}
+
+fn authorize_caller(
+    caller: &Principal,
+    db: &Connection,
+    op: &str,
+    target: &SessionKey,
+    is_api_chat: bool,
+    is_chief: bool,
+    chief_on: bool,
+) -> Result<(), DomainStateError> {
+    let mutates = matches!(op, "set" | "clear");
+    match caller {
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent => Ok(()),
+        Principal::Session {
+            project_id: caller_project,
+            session_id: caller_session,
+            ..
+        } => {
+            let caller_key = (caller_project.clone(), caller_session.clone());
+            let is_self = caller_key == *target;
+            if is_api_chat && !is_self {
+                return Err(forbidden(
+                    "Only you, from Ghostex on your computer or phone, can read or change a GBot API chat's standing role.",
+                ));
+            }
+            if is_chief && !chief_on {
+                return Err(DomainStateError {
+                    code: "turnedOff",
+                    message: crate::chief::chief_off_message(),
+                });
+            }
+            if !mutates || is_self {
+                return Ok(());
+            }
+            let is_coordinator = crate::coordinators::read_coordinator(db, &target.0, &target.1)?
+                .is_some();
+            if is_coordinator || is_chief {
+                return Err(forbidden(
+                    "A session cannot change the standing role of a coordinator or Chief of Staff.",
+                ));
+            }
+            let leads_target =
+                crate::agents::lead_links::read_lead_link(db, &target.0, &target.1)?
+                    .is_some_and(|link| link.lead_key() == caller_key);
+            let owns_thread = crate::coordinators::read_thread(db, &target.0, &target.1)?
+                .is_some_and(|thread| thread.coordinator_key() == caller_key);
+            if leads_target || owns_thread {
+                return Ok(());
+            }
+            Err(forbidden(
+                "A session can only change its own standing role, a session linked to it as lead, or one of its own threads.",
+            ))
+        }
+        Principal::Peer { .. } => {
+            if is_api_chat {
+                return Err(forbidden(
+                    "Another computer cannot read or change a GBot API chat's standing role.",
+                ));
+            }
+            if is_chief && !chief_on {
+                return Err(DomainStateError {
+                    code: "turnedOff",
+                    message: crate::chief::chief_off_message(),
+                });
+            }
+            if mutates {
+                let is_coordinator =
+                    crate::coordinators::read_coordinator(db, &target.0, &target.1)?.is_some();
+                if is_coordinator || is_chief {
+                    return Err(forbidden(
+                        "Another computer cannot change the standing role of a coordinator or Chief of Staff.",
+                    ));
+                }
+            }
+            Ok(())
+        }
+        Principal::Guest { .. } | Principal::Extension { .. } | Principal::Anonymous => Err(
+            forbidden("Only the user or an agent session can read or change a session's standing role."),
+        ),
+    }
 }
 
 /// `/api/sessionStandingRole`: `{ op: "set" | "show" | "clear", projectId, sessionId, role? }`.
+#[allow(clippy::too_many_arguments)]
 pub fn handle_standing_role_endpoint(
     caller: &Principal,
     db: &Connection,
     repository: &DomainRepository<'_>,
     server_id: &str,
     params: &Map<String, Value>,
+    is_api_chat: bool,
+    is_chief: bool,
+    chief_on: bool,
 ) -> Result<Value, DomainStateError> {
-    if !caller_allowed(caller) {
-        return Err(DomainStateError::bad_request(
-            "Only the user or an agent session can read or change a session's standing role.",
-        ));
-    }
     let op = param_text(params, "op").unwrap_or_default();
+    if !matches!(op.as_str(), "set" | "show" | "clear") {
+        return Err(DomainStateError::bad_request(format!(
+            "Unknown standing role op \"{op}\"."
+        )));
+    }
     let (Some(project_id), Some(session_id)) =
         (param_text(params, "projectId"), param_text(params, "sessionId"))
     else {
@@ -354,11 +444,12 @@ pub fn handle_standing_role_endpoint(
             "This standing role request needs projectId and sessionId.",
         ));
     };
+    let key = (project_id.clone(), session_id.clone());
+    authorize_caller(caller, db, &op, &key, is_api_chat, is_chief, chief_on)?;
     let session = repository
         .get_session(&project_id, &session_id)?
         .ok_or_else(|| DomainStateError::not_found("That session no longer exists."))?;
     let global_ref = create_global_session_ref(server_id, &project_id, &session_id);
-    let key = (project_id.clone(), session_id.clone());
     match op.as_str() {
         "set" => {
             let role = params
@@ -398,8 +489,6 @@ pub fn handle_standing_role_endpoint(
                 "globalRef": global_ref,
             }))
         }
-        other => Err(DomainStateError::bad_request(format!(
-            "Unknown standing role op \"{other}\"."
-        ))),
+        _ => unreachable!("validated standing role op"),
     }
 }
