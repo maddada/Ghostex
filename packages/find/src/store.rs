@@ -107,6 +107,12 @@ pub struct AnswerSyncStats {
     pub remaining_files: usize,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UserSyncStats {
+    pub written: usize,
+    pub complete: bool,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct EmptyPageResult {
     pub matched: usize,
@@ -224,17 +230,22 @@ impl SearchStore {
 
     /// Upsert user prompt records in bounded transactions so writers and readers
     /// never block for seconds, skipping rows whose key and metadata are unchanged.
-    pub fn sync_user_records(&mut self, records: &[Record]) -> usize {
+    pub fn sync_user_records(&mut self, records: &[Record]) -> UserSyncStats {
         if records.is_empty() {
-            return 0;
+            return UserSyncStats {
+                written: 0,
+                complete: true,
+            };
         }
         let mut written = 0usize;
+        let mut complete = true;
         for chunk in records.chunks(USER_SYNC_BATCH_SIZE) {
             let _guard = write_lock();
             let Ok(tx) = self
                 .conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
             else {
+                complete = false;
                 break;
             };
             let mut batch_written = 0usize;
@@ -257,6 +268,7 @@ impl SearchStore {
                         OR (excluded.session_id <> '' AND excluded.session_id <> search_items.session_id)
                     "#,
                 ) else {
+                    complete = false;
                     break;
                 };
                 for rec in chunk {
@@ -266,7 +278,7 @@ impl SearchStore {
                     );
                     let meta_json =
                         serde_json::to_string(&rec.meta).unwrap_or_else(|_| "{}".to_string());
-                    if let Ok(changed) = stmt.execute(params![
+                    match stmt.execute(params![
                         item_key,
                         rec.agent.label(),
                         rec.kind.as_str(),
@@ -279,15 +291,18 @@ impl SearchStore {
                         meta_json,
                         "",
                     ]) {
-                        batch_written += changed;
+                        Ok(changed) => batch_written += changed,
+                        Err(_) => complete = false,
                     }
                 }
             }
             if tx.commit().is_ok() {
                 written += batch_written;
+            } else {
+                complete = false;
             }
         }
-        written
+        UserSyncStats { written, complete }
     }
 
     fn file_is_current(&self, path_str: &str, size: u64, mtime_ns: i64) -> bool {

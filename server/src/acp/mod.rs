@@ -87,18 +87,13 @@ pub fn agent_acp_enabled_in_shared_settings(agent_family: &str) -> bool {
         .is_some_and(|map| agent_acp_enabled(&map, agent_family))
 }
 
-/// Canonicalized Ghostex-owned attachment and temp directories that Non-CLI image sends may read from.
-/// Excludes daemon state roots (`root_dir`, `auth_dir`, `state.db`) and arbitrary user/system paths.
+/// Canonicalized Ghostex-owned attachment directories (`app_data_dir/i` and `app_data_dir/f`) that
+/// Non-CLI image sends may read from. Excludes daemon state, cache, runtime, and arbitrary paths.
 pub(crate) fn allowed_acp_image_dirs(paths: &GxserverPaths) -> Vec<PathBuf> {
-    [
-        paths.app_data_dir.join("i"),
-        paths.app_data_dir.join("f"),
-        paths.app_cache_dir.clone(),
-        paths.runtime_dir.clone(),
-    ]
-    .into_iter()
-    .filter_map(|dir| fs::canonicalize(dir).ok())
-    .collect()
+    [paths.app_data_dir.join("i"), paths.app_data_dir.join("f")]
+        .into_iter()
+        .filter_map(|dir| fs::canonicalize(dir).ok())
+        .collect()
 }
 
 /// Identify a supported raster image MIME type strictly from its leading magic bytes (never from

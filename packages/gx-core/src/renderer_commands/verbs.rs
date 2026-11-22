@@ -87,6 +87,8 @@ const SETTINGS_SEARCH_MAX_UTF16: usize = 200;
 pub const SETTINGS_PATCH_MAX_KEYS: usize = 50;
 /// Far above the ~100 hotkey ids; bounds what one `ghostex settings hotkeys` save can carry.
 const SETTINGS_PATCH_MAX_HOTKEYS: usize = 512;
+/// Bounds per-agent override maps (`agentSessionMode`, `preferredAgentInterfaceOverrides`).
+const SETTINGS_PATCH_MAX_AGENT_OVERRIDES: usize = 256;
 /// The longest list setting a patch carries (`unifiedProjectOrder`, `sidebarSessionTagListItems`).
 const SETTINGS_PATCH_MAX_LIST_ITEMS: usize = 1024;
 
@@ -481,13 +483,28 @@ fn settings_patch(payload: &Value) -> Result<RendererVerb, RendererCommandError>
 }
 
 /// A value `updateSettingsPatch` takes for `key`: a boolean, string or finite number, the
-/// `hotkeys` map, or one of the sidebar's two lists. Settings sync carries only these (gx-core settings_sync/settings_keys.rs).
+/// `hotkeys` / `themeRoles` / per-agent override maps, or one of the sidebar's two lists.
+/// Settings sync carries only these (gx-core settings_sync/settings_keys.rs).
 pub fn settings_patch_value_allowed(key: &str, value: &Value) -> bool {
     match value {
         Value::Bool(_) | Value::String(_) => true,
         Value::Number(number) => number.as_f64().is_some_and(f64::is_finite),
         Value::Object(hotkeys) if key == "hotkeys" => {
             hotkeys.len() <= SETTINGS_PATCH_MAX_HOTKEYS && hotkeys.values().all(Value::is_string)
+        }
+        Value::Object(modes) if key == "agentSessionMode" => {
+            modes.len() <= SETTINGS_PATCH_MAX_AGENT_OVERRIDES
+                && modes.iter().all(|(family, mode)| {
+                    !family.trim().is_empty()
+                        && matches!(mode.as_str(), Some("agent-cli" | "non-cli"))
+                })
+        }
+        Value::Object(overrides) if key == "preferredAgentInterfaceOverrides" => {
+            overrides.len() <= SETTINGS_PATCH_MAX_AGENT_OVERRIDES
+                && overrides.iter().all(|(agent_id, view)| {
+                    !agent_id.trim().is_empty()
+                        && matches!(view.as_str(), Some("terminal" | "chat"))
+                })
         }
         // The theme roles `ghostex theme set` saves whole (settings-catalog theme_roles.rs).
         Value::Object(_) if key == ghostex_settings_catalog::theme_roles::THEME_ROLES_SETTING => {

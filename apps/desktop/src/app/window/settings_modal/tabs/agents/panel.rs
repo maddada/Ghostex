@@ -149,19 +149,32 @@ impl AgentsTab {
     }
 
     fn set_session_mode(&mut self, family: &str, mode: String, cx: &mut Context<Self>) {
-        let mut map: Map<String, Value> = self
-            .store
-            .read(cx)
-            .value("agentSessionMode")
-            .as_object()
-            .cloned()
-            .unwrap_or_default();
-        if mode == "non-cli" {
-            map.insert(family.to_string(), json!("non-cli"));
+        let (mut map, legacy_map) = {
+            let store = self.store.read(cx);
+            let modes = store
+                .value("agentSessionMode")
+                .as_object()
+                .cloned()
+                .unwrap_or_default();
+            let legacy = store.value("agentAcpMode").as_object().cloned();
+            (modes, legacy)
+        };
+        let normalized = if mode == "non-cli" {
+            "non-cli"
         } else {
-            map.remove(family);
+            "agent-cli"
+        };
+        map.insert(family.to_string(), json!(normalized));
+        let mut patch = Map::new();
+        patch.insert("agentSessionMode".to_string(), Value::Object(map));
+        if let Some(mut legacy) = legacy_map {
+            if legacy.remove(family).is_some() {
+                patch.insert("agentAcpMode".to_string(), Value::Object(legacy));
+            }
         }
-        self.save("agentSessionMode", Value::Object(map), cx);
+        self.store.update(cx, |store, cx| {
+            store.apply_patch(patch, "settings:control", cx)
+        });
     }
 
     #[allow(clippy::too_many_arguments)]

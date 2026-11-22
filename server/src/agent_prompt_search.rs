@@ -61,6 +61,7 @@ struct CachedStore {
     opencode_error: Option<String>,
     empryo_error: Option<String>,
     epoch: u64,
+    sync_complete: bool,
     synced_at: Instant,
     synced_at_unix: i64,
 }
@@ -195,7 +196,7 @@ fn sync_store(
         message: "Could not open the rebuildable search index database.".to_string(),
     })?;
     let built = SearchIndex::build(&home, &cache_root, favorites_path.clone());
-    store.sync_user_records(&built.records);
+    let user_sync = store.sync_user_records(&built.records);
     let home_path = PathBuf::from(&home);
     let stats = store.sync_answer_sources_budgeted(
         &home_path,
@@ -215,6 +216,7 @@ fn sync_store(
         opencode_error: built.opencode_error,
         empryo_error: built.empryo_error,
         epoch: prev_epoch + 1,
+        sync_complete: user_sync.complete,
         synced_at: Instant::now(),
         synced_at_unix: now_unix(),
     })
@@ -255,7 +257,9 @@ fn with_store_policy<T>(
         let fresh = match guard.as_ref() {
             None => false,
             Some(cached) => {
-                !force_refresh && (!sync_when_stale || cached.synced_at.elapsed() <= INDEX_MAX_AGE)
+                !force_refresh
+                    && (!sync_when_stale
+                        || (cached.sync_complete && cached.synced_at.elapsed() <= INDEX_MAX_AGE))
             }
         };
         if fresh {
@@ -278,7 +282,10 @@ fn with_store_policy<T>(
         if !force_refresh {
             let fresh = match guard.as_ref() {
                 None => false,
-                Some(cached) => !sync_when_stale || cached.synced_at.elapsed() <= INDEX_MAX_AGE,
+                Some(cached) => {
+                    !sync_when_stale
+                        || (cached.sync_complete && cached.synced_at.elapsed() <= INDEX_MAX_AGE)
+                }
             };
             if fresh {
                 let cached = guard.as_mut().expect("checked Some above");

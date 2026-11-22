@@ -13,7 +13,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use serde_json::{Value, json};
@@ -963,20 +963,30 @@ pub fn run(args: &[String]) -> i32 {
                     t_sig.close_stdin();
                     let pid = pid_sig.swap(0, Ordering::AcqRel);
                     if pid != 0 {
+                        let cpid = pid as libc::pid_t;
                         unsafe {
-                            libc::kill(pid as libc::pid_t, libc::SIGTERM);
+                            libc::kill(cpid, libc::SIGTERM);
                         }
-                        let deadline = SystemTime::now() + Duration::from_secs(1);
-                        while SystemTime::now() < deadline {
-                            let alive = unsafe { libc::kill(pid as libc::pid_t, 0) == 0 };
-                            if !alive {
+                        let mut reaped = false;
+                        let deadline = Instant::now() + Duration::from_secs(1);
+                        while Instant::now() < deadline {
+                            let waited = unsafe {
+                                libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG)
+                            };
+                            if waited > 0
+                                || (waited < 0
+                                    && std::io::Error::last_os_error().raw_os_error()
+                                        != Some(libc::EINTR))
+                            {
+                                reaped = true;
                                 break;
                             }
                             thread::sleep(Duration::from_millis(50));
                         }
-                        unsafe {
-                            if libc::kill(pid as libc::pid_t, 0) == 0 {
-                                libc::kill(pid as libc::pid_t, libc::SIGKILL);
+                        if !reaped {
+                            unsafe {
+                                libc::kill(cpid, libc::SIGKILL);
+                                let _ = libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG);
                             }
                         }
                     }

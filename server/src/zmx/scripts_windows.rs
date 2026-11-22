@@ -195,6 +195,9 @@ fn start(
     for (key, value) in coordinator_environment {
         environment.insert(key.to_string(), value);
     }
+    let cli = std::env::current_exe()
+        .expect("resolve running gxserver for the session editor")
+        .with_file_name("ghostex.exe");
     for (key, value) in [
         ("GHOSTEX_GLOBAL_SESSION_REF", global_ref),
         ("GHOSTEX_GXSERVER_AUTH_TOKEN_FILE", token_file),
@@ -205,6 +208,10 @@ fn start(
         ),
         ("GHOSTEX_SESSION_ID", Some(name.to_string())),
         ("GHOSTEX_ZMX_BIN", Some(program.to_string())),
+        (
+            "GHOSTEX_CLI_EXECUTABLE",
+            Some(cli.to_string_lossy().into_owned()),
+        ),
         (
             super::PROMPT_HANDSHAKE_DIR_ENV,
             Some(super::prompt_handshake_dir().to_string_lossy().into_owned()),
@@ -224,9 +231,6 @@ fn start(
             environment.insert(key.into(), value);
         }
     }
-    let cli = std::env::current_exe()
-        .expect("resolve running gxserver for the session editor")
-        .with_file_name("ghostex.exe");
     let editor = format!("\"{}\" prompt-editor", cli.to_string_lossy());
     // The profile runs after ConPTY applies launch.cwd and may change location.
     // Restore the selected project before any agent command can run.

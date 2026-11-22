@@ -156,13 +156,17 @@ fn build_acp_host_launch_command_for_platform(
 }
 
 /// Shell-aware tokenizer for a stored CLI command line (handles single/double quotes, escaped
-/// spaces on POSIX, PowerShell doubled single quotes, and preserves Windows paths with spaces).
+/// spaces on POSIX, PowerShell doubled quotes and statement separators, Windows CRT backslash
+/// rules before double quotes, and preserves Windows paths with spaces).
 pub(crate) fn tokenize_cli_command(command: &str) -> Vec<String> {
+    tokenize_cli_command_for_platform(command, cfg!(windows))
+}
+
+fn tokenize_cli_command_for_platform(command: &str, is_windows: bool) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut in_token = false;
     let mut chars = command.trim().chars().peekable();
-    let is_windows = cfg!(windows);
 
     while let Some(ch) = chars.next() {
         match ch {
@@ -196,16 +200,31 @@ pub(crate) fn tokenize_cli_command(command: &str) -> Vec<String> {
                                 break;
                             }
                         }
+                        '\\' if is_windows => {
+                            // Windows CRT CommandLineToArgvW rule: 2n backslashes before `"` emit n
+                            // backslashes and close the quote; 2n+1 backslashes before `"` emit n
+                            // backslashes and a literal `"`; backslashes not before `"` are literal.
+                            let mut backslashes = 1usize;
+                            while chars.peek() == Some(&'\\') {
+                                chars.next();
+                                backslashes += 1;
+                            }
+                            if chars.peek() == Some(&'"') {
+                                for _ in 0..(backslashes / 2) {
+                                    current.push('\\');
+                                }
+                                if backslashes % 2 == 1 {
+                                    chars.next();
+                                    current.push('"');
+                                }
+                            } else {
+                                for _ in 0..backslashes {
+                                    current.push('\\');
+                                }
+                            }
+                        }
                         '\\' => match chars.peek().copied() {
-                            Some('"') => {
-                                chars.next();
-                                current.push('"');
-                            }
-                            Some('\\') if !is_windows => {
-                                chars.next();
-                                current.push('\\');
-                            }
-                            Some(esc @ ('$' | '`')) if !is_windows => {
+                            Some(esc @ ('"' | '\\' | '$' | '`')) => {
                                 chars.next();
                                 current.push(esc);
                             }
@@ -222,6 +241,13 @@ pub(crate) fn tokenize_cli_command(command: &str) -> Vec<String> {
                 } else {
                     current.push('\\');
                 }
+            }
+            ';' if is_windows => {
+                if in_token {
+                    tokens.push(std::mem::take(&mut current));
+                    in_token = false;
+                }
+                tokens.push(";".to_string());
             }
             ch if ch.is_whitespace() => {
                 if in_token {
@@ -245,28 +271,91 @@ pub(crate) fn tokenize_cli_command(command: &str) -> Vec<String> {
     tokens
 }
 
+fn is_valid_env_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn strip_ps_env_prefix(token: &str) -> Option<&str> {
+    if token.len() > 5 && token[..5].eq_ignore_ascii_case("$env:") {
+        Some(&token[5..])
+    } else {
+        None
+    }
+}
+
 fn split_leading_env_assignments(tokens: Vec<String>) -> (Vec<(String, String)>, Vec<String>) {
     let mut envs = Vec::new();
     let mut idx = 0;
+    let mut saw_env_cmd = false;
+
     while idx < tokens.len() {
         let token = &tokens[idx];
-        let is_env = token
-            .split_once('=')
-            .filter(|(k, _)| {
-                !k.is_empty()
-                    && k.chars()
-                        .next()
-                        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-                    && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-            })
-            .map(|(k, v)| (k.to_string(), v.to_string()));
-        if let Some(pair) = is_env {
-            envs.push(pair);
+
+        if token == ";" {
             idx += 1;
-        } else {
+            continue;
+        }
+
+        // PowerShell `$env:KEY=VAL` (with optional trailing `;` or spaces around `=`).
+        if let Some(rest) = strip_ps_env_prefix(token) {
+            if let Some((k, v)) = rest.split_once('=') {
+                if is_valid_env_name(k) {
+                    let val = v.strip_suffix(';').unwrap_or(v);
+                    envs.push((k.to_string(), val.to_string()));
+                    idx += 1;
+                    continue;
+                }
+            } else if is_valid_env_name(rest) && idx + 1 < tokens.len() {
+                if tokens[idx + 1] == "=" && idx + 2 < tokens.len() {
+                    let val = tokens[idx + 2]
+                        .strip_suffix(';')
+                        .unwrap_or(&tokens[idx + 2]);
+                    envs.push((rest.to_string(), val.to_string()));
+                    idx += 3;
+                    continue;
+                }
+                if let Some(after_eq) = tokens[idx + 1].strip_prefix('=') {
+                    let val = after_eq.strip_suffix(';').unwrap_or(after_eq);
+                    envs.push((rest.to_string(), val.to_string()));
+                    idx += 2;
+                    continue;
+                }
+            }
             break;
         }
+
+        // POSIX `KEY=VAL` assignment.
+        if let Some((k, v)) = token.split_once('=') {
+            if is_valid_env_name(k) {
+                envs.push((k.to_string(), v.to_string()));
+                idx += 1;
+                continue;
+            }
+        }
+
+        // POSIX `env` / `/usr/bin/env` wrapper (with optional `--`) when followed by a target.
+        if !saw_env_cmd && (token == "env" || token == "/usr/bin/env") && idx + 1 < tokens.len() {
+            saw_env_cmd = true;
+            idx += 1;
+            if idx < tokens.len() && tokens[idx] == "--" && idx + 1 < tokens.len() {
+                idx += 1;
+            }
+            continue;
+        }
+
+        break;
     }
+
+    // Drop a PowerShell call operator `&` that followed leading `$env:` assignments.
+    if idx + 1 < tokens.len() && tokens[idx] == "&" {
+        idx += 1;
+    }
+
     (envs, tokens[idx..].to_vec())
 }
 
@@ -298,11 +387,13 @@ pub fn build_cli_switch_argv(
     native_session_id: Option<&str>,
     accept_all: bool,
 ) -> (Vec<(String, String)>, String, Vec<String>) {
-    let (envs, base_tokens) = cli_command
+    let (envs, mut base_tokens) = cli_command
         .map(tokenize_cli_command)
         .map(split_leading_env_assignments)
-        .filter(|(_, tokens)| !tokens.is_empty())
-        .unwrap_or_else(|| (Vec::new(), vec![spec.default_cli_bin.to_string()]));
+        .unwrap_or_default();
+    if base_tokens.is_empty() {
+        base_tokens.push(spec.default_cli_bin.to_string());
+    }
     let program = base_tokens[0].clone();
     let mut args = base_tokens[1..].to_vec();
     if accept_all {
