@@ -217,7 +217,8 @@ pub(crate) fn session_waiting_for_idle_compaction(
     else {
         return false;
     };
-    let hook_state_directory = crate::session_chat_options::session_chat_hook_state_directory(paths);
+    let hook_state_directory =
+        crate::session_chat_options::session_chat_hook_state_directory(paths);
     let Some((selection, _)) = crate::session_chat_options::read_claude_statusline_reading(
         &hook_state_directory,
         agent_session_id,

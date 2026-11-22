@@ -1028,11 +1028,7 @@ impl GhostexGpuiApp {
             return;
         }
         let machine = ghostex_gx_core::LOCAL_MACHINE_ID.to_string();
-        self.change_native_sidebar_chief(
-            &machine,
-            json!({ "op": "prompt", "prompt": prompt }),
-            cx,
-        );
+        self.change_native_sidebar_chief(&machine, json!({ "op": "prompt", "prompt": prompt }), cx);
     }
 
     /// `open` (first open with the picked agent), `newChat`, `setAgent` or `prompt`, then opens the chat.

@@ -103,9 +103,9 @@ pub(crate) async fn generate_first_prompt_session_title(
 /// SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/agents/model.rs `title_generation_preview`, which must preview the same commands.
 pub(crate) fn normalize_title_generation_agent(value: Option<&str>) -> String {
     match value {
-        Some("codex" | "cursor" | "claude" | "grok" | "pi" | "antigravity" | "empryo" | "custom") => {
-            value.unwrap().to_string()
-        }
+        Some(
+            "codex" | "cursor" | "claude" | "grok" | "pi" | "antigravity" | "empryo" | "custom",
+        ) => value.unwrap().to_string(),
         _ => "claude".to_string(),
     }
 }

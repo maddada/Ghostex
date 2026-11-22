@@ -232,11 +232,15 @@ pub(super) fn chat_settings() -> ChatSettings {
             object
                 .get("claudeIdleCompactAbove")
                 .and_then(|value| {
-                    value
-                        .as_u64()
-                        .or_else(|| value.as_str().and_then(|text| text.trim().parse::<u64>().ok()))
+                    value.as_u64().or_else(|| {
+                        value
+                            .as_str()
+                            .and_then(|text| text.trim().parse::<u64>().ok())
+                    })
                 })
-                .unwrap_or(ghostex_gx_chat_core::composer::compact_prompt::DEFAULT_COMPACT_CHATS_ABOVE)
+                .unwrap_or(
+                    ghostex_gx_chat_core::composer::compact_prompt::DEFAULT_COMPACT_CHATS_ABOVE,
+                )
         }),
     }
 }

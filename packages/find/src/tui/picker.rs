@@ -1,5 +1,5 @@
-use crate::agent::{ALL_AGENTS, Agent};
-use crate::index::{Hit, QueryOptions, SearchIndex, day_key};
+use crate::agent::{Agent, ALL_AGENTS};
+use crate::index::{day_key, Hit, QueryOptions, SearchIndex};
 use crate::scan::Record;
 
 use super::*;

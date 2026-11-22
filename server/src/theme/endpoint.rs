@@ -661,19 +661,18 @@ async fn save_current_theme(
         ));
     }
     let settings = read_settings(state)?;
-    let mut keys: Vec<String> = ghostex_settings_catalog::general_sections(
-        ghostex_settings_catalog::Platform::current(),
-    )
-    .into_iter()
-    .find(|section| section.id == "theming")
-    .map(|section| {
-        section
-            .settings
+    let mut keys: Vec<String> =
+        ghostex_settings_catalog::general_sections(ghostex_settings_catalog::Platform::current())
             .into_iter()
-            .map(|row| row.key.to_string())
-            .collect()
-    })
-    .unwrap_or_default();
+            .find(|section| section.id == "theming")
+            .map(|section| {
+                section
+                    .settings
+                    .into_iter()
+                    .map(|row| row.key.to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
     keys.retain(|key| !SAVED_THEME_EXCLUDED.contains(&key.as_str()));
     keys.extend(SAVED_THEME_EXTRA_KEYS.iter().map(|key| (*key).to_string()));
     let mut snapshot = Map::new();

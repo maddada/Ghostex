@@ -173,11 +173,7 @@ async fn deliver(state: Arc<AppState>, project: String, session_id: String, clai
         if ok { "success" } else { "failed" },
         result.as_ref().err().map(|error| error.message.as_str()),
     );
-    runtime["accountRecovery"]["status"] = json!(if ok {
-        "resumed"
-    } else {
-        "needsAttention"
-    });
+    runtime["accountRecovery"]["status"] = json!(if ok { "resumed" } else { "needsAttention" });
     runtime["accountRecovery"]["reason"] = json!(match result {
         Ok(()) => "Continuation sent on the selected account.".to_string(),
         Err(error) => error.message,

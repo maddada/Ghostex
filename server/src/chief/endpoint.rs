@@ -160,13 +160,12 @@ async fn prompt_chief(
         .and_then(Value::as_str)
         .map(str::to_string);
     let worker = state.clone();
-    let mut result =
-        tokio::task::spawn_blocking(move || open_chief(&worker, agent_id.as_deref()))
-            .await
-            .map_err(|error| DomainStateError {
-                code: "internalError",
-                message: format!("Ghostex AI could not answer: {error}"),
-            })??;
+    let mut result = tokio::task::spawn_blocking(move || open_chief(&worker, agent_id.as_deref()))
+        .await
+        .map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("Ghostex AI could not answer: {error}"),
+        })??;
     let (project_id, session_id) = result["chief"]["projectId"]
         .as_str()
         .zip(result["chief"]["sessionId"].as_str())
@@ -178,8 +177,7 @@ async fn prompt_chief(
     if let Some(first_message) =
         crate::session_chat_first_message::edit(state, &project_id, &session_id).await?
     {
-        const GREETING_TAIL: &str =
-            "Then greet the user as its \"Your first reply\" section says.";
+        const GREETING_TAIL: &str = "Then greet the user as its \"Your first reply\" section says.";
         let replacement = format!(
             "Skip the getting-started greeting and handle this request from the user right away:\n\n{prompt}"
         );

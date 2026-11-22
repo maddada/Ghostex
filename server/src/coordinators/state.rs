@@ -270,7 +270,10 @@ pub fn thread_wait_info(session: &Value, state: ThreadState) -> Option<ThreadWai
         return session_usage_limit_info(session, None, false);
     }
     let screen = recorded_screen_wait(session);
-    if let Some(wait) = screen.as_ref().filter(|wait| wait.kind == ThreadWaitKind::Approval) {
+    if let Some(wait) = screen
+        .as_ref()
+        .filter(|wait| wait.kind == ThreadWaitKind::Approval)
+    {
         return Some(ThreadWaitInfo {
             kind: ThreadWaitKind::Approval,
             summary: wait.short_summary.clone(),
@@ -609,7 +612,8 @@ fn notice_wait_kind(notice: &SessionChatTerminalNotice) -> ThreadWaitKind {
                 .approval_command
                 .as_deref()
                 .is_some_and(|cmd| !cmd.trim().is_empty())
-            || (notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED
+            || (notice.kind
+                == crate::session_chat_notice::SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED
                 && notice.title.to_ascii_lowercase().contains("approv")) =>
         {
             ThreadWaitKind::Approval
@@ -760,7 +764,10 @@ impl ThreadScreenWait {
             let user_approval = matches!(kind, ThreadWaitKind::Approval);
             // Usage limits and exited agents never count as user-approval blocking screens.
             let blocking = notice.blocks_input()
-                && !matches!(kind, ThreadWaitKind::UsageLimit | ThreadWaitKind::AgentExited);
+                && !matches!(
+                    kind,
+                    ThreadWaitKind::UsageLimit | ThreadWaitKind::AgentExited
+                );
             return Some(Self {
                 prompt: ThreadPrompt {
                     key: format!("notice:{}:{}", notice.kind, notice.title),

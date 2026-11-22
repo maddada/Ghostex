@@ -1046,21 +1046,28 @@ impl ChatOptionMenuPanel {
                 // CDXC:AgentProviders 2026-11-22 DECISION in server/src/accounts/limit_wait.rs:
                 // a fix for each account the sentence names (Sign in, Turn on, Use it for this
                 // session), one to a line so the box's height stays known.
-                .children(fixes.into_iter().enumerate().map(|(index, (label, command))| {
-                    div()
-                        .flex()
-                        .child(self.button(
-                            gpui::SharedString::from(format!("account-recovery-fix-{index}")),
-                            label,
-                            None,
-                            busy,
-                            Action::Close(command),
-                            colors,
-                            s,
-                            cx,
-                        ))
-                        .into_any_element()
-                }))
+                .children(
+                    fixes
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, (label, command))| {
+                            div()
+                                .flex()
+                                .child(self.button(
+                                    gpui::SharedString::from(format!(
+                                        "account-recovery-fix-{index}"
+                                    )),
+                                    label,
+                                    None,
+                                    busy,
+                                    Action::Close(command),
+                                    colors,
+                                    s,
+                                    cx,
+                                ))
+                                .into_any_element()
+                        }),
+                )
                 .child(
                     div()
                         .flex()

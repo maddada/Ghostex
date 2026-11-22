@@ -122,9 +122,7 @@ pub(crate) fn own_box_key(paths: &GxserverPaths, address: &str, purpose: &str) -
         .ok()?
         .into_iter()
         .map(|stored| stored.row)
-        .filter(|row| {
-            row.state != CloudBoxState::Deleted && row.provider != CloudProviderId::Local
-        })
+        .filter(|row| row.state != CloudBoxState::Deleted && row.provider != CloudProviderId::Local)
         .collect();
     let row = rows
         .iter()

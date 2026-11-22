@@ -36,9 +36,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Local, Utc};
 use serde_json::{json, Value};
 
-use crate::ghostex_cli::{
-    accounts as accounts_cli, agents, args::Flags, rpc::call_gxserver_rpc,
-};
+use crate::ghostex_cli::{accounts as accounts_cli, agents, args::Flags, rpc::call_gxserver_rpc};
 
 /// An account at this share of its 7d window (or any window longer than 5h, such as a usage-only
 /// account's month) or more is close to out: days of work are gone when it fills.
@@ -133,7 +131,8 @@ impl Account {
         self.long.is_some_and(|used| used >= LONG_PERCENT)
             || self.short.is_some_and(|(used, resets)| {
                 used >= SHORT_PERCENT
-                    && resets.is_none_or(|at| at - now >= chrono::Duration::hours(SHORT_RESET_HOURS))
+                    && resets
+                        .is_none_or(|at| at - now >= chrono::Duration::hours(SHORT_RESET_HOURS))
             })
     }
 }

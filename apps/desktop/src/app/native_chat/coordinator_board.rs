@@ -1365,8 +1365,7 @@ impl NativeChatView {
         let relayed = Some(text(&row["openThread"], "sessionId"))
             .filter(|session| !session.is_empty())
             .or_else(|| {
-                Some(text(&row["dock"]["open"], "sessionId"))
-                    .filter(|session| !session.is_empty())
+                Some(text(&row["dock"]["open"], "sessionId")).filter(|session| !session.is_empty())
             })
             .and_then(|session| self.relayed_card_for_thread(&session));
         // Line 2 closed, or the chip block open: every chip when open (they wrap), else the chips
@@ -1806,8 +1805,7 @@ impl NativeChatView {
         let relayed = Some(text(&row["openThread"], "sessionId"))
             .filter(|session| !session.is_empty())
             .or_else(|| {
-                Some(text(&row["dock"]["open"], "sessionId"))
-                    .filter(|session| !session.is_empty())
+                Some(text(&row["dock"]["open"], "sessionId")).filter(|session| !session.is_empty())
             })
             .and_then(|session| self.relayed_card_for_thread(&session));
         // A thread's approval is decided from what it would run: its whole command shows on the
@@ -3285,11 +3283,13 @@ impl NativeChatView {
                 },
             )
             .text_size(px(CHIP_SIZE * s))
-            .text_color(if matches!(kind.as_str(), "release" | "question" | "usageLimit") {
-                color
-            } else {
-                p.card_muted
-            })
+            .text_color(
+                if matches!(kind.as_str(), "release" | "question" | "usageLimit") {
+                    color
+                } else {
+                    p.card_muted
+                },
+            )
             .tooltip(move |window, cx| {
                 gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
             })

@@ -350,7 +350,12 @@ impl GpuiOnboardingWindow {
         self.update_settings(patch, cx);
     }
 
-    fn pick_look_no_artwork(&mut self, dark: bool, enable_transparency: bool, cx: &mut Context<Self>) {
+    fn pick_look_no_artwork(
+        &mut self,
+        dark: bool,
+        enable_transparency: bool,
+        cx: &mut Context<Self>,
+    ) {
         let values = self.settings.to_settings_values();
         let mut patch = Map::new();
         patch.insert(art_key(dark).into(), json!("none"));
@@ -633,7 +638,11 @@ impl GpuiOnboardingWindow {
     fn pick_look_square(&mut self, dark: bool, preset: String, cx: &mut Context<Self>) {
         let mut patch = Map::new();
         let (key, other_key, other_picked) = if dark {
-            ("darkThemePreset", "lightThemePreset", self.look.picked_light)
+            (
+                "darkThemePreset",
+                "lightThemePreset",
+                self.look.picked_light,
+            )
         } else {
             ("lightThemePreset", "darkThemePreset", self.look.picked_dark)
         };
@@ -742,49 +751,57 @@ impl GpuiOnboardingWindow {
             .border_1()
             .border_color(rgba(160, 180, 255, 0.14))
             .children(
-                [("system", "System"), ("plain-light", "Light"), ("dark-2", "Dark")]
-                    .into_iter()
-                    .map(|(value, name)| {
-                        let selected = appearance == value;
-                        let key = SharedString::from(format!("look-appearance-{value}"));
-                        let label_text = appearance_label(value, name, sys_light);
-                        self.control(
-                            s,
-                            div()
-                                .id(key.clone())
-                                .flex_1()
-                                .h(s.px(30.0))
-                                .rounded(s.px(7.0))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .cursor_pointer()
-                                .when(selected, |this| {
-                                    this.bg(rgba(44, 56, 102, 0.85))
-                                        .border_1()
-                                        .border_color(rgba(124, 148, 232, 0.5))
-                                })
-                                .child(
-                                    sans(
-                                        s,
-                                        13.0,
-                                        if selected { 600.0 } else { 400.0 },
-                                        if selected { hex(0xeef1f7) } else { hex(0x9aa3b8) },
-                                    )
-                                    .child(label_text),
-                                ),
-                            key,
-                            interact::Ring::new(7.0, 1.0),
-                            interact::Keys::EnterSpace,
-                            cx,
-                            move |this, _, cx| {
-                                let mut patch = Map::new();
-                                patch.insert("sidebarTheme".into(), json!(value));
-                                this.look.artworks_revealed = None;
-                                this.update_settings(patch, cx);
-                            },
-                        )
-                    }),
+                [
+                    ("system", "System"),
+                    ("plain-light", "Light"),
+                    ("dark-2", "Dark"),
+                ]
+                .into_iter()
+                .map(|(value, name)| {
+                    let selected = appearance == value;
+                    let key = SharedString::from(format!("look-appearance-{value}"));
+                    let label_text = appearance_label(value, name, sys_light);
+                    self.control(
+                        s,
+                        div()
+                            .id(key.clone())
+                            .flex_1()
+                            .h(s.px(30.0))
+                            .rounded(s.px(7.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .when(selected, |this| {
+                                this.bg(rgba(44, 56, 102, 0.85))
+                                    .border_1()
+                                    .border_color(rgba(124, 148, 232, 0.5))
+                            })
+                            .child(
+                                sans(
+                                    s,
+                                    13.0,
+                                    if selected { 600.0 } else { 400.0 },
+                                    if selected {
+                                        hex(0xeef1f7)
+                                    } else {
+                                        hex(0x9aa3b8)
+                                    },
+                                )
+                                .child(label_text),
+                            ),
+                        key,
+                        interact::Ring::new(7.0, 1.0),
+                        interact::Keys::EnterSpace,
+                        cx,
+                        move |this, _, cx| {
+                            let mut patch = Map::new();
+                            patch.insert("sidebarTheme".into(), json!(value));
+                            this.look.artworks_revealed = None;
+                            this.update_settings(patch, cx);
+                        },
+                    )
+                }),
             );
 
         // ---- Theme tiles (4 columns, 7 initial themes + "+N More themes" expanding all) ----
@@ -844,7 +861,11 @@ impl GpuiOnboardingWindow {
                                 s,
                                 12.0,
                                 if selected { 600.0 } else { 400.0 },
-                                if selected { hex(0xeef1f7) } else { hex(0x9aa3b8) },
+                                if selected {
+                                    hex(0xeef1f7)
+                                } else {
+                                    hex(0x9aa3b8)
+                                },
                             )
                             .overflow_hidden()
                             .whitespace_nowrap()
@@ -882,13 +903,11 @@ impl GpuiOnboardingWindow {
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .child(
-                                    sans(s, 14.5, 600.0, hex(0xdbe2f5)).child(if expanded {
-                                        "Fewer".to_string()
-                                    } else {
-                                        format!("+{remaining}")
-                                    }),
-                                ),
+                                .child(sans(s, 14.5, 600.0, hex(0xdbe2f5)).child(if expanded {
+                                    "Fewer".to_string()
+                                } else {
+                                    format!("+{remaining}")
+                                })),
                         )
                         .child(sans(s, 12.0, 400.0, hex(0x9aa3b8)).child(if expanded {
                             "Show fewer"
@@ -909,10 +928,12 @@ impl GpuiOnboardingWindow {
         }
 
         // ---- Artwork strip: None, 32 artworks, Your image, Animated (reuses Settings' catalog & helpers) ----
-        let artwork_section = self.render_look_artwork_section(s, now, dark, &values, &picked, &themes, cx);
+        let artwork_section =
+            self.render_look_artwork_section(s, now, dark, &values, &picked, &themes, cx);
 
         // ---- Slim Window transparency card ----
-        let transparency_section = self.render_look_transparency_section(s, dark, &values, &picked, cx);
+        let transparency_section =
+            self.render_look_transparency_section(s, dark, &values, &picked, cx);
 
         // ---- Accent dots + 16 colour squares + Custom ----
         let current_accent = self
@@ -923,32 +944,33 @@ impl GpuiOnboardingWindow {
             .and_then(Value::as_str)
             .unwrap_or("#86d3f8")
             .to_string();
-        let accent_dots = div()
-            .flex()
-            .items_center()
-            .gap(s.px(10.0))
-            .children(ACCENT_DOTS.iter().map(|&color_hex| {
-                let selected = current_accent.eq_ignore_ascii_case(color_hex);
-                let key = SharedString::from(format!("look-accent-{color_hex}"));
-                let rgb = parse_rgb(color_hex, 0x86d3f8);
-                self.control(
-                    s,
-                    div()
-                        .id(key.clone())
-                        .size(s.px(22.0))
-                        .rounded_full()
-                        .cursor_pointer()
-                        .bg(hex(rgb))
-                        .border_color(if selected { hex(0xeef1f7) } else { white(0.18) })
-                        .when(selected, |this| this.border_2())
-                        .when(!selected, |this| this.border_1()),
-                    key,
-                    interact::Ring::new(11.0, 1.0),
-                    interact::Keys::EnterSpace,
-                    cx,
-                    move |this, _, cx| this.pick_look_accent(color_hex, cx),
-                )
-            }));
+        let accent_dots =
+            div()
+                .flex()
+                .items_center()
+                .gap(s.px(10.0))
+                .children(ACCENT_DOTS.iter().map(|&color_hex| {
+                    let selected = current_accent.eq_ignore_ascii_case(color_hex);
+                    let key = SharedString::from(format!("look-accent-{color_hex}"));
+                    let rgb = parse_rgb(color_hex, 0x86d3f8);
+                    self.control(
+                        s,
+                        div()
+                            .id(key.clone())
+                            .size(s.px(22.0))
+                            .rounded_full()
+                            .cursor_pointer()
+                            .bg(hex(rgb))
+                            .border_color(if selected { hex(0xeef1f7) } else { white(0.18) })
+                            .when(selected, |this| this.border_2())
+                            .when(!selected, |this| this.border_1()),
+                        key,
+                        interact::Ring::new(11.0, 1.0),
+                        interact::Keys::EnterSpace,
+                        cx,
+                        move |this, _, cx| this.pick_look_accent(color_hex, cx),
+                    )
+                }));
 
         let selected_preset = if dark {
             self.settings.dark_theme_preset.clone()
@@ -972,7 +994,11 @@ impl GpuiOnboardingWindow {
                         .rounded(s.px(7.0))
                         .cursor_pointer()
                         .bg(gpui::Hsla::from(colour.gpui()))
-                        .border_color(if is_selected { hex(0xeef1f7) } else { white(0.18) })
+                        .border_color(if is_selected {
+                            hex(0xeef1f7)
+                        } else {
+                            white(0.18)
+                        })
                         .when(is_selected, |this| this.border_2())
                         .when(!is_selected, |this| this.border_1()),
                     key,
@@ -1151,9 +1177,7 @@ impl GpuiOnboardingWindow {
                                 .border_color(hex(0x86d3f8))
                                 .child(sans(s, 10.5, 700.0, hex(0x0f1420)).child("✓"))
                         })
-                        .when(!queued, |this| {
-                            this.border_color(rgba(180, 198, 240, 0.45))
-                        }),
+                        .when(!queued, |this| this.border_color(rgba(180, 198, 240, 0.45))),
                 )
                 .child(
                     sans(
@@ -1175,10 +1199,7 @@ impl GpuiOnboardingWindow {
             |this, _, cx| {
                 this.flow.theme_editor_queued = !this.flow.theme_editor_queued;
                 if this.flow.theme_editor_queued {
-                    this.show_toast(
-                        "The compact Theme editor will open right after setup.",
-                        cx,
-                    );
+                    this.show_toast("The compact Theme editor will open right after setup.", cx);
                 }
                 cx.notify();
             },
@@ -1251,7 +1272,11 @@ impl GpuiOnboardingWindow {
                         s,
                         11.5,
                         if selected { 600.0 } else { 400.0 },
-                        if selected { hex(0xeef1f7) } else { hex(0x9aa3b8) },
+                        if selected {
+                            hex(0xeef1f7)
+                        } else {
+                            hex(0x9aa3b8)
+                        },
                     )
                     .overflow_hidden()
                     .whitespace_nowrap()
@@ -1295,18 +1320,20 @@ impl GpuiOnboardingWindow {
             .collect();
 
         let mut tiles: Vec<AnyElement> = Vec::with_capacity(ARTWORKS.len() + 3);
-        tiles.push(self.render_look_artwork_tile(
-            s,
-            "look-artwork-none".into(),
-            "None".into(),
-            *picked == Backdrop::None,
-            div()
-                .size_full()
-                .bg(rgba(28, 34, 52, 0.72))
-                .into_any_element(),
-            cx,
-            move |this, _, cx| this.pick_look_no_artwork(dark, false, cx),
-        ));
+        tiles.push(
+            self.render_look_artwork_tile(
+                s,
+                "look-artwork-none".into(),
+                "None".into(),
+                *picked == Backdrop::None,
+                div()
+                    .size_full()
+                    .bg(rgba(28, 34, 52, 0.72))
+                    .into_any_element(),
+                cx,
+                move |this, _, cx| this.pick_look_no_artwork(dark, false, cx),
+            ),
+        );
         for artwork in ARTWORKS {
             let id = artwork.id;
             let short = labels
@@ -1461,26 +1488,29 @@ impl GpuiOnboardingWindow {
                             sans(s, 12.0, 400.0, hex(0x9aa3b8))
                                 .child("No picture chosen yet, so the window stays solid."),
                         )
-                        .child(self.control(
-                            s,
-                            div()
-                                .id("look-artwork-choose-pic")
-                                .px(s.px(10.0))
-                                .py(s.px(5.0))
-                                .rounded(s.px(7.0))
-                                .bg(rgba(44, 56, 102, 0.7))
-                                .border_1()
-                                .border_color(rgba(124, 148, 232, 0.45))
-                                .cursor_pointer()
-                                .child(
-                                    sans(s, 12.0, 500.0, hex(0xeef1f7)).child("Choose picture…"),
-                                ),
-                            "look-artwork-choose-pic",
-                            interact::Ring::new(7.0, 1.0),
-                            interact::Keys::EnterSpace,
-                            cx,
-                            move |this, _, cx| this.pick_look_your_image(dark, true, cx),
-                        ))
+                        .child(
+                            self.control(
+                                s,
+                                div()
+                                    .id("look-artwork-choose-pic")
+                                    .px(s.px(10.0))
+                                    .py(s.px(5.0))
+                                    .rounded(s.px(7.0))
+                                    .bg(rgba(44, 56, 102, 0.7))
+                                    .border_1()
+                                    .border_color(rgba(124, 148, 232, 0.45))
+                                    .cursor_pointer()
+                                    .child(
+                                        sans(s, 12.0, 500.0, hex(0xeef1f7))
+                                            .child("Choose picture…"),
+                                    ),
+                                "look-artwork-choose-pic",
+                                interact::Ring::new(7.0, 1.0),
+                                interact::Keys::EnterSpace,
+                                cx,
+                                move |this, _, cx| this.pick_look_your_image(dark, true, cx),
+                            ),
+                        )
                 });
                 let strength_row = self.look_slider_row(
                     s,
@@ -1533,8 +1563,8 @@ impl GpuiOnboardingWindow {
                     "windowGlassLiveStyleLight"
                 };
                 let current_style = values.string(style_key);
-                let options = settings_catalog()
-                    .options(module::SETTINGS, "WINDOW_GLASS_LIVE_STYLE_OPTIONS");
+                let options =
+                    settings_catalog().options(module::SETTINGS, "WINDOW_GLASS_LIVE_STYLE_OPTIONS");
                 let mut cards: Vec<AnyElement> = Vec::with_capacity(options.len());
                 for option in options {
                     let style_id = option.value;
@@ -1577,7 +1607,11 @@ impl GpuiOnboardingWindow {
                                         s,
                                         11.5,
                                         if selected { 600.0 } else { 400.0 },
-                                        if selected { hex(0xeef1f7) } else { hex(0x9aa3b8) },
+                                        if selected {
+                                            hex(0xeef1f7)
+                                        } else {
+                                            hex(0x9aa3b8)
+                                        },
                                     )
                                     .child(style_name),
                                 ),
@@ -1589,7 +1623,10 @@ impl GpuiOnboardingWindow {
                                 let mut patch = Map::new();
                                 patch.insert(style_key.into(), json!(style_id));
                                 if single {
-                                    patch.insert("windowGlassLiveStyleLight".into(), json!(style_id));
+                                    patch.insert(
+                                        "windowGlassLiveStyleLight".into(),
+                                        json!(style_id),
+                                    );
                                 }
                                 patch.insert("windowGlassSource".into(), json!("live"));
                                 this.update_settings(patch, cx);
@@ -1610,8 +1647,10 @@ impl GpuiOnboardingWindow {
                 } else {
                     format!("{speed:.2}x").replace(".50x", ".5x")
                 };
-                let brightness_label =
-                    format!("{}%", self.settings.window_glass_live_brightness.round() as i64);
+                let brightness_label = format!(
+                    "{}%",
+                    self.settings.window_glass_live_brightness.round() as i64
+                );
                 let strength_row = self.look_slider_row(
                     s,
                     "look-strength",
@@ -1620,14 +1659,8 @@ impl GpuiOnboardingWindow {
                     strength_label,
                     cx,
                 );
-                let speed_row = self.look_slider_row(
-                    s,
-                    "look-live-speed",
-                    "Speed",
-                    speed,
-                    speed_label,
-                    cx,
-                );
+                let speed_row =
+                    self.look_slider_row(s, "look-live-speed", "Speed", speed, speed_label, cx);
                 let brightness_row = self.look_slider_row(
                     s,
                     "look-live-brightness",
@@ -1644,9 +1677,7 @@ impl GpuiOnboardingWindow {
                     .justify_between()
                     .h(s.px(26.0))
                     .mt(s.px(2.0))
-                    .child(
-                        sans(s, 12.5, 400.0, hex(0xd5dce8)).child("Play only when plugged in"),
-                    )
+                    .child(sans(s, 12.5, 400.0, hex(0xd5dce8)).child("Play only when plugged in"))
                     .child(self.control(
                         s,
                         toggle(
@@ -1823,7 +1854,11 @@ impl GpuiOnboardingWindow {
                                 s,
                                 12.5,
                                 if selected { 600.0 } else { 400.0 },
-                                if selected { hex(0xeef1f7) } else { hex(0x9aa3b8) },
+                                if selected {
+                                    hex(0xeef1f7)
+                                } else {
+                                    hex(0x9aa3b8)
+                                },
                             )
                             .child(opt.label),
                         ),
@@ -1965,7 +2000,10 @@ impl GpuiOnboardingWindow {
                 } else {
                     format!("{}%", nearest.round() as i64)
                 };
-                let blur_label = format!("{} pt", self.settings.window_glass_blur_radius.round() as i64);
+                let blur_label = format!(
+                    "{} pt",
+                    self.settings.window_glass_blur_radius.round() as i64
+                );
                 let strength_row = self.look_slider_row(
                     s,
                     "look-strength",
@@ -2035,9 +2073,15 @@ impl GpuiOnboardingWindow {
         let glass_active = glass != "opaque" && !(glass == "auto" && !dark);
         let solid = matches!(picked, Backdrop::None) && !glass_active;
         let (sb_tint, wa_tint) = if dark {
-            (self.settings.glass_sidebar_dark, self.settings.glass_work_area_dark)
+            (
+                self.settings.glass_sidebar_dark,
+                self.settings.glass_work_area_dark,
+            )
         } else {
-            (self.settings.glass_sidebar_light, self.settings.glass_work_area_light)
+            (
+                self.settings.glass_sidebar_light,
+                self.settings.glass_work_area_light,
+            )
         };
         let sb_alpha = if solid {
             1.0
@@ -2056,7 +2100,11 @@ impl GpuiOnboardingWindow {
             "text",
             wa_rgb,
             RoleValue::Colour {
-                rgb: if dark { [0xe8, 0xeb, 0xf2] } else { [0x1f, 0x23, 0x2b] },
+                rgb: if dark {
+                    [0xe8, 0xeb, 0xf2]
+                } else {
+                    [0x1f, 0x23, 0x2b]
+                },
                 alpha: 1.0,
             },
         );
@@ -2066,7 +2114,11 @@ impl GpuiOnboardingWindow {
             "mutedText",
             wa_rgb,
             RoleValue::Colour {
-                rgb: if dark { [0x98, 0xa0, 0xb2] } else { [0x5b, 0x62, 0x75] },
+                rgb: if dark {
+                    [0x98, 0xa0, 0xb2]
+                } else {
+                    [0x5b, 0x62, 0x75]
+                },
                 alpha: 1.0,
             },
         );
@@ -2441,10 +2493,7 @@ impl GpuiOnboardingWindow {
             .flex_col()
             .gap(s.px(14.0))
             .child(window_card)
-            .child(
-                sans(s, 13.5, 400.0, hex(0x9aa3b8))
-                    .child("Your Ghostex, as you change it."),
-            )
+            .child(sans(s, 13.5, 400.0, hex(0x9aa3b8)).child("Your Ghostex, as you change it."))
             .into_any_element()
     }
 }

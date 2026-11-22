@@ -852,10 +852,10 @@ fn bare_work_item_ids_in_title<'a>(text: &str, items: &'a [WorkItem]) -> Vec<&'a
                 } else {
                     let next = chars[end];
                     let domain_dot = next == '.'
-                        && chars.get(end + 1).is_some_and(|after| after.is_alphanumeric());
-                    !next.is_alphanumeric()
-                        && !matches!(next, '-' | '_' | '/')
-                        && !domain_dot
+                        && chars
+                            .get(end + 1)
+                            .is_some_and(|after| after.is_alphanumeric());
+                    !next.is_alphanumeric() && !matches!(next, '-' | '_' | '/') && !domain_dot
                 };
                 if right_ok {
                     let digits: String = chars[start..end].iter().collect();
@@ -1687,9 +1687,9 @@ fn finished_before_asks(item: &WorkItem) -> bool {
     let Some(done_index) = item.history.iter().rposition(|event| event.kind == "done") else {
         return false;
     };
-    item.history[done_index + 1..].iter().all(|event| {
-        matches!(event.kind.as_str(), "ask" | "answer" | "settle" | "reply")
-    })
+    item.history[done_index + 1..]
+        .iter()
+        .all(|event| matches!(event.kind.as_str(), "ask" | "answer" | "settle" | "reply"))
 }
 
 /// After an ask settles: an item that was only waiting on the user (Needs you by the

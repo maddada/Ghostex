@@ -128,39 +128,34 @@ impl NativeChatView {
             hue: tone_look("info", p).hue,
             icon: "titlebar/arrows-diagonal-minimize.svg".to_string(),
         };
-        let dismiss_option = |id: &'static str,
-                              label: &'static str,
-                              scope: &'static str,
-                              tip: &'static str| {
-            div()
-                .id(id)
-                .role(gpui::Role::Button)
-                .aria_label(format!("Don't ask again: {label}"))
-                .chat_cursor_pointer()
-                .px(px(6.0 * s))
-                .py(px(3.0 * s))
-                .rounded(px(6.0 * s))
-                .text_size(px(12.5 * s))
-                .line_height(px(16.0 * s))
-                .text_color(p.muted)
-                .hover(|style| {
-                    style
-                        .text_color(p.foreground)
-                        .bg(p.foreground.opacity(0.08))
-                })
-                .tooltip(move |window, cx| {
-                    gpui_component::tooltip::Tooltip::new(tip).build(window, cx)
-                })
-                .child(label)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.compact_prompt.opened_at = None;
-                    this.invoke(
-                        json!({"type": "compactPromptDismiss", "scope": scope}),
-                        cx,
-                    );
-                }))
-                .into_any_element()
-        };
+        let dismiss_option =
+            |id: &'static str, label: &'static str, scope: &'static str, tip: &'static str| {
+                div()
+                    .id(id)
+                    .role(gpui::Role::Button)
+                    .aria_label(format!("Don't ask again: {label}"))
+                    .chat_cursor_pointer()
+                    .px(px(6.0 * s))
+                    .py(px(3.0 * s))
+                    .rounded(px(6.0 * s))
+                    .text_size(px(12.5 * s))
+                    .line_height(px(16.0 * s))
+                    .text_color(p.muted)
+                    .hover(|style| {
+                        style
+                            .text_color(p.foreground)
+                            .bg(p.foreground.opacity(0.08))
+                    })
+                    .tooltip(move |window, cx| {
+                        gpui_component::tooltip::Tooltip::new(tip).build(window, cx)
+                    })
+                    .child(label)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.compact_prompt.opened_at = None;
+                        this.invoke(json!({"type": "compactPromptDismiss", "scope": scope}), cx);
+                    }))
+                    .into_any_element()
+            };
         let dont_ask_controls = div()
             .id("compact-prompt-dont-ask")
             .flex()

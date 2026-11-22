@@ -377,15 +377,16 @@ impl ThemeTab {
             });
             let track = step_slider(self, p, binding, f64::from(percent), saver, window, cx);
             // An opacity (8%) already reads in the text box; a colour's or base step's opacity does not.
-            let readout = matches!(value, RoleValue::Colour { .. } | RoleValue::Base { .. }).then(|| {
-                div()
-                    .flex_shrink_0()
-                    .w(px(READOUT))
-                    .text_right()
-                    .text_size(px(13.0))
-                    .text_color(hsla(p.muted))
-                    .child(format!("{percent}%"))
-            });
+            let readout =
+                matches!(value, RoleValue::Colour { .. } | RoleValue::Base { .. }).then(|| {
+                    div()
+                        .flex_shrink_0()
+                        .w(px(READOUT))
+                        .text_right()
+                        .text_size(px(13.0))
+                        .text_color(hsla(p.muted))
+                        .child(format!("{percent}%"))
+                });
             h_flex()
                 .flex_1()
                 .min_w_0()
@@ -439,10 +440,11 @@ impl ThemeTab {
             {
                 set_here.push(light);
             }
-            let base_rgb = ghostex_settings_catalog::theme_colours::work_area_background_for_variant(
-                t.values.map(),
-                light,
-            );
+            let base_rgb =
+                ghostex_settings_catalog::theme_colours::work_area_background_for_variant(
+                    t.values.map(),
+                    light,
+                );
             lines.push(self.role_editor_line(
                 &p,
                 &saved,

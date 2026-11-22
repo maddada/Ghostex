@@ -123,8 +123,9 @@ fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: 
     let page = channels(page_rgb);
     let side = sidebar(settings, light);
     let text_on = |fill: [f64; 3]| {
-        role(settings, light, "text")
-            .map_or(default_text(light), |text| over(text, light, fill, page_rgb))
+        role(settings, light, "text").map_or(default_text(light), |text| {
+            over(text, light, fill, page_rgb)
+        })
     };
     let mut push = |id: &str, text: String, extra: Vec<String>| {
         let mut keys = vec![role_key(light, id)];

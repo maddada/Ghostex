@@ -417,16 +417,15 @@ async fn wake(
             }
         }
         None => {
-            let pick = if crate::accounts::autopilot::agent_has_room(
-                &state.paths,
-                preferred.launch().0,
-            ) {
-                preferred
-            } else if crate::accounts::autopilot::agent_has_room(&state.paths, other.launch().0) {
-                other
-            } else {
-                return Err(PARKED_NO_USAGE.to_string());
-            };
+            let pick =
+                if crate::accounts::autopilot::agent_has_room(&state.paths, preferred.launch().0) {
+                    preferred
+                } else if crate::accounts::autopilot::agent_has_room(&state.paths, other.launch().0)
+                {
+                    other
+                } else {
+                    return Err(PARKED_NO_USAGE.to_string());
+                };
             start_supervisor_for(state, pick)
                 .await
                 .map_err(|error| format!("Couldn't start the supervisor: {error}"))?

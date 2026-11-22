@@ -858,7 +858,8 @@ mod theme_preset_palette_tests {
             "no phone presets at {}: set GHOSTEX_MOBILE_DIR to a ghostex-mobile checkout that has them",
             dir.display()
         );
-        let stage1_phone_tints = parse_phone_stage1_preset_tints(&mobile.join("src/theme/presets.ts"));
+        let stage1_phone_tints =
+            parse_phone_stage1_preset_tints(&mobile.join("src/theme/presets.ts"));
         let presets = theme_presets();
         let mut phone_ids: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()
@@ -880,7 +881,9 @@ mod theme_preset_palette_tests {
                 obj.remove("tintColor");
                 if let Some(patches) = obj.get_mut("patches").and_then(Value::as_object_mut) {
                     for patch_key in ["lightFollows", "lightPickedOnPurpose"] {
-                        if let Some(patch) = patches.get_mut(patch_key).and_then(Value::as_object_mut) {
+                        if let Some(patch) =
+                            patches.get_mut(patch_key).and_then(Value::as_object_mut)
+                        {
                             patch.remove("customSidebarTitlebarBackgroundTintColor");
                             patch.remove("customSidebarTitlebarLightBackgroundTintColor");
                         }
@@ -946,7 +949,10 @@ mod theme_preset_palette_tests {
                 {
                     assert_eq!(
                         effective_bg.to_lowercase(),
-                        entry["background"].as_str().unwrap_or_default().to_lowercase(),
+                        entry["background"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_lowercase(),
                         "{}: STAGE1_PRESET_TINTS background differs from host",
                         preset.id
                     );

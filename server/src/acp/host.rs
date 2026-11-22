@@ -11,20 +11,20 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::constants::{
     GXSERVER_LOCAL_API_HOST, GXSERVER_PROTOCOL_HEADER, GXSERVER_PROTOCOL_VERSION,
 };
 
 use super::spec::{
-    AcpAgentSpec, build_acp_server_argv, build_cli_switch_argv, spec_for_family,
-    transcript_path_for_session,
+    build_acp_server_argv, build_cli_switch_argv, spec_for_family, transcript_path_for_session,
+    AcpAgentSpec,
 };
 
 const ACP_LOAD_TIMEOUT: Duration = Duration::from_secs(90);
@@ -795,7 +795,14 @@ fn pick_accept_all_mode_id(available_modes: &Value) -> Option<String> {
             Some((id.to_string(), format!("{id} {label}").to_ascii_lowercase()))
         })
         .collect();
-    for keyword in ["bypass", "yolo", "accept_all", "acceptall", "full_auto", "full-auto"] {
+    for keyword in [
+        "bypass",
+        "yolo",
+        "accept_all",
+        "acceptall",
+        "full_auto",
+        "full-auto",
+    ] {
         if let Some((id, _)) = candidates.iter().find(|(_, hay)| hay.contains(keyword)) {
             return Some(id.clone());
         }
@@ -808,9 +815,16 @@ fn pick_accept_all_mode_id(available_modes: &Value) -> Option<String> {
 
 fn mode_implies_accept_all(mode: &str) -> Option<bool> {
     let lower = mode.trim().to_ascii_lowercase();
-    if ["bypass", "yolo", "accept_all", "acceptall", "full_auto", "full-auto"]
-        .iter()
-        .any(|kw| lower.contains(kw))
+    if [
+        "bypass",
+        "yolo",
+        "accept_all",
+        "acceptall",
+        "full_auto",
+        "full-auto",
+    ]
+    .iter()
+    .any(|kw| lower.contains(kw))
     {
         return Some(true);
     }
@@ -970,9 +984,8 @@ pub fn run(args: &[String]) -> i32 {
                         let mut reaped = false;
                         let deadline = Instant::now() + Duration::from_secs(1);
                         while Instant::now() < deadline {
-                            let waited = unsafe {
-                                libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG)
-                            };
+                            let waited =
+                                unsafe { libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG) };
                             if waited > 0
                                 || (waited < 0
                                     && std::io::Error::last_os_error().raw_os_error()
@@ -1055,10 +1068,8 @@ pub fn run(args: &[String]) -> i32 {
                     let params = msg.get("params").cloned().unwrap_or(Value::Null);
                     if method == "session/request_permission" {
                         let perm = parse_permission_request(rpc_id, &params);
-                        let auto_approve = st_out
-                            .lock()
-                            .unwrap_or_else(|p| p.into_inner())
-                            .accept_all;
+                        let auto_approve =
+                            st_out.lock().unwrap_or_else(|p| p.into_inner()).accept_all;
                         if auto_approve {
                             if let Some(opt_id) = perm.resolve_option_id(None, "allow_always") {
                                 println!(
@@ -1211,7 +1222,8 @@ pub fn run(args: &[String]) -> i32 {
         (s.native_session_id.clone(), auto_mode)
     };
 
-    if let (Some(sid), Some(mode_id)) = (native_session_id.as_deref(), accept_all_mode_id.as_deref())
+    if let (Some(sid), Some(mode_id)) =
+        (native_session_id.as_deref(), accept_all_mode_id.as_deref())
     {
         if transport
             .call(
@@ -1314,7 +1326,11 @@ pub fn run(args: &[String]) -> i32 {
                         } else {
                             "idle"
                         };
-                        (act, s.native_session_id.clone(), s.pending_permission.clone())
+                        (
+                            act,
+                            s.native_session_id.clone(),
+                            s.pending_permission.clone(),
+                        )
                     };
                     ep.report_activity(spec.family, act, sid.as_deref(), perm.as_ref());
                 }

@@ -532,23 +532,63 @@ pub(super) fn open_theme_editor(demo: &super::DemoEnv, cx: &mut App) {
                 (
                     gpui::rgb(0xdbe3ee),
                     gpui::rgb(0xeae3ef),
-                    gpui::Rgba { r: 0.92, g: 0.93, b: 0.95, a: 0.90 },
-                    gpui::Rgba { r: 0.96, g: 0.97, b: 0.98, a: 0.88 },
-                    gpui::Rgba { r: 0.0, g: 0.0, b: 0.0, a: 0.10 },
+                    gpui::Rgba {
+                        r: 0.92,
+                        g: 0.93,
+                        b: 0.95,
+                        a: 0.90,
+                    },
+                    gpui::Rgba {
+                        r: 0.96,
+                        g: 0.97,
+                        b: 0.98,
+                        a: 0.88,
+                    },
+                    gpui::Rgba {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 0.10,
+                    },
                     gpui::rgb(0x1f232b),
                     gpui::rgb(0x5b6275),
-                    gpui::Rgba { r: 1.0, g: 1.0, b: 1.0, a: 0.72 },
+                    gpui::Rgba {
+                        r: 1.0,
+                        g: 1.0,
+                        b: 1.0,
+                        a: 0.72,
+                    },
                 )
             } else {
                 (
                     gpui::rgb(0x1b2b34),
                     gpui::rgb(0x282034),
-                    gpui::Rgba { r: 0.08, g: 0.10, b: 0.12, a: 0.78 },
-                    gpui::Rgba { r: 0.10, g: 0.12, b: 0.14, a: 0.74 },
-                    gpui::Rgba { r: 1.0, g: 1.0, b: 1.0, a: 0.08 },
+                    gpui::Rgba {
+                        r: 0.08,
+                        g: 0.10,
+                        b: 0.12,
+                        a: 0.78,
+                    },
+                    gpui::Rgba {
+                        r: 0.10,
+                        g: 0.12,
+                        b: 0.14,
+                        a: 0.74,
+                    },
+                    gpui::Rgba {
+                        r: 1.0,
+                        g: 1.0,
+                        b: 1.0,
+                        a: 0.08,
+                    },
                     gpui::rgb(0xe8ebf2),
                     gpui::rgb(0x98a0b2),
-                    gpui::Rgba { r: 0.16, g: 0.19, b: 0.22, a: 0.72 },
+                    gpui::Rgba {
+                        r: 0.16,
+                        g: 0.19,
+                        b: 0.22,
+                        a: 0.72,
+                    },
                 )
             };
             div()
@@ -705,18 +745,26 @@ pub(super) fn open_theme_editor(demo: &super::DemoEnv, cx: &mut App) {
     }
     let palette = if super::env("GHOSTEX_NATIVE_MODAL_DEMO_GLASS") == "1" {
         let base = if demo.palette.light {
-            gpui::Rgba { r: 0.96, g: 0.97, b: 0.98, a: 0.86 }
+            gpui::Rgba {
+                r: 0.96,
+                g: 0.97,
+                b: 0.98,
+                a: 0.86,
+            }
         } else {
-            gpui::Rgba { r: 0.13, g: 0.15, b: 0.18, a: 0.84 }
+            gpui::Rgba {
+                r: 0.13,
+                g: 0.15,
+                b: 0.18,
+                a: 0.84,
+            }
         };
         demo.palette.frosted_dialog(base)
     } else {
         demo.palette
     };
-    let request = SettingsOpenRequest::from_open_message(
-        "settings",
-        &json!({ "initialTab": "theme" }),
-    );
+    let request =
+        SettingsOpenRequest::from_open_message("settings", &json!({ "initialTab": "theme" }));
     let config = SettingsModalConfig {
         palette,
         request,

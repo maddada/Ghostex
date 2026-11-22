@@ -107,8 +107,7 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
     let is_antigravity = title_signal
         .as_ref()
         .is_some_and(|signal| signal.agent_name == "antigravity")
-        || normalize_status_agent_name(input.agent_id.as_deref()).as_deref()
-            == Some("antigravity")
+        || normalize_status_agent_name(input.agent_id.as_deref()).as_deref() == Some("antigravity")
         || previous.agent_name.as_deref() == Some("antigravity");
 
     // CDXC:SessionStatus 2026-11-22 DECISION (Q4463):

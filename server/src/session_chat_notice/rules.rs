@@ -981,11 +981,8 @@ const ANTIGRAVITY_RESOURCE_EXHAUSTED_CORROBORATORS: &[&str] = &[
     "\"code\": 429",
 ];
 
-const ANTIGRAVITY_USAGE_LIMIT_STRICT_CORROBORATORS: &[&str] = &[
-    "Error ID:",
-    "upgrade your subscription",
-    "Resets in",
-];
+const ANTIGRAVITY_USAGE_LIMIT_STRICT_CORROBORATORS: &[&str] =
+    &["Error ID:", "upgrade your subscription", "Resets in"];
 
 const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
     kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,

@@ -774,12 +774,10 @@ pub(crate) async fn handle_read_session_chat_http(
     // so web and phone follow this computer's settings; older clients ignore both optional fields.
     result.insert(
         "offerCompactBeforeSending".to_string(),
-        json!(
-            settings
-                .get(crate::agents::claude_idle_compaction::OFFER_COMPACT_BEFORE_SENDING_SETTING)
-                .and_then(Value::as_bool)
-                .unwrap_or(true)
-        ),
+        json!(settings
+            .get(crate::agents::claude_idle_compaction::OFFER_COMPACT_BEFORE_SENDING_SETTING)
+            .and_then(Value::as_bool)
+            .unwrap_or(true)),
     );
     let compact_above =
         crate::agents::claude_idle_compaction::ClaudeCompaction::from_settings(Some(&settings))

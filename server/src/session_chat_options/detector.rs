@@ -544,10 +544,9 @@ impl SessionChatOptionDetector {
         // suppresses dismissed/post-action banners, so `quota_wait` knows whether the old banner is
         // still sitting on screen vs scrolled away cleanly.
         if detected.captured {
-            let progress_visible_notice = detected
-                .notice
-                .as_ref()
-                .filter(|notice| crate::session_chat_notice_progress::visible(project_id, session_id, notice));
+            let progress_visible_notice = detected.notice.as_ref().filter(|notice| {
+                crate::session_chat_notice_progress::visible(project_id, session_id, notice)
+            });
             let model_label = detected
                 .options
                 .as_ref()

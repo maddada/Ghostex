@@ -2015,8 +2015,10 @@ fn refresh_thread_screen_waits(
             let agent = crate::session_chat_composer::session_chat_composer_agent_id(&session);
             // Probe Antigravity threads (which surface permission pickers and quota banners only on
             // screen) as well as screen-only agents, bounded by the detector's own 5s cache TTL.
-            if (crate::session_chat_options::session_chat_questions_only_on_screen(agent.as_deref())
-                && crate::presentation::presentation_activity(&session, &generated_at) == "working")
+            if (crate::session_chat_options::session_chat_questions_only_on_screen(
+                agent.as_deref(),
+            ) && crate::presentation::presentation_activity(&session, &generated_at)
+                == "working")
                 || agent.as_deref() == Some("antigravity")
             {
                 detector.detect_blocking(

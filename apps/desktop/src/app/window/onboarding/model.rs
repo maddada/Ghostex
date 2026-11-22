@@ -359,14 +359,13 @@ impl OnboardingSettings {
         // A key the file does not hold reads as the settings catalog's default.
         let catalog_default = |key: &str| ghostex_settings_catalog::default_value(key);
         let catalog_str = |key: &str, fallback: &'static str| {
-            catalog_default(key)
-                .and_then(J::as_str)
-                .unwrap_or(fallback)
+            catalog_default(key).and_then(J::as_str).unwrap_or(fallback)
         };
-        let sidebar_theme = match text("sidebarTheme").unwrap_or_else(|| catalog_str("sidebarTheme", "system")) {
-            value @ ("plain-light" | "system") => value.to_string(),
-            _ => "dark-2".to_string(),
-        };
+        let sidebar_theme =
+            match text("sidebarTheme").unwrap_or_else(|| catalog_str("sidebarTheme", "system")) {
+                value @ ("plain-light" | "system") => value.to_string(),
+                _ => "dark-2".to_string(),
+            };
         let catalog_number =
             |key: &str| catalog_default(key).and_then(J::as_f64).unwrap_or_default();
         let preset = |key: &str, presets: &[(&str, &str); 16]| {
@@ -640,9 +639,18 @@ impl OnboardingSettings {
     /// `prompt_gallery::applied_theme`) directly.
     pub(crate) fn to_settings_values(&self) -> super::super::settings_modal::store::SettingsValues {
         let mut map = Map::new();
-        map.insert("sidebarTheme".into(), Value::String(self.sidebar_theme.clone()));
-        map.insert("darkThemePreset".into(), Value::String(self.dark_theme_preset.clone()));
-        map.insert("lightThemePreset".into(), Value::String(self.light_theme_preset.clone()));
+        map.insert(
+            "sidebarTheme".into(),
+            Value::String(self.sidebar_theme.clone()),
+        );
+        map.insert(
+            "darkThemePreset".into(),
+            Value::String(self.dark_theme_preset.clone()),
+        );
+        map.insert(
+            "lightThemePreset".into(),
+            Value::String(self.light_theme_preset.clone()),
+        );
         map.insert(
             "customSidebarTitlebarBackgroundTintColor".into(),
             Value::String(self.custom_dark_tint.clone()),
@@ -651,20 +659,41 @@ impl OnboardingSettings {
             "customSidebarTitlebarLightBackgroundTintColor".into(),
             Value::String(self.custom_light_tint.clone()),
         );
-        map.insert("themeSidebarContrast".into(), js_number(self.sidebar_contrast));
-        map.insert("themeWorkAreaContrast".into(), js_number(self.work_area_contrast));
+        map.insert(
+            "themeSidebarContrast".into(),
+            js_number(self.sidebar_contrast),
+        );
+        map.insert(
+            "themeWorkAreaContrast".into(),
+            js_number(self.work_area_contrast),
+        );
         map.insert("windowArt".into(), Value::String(self.window_art.clone()));
-        map.insert("windowArtLight".into(), Value::String(self.window_art_light.clone()));
+        map.insert(
+            "windowArtLight".into(),
+            Value::String(self.window_art_light.clone()),
+        );
         map.insert("windowArtDim".into(), js_number(self.window_art_dim));
         map.insert("windowArtBlur".into(), js_number(self.window_art_blur));
-        map.insert("windowArtImage".into(), Value::String(self.window_art_image.clone()));
+        map.insert(
+            "windowArtImage".into(),
+            Value::String(self.window_art_image.clone()),
+        );
         map.insert(
             "windowArtImageLight".into(),
             Value::String(self.window_art_image_light.clone()),
         );
-        map.insert("windowGlass".into(), Value::String(self.window_glass.clone()));
-        map.insert("windowGlassSource".into(), Value::String(self.window_glass_source.clone()));
-        map.insert("windowGlassBlurRadius".into(), js_number(self.window_glass_blur_radius));
+        map.insert(
+            "windowGlass".into(),
+            Value::String(self.window_glass.clone()),
+        );
+        map.insert(
+            "windowGlassSource".into(),
+            Value::String(self.window_glass_source.clone()),
+        );
+        map.insert(
+            "windowGlassBlurRadius".into(),
+            js_number(self.window_glass_blur_radius),
+        );
         map.insert(
             "windowGlassLiveStyleDark".into(),
             Value::String(self.window_glass_live_dark.clone()),
@@ -673,7 +702,10 @@ impl OnboardingSettings {
             "windowGlassLiveStyleLight".into(),
             Value::String(self.window_glass_live_light.clone()),
         );
-        map.insert("windowGlassLiveSpeed".into(), js_number(self.window_glass_live_speed));
+        map.insert(
+            "windowGlassLiveSpeed".into(),
+            js_number(self.window_glass_live_speed),
+        );
         map.insert(
             "windowGlassLiveBrightness".into(),
             js_number(self.window_glass_live_brightness),
@@ -682,9 +714,18 @@ impl OnboardingSettings {
             "windowGlassVideoOnlyOnPower".into(),
             Value::Bool(self.window_glass_video_only_on_power),
         );
-        map.insert("windowGlassSidebarOpacityDark".into(), js_number(self.glass_sidebar_dark));
-        map.insert("windowGlassWorkAreaTintDark".into(), js_number(self.glass_work_area_dark));
-        map.insert("windowGlassSidebarOpacityLight".into(), js_number(self.glass_sidebar_light));
+        map.insert(
+            "windowGlassSidebarOpacityDark".into(),
+            js_number(self.glass_sidebar_dark),
+        );
+        map.insert(
+            "windowGlassWorkAreaTintDark".into(),
+            js_number(self.glass_work_area_dark),
+        );
+        map.insert(
+            "windowGlassSidebarOpacityLight".into(),
+            js_number(self.glass_sidebar_light),
+        );
         map.insert(
             "windowGlassWorkAreaTintLight".into(),
             js_number(self.glass_work_area_light),

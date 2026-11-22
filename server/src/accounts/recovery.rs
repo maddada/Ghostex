@@ -1656,7 +1656,13 @@ pub(super) async fn deliver(state: Arc<AppState>, plan: Plan) {
         .map(|_| ())
     };
     if plan.quota_wait {
-        super::quota_wait::finish_delivery(&state, &plan.project, &plan.session, &plan.claim, result);
+        super::quota_wait::finish_delivery(
+            &state,
+            &plan.project,
+            &plan.session,
+            &plan.claim,
+            result,
+        );
         return;
     }
     let _gate = state.accounts.mutation_gate();

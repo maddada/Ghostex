@@ -15,13 +15,13 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rusqlite::{
-    Connection, ErrorCode, OptionalExtension, TransactionBehavior, params, params_from_iter,
+    params, params_from_iter, Connection, ErrorCode, OptionalExtension, TransactionBehavior,
 };
 
-use crate::agent::{ALL_AGENTS, Agent};
+use crate::agent::{Agent, ALL_AGENTS};
 use crate::favorites;
 use crate::scan::answers::{
-    TranscriptSource, discover_transcript_sources, extract_answers_from_file,
+    discover_transcript_sources, extract_answers_from_file, TranscriptSource,
 };
 use crate::scan::{Meta, Record, RecordKind};
 
@@ -435,7 +435,11 @@ impl SearchStore {
                 now,
             ],
         );
-        if tx.commit().is_ok() { written } else { 0 }
+        if tx.commit().is_ok() {
+            written
+        } else {
+            0
+        }
     }
 
     /// Incrementally index newest changed transcript files within `max_files` and `max_duration`.

@@ -115,7 +115,10 @@ pub(super) fn run(args: &Arguments) -> CliResult<Value> {
 pub(super) fn print_text(action: &str, result: &Value) {
     let reference = text(&result["session"], "globalRef");
     match action {
-        "set" => println!("Standing role set for {reference}: {}", text(result, "role")),
+        "set" => println!(
+            "Standing role set for {reference}: {}",
+            text(result, "role")
+        ),
         "show" => {
             let role = text(result, "role");
             if role.is_empty() {

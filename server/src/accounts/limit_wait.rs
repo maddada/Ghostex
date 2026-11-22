@@ -529,8 +529,14 @@ pub(crate) fn acknowledge(
     }
     let mut to_update: Vec<Value> = Vec::new();
     let clicked_key = (
-        clicked["projectId"].as_str().unwrap_or_default().to_string(),
-        clicked["sessionId"].as_str().unwrap_or_default().to_string(),
+        clicked["projectId"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
+        clicked["sessionId"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
     );
     for session in repo.list_sessions_excluding_stopped(None)? {
         let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
@@ -570,7 +576,10 @@ pub(crate) fn acknowledge(
         else {
             continue;
         };
-        let Some(wait) = recovery.get_mut("accountWait").and_then(Value::as_object_mut) else {
+        let Some(wait) = recovery
+            .get_mut("accountWait")
+            .and_then(Value::as_object_mut)
+        else {
             continue;
         };
         if wait.get("acknowledgedAt").and_then(Value::as_str).is_some() {
@@ -582,7 +591,8 @@ pub(crate) fn acknowledge(
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(key(pid, sid), wait_value);
-        let updated = endpoint::update_session_members(repo, &session, &runtime, &["accountRecovery"])?;
+        let updated =
+            endpoint::update_session_members(repo, &session, &runtime, &["accountRecovery"])?;
         endpoint::publish(state, repo, &updated)?;
         crate::session_chat_options::session_chat_terminal_notice_publisher(state, pid, sid)();
     }

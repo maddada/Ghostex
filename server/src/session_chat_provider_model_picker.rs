@@ -15,10 +15,10 @@ pub(super) mod empryo_picker;
 pub(super) mod dsh_picker;
 
 use crate::session_chat_composer::{
-    SessionChatComposerState, detect_session_chat_composer_readiness, session_chat_composer_input,
+    detect_session_chat_composer_readiness, session_chat_composer_input, SessionChatComposerState,
 };
 use crate::session_chat_send::{
-    AGENT_TUI_CLEAR_INPUT_LINE, build_session_chat_paste_bytes, capture_session_terminal_text_vt,
+    build_session_chat_paste_bytes, capture_session_terminal_text_vt, AGENT_TUI_CLEAR_INPUT_LINE,
 };
 
 fn option_agent(provider: &str) -> SessionChatOptionAgent {

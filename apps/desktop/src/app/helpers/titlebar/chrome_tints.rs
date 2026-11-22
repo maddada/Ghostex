@@ -326,20 +326,28 @@ mod full_colour_tests {
             for points in subtle_to_vivid() {
                 let object = settings(preset, "#808080", 96.0, points);
                 let (sidebar, work) = resolved(&object);
-                let (sidebar_l, sidebar_c, _) = ghostex_settings_catalog::dark_chrome::srgb_to_oklch(
-                    sidebar_titlebar_rgb_channels(sidebar).map(f64::from),
-                );
+                let (sidebar_l, sidebar_c, _) =
+                    ghostex_settings_catalog::dark_chrome::srgb_to_oklch(
+                        sidebar_titlebar_rgb_channels(sidebar).map(f64::from),
+                    );
                 let (work_l, work_c, _) = ghostex_settings_catalog::dark_chrome::srgb_to_oklch(
                     sidebar_titlebar_rgb_channels(work).map(f64::from),
                 );
                 assert!(
-                    sidebar_c <= ghostex_settings_catalog::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA + 0.004
-                        && sidebar_l <= ghostex_settings_catalog::dark_chrome::SUBTLE_DARK_MAX_LIGHTNESS + 0.008,
+                    sidebar_c
+                        <= ghostex_settings_catalog::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA + 0.004
+                        && sidebar_l
+                            <= ghostex_settings_catalog::dark_chrome::SUBTLE_DARK_MAX_LIGHTNESS
+                                + 0.008,
                     "{preset} at {points}: sidebar {sidebar:06x} (L={sidebar_l:.3}, C={sidebar_c:.4})"
                 );
                 assert!(
-                    work_c <= ghostex_settings_catalog::dark_chrome::SUBTLE_WORK_AREA_MAX_CHROMA + 0.004
-                        && work_l <= ghostex_settings_catalog::dark_chrome::SUBTLE_DARK_MAX_LIGHTNESS + 0.008,
+                    work_c
+                        <= ghostex_settings_catalog::dark_chrome::SUBTLE_WORK_AREA_MAX_CHROMA
+                            + 0.004
+                        && work_l
+                            <= ghostex_settings_catalog::dark_chrome::SUBTLE_DARK_MAX_LIGHTNESS
+                                + 0.008,
                     "{preset} at {points}: work {work:06x} (L={work_l:.3}, C={work_c:.4})"
                 );
             }
@@ -357,12 +365,13 @@ mod full_colour_tests {
     fn vivid_values_below_the_limit_are_still_cut_to_85() {
         // A preset at Vivid computes 94 - 12 = 82, a custom colour 96 - 12 = 84, and a hand-edited
         // file may hold 84 or 82: all still draw what depth 85 draws (presets with the subtle cap).
-        let at_85 = ghostex_settings_catalog::theme_colours::sidebar_titlebar_background_toward_full_subtle(
-            85.0,
-            0x2f7f7f,
-            0.0,
-            ghostex_settings_catalog::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA,
-        );
+        let at_85 =
+            ghostex_settings_catalog::theme_colours::sidebar_titlebar_background_toward_full_subtle(
+                85.0,
+                0x2f7f7f,
+                0.0,
+                ghostex_settings_catalog::dark_chrome::SUBTLE_SIDEBAR_MAX_CHROMA,
+            );
         assert_eq!(resolved(&settings("teal", "#808080", 96.0, -12.0)).0, at_85);
         for stored in [84.0, 82.0, 0.0] {
             let object = settings("custom", "#273136", stored, -12.0);

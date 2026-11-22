@@ -598,8 +598,8 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
     let routed = computers::args_for_session_on_another_computer(name, args);
     let args: &[String] = routed.as_deref().unwrap_or(args);
     use actions::{
-        BridgeOptions, Parser, run_bridge_action, run_message_bridge_action,
-        run_resolved_session_bridge_action,
+        run_bridge_action, run_message_bridge_action, run_resolved_session_bridge_action,
+        BridgeOptions, Parser,
     };
     let plain = BridgeOptions {
         fail_on_not_ok: false,

@@ -889,7 +889,14 @@ async fn answer_session_chat_prompt(
                 };
                 let is_deny = matches!(
                     decision.trim().to_ascii_lowercase().as_str(),
-                    "deny" | "reject" | "reject_once" | "reject_always" | "escape" | "cancel" | "n" | "no"
+                    "deny"
+                        | "reject"
+                        | "reject_once"
+                        | "reject_always"
+                        | "escape"
+                        | "cancel"
+                        | "n"
+                        | "no"
                 );
                 if !is_deny {
                     if let Err(error) =

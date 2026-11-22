@@ -371,16 +371,15 @@ fn authorize_caller(
             if !mutates || is_self {
                 return Ok(());
             }
-            let is_coordinator = crate::coordinators::read_coordinator(db, &target.0, &target.1)?
-                .is_some();
+            let is_coordinator =
+                crate::coordinators::read_coordinator(db, &target.0, &target.1)?.is_some();
             if is_coordinator || is_chief {
                 return Err(forbidden(
                     "A session cannot change the standing role of a coordinator or Chief of Staff.",
                 ));
             }
-            let leads_target =
-                crate::agents::lead_links::read_lead_link(db, &target.0, &target.1)?
-                    .is_some_and(|link| link.lead_key() == caller_key);
+            let leads_target = crate::agents::lead_links::read_lead_link(db, &target.0, &target.1)?
+                .is_some_and(|link| link.lead_key() == caller_key);
             let owns_thread = crate::coordinators::read_thread(db, &target.0, &target.1)?
                 .is_some_and(|thread| thread.coordinator_key() == caller_key);
             if leads_target || owns_thread {
@@ -413,9 +412,11 @@ fn authorize_caller(
             }
             Ok(())
         }
-        Principal::Guest { .. } | Principal::Extension { .. } | Principal::Anonymous => Err(
-            forbidden("Only the user or an agent session can read or change a session's standing role."),
-        ),
+        Principal::Guest { .. } | Principal::Extension { .. } | Principal::Anonymous => {
+            Err(forbidden(
+                "Only the user or an agent session can read or change a session's standing role.",
+            ))
+        }
     }
 }
 
@@ -437,9 +438,10 @@ pub fn handle_standing_role_endpoint(
             "Unknown standing role op \"{op}\"."
         )));
     }
-    let (Some(project_id), Some(session_id)) =
-        (param_text(params, "projectId"), param_text(params, "sessionId"))
-    else {
+    let (Some(project_id), Some(session_id)) = (
+        param_text(params, "projectId"),
+        param_text(params, "sessionId"),
+    ) else {
         return Err(DomainStateError::bad_request(
             "This standing role request needs projectId and sessionId.",
         ));

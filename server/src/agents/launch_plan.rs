@@ -1,4 +1,4 @@
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::*;
 use crate::domain::DomainStateError;
@@ -685,20 +685,18 @@ pub(crate) fn create_agent_session_params_for_project(
                             .and_then(Value::as_str)
                             .map(str::to_string);
                         let resume_id = read_text_from_map(&runtime_settings, "agentSessionId");
-                        let accept_all_effective = match read_text_from_map(
-                            &agent_config,
-                            "acceptAllMode",
-                        )
-                        .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
-                        .as_deref()
-                        {
-                            Some("enabled" | "acceptAll") => true,
-                            Some("disabled") => false,
-                            _ => settings
-                                .get("agentAcceptAllEnabled")
-                                .and_then(Value::as_bool)
-                                .unwrap_or(false),
-                        };
+                        let accept_all_effective =
+                            match read_text_from_map(&agent_config, "acceptAllMode")
+                                .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
+                                .as_deref()
+                            {
+                                Some("enabled" | "acceptAll") => true,
+                                Some("disabled") => false,
+                                _ => settings
+                                    .get("agentAcceptAllEnabled")
+                                    .and_then(Value::as_bool)
+                                    .unwrap_or(false),
+                            };
                         let req_model = read_text(params, "agentModel");
                         let req_effort = read_text(params, "agentEffort");
                         let acp_cmd = crate::acp::spec::build_acp_host_launch_command(
@@ -1187,8 +1185,8 @@ fn pin_remembered_agent_model(
     runtime_settings: &mut Map<String, Value>,
 ) -> Result<Option<String>, DomainStateError> {
     use crate::agent_model_pins::{
-        ModelPin, ORIGIN_DEFAULT, ORIGIN_LEARN, ORIGIN_SESSION, SESSION_PIN_KEY, launch_default,
-        pin_family, session_marker,
+        launch_default, pin_family, session_marker, ModelPin, ORIGIN_DEFAULT, ORIGIN_LEARN,
+        ORIGIN_SESSION, SESSION_PIN_KEY,
     };
     let Some(family) =
         resume_agent_family_id(Some(agent_id.to_string()), agent_config, launch_settings)
@@ -1650,26 +1648,18 @@ mod launch_choice_tests {
             refusal.contains("takes a launch model but no effort"),
             "{refusal}"
         );
-        assert!(
-            launch("opencode", Some("opencode/big-pickle"), None)
-                .unwrap_err()
-                .contains("An OpenCode thread keeps its configured model")
-        );
-        assert!(
-            launch("dsh", Some("deepseek-v4"), None)
-                .unwrap_err()
-                .contains("Cursor CLI takes a model only")
-        );
-        assert!(
-            launch("copilot", None, Some("hgih"))
-                .unwrap_err()
-                .contains("A Copilot effort is one of")
-        );
-        assert!(
-            launch("omp", None, Some("ultra"))
-                .unwrap_err()
-                .contains("A OMP effort")
-        );
+        assert!(launch("opencode", Some("opencode/big-pickle"), None)
+            .unwrap_err()
+            .contains("An OpenCode thread keeps its configured model"));
+        assert!(launch("dsh", Some("deepseek-v4"), None)
+            .unwrap_err()
+            .contains("Cursor CLI takes a model only"));
+        assert!(launch("copilot", None, Some("hgih"))
+            .unwrap_err()
+            .contains("A Copilot effort is one of"));
+        assert!(launch("omp", None, Some("ultra"))
+            .unwrap_err()
+            .contains("A OMP effort"));
         assert!(launch("hermes-agent", None, Some("ultra")).is_ok());
     }
 }

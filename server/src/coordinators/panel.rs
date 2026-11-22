@@ -1351,7 +1351,15 @@ mod tests {
         assert_eq!(row["detail"], "Find the CPU churn");
         assert_eq!(row["recent"], true);
         assert_eq!(panel_rank(&row), 0);
-        let panel = cached_panel(vec![row], Value::Null, Value::Null, json!([]), false, false, None);
+        let panel = cached_panel(
+            vec![row],
+            Value::Null,
+            Value::Null,
+            json!([]),
+            false,
+            false,
+            None,
+        );
         assert_eq!(panel.summary["total"], 1);
         assert_eq!(panel.summary["threads"][0]["serverId"], "S4k");
 

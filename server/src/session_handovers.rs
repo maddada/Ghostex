@@ -8,25 +8,25 @@
 
 use axum::http::StatusCode;
 use chrono::Utc;
-use rusqlite::{Connection, params};
-use serde_json::{Value, json};
+use rusqlite::{params, Connection};
+use serde_json::{json, Value};
 use std::path::PathBuf;
 
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::presentation::presentation_activity;
 use crate::protocol::rpc_success;
 use crate::server::{
-    AppState, RoutedResponse, domain_error_response, read_runtime_text, read_session_text,
-    routed_json,
+    domain_error_response, read_runtime_text, read_session_text, routed_json, AppState,
+    RoutedResponse,
 };
 use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_chat_queue::enqueue_session_chat_prompt;
 use crate::session_chat_queue_runtime::{
-    SessionChatMessageSource, send_session_chat_message_internal,
+    send_session_chat_message_internal, SessionChatMessageSource,
 };
 use crate::session_transcript_export::{
-    SessionTranscriptExportRequest, SessionTranscriptExportSelection, count_session_transcript,
-    export_session_transcript,
+    count_session_transcript, export_session_transcript, SessionTranscriptExportRequest,
+    SessionTranscriptExportSelection,
 };
 use crate::storage::open_gxserver_database;
 

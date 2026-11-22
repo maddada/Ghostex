@@ -11,8 +11,9 @@
 use super::super::native_modal_kit::*;
 use super::catalog::{module, settings_catalog};
 use super::fields::{
-    ColorSaver, FieldStates, SettingsPage, SliderBinding, SliderSaver, centered_tint_picker_overlay,
-    open_tint_picker, set_color_saver, settings_icon, step_slider, tooltip_text,
+    ColorSaver, FieldStates, SettingsPage, SliderBinding, SliderSaver,
+    centered_tint_picker_overlay, open_tint_picker, set_color_saver, settings_icon, step_slider,
+    tooltip_text,
 };
 use super::model::SettingsModalHost;
 use super::palette::{SETTINGS_FONT, SettingsPalette};
@@ -49,8 +50,8 @@ use ghostex_settings_catalog::{ARTWORKS, YOUR_IMAGE_ART_ID, artwork_by_id};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, ClickEvent, Context, Entity, FocusHandle, Focusable, Image, ImageFormat,
-    InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton, ObjectFit,
-    ParentElement as _, Point, Pixels, Render, RenderImage, ScrollHandle, SharedString,
+    InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton, ObjectFit, ParentElement as _,
+    Pixels, Point, Render, RenderImage, ScrollHandle, SharedString,
     StatefulInteractiveElement as _, Styled as _, StyledImage as _, Subscription, Window,
     WindowAppearance, WindowControlArea, canvas, div, img, point, px,
 };
@@ -376,13 +377,7 @@ impl GpuiThemeEditorWindow {
         self.apply_gallery_theme("default", cx);
     }
 
-    fn theme_rpc(
-        &mut self,
-        id: &str,
-        params: Value,
-        failed: &'static str,
-        cx: &mut Context<Self>,
-    ) {
+    fn theme_rpc(&mut self, id: &str, params: Value, failed: &'static str, cx: &mut Context<Self>) {
         if self.busy_theme.is_some() {
             return;
         }
@@ -941,7 +936,8 @@ impl GpuiThemeEditorWindow {
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                     })
                     .when(!selected, |this| {
-                        this.text_color(muted).hover(move |s| s.bg(hover_bg).text_color(fg))
+                        this.text_color(muted)
+                            .hover(move |s| s.bg(hover_bg).text_color(fg))
                     })
                     .on_click(cx.listener(move |editor, _: &ClickEvent, window, cx| {
                         on_pick(editor, value, window, cx);
@@ -1086,22 +1082,23 @@ impl GpuiThemeEditorWindow {
     fn header(&self, p: &SettingsPalette, cx: &mut Context<Self>) -> AnyElement {
         let hover_bg = hsla(p.foreground_alpha(0.08));
         let can_undo = !self.undo_stack.is_empty();
-        let icon_btn = |id: &'static str, icon_path: &'static str, tip: &'static str, enabled: bool| {
-            div()
-                .id(id)
-                .size(px(26.0))
-                .rounded(px(6.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .when(enabled, |this| {
-                    this.cursor_pointer().hover(move |s| s.bg(hover_bg))
-                })
-                .when(!enabled, |this| this.opacity(0.35))
-                .tooltip(tooltip_text(tip))
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(settings_icon(icon_path, 14.0, p.muted))
-        };
+        let icon_btn =
+            |id: &'static str, icon_path: &'static str, tip: &'static str, enabled: bool| {
+                div()
+                    .id(id)
+                    .size(px(26.0))
+                    .rounded(px(6.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .when(enabled, |this| {
+                        this.cursor_pointer().hover(move |s| s.bg(hover_bg))
+                    })
+                    .when(!enabled, |this| this.opacity(0.35))
+                    .tooltip(tooltip_text(tip))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .child(settings_icon(icon_path, 14.0, p.muted))
+            };
         let drag_band = h_flex()
             .id("theme-editor-drag-header")
             .flex_1()
@@ -1158,13 +1155,15 @@ impl GpuiThemeEditorWindow {
             .border_b_1()
             .border_color(hsla(p.hairline))
             .child(drag_band)
-            .child(icon_btn("theme-editor-undo", ICON_UNDO, "Undo last change", can_undo).on_click(
-                cx.listener(move |editor, _: &ClickEvent, _window, cx| {
-                    if can_undo {
-                        editor.undo(cx);
-                    }
-                }),
-            ))
+            .child(
+                icon_btn("theme-editor-undo", ICON_UNDO, "Undo last change", can_undo).on_click(
+                    cx.listener(move |editor, _: &ClickEvent, _window, cx| {
+                        if can_undo {
+                            editor.undo(cx);
+                        }
+                    }),
+                ),
+            )
             .child(
                 icon_btn("theme-editor-close", ICON_CLOSE, "Close theme editor", true).on_click(
                     cx.listener(|editor, _: &ClickEvent, window, cx| {
@@ -1289,11 +1288,7 @@ impl GpuiThemeEditorWindow {
                             .when(selected, |this| this.border_2())
                             .when(!selected, |this| this.border_1())
                             .when_some(picture, |this, pic| {
-                                this.child(
-                                    img(pic)
-                                        .size_full()
-                                        .object_fit(ObjectFit::Cover),
-                                )
+                                this.child(img(pic).size_full().object_fit(ObjectFit::Cover))
                             }),
                     )
                     .child(
@@ -1308,7 +1303,9 @@ impl GpuiThemeEditorWindow {
                             } else {
                                 hsla(p.muted)
                             })
-                            .when(selected, |this| this.font_weight(gpui::FontWeight::SEMIBOLD))
+                            .when(selected, |this| {
+                                this.font_weight(gpui::FontWeight::SEMIBOLD)
+                            })
                             .child(label),
                     )
                     .into_any_element(),
@@ -1407,7 +1404,9 @@ impl GpuiThemeEditorWindow {
                     } else {
                         hsla(p.muted)
                     })
-                    .when(selected, |this| this.font_weight(gpui::FontWeight::SEMIBOLD))
+                    .when(selected, |this| {
+                        this.font_weight(gpui::FontWeight::SEMIBOLD)
+                    })
                     .child(title),
             )
             .into_any_element()
@@ -1712,8 +1711,8 @@ impl GpuiThemeEditorWindow {
                     "windowGlassLiveStyleLight"
                 };
                 let current_live = values.string(live_key);
-                let options = settings_catalog()
-                    .options(module::SETTINGS, "WINDOW_GLASS_LIVE_STYLE_OPTIONS");
+                let options =
+                    settings_catalog().options(module::SETTINGS, "WINDOW_GLASS_LIVE_STYLE_OPTIONS");
                 let mut cards: Vec<AnyElement> = Vec::with_capacity(options.len());
                 for option in options {
                     let style_id = option.value;
@@ -1731,10 +1730,14 @@ impl GpuiThemeEditorWindow {
                                 let mut patch = Map::new();
                                 patch.insert(live_key.into(), json!(style_id));
                                 if single {
-                                    patch.insert("windowGlassLiveStyleLight".into(), json!(style_id));
+                                    patch.insert(
+                                        "windowGlassLiveStyleLight".into(),
+                                        json!(style_id),
+                                    );
                                 }
                                 patch.insert("windowGlassSource".into(), json!("live"));
-                                if editor.store.read(cx).values().string("windowGlass") == "opaque" {
+                                if editor.store.read(cx).values().string("windowGlass") == "opaque"
+                                {
                                     patch.insert(
                                         "windowGlass".into(),
                                         json!(if dark { "auto" } else { "frosted" }),
@@ -1811,23 +1814,25 @@ impl GpuiThemeEditorWindow {
                     },
                     cx,
                 );
-                content.push(self.compact_slider_row(
-                    p,
-                    "Speed",
-                    speed_label,
-                    SliderBinding {
-                        key: "float-live-speed",
-                        min: settings_catalog()
-                            .number(module::SETTINGS, "MIN_WINDOW_GLASS_LIVE_SPEED"),
-                        max: settings_catalog()
-                            .number(module::SETTINGS, "MAX_WINDOW_GLASS_LIVE_SPEED"),
-                        step: 0.25,
-                    },
-                    speed,
-                    speed_saver,
-                    window,
-                    cx,
-                ));
+                content.push(
+                    self.compact_slider_row(
+                        p,
+                        "Speed",
+                        speed_label,
+                        SliderBinding {
+                            key: "float-live-speed",
+                            min: settings_catalog()
+                                .number(module::SETTINGS, "MIN_WINDOW_GLASS_LIVE_SPEED"),
+                            max: settings_catalog()
+                                .number(module::SETTINGS, "MAX_WINDOW_GLASS_LIVE_SPEED"),
+                            step: 0.25,
+                        },
+                        speed,
+                        speed_saver,
+                        window,
+                        cx,
+                    ),
+                );
                 let bright = values.f64("windowGlassLiveBrightness");
                 let bright_saver = self.tracked_slider_saver(
                     "float-live-brightness",
@@ -1849,23 +1854,25 @@ impl GpuiThemeEditorWindow {
                     },
                     cx,
                 );
-                content.push(self.compact_slider_row(
-                    p,
-                    "Brightness",
-                    format!("{}%", bright.round() as i64),
-                    SliderBinding {
-                        key: "float-live-brightness",
-                        min: settings_catalog()
-                            .number(module::SETTINGS, "MIN_WINDOW_GLASS_LIVE_BRIGHTNESS"),
-                        max: settings_catalog()
-                            .number(module::SETTINGS, "MAX_WINDOW_GLASS_LIVE_BRIGHTNESS"),
-                        step: 1.0,
-                    },
-                    bright,
-                    bright_saver,
-                    window,
-                    cx,
-                ));
+                content.push(
+                    self.compact_slider_row(
+                        p,
+                        "Brightness",
+                        format!("{}%", bright.round() as i64),
+                        SliderBinding {
+                            key: "float-live-brightness",
+                            min: settings_catalog()
+                                .number(module::SETTINGS, "MIN_WINDOW_GLASS_LIVE_BRIGHTNESS"),
+                            max: settings_catalog()
+                                .number(module::SETTINGS, "MAX_WINDOW_GLASS_LIVE_BRIGHTNESS"),
+                            step: 1.0,
+                        },
+                        bright,
+                        bright_saver,
+                        window,
+                        cx,
+                    ),
+                );
                 let plugged = values.bool("windowGlassVideoOnlyOnPower");
                 content.push(self.compact_toggle_row(
                     p,
@@ -1999,10 +2006,7 @@ impl GpuiThemeEditorWindow {
                 "customSidebarTitlebarLightBackgroundLightnessPercent",
             ],
             |store, value, _commit, cx| {
-                let pos = value
-                    .round()
-                    .clamp(0.0, COLOURFULNESS_LAST_POSITION as f64)
-                    as usize;
+                let pos = value.round().clamp(0.0, COLOURFULNESS_LAST_POSITION as f64) as usize;
                 if colourfulness_step_index(&store.values()) != Some(pos) {
                     store.apply_patch(colourfulness_patch(pos), "settings:control", cx);
                 }
@@ -2085,10 +2089,9 @@ impl GpuiThemeEditorWindow {
                         slider_key,
                         undo_keys,
                         move |store, value, _commit, cx| {
-                            let position = value
-                                .round()
-                                .clamp(0.0, COLOURFULNESS_LAST_POSITION as f64)
-                                as usize;
+                            let position =
+                                value.round().clamp(0.0, COLOURFULNESS_LAST_POSITION as f64)
+                                    as usize;
                             if store.values().f64(key) != colourfulness_points(position) {
                                 store.apply_patch(
                                     area_colourfulness_patch(key, position),
@@ -2177,7 +2180,14 @@ impl GpuiThemeEditorWindow {
                 .border_color(hsla(p.foreground_alpha(0.45)))
                 .tooltip(tooltip_text("Pick custom accent"))
                 .on_click(cx.listener(move |editor, _: &ClickEvent, window, cx| {
-                    editor.open_role_picker("accent", light, &accent_hex_for_click, None, window, cx);
+                    editor.open_role_picker(
+                        "accent",
+                        light,
+                        &accent_hex_for_click,
+                        None,
+                        window,
+                        cx,
+                    );
                 }))
                 .child(settings_icon(ICON_PLUS, 10.0, p.muted))
                 .into_any_element(),
@@ -2514,8 +2524,7 @@ impl GpuiThemeEditorWindow {
                         }))
                         .when(selected, |this| this.border_2())
                         .when(!selected, |this| {
-                            this.border_1()
-                                .hover(move |s| s.border_color(border_hover))
+                            this.border_1().hover(move |s| s.border_color(border_hover))
                         })
                         .bg(hsla(p.foreground_alpha(0.03)))
                         .cursor_pointer()
@@ -2606,11 +2615,7 @@ impl GpuiThemeEditorWindow {
                     &["windowGlassBlurRadius"],
                     |store, value, commit, cx| {
                         if commit {
-                            store.update_setting(
-                                "windowGlassBlurRadius",
-                                json!(value.round()),
-                                cx,
-                            );
+                            store.update_setting("windowGlassBlurRadius", json!(value.round()), cx);
                         } else {
                             store.update_setting_debounced(
                                 "windowGlassBlurRadius",
@@ -2621,23 +2626,25 @@ impl GpuiThemeEditorWindow {
                     },
                     cx,
                 );
-                content.push(self.compact_slider_row(
-                    p,
-                    "Blur",
-                    format!("{} pt", blur.round() as i64),
-                    SliderBinding {
-                        key: "float-glass-blur",
-                        min: settings_catalog()
-                            .number(module::SETTINGS, "MIN_WINDOW_GLASS_BLUR_RADIUS"),
-                        max: settings_catalog()
-                            .number(module::SETTINGS, "MAX_WINDOW_GLASS_BLUR_RADIUS"),
-                        step: 1.0,
-                    },
-                    blur,
-                    blur_saver,
-                    window,
-                    cx,
-                ));
+                content.push(
+                    self.compact_slider_row(
+                        p,
+                        "Blur",
+                        format!("{} pt", blur.round() as i64),
+                        SliderBinding {
+                            key: "float-glass-blur",
+                            min: settings_catalog()
+                                .number(module::SETTINGS, "MIN_WINDOW_GLASS_BLUR_RADIUS"),
+                            max: settings_catalog()
+                                .number(module::SETTINGS, "MAX_WINDOW_GLASS_BLUR_RADIUS"),
+                            step: 1.0,
+                        },
+                        blur,
+                        blur_saver,
+                        window,
+                        cx,
+                    ),
+                );
             }
             let more_open = self.more_glass;
             content.push(self.fold_button(
@@ -2673,23 +2680,25 @@ impl GpuiThemeEditorWindow {
                     },
                     cx,
                 );
-                content.push(self.compact_slider_row(
-                    p,
-                    "Menu blur",
-                    format!("{} pt", menu_blur.round() as i64),
-                    SliderBinding {
-                        key: "float-menu-blur",
-                        min: settings_catalog()
-                            .number(module::SETTINGS, "MIN_WINDOW_GLASS_MENU_BLUR_RADIUS"),
-                        max: settings_catalog()
-                            .number(module::SETTINGS, "MAX_WINDOW_GLASS_MENU_BLUR_RADIUS"),
-                        step: 1.0,
-                    },
-                    menu_blur,
-                    menu_blur_saver,
-                    window,
-                    cx,
-                ));
+                content.push(
+                    self.compact_slider_row(
+                        p,
+                        "Menu blur",
+                        format!("{} pt", menu_blur.round() as i64),
+                        SliderBinding {
+                            key: "float-menu-blur",
+                            min: settings_catalog()
+                                .number(module::SETTINGS, "MIN_WINDOW_GLASS_MENU_BLUR_RADIUS"),
+                            max: settings_catalog()
+                                .number(module::SETTINGS, "MAX_WINDOW_GLASS_MENU_BLUR_RADIUS"),
+                            step: 1.0,
+                        },
+                        menu_blur,
+                        menu_blur_saver,
+                        window,
+                        cx,
+                    ),
+                );
             }
         } else if glass == "auto" && !dark {
             content.push(
@@ -2826,8 +2835,7 @@ impl Render for GpuiThemeEditorWindow {
         let transparency_section =
             self.window_transparency_section(&p, &values, dark, &picked, window, cx);
         let chat_term_section = self.chat_and_terminal_section(&p, &values, cx);
-        let color_picker_overlay =
-            self.active_color_picker_overlay(&p, &values, dark, window, cx);
+        let color_picker_overlay = self.active_color_picker_overlay(&p, &values, dark, window, cx);
         v_flex()
             .id("ghostex-floating-theme-editor")
             .relative()

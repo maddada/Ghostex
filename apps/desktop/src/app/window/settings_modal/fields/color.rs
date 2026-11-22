@@ -618,7 +618,11 @@ fn pick_color_dialog<V: SettingsPage>(
     let viewport_w = f32::from(viewport.width);
     let bound_w = max_width.map_or(viewport_w, |limit| limit.min(viewport_w));
     let dialog_width = (bound_w - 16.0).clamp(240.0, DIALOG_WIDTH);
-    let pad = if dialog_width < DIALOG_WIDTH { 12.0 } else { 16.0 };
+    let pad = if dialog_width < DIALOG_WIDTH {
+        12.0
+    } else {
+        16.0
+    };
     let picker_size = (dialog_width - pad * 2.0).min(PICKER_SIZE).max(200.0);
     let (hue, saturation, value) = (
         state.picker.hue,
@@ -780,8 +784,16 @@ fn pick_color_dialog<V: SettingsPage>(
         .occlude()
         .w(px(dialog_width))
         .p(px(pad))
-        .gap(px(if dialog_width < DIALOG_WIDTH { 12.0 } else { 16.0 }))
-        .rounded(px(if dialog_width < DIALOG_WIDTH { 10.0 } else { 0.0 }))
+        .gap(px(if dialog_width < DIALOG_WIDTH {
+            12.0
+        } else {
+            16.0
+        }))
+        .rounded(px(if dialog_width < DIALOG_WIDTH {
+            10.0
+        } else {
+            0.0
+        }))
         .bg(hsla(dialog_bg))
         .shadow(vec![gpui::BoxShadow {
             color: hsla(p.foreground_alpha(0.1)),
@@ -818,7 +830,11 @@ fn pick_color_dialog<V: SettingsPage>(
                 .w(px(picker_size))
                 .mx_auto()
                 .bg(gpui::rgb(0x202020))
-                .gap(px(if dialog_width < DIALOG_WIDTH { 13.0 } else { 17.0 }))
+                .gap(px(if dialog_width < DIALOG_WIDTH {
+                    13.0
+                } else {
+                    17.0
+                }))
                 .child(
                     div()
                         .on_children_prepainted(capture_child_bounds(square_bounds, 0))
@@ -826,7 +842,11 @@ fn pick_color_dialog<V: SettingsPage>(
                 )
                 .child(
                     v_flex()
-                        .gap(px(if dialog_width < DIALOG_WIDTH { 14.0 } else { 18.0 }))
+                        .gap(px(if dialog_width < DIALOG_WIDTH {
+                            14.0
+                        } else {
+                            18.0
+                        }))
                         .child(
                             div()
                                 .on_children_prepainted(capture_child_bounds(hue_bounds, 0))
