@@ -162,6 +162,14 @@ arrives is the Escape Ghostex types to deliver it, not the user pausing you: ret
    `ghostex coordinator resolve <thread ref>` (`--keep-open` when the user wants its session left
    open), never `ghostex agents close`, which stops an agent mid-turn and loses its work. Never
    resolve a thread with changes you have not taken.
+   A thread can look busy after its work is done: its last turn is a finished report, nothing new
+   comes, its screen shows the empty prompt with "N shells" or helper agents "waiting on shells", and
+   `resolve` refuses ("The thread is still working"). Ghostex counts such a thread as working on
+   purpose; you clear it. When its work is taken (committed, or on main) and nothing more is expected,
+   `ghostex interrupt-session-chat <thread ref>` ends the leftover shells, then `resolve`; if resolve
+   still refuses, `resolve --keep-open` marks it done and leaves the session open. Never close a
+   thread whose work you have not taken. Its old "Needs you" goes away once it is resolved: do not pass
+   on an ask from a finished report as new.
 
 Never reply to a report just to acknowledge it: that wakes the thread.
 
