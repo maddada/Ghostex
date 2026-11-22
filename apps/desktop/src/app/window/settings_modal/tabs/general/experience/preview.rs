@@ -412,7 +412,7 @@ fn sessions_list(ink: &Ink, state: &PreviewState) -> gpui::Div {
     ];
     let other = Row {
         agent: Agent::Coordinator,
-        title: "t3code-pm PM",
+        title: "website PM",
         machine: APPLE,
         time: Some("6h"),
         selected: false,
@@ -466,7 +466,7 @@ fn sessions_list(ink: &Ink, state: &PreviewState) -> gpui::Div {
                 .enumerate()
                 .map(|(index, row)| session_row(index + 3, row, ink, state)),
         )
-        .child(project_row("t3code", false, ink, state))
+        .child(project_row("website", false, ink, state))
         .child(session_row(6, &other, ink, state))
 }
 
