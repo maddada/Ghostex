@@ -207,9 +207,6 @@ fn environment(data: &Value, hide_emails: bool, computer_name: Option<String>) -
             "badge": (environment.get("worktree") == Some(&Value::Bool(true))).then_some("worktree"),
         }));
     }
-    if let Some(branch) = text(data, "/changes/branch") {
-        rows.push(json!({"icon": "branch", "text": branch}));
-    }
     if let Some(row) = account_row(environment, hide_emails) {
         rows.push(row);
     }
@@ -640,7 +637,16 @@ fn changes(data: &Value) -> Option<Value> {
     } else {
         Some(json!({"label": "Create PR", "action": open_action("createPullRequest", Value::Null)}))
     };
+    // CDXC:SessionDetails 2026-11-22 DECISION:
+    // User (merge page, Q4438): the branch moves from Environment into the Changes card, where it
+    // reads with the diff it belongs to: its own row above the numbers. No Session id row comes
+    // with it.
+    let rows: Vec<Value> = text(data, "/changes/branch")
+        .map(|branch| json!({"icon": "branch", "text": branch}))
+        .into_iter()
+        .collect();
     Some(json!({
+        "rows": rows,
         "additions": format!("+{additions}"),
         "deletions": format!("\u{2212}{deletions}"),
         "empty": additions + deletions == 0,
@@ -894,7 +900,7 @@ fn rider_text(rider: &str, value: &str) -> String {
 
 /// The second tab (the Limits area): its cards from the detail rows, and Customize session details
 /// (the meter's editor).
-fn usage_tab(items: &[(String, String, String)]) -> Value {
+fn usage_tab(items: &[(String, String, String)], pinnable: bool) -> Value {
     let find = |id: &str| items.iter().find(|item| item.0 == id);
     let cards: Vec<Value> = USAGE_CARDS
         .iter()
@@ -928,11 +934,18 @@ fn usage_tab(items: &[(String, String, String)]) -> Value {
             (!rows.is_empty()).then(|| json!({"id": id, "title": title, "rows": rows}))
         })
         .collect();
-    json!({
+    // Every row with a value shows (the 2026-11-22 decision in menus/context/meter.rs), so an
+    // empty Limits is an agent that reported none yet; Customize session details pins rows to the
+    // Chat Status Line, and an agent with nothing to pin has no button.
+    let mut tab = json!({
         "cards": cards,
-        "empty": "Nothing picked to show here. Customize session details picks which rows show.",
-        "chooseDetails": {"label": "Customize session details", "action": {"type": "contextEdit"}},
-    })
+        "empty": "No limits, cost or cache reported yet.",
+    });
+    if pinnable {
+        tab["chooseDetails"] =
+            json!({"label": "Customize session details", "action": {"type": "contextEdit"}});
+    }
+    tab
 }
 
 /// Environment gains the agent's version ("Claude Code 2.1.4") when the details carry it.
@@ -1092,7 +1105,10 @@ pub fn document(state: &ChatState, context: &ChatContext, meter: Option<&Value>)
             })
             .collect::<Vec<_>>(),
         "sections": sections,
-        "usage": usage_tab(&items),
+        "usage": usage_tab(
+            &items,
+            meter.is_none_or(|meter| meter["nothingToPin"] != true),
+        ),
     })
 }
 

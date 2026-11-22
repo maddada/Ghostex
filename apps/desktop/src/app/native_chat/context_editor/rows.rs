@@ -6,7 +6,6 @@ use gpui::{
     AnyElement, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     Render, StatefulInteractiveElement as _, Styled as _, Window, div, px, svg,
 };
-use gpui_component::{Disableable as _, Sizable as _, switch::Switch};
 use serde_json::{Value, json};
 
 #[derive(Clone)]
@@ -165,44 +164,6 @@ impl ContextEditorWindow {
                     p,
                     cx,
                 ));
-            let chat = self.chat.clone();
-            let key_id = id.clone();
-            let key_shown = item["shown"] != true;
-            row = row.child(
-                div()
-                    .id(format!("shown-keyboard-{id}"))
-                    .focusable()
-                    .tab_stop(!disabled)
-                    .role(gpui::Role::Switch)
-                    .aria_label(format!("Show {label}"))
-                    .aria_toggled(if item["shown"] == true {
-                        gpui::Toggled::True
-                    } else {
-                        gpui::Toggled::False
-                    })
-                    .on_key_down(cx.listener(move |this, event, window, cx| {
-                        this.activate_key(
-                            event,
-                            json!({"type":"contextShown","id":key_id,"shown":key_shown}),
-                            window,
-                            cx,
-                        )
-                    }))
-                    .child(
-                        Switch::new(format!("shown-{id}"))
-                            .small()
-                            .checked(item["shown"] == true)
-                            .disabled(disabled)
-                            .on_click(move |shown, _, cx| {
-                                chat.update(cx, |chat, cx| {
-                                    chat.invoke(
-                                        json!({"type":"contextShown","id":id,"shown":shown}),
-                                        cx,
-                                    )
-                                })
-                            }),
-                    ),
-            );
         }
         row.into_any_element()
     }

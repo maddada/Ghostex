@@ -2761,25 +2761,25 @@ off by default for everyone (also for people who saw the line before it became
 an extension): turn it on in Settings > Extensions > Built-in. While it is off
 the chat box has no line under it, on this computer and in Ghostex in a browser
 connected to it; what you pinned is kept for when you turn it back on. While it
-is on, nothing is pinned to the line until you pin something. To show one, star
-items in Context details (Customize session details in the Session details
-panel opens it too); hover the status line and click the pen after its last item
-to open Context details again. A line whose pinned items this agent never
-reports takes no room. Everyone who pinned items before keeps them, and your own
-changes are never overwritten. The phone shows the line
+is on, it shows the 5h limit, the 7d limit and Context used until you pin
+something else (Cursor shows Context used; Hermes Context used, Cost, Tokens and
+Session time; Pi Context used, Cost and Tokens). To change it, star items in
+Customize session details (the button at the bottom of the Session details
+panel); hover the status line and click the pen after its last item to open it
+again. Its More group, folded at first, holds what Ghostex already shows
+elsewhere (Model, Thinking, Session title, Repository, Folder, Branch, Pull
+request, Lines changed, the agent's version) and the agent's own settings
+(Agent, Output style, Provider, Sandbox, Approval policy, Parent thread,
+Worktree, Max Mode, Auto-run); none of them is pinned unless you pin it, and
+pins of them made before this change were removed once. Every other chat agent
+(Freebuff, OMP, Grok Build, Antigravity, OpenCode, ZCode) has only rows Ghostex
+already shows, so it has no status line. A line whose pinned items this agent
+never reports takes no room. Your own pins are never overwritten otherwise. The
+phone shows the line
 the chat's computer shows: what you pinned in the Ghostex app on that computer,
 for each agent, picked up when a chat opens or catches up. The phone's own pins
 are used only with a computer that has no Ghostex app or runs an older Ghostex.
-Reset to recommended
-pins the setup Ghostex suggests: Claude Code gets Account, Model limit, 5h
-limit, 7d limit, and Repository; Codex gets Account email, 7d limit, 7d reset,
-and Account resets; Cursor gets Context used, Branch, and Lines changed; Hermes
-gets Context used, Cost, Tokens, and Session time; Pi gets Model, Context used,
-Cost, and Tokens (read from Pi's own session record) and can also show Context
-tokens, Thinking level, Session time, Output tokens, Repository, Folder,
-Branch, and Session title; every other chat agent (Freebuff, OMP, Grok Build,
-Antigravity, OpenCode, ZCode) gets Repository and Branch, and can also show
-Folder, Model, and Session title.
+Reset to recommended returns to the pins above.
 Items without a value are hidden until their data is available again;
 your starred selections stay saved. Wrapped rows are centered and balanced where
 space allows, with separators only between items on the same row.
@@ -3193,9 +3193,9 @@ context ring opens the panel too, at the Context card, so there is no separate
 Context window popover any more (a chat without the panel keeps it).
 
 Overview holds Environment (the computer, by its icon and name, or the
-box the session runs in, its folder, branch and account, the agent's version, and how much memory
-the session's processes use while it runs on this computer); Changes (lines changed on the
-branch against main, uncommitted edits included, with Commit, Create PR or View
+box the session runs in, its folder and account, the agent's version, and how much memory
+the session's processes use while it runs on this computer); Changes (the branch, then lines
+changed on it against main, uncommitted edits included, with Commit, Create PR or View
 PR); Context (how full the context window is, with Claude's own breakdown into
 messages, memory files, skills, tools and free space; it starts folded, still
 showing how full the window is, its bar and Compact context, and clicking its
@@ -3209,9 +3209,11 @@ while connecting or needing a sign-in; Manage opens Settings > Connectors);
 Skills (the ones the session used, then all of them; click one to open it in
 Agents Hub); Memory files (the CLAUDE.md and AGENTS.md files Claude loaded;
 click to open); Background tasks (each running command with its time and a
-stop button, then the finished ones); and Agent (the agent's other settings).
-Limits holds Plan limits (each limit with when it resets), Cost and time and
-Cache, and a Customize session details button, which picks the rows to show. A card's title folds
+stop button, then the finished ones; clicking the chat's Background pill opens
+the panel at this card, and the pill hides while the panel shows); and Agent
+(the agent's other settings). Limits holds Plan limits (each limit with when it
+resets), Cost and time and Cache, each showing every row the agent reports, and
+a Customize session details button, which picks what the Chat Status Line pins. A card's title folds
 it, except Context. Claude task list (Settings > Agents > Defaults, shown while
 the extension is on, on by default) starts Claude with its task list tools, which
 recent Claude models only get when Ghostex asks; it applies to Claude sessions

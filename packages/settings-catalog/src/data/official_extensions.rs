@@ -352,7 +352,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // User, of the row of pills under the chat box (the status line, which old users saw as three empty grey placeholder pills): "i dont wanna see this anymore". It becomes opt-in: a built-in extension, Chat Status Line, off by default under a key that enables (`chatStatusLineEnabled`), so a settings file from before it, which has no such key, reads off and existing users lose the line too. Off, no line and no room for one under the chat box, in the desktop and Ghostex in a browser; on, the line shows the details pinned to it as before. The pinned details are kept either way.
     // SEE-ALSO: apps/desktop/src/app/gx_chat/boot.rs (`ChatSettings::status_line`, the desktop's and the browser's switch), packages/gx-chat-core/src/menus/context/document.rs (`statusLineOff`), apps/desktop/src/app/native_chat/context_meter.rs (the line).
     J::Obj(&[
-        ("description", J::Str("A line under the chat box with the details you pin to it, such as your plan limits, the account or the branch. Pick them with the pen at the line's end or with Customize session details.")),
+        ("description", J::Str("A line under the chat box with the details you pin to it, such as your plan limits, context or account. Pick them with the pen at the line's end or with Customize session details.")),
         ("category", J::Str("features")),
         ("id", J::Str("chatStatusLine")),
         ("placement", J::Str("feature")),

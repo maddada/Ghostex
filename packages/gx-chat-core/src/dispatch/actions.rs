@@ -192,6 +192,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ContextCancel
         | ActionKind::ContextQuery
         | ActionKind::ContextShown
+        | ActionKind::ContextMore
         | ActionKind::ContextStar
         | ActionKind::ContextReorder
         | ActionKind::ContextReset

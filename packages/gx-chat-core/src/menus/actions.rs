@@ -30,6 +30,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         | ActionKind::ContextCancel
         | ActionKind::ContextQuery
         | ActionKind::ContextShown
+        | ActionKind::ContextMore
         | ActionKind::ContextStar
         | ActionKind::ContextReorder
         | ActionKind::ContextReset

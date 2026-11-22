@@ -35,6 +35,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 query: String::new(),
                 saving: false,
                 error: None,
+                more_open: false,
             });
             Vec::new()
         }
@@ -95,6 +96,9 @@ fn editor_command(
     match action.kind {
         ActionKind::ContextCancel => {
             state.pickers.context.editor = None;
+        }
+        ActionKind::ContextMore => {
+            editor.more_open = !editor.more_open;
         }
         ActionKind::ContextQuery => {
             editor.query = action

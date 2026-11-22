@@ -113,12 +113,17 @@ pub fn compute_context_meter(
             value.to_string()
         }
     };
+    // CDXC:SessionDetails 2026-11-22 DECISION:
+    // User (merge page, Q4443): drop the per-row show switch; Limits shows all its rows. The
+    // details are every row with a value, so the Limits cards, the Agent card and Environment's
+    // version row list whatever the agent reports; Customize session details only pins rows to
+    // the Chat Status Line. A saved `shown` choice is kept in the record but no longer read here.
     let details = has_details.then(|| {
         resolve_context_detail_groups(
             Some(&status),
             preferences,
             context,
-            RowSelection::Shown,
+            RowSelection::All,
             Some(&session),
             agent,
         )

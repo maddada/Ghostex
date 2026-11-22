@@ -62,14 +62,21 @@ pub fn document_with_icon(
         .computer
         .preferences(agent, pickers.context.preferences.get(agent));
     let result = compute_context_meter(&input, &preferences, &meter_context);
+    // An agent with only the basic rows has nothing to pin (CDXC:SessionChat 2026-11-22 on
+    // `recommended_preferences` in preferences.rs): no line, and Session details offers no
+    // Customize session details for it.
+    let basic = agent == crate::menus::context::ContextDetailsAgent::Basic;
     into.context_meter = match result.meter {
         Value::Null => Tri::Null,
-        Value::Object(mut meter) if pickers.context.status_line_off => {
+        Value::Object(mut meter) if pickers.context.status_line_off || basic => {
             // The Chat Status Line extension is off (CDXC:SessionChat 2026-11-22 in
             // packages/settings-catalog/src/data/official_extensions.rs): no line and no room
             // held for one; the details and their pins stay for the ring and the editor.
             meter.insert("statusLineOff".into(), Value::Bool(true));
             meter.insert("statusLineReserved".into(), Value::Bool(false));
+            if basic {
+                meter.insert("nothingToPin".into(), Value::Bool(true));
+            }
             Tri::Value(Value::Object(meter))
         }
         meter => Tri::Value(meter),
@@ -81,6 +88,7 @@ pub fn document_with_icon(
         &result.status,
         Some(&result.session),
         context,
+        pickers.context.status_line_off,
         move |text| {
             if hide {
                 mask_account_text(text)

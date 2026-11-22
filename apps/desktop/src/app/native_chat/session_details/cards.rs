@@ -152,26 +152,32 @@ fn usage_height(details: &Value) -> f32 {
     total + CUSTOMIZE_HEIGHT
 }
 
-/// How far down the panel's scrolling content the Context card starts, for the rings that open
-/// the panel there: under the Overview header, while that area is open.
-pub(super) fn context_offset(details: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f32 {
+/// How far down the panel's scrolling content a card starts (the rings open the panel at Context,
+/// the Background pill at Background tasks): under the Overview header. `None` while the card is
+/// not drawn (not sent yet, or Overview folded), except Context, which falls back to the top.
+pub(super) fn card_offset(
+    details: &Value,
+    card: &str,
+    open: &mut dyn FnMut(&str, bool) -> f32,
+) -> Option<f32> {
     let overview_open = details["areas"]
         .as_array()
         .into_iter()
         .flatten()
         .find(|area| area["id"] == "overview")
         .is_none_or(|area| area["collapsed"] != true);
+    let fallback = (card == "context").then_some(0.0);
     if !overview_open {
-        return 0.0;
+        return fallback;
     }
     let mut total = AREA_HEADER_HEIGHT;
     for section in details["sections"].as_array().into_iter().flatten() {
-        if section["id"] == "context" {
-            break;
+        if section["id"] == card {
+            return Some(total);
         }
         total += section_height(section, open) + CARD_GAP;
     }
-    total
+    fallback
 }
 
 /// One card's height: its padding and title, the part of its body still showing.
@@ -226,7 +232,8 @@ fn section_height(section: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f
                 let toggle = usize::from(len(section, "finished") > 0);
                 (len(section, "running") + toggle) as f32 * ROW_HEIGHT + finished * ROW_HEIGHT
             }
-            "changes" => ROW_HEIGHT,
+            // The branch row (since 2026-11-22) above the numbers.
+            "changes" => (len(section, "rows") + 1) as f32 * ROW_HEIGHT,
             "tasks" => {
                 let fold = usize::from(section["foldAction"].is_object());
                 (len(section, "rows") + fold) as f32 * ROW_HEIGHT
@@ -1460,14 +1467,24 @@ impl NativeChatView {
                     this.session_details_action(&action, cx);
                 }))
         });
+        // The branch reads above the diff it belongs to (CDXC:SessionDetails 2026-11-22 in
+        // gx-chat-core's session_details/document.rs `changes`).
+        let branch = (len(section, "rows") > 0).then(|| self.plain_rows("changes", section, p, cx));
         div()
             .flex()
-            .items_center()
-            .gap(px(6.0 * s))
-            .h(px(ROW_HEIGHT * s))
+            .flex_col()
             .min_w_0()
-            .child(numbers)
-            .children(button)
+            .children(branch)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .h(px(ROW_HEIGHT * s))
+                    .min_w_0()
+                    .child(numbers)
+                    .children(button),
+            )
             .into_any_element()
     }
 

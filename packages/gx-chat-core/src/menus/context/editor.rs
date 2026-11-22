@@ -6,7 +6,8 @@
 use serde_json::{json, Value};
 
 use crate::menus::context::preferences::{
-    is_shown, is_starred, ordered_rows, ordered_starred_rows, ContextDetailsPreferences,
+    is_more_row, is_shown, is_starred, ordered_rows, ordered_starred_rows,
+    ContextDetailsPreferences, MORE_ROWS,
 };
 use crate::menus::context::rows::{
     context_detail_row, context_detail_rows, ContextDetailSession, GroupId, RowDefinition,
@@ -22,6 +23,8 @@ pub struct ContextEditorState {
     pub query: String,
     pub saving: bool,
     pub error: Option<String>,
+    /// The More group is unfolded (`contextMore`); it opens folded each time.
+    pub more_open: bool,
 }
 
 /// `moveContextRow`.
@@ -116,6 +119,7 @@ pub fn context_editor_projection(
     status: &ContextDetailStatus,
     session: Option<&ContextDetailSession>,
     context: &crate::ChatContext,
+    status_line_off: bool,
     mask: impl Fn(&str) -> String,
 ) -> Value {
     let Some(editor) = editor else {
@@ -139,33 +143,61 @@ pub fn context_editor_projection(
             "starred": is_starred(&editor.draft, row),
         })
     };
-    let groups: Vec<Value> = CONTEXT_DETAIL_GROUPS
+    // The rows the query keeps, with their samples masked.
+    let listed = |rows: Vec<RowDefinition>| -> Vec<Value> {
+        rows.iter()
+            .map(project)
+            .filter(|item| {
+                let id = item.get("id").and_then(Value::as_str).unwrap_or_default();
+                let sample = item.get("sample").and_then(Value::as_str);
+                catalog
+                    .iter()
+                    .find(|row| row.id == id)
+                    .is_some_and(|row| matches_context_detail_filter(&editor.query, row, sample))
+            })
+            .map(|mut item| {
+                if let Some(sample) = item.get("sample").and_then(Value::as_str) {
+                    let masked = mask(sample);
+                    if let Some(object) = item.as_object_mut() {
+                        object.insert("sample".into(), json!(masked));
+                    }
+                }
+                item
+            })
+            .collect()
+    };
+    let mut groups: Vec<Value> = CONTEXT_DETAIL_GROUPS
         .into_iter()
         .filter_map(|group| {
-            let rows: Vec<Value> = ordered_rows(&editor.draft, group, agent)
-                .iter()
-                .map(project)
-                .filter(|item| {
-                    let id = item.get("id").and_then(Value::as_str).unwrap_or_default();
-                    let sample = item.get("sample").and_then(Value::as_str);
-                    catalog.iter().find(|row| row.id == id).is_some_and(|row| {
-                        matches_context_detail_filter(&editor.query, row, sample)
-                    })
-                })
-                .map(|mut item| {
-                    if let Some(sample) = item.get("sample").and_then(Value::as_str) {
-                        let masked = mask(sample);
-                        if let Some(object) = item.as_object_mut() {
-                            object.insert("sample".into(), json!(masked));
-                        }
-                    }
-                    item
-                })
-                .collect();
+            let rows = listed(
+                ordered_rows(&editor.draft, group, agent)
+                    .into_iter()
+                    .filter(|row| !is_more_row(row.id))
+                    .collect(),
+            );
             (!rows.is_empty())
                 .then(|| json!({ "id": group.as_str(), "label": group.label(), "rows": rows }))
         })
         .collect();
+    // The More group (the 2026-11-22 decision on `MORE_ROWS`), in its own order. A search
+    // unfolds it, so a match inside is never hidden.
+    let more = listed(
+        MORE_ROWS
+            .iter()
+            .filter_map(|id| catalog.iter().find(|row| row.id == *id).copied())
+            .collect(),
+    );
+    if !more.is_empty() {
+        let searching = !editor.query.trim().is_empty();
+        groups.push(json!({
+            "id": "more",
+            "label": "More",
+            "subtitle": "Already shown by the Ghostex UI, so none is pinned by default.",
+            "collapsed": !editor.more_open && !searching,
+            "toggle": {"type": "contextMore"},
+            "rows": more,
+        }));
+    }
     let mut object = serde_json::Map::new();
     object.insert("agent".into(), json!(agent.as_str()));
     object.insert("query".into(), json!(editor.query));
@@ -176,10 +208,17 @@ pub fn context_editor_projection(
     }
     object.insert(
         "description".into(),
-        json!(format!(
-            "Pick the rows shown under the context meter in {} sessions. Drag to reorder within a group. Star a row to show its value under the chat box.",
-            agent.display_name()
-        )),
+        json!(if status_line_off {
+            format!(
+                "Star a row to pin its value to the Chat Status Line under the chat box in {} sessions. The line is off: turn on Chat Status Line in Settings > Extensions to see it.",
+                agent.display_name()
+            )
+        } else {
+            format!(
+                "Star a row to pin its value to the Chat Status Line under the chat box in {} sessions.",
+                agent.display_name()
+            )
+        }),
     );
     object.insert("groups".into(), Value::Array(groups));
     object.insert(

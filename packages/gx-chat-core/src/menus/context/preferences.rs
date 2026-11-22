@@ -65,6 +65,53 @@ pub struct ContextDetailsPreferences {
     /// in group order.
     #[serde(default)]
     pub starred_order: Vec<String>,
+    /// Which one-time migrations this record has had ([`PREFERENCES_REVISION`]); absent is 0, a
+    /// record saved before 2026-11-22.
+    #[serde(default)]
+    pub revision: u32,
+}
+
+/// The record's current revision. 1 (2026-11-22): the More rows were unpinned once
+/// ([`MORE_ROWS`]).
+pub const PREFERENCES_REVISION: u32 = 1;
+
+/// The rows Customize session details lists under More, folded by default: what the Ghostex UI
+/// already shows elsewhere, then the agent's own settings. None is pinned by default.
+///
+/// CDXC:SessionChat 2026-11-22 DECISION:
+/// User (the status line and details merge page, Q4431 and Q4440): the items the Ghostex UI already
+/// shows elsewhere ("Model, effort, title, folder" and the rest the page listed: repository,
+/// branch, pull request, lines changed, agent version) move into a "More" group, collapsed by
+/// default, whose subtitle says the Ghostex UI already shows them; the agent-setting rows (agent,
+/// output style, provider, sandbox, approval policy, parent thread, worktree, Max Mode, Auto-run)
+/// stay pinnable but move there too. All of them are off by default for every agent and every
+/// user: a record saved before this (revision 0) loses their pins once on read
+/// ([`normalize_preferences`]), and a pin made after it is kept. They still show where they did
+/// (the model pill, the where pill, Environment, Changes, the Agent card).
+pub const MORE_ROWS: [&str; 18] = [
+    "model",
+    "thinking",
+    "sessionName",
+    "repo",
+    "folder",
+    "branch",
+    "pr",
+    "lines",
+    "version",
+    "agentName",
+    "outputStyle",
+    "provider",
+    "sandbox",
+    "approvalPolicy",
+    "parentThread",
+    "worktree",
+    "maxMode",
+    "autorun",
+];
+
+/// Whether a row is one of the [`MORE_ROWS`].
+pub fn is_more_row(id: &str) -> bool {
+    MORE_ROWS.contains(&id)
 }
 
 /// Rows retired on 2026-09-11 when every row became one value.
@@ -172,17 +219,20 @@ fn normalize_order(
     order
 }
 
-/// `defaultSessionChatContextDetailsPreferences`: what an agent uses before anything is saved. The
-/// recommended popover rows, and nothing pinned to the status line under the chat box.
+/// `defaultSessionChatContextDetailsPreferences`: what an agent uses before anything is saved:
+/// the recommended pins ([`recommended_preferences`]).
+///
+/// CDXC:SessionChat 2026-11-22 DECISION:
+/// User (merge page, Q4442): when someone turns Chat Status Line on, the pinned defaults are the
+/// plan limits and context. The line is an extension now, off until the person turns it on
+/// (packages/settings-catalog/src/data/official_extensions.rs), so a never-saved record can pin
+/// again without a line appearing unasked. Only records never saved get them; nobody's saved pins
+/// change. Supersedes the 2026-11-09 empty default below.
 ///
 /// CDXC:SessionChatDetectedOptions 2026-11-09 DECISION:
 /// User: "let's please disable showing the status line below the chat composer for claude/codex/etc by default for new users (nothing pinned there in statusline config). keep people's configs as they are tho". A record that was never saved pins nothing, for every agent, so no bar shows under the chat box until the person pins something. Everyone who already had Ghostex keeps the line they saw: the chat host writes [`recommended_preferences`] into each agent's record once (`gx_chat/status_line_default.rs`). This supersedes the 2026-09-23 default below.
 pub fn default_preferences(agent: ContextDetailsAgent) -> ContextDetailsPreferences {
-    ContextDetailsPreferences {
-        starred: BTreeMap::new(),
-        starred_order: Vec::new(),
-        ..recommended_preferences(agent)
-    }
+    recommended_preferences(agent)
 }
 
 /// The maintainer's own setup per agent: what Reset to recommended restores, and what every
@@ -203,32 +253,19 @@ pub fn default_preferences(agent: ContextDetailsAgent) -> ContextDetailsPreferen
 ///
 /// CDXC:AgentProviders 2026-10-06 DECISION:
 /// User: Pi's status line shows "model, usage, context, like Claude's": model, context used, cost and tokens.
+///
+/// CDXC:SessionChat 2026-11-22 DECISION:
+/// User (merge page, Q4442 and Q4441): Claude and Codex pin the 5h limit, the 7d limit and Context
+/// used; Cursor, Hermes and Pi keep their own sets, less the [`MORE_ROWS`] that are off for
+/// everyone (Cursor's branch and lines, Pi's model). The agents with only the basic rows (every
+/// other chat agent) pin nothing and get no status line at all: their five rows are all More rows
+/// the where pill and the model pill show. Supersedes the Claude and Codex sets above and the
+/// 2026-10-04 repository and branch for every other agent.
 pub fn recommended_preferences(agent: ContextDetailsAgent) -> ContextDetailsPreferences {
     let (shown, starred): (&[(&str, bool)], &[&str]) = match agent {
-        ContextDetailsAgent::Claude => (
-            &[("fiveHourReset", false)],
-            &[
-                "accountName",
-                "modelLimit",
-                "fiveHourLimit",
-                "sevenDayLimit",
-                "repo",
-            ],
-        ),
-        ContextDetailsAgent::Codex => (
-            &[
-                ("fiveHourLimit", false),
-                ("fiveHourReset", false),
-                ("sevenDayReset", true),
-                ("accountEmail", true),
-            ],
-            &[
-                "accountEmail",
-                "sevenDayLimit",
-                "sevenDayReset",
-                "accountResets",
-            ],
-        ),
+        ContextDetailsAgent::Claude | ContextDetailsAgent::Codex => {
+            (&[], &["fiveHourLimit", "sevenDayLimit", "contextUsed"])
+        }
         ContextDetailsAgent::Cursor => (
             &[
                 ("thinking", false),
@@ -237,11 +274,11 @@ pub fn recommended_preferences(agent: ContextDetailsAgent) -> ContextDetailsPref
                 ("totalOutputTokens", true),
                 ("pr", true),
             ],
-            &["contextUsed", "branch", "lines"],
+            &["contextUsed"],
         ),
         ContextDetailsAgent::Hermes => (&[], &["contextUsed", "costUsd", "tokens", "sessionTime"]),
-        ContextDetailsAgent::Pi => (&[], &["model", "contextUsed", "costUsd", "tokens"]),
-        ContextDetailsAgent::Basic => (&[], &["repo", "branch"]),
+        ContextDetailsAgent::Pi => (&[], &["contextUsed", "costUsd", "tokens"]),
+        ContextDetailsAgent::Basic => (&[], &[]),
     };
     ContextDetailsPreferences {
         shown: shown
@@ -251,6 +288,7 @@ pub fn recommended_preferences(agent: ContextDetailsAgent) -> ContextDetailsPref
         starred: starred.iter().map(|id| (id.to_string(), true)).collect(),
         order: BTreeMap::new(),
         starred_order: starred.iter().map(|id| id.to_string()).collect(),
+        revision: PREFERENCES_REVISION,
     }
 }
 
@@ -277,12 +315,21 @@ pub fn normalize_preferences(
         }
         _ => Vec::new(),
     };
-    ContextDetailsPreferences {
+    let mut preferences = ContextDetailsPreferences {
         shown: normalize_flags(record.get("shown"), agent),
         starred: normalize_flags(record.get("starred"), agent),
         order: normalize_order(record.get("order"), agent),
         starred_order,
+        revision: PREFERENCES_REVISION,
+    };
+    let revision = record.get("revision").and_then(Value::as_u64).unwrap_or(0);
+    if revision < 1 {
+        // The More rows' pins go once (the 2026-11-22 decision on `MORE_ROWS`); the next save
+        // stores revision 1, so a pin made after this is kept.
+        preferences.starred.retain(|id, _| !is_more_row(id));
+        preferences.starred_order.retain(|id| !is_more_row(id));
     }
+    preferences
 }
 
 /// `JSON.parse` a saved record, then normalize it. An unreadable record is the default.
@@ -413,6 +460,9 @@ impl ContextDetailGroup {
 pub enum RowSelection {
     Shown,
     Starred,
+    /// Every row with a value: the Session details panel lists them all (the 2026-11-22 decision
+    /// at `meter.rs`'s use).
+    All,
 }
 
 /// `resolveSessionChatContextDetailGroups`: groups with at least one row that is selected AND has
@@ -432,6 +482,7 @@ pub fn resolve_context_detail_groups(
     let selected = |preferences: &ContextDetailsPreferences, row: &RowDefinition| match select {
         RowSelection::Shown => is_shown(preferences, row),
         RowSelection::Starred => is_starred(preferences, row),
+        RowSelection::All => true,
     };
     let mut groups = Vec::new();
     for group in CONTEXT_DETAIL_GROUPS {

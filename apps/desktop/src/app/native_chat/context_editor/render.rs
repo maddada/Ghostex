@@ -29,6 +29,84 @@ impl ContextEditorWindow {
         }
     }
 
+    /// The More group's header (CDXC:SessionChat 2026-11-22 on `MORE_ROWS` in gx-chat-core's
+    /// menus/context/preferences.rs): the whole row folds the group, its chevron pointing right while
+    /// folded, with the core's subtitle under the label.
+    fn folding_group_header(
+        &self,
+        group: &serde_json::Value,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let collapsed = group["collapsed"] == true;
+        let label = text(group, "label");
+        let toggle = group["toggle"].clone();
+        let key_toggle = toggle.clone();
+        let disabled = self.chat.read(cx).snapshot["contextEditor"]["saving"] == true;
+        div()
+            .id(gpui::SharedString::from(format!(
+                "context-group-{}",
+                text(group, "id")
+            )))
+            .focusable()
+            .tab_stop(!disabled)
+            .role(gpui::Role::Button)
+            .aria_label(label.clone())
+            .aria_expanded(!collapsed)
+            .mt(px(8.0 * s))
+            .px(px(4.0 * s))
+            .py(px(4.0 * s))
+            .flex()
+            .items_start()
+            .gap(px(6.0 * s))
+            .rounded(px(6.0 * s))
+            .when(!disabled, |row| {
+                row.chat_cursor_pointer()
+                    .hover(|style| style.bg(p.border.opacity(0.4)))
+            })
+            .child(
+                gpui::svg()
+                    .path(if collapsed {
+                        "titlebar/chevron-right.svg"
+                    } else {
+                        "titlebar/chevron-down.svg"
+                    })
+                    .size(px(12.0 * s))
+                    .mt(px(1.0 * s))
+                    .flex_shrink_0()
+                    .text_color(p.muted),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .min_w_0()
+                    .child(
+                        div()
+                            .text_size(px(10.0 * s))
+                            .text_color(p.muted)
+                            .child(label.to_uppercase()),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(11.0 * s))
+                            .text_color(p.muted.opacity(0.8))
+                            .child(text(group, "subtitle")),
+                    ),
+            )
+            .on_key_down(cx.listener(move |this, event, window, cx| {
+                this.activate_key(event, key_toggle.clone(), window, cx)
+            }))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                if !disabled {
+                    this.chat
+                        .update(cx, |chat, cx| chat.invoke(toggle.clone(), cx));
+                }
+            }))
+            .into_any_element()
+    }
+
     fn button(
         &self,
         label: &'static str,
@@ -109,14 +187,21 @@ impl Render for ContextEditorWindow {
             );
         }
         for group in editor["groups"].as_array().into_iter().flatten() {
-            groups = groups.child(
-                div()
-                    .pt(px(8.0 * s))
-                    .pb(px(2.0 * s))
-                    .text_size(px(10.0 * s))
-                    .text_color(p.muted)
-                    .child(text(group, "label").to_uppercase()),
-            );
+            if group["toggle"].is_object() {
+                groups = groups.child(self.folding_group_header(group, &p, cx));
+                if group["collapsed"] == true {
+                    continue;
+                }
+            } else {
+                groups = groups.child(
+                    div()
+                        .pt(px(8.0 * s))
+                        .pb(px(2.0 * s))
+                        .text_size(px(10.0 * s))
+                        .text_color(p.muted)
+                        .child(text(group, "label").to_uppercase()),
+                );
+            }
             for row in group["rows"].as_array().into_iter().flatten() {
                 groups = groups.child(self.option_row(row, &text(group, "id"), false, &p, cx));
             }
@@ -160,7 +245,7 @@ impl Render for ContextEditorWindow {
                     .text_size(px(18.0 * s))
                     .line_height(px(24.0 * s))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child("Context details");
+                    .child("Customize session details");
                 let close = self.icon_button(
                     "context-close".into(),
                     "Close".into(),
@@ -220,7 +305,7 @@ impl Render for ContextEditorWindow {
                             .mb(px(6.0 * s))
                             .text_size(px(11.0 * s))
                             .text_color(p.muted)
-                            .child("STATUS LINE")
+                            .child("CHAT STATUS LINE")
                             .child(if no_stars {
                                 "Star rows above to show them under the chat box."
                             } else {

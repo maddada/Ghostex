@@ -19,6 +19,12 @@
 //! CDXC:SessionDetails 2026-10-25 DECISION:
 //! User: "we're showing the tasks twice. i think let's make clicking the tasks button not show the floating one, instead it should hide that pill and just show the session details sidebar". While this chat's Session details panel is on screen, docked or floating, its Tasks card lists the same tasks, so the Tasks pill is left out (`tasks_in_session_details`) and comes back when the panel closes. Where the panel can open, a click on the Tasks pill opens it instead of the pill's menu (apps/desktop/src/app/native_chat/session_details/mod.rs, `show_session_details_for_tasks`). Supersedes the 2026-10-18 menu above for the Tasks pill only: with no panel for the chat (the extension off, a chat that is not Claude's, the phone, which has no panel yet) Tasks still opens its menu.
 //!
+//! CDXC:SessionDetails 2026-11-22 DECISION:
+//! User (merge page, Q4439): the Background pill opens the sidebar's Background tasks card, like
+//! the Tasks pill does, and hides while that panel is on screen. Same rule as Tasks above: where
+//! the panel can open, a click shows it scrolled to the Background tasks card (the desktop's
+//! `show_session_details_for_background`); with no panel for the chat it still opens its menu.
+//!
 //! CDXC:SessionChat 2026-10-18 SEE-ALSO:
 //! apps/desktop/src/app/native_chat/working_card.rs and chat_pills.rs (desktop and web), apps/mobile/app/src/chat/native/cards/WorkingCard.tsx and ChatPills.tsx (phone) draw this list and must match.
 
@@ -72,7 +78,7 @@ pub fn pill_dots(working: u64, approval: u64, question: u64) -> Vec<PillDot> {
 
 /// The pills, in the order the row shows them, from the chat's resource list and the four
 /// projected panel values (`null` when the panel is absent). `tasks_in_session_details`: the chat's
-/// Session details panel is on screen and lists the tasks itself.
+/// Session details panel is on screen and lists the tasks and the background commands itself.
 ///
 /// CDXC:SessionChat 2026-10-28 DECISION:
 /// User: "show the new resources button between threads and ? pills in the bar and give resources a different icon". Resources is the first of these pills, ahead of Threads (since 2026-11-06 the Board pill goes before it, extras/document.rs); it opens the Chat Resources list (questions/open_questions.rs) and shows while the list has any row, with the row count.
@@ -196,7 +202,7 @@ pub fn chat_pills(
             dots: pill_dots(working as u64, 0, 0),
         });
     }
-    if background.is_object() {
+    if background.is_object() && !tasks_in_session_details {
         let meta = text(background, "meta");
         pills.push(ChatPill {
             supervisor_row: None,

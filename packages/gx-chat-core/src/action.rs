@@ -267,6 +267,8 @@ action_kinds! {
     ContextCancel => "contextCancel",
     ContextQuery => "contextQuery",
     ContextShown => "contextShown",
+    // Folds or unfolds Customize session details' More group.
+    ContextMore => "contextMore",
     ContextStar => "contextStar",
     ContextReorder => "contextReorder",
     ContextReset => "contextReset",

@@ -45,7 +45,8 @@ impl ComputerPins {
 
     /// The record the meter draws for `agent`: `own` with its pins replaced by the computer's
     /// while the host follows a computer that sent them, else `own` itself. An agent the
-    /// computer's app never saved a record for pins nothing there, so it pins nothing here.
+    /// computer's app never saved a record for pins the defaults there (the plan limits and
+    /// context since 2026-11-22, `default_preferences`), so it pins them here.
     pub fn preferences<'a>(
         &self,
         agent: ContextDetailsAgent,
@@ -135,11 +136,12 @@ mod tests {
     }
 
     #[test]
-    fn an_agent_the_computer_never_saved_pins_nothing() {
+    fn an_agent_the_computer_never_saved_pins_its_defaults() {
         let pins = computer(json!({ "claudeContext": { "starred": { "repo": true } } }));
         let own = own();
         let drawn = pins.preferences(ContextDetailsAgent::Codex, &own);
-        assert!(drawn.starred.values().all(|starred| !starred));
-        assert!(drawn.starred_order.is_empty());
+        let defaults = default_preferences(ContextDetailsAgent::Codex);
+        assert_eq!(drawn.starred, defaults.starred);
+        assert_eq!(drawn.starred_order, defaults.starred_order);
     }
 }

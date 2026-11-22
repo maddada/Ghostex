@@ -67,8 +67,9 @@ pub(crate) struct SessionDetailsView {
     /// The cards were drawn since the panel was last off screen: their fold motions are watching
     /// the states they were drawn in (`DisclosureMotions::forget`).
     pub(super) drew: bool,
-    /// The next frame scrolls the panel to the Context card (a ring opened it).
-    pub(super) to_context: bool,
+    /// The card the next frame scrolls the panel to: Context when a ring opened it, Background
+    /// tasks for the Background pill. It waits while the card is not drawn yet.
+    pub(super) to_card: Option<&'static str>,
     /// The floating card's scroll.
     pub(super) menu_scroll: ScrollHandle,
     /// How wide the docked column was last drawn, sliding included; 0 while it is not docked.
@@ -90,7 +91,9 @@ impl NativeChatView {
         // Both rings open it at the Context card (the decision at `TABS` in gx-chat-core
         // `session_details/document.rs`).
         if wanted {
-            self.session_details.to_context = true;
+            self.session_details.to_card.get_or_insert("context");
+        } else {
+            self.session_details.to_card = None;
         }
         if anchor.is_some() {
             self.session_details.anchor = anchor;
@@ -142,7 +145,7 @@ impl NativeChatView {
         if !self.session_details_placeable() {
             return false;
         }
-        self.session_details.to_context = true;
+        self.session_details.to_card = Some("context");
         if !self.session_details.wanted {
             self.host("showSessionDetails", json!({}), cx);
         }
@@ -150,15 +153,55 @@ impl NativeChatView {
         true
     }
 
-    /// Scrolls the panel to the Context card, once, when a ring asked for it.
-    fn scroll_session_details_to_context(&mut self, scale: f32) {
-        if !std::mem::take(&mut self.session_details.to_context) {
-            return;
+    /// A click on the Background pill: where the panel can go, it shows scrolled to its Background
+    /// tasks card, unfolding Overview and the card if they were folded (CDXC:SessionDetails
+    /// 2026-11-22 in gx-chat-core's extras/chat_pills.rs). False leaves the click to the pill's
+    /// own menu.
+    pub(super) fn show_session_details_for_background(&mut self, cx: &mut Context<Self>) -> bool {
+        if !self.session_details_placeable() {
+            return false;
         }
+        let details = &self.snapshot["sessionDetails"];
+        let mut unfold = Vec::new();
+        if let Some(area) = details["areas"]
+            .as_array()
+            .and_then(|areas| areas.iter().find(|area| area["id"] == "overview"))
+            .filter(|area| area["collapsed"] == true)
+        {
+            unfold.push(area["toggle"].clone());
+        }
+        if details["sections"]
+            .as_array()
+            .and_then(|sections| sections.iter().find(|card| card["id"] == "background"))
+            .is_some_and(|card| card["collapsed"] == true)
+        {
+            unfold.push(json!({"type": "sessionDetailsSection", "section": "background"}));
+        }
+        for action in unfold {
+            self.invoke(action, cx);
+        }
+        self.session_details.to_card = Some("background");
+        if !self.session_details.wanted {
+            self.host("showSessionDetails", json!({}), cx);
+        }
+        cx.notify();
+        true
+    }
+
+    /// Scrolls the panel to the card a ring or a pill asked for, once it is drawn.
+    fn scroll_session_details_to_card(&mut self, scale: f32) {
+        let Some(card) = self.session_details.to_card else {
+            return;
+        };
         let mut motions = self.disclosure_motion.borrow_mut();
-        let offset = cards::context_offset(&self.snapshot["sessionDetails"], &mut |key, open| {
-            motions.open_factor(key, open)
-        });
+        let Some(offset) =
+            cards::card_offset(&self.snapshot["sessionDetails"], card, &mut |key, open| {
+                motions.open_factor(key, open)
+            })
+        else {
+            return;
+        };
+        self.session_details.to_card = None;
         let point = gpui::point(px(0.0), px(-offset * scale));
         self.session_details.scroll.set_offset(point);
         self.session_details.menu_scroll.set_offset(point);
@@ -308,7 +351,7 @@ impl NativeChatView {
         // take over window glass, since the chat's own solid fill draws them as black slabs.
         let p = p.clone().on_window_glass(true);
         let body = self.session_details_cards(&p, window, cx);
-        self.scroll_session_details_to_context(p.scale);
+        self.scroll_session_details_to_card(p.scale);
         Some(
             div()
                 .id("chat-session-details-menu")
@@ -351,7 +394,7 @@ impl NativeChatView {
             PANEL_WIDTH * s
         };
         let body = self.session_details_cards(p, window, cx);
-        self.scroll_session_details_to_context(s);
+        self.scroll_session_details_to_card(s);
         let column = div()
             .id("chat-session-details-dock")
             .role(gpui::Role::Group)

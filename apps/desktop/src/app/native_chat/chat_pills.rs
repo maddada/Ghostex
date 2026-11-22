@@ -480,6 +480,9 @@ impl NativeChatView {
         if id == "tasks" && self.show_session_details_for_tasks(cx) {
             return;
         }
+        if id == "background" && self.show_session_details_for_background(cx) {
+            return;
+        }
         if id == STASHED_PILL {
             // The list the Stash prompt row opens from an empty chat box (toolbar.rs).
             self.host("stashedPrompts", json!({}), cx);
