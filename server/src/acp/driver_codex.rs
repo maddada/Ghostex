@@ -2161,12 +2161,36 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         spool_session_id,
     };
 
+    let file_instructions = parsed
+        .profile
+        .append_system_prompt_file
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .map(|text| text.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let combined_developer_instructions = match (
+        parsed
+            .profile
+            .developer_instructions
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
+        file_instructions.as_deref(),
+    ) {
+        (Some(inline), Some(file_text)) => Some(format!("{inline}\n\n{file_text}")),
+        (Some(inline), None) => Some(inline.to_string()),
+        (None, Some(file_text)) => Some(file_text.to_string()),
+        (None, None) => None,
+    };
+
     let state = Arc::new(Mutex::new(CodexState::new(
         parsed.approval_level,
         parsed.read_only,
         deny_mode,
         init_profile,
-        parsed.profile.developer_instructions.clone(),
+        combined_developer_instructions,
         cwd_path.clone(),
         writable_roots,
         parsed.model.clone(),

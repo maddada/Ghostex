@@ -217,11 +217,12 @@ pub(crate) fn with_launch_notes_for_workspace(
 }
 
 /// Server-side Ghostex launch note / marked-handovers / workspace-instructions prompt for Non-CLI
-/// sessions, returning `(claude_prompt_file, codex_developer_instructions)` without scraping any
-/// command string. Never places workspace instruction text inline on a shell command line: Claude
-/// receives workspace instructions via a generated per-workspace note file (same path as CLI),
-/// while Codex and Antigravity receive workspace instructions via their SessionStart hook
-/// (`agents/activity.rs`).
+/// sessions, returning `(prompt_file, codex_inline_developer_instructions)` without scraping any
+/// command string. Never places workspace instruction text inline on a shell command line: both
+/// Claude and Codex receive workspace instructions via a generated per-workspace note file
+/// (`driver_claude` passes `--append-system-prompt-file <path>`; `driver_codex` reads the file
+/// in-memory and sends it over JSON-RPC `developerInstructions`), while Antigravity receives
+/// workspace instructions via its SessionStart hook (`agents/activity.rs`).
 pub(crate) fn acp_launch_note(
     family: &str,
     coordinator: bool,
@@ -232,7 +233,7 @@ pub(crate) fn acp_launch_note(
         return (None, None);
     }
     let paths = get_gxserver_paths(None);
-    let workspace_instructions = if family == "claude" {
+    let workspace_instructions = if matches!(family, "claude" | "codex") {
         workspace.and_then(|ws| {
             crate::workspaces::read_workspace_instructions_note(
                 &paths,
@@ -258,32 +259,32 @@ pub(crate) fn acp_launch_note(
     let Some(text) = text else {
         return (None, None);
     };
-    match family {
-        "claude" => {
-            let path = if let (Some(ws), true) = (workspace, workspace_instructions.is_some()) {
-                let safe_id = crate::workspaces::safe_workspace_file_stem(&ws.workspace_id);
-                let filename = if thread_marked_handovers {
-                    format!("thread-workspace-{safe_id}.md")
-                } else if coordinator {
-                    format!("coordinator-workspace-{safe_id}.md")
-                } else {
-                    format!("workspace-{safe_id}.md")
-                };
-                paths.root_dir.join("agent-note").join(filename)
-            } else if coordinator && text != MARKED_HANDOVERS_NOTE {
-                paths
-                    .root_dir
-                    .join("agent-note")
-                    .join("coordinator-note.md")
+    let write_workspace_or_note_file = || -> Option<String> {
+        let path = if let (Some(ws), true) = (workspace, workspace_instructions.is_some()) {
+            let safe_id = crate::workspaces::safe_workspace_file_stem(&ws.workspace_id);
+            let filename = if thread_marked_handovers {
+                format!("thread-workspace-{safe_id}.md")
+            } else if coordinator {
+                format!("coordinator-workspace-{safe_id}.md")
             } else {
-                note_file_path(&paths, &text)
+                format!("workspace-{safe_id}.md")
             };
-            if write_note_file(&path, &text).is_ok() {
-                (Some(path.to_string_lossy().to_string()), None)
-            } else {
-                (None, None)
-            }
-        }
+            paths.root_dir.join("agent-note").join(filename)
+        } else if coordinator && text != MARKED_HANDOVERS_NOTE {
+            paths
+                .root_dir
+                .join("agent-note")
+                .join("coordinator-note.md")
+        } else {
+            note_file_path(&paths, &text)
+        };
+        write_note_file(&path, &text)
+            .ok()
+            .map(|()| path.to_string_lossy().to_string())
+    };
+    match family {
+        "claude" => (write_workspace_or_note_file(), None),
+        "codex" if workspace_instructions.is_some() => (write_workspace_or_note_file(), None),
         "codex" => (None, Some(text)),
         _ => (None, None),
     }
