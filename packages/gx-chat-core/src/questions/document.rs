@@ -123,6 +123,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.resource_modal = crate::questions::resource_modal::project(state, context);
     into.later_questions =
         crate::questions::open_questions::later_waiting_at(state, context.now_millis());
+    into.page_open_questions = crate::questions::open_questions::page_open_question_counts(state);
     into.starred_pages = crate::questions::later::starred_page_ids(state)
         .into_iter()
         .collect();

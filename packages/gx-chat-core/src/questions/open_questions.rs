@@ -343,6 +343,30 @@ pub fn later_waiting_at(state: &ChatState, now_ms: i64) -> Vec<String> {
         .collect()
 }
 
+/// How many open questions each Live page still asks, by page id: every waiting question page
+/// that asks questions (not `seen_only`, not retired, not answered on the way). Used by the
+/// compact Live page row in Summary view (desktop `page_card.rs`, phone `PageCard.tsx`).
+pub fn page_open_question_counts(state: &ChatState) -> std::collections::BTreeMap<String, usize> {
+    let on_the_way: Vec<String> = answers_on_the_way(state)
+        .into_iter()
+        .map(|answers| answers.page_id)
+        .collect();
+    waiting(state)
+        .into_iter()
+        .filter(|asker| {
+            asker.kind == AskerKind::Page
+                && !asker.seen_only
+                && !state
+                    .session
+                    .retired_page_ids
+                    .iter()
+                    .any(|id| id == &asker.id)
+                && !on_the_way.iter().any(|id| id == &asker.id)
+        })
+        .map(|asker| (asker.id.clone(), asker.waiting(None)))
+        .collect()
+}
+
 /// Where an asker stands (`QuestionListRow::status`), or `None` for one this chat does not list (an
 /// unanswered question inherited from the session this one was forked from).
 fn status_of(
@@ -925,13 +949,11 @@ pub fn project_with(
     CDXC:SessionChat 2026-11-04 WHY:
     This runs on every chat event (each streamed token) to learn whether the document changed, and it listed every form, page and chart with its time labels and copied each row twice to keep the first page: on a coordinator chat with hundreds of them that was the chat worker's main cost while a visible chat streamed (issues-1027/macos-perf). Rows are listed without their time fields, moved rather than copied, and only the rows on the page get their time fields (`label_row`), which reads them exactly as listing them would.
     */
-    let reused = kept
-        .as_mut()
-        .and_then(|(inputs, all)| {
-            inputs
-                .matches(state, now_ms)
-                .then(|| std::sync::Arc::clone(all))
-        });
+    let reused = kept.as_mut().and_then(|(inputs, all)| {
+        inputs
+            .matches(state, now_ms)
+            .then(|| std::sync::Arc::clone(all))
+    });
     let all = match reused {
         Some(all) => all,
         None => {
@@ -2344,5 +2366,74 @@ mod paged_labels_tests {
                 .flat_map(|section| &section.rows)
                 .all(|row| !row.time.is_empty() && !row.time_title.is_empty()));
         }
+    }
+
+    #[test]
+    fn page_open_question_counts_reflects_waiting_page_questions() {
+        let mut state = ChatState::default();
+        let make_page = |id: &str, tags: &[&str], seen_only: bool, answered: bool| Asker {
+            id: id.to_string(),
+            kind: AskerKind::Page,
+            message_id: format!("m-{id}"),
+            tags: tags.iter().map(|t| (*t).to_string()).collect(),
+            answered,
+            obsolete: false,
+            withdrawn: Vec::new(),
+            keys: Vec::new(),
+            skipped: Vec::new(),
+            superseded: Vec::new(),
+            inherited: false,
+            seen_only,
+            source: None,
+            replaced: false,
+            prints: Vec::new(),
+            rounds: Vec::new(),
+            said: Vec::new(),
+            title: format!("Page {id}"),
+            at: None,
+        };
+        let mut partial = make_page("page-partial", &["Q1", "Q2", "Q3"], false, false);
+        partial.said = vec!["Q2".to_string()];
+        let untagged = make_page("page-untagged", &[], false, false);
+        let seen_only = make_page("page-seen-only", &[], true, false);
+        let answered = make_page("page-answered", &["Q4"], false, true);
+        let retired = make_page("page-retired", &["Q5"], false, false);
+        let queued_id = "0123456789abcdef0123456789abcdef";
+        let queued = make_page(queued_id, &["Q6"], false, false);
+        let form = Asker {
+            kind: AskerKind::Form,
+            ..make_page("form-1", &["Q7"], false, false)
+        };
+        *state.transcript_view.askers = vec![
+            partial, untagged, seen_only, answered, retired, queued, form,
+        ];
+        state.session.retired_page_ids = vec!["page-retired".to_string()];
+        *state.session.queue_prompts = Some(vec![serde_json::json!({
+            "state": "queued",
+            "prompt": {
+                "text": format!("<ghostex-page-answers page=\"{queued_id}\" title=\"Queued\">\n{{\"Q6\":\"yes\"}}\n</ghostex-page-answers>")
+            }
+        })]);
+
+        let counts = page_open_question_counts(&state);
+        assert_eq!(counts.get("page-partial"), Some(&2));
+        assert_eq!(counts.get("page-untagged"), Some(&1));
+        assert_eq!(counts.get("page-seen-only"), None);
+        assert_eq!(counts.get("page-answered"), None);
+        assert_eq!(counts.get("page-retired"), None);
+        assert_eq!(counts.get(queued_id), None);
+        assert_eq!(counts.get("form-1"), None);
+
+        // Document assembly carries collapse_page_cards only in summary mode and always exposes
+        // page_open_questions.
+        let context = ChatContext::default();
+        let normal_doc = crate::document::assemble(&state, &context);
+        assert!(!normal_doc.collapse_page_cards);
+        assert_eq!(normal_doc.page_open_questions, counts);
+
+        state.transcript_view.summary_mode = true;
+        let summary_doc = crate::document::assemble(&state, &context);
+        assert!(summary_doc.collapse_page_cards);
+        assert_eq!(summary_doc.page_open_questions, counts);
     }
 }

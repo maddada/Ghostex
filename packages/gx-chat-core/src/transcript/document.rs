@@ -71,6 +71,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     let view = &state.transcript_view;
     into.summary_mode = view.summary_mode;
     into.view_level = crate::transcript::view_level::view_level(view).to_string();
+    into.collapse_page_cards = crate::transcript::view_level::collapse_page_cards(view);
     into.verbose_override = view.verbose_override;
     into.simple_override = view.simple_override;
     // The projection's askers are only read for the withdrawn pages, so the held ones are not

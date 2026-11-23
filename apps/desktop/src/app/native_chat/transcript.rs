@@ -166,6 +166,7 @@ impl NativeChatView {
         if !main {
             p.simple = false;
             p.work_open = false;
+            p.collapse_page_cards = false;
         }
         let p = p;
         let s = p.scale;

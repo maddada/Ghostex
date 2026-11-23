@@ -3312,11 +3312,12 @@ a running turn: the agent's words, pages, questions and approvals stay in view,
 and each run of tool calls, thinking and reports is one line that counts it
 ("Working · 3 tool calls so far"); Expand the last turn in Quiet View opens the
 newest of those lines. Work the agent does after a reply in the same turn, when a
-thread's report or a background task wakes it, shows there too. Live pages and
-Ghostex visuals stay in full under their prompt, never folded, and so does a
-Ghostex form or question until you answer it; a strip of the pictures the agent
-opened sits under the closed reply, and "Interrupted" and command output lines
-stay in view. Work item cards and forms you already answered fold away. Messages
+thread's report or a background task wakes it, shows there too. Live pages stay
+under their prompt as a compact row (title, open-questions count if any, and
+Open; click to expand the full preview), Ghostex visuals stay in full, and so
+does a Ghostex form or question until you answer it; a strip of the pictures the
+agent opened sits under the closed reply, and "Interrupted" and command output
+lines stay in view. Work item cards and forms you already answered fold away. Messages
 to and from other agents (a coordinator's thread reports, messages from other
 sessions) open no turn of their own: they fold into the "Agent reply" of your own
 prompt, so the summary reads as your conversation.

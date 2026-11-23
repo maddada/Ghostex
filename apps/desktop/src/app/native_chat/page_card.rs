@@ -355,6 +355,25 @@ impl NativeChatView {
         {
             return div().into_any_element();
         }
+        let open_questions = page_id
+            .as_deref()
+            .and_then(|id| self.snapshot["pageOpenQuestions"][id].as_u64())
+            .unwrap_or(0) as usize;
+        let collapsible = p.collapse_page_cards;
+        let fold_key = format!("page-card:{key}");
+        let expanded = !collapsible || self.is_expanded(&fold_key, false);
+        if !expanded {
+            return self.collapsed_visual_page_card(
+                key,
+                fold_key,
+                page,
+                page_id,
+                answered,
+                open_questions,
+                p,
+                cx,
+            );
+        }
         // Its questions a later block withdrew, some or all (`withdrawnPages`, the core's
         // open_questions.rs): the card says so where an answered page says Answered.
         let withdrawn = page_id
@@ -456,6 +475,9 @@ impl NativeChatView {
         };
         let open_card = open.clone();
         let window_bg = p.card_row;
+        let bar_hover = super::cards::card_hover_fill(p);
+        let collapse_key = fold_key.clone();
+        let collapse_btn_key = fold_key;
         let bar = div()
             .flex()
             .items_center()
@@ -488,20 +510,42 @@ impl NativeChatView {
                     .child(bar_label),
             )
             // Balances the dots so the name sits in the middle of the bar, and holds the page's
-            // star at its right end (gx-chat-core questions/later.rs `starred_page_ids`).
+            // star (gx-chat-core questions/later.rs `starred_page_ids`) and, in Summary view, the
+            // collapse button at its right end.
             .child(
                 div()
                     .flex_shrink_0()
-                    .w(px((v.dot_size * 3.0 + v.dot_gap * 2.0) * s))
+                    .min_w(px((v.dot_size * 3.0 + v.dot_gap * 2.0) * s))
                     .flex()
+                    .items_center()
                     .justify_end()
+                    .gap(px(2.0 * s))
                     .when_some(page_id.clone(), |this, page_id| {
                         let starred = self.snapshot["starredPages"]
                             .as_array()
                             .is_some_and(|ids| ids.iter().any(|id| id == page_id.as_str()));
                         this.child(star_button(key, &page_id, starred, p, cx))
+                    })
+                    .when(collapsible, |this| {
+                        let key = key.to_string();
+                        let fold_key = collapse_btn_key.clone();
+                        this.child(collapse_button(&key, fold_key, p, cx))
                     }),
             );
+        let bar: AnyElement = if collapsible {
+            bar.id(SharedString::from(format!("visual-page-bar:{key}")))
+                .role(gpui::Role::Button)
+                .aria_label("Collapse page preview")
+                .chat_cursor_pointer()
+                .hover(move |style| style.bg(bar_hover))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.toggle_disclosure(&collapse_key, cx);
+                }))
+                .into_any_element()
+        } else {
+            bar.into_any_element()
+        };
         let preview = div()
             .relative()
             .w_full()
@@ -682,7 +726,7 @@ impl NativeChatView {
             })
             .child(
                 div()
-                    .id("visual-page-open")
+                    .id(SharedString::from(format!("visual-page-open:{key}")))
                     .flex_shrink_0()
                     .role(gpui::Role::Button)
                     .aria_label("Open")
@@ -716,6 +760,134 @@ impl NativeChatView {
             .child(footer)
             .into_any_element()
     }
+
+    /// A Live page collapsed to one compact row in Summary view: page icon tile, title,
+    /// open-questions pill (if any), and Open button. Clicking the row expands the full preview
+    /// card; clicking Open opens the page directly.
+    #[allow(clippy::too_many_arguments)]
+    fn collapsed_visual_page_card(
+        &self,
+        key: &str,
+        fold_key: String,
+        page: gxv::PageRef,
+        page_id: Option<String>,
+        answered: bool,
+        open_questions: usize,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let shape = &*super::cards::SINGLE_LINE_CARD;
+        let chat = cx.weak_entity();
+        let gxv::PageRef {
+            title, url, file, ..
+        } = page;
+        let page_title = title.clone();
+        let expand_aria = format!("Expand page {title}");
+        let opened_page = page_id.clone();
+        let open = move |cx: &mut App| {
+            let url = url.clone();
+            let opened_page = opened_page.clone();
+            let _ = chat.update(cx, |chat, cx| {
+                chat.open_page_card(url, page_title.clone(), file.clone(), opened_page, cx)
+            });
+        };
+        let mut tile = shape.tile("titlebar/file-type-html.svg", p);
+        if open_questions > 0 {
+            tile = tile.child(shape.ask_badge(p));
+        } else if answered {
+            tile = tile.child(shape.check_badge(p));
+        }
+        let mut head = div()
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .gap(px(super::cards::TITLE_ROW_GAP * s))
+            .w_full()
+            .min_w_0()
+            .h(px(shape.header_height(s)))
+            .px(px(shape.padding_x * s))
+            .child(tile)
+            .child(
+                shape
+                    .title(div().flex_1().min_w_0().truncate(), p)
+                    .text_color(p.foreground)
+                    .child(title),
+            );
+        if open_questions > 0 {
+            let label = if open_questions == 1 {
+                "1 open question".to_string()
+            } else {
+                format!("{open_questions} open questions")
+            };
+            head = head.child(shape.pill(None, Some(label), super::ask_card::ask_color(p), p));
+        }
+        head = head.child(
+            div()
+                .id(SharedString::from(format!("visual-page-open:{key}")))
+                .flex_shrink_0()
+                .role(gpui::Role::Button)
+                .aria_label("Open")
+                .chat_cursor_pointer()
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    open(cx)
+                })
+                .child(primary_button("Open", p)),
+        );
+        let head = super::ask_card::single_line_press_head(
+            head,
+            SharedString::from(format!("visual-page:{key}")),
+            "Expand page",
+            false,
+            p,
+        )
+        .aria_label(expand_aria)
+        .on_click(cx.listener(move |this, _, _, cx| {
+            this.toggle_disclosure(&fold_key, cx);
+        }));
+        shape
+            .shell(div().w_full().min_w_0().overflow_hidden(), p)
+            .child(head)
+            .into_any_element()
+    }
+}
+
+/// The collapse chevron at the right end of an expanded page card's window bar in Summary view.
+fn collapse_button(
+    key: &str,
+    fold_key: String,
+    p: &ChatAppearance,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    let s = p.scale;
+    let hover = p.foreground;
+    div()
+        .id(SharedString::from(format!("visual-page-collapse:{key}")))
+        .role(gpui::Role::Button)
+        .aria_label("Collapse page preview")
+        .flex_shrink_0()
+        .size(px(22.0 * s))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(5.0 * s))
+        .chat_cursor_pointer()
+        .hover(move |style| style.bg(hover.opacity(0.08)))
+        .tooltip(|window, cx| {
+            gpui_component::tooltip::Tooltip::new("Collapse preview").build(window, cx)
+        })
+        .child(
+            svg()
+                .path("titlebar/chevron-up.svg")
+                .size(px(14.0 * s))
+                .text_color(p.muted),
+        )
+        .on_click(cx.listener(move |this, _, _, cx| {
+            cx.stop_propagation();
+            this.toggle_disclosure(&fold_key, cx);
+        }))
+        .into_any_element()
 }
 
 /// The star at the right end of the card's window bar: yellow and filled once the page is starred,

@@ -109,6 +109,10 @@ pub struct Document {
     /// so their cards say so (`transcript::open_questions::withdrawn_pages`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub withdrawn_pages: BTreeMap<String, crate::transcript::open_questions::WithdrawnPage>,
+    /// How many open questions each Live page still asks, by page id, for its compact row in
+    /// Summary view (`questions::open_questions::page_open_question_counts`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub page_open_questions: BTreeMap<String, usize>,
     /// The question pages and forms put off "For later" that still wait for answers, so their
     /// cards say so and offer "Back to unanswered" (`questions::later`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -432,6 +436,10 @@ pub struct Document {
     /// the renderers draw from it rather than from the records below.
     #[serde(default)]
     pub view_level: String,
+    /// Whether Live page cards start folded to a single compact row in the transcript: true in
+    /// Summary view (`transcript::view_level::collapse_page_cards`), absent otherwise.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub collapse_page_cards: bool,
     /// The user's verbose override, or `null` to follow the setting.
     pub verbose_override: Option<bool>,
     /// The user's Simple override for this chat, or `null` to follow the setting.
