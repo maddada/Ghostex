@@ -8,7 +8,7 @@ use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -89,6 +89,7 @@ pub(super) struct HostArgs {
     pub(super) writable_roots: Vec<PathBuf>,
     pub(super) model: Option<String>,
     pub(super) effort: Option<String>,
+    pub(super) channel_secret_file: Option<String>,
     pub(super) profile: AcpLaunchProfile,
 }
 
@@ -102,6 +103,7 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
     let mut writable_roots = Vec::new();
     let mut model = None;
     let mut effort = None;
+    let mut channel_secret_file = None;
     let mut wrapper_bin: Option<String> = None;
     let mut wrapper_slot: Option<String> = None;
     let mut profile = AcpLaunchProfile::default();
@@ -175,6 +177,10 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
             "--gbot-api-chat" => profile.gbot_api_chat = true,
             "--gbot-computer-use-off" => profile.gbot_computer_use_off = true,
             "--lean-worker" => profile.lean_worker = true,
+            "--channel-secret-file" => {
+                i += 1;
+                channel_secret_file = args.get(i).cloned();
+            }
             other => return Err(format!("Unknown acp-host option: {other}")),
         }
         i += 1;
@@ -200,6 +206,7 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
         writable_roots,
         model,
         effort,
+        channel_secret_file,
         profile,
     })
 }
@@ -223,7 +230,12 @@ pub(super) struct GxserverEndpoint {
 }
 
 impl GxserverEndpoint {
-    pub(super) fn from_env() -> Option<Self> {
+    pub(super) fn from_env_or_secret_file(secret_file: Option<&str>) -> Option<Self> {
+        // Consume and unlink any one-shot secret file immediately, even if session_ref is absent.
+        let file_secret = secret_file
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .and_then(|p| super::channel::read_and_remove_channel_secret_file(Path::new(p)));
         let session_ref = env::var("GHOSTEX_GLOBAL_SESSION_REF")
             .ok()?
             .trim()
@@ -256,10 +268,12 @@ impl GxserverEndpoint {
                     .filter(|s| !s.is_empty())
             })
             .unwrap_or_default();
-        let channel_secret = env::var(super::channel::ACP_CHANNEL_SECRET_ENV)
-            .ok()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+        let channel_secret = file_secret.or_else(|| {
+            env::var(super::channel::ACP_CHANNEL_SECRET_ENV)
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        });
         let instance = format!("acp-{}-{}", std::process::id(), now_ms());
         Some(Self {
             base_url,
@@ -1427,7 +1441,7 @@ pub fn run(args: &[String]) -> i32 {
     let cwd_path = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let cwd = cwd_path.to_string_lossy().to_string();
     let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);
-    let endpoint = GxserverEndpoint::from_env();
+    let endpoint = GxserverEndpoint::from_env_or_secret_file(parsed.channel_secret_file.as_deref());
     let spool_session_id = endpoint
         .as_ref()
         .map(|ep| ep.session_id.clone())

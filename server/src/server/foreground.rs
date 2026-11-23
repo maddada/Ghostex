@@ -169,6 +169,9 @@ pub async fn run_gxserver_foreground(
             details: Some(moved),
         });
     }
+    // Sweep any leftover one-shot ACP channel secret files or account-switch scripts from an
+    // interrupted switch before accepting traffic.
+    crate::acp::channel::sweep_stale_channel_secret_files(&paths.root_dir);
     // A GBot chat's first message still waiting in its queue names `ghostex gbots guide` instead of
     // the retired skill (gbots/session.rs `rewrite_queued_gbots_first_lines`).
     if let Ok(db) = crate::storage::open_gxserver_database(&paths) {

@@ -51,15 +51,7 @@ pub enum Principal {
     /// in the user's own terminal uses it and can't be told apart from an agent there.
     LocalAgent,
     /// Another computer's agents, through the grant this computer gave it.
-    /// `relayed_non_user_device` is set when the sending computer's relay forwarded a request
-    /// from a non-user-device caller (`Principal::Session`, guest, extension) so approval and
-    /// launch-policy guards treat it with the originating caller's non-user-device status.
-    Peer {
-        server_id: String,
-        name: String,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        relayed_non_user_device: bool,
-    },
+    Peer { server_id: String, name: String },
     /// A Collab guest, through a share token: only its own chat.
     Guest { share_id: String },
     /// An installed extension's own API token.
@@ -147,13 +139,7 @@ impl Principal {
     pub fn is_user_device(&self) -> bool {
         matches!(
             self,
-            Self::Owner { .. }
-                | Self::Device { .. }
-                | Self::LocalAgent
-                | Self::Peer {
-                    relayed_non_user_device: false,
-                    ..
-                }
+            Self::Owner { .. } | Self::Device { .. } | Self::LocalAgent | Self::Peer { .. }
         )
     }
 

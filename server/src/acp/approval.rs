@@ -171,259 +171,72 @@ pub fn global_accept_all_enabled_in_shared_settings(paths: &crate::paths::Gxserv
         .unwrap_or(false)
 }
 
-/// True when a caller-supplied shell command or startup text contains flags or leading environment
-/// assignments that bypass approvals, override sandbox/config/settings/MCP/plugins, or launch ACP
-/// above `Ask`. Used to reject untrusted `agentCommand` overrides from non-user-device callers
-/// (`Principal::Session`, guests, extensions). Ghostex injects its own settings, profiles, and
-/// connector env server-side AFTER this guard runs.
+/// True when a shell command or startup text contains flags that bypass approvals or launch ACP
+/// above `Ask` (`--dangerously-skip-permissions`, `--yolo`, `--accept-all`, `--approval-level`
+/// above `ask`, `danger-full-access`, `bypassPermissions`, `--full-auto`, `--ask-for-approval never`).
 pub fn command_has_accept_all_flag(cmd: &str) -> bool {
-    // Reject shell command chaining / subshell metacharacters from untrusted callers.
-    if cmd.contains(';')
-        || cmd.contains('|')
-        || cmd.contains('&')
-        || cmd.contains('`')
-        || cmd.contains("$(")
-        || cmd.contains('\n')
-        || cmd.contains('\r')
-    {
-        return true;
-    }
-
-    let raw_tokens = super::spec::tokenize_cli_command(cmd);
-    if raw_tokens
-        .first()
-        .is_some_and(|t| matches!(t.as_str(), "env" | "/usr/bin/env"))
-    {
-        return true;
-    }
-    let (leading_envs, exec_tokens) = super::spec::split_leading_env_assignments(raw_tokens);
-    // Non-user-device callers may never inject leading env vars (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
-    // `PATH`, `DYLD_*`, `LD_*`, `BASH_ENV`, `ENV`, `NODE_OPTIONS`, proxy overrides, etc.).
-    if !leading_envs.is_empty() {
-        return true;
-    }
-
-    // Non-user-device callers may never execute path-qualified binaries (`/path/to/claude`,
-    // `./cswap`, `C:\evil\claude.exe`), shell/launcher wrappers, or `cswap`/`xswap` account
-    // wrapper commands directly (accounts are chosen strictly through Ghostex's account API so
-    // manual-only account gates and slot validation stay enforced).
-    let token_stem = |tok: &str| -> String {
-        let lower = tok.to_ascii_lowercase();
-        let base = lower.rsplit(['/', '\\']).next().unwrap_or(&lower);
-        [".exe", ".cmd", ".bat", ".ps1"]
-            .iter()
-            .find_map(|suffix| base.strip_suffix(suffix))
-            .unwrap_or(base)
-            .to_string()
-    };
-    if let Some(first) = exec_tokens.first() {
-        if first.contains('/')
-            || first.contains('\\')
-            || first.starts_with('.')
-            || first.starts_with('~')
-            || first.starts_with('$')
-        {
-            return true;
-        }
-        let stem = token_stem(first);
-        if matches!(
-            stem.as_str(),
-            "cswap"
-                | "xswap"
-                | "sh"
-                | "bash"
-                | "zsh"
-                | "fish"
-                | "dash"
-                | "ksh"
-                | "cmd"
-                | "powershell"
-                | "pwsh"
-                | "exec"
-                | "command"
-                | "nohup"
-                | "sudo"
-                | "su"
-                | "eval"
-                | "osascript"
-        ) {
-            return true;
-        }
-    }
-    if exec_tokens
-        .iter()
-        .any(|tok| matches!(token_stem(tok).as_str(), "cswap" | "xswap"))
-    {
-        return true;
-    }
-
-    let mut i = 0;
-    while i < exec_tokens.len() {
-        let raw_tok = exec_tokens[i].as_str();
-        let lower = raw_tok.to_ascii_lowercase();
-        let next_lower = exec_tokens
-            .get(i + 1)
-            .map(|s| s.trim().to_ascii_lowercase());
-
-        // Reject any `--settings` (inline JSON or file path), `-c`/`--config` override, directory
-        // widening, MCP/plugin injection, or tool allowlist from untrusted callers.
-        if matches!(
-            lower.as_str(),
-            "--settings"
-                | "-c"
-                | "--config"
-                | "--add-dir"
-                | "--allowedtools"
-                | "--allowed-tools"
-                | "--mcp-config"
-                | "--strict-mcp-config"
-                | "--plugin-dir"
-                | "--plugin-url"
-                | "--setting-sources"
-                | "--allow-dangerously-skip-permissions"
-                | "--dangerously-skip-permissions"
-                | "--dangerously-bypass-approvals-and-sandbox"
-                | "--dangerously-bypass-hook-trust"
-                | "--approve-for-me"
-                | "--yolo"
-                | "--accept-all"
-                | "--full-auto"
-                | "--allow-all"
-                | "--bypass-permissions"
-        ) || lower.starts_with("--settings=")
-            || lower.starts_with("-c=")
-            || lower.starts_with("--config=")
-            || lower.starts_with("--add-dir=")
-            || lower.starts_with("--allowedtools=")
-            || lower.starts_with("--allowed-tools=")
-            || lower.starts_with("--mcp-config=")
-            || lower.starts_with("--plugin-dir=")
-            || lower.starts_with("--plugin-url=")
-            || lower.starts_with("--setting-sources=")
-        {
-            return true;
-        }
-        if lower.contains("danger-full-access")
-            || lower.contains("bypasspermissions")
-            || lower.contains("dangerously-skip-permissions")
-            || lower.contains("dangerously-bypass-approvals-and-sandbox")
-            || lower.contains("dangerously-bypass-hook-trust")
-        {
-            return true;
-        }
-        if let Some(val) = lower.strip_prefix("--approval-level=") {
-            if AcpApprovalLevel::parse(val) != Some(AcpApprovalLevel::Ask) {
-                return true;
-            }
-        } else if lower == "--approval-level" {
-            if next_lower
-                .as_deref()
-                .and_then(AcpApprovalLevel::parse)
-                != Some(AcpApprovalLevel::Ask)
-            {
-                return true;
-            }
-        }
-        if let Some(val) = lower.strip_prefix("--permission-mode=") {
-            if !matches!(val, "default" | "plan") {
-                return true;
-            }
-        } else if lower == "--permission-mode" {
-            if !matches!(next_lower.as_deref(), Some("default" | "plan")) {
-                return true;
-            }
-        }
-        if let Some(val) = lower
-            .strip_prefix("--approval-mode=")
-            .or_else(|| lower.strip_prefix("--ask-for-approval="))
-            .or_else(|| lower.strip_prefix("-a="))
-        {
-            if !matches!(val, "untrusted" | "on-request" | "request-review" | "ask") {
-                return true;
-            }
-        } else if matches!(
-            lower.as_str(),
-            "--approval-mode" | "--ask-for-approval" | "-a"
-        ) {
-            if !matches!(
-                next_lower.as_deref(),
-                Some("untrusted" | "on-request" | "request-review" | "ask")
-            ) {
-                return true;
-            }
-        }
-        if let Some(val) = lower
-            .strip_prefix("--sandbox=")
-            .or_else(|| lower.strip_prefix("-s="))
-        {
-            if val != "read-only" {
-                return true;
-            }
-        } else if matches!(lower.as_str(), "--sandbox" | "-s") {
-            if next_lower.as_deref() != Some("read-only") {
-                return true;
-            }
-        }
-        i += 1;
-    }
-
-    // Secondary whitespace-trimmed scan in case shell metacharacters (`;`, `&&`, `|`) hide a flag
-    // inside a compound command string.
     let lower = cmd.to_ascii_lowercase();
-    for tok in lower
+    let tokens: Vec<String> = lower
         .split_whitespace()
         .map(|tok| {
             tok.trim_matches(|c: char| {
                 matches!(c, '\'' | '"' | ';' | '&' | '|' | '(' | ')' | '\r' | '\n')
             })
+            .to_string()
         })
         .filter(|tok| !tok.is_empty())
-    {
+        .collect();
+    for (idx, tok) in tokens.iter().enumerate() {
+        let next = tokens.get(idx + 1).map(String::as_str);
         if matches!(
-            tok,
+            tok.as_str(),
             "--dangerously-skip-permissions"
                 | "--dangerously-bypass-approvals-and-sandbox"
-                | "--dangerously-bypass-hook-trust"
-                | "--allow-dangerously-skip-permissions"
-                | "--approve-for-me"
                 | "--yolo"
                 | "--accept-all"
                 | "--full-auto"
                 | "--allow-all"
                 | "--bypass-permissions"
-                | "--settings"
-                | "--add-dir"
-                | "--allowedtools"
-                | "--allowed-tools"
-                | "--mcp-config"
-                | "--plugin-dir"
-                | "--plugin-url"
-                | "--setting-sources"
-                | "-c"
-                | "--config"
-        ) || tok.starts_with("--settings=")
-            || tok.starts_with("--add-dir=")
-            || tok.starts_with("--allowedtools=")
-            || tok.starts_with("--allowed-tools=")
-            || tok.starts_with("--mcp-config=")
-            || tok.starts_with("--plugin-dir=")
-            || tok.starts_with("--plugin-url=")
-            || tok.starts_with("--setting-sources=")
-            || tok.starts_with("-c=")
-            || tok.starts_with("--config=")
-            || tok.contains("danger-full-access")
+        ) {
+            return true;
+        }
+        if tok.contains("danger-full-access")
             || tok.contains("bypasspermissions")
             || tok.contains("dangerously-skip-permissions")
             || tok.contains("dangerously-bypass-approvals-and-sandbox")
-            || tok.contains("dangerously-bypass-hook-trust")
-            || tok.contains("claude_config_dir=")
-            || tok.contains("codex_home=")
-            || tok.contains("dyld_")
-            || tok.contains("ld_preload=")
-            || tok.contains("bash_env=")
-            || tok.contains("node_options=")
         {
             return true;
+        }
+        if let Some(val) = tok.strip_prefix("--approval-level=") {
+            if AcpApprovalLevel::parse(val) != Some(AcpApprovalLevel::Ask) {
+                return true;
+            }
+        } else if tok == "--approval-level" {
+            if next.and_then(AcpApprovalLevel::parse) != Some(AcpApprovalLevel::Ask) {
+                return true;
+            }
+        }
+        if let Some(val) = tok
+            .strip_prefix("--permission-mode=")
+            .or_else(|| tok.strip_prefix("--approval-mode="))
+            .or_else(|| tok.strip_prefix("--ask-for-approval="))
+        {
+            if matches!(
+                val,
+                "bypasspermissions" | "bypass" | "yolo" | "auto" | "never" | "full-auto"
+            ) {
+                return true;
+            }
+        } else if matches!(
+            tok.as_str(),
+            "--permission-mode" | "--approval-mode" | "--ask-for-approval" | "-a"
+        ) {
+            if matches!(
+                next,
+                Some("bypasspermissions" | "bypass" | "yolo" | "auto" | "never" | "full-auto")
+            ) {
+                return true;
+            }
         }
     }
     false
@@ -450,27 +263,7 @@ pub fn guard_create_session_params(
     is_user_device: bool,
     strip_raw_launch_plan: bool,
 ) -> Result<Map<String, Value>, DomainStateError> {
-    guard_create_session_params_with_owner_command(
-        params,
-        is_user_device,
-        strip_raw_launch_plan,
-        None,
-    )
-}
-
-pub fn guard_create_session_params_with_owner_command(
-    params: &Map<String, Value>,
-    is_user_device: bool,
-    strip_raw_launch_plan: bool,
-    allowed_owner_command: Option<&str>,
-) -> Result<Map<String, Value>, DomainStateError> {
     let mut cleaned = params.clone();
-    let matches_owner_command = |cmd: &str| -> bool {
-        allowed_owner_command
-            .map(str::trim)
-            .filter(|owner| !owner.is_empty())
-            .is_some_and(|owner| owner == cmd.trim())
-    };
     if !is_user_device {
         if let Some(raw_level) = cleaned
             .get("runtimeSettings")
@@ -489,7 +282,7 @@ pub fn guard_create_session_params_with_owner_command(
             }
         }
         if let Some(cmd) = cleaned.get("agentCommand").and_then(Value::as_str) {
-            if !matches_owner_command(cmd) && command_has_accept_all_flag(cmd) {
+            if command_has_accept_all_flag(cmd) {
                 return Err(DomainStateError {
                     code: "forbidden",
                     message: "Only your own devices can pass accept-all flags in an agent command."
@@ -507,7 +300,7 @@ pub fn guard_create_session_params_with_owner_command(
                 });
             }
             if let Some(cmd) = launch.get("agentCommand").and_then(Value::as_str) {
-                if !matches_owner_command(cmd) && command_has_accept_all_flag(cmd) {
+                if command_has_accept_all_flag(cmd) {
                     return Err(DomainStateError {
                         code: "forbidden",
                         message:
@@ -535,29 +328,13 @@ pub fn guard_create_session_params_with_owner_command(
     {
         runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
         if !is_user_device {
-            // Non-user-device callers may never spoof GBot chat metadata (which carries server-side
-            // approval / computer-use policy), CLIProxyAPI hub profile selection, or pre-resolved
-            // account wrapper metadata (accounts must be selected through Ghostex's account API).
+            // Non-user-device callers may never spoof GBot chat metadata (`gbot` / `gbotHome`),
+            // which Non-CLI `launch_plan.rs` reads to raise starting `acpApprovalLevel`.
             runtime.remove("gbot");
             runtime.remove("gbotHome");
-            runtime.remove(crate::accounts::hub::launch::RUNTIME_KEY);
-            for key in [
-                "accountCommand",
-                "accountSlot",
-                "accountBaseCommand",
-                "accountProvider",
-                "accountName",
-                "accountId",
-            ] {
-                runtime.remove(key);
-            }
         }
     }
     if !is_user_device {
-        // Non-user-device callers may never pass raw `accountId` (which bypasses manual-only
-        // account checks on `/api/createWorktreeSession`) or `teleportCloudSession`.
-        cleaned.remove("accountId");
-        cleaned.remove("teleportCloudSession");
         if let Some(launch) = cleaned
             .get_mut("launchSettings")
             .and_then(Value::as_object_mut)
@@ -595,18 +372,27 @@ pub fn guard_update_session_params(
     let stored_level = current_session
         .and_then(stored_session_approval_level)
         .unwrap_or(AcpApprovalLevel::Ask);
+    let stored_is_non_cli = stored_runtime.is_some_and(|m| {
+        m.get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
+            .and_then(Value::as_bool)
+            == Some(true)
+            || m.get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+                .and_then(Value::as_bool)
+                == Some(true)
+    });
 
     if cleaned.contains_key("runtimeSettings") {
         let is_object = cleaned.get("runtimeSettings").is_some_and(Value::is_object);
-        let stored_is_read_only = stored_runtime
-            .and_then(|m| m.get(crate::coordinators::READ_ONLY_THREAD_KEY))
-            .and_then(Value::as_bool)
-            == Some(true);
+        let stored_is_read_only_non_cli = stored_is_non_cli
+            && stored_runtime
+                .and_then(|m| m.get(crate::coordinators::READ_ONLY_THREAD_KEY))
+                .and_then(Value::as_bool)
+                == Some(true);
         if !is_object {
             // Passing `"runtimeSettings": null` (or a non-object) would overwrite the stored
-            // runtime object with `{}` in `merge_session_update`, wiping protected server fields.
+            // runtime object with `{}` in `merge_session_update`, wiping `acpApprovalLevel`.
             if !is_user_device {
-                if stored_is_read_only {
+                if stored_is_read_only_non_cli {
                     return Err(DomainStateError {
                         code: "forbidden",
                         message: "Only your own devices can clear read-only mode on a session."
@@ -632,7 +418,7 @@ pub fn guard_update_session_params(
             .and_then(Value::as_object_mut)
         {
             if !is_user_device {
-                if stored_is_read_only
+                if stored_is_read_only_non_cli
                     && incoming_runtime
                         .get(crate::coordinators::READ_ONLY_THREAD_KEY)
                         .and_then(Value::as_bool)
@@ -662,21 +448,12 @@ pub fn guard_update_session_params(
                         });
                     }
                 }
-                // Preserve server-owned security/mode/account/hub fields from the stored session
-                // so non-user-device callers can never clear `readOnlyThread`, inject
-                // `cliproxyHubId`, toggle Non-CLI mode/family, or forge account wrapper metadata.
+                // Preserve Non-CLI mode identity from the stored session so non-user-device
+                // callers cannot toggle a Non-CLI session's mode flags in SQLite.
                 for protected_key in [
-                    crate::coordinators::READ_ONLY_THREAD_KEY,
-                    crate::accounts::hub::launch::RUNTIME_KEY,
                     crate::acp::SESSION_NON_CLI_ACTIVE_KEY,
                     crate::acp::SESSION_ACP_ACTIVE_KEY,
                     crate::acp::SESSION_ACP_FAMILY_KEY,
-                    "accountCommand",
-                    "accountSlot",
-                    "accountBaseCommand",
-                    "accountProvider",
-                    "accountName",
-                    "accountId",
                 ] {
                     match stored_runtime.and_then(|m| m.get(protected_key)) {
                         Some(val) => {
@@ -686,6 +463,12 @@ pub fn guard_update_session_params(
                             incoming_runtime.remove(protected_key);
                         }
                     }
+                }
+                if stored_is_read_only_non_cli {
+                    incoming_runtime.insert(
+                        crate::coordinators::READ_ONLY_THREAD_KEY.to_string(),
+                        Value::Bool(true),
+                    );
                 }
             }
             // Always keep the stored `acpApprovalLevel` so `/api/updateSession` cannot diverge

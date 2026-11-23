@@ -600,10 +600,31 @@ pub fn detect_session_chat_terminal_state(
             .ok()
             .flatten();
         let notice = acp_terminal_notice(Some(&acp_state), session_row.as_ref());
+        let child_exited = acp_state
+            .get("childExited")
+            .and_then(Value::as_bool)
+            == Some(true);
+        let has_fatal_error = acp_state
+            .get("fatalError")
+            .and_then(Value::as_str)
+            .is_some_and(|s| !s.trim().is_empty());
+        let is_working = acp_state
+            .get("working")
+            .and_then(Value::as_bool)
+            == Some(true);
+        let has_pending_permission = acp_state
+            .get("pendingPermission")
+            .is_some_and(|v| !v.is_null());
         let mut detection = SessionChatTerminalDetection::default();
         detection.options = options;
         detection.activity = activity;
         detection.notice = notice;
+        detection.composer.state =
+            if child_exited || has_fatal_error || is_working || has_pending_permission {
+                crate::session_chat_composer::SessionChatComposerState::NotReady
+            } else {
+                crate::session_chat_composer::SessionChatComposerState::Ready
+            };
         detection.captured = true;
         detection.attempted = true;
         return detection;

@@ -1551,38 +1551,6 @@ pub(crate) fn build_session_launch_plan(input: AgentLaunchInput, coordinator: bo
     Value::Object(plan)
 }
 
-pub(crate) fn owner_configured_agent_command(
-    db: &Connection,
-    project: Option<&Value>,
-    agent_id: &str,
-) -> Option<String> {
-    let trimmed_id = agent_id.trim();
-    if trimmed_id.is_empty() {
-        return None;
-    }
-    if let Some(project) = project {
-        let cfg = resolve_project_agent_config(project, trimmed_id, None);
-        if let Some(cmd) = read_text_from_map(&cfg, "command") {
-            return Some(cmd);
-        }
-        if let Some(global_project) = project_with_global_agent_list(db, project) {
-            let cfg = resolve_project_agent_config(&global_project, trimmed_id, None);
-            if let Some(cmd) = read_text_from_map(&cfg, "command") {
-                return Some(cmd);
-            }
-        }
-    } else {
-        let empty = json!({});
-        if let Some(global_project) = project_with_global_agent_list(db, &empty) {
-            let cfg = resolve_project_agent_config(&global_project, trimmed_id, None);
-            if let Some(cmd) = read_text_from_map(&cfg, "command") {
-                return Some(cmd);
-            }
-        }
-    }
-    None
-}
-
 pub(crate) fn resolve_project_agent_config(
     project: &Value,
     agent_id: &str,

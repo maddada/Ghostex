@@ -1327,9 +1327,14 @@ fn drain_or_restart_claude_turn(
         new_gen,
     ) {
         Ok(p) => p,
-        Err(_err) if resume_id.is_some() => {
-            // Turn 1 may have been aborted before Claude wrote a transcript to disk, causing
-            // `--resume <id>` to fail. Retry once with a fresh session.
+        Err(_err)
+            if resume_id.as_deref().is_some_and(|id| {
+                crate::agent_transcripts::find_claude_transcript(id).is_none()
+            }) =>
+        {
+            // Only when NO transcript exists on disk for `resume_id` (turn-1 abort before Claude
+            // ever persisted a conversation) retry once with a fresh session. Never wipe
+            // `native_session_id` or open a blank chat when a persisted transcript exists.
             let retry_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
             {
                 let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -1366,7 +1371,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let cwd = cwd_path.to_string_lossy().to_string();
     let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);
-    let endpoint = GxserverEndpoint::from_env();
+    let endpoint = GxserverEndpoint::from_env_or_secret_file(parsed.channel_secret_file.as_deref());
     let spool_session_id = endpoint
         .as_ref()
         .map(|ep| ep.session_id.clone())

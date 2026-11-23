@@ -115,6 +115,7 @@ async fn observe_new_acp_login(
         // `xswap` resolve to the actual child `claude` / `codex` process whose env holds
         // `CLAUDE_CONFIG_DIR` / `CODEX_HOME`, falling back to `child_pid` itself when `exec`'d.
         let mut candidate_pids: Vec<i64> = Vec::new();
+        let mut child_is_account_wrapper = false;
         if let Ok(Some(tree)) = crate::zmx::read_zmx_session_tree(&name) {
             let mut queue = std::collections::VecDeque::from([child_pid]);
             let mut seen = std::collections::HashSet::new();
@@ -126,6 +127,14 @@ async fn observe_new_acp_login(
                 }
                 if let Some(proc_row) = tree.processes.iter().find(|p| p.pid == pid) {
                     let lower = proc_row.command.to_ascii_lowercase();
+                    if pid == child_pid
+                        && (lower.contains("cswap")
+                            || lower.contains("claude-swap")
+                            || lower.contains("xswap")
+                            || lower.contains("codex-swap"))
+                    {
+                        child_is_account_wrapper = true;
+                    }
                     let matches_agent = match provider.as_str() {
                         "claude" => lower.contains("claude") && !lower.contains("claude-swap"),
                         "codex" => lower.contains("codex") && !lower.contains("codex-swap"),
@@ -141,12 +150,21 @@ async fn observe_new_acp_login(
                     queue.push_back(child.pid);
                 }
             }
+            // If `child_pid` is still the `cswap` / `xswap` wrapper and the inner `claude` /
+            // `codex` process has not appeared yet, do NOT read the wrapper's own env (which lacks
+            // `CLAUDE_CONFIG_DIR` / `CODEX_HOME` and would falsely match the default login). Keep
+            // polling until the inner agent child appears.
+            if child_is_account_wrapper && agent_pids.is_empty() {
+                return Some((snap, None));
+            }
             // Prefer deeper actual agent processes (inside cswap/xswap) before the wrapper pid.
             agent_pids.reverse();
             candidate_pids.extend(agent_pids);
-            candidate_pids.extend(other_pids);
+            if !child_is_account_wrapper {
+                candidate_pids.extend(other_pids);
+            }
         }
-        if !candidate_pids.contains(&child_pid) {
+        if !child_is_account_wrapper && !candidate_pids.contains(&child_pid) {
             candidate_pids.push(child_pid);
         }
         let identity = candidate_pids

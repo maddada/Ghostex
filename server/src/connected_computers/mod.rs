@@ -22,8 +22,7 @@ pub(crate) use registry::{
     DEFAULT_REGISTRATION_TTL,
 };
 pub(crate) use relay::{
-    access_off_message, parse_relay_path, peer_refusal, relay, relay_base_url,
-    RELAYED_NON_USER_DEVICE_HEADER, RELAY_ROUTE_PREFIX,
+    access_off_message, parse_relay_path, peer_refusal, relay, relay_base_url, RELAY_ROUTE_PREFIX,
 };
 pub(crate) use scope::{is_peer_allowed, PEER_ALLOWED_ENDPOINTS};
 
