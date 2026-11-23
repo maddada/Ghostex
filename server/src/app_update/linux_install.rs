@@ -16,11 +16,18 @@ const RELEASE_DOWNLOAD_URL: &str = "https://github.com/maddada/Ghostex/releases/
 const AUR_PACKAGE: &str = "ghostex-bin";
 /// The AppImage launcher's stamp beside the copy it runs (tooling/packaging/appimage/AppRun).
 const APPIMAGE_INSTALL_STAMP: &str = ".ghostex-appimage";
+/// The stamp a Linux `cargo xtask start` writes into a package-owned app folder it installed over
+/// (tooling/xtask/src/start/install.rs, `write_linux_dev_install_stamp`).
+const DEV_INSTALL_STAMP: &str = ".ghostex-dev-install";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum InstallKind {
-    /// Owned by a pacman package (the AUR's `ghostex-bin`).
-    Pacman(String),
+    /// Owned by a pacman package (the AUR's `ghostex-bin`). `overwrite` is the app folder when a
+    /// development build is installed over the package's files.
+    Pacman {
+        package: String,
+        overwrite: Option<PathBuf>,
+    },
     Deb,
     Rpm,
     AppImage,
@@ -31,7 +38,7 @@ enum InstallKind {
 impl InstallKind {
     fn name(&self) -> &'static str {
         match self {
-            Self::Pacman(_) => "pacman",
+            Self::Pacman { .. } => "pacman",
             Self::Deb => "deb",
             Self::Rpm => "rpm",
             Self::AppImage => "appimage",
@@ -75,7 +82,12 @@ fn detect(gxserver_exe: &Path) -> InstallKind {
             .filter(|text| !text.is_empty())
     };
     if let Some(package) = owner("pacman", &["-Qqo"]) {
-        return InstallKind::Pacman(package.lines().next().unwrap_or(&package).to_string());
+        return InstallKind::Pacman {
+            package: package.lines().next().unwrap_or(&package).to_string(),
+            overwrite: install
+                .filter(|install| is_dev_install(install))
+                .map(Path::to_path_buf),
+        };
     }
     if owner("dpkg", &["-S"]).is_some() {
         return InstallKind::Deb;
@@ -84,6 +96,19 @@ fn detect(gxserver_exe: &Path) -> InstallKind {
         return InstallKind::Rpm;
     }
     InstallKind::Manual
+}
+
+/// Whether the app folder holds a development build installed over the package's files.
+///
+/// CDXC:Updates 2026-11-23 WHY: a Linux `cargo xtask start` mirrors its own build over the package's /opt/ghostex, which leaves files no package owns (new hashed page chunks, the bundled skill folder, the CEF runtime), and pacman refuses the next upgrade when the new package contains any of them ("exists in filesystem"; the user had to rerun it with `--overwrite`). The start stamps the gxserver build it installed; the stamp is only believed while that build is still the one installed, so after a real package upgrade replaces it (the unowned stamp itself stays behind) the command is the plain one again. Release installs never carry the stamp.
+fn is_dev_install(install: &Path) -> bool {
+    let read_identity = |path: PathBuf| -> Option<String> {
+        let value: Value = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+        Some(value["buildIdentity"].as_str()?.to_string()).filter(|text| !text.is_empty())
+    };
+    let stamped = read_identity(install.join(DEV_INSTALL_STAMP));
+    stamped.is_some()
+        && stamped == read_identity(install.join("gxserver").join("build-identity.json"))
 }
 
 /// The first `program` on the PATH a terminal would have.
@@ -137,21 +162,39 @@ fn safe_version(version: &str) -> Option<&str> {
 /// release page can (the AppImage updates itself; a tarball has no package manager).
 fn update_command(kind: &InstallKind, version: Option<&str>) -> Option<String> {
     match kind {
-        InstallKind::Pacman(package) => {
+        InstallKind::Pacman { package, overwrite } => {
             if !package
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || b"-_.+@".contains(&byte))
             {
                 return None;
             }
+            let overwrite = match overwrite {
+                Some(install) => {
+                    let install = install.to_str()?;
+                    if !install
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"-_.+@/".contains(&byte))
+                    {
+                        return None;
+                    }
+                    format!(" --overwrite '{install}/*'")
+                }
+                None => String::new(),
+            };
             if let Some(helper) = first_on_path(&["yay", "paru"]) {
-                Some(format!("{helper} -S {package}"))
-            } else if package == AUR_PACKAGE {
+                Some(format!("{helper} -S{overwrite} {package}"))
+            } else if package == AUR_PACKAGE && overwrite.is_empty() {
                 Some(format!(
                     "cd \"$(mktemp -d)\" && git clone https://aur.archlinux.org/{AUR_PACKAGE}.git && cd {AUR_PACKAGE} && makepkg -si"
                 ))
+            } else if package == AUR_PACKAGE {
+                // makepkg -i cannot pass --overwrite on to pacman, so the built package is installed by hand.
+                Some(format!(
+                    "cd \"$(mktemp -d)\" && git clone https://aur.archlinux.org/{AUR_PACKAGE}.git && cd {AUR_PACKAGE} && makepkg -s && sudo pacman -U{overwrite} ./{AUR_PACKAGE}-*.pkg.tar.zst"
+                ))
             } else {
-                Some(format!("sudo pacman -S {package}"))
+                Some(format!("sudo pacman -S{overwrite} {package}"))
             }
         }
         InstallKind::Deb => {

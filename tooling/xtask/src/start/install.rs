@@ -82,6 +82,7 @@ impl Start {
             fs::create_dir_all(installed.parent().expect("install path has a parent"))?;
         }
         self.sync_installed_bundle(needs_root)?;
+        self.write_linux_dev_install_stamp(needs_root);
         self.log.step(&format!("Opening {}...", self.app_name));
         self.launch_linux_app()
     }
@@ -528,6 +529,53 @@ impl Start {
                 .join("build-identity.json"),
         );
         installed.is_some() && installed == self.bundled_gxserver_build_identity()
+    }
+
+    /// Stamps a package-owned app folder with the gxserver build this start installed over it.
+    ///
+    /// CDXC:Updates 2026-11-23 WHY: the sync mirrors this build over the package's files, so the folder ends up with files no package owns (new hashed page chunks, the bundled skill folder, the CEF runtime) and pacman refused the next `yay -S ghostex-bin` with "exists in filesystem" until it was rerun with `--overwrite`. pacman checks file conflicts before any hook runs, so nothing can tidy the folder at upgrade time; instead gxserver reads this stamp (`is_dev_install` in server/src/app_update/linux_install.rs) and adds `--overwrite '<app>/*'` to the update command it shows, for as long as this build is the one installed. The sync's `--delete` removes the stamp, so it is written after every sync.
+    fn write_linux_dev_install_stamp(&self, as_root: bool) {
+        let installed = &self.installed_app_path;
+        let package_owned = util::output(
+            Command::new("pacman")
+                .arg("-Qqo")
+                .arg(installed.join("Ghostex")),
+        )
+        .is_ok_and(|output| output.status.success());
+        if !package_owned {
+            return;
+        }
+        let Some(identity) = self.bundled_gxserver_build_identity() else {
+            return;
+        };
+        let stamp = installed.join(".ghostex-dev-install");
+        let text = serde_json::json!({ "buildIdentity": identity }).to_string();
+        let written = if as_root {
+            use std::io::Write;
+            util::command("sudo")
+                .arg("tee")
+                .arg(&stamp)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .and_then(|mut child| {
+                    child
+                        .stdin
+                        .take()
+                        .expect("piped stdin")
+                        .write_all(text.as_bytes())?;
+                    child.wait()
+                })
+                .is_ok_and(|status| status.success())
+        } else {
+            fs::write(&stamp, &text).is_ok()
+        };
+        if written {
+            self.log.detail(&format!(
+                "Marked {} as a development install, so Ghostex's update command adds --overwrite.",
+                installed.display()
+            ));
+        }
     }
 
     fn linux_install_needs_root(&self) -> bool {
