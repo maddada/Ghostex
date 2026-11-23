@@ -46,6 +46,13 @@ fn allowed_keys(path: &str) -> Option<&'static [&'static str]> {
             "provider",
             "id",
             "accountId",
+            "hubId",
+            "url",
+            "clientKey",
+            "managementKey",
+            "label",
+            "clearManagementKey",
+            "state",
             "selector",
             "email",
             "jobId",
@@ -91,6 +98,18 @@ const REMOTE_ACCOUNT_OPERATIONS: &[&str] = &[
     "defaultAccount",
     "helperStatus",
     "helperAction",
+    "hubAdd",
+    "hubUpdate",
+    "hubRemove",
+    "hubAccountSidebar",
+    "hubOAuthStart",
+    "hubOAuthStatus",
+    "hubOAuthCallback",
+    "hubOAuthCancel",
+    "hubAccountRemove",
+    "hubAccountSetEnabled",
+    "hubAccountResetCooldown",
+    "hubSetSessionAffinity",
 ];
 
 /// The Accounts switches that cross as booleans.
@@ -104,6 +123,7 @@ const ACCOUNT_SWITCHES: &[&str] = &[
     "fresh",
     "stopCodex",
     "fromAnotherDevice",
+    "clearManagementKey",
 ];
 
 /// The params as they cross to the machine, or `None` when the path or a value is not allowed.
@@ -128,7 +148,18 @@ pub(crate) fn settings_remote_params(path: &str, params: &Value) -> Option<Value
             continue;
         }
         let allowed = match value {
-            Value::String(text) => text.chars().count() <= 200,
+            Value::String(text) => {
+                let limit = if accounts
+                    && matches!(
+                        key.as_str(),
+                        "input" | "url" | "clientKey" | "managementKey" | "state"
+                    ) {
+                    2048
+                } else {
+                    200
+                };
+                text.chars().count() <= limit
+            }
             Value::Bool(_) => {
                 matches!(key.as_str(), "fresh" | "includeDesktopControl")
                     || (path == "/api/machineExtensions" && key == "on")

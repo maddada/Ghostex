@@ -99,15 +99,122 @@ fn key_helper(key_file: &Path) -> String {
     }
 }
 
+/// Creates a symlink `link -> target`, using directory or file symlinks on Windows.
+fn create_symlink(target: &Path, link: &Path, is_dir: bool) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        let _ = is_dir;
+        std::os::unix::fs::symlink(target, link)
+    }
+    #[cfg(windows)]
+    {
+        if is_dir {
+            std::os::windows::fs::symlink_dir(target, link)
+        } else {
+            std::os::windows::fs::symlink_file(target, link)
+        }
+    }
+}
+
+/// Recursively merges entries from `src` into `dst` without overwriting existing files, then
+/// removes `src` when empty so it can be replaced by a symlink.
+fn merge_dir_into(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            merge_dir_into(&from, &to)?;
+        } else if !to.exists() {
+            if fs::rename(&from, &to).is_err() {
+                fs::copy(&from, &to)?;
+                let _ = fs::remove_file(&from);
+            }
+        }
+    }
+    let _ = fs::remove_dir(src);
+    Ok(())
+}
+
+/// Links `profile_dir/<name>` to `claude_home/<name>` like `cswap --share-history`, merging any
+/// local `projects/` or `history.jsonl` that accumulated in the hub profile before linking.
+fn share_claude_home(claude_home: &Path, profile_dir: &Path) {
+    let _ = fs::create_dir_all(claude_home);
+
+    // 1. projects/ (always ensure target exists so new hub sessions write straight to ~/.claude/projects).
+    let shared_projects = claude_home.join("projects");
+    let profile_projects = profile_dir.join("projects");
+    let _ = fs::create_dir_all(&shared_projects);
+    match fs::symlink_metadata(&profile_projects) {
+        Ok(meta) if meta.file_type().is_symlink() => {}
+        Ok(meta) if meta.is_dir() => {
+            if merge_dir_into(&profile_projects, &shared_projects).is_ok()
+                && fs::symlink_metadata(&profile_projects).is_err()
+            {
+                let _ = create_symlink(&shared_projects, &profile_projects, true);
+            }
+        }
+        Ok(_) => {}
+        Err(_) => {
+            let _ = create_symlink(&shared_projects, &profile_projects, true);
+        }
+    }
+
+    // 2. history.jsonl (ensure target file exists, merge any local hub history, then symlink).
+    let shared_history = claude_home.join("history.jsonl");
+    let profile_history = profile_dir.join("history.jsonl");
+    let _ = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&shared_history);
+    match fs::symlink_metadata(&profile_history) {
+        Ok(meta) if meta.file_type().is_symlink() => {}
+        Ok(meta) if meta.is_file() => {
+            if let Ok(existing) = fs::read(&profile_history) {
+                if !existing.is_empty() {
+                    if let Ok(mut target) = fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&shared_history)
+                    {
+                        let _ = target.write_all(&existing);
+                    }
+                }
+            }
+            if fs::remove_file(&profile_history).is_ok() {
+                let _ = create_symlink(&shared_history, &profile_history, false);
+            }
+        }
+        Ok(_) => {}
+        Err(_) => {
+            let _ = create_symlink(&shared_history, &profile_history, false);
+        }
+    }
+
+    // 3. CLAUDE.md and skills/ (symlink into hub profile whenever present in ~/.claude).
+    for (name, is_dir) in [("CLAUDE.md", false), ("skills", true)] {
+        let src = claude_home.join(name);
+        let dst = profile_dir.join(name);
+        if fs::symlink_metadata(&src).is_ok() && fs::symlink_metadata(&dst).is_err() {
+            let _ = create_symlink(&src, &dst, is_dir);
+        }
+    }
+}
+
 /// Claude's folder: the key file, `settings.json` with the hub's address and the key helper (the
-/// hooks Ghostex adds there are kept), and `.claude.json` marked as past Claude's first-run steps.
+/// hooks Ghostex adds there are kept), shared `CLAUDE.md`, `skills/`, `projects/` and
+/// `history.jsonl` from `~/.claude`, and `.claude.json` marked as past Claude's first-run steps.
 fn prepare_claude(
+    home: &Path,
     dir: &Path,
     url: &str,
     key: &str,
     statusline: Option<&Path>,
 ) -> std::io::Result<()> {
     private_dir(dir)?;
+    share_claude_home(&home.join(".claude"), dir);
     let key_file = dir.join(KEY_FILE);
     write_private(&key_file, key.as_bytes())?;
     let settings_path = dir.join("settings.json");
@@ -273,6 +380,7 @@ pub(crate) fn apply(
     let dir = profile_dir(&home, provider, &hub.id);
     match provider {
         Provider::Claude => prepare_claude(
+            &home,
             &dir,
             &hub.url,
             &key,

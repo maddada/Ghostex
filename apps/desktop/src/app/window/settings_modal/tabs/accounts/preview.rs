@@ -68,6 +68,23 @@ impl AccountsTab {
             "accounts-editor" => self.pane = Some(Pane::Account("claude-1".into())),
             "accounts-gemini" => self.pane = Some(Pane::Account("gemini-1".into())),
             "accounts-hubs" => self.pane = Some(Pane::Hub("hub-preview".into())),
+            "accounts-hub-oauth" => {
+                self.pane = Some(Pane::Hub("hub-preview".into()));
+                self.cliproxy_card_collapsed = true;
+                self.hub_oauth = Some(super::hubs::HubOAuthFlow {
+                    hub_id: "hub-preview".into(),
+                    provider: "claude",
+                    url: "https://claude.ai/oauth/authorize?client_id=cliproxy&state=preview-state".into(),
+                    state: "preview-state".into(),
+                    is_local: false,
+                    status: "waiting".into(),
+                    error: None,
+                    input: String::new(),
+                    submitting: false,
+                    poll: None,
+                });
+            }
+            "accounts-cliproxy-guide" => self.open_cliproxy_guide(window, cx),
             "accounts-hub-account" => self.pane = Some(Pane::HubAccount("hub-preview:a1".into())),
             "accounts-hub-add" => self.pane = Some(Pane::AddHub),
             "accounts-editor-actions" | "accounts-advanced" => {

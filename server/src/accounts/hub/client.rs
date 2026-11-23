@@ -1,10 +1,10 @@
-//! Calls to a CLIProxyAPI hub: the client key check when a hub is added, and the management API
-//! that lists the hub's accounts (`/v0/management/auth-files`) and reads each one's usage through
-//! the hub (`/v0/management/api-call`, which sends the request with that account's token in place
-//! of `$TOKEN$`, so no token ever reaches Ghostex).
-//!
-//! CDXC:AgentProviders 2026-11-18 WHY:
-//! Only reads go to the management API. Ghostex never downloads, uploads, deletes or refreshes a hub's credentials, never asks it to sign an account in, and never redeems a Codex reset credit through it: the hub is the user's, and it holds the tokens.
+//! Calls to a CLIProxyAPI hub: the client key check when a hub is added, and the v8 management
+//! API (with v0 fallback for older hubs) that lists the hub's Claude and Codex accounts
+//! (`/v8/management/credentials`), reads each one's usage through the hub
+//! (`/v0/management/api-call`, which sends the request with that account's token in place of
+//! `$TOKEN$`, so no token ever reaches Ghostex), runs browser OAuth sign-ins for Claude and Codex
+//! (`/v8/management/oauth/...`), toggles or removes credentials, resets cooldowns, and reads or
+//! enables session affinity (`/v8/management/config`) for prompt caching.
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -121,6 +121,46 @@ fn management_get(url: &str, key: &str, path: &str) -> Result<Value, String> {
     management_answer(answer)
 }
 
+fn management_v8_get(url: &str, key: &str, path: &str) -> Result<Answer, String> {
+    answer(
+        agent()
+            .get(format!("{url}/v8/management/{path}"))
+            .header("Authorization", format!("Bearer {key}"))
+            .call(),
+    )
+}
+
+fn management_v8_post(url: &str, key: Option<&str>, path: &str, body: Value) -> Result<Answer, String> {
+    let request = agent().post(format!("{url}/v8/management/{path}"));
+    let request = match key {
+        Some(key) => request.header("Authorization", format!("Bearer {key}")),
+        None => request,
+    };
+    answer(request.send_json(body))
+}
+
+fn management_v8_patch(url: &str, key: &str, path: &str, body: Value) -> Result<Answer, String> {
+    answer(
+        agent()
+            .patch(format!("{url}/v8/management/{path}"))
+            .header("Authorization", format!("Bearer {key}"))
+            .send_json(body),
+    )
+}
+
+fn management_v8_delete(url: &str, key: &str, path: &str) -> Result<Answer, String> {
+    answer(
+        agent()
+            .delete(format!("{url}/v8/management/{path}"))
+            .header("Authorization", format!("Bearer {key}"))
+            .call(),
+    )
+}
+
+fn encode_query(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
+}
+
 fn management_answer(answer: Answer) -> Result<Value, String> {
     match answer.status {
         200..=299 => Ok(answer.body),
@@ -137,14 +177,255 @@ fn management_answer(answer: Answer) -> Result<Value, String> {
     }
 }
 
-/// The hub's accounts (`files` of `/v0/management/auth-files`).
+/// The hub's accounts (`files` of `/v8/management/credentials`, falling back to `/v0/management/auth-files`).
 pub(crate) fn auth_files(url: &str, key: &str) -> Result<Vec<Value>, String> {
-    let body = management_get(url, key, "auth-files")?;
+    let v8 = management_v8_get(url, key, "credentials")?;
+    let body = if v8.status == 404 {
+        management_get(url, key, "auth-files")?
+    } else {
+        management_answer(v8)?
+    };
     Ok(body
         .get("files")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default())
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct RoutingInfo {
+    pub session_affinity: Option<bool>,
+    pub strategy: Option<String>,
+}
+
+/// Reads the hub's routing configuration (`routing.session-affinity` and `routing.strategy`) via
+/// `GET /v8/management/config`. Returns empty info if the hub does not expose v8 config.
+pub(crate) fn read_routing(url: &str, key: &str) -> Result<RoutingInfo, String> {
+    let response = management_v8_get(url, key, "config")?;
+    if response.status == 404 {
+        return Ok(RoutingInfo::default());
+    }
+    let body = management_answer(response)?;
+    let routing = body.get("routing");
+    let session_affinity = routing
+        .and_then(|r| r.get("session-affinity"))
+        .and_then(Value::as_bool)
+        .or_else(|| routing.map(|_| false));
+    let strategy = routing
+        .and_then(|r| r.get("strategy"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    Ok(RoutingInfo {
+        session_affinity,
+        strategy,
+    })
+}
+
+/// Sets `routing.session-affinity` on the hub (`PATCH /v8/management/config`), retrying once on a
+/// concurrent config change (409 / 412).
+pub(crate) fn set_session_affinity(url: &str, key: &str, enabled: bool) -> Result<(), String> {
+    for attempt in 0..2 {
+        let response = management_v8_patch(
+            url,
+            key,
+            "config",
+            json!({ "routing": { "session-affinity": enabled } }),
+        )?;
+        if matches!(response.status, 409 | 412) && attempt == 0 {
+            continue;
+        }
+        management_answer(response)?;
+        return Ok(());
+    }
+    Err("The hub's config changed while saving session affinity. Try again.".to_string())
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct OAuthStart {
+    pub url: String,
+    pub state: String,
+}
+
+/// Starts a v8 browser OAuth sign-in on the hub for `claude` or `codex` only.
+pub(crate) fn oauth_start(
+    url: &str,
+    key: &str,
+    provider: &str,
+    local_callback: bool,
+) -> Result<OAuthStart, String> {
+    if !matches!(provider, "claude" | "codex") {
+        return Err("Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string());
+    }
+    let path = if local_callback {
+        format!("oauth/auth-url?provider={provider}&is_webui=true")
+    } else {
+        format!("oauth/auth-url?provider={provider}")
+    };
+    let mut response = management_v8_get(url, key, &path)?;
+    // If the hub could not bind its local callback port (e.g. port busy), retry without is_webui
+    // so the user can still complete sign-in by pasting the redirect URL.
+    if local_callback && response.status >= 500 {
+        response = management_v8_get(url, key, &format!("oauth/auth-url?provider={provider}"))?;
+    }
+    let body = management_answer(response)?;
+    let auth_url = body
+        .get("url")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "The hub did not return a sign-in URL.".to_string())?
+        .to_string();
+    let state = body
+        .get("state")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "The hub did not return an OAuth state.".to_string())?
+        .to_string();
+    Ok(OAuthStart {
+        url: auth_url,
+        state,
+    })
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct OAuthStatus {
+    pub status: String,
+    pub error: Option<String>,
+}
+
+/// Polls a pending v8 OAuth login session (`GET /v8/management/oauth/status?state=...`).
+pub(crate) fn oauth_status(url: &str, key: &str, state: &str) -> Result<OAuthStatus, String> {
+    let response = management_v8_get(
+        url,
+        key,
+        &format!("oauth/status?state={}", encode_query(state)),
+    )?;
+    let body = management_answer(response)?;
+    let status = body
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("error")
+        .to_string();
+    let error = body
+        .get("error")
+        .and_then(Value::as_str)
+        .map(masked)
+        .filter(|value| !value.is_empty());
+    Ok(OAuthStatus { status, error })
+}
+
+/// Submits a pasted redirect URL or authorization code to `POST /v8/management/oauth/callback`.
+pub(crate) fn oauth_callback(
+    url: &str,
+    key: &str,
+    provider: &str,
+    state: &str,
+    input: &str,
+) -> Result<(), String> {
+    if !matches!(provider, "claude" | "codex") {
+        return Err("Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string());
+    }
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("Paste the redirect URL or authorization code from your browser.".to_string());
+    }
+    let body = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        json!({
+            "provider": provider,
+            "state": state,
+            "redirect_url": trimmed,
+        })
+    } else if let Some((code_part, state_part)) = trimmed.split_once('#') {
+        let code = code_part.trim();
+        let effective_state = if state_part.trim().is_empty() {
+            state
+        } else {
+            state_part.trim()
+        };
+        json!({
+            "provider": provider,
+            "state": effective_state,
+            "code": code,
+        })
+    } else {
+        json!({
+            "provider": provider,
+            "state": state,
+            "code": trimmed,
+        })
+    };
+    let response = management_v8_post(url, Some(key), "oauth/callback", body)?;
+    management_answer(response)?;
+    Ok(())
+}
+
+/// Cancels a pending v8 OAuth login session (`DELETE /v8/management/oauth/session?state=...`).
+pub(crate) fn oauth_cancel(url: &str, key: &str, state: &str) -> Result<(), String> {
+    let response = management_v8_delete(
+        url,
+        key,
+        &format!("oauth/session?state={}", encode_query(state)),
+    )?;
+    if response.status == 404 {
+        return Ok(());
+    }
+    management_answer(response)?;
+    Ok(())
+}
+
+/// Enables or disables a hub credential (`PATCH /v8/management/credentials/status`).
+pub(crate) fn set_account_disabled(
+    url: &str,
+    key: &str,
+    file_name: &str,
+    auth_index: &str,
+    disabled: bool,
+) -> Result<(), String> {
+    let response = management_v8_patch(
+        url,
+        key,
+        "credentials/status",
+        json!({
+            "name": file_name,
+            "auth_index": auth_index,
+            "disabled": disabled,
+        }),
+    )?;
+    management_answer(response)?;
+    Ok(())
+}
+
+/// Deletes a credential file from the hub (`DELETE /v8/management/credentials?name=...`, with v0 fallback).
+pub(crate) fn delete_account(url: &str, key: &str, file_name: &str) -> Result<(), String> {
+    let query = format!("name={}", encode_query(file_name));
+    let response = management_v8_delete(url, key, &format!("credentials?{query}"))?;
+    if response.status == 404 {
+        let fallback = answer(
+            agent()
+                .delete(format!("{url}/v0/management/auth-files?{query}"))
+                .header("Authorization", format!("Bearer {key}"))
+                .call(),
+        )?;
+        management_answer(fallback)?;
+        return Ok(());
+    }
+    management_answer(response)?;
+    Ok(())
+}
+
+/// Clears a credential's cooldown state (`POST /v8/management/routing/cooldown/reset`).
+pub(crate) fn reset_cooldown(url: &str, key: &str, auth_index: &str) -> Result<(), String> {
+    let response = management_v8_post(
+        url,
+        Some(key),
+        "routing/cooldown/reset",
+        json!({ "auth_index": auth_index }),
+    )?;
+    management_answer(response)?;
+    Ok(())
 }
 
 /// One request the hub makes with an account's token (`POST /v0/management/api-call`): the

@@ -48,6 +48,7 @@ fn turned_off() -> DomainStateError {
 #[derive(Clone)]
 struct AccountReading {
     auth_index: String,
+    file_name: String,
     provider: String,
     name: String,
     plan: Option<String>,
@@ -56,6 +57,7 @@ struct AccountReading {
     /// `ready`, `coolingDown`, `disabled` or `error`, from the hub's own state.
     status: &'static str,
     status_message: Option<String>,
+    requires_sign_in: bool,
     /// When the hub uses the account again after a cooldown.
     next_retry_after: Option<DateTime<Utc>>,
     usage: Vec<UsageWindow>,
@@ -67,6 +69,8 @@ struct AccountReading {
 struct Reading {
     error: Option<String>,
     accounts: Vec<AccountReading>,
+    session_affinity: Option<bool>,
+    routing_strategy: Option<String>,
     updated_at: Option<String>,
     fetched_at: Instant,
 }
@@ -106,7 +110,8 @@ fn time(value: Option<&Value>) -> Option<DateTime<Utc>> {
         .map(|at| at.with_timezone(&Utc))
 }
 
-/// One `auth-files` entry as an account row, before its usage is read.
+/// One `auth-files` / `credentials` entry as an account row, before its usage is read.
+/// Only Claude and Codex accounts are shown or managed.
 fn account_from_file(file: &Value, now: DateTime<Utc>) -> Option<AccountReading> {
     let auth_index = file.get("auth_index").and_then(Value::as_str)?.to_string();
     let text = |key: &str| {
@@ -120,12 +125,17 @@ fn account_from_file(file: &Value, now: DateTime<Utc>) -> Option<AccountReading>
         .or_else(|| text("type"))
         .unwrap_or_default()
         .to_ascii_lowercase();
+    if !matches!(provider.as_str(), "claude" | "codex") {
+        return None;
+    }
+    let file_name = text("name").or_else(|| text("id")).unwrap_or_default();
+    let requires_sign_in = file.get("requires_sign_in").and_then(Value::as_bool) == Some(true);
     let next_retry_after = time(file.get("next_retry_after")).filter(|at| *at > now);
     let disabled = file.get("disabled").and_then(Value::as_bool) == Some(true)
         || text("status").as_deref() == Some("disabled");
     let status = if disabled {
         "disabled"
-    } else if text("status").as_deref() == Some("error") {
+    } else if requires_sign_in || text("status").as_deref() == Some("error") {
         "error"
     } else if file.get("unavailable").and_then(Value::as_bool) == Some(true)
         || next_retry_after.is_some()
@@ -136,6 +146,7 @@ fn account_from_file(file: &Value, now: DateTime<Utc>) -> Option<AccountReading>
     };
     Some(AccountReading {
         auth_index,
+        file_name,
         name: text("email")
             .or_else(|| text("label"))
             .or_else(|| text("account"))
@@ -155,13 +166,14 @@ fn account_from_file(file: &Value, now: DateTime<Utc>) -> Option<AccountReading>
         status_message: text("status_message")
             .map(|message| client::masked(&message))
             .filter(|message| !message.is_empty()),
+        requires_sign_in,
         next_retry_after,
         usage: Vec::new(),
         usage_error: None,
     })
 }
 
-/// Reads a hub's accounts and each one's usage, and keeps the result.
+/// Reads a hub's accounts, routing settings, and each account's usage, and keeps the result.
 fn refresh(paths: &GxserverPaths, hub: &store::Hub) {
     if !reading_now()
         .lock()
@@ -177,13 +189,14 @@ fn refresh(paths: &GxserverPaths, hub: &store::Hub) {
             .unwrap_or_else(|e| e.into_inner())
             .insert(hub.id.clone(), reading);
     };
-    let listed = (|| -> Result<(String, Vec<Value>), String> {
+    let listed = (|| -> Result<(String, Vec<Value>, client::RoutingInfo), String> {
         let key = store::open_key(paths, &hub.management_key)?;
         let files = client::auth_files(&hub.url, &key)?;
-        Ok((key, files))
+        let routing = client::read_routing(&hub.url, &key).unwrap_or_default();
+        Ok((key, files, routing))
     })();
     match listed {
-        Ok((key, files)) => {
+        Ok((key, files, routing)) => {
             let now = Utc::now();
             let mut accounts: Vec<AccountReading> = files
                 .iter()
@@ -196,6 +209,8 @@ fn refresh(paths: &GxserverPaths, hub: &store::Hub) {
                 store_reading(Reading {
                     error: None,
                     accounts: accounts.to_vec(),
+                    session_affinity: routing.session_affinity,
+                    routing_strategy: routing.strategy.clone(),
                     updated_at: updated_at.clone(),
                     fetched_at: Instant::now(),
                 });
@@ -203,6 +218,8 @@ fn refresh(paths: &GxserverPaths, hub: &store::Hub) {
             store_reading(Reading {
                 error: None,
                 accounts,
+                session_affinity: routing.session_affinity,
+                routing_strategy: routing.strategy,
                 updated_at,
                 fetched_at: Instant::now(),
             });
@@ -213,6 +230,8 @@ fn refresh(paths: &GxserverPaths, hub: &store::Hub) {
                 .as_ref()
                 .map(|p| p.accounts.clone())
                 .unwrap_or_default(),
+            session_affinity: previous.as_ref().and_then(|p| p.session_affinity),
+            routing_strategy: previous.as_ref().and_then(|p| p.routing_strategy.clone()),
             updated_at: previous.and_then(|p| p.updated_at),
             fetched_at: Instant::now(),
         }),
@@ -280,16 +299,20 @@ pub(crate) fn rows(paths: &GxserverPaths, wait: Wait) -> Vec<Value> {
                 .map(|account| {
                     json!({
                         "id": format!("{}:{}", hub.id, account.auth_index),
+                        "authIndex": account.auth_index,
+                        "fileName": account.file_name,
                         "provider": account.provider,
                         "name": account.name,
                         "plan": account.plan,
                         "workspace": account.workspace,
                         "status": account.status,
                         "statusMessage": account.status_message,
+                        "requiresSignIn": account.requires_sign_in,
                         "nextRetryAfter": account.next_retry_after.map(|at| at.to_rfc3339()),
                         "usage": account.usage,
                         "usageError": account.usage_error,
                         "showInSidebar": !hub.hidden_in_sidebar.contains(&account.auth_index),
+                        "canManage": has_management_key && !account.file_name.is_empty(),
                     })
                 })
                 .collect();
@@ -305,6 +328,8 @@ pub(crate) fn rows(paths: &GxserverPaths, wait: Wait) -> Vec<Value> {
                 "url": hub.url,
                 "host": host(&hub.url),
                 "hasManagementKey": has_management_key,
+                "sessionAffinity": cached.as_ref().and_then(|c| c.session_affinity),
+                "routingStrategy": cached.as_ref().and_then(|c| c.routing_strategy.clone()),
                 "status": match (&cached, has_management_key) {
                     (_, false) => "noManagementKey",
                     (None, true) => "loading",
@@ -379,7 +404,7 @@ fn normalize_url(text: &str) -> Result<String, DomainStateError> {
     }
     let mut path = url.path().trim_end_matches('/').to_string();
     // The address of the hub's own management page (`…/management.html`) works too.
-    for suffix in ["/management.html", "/v0/management", "/v1"] {
+    for suffix in ["/management.html", "/v8/management", "/v0/management", "/v1"] {
         if let Some(stripped) = path.strip_suffix(suffix) {
             path = stripped.to_string();
         }
@@ -421,7 +446,79 @@ fn check_management_key(url: &str, key: &str) -> Result<(), DomainStateError> {
         .map_err(DomainStateError::bad_request)
 }
 
-/// The hub operations Settings sends (`hubAdd`, `hubUpdate`, `hubRemove`, `hubAccountSidebar`).
+fn is_local_hub(url: &str) -> bool {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(str::to_ascii_lowercase))
+        .is_some_and(|host| matches!(host.as_str(), "127.0.0.1" | "localhost" | "::1" | "[::1]"))
+}
+
+fn managed_hub(
+    paths: &GxserverPaths,
+    hub_id: &str,
+) -> Result<(store::Hub, String), DomainStateError> {
+    let hub = {
+        let _lock = store::lock();
+        store::read(paths)
+            .map_err(io_error)?
+            .into_iter()
+            .find(|hub| hub.id == hub_id)
+            .ok_or_else(|| DomainStateError::not_found("That hub was already removed."))?
+    };
+    if hub.management_key.is_empty() {
+        return Err(DomainStateError::bad_request(
+            "Add this hub's management key first to manage its accounts.",
+        ));
+    }
+    let key = store::open_key(paths, &hub.management_key).map_err(DomainStateError::bad_request)?;
+    Ok((hub, key))
+}
+
+fn parse_hub_account_id(
+    params: &Map<String, Value>,
+) -> Result<(String, String), DomainStateError> {
+    let id = text_param(params, "accountId")
+        .ok_or_else(|| DomainStateError::bad_request("accountId is required"))?;
+    let (hub_id, auth_index) = id
+        .split_once(':')
+        .filter(|(h, a)| !h.is_empty() && !a.is_empty())
+        .ok_or_else(|| DomainStateError::bad_request("That isn't a hub account."))?;
+    Ok((hub_id.to_string(), auth_index.to_string()))
+}
+
+fn find_account_file_name(
+    hub: &store::Hub,
+    key: &str,
+    auth_index: &str,
+) -> Result<String, DomainStateError> {
+    if let Some(name) = reading(&hub.id).and_then(|r| {
+        r.accounts
+            .into_iter()
+            .find(|a| a.auth_index == auth_index && !a.file_name.is_empty())
+            .map(|a| a.file_name)
+    }) {
+        return Ok(name);
+    }
+    let files = client::auth_files(&hub.url, key).map_err(DomainStateError::bad_request)?;
+    files
+        .iter()
+        .find(|file| file.get("auth_index").and_then(Value::as_str) == Some(auth_index))
+        .and_then(|file| {
+            file.get("name")
+                .or_else(|| file.get("id"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(str::to_string)
+        })
+        .ok_or_else(|| {
+            DomainStateError::not_found("That account is no longer on the hub.")
+        })
+}
+
+/// The hub operations Settings sends (`hubAdd`, `hubUpdate`, `hubRemove`, `hubAccountSidebar`,
+/// plus v8 management operations for OAuth, account removal/toggle, cooldown reset, and session
+/// affinity).
 pub(crate) fn handle(
     paths: &GxserverPaths,
     params: &Map<String, Value>,
@@ -432,17 +529,133 @@ pub(crate) fn handle(
         .unwrap_or_default();
     if !matches!(
         operation,
-        "hubAdd" | "hubUpdate" | "hubRemove" | "hubAccountSidebar"
+        "hubAdd"
+            | "hubUpdate"
+            | "hubRemove"
+            | "hubAccountSidebar"
+            | "hubOAuthStart"
+            | "hubOAuthStatus"
+            | "hubOAuthCallback"
+            | "hubOAuthCancel"
+            | "hubAccountRemove"
+            | "hubAccountSetEnabled"
+            | "hubAccountResetCooldown"
+            | "hubSetSessionAffinity"
     ) {
         return Ok(Handled::NotMine);
     }
     if !enabled(paths) {
         return Err(turned_off());
     }
-    if operation == "hubAccountSidebar" {
-        let hub = sidebar::set_shown(paths, params)?;
-        refresh_soon(paths, &hub);
-        return Ok(Handled::Changed);
+    match operation {
+        "hubAccountSidebar" => {
+            let hub = sidebar::set_shown(paths, params)?;
+            refresh_soon(paths, &hub);
+            return Ok(Handled::Changed);
+        }
+        "hubOAuthStart" => {
+            let hub_id = text_param(params, "hubId")
+                .ok_or_else(|| DomainStateError::bad_request("hubId is required"))?;
+            let provider = text_param(params, "provider")
+                .ok_or_else(|| DomainStateError::bad_request("provider is required"))?
+                .to_ascii_lowercase();
+            let (hub, key) = managed_hub(paths, hub_id)?;
+            let is_local = is_local_hub(&hub.url);
+            let started = client::oauth_start(&hub.url, &key, &provider, is_local)
+                .map_err(DomainStateError::bad_request)?;
+            return Ok(Handled::Answer(json!({
+                "status": "ok",
+                "hubId": hub.id,
+                "provider": provider,
+                "url": started.url,
+                "state": started.state,
+                "isLocal": is_local,
+            })));
+        }
+        "hubOAuthStatus" => {
+            let hub_id = text_param(params, "hubId")
+                .ok_or_else(|| DomainStateError::bad_request("hubId is required"))?;
+            let state = text_param(params, "state")
+                .ok_or_else(|| DomainStateError::bad_request("state is required"))?;
+            let (hub, key) = managed_hub(paths, hub_id)?;
+            let status = client::oauth_status(&hub.url, &key, state)
+                .map_err(DomainStateError::bad_request)?;
+            if status.status == "ok" {
+                refresh(paths, &hub);
+            }
+            return Ok(Handled::Answer(json!({
+                "status": status.status,
+                "error": status.error,
+            })));
+        }
+        "hubOAuthCallback" => {
+            let hub_id = text_param(params, "hubId")
+                .ok_or_else(|| DomainStateError::bad_request("hubId is required"))?;
+            let provider = text_param(params, "provider")
+                .ok_or_else(|| DomainStateError::bad_request("provider is required"))?
+                .to_ascii_lowercase();
+            let state = text_param(params, "state")
+                .ok_or_else(|| DomainStateError::bad_request("state is required"))?;
+            let input = text_param(params, "input")
+                .ok_or_else(|| DomainStateError::bad_request("Paste the redirect URL or code."))?;
+            let (hub, key) = managed_hub(paths, hub_id)?;
+            client::oauth_callback(&hub.url, &key, &provider, state, input)
+                .map_err(DomainStateError::bad_request)?;
+            return Ok(Handled::Answer(json!({ "status": "ok" })));
+        }
+        "hubOAuthCancel" => {
+            let hub_id = text_param(params, "hubId")
+                .ok_or_else(|| DomainStateError::bad_request("hubId is required"))?;
+            let state = text_param(params, "state")
+                .ok_or_else(|| DomainStateError::bad_request("state is required"))?;
+            let (hub, key) = managed_hub(paths, hub_id)?;
+            client::oauth_cancel(&hub.url, &key, state).map_err(DomainStateError::bad_request)?;
+            return Ok(Handled::Answer(json!({ "status": "ok" })));
+        }
+        "hubAccountRemove" => {
+            let (hub_id, auth_index) = parse_hub_account_id(params)?;
+            let (hub, key) = managed_hub(paths, &hub_id)?;
+            let file_name = find_account_file_name(&hub, &key, &auth_index)?;
+            client::delete_account(&hub.url, &key, &file_name)
+                .map_err(DomainStateError::bad_request)?;
+            refresh(paths, &hub);
+            return Ok(Handled::Changed);
+        }
+        "hubAccountSetEnabled" => {
+            let (hub_id, auth_index) = parse_hub_account_id(params)?;
+            let enabled_val = params
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| DomainStateError::bad_request("enabled is required"))?;
+            let (hub, key) = managed_hub(paths, &hub_id)?;
+            let file_name = find_account_file_name(&hub, &key, &auth_index)?;
+            client::set_account_disabled(&hub.url, &key, &file_name, &auth_index, !enabled_val)
+                .map_err(DomainStateError::bad_request)?;
+            refresh(paths, &hub);
+            return Ok(Handled::Changed);
+        }
+        "hubAccountResetCooldown" => {
+            let (hub_id, auth_index) = parse_hub_account_id(params)?;
+            let (hub, key) = managed_hub(paths, &hub_id)?;
+            client::reset_cooldown(&hub.url, &key, &auth_index)
+                .map_err(DomainStateError::bad_request)?;
+            refresh(paths, &hub);
+            return Ok(Handled::Changed);
+        }
+        "hubSetSessionAffinity" => {
+            let hub_id = text_param(params, "hubId")
+                .ok_or_else(|| DomainStateError::bad_request("hubId is required"))?;
+            let enabled_val = params
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| DomainStateError::bad_request("enabled is required"))?;
+            let (hub, key) = managed_hub(paths, hub_id)?;
+            client::set_session_affinity(&hub.url, &key, enabled_val)
+                .map_err(DomainStateError::bad_request)?;
+            refresh(paths, &hub);
+            return Ok(Handled::Changed);
+        }
+        _ => {}
     }
     let label = params
         .get("label")
@@ -462,6 +675,8 @@ pub(crate) fn handle(
             let management_key = text_param(params, "managementKey");
             if let Some(key) = management_key {
                 check_management_key(&url, key)?;
+                // Turn on session affinity by default when connecting a hub so prompt caching stays warm.
+                let _ = client::set_session_affinity(&url, key, true);
             }
             let hub = store::Hub {
                 id: hub_id_for(&url),
@@ -474,6 +689,7 @@ pub(crate) fn handle(
                     .unwrap_or_default(),
                 hidden_in_sidebar: Default::default(),
             };
+            let saved = hub.clone();
             let _lock = store::lock();
             let mut hubs = store::read(paths).map_err(io_error)?;
             if hubs
@@ -486,6 +702,7 @@ pub(crate) fn handle(
             }
             hubs.push(hub);
             store::write(paths, &hubs).map_err(io_error)?;
+            refresh_soon(paths, &saved);
         }
         "hubRemove" => {
             let id = text_param(params, "hubId")
@@ -546,6 +763,9 @@ pub(crate) fn handle(
             }
             if let Some(key) = &management_key {
                 check_management_key(&url, key)?;
+                if current.management_key.is_empty() {
+                    let _ = client::set_session_affinity(&url, key, true);
+                }
             }
             let client_key = client_key.map(|key| seal(paths, &key)).transpose()?;
             let management_key = management_key.map(|key| seal(paths, &key)).transpose()?;
@@ -614,6 +834,8 @@ pub(crate) fn handle(
 pub(crate) enum Handled {
     /// Not a hub operation.
     NotMine,
+    /// A hub operation returned its own answer directly (OAuth start, status, callback, cancel).
+    Answer(Value),
     /// A hub was added, changed or removed; the caller answers with the accounts list.
     Changed,
     /// A hub moved to another address and so to another id.

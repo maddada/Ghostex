@@ -78,6 +78,9 @@ pub(crate) fn dispatch(
         return super::cli::switch_session(state, params);
     }
     let hub_change = super::hub::handle(&state.paths, params)?;
+    if let super::hub::Handled::Answer(answer) = hub_change {
+        return Ok(answer);
+    }
     // A hub that moved to another address (and so another id) keeps its New sessions start on pins.
     if let super::hub::Handled::Moved { from, to } = &hub_change {
         let (from, to) = (
