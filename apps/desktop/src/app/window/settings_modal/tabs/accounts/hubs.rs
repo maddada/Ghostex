@@ -36,6 +36,7 @@ const HUB_OAUTH_POLL: Duration = Duration::from_secs(2);
 
 /// An active v8 Management API OAuth sign-in on a CLIProxyAPI hub (Claude or Codex only).
 pub(crate) struct HubOAuthFlow {
+    pub(crate) id: u64,
     pub(crate) hub_id: String,
     pub(crate) provider: &'static str,
     pub(crate) url: String,
@@ -401,7 +402,8 @@ impl AccountsTab {
             &value,
             Some(placeholder),
             move |page: &mut Self, text, _window, cx| {
-                let text: String = text.trim().chars().take(4000).collect();
+                let limit = if field == "label" { 119 } else { 2048 };
+                let text: String = text.trim().chars().take(limit).collect();
                 page.update_hub_draft(&draft_key, cx, |draft| match field {
                     "url" => draft.url = text,
                     "clientKey" => draft.client_key = text,
@@ -578,6 +580,7 @@ impl AccountsTab {
             }),
             MenuRow::action("Setup instructions", |page, cx| {
                 page.cliproxy_guide_open = true;
+                page.cliproxy_guide_needs_focus = true;
                 cx.notify();
             }),
         ];
@@ -936,43 +939,57 @@ impl AccountsTab {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let hub_id = hub.id();
-        let affinity = hub.session_affinity().unwrap_or(true);
         let strategy = hub.routing_strategy();
-        let description = match strategy {
-            Some(strategy) => format!(
+        let control = match hub.session_affinity() {
+            Some(affinity) => switch_control(
+                p,
+                SharedString::from(format!("accounts-hub-{hub_id}-session-affinity-switch")),
+                "Session affinity (prompt caching)",
+                affinity,
+                busy,
+                Some("Saving hub routing settings…".into()),
+                move |page: &mut Self, next, _window, cx| {
+                    page.account_request(
+                        json!({
+                            "operation": "hubSetSessionAffinity",
+                            "hubId": hub_id.clone(),
+                            "enabled": next,
+                        }),
+                        None,
+                        cx,
+                    );
+                },
+                cx,
+            )
+            .into_any_element(),
+            None => status_tag(
+                p,
+                if hub.status() == "loading" {
+                    "Checking…"
+                } else {
+                    "Requires v8"
+                },
+                TagTone::Off,
+            ),
+        };
+        let description = match (hub.session_affinity(), strategy) {
+            (Some(_), Some(strategy)) => format!(
                 "Keeps each conversation on one account until it hits a limit so prompt caching stays warm (hub strategy: {strategy}). On by default."
             ),
-            None => "Keeps each conversation on one account until it hits a limit so prompt caching stays warm. On by default.".to_string(),
+            (Some(_), None) => "Keeps each conversation on one account until it hits a limit so prompt caching stays warm. On by default.".to_string(),
+            (None, _) if hub.status() == "loading" => "Reading routing settings from this hub…".to_string(),
+            (None, _) => "Upgrade CLIProxyAPI to v8 to read and toggle session affinity from Ghostex.".to_string(),
         };
         div()
             .px(px(DETAIL_INSET))
             .child(setting_row(
                 p,
-                SharedString::from(format!("accounts-hub-{hub_id}-session-affinity")),
+                SharedString::from(format!("accounts-hub-{}-session-affinity", hub.id())),
                 RowSpec::new("Session affinity (prompt caching)")
                     .description(description)
                     .inset_x(0.0),
                 None,
-                switch_control(
-                    p,
-                    SharedString::from(format!("accounts-hub-{hub_id}-session-affinity-switch")),
-                    "Session affinity (prompt caching)",
-                    affinity,
-                    busy,
-                    Some("Saving hub routing settings…".into()),
-                    move |page: &mut Self, next, _window, cx| {
-                        page.account_request(
-                            json!({
-                                "operation": "hubSetSessionAffinity",
-                                "hubId": hub_id.clone(),
-                                "enabled": next,
-                            }),
-                            None,
-                            cx,
-                        );
-                    },
-                    cx,
-                ),
+                control,
                 cx,
             ))
             .into_any_element()
@@ -987,7 +1004,11 @@ impl AccountsTab {
         if !matches!(provider, "claude" | "codex") {
             return;
         }
+        self.hub_oauth_seq = self.hub_oauth_seq.wrapping_add(1);
+        let flow_id = self.hub_oauth_seq;
+        let local_callback = self.client.read(cx).machine().is_none();
         self.hub_oauth = Some(HubOAuthFlow {
+            id: flow_id,
             hub_id: hub_id.clone(),
             provider,
             url: String::new(),
@@ -1011,10 +1032,11 @@ impl AccountsTab {
                 "operation": "hubOAuthStart",
                 "hubId": hub_id,
                 "provider": provider,
+                "localCallback": local_callback,
             }),
             move |result, cx| {
                 let _ = this.update(cx, |page, cx| {
-                    let Some(flow) = page.hub_oauth.as_mut() else {
+                    let Some(flow) = page.hub_oauth.as_mut().filter(|f| f.id == flow_id) else {
                         return;
                     };
                     match result {
@@ -1049,11 +1071,11 @@ impl AccountsTab {
     }
 
     fn begin_hub_oauth_poll(&mut self, cx: &mut Context<Self>) {
-        let Some((hub_id, state)) = self
+        let Some((flow_id, hub_id, state)) = self
             .hub_oauth
             .as_ref()
             .filter(|f| f.status == "waiting" && !f.state.is_empty())
-            .map(|f| (f.hub_id.clone(), f.state.clone()))
+            .map(|f| (f.id, f.hub_id.clone(), f.state.clone()))
         else {
             return;
         };
@@ -1063,7 +1085,8 @@ impl AccountsTab {
                 let keep_going = this
                     .update(cx, |page, cx| {
                         let still_this = page.hub_oauth.as_ref().is_some_and(|flow| {
-                            flow.hub_id == hub_id
+                            flow.id == flow_id
+                                && flow.hub_id == hub_id
                                 && flow.state == state
                                 && flow.status == "waiting"
                         });
@@ -1081,12 +1104,11 @@ impl AccountsTab {
                             }),
                             move |result, cx| {
                                 let _ = weak.update(cx, |page, cx| {
-                                    let Some(flow) = page.hub_oauth.as_mut() else {
+                                    let Some(flow) = page.hub_oauth.as_mut().filter(|f| {
+                                        f.id == flow_id && f.state == check_state
+                                    }) else {
                                         return;
                                     };
-                                    if flow.state != check_state {
-                                        return;
-                                    }
                                     match result {
                                         Ok(answer) => {
                                             let status = answer["status"]
@@ -1129,14 +1151,15 @@ impl AccountsTab {
                 }
             }
         });
-        if let Some(flow) = self.hub_oauth.as_mut() {
+        if let Some(flow) = self.hub_oauth.as_mut().filter(|f| f.id == flow_id) {
             flow.poll = Some(task);
         }
     }
 
     fn submit_hub_oauth_callback(&mut self, cx: &mut Context<Self>) {
-        let Some((hub_id, provider, state, input)) = self.hub_oauth.as_ref().map(|f| {
+        let Some((flow_id, hub_id, provider, state, input)) = self.hub_oauth.as_ref().map(|f| {
             (
+                f.id,
                 f.hub_id.clone(),
                 f.provider,
                 f.state.clone(),
@@ -1148,12 +1171,13 @@ impl AccountsTab {
         if input.is_empty() || state.is_empty() {
             return;
         }
-        if let Some(flow) = self.hub_oauth.as_mut() {
+        if let Some(flow) = self.hub_oauth.as_mut().filter(|f| f.id == flow_id) {
             flow.submitting = true;
             flow.error = None;
         }
         cx.notify();
         let this = cx.weak_entity();
+        let expected_state = state.clone();
         AccountsClient::call(
             &self.client.clone(),
             json!({
@@ -1165,7 +1189,11 @@ impl AccountsTab {
             }),
             move |result, cx| {
                 let _ = this.update(cx, |page, cx| {
-                    if let Some(flow) = page.hub_oauth.as_mut() {
+                    if let Some(flow) = page
+                        .hub_oauth
+                        .as_mut()
+                        .filter(|f| f.id == flow_id && f.state == expected_state)
+                    {
                         flow.submitting = false;
                         match result {
                             Ok(_) => {
@@ -1314,7 +1342,7 @@ impl AccountsTab {
                 Some("Paste redirect URL (http://localhost:...) or code"),
                 |page: &mut Self, text, _window, cx| {
                     if let Some(flow) = page.hub_oauth.as_mut() {
-                        flow.input = text;
+                        flow.input = text.chars().take(2048).collect();
                         cx.notify();
                     }
                 },

@@ -22,13 +22,17 @@ use std::time::Duration;
 
 const CLIPROXY_RELEASES_URL: &str = "https://github.com/router-for-me/CLIProxyAPI/releases";
 
-const CLIPROXY_CONFIG_SAMPLE: &str = r#"host: "0.0.0.0"
-port: 8317
+const CLIPROXY_CONFIG_SAMPLE: &str = r#"config-version: 8
 
-api-keys:
-  - "replace-with-a-random-client-key"
+server:
+  host: "0.0.0.0"
+  port: 8317
 
-remote-management:
+access:
+  api-keys:
+    - "replace-with-a-random-client-key"
+
+management:
   allow-remote: true
   secret-key: "replace-with-a-random-management-key"
 
@@ -39,6 +43,7 @@ routing:
 impl AccountsTab {
     pub(crate) fn open_cliproxy_guide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.cliproxy_guide_open = true;
+        self.cliproxy_guide_needs_focus = false;
         self.cliproxy_guide_focus.focus(window, cx);
         cx.notify();
     }
@@ -329,11 +334,7 @@ impl AccountsTab {
         if !remote_choices.is_empty() {
             for (index, (machine_id, name)) in remote_choices.into_iter().take(3).enumerate() {
                 let target_id = machine_id.clone();
-                let label = if machine_id.is_none() {
-                    format!("Switch to {name}")
-                } else {
-                    format!("Switch to {name}")
-                };
+                let label = format!("Switch to {name}");
                 actions.push(settings_sized_button(
                     p,
                     SharedString::from(format!("accounts-cliproxy-switch-machine-{index}")),
@@ -412,6 +413,10 @@ impl AccountsTab {
     ) -> Option<AnyElement> {
         if !self.cliproxy_guide_open {
             return None;
+        }
+        if self.cliproxy_guide_needs_focus {
+            self.cliproxy_guide_needs_focus = false;
+            self.cliproxy_guide_focus.focus(window, cx);
         }
         let p = &p.nested_dialog();
         let data = self.client.read(cx).data.clone();

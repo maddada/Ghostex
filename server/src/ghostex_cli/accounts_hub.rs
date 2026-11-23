@@ -38,8 +38,8 @@ from standard input (-), never from the command line, and never printed:
 Only one key can come from standard input per command. A new --address needs the client key
 again (and the management key, when the hub has one): saved keys never go to a new address.
 
-Run it on each computer that should use the hub (an agent session on that computer can run
-it); agents on another computer can't change this computer's accounts.";
+Run it from your own terminal on each computer that should use the hub (agent sessions
+can't add, change or remove hubs).";
 
 #[derive(Default)]
 struct Options {
@@ -156,7 +156,7 @@ fn parse(args: &[String]) -> CliResult<Options> {
             }
             "--computer" => {
                 return Err(CliError::Other(
-                    "Hubs are added on each computer itself: run this command in a session on that computer.".into(),
+                    "Hubs are added on each computer itself: run this command from your own terminal on that computer.".into(),
                 ))
             }
             // `--flag=value`: never repeated, since the value may be a key.

@@ -421,7 +421,7 @@ fn text_param<'a>(params: &'a Map<String, Value>, key: &str) -> Option<&'a str> 
         .get(key)
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|text| !text.is_empty() && text.len() < 4096)
+        .filter(|text| !text.is_empty() && text.chars().count() <= 2048)
 }
 
 fn seal(paths: &GxserverPaths, key: &str) -> Result<String, DomainStateError> {
@@ -486,6 +486,17 @@ fn parse_hub_account_id(
     Ok((hub_id.to_string(), auth_index.to_string()))
 }
 
+fn is_supported_provider(file: &Value) -> bool {
+    let provider = file
+        .get("provider")
+        .or_else(|| file.get("type"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    matches!(provider.as_str(), "claude" | "codex")
+}
+
 fn find_account_file_name(
     hub: &store::Hub,
     key: &str,
@@ -494,7 +505,11 @@ fn find_account_file_name(
     if let Some(name) = reading(&hub.id).and_then(|r| {
         r.accounts
             .into_iter()
-            .find(|a| a.auth_index == auth_index && !a.file_name.is_empty())
+            .find(|a| {
+                a.auth_index == auth_index
+                    && matches!(a.provider.as_str(), "claude" | "codex")
+                    && !a.file_name.is_empty()
+            })
             .map(|a| a.file_name)
     }) {
         return Ok(name);
@@ -502,7 +517,10 @@ fn find_account_file_name(
     let files = client::auth_files(&hub.url, key).map_err(DomainStateError::bad_request)?;
     files
         .iter()
-        .find(|file| file.get("auth_index").and_then(Value::as_str) == Some(auth_index))
+        .find(|file| {
+            file.get("auth_index").and_then(Value::as_str) == Some(auth_index)
+                && is_supported_provider(file)
+        })
         .and_then(|file| {
             file.get("name")
                 .or_else(|| file.get("id"))
@@ -512,8 +530,32 @@ fn find_account_file_name(
                 .map(str::to_string)
         })
         .ok_or_else(|| {
-            DomainStateError::not_found("That account is no longer on the hub.")
+            DomainStateError::not_found("That Claude or Codex account is no longer on the hub.")
         })
+}
+
+fn ensure_supported_account(
+    hub: &store::Hub,
+    key: &str,
+    auth_index: &str,
+) -> Result<(), DomainStateError> {
+    if reading(&hub.id).is_some_and(|r| {
+        r.accounts
+            .iter()
+            .any(|a| a.auth_index == auth_index && matches!(a.provider.as_str(), "claude" | "codex"))
+    }) {
+        return Ok(());
+    }
+    let files = client::auth_files(&hub.url, key).map_err(DomainStateError::bad_request)?;
+    if files.iter().any(|file| {
+        file.get("auth_index").and_then(Value::as_str) == Some(auth_index)
+            && is_supported_provider(file)
+    }) {
+        return Ok(());
+    }
+    Err(DomainStateError::not_found(
+        "That Claude or Codex account is no longer on the hub.",
+    ))
 }
 
 /// The hub operations Settings sends (`hubAdd`, `hubUpdate`, `hubRemove`, `hubAccountSidebar`,
@@ -560,7 +602,13 @@ pub(crate) fn handle(
                 .ok_or_else(|| DomainStateError::bad_request("provider is required"))?
                 .to_ascii_lowercase();
             let (hub, key) = managed_hub(paths, hub_id)?;
-            let is_local = is_local_hub(&hub.url);
+            // Only bind local callback ports when the caller's browser runs on this same computer
+            // and the hub itself is local; remote Settings passes `localCallback: false`.
+            let caller_local = params
+                .get("localCallback")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            let is_local = caller_local && is_local_hub(&hub.url);
             let started = client::oauth_start(&hub.url, &key, &provider, is_local)
                 .map_err(DomainStateError::bad_request)?;
             return Ok(Handled::Answer(json!({
@@ -569,7 +617,7 @@ pub(crate) fn handle(
                 "provider": provider,
                 "url": started.url,
                 "state": started.state,
-                "isLocal": is_local,
+                "isLocal": started.local_callback,
             })));
         }
         "hubOAuthStatus" => {
@@ -637,6 +685,7 @@ pub(crate) fn handle(
         "hubAccountResetCooldown" => {
             let (hub_id, auth_index) = parse_hub_account_id(params)?;
             let (hub, key) = managed_hub(paths, &hub_id)?;
+            ensure_supported_account(&hub, &key, &auth_index)?;
             client::reset_cooldown(&hub.url, &key, &auth_index)
                 .map_err(DomainStateError::bad_request)?;
             refresh(paths, &hub);
@@ -666,6 +715,20 @@ pub(crate) fn handle(
     match operation {
         "hubAdd" => {
             let url = normalize_url(text_param(params, "url").unwrap_or_default())?;
+            let new_id = hub_id_for(&url);
+            // Check for an existing duplicate before touching the hub's config.
+            {
+                let _lock = store::lock();
+                let hubs = store::read(paths).map_err(io_error)?;
+                if hubs
+                    .iter()
+                    .any(|saved| saved.id == new_id || saved.url == url)
+                {
+                    return Err(DomainStateError::bad_request(
+                        "That hub is already added. Edit it to change its keys or name.",
+                    ));
+                }
+            }
             let client_key = text_param(params, "clientKey").ok_or_else(|| {
                 DomainStateError::bad_request(
                     "Enter a client key: one of the keys under api-keys in the hub's config.",
@@ -679,7 +742,7 @@ pub(crate) fn handle(
                 let _ = client::set_session_affinity(&url, key, true);
             }
             let hub = store::Hub {
-                id: hub_id_for(&url),
+                id: new_id,
                 label: label.unwrap_or_default(),
                 url,
                 client_key: seal(paths, client_key)?,

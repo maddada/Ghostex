@@ -52,6 +52,7 @@ fn allowed_keys(path: &str) -> Option<&'static [&'static str]> {
             "managementKey",
             "label",
             "clearManagementKey",
+            "localCallback",
             "state",
             "selector",
             "email",
@@ -124,6 +125,7 @@ const ACCOUNT_SWITCHES: &[&str] = &[
     "stopCodex",
     "fromAnotherDevice",
     "clearManagementKey",
+    "localCallback",
 ];
 
 /// The params as they cross to the machine, or `None` when the path or a value is not allowed.

@@ -72,6 +72,7 @@ impl AccountsTab {
                 self.pane = Some(Pane::Hub("hub-preview".into()));
                 self.cliproxy_card_collapsed = true;
                 self.hub_oauth = Some(super::hubs::HubOAuthFlow {
+                    id: 1,
                     hub_id: "hub-preview".into(),
                     provider: "claude",
                     url: "https://claude.ai/oauth/authorize?client_id=cliproxy&state=preview-state".into(),

@@ -111,11 +111,13 @@ pub(crate) struct AccountsTab {
     pub(crate) cliproxy_card_collapsed: bool,
     /// Whether the CLIProxyAPI setup instructions sheet is open.
     pub(crate) cliproxy_guide_open: bool,
+    pub(crate) cliproxy_guide_needs_focus: bool,
     pub(crate) cliproxy_guide_focus: FocusHandle,
     /// Turning on the built-in CLIProxyAPI extension is in flight.
     pub(crate) cliproxy_enabling: bool,
     /// Active v8 management OAuth sign-in flow on a CLIProxyAPI hub (`hubs.rs`).
     pub(crate) hub_oauth: Option<hubs::HubOAuthFlow>,
+    pub(crate) hub_oauth_seq: u64,
     /// The hub account id whose inline Remove confirmation is open (`hubs.rs`).
     pub(crate) hub_account_remove: Option<String>,
     /// The machine whose accounts the page shows (the machine picker's pick); `None` is this
@@ -222,9 +224,11 @@ impl AccountsTab {
             hub_drafts: HashMap::new(),
             cliproxy_card_collapsed: false,
             cliproxy_guide_open: false,
+            cliproxy_guide_needs_focus: false,
             cliproxy_guide_focus: cx.focus_handle(),
             cliproxy_enabling: false,
             hub_oauth: None,
+            hub_oauth_seq: 0,
             hub_account_remove: None,
             commit_inputs: HashSet::new(),
             claude_ai_polling: false,
