@@ -118,6 +118,7 @@ pub(crate) fn notice_wait(project: &str, session: &str) -> Option<Value> {
 }
 
 /// The facts of a wait: the limit the current account hit, and the eligible account (the current one included) whose full windows reset soonest.
+#[allow(dead_code, clippy::too_many_arguments)]
 pub(super) fn describe(
     registry: &Registry,
     snapshot: &Snapshot,
@@ -128,6 +129,34 @@ pub(super) fn describe(
     alternative: Option<&super::model_fallback::Alternative>,
     now: DateTime<Utc>,
 ) -> Value {
+    describe_in_pool(
+        registry,
+        snapshot,
+        provider,
+        current,
+        model,
+        model_label,
+        alternative,
+        None,
+        now,
+    )
+}
+
+/// Like [`describe`], scoped to `allowed_ids` when the session's workspace pins a Claude account
+/// pool so wait reset times and blocked accounts stay inside that workspace.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn describe_in_pool(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    current: Option<&str>,
+    model: &str,
+    model_label: Option<&str>,
+    alternative: Option<&super::model_fallback::Alternative>,
+    allowed_ids: Option<&[String]>,
+    now: DateTime<Utc>,
+) -> Value {
+    let in_pool = |id: &str| allowed_ids.is_none_or(|ids| ids.iter().any(|allowed| allowed == id));
     let reading = |id: &str| {
         snapshot
             .accounts
@@ -159,7 +188,8 @@ pub(super) fn describe(
         .accounts
         .iter()
         .filter(|a| {
-            a.provider == provider && (a.auto_switchable() || Some(a.id.as_str()) == current)
+            a.provider == provider
+                && ((a.auto_switchable() && in_pool(&a.id)) || Some(a.id.as_str()) == current)
         })
         .filter_map(|a| {
             let windows = full(reading(&a.id)?);
@@ -192,7 +222,7 @@ pub(super) fn describe(
     let blocked: Vec<Value> = registry
         .accounts
         .iter()
-        .filter(|a| a.provider == provider && Some(a.id.as_str()) != current)
+        .filter(|a| a.provider == provider && Some(a.id.as_str()) != current && in_pool(&a.id))
         .filter(|a| !(a.user_disabled && a.disabled.is_some()))
         .filter_map(|a| {
             if a.user_disabled {

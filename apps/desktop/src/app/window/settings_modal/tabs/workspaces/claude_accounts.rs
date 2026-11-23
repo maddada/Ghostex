@@ -7,7 +7,7 @@
 //! gently highlights missing Slack or Linear, and opens `claude.ai/settings/connectors` in that
 //! account's isolated Ghostex Browser profile.
 
-use super::super::super::fields::{settings_checkbox, settings_icon};
+use super::super::super::fields::{settings_checkbox, settings_icon, tooltip_text};
 use super::super::super::super::native_modal_kit::{a11y_toggled, hsla, PressExt as _};
 use super::*;
 use gpui::{FontWeight, rgba};
@@ -28,17 +28,28 @@ pub(crate) struct ClaudeAccountInfo {
     pub(crate) label: String,
     pub(crate) email: String,
     pub(crate) user_disabled: bool,
+    pub(crate) eligible: bool,
+    pub(crate) signed_in: bool,
     pub(crate) connectors: ClaudeAiConnectorsInfo,
 }
 
-/// Parses Claude accounts from `/api/agentAccounts`, ordered by numeric slot.
+impl ClaudeAccountInfo {
+    fn auto_selectable(&self) -> bool {
+        !self.user_disabled && self.eligible && self.signed_in
+    }
+}
+
+/// Parses registered Claude accounts from `/api/agentAccounts`, ordered by numeric slot.
 pub(super) fn parse_claude_accounts(result: &Value) -> Vec<ClaudeAccountInfo> {
     let mut accounts: Vec<(f64, ClaudeAccountInfo)> = result
         .get("accounts")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter(|account| account.get("provider").and_then(Value::as_str) == Some("claude"))
+        .filter(|account| {
+            account.get("provider").and_then(Value::as_str) == Some("claude")
+                && account.get("registered").and_then(Value::as_bool) == Some(true)
+        })
         .filter_map(|account| {
             let id = account.get("id").and_then(Value::as_str)?.to_string();
             let slot = text(account, "selector");
@@ -50,6 +61,20 @@ pub(super) fn parse_claude_accounts(result: &Value) -> Vec<ClaudeAccountInfo> {
                 .unwrap_or_else(|| format!("Account {slot}"));
             let user_disabled =
                 account.get("userDisabled").and_then(Value::as_bool) == Some(true);
+            let eligible = account.get("eligible").and_then(Value::as_bool) != Some(false);
+            let status = text(account, "status");
+            let login_expired = account
+                .get("loginExpiredAt")
+                .and_then(Value::as_str)
+                .is_some_and(|v| !v.trim().is_empty());
+            let disabled_by_error = account.get("disabled").is_some_and(|v| !v.is_null());
+            let signed_in = !slot.trim().is_empty()
+                && !login_expired
+                && !disabled_by_error
+                && !matches!(
+                    status.as_str(),
+                    "loginRequired" | "disabled" | "identityChanged"
+                );
             let connectors_val = account.get("claudeAiConnectors");
             let connectors = ClaudeAiConnectorsInfo {
                 detected: connectors_val
@@ -81,6 +106,8 @@ pub(super) fn parse_claude_accounts(result: &Value) -> Vec<ClaudeAccountInfo> {
                     label,
                     email,
                     user_disabled,
+                    eligible,
+                    signed_in,
                     connectors,
                 },
             ))
@@ -252,11 +279,33 @@ impl WorkspacesTab {
                         .gap(px(8.0))
                         .children(active_accounts.iter().map(|account| {
                             let selected = selected_ids.iter().any(|id| id == &account.id);
+                            let selectable = account.auto_selectable();
+                            let disabled = !selectable && !selected;
+                            let status_badge: Option<&'static str> = if !account.signed_in {
+                                Some("Sign in")
+                            } else if !account.eligible {
+                                Some("Manual")
+                            } else {
+                                None
+                            };
+                            let disabled_tip: Option<String> = if !account.signed_in {
+                                Some(
+                                    "Sign in to this account on this computer in Settings > Accounts before using it in a workspace pool."
+                                        .to_string(),
+                                )
+                            } else if !account.eligible {
+                                Some(
+                                    "Manual-only accounts are never picked automatically. Turn on Automatic in Settings > Accounts to use it here."
+                                        .to_string(),
+                                )
+                            } else {
+                                None
+                            };
                             let display_name =
                                 super::super::accounts::widgets::account_text(&account.label, hide_emails);
                             let target_ws = workspace_id.to_string();
                             let target_id = account.id.clone();
-                            div()
+                            let mut chip = div()
                                 .id(SharedString::from(format!(
                                     "workspace-claude-pick-{workspace_id}-{}",
                                     account.id
@@ -273,17 +322,39 @@ impl WorkspacesTab {
                                 .border_1()
                                 .border_color(hsla(if selected { on_edge } else { hairline }))
                                 .when(selected, |chip| chip.bg(hsla(on_bg)))
-                                .hover(move |chip| chip.bg(hsla(hover_bg)))
-                                .cursor_pointer()
+                                .when(!disabled, |chip| {
+                                    chip.hover(move |chip| chip.bg(hsla(hover_bg)))
+                                        .cursor_pointer()
+                                })
+                                .when(disabled, |chip| chip.opacity(0.55))
                                 .text_size(px(12.5))
-                                .text_color(hsla(fg))
-                                .child(settings_checkbox(p, selected, false))
+                                .text_color(hsla(if disabled { muted } else { fg }))
+                                .child(settings_checkbox(p, selected, disabled))
                                 .child(display_name)
-                                .on_press(cx, move |page, _window, cx| {
+                                .when_some(status_badge, |chip, badge| {
+                                    chip.child(
+                                        div()
+                                            .px(px(5.0))
+                                            .py(px(1.0))
+                                            .rounded(px(4.0))
+                                            .border_1()
+                                            .border_color(hsla(hairline))
+                                            .text_size(px(10.5))
+                                            .text_color(hsla(muted))
+                                            .child(badge),
+                                    )
+                                });
+                            if let Some(tip) = disabled_tip {
+                                chip = chip.tooltip(tooltip_text(tip));
+                            }
+                            if !disabled {
+                                chip = chip.on_press(cx, move |page, _window, cx| {
                                     page.toggle_workspace_claude_account(
                                         &target_ws, &target_id, cx,
                                     );
-                                })
+                                });
+                            }
+                            chip
                         })),
                 )
                 .child(
@@ -372,7 +443,7 @@ impl WorkspacesTab {
                 .to_string()
         } else if missing_count == 0 {
             format!(
-                "Slack and Linear seen on all {} account(s) in this workspace.",
+                "Slack and Linear last seen connected on all {} account(s) in this workspace.",
                 shown_accounts.len()
             )
         } else {
@@ -461,10 +532,7 @@ impl WorkspacesTab {
             let other_apps: Vec<String> = connectors
                 .apps
                 .iter()
-                .filter(|app| {
-                    let lower = app.to_ascii_lowercase();
-                    !lower.contains("slack") && !lower.contains("linear")
-                })
+                .filter(|app| !is_slack_or_linear_app(app))
                 .cloned()
                 .collect();
 
@@ -653,7 +721,7 @@ impl WorkspacesTab {
                 ))
                 .child(guide_line(
                     p,
-                    "2. Connect Slack and Linear inside claude.ai, start a Claude session on that account so Claude Code refreshes its local profile, then click Refresh.",
+                    "2. Connect Slack and Linear inside claude.ai, start a Claude session on that account so Claude Code refreshes its local profile, then click Refresh. Status shows apps connected at some point (disconnecting in claude.ai may not show here until Claude refreshes its local profile).",
                 ))
                 .child(guide_line(
                     p,
@@ -666,7 +734,7 @@ impl WorkspacesTab {
             format!("workspace-claude-connectors-{workspace_id}"),
             RowSpec::new("claude.ai connectors")
                 .description(
-                    "Slack, Linear and other apps connected on claude.ai per Claude account (read from each account's local Claude profile). No Linear API key or company Slack bot needed.",
+                    "Slack, Linear and other apps connected at some point on claude.ai per Claude account (read from each account's local Claude profile; disconnecting in claude.ai may not show here until Claude refreshes its profile). No Linear API key or company Slack bot needed.",
                 )
                 .wide(),
             None,
@@ -674,6 +742,11 @@ impl WorkspacesTab {
             cx,
         )
     }
+}
+
+fn is_slack_or_linear_app(app: &str) -> bool {
+    app.split(|ch: char| !ch.is_ascii_alphanumeric())
+        .any(|word| word.eq_ignore_ascii_case("slack") || word.eq_ignore_ascii_case("linear"))
 }
 
 #[allow(clippy::too_many_arguments)]

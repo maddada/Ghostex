@@ -46,11 +46,21 @@ pub(crate) fn read_account_claude_ai_connectors(
     identity: &str,
 ) -> ClaudeAiConnectorsSummary {
     let mut candidate_paths: Vec<(PathBuf, bool)> = Vec::new();
+    let expected_identity = identity.trim().to_ascii_lowercase();
     let trimmed_slot = slot.trim();
     if !trimmed_slot.is_empty() {
         if let Ok(claude_slot) = ClaudeSlot::read(home, trimmed_slot) {
             let session_file = PathBuf::from(claude_slot.session_dir()).join(".claude.json");
-            candidate_paths.push((session_file, false));
+            let slot_identity_matches = expected_identity.is_empty()
+                || claude_slot
+                    .identity()
+                    .trim()
+                    .eq_ignore_ascii_case(&expected_identity);
+            if slot_identity_matches {
+                candidate_paths.push((session_file, false));
+            } else {
+                candidate_paths.push((session_file, true));
+            }
             if claude_slot.names_default_login(home) {
                 candidate_paths.push((ghostex_paths::agent_homes::claude_json_path(home), true));
             }
@@ -64,7 +74,6 @@ pub(crate) fn read_account_claude_ai_connectors(
 
     let mut detected = false;
     let mut apps: Vec<String> = Vec::new();
-    let expected_identity = identity.trim().to_ascii_lowercase();
 
     for (path, require_identity_match) in candidate_paths {
         let Some((file_identity, entries)) = read_file_connectors_memoized(&path) else {

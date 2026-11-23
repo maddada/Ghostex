@@ -1344,8 +1344,11 @@ fn state_value(
             .transpose()?
             .flatten()
         {
-            let workspace_accounts =
-                crate::workspaces::project_claude_account_ids(repository.db, &project)?;
+            let workspace_accounts = if crate::workspaces::is_config_folder_project(&project) {
+                Vec::new()
+            } else {
+                crate::workspaces::project_claude_account_ids(repository.db, &project)?
+            };
             if !workspace_accounts.is_empty() {
                 let model = super::default_account::launch_model(Provider::Claude, None);
                 if let Some(account) = super::default_account::quick_launch_account_from_pool(

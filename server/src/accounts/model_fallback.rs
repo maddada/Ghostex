@@ -101,6 +101,7 @@ impl Alternative {
 /// Where a Fable session that no account has Fable room for can continue on Opus: the account it
 /// is on when that has room for Opus, else the first account with Auto-switch on that has, in the
 /// session's Try first order. `None` for any other model, or when no account has room.
+#[allow(dead_code)]
 pub(super) fn alternative(
     registry: &Registry,
     snapshot: &Snapshot,
@@ -110,6 +111,25 @@ pub(super) fn alternative(
     effort: &str,
     priority: Priority,
     session: &Value,
+) -> Option<Alternative> {
+    alternative_in_pool(
+        registry, snapshot, provider, current, model, effort, priority, session, None,
+    )
+}
+
+/// Like [`alternative`], restricted to `allowed_ids` when the session's workspace pins a Claude
+/// account pool.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn alternative_in_pool(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    current: Option<&str>,
+    model: &str,
+    effort: &str,
+    priority: Priority,
+    session: &Value,
+    allowed_ids: Option<&[String]>,
 ) -> Option<Alternative> {
     if provider != Provider::Claude || !is_fable(model) {
         return None;
@@ -123,22 +143,31 @@ pub(super) fn alternative(
     let here = current
         .and_then(|id| registry.accounts.iter().find(|a| a.id == id))
         .filter(|a| a.provider == provider && !a.user_disabled && a.login_expired_at.is_none())
+        .filter(|a| allowed_ids.is_none_or(|ids| ids.iter().any(|id| id == &a.id)))
         .filter(|a| room(&a.id));
     // An account this session automatically left counts once a reading taken since says so,
     // the rule `switch_target` keeps.
     let left = super::recovery::left_account(session);
     let account = here.or_else(|| {
-        super::recovery::ranked(registry, snapshot, provider, current, &value, priority)
-            .into_iter()
-            .find(|account| match left {
-                Some((from, at)) if from == account.id => snapshot
-                    .accounts
-                    .iter()
-                    .find(|found| endpoint::account_id(found) == from)
-                    .and_then(super::recovery::reading_time)
-                    .is_some_and(|read| read > at),
-                _ => true,
-            })
+        super::recovery::ranked_in_pool(
+            registry,
+            snapshot,
+            provider,
+            current,
+            &value,
+            priority,
+            allowed_ids,
+        )
+        .into_iter()
+        .find(|account| match left {
+            Some((from, at)) if from == account.id => snapshot
+                .accounts
+                .iter()
+                .find(|found| endpoint::account_id(found) == from)
+                .and_then(super::recovery::reading_time)
+                .is_some_and(|read| read > at),
+            _ => true,
+        })
     })?;
     Some(Alternative {
         account_id: account.id.clone(),

@@ -150,7 +150,15 @@ pub(crate) fn with_launch_notes_for_workspace(
             return command.to_string();
         }
     }
-    let workspace_instructions = if cfg!(test) {
+    // Never place workspace instruction text on a shell command line. Only file-based launch-flag
+    // agents carry workspace instructions here (Claude, Droid, Pi, OMP, Copilot CLI). Codex gets
+    // workspace instructions via its SessionStart hook (agents/activity.rs), and Grok Build's
+    // `--rules` accepts inline text only so it skips workspace instructions.
+    let supports_workspace_file = matches!(
+        family.as_str(),
+        "claude" | "droid" | "pi" | "omp" | "copilot"
+    );
+    let workspace_instructions = if cfg!(test) || !supports_workspace_file {
         None
     } else {
         workspace.and_then(|ws| {
@@ -162,8 +170,8 @@ pub(crate) fn with_launch_notes_for_workspace(
         })
     };
     // A coordinator thread's saved command already carries Ghostex's marked-handovers flag; when its
-    // workspace also has instructions, combine both into a per-workspace thread note so threads
-    // follow workspace rules without clobbering user-supplied flags.
+    // workspace also has instructions, combine both into a per-workspace thread note file so
+    // threads follow workspace rules without clobbering user-supplied flags.
     if let (Some(ws), Some(ws_note)) = (workspace, workspace_instructions.as_deref()) {
         let safe_id = crate::workspaces::safe_workspace_file_stem(&ws.workspace_id);
         let thread_note_file = paths.root_dir.join("marked-handovers").join("note.md");
@@ -177,13 +185,6 @@ pub(crate) fn with_launch_notes_for_workspace(
             if write_note_file(&combined_path, &combined).is_ok() {
                 let replacement = quote_shell_arg(&combined_path.to_string_lossy());
                 return command.replacen(&thread_note_quoted, &replacement, 1);
-            }
-        }
-        if family == "codex" {
-            let thread_codex_arg = codex_note_arg(MARKED_HANDOVERS_NOTE);
-            if command.contains(&thread_codex_arg) {
-                let combined = format!("{MARKED_HANDOVERS_NOTE}\n\n{ws_note}");
-                return command.replacen(&thread_codex_arg, &codex_note_arg(&combined), 1);
             }
         }
     }
@@ -237,24 +238,16 @@ fn with_note_at(family: &str, command: &str, text: &str, path: &std::path::Path)
             "--append-system-prompt-file"
         }
         "droid" if !command.contains("--append-system-prompt") => "--append-system-prompt-file",
-        // Pi reads a file named by `--append-system-prompt` (it takes text or a file).
-        "pi" if !command.contains("--append-system-prompt") => "--append-system-prompt",
+        // Pi and OMP read a file named by `--append-system-prompt` (both accept a file path).
+        "pi" | "omp" if !command.contains("--append-system-prompt") => "--append-system-prompt",
         "codex" if !command.contains("developer_instructions=") => {
             return format!("{} {}", command.trim_end(), codex_note_arg(text));
         }
-        // CDXC:AgentGuide 2026-11-21 WHY: Grok Build (1.0.93) and OMP (19.0.0) had no note though
-        // each has a flag that appends to the system prompt. Grok's `--rules` takes text only (a
-        // path reached the model as a path, tested live), so both get the text itself; OMP's takes
-        // text or a file like Pi's.
+        // CDXC:AgentGuide 2026-11-21 WHY: Grok Build (1.0.93) has `--rules` which takes text only
+        // (a path reached the model as a path, tested live). Only Ghostex's built-in short note
+        // uses it; workspace instructions never go on a shell command line.
         "grok" if !command.contains("--rules") => {
             return format!("{} --rules {}", command.trim_end(), quote_shell_arg(text));
-        }
-        "omp" if !command.contains("--append-system-prompt") => {
-            return format!(
-                "{} --append-system-prompt {}",
-                command.trim_end(),
-                quote_shell_arg(text)
-            );
         }
         "copilot" if !command.contains(COPILOT_INSTRUCTIONS_DIRS) => {
             return with_copilot_note(command, text, path);

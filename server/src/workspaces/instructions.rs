@@ -2,19 +2,21 @@
 //! config directory (`<config_dir>/workspace-instructions/<workspace_id>.md`).
 //!
 //! Never writes or edits the user's own global (`~/.claude/CLAUDE.md`, `~/.agents/main.md`) or
-//! repository (`CLAUDE.md`, `AGENTS.md`) files. Delivered automatically by gxserver on every
-//! session start and resume (launch flags for Claude/Codex/Droid/Pi/Grok/OMP/Copilot and
-//! SessionStart hook context for Antigravity/ZCode/Kiro/CodeBuddy/Qoder).
+//! repository (`CLAUDE.md`, `AGENTS.md`) files. Delivered automatically by gxserver via generated
+//! files for Claude, Droid, Pi, OMP, and Copilot CLI, and via SessionStart hook context for
+//! Codex, Antigravity, ZCode, Kiro, CodeBuddy, and Qoder. Never placed inline on a shell command
+//! line.
 
-use std::fs;
-use std::path::PathBuf;
+use std::fs::{self, File};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 
-/// Upper bound on workspace instructions so launch-flag agents (including Codex's `-c` arg)
-/// stay well within shell command limits.
-pub const MAX_WORKSPACE_INSTRUCTIONS_CHARS: usize = 32_768;
+/// Upper bound in UTF-8 bytes on workspace instructions (32 KiB). Bounded on both read and write
+/// so externally edited or huge files cannot exhaust memory or blow hook/launch budgets.
+pub const MAX_WORKSPACE_INSTRUCTIONS_BYTES: usize = 32_768;
 
 /// Folder holding one `.md` file per workspace.
 pub fn workspace_instructions_dir(paths: &GxserverPaths) -> PathBuf {
@@ -46,18 +48,61 @@ pub fn workspace_instructions_file(paths: &GxserverPaths, workspace_id: &str) ->
     workspace_instructions_dir(paths).join(format!("{}.md", safe_workspace_file_stem(workspace_id)))
 }
 
-/// Reads `workspace_id`'s instructions directly from disk so edits made outside Settings show up.
-/// Returns `(content, file_path, exists)`.
+/// Strips unsafe ASCII control characters (everything `< 0x20` except `\n` and `\t`, plus `0x7F`)
+/// and normalizes CRLF/CR line endings to LF.
+pub fn sanitize_workspace_instructions(raw: &str) -> String {
+    let normalized = raw.replace("\r\n", "\n").replace('\r', "\n");
+    normalized
+        .chars()
+        .filter(|&ch| ch == '\n' || ch == '\t' || (ch >= ' ' && ch != '\x7f'))
+        .collect()
+}
+
+/// Bounded read of at most `MAX_WORKSPACE_INSTRUCTIONS_BYTES` bytes from `path`.
+/// Returns `Ok(None)` when the file does not exist, or `Ok(Some((sanitized_text, truncated)))`.
+fn read_bounded_instructions_file(path: &Path) -> std::io::Result<Option<(String, bool)>> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let mut buf = Vec::new();
+    file.take((MAX_WORKSPACE_INSTRUCTIONS_BYTES + 1) as u64)
+        .read_to_end(&mut buf)?;
+    let truncated = buf.len() > MAX_WORKSPACE_INSTRUCTIONS_BYTES;
+    if truncated {
+        buf.truncate(MAX_WORKSPACE_INSTRUCTIONS_BYTES);
+        // Drop any partial trailing UTF-8 sequence split at the byte boundary.
+        while !buf.is_empty() && std::str::from_utf8(&buf).is_err() {
+            let valid_up_to = std::str::from_utf8(&buf)
+                .err()
+                .map(|err| err.valid_up_to())
+                .unwrap_or(0);
+            if buf.len() - valid_up_to <= 3 {
+                buf.truncate(valid_up_to);
+                break;
+            } else {
+                // Invalid UTF-8 earlier in the file; fall through to lossy decoding.
+                break;
+            }
+        }
+    }
+    let decoded = String::from_utf8_lossy(&buf);
+    let cleaned = sanitize_workspace_instructions(&decoded);
+    Ok(Some((cleaned, truncated)))
+}
+
+/// Reads `workspace_id`'s instructions directly from disk (bounded to
+/// `MAX_WORKSPACE_INSTRUCTIONS_BYTES`) so edits made outside Settings show up safely.
+/// Returns `(content, file_path, exists, truncated)`.
 pub fn read_workspace_instructions_file(
     paths: &GxserverPaths,
     workspace_id: &str,
-) -> Result<(String, PathBuf, bool), DomainStateError> {
+) -> Result<(String, PathBuf, bool, bool), DomainStateError> {
     let path = workspace_instructions_file(paths, workspace_id);
-    match fs::read_to_string(&path) {
-        Ok(content) => Ok((content, path, true)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            Ok((String::new(), path, false))
-        }
+    match read_bounded_instructions_file(&path) {
+        Ok(Some((content, truncated))) => Ok((content, path, true, truncated)),
+        Ok(None) => Ok((String::new(), path, false, false)),
         Err(error) => Err(DomainStateError {
             code: "internalError",
             message: format!("Could not read workspace instructions file: {error}"),
@@ -65,24 +110,24 @@ pub fn read_workspace_instructions_file(
     }
 }
 
-/// Writes `content` to `workspace_id`'s instructions file.
+/// Writes `content` to `workspace_id`'s instructions file (at most
+/// `MAX_WORKSPACE_INSTRUCTIONS_BYTES` UTF-8 bytes).
 ///
-/// When `content` is blank and `create_file` is false, removes the file if it exists so an empty
-/// workspace carries no stale file; when `create_file` is true (the "Open file" action), ensures
-/// the file exists on disk so an external editor can open it.
+/// When `content` is blank, removes the file if it exists so an empty workspace carries no stale
+/// file.
 pub fn write_workspace_instructions_file(
     paths: &GxserverPaths,
     workspace_id: &str,
     content: &str,
-    create_file: bool,
 ) -> Result<(String, PathBuf, bool), DomainStateError> {
-    if content.chars().count() > MAX_WORKSPACE_INSTRUCTIONS_CHARS {
-        return Err(DomainStateError::bad_request(format!(
-            "Workspace instructions can be at most {MAX_WORKSPACE_INSTRUCTIONS_CHARS} characters."
-        )));
+    let sanitized = sanitize_workspace_instructions(content);
+    if sanitized.len() > MAX_WORKSPACE_INSTRUCTIONS_BYTES {
+        return Err(DomainStateError::bad_request(
+            "Workspace instructions can be at most 32 KB.",
+        ));
     }
     let path = workspace_instructions_file(paths, workspace_id);
-    if content.trim().is_empty() && !create_file {
+    if sanitized.trim().is_empty() {
         match fs::remove_file(&path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -101,27 +146,31 @@ pub fn write_workspace_instructions_file(
             message: format!("Could not prepare workspace instructions folder: {error}"),
         })?;
     }
-    if create_file && content.is_empty() && path.is_file() {
-        let existing = fs::read_to_string(&path).unwrap_or_default();
-        return Ok((existing, path, true));
-    }
-    fs::write(&path, content).map_err(|error| DomainStateError {
+    fs::write(&path, &sanitized).map_err(|error| DomainStateError {
         code: "internalError",
         message: format!("Could not save workspace instructions file: {error}"),
     })?;
-    Ok((content.to_string(), path, true))
+    Ok((sanitized, path, true))
 }
 
-/// Removes a deleted workspace's instructions file, if one exists.
+/// Removes a deleted workspace's instructions file and any generated launch-note files under
+/// `<root_dir>/agent-note/`.
 pub fn delete_workspace_instructions_file(paths: &GxserverPaths, workspace_id: &str) {
     let path = workspace_instructions_file(paths, workspace_id);
     let _ = fs::remove_file(path);
+    let stem = safe_workspace_file_stem(workspace_id);
+    let note_dir = paths.root_dir.join("agent-note");
+    for prefix in ["workspace", "coordinator-workspace", "thread-workspace"] {
+        let _ = fs::remove_file(note_dir.join(format!("{prefix}-{stem}.md")));
+        let _ = fs::remove_dir_all(note_dir.join(format!("{prefix}-{stem}-copilot")));
+    }
 }
 
 /// Formats non-empty workspace instructions with an explicit precedence statement so every agent
 /// combines them predictably with global rules and per-repo CLAUDE.md / AGENTS.md files.
 pub fn format_workspace_instructions_note(workspace_name: &str, content: &str) -> Option<String> {
-    let trimmed = content.trim();
+    let sanitized = sanitize_workspace_instructions(content);
+    let trimmed = sanitized.trim();
     if trimmed.is_empty() {
         return None;
     }
@@ -139,22 +188,15 @@ pub fn format_workspace_instructions_note(workspace_name: &str, content: &str) -
     ))
 }
 
-/// Reads and formats `workspace_id`'s instructions for injection into an agent launch or
-/// SessionStart hook. Returns `None` when the file is missing, unreadable, or blank.
+/// Reads (bounded to `MAX_WORKSPACE_INSTRUCTIONS_BYTES`) and formats `workspace_id`'s instructions
+/// for injection into an agent launch file or SessionStart hook. Returns `None` when the file is
+/// missing, unreadable, or blank.
 pub fn read_workspace_instructions_note(
     paths: &GxserverPaths,
     workspace_id: &str,
     workspace_name: &str,
 ) -> Option<String> {
     let path = workspace_instructions_file(paths, workspace_id);
-    let content = fs::read_to_string(path).ok()?;
-    let content = if content.chars().count() > MAX_WORKSPACE_INSTRUCTIONS_CHARS {
-        content
-            .chars()
-            .take(MAX_WORKSPACE_INSTRUCTIONS_CHARS)
-            .collect::<String>()
-    } else {
-        content
-    };
+    let (content, _truncated) = read_bounded_instructions_file(&path).ok()??;
     format_workspace_instructions_note(workspace_name, &content)
 }

@@ -3,6 +3,70 @@ use super::*;
 pub(crate) const GROK_PERMISSION_MODE_FLAG: &str = "--permission-mode";
 pub(crate) const GROK_BYPASS_PERMISSIONS_VALUE: &str = "bypassPermissions";
 
+/// Splits `command` into shell-quoted word slices without ever splitting inside `'...'` or `"..."`
+/// arguments, so flag stripping and duplicate checks never modify text inside quoted arguments.
+fn shell_word_slices(command: &str) -> Vec<&str> {
+    let mut words = Vec::new();
+    let mut word_start = None;
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut escaped = false;
+    for (index, character) in command.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if in_single {
+            if character == '\'' {
+                in_single = false;
+            }
+            continue;
+        }
+        if in_double {
+            match character {
+                '\\' => escaped = true,
+                '"' => in_double = false,
+                _ => {}
+            }
+            continue;
+        }
+        match character {
+            '\\' => {
+                if word_start.is_none() {
+                    word_start = Some(index);
+                }
+                escaped = true;
+            }
+            '\'' => {
+                if word_start.is_none() {
+                    word_start = Some(index);
+                }
+                in_single = true;
+            }
+            '"' => {
+                if word_start.is_none() {
+                    word_start = Some(index);
+                }
+                in_double = true;
+            }
+            ch if ch.is_whitespace() => {
+                if let Some(start) = word_start.take() {
+                    words.push(&command[start..index]);
+                }
+            }
+            _ => {
+                if word_start.is_none() {
+                    word_start = Some(index);
+                }
+            }
+        }
+    }
+    if let Some(start) = word_start {
+        words.push(&command[start..]);
+    }
+    words
+}
+
 /// The configured agent command for a one-shot text job (commit message, session title, Catch me
 /// up) with every permission-bypass, approval and sandbox flag removed; the job's builder then
 /// pins its own read-only mode (Codex `exec --sandbox read-only`, Claude `--permission-mode
@@ -38,7 +102,7 @@ pub(crate) fn one_shot_text_job_command(command: &str, agent_id: &str) -> String
         ),
         _ => return trimmed.to_string(),
     };
-    let tokens = trimmed.split_whitespace().collect::<Vec<_>>();
+    let tokens = shell_word_slices(trimmed);
     let mut output = Vec::new();
     let mut index = 0;
     while index < tokens.len() {
@@ -209,8 +273,8 @@ pub(crate) fn strip_accept_all_markers(
     assignments: &[String],
     aliases: &[String],
 ) -> String {
-    command
-        .split_whitespace()
+    shell_word_slices(command)
+        .into_iter()
         .filter(|token| !assignments.iter().any(|assignment| assignment == token))
         .filter(|token| !is_accept_all_flag_token(token, aliases))
         .collect::<Vec<_>>()
@@ -218,7 +282,7 @@ pub(crate) fn strip_accept_all_markers(
 }
 
 pub(crate) fn strip_accept_all_flags(command: &str, aliases: &[String]) -> String {
-    let tokens = command.split_whitespace().collect::<Vec<_>>();
+    let tokens = shell_word_slices(command);
     let mut output = Vec::new();
     let mut index = 0;
     while index < tokens.len() {
@@ -248,7 +312,7 @@ pub(crate) fn strip_accept_all_flags(command: &str, aliases: &[String]) -> Strin
 pub(crate) fn strip_duplicate_accept_all_flags(command: &str, aliases: &[String]) -> String {
     let mut seen = false;
     let mut output = Vec::new();
-    let tokens = command.split_whitespace().collect::<Vec<_>>();
+    let tokens = shell_word_slices(command);
     let mut index = 0;
     while index < tokens.len() {
         let token = tokens[index];
@@ -286,7 +350,7 @@ pub(crate) fn strip_duplicate_accept_all_flags(command: &str, aliases: &[String]
 }
 
 pub(crate) fn command_includes_accept_all_flag(command: &str, aliases: &[String]) -> bool {
-    let tokens = command.split_whitespace().collect::<Vec<_>>();
+    let tokens = shell_word_slices(command);
     for (index, token) in tokens.iter().enumerate() {
         if is_accept_all_flag_token(token, aliases) {
             return true;

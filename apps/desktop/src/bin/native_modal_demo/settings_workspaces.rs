@@ -76,6 +76,9 @@ fn demo_claude_accounts() -> Value {
             {
                 "id": "claude-acct-work",
                 "provider": "claude",
+                "registered": true,
+                "eligible": true,
+                "status": "ready",
                 "selector": "2",
                 "name": "work@company.example",
                 "email": "work@company.example",
@@ -90,6 +93,9 @@ fn demo_claude_accounts() -> Value {
             {
                 "id": "claude-acct-personal-1",
                 "provider": "claude",
+                "registered": true,
+                "eligible": true,
+                "status": "ready",
                 "selector": "1",
                 "name": "personal-one@example.com",
                 "email": "personal-one@example.com",
@@ -104,6 +110,9 @@ fn demo_claude_accounts() -> Value {
             {
                 "id": "claude-acct-personal-2",
                 "provider": "claude",
+                "registered": true,
+                "eligible": true,
+                "status": "ready",
                 "selector": "4",
                 "name": "personal-two@example.com",
                 "email": "personal-two@example.com",

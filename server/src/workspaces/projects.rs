@@ -401,6 +401,16 @@ pub(crate) fn resolve_project_reference(
     id_of(&project).ok_or_else(|| DomainStateError::bad_request("No project id."))
 }
 
+/// Whether a session in `project` with `runtime_settings` must opt out of workspace instructions
+/// and workspace Claude account pools: GBot API chats (which serve external/untrusted callers)
+/// and Help / Ask Ghostex AI chats (the config-folder project).
+pub(crate) fn session_skips_workspace_context(
+    project: &Value,
+    runtime_settings: Option<&Map<String, Value>>,
+) -> bool {
+    is_config_folder_project(project) || crate::agents::is_gbot_api_chat(runtime_settings)
+}
+
 /// Resolves `project`'s workspace id and display name when Workspaces is enabled and the
 /// workspace lives on this computer (not tied to a different workspace PC).
 pub(crate) fn project_workspace_info(

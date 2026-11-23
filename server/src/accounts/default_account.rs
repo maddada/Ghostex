@@ -140,21 +140,34 @@ fn pick_from_pool<'a>(
     if allowed_ids.is_empty() {
         return None;
     }
-    let usable: Vec<&SavedAccount> = registry
+    // Workspace account pools only ever pick registered, signed-in (`!selector.is_empty()`),
+    // enabled, non-expired, Automatic (`eligible`) accounts. Manual-only, unregistered, disabled,
+    // or signed-out accounts are never picked automatically (no fallback to manual-only accounts).
+    let pool: Vec<&SavedAccount> = registry
         .accounts
         .iter()
         .filter(|a| {
             a.provider == provider
-                && !a.user_disabled
-                && a.login_expired_at.is_none()
+                && a.auto_switchable()
+                && a.disabled.is_none()
                 && allowed_ids.iter().any(|id| id == &a.id)
+                && snapshot
+                    .accounts
+                    .iter()
+                    .find(|d| account_id(d) == a.id)
+                    .is_none_or(|d| {
+                        !matches!(
+                            d.status.as_str(),
+                            "loginRequired" | "disabled" | "identityChanged"
+                        )
+                    })
         })
         .collect();
-    if usable.is_empty() {
+    if pool.is_empty() {
         return None;
     }
-    if usable.len() == 1 {
-        return usable.into_iter().next();
+    if pool.len() == 1 {
+        return pool.into_iter().next();
     }
     let stored_rule = registry
         .new_session_accounts
@@ -163,11 +176,7 @@ fn pick_from_pool<'a>(
         .unwrap_or(NewSessionAccount::Auto);
     if matches!(stored_rule, NewSessionAccount::LastUsed) {
         if let Some(last_id) = registry.last_used_accounts.get(&provider) {
-            if let Some(account) = usable
-                .iter()
-                .copied()
-                .find(|a| &a.id == last_id && a.disabled.is_none())
-            {
+            if let Some(account) = pool.iter().copied().find(|a| &a.id == last_id) {
                 return Some(account);
             }
         }
@@ -178,16 +187,6 @@ fn pick_from_pool<'a>(
         | NewSessionAccount::MostUsed
         | NewSessionAccount::SoonestReset => stored_rule,
         NewSessionAccount::LastUsed | NewSessionAccount::Pinned { .. } => NewSessionAccount::Auto,
-    };
-    let auto_candidates: Vec<&SavedAccount> = usable
-        .iter()
-        .copied()
-        .filter(|a| a.auto_switchable())
-        .collect();
-    let pool = if !auto_candidates.is_empty() {
-        auto_candidates
-    } else {
-        usable
     };
     let usage = |account: &SavedAccount| {
         snapshot

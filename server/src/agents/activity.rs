@@ -575,9 +575,28 @@ fn coordinator_session_start_context(
     );
     let is_session_start = read_text(params, "eventName")
         .is_some_and(|event| event.eq_ignore_ascii_case("SessionStart"));
+    let session_runtime = session.get("runtimeSettings").and_then(Value::as_object);
+    let load_workspace_instructions = |paths: &crate::paths::GxserverPaths| -> Option<String> {
+        if cfg!(test) {
+            return None;
+        }
+        let project = repository
+            .get_project(&lifecycle.project_id)
+            .ok()
+            .flatten()?;
+        if crate::workspaces::session_skips_workspace_context(&project, session_runtime) {
+            return None;
+        }
+        let (workspace_id, workspace_name) =
+            crate::workspaces::project_workspace_info(repository.connection(), &project)
+                .ok()
+                .flatten()?;
+        crate::workspaces::read_workspace_instructions_note(paths, &workspace_id, &workspace_name)
+    };
     // A Claude or Codex session whose new conversation lost its earlier context gets its
     // coordinator role (coordinators/role.rs `coordinator_role_again`, GitHub #570) and/or its
     // per-session standing role line (agents/standing_role.rs, GitHub #678) back on SessionStart.
+    // Codex also receives per-workspace instructions here (never inline on a shell command line).
     if matches!(agent.as_str(), "claude" | "codex") && is_session_start {
         let key = (lifecycle.project_id.clone(), lifecycle.session_id.clone());
         let skill_coordinator = crate::coordinators::coordinator_role_is_skill(session)
@@ -599,11 +618,24 @@ fn coordinator_session_start_context(
             &key.0,
             &key.1,
         );
-        return Ok(crate::agents::standing_role::session_start_context(
+        let base_context = crate::agents::standing_role::session_start_context(
             coordinator_context.as_deref(),
             standing_role.as_ref().map(|record| record.role.as_str()),
             &source,
-        ));
+        );
+        let codex_workspace_note = if agent == "codex" && !matches!(source.as_str(), "resume" | "fork")
+        {
+            let paths = crate::paths::get_gxserver_paths(None);
+            load_workspace_instructions(&paths)
+        } else {
+            None
+        };
+        let combined = [base_context.as_deref(), codex_workspace_note.as_deref()]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        return Ok((!combined.is_empty()).then_some(combined));
     }
     let is_session_start = is_session_start
         || (agent == "kiro"
@@ -634,26 +666,7 @@ fn coordinator_session_start_context(
     };
     let legacy_coordinator =
         coordinator && !crate::coordinators::coordinator_role_is_skill(session);
-    let workspace_instructions = if cfg!(test) {
-        None
-    } else {
-        repository
-            .get_project(&lifecycle.project_id)
-            .ok()
-            .flatten()
-            .and_then(|project| {
-                crate::workspaces::project_workspace_info(repository.connection(), &project)
-                    .ok()
-                    .flatten()
-            })
-            .and_then(|(workspace_id, workspace_name)| {
-                crate::workspaces::read_workspace_instructions_note(
-                    &paths,
-                    &workspace_id,
-                    &workspace_name,
-                )
-            })
-    };
+    let workspace_instructions = load_workspace_instructions(&paths);
     // Extension lines are for ordinary sessions only, as on a launch flag (marked_handovers.rs).
     let note = super::note_text_with_workspace(
         &paths,

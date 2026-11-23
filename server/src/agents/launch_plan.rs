@@ -237,7 +237,8 @@ pub(crate) fn create_agent_session_params_for_project(
         runtime_settings.insert("accountId".to_string(), json!(id));
     } else if agentbox_provider.is_none() && !runtime_settings.contains_key("accountId") {
         // New sessions start on a hub (CDXC:AgentProviders 2026-11-19 in accounts/hub/launch.rs),
-        // unless the workspace picks a Claude account or the command chooses its own login.
+        // unless the workspace picks an eligible Claude account or the command chooses its own
+        // login. GBot API chats and Help chats never inherit workspace account pools.
         if let Some(provider) =
             crate::accounts::launch::agent_provider(&agent_id, agent_icon.as_deref())
         {
@@ -247,19 +248,28 @@ pub(crate) fn create_agent_session_params_for_project(
                 .unwrap_or_else(|| provider.id().to_string());
             if !crate::accounts::launch::uses_own_login(&base, provider) {
                 let registry = crate::accounts::store::read(db)?;
+                let skip_workspace = crate::workspaces::session_skips_workspace_context(
+                    project,
+                    Some(&runtime_settings),
+                );
                 let workspace_account = match provider {
-                    crate::accounts::model::Provider::Claude => {
+                    crate::accounts::model::Provider::Claude if !skip_workspace => {
                         let allowed = crate::workspaces::project_claude_account_ids(db, project)?;
-                        allowed.into_iter().find(|id| {
-                            registry.accounts.iter().any(|a| {
-                                a.id == *id
-                                    && a.provider == provider
-                                    && !a.user_disabled
-                                    && a.login_expired_at.is_none()
-                            })
-                        })
+                        if allowed.is_empty() {
+                            None
+                        } else {
+                            let snapshot = crate::accounts::runtime::current_snapshot();
+                            let model = crate::accounts::default_account::launch_model(
+                                provider,
+                                Some(&base),
+                            );
+                            crate::accounts::default_account::quick_launch_account_from_pool(
+                                &registry, &snapshot, provider, &model, &allowed,
+                            )
+                            .map(|a| a.id.clone())
+                        }
                     }
-                    crate::accounts::model::Provider::Codex => None,
+                    _ => None,
                 };
                 if workspace_account.is_none() {
                     if let Some(hub) =
@@ -337,7 +347,14 @@ pub(crate) fn create_agent_session_params_for_project(
                 .entry("accountBaseCommand")
                 .or_insert(json!(command));
         }
-        let workspace_account_ids = crate::workspaces::project_claude_account_ids(db, project)?;
+        let workspace_account_ids = if crate::workspaces::session_skips_workspace_context(
+            project,
+            Some(&runtime_settings),
+        ) {
+            Vec::new()
+        } else {
+            crate::workspaces::project_claude_account_ids(db, project)?
+        };
         crate::accounts::launch::apply_new_session(
             db,
             &agent_id,
@@ -434,13 +451,20 @@ pub(crate) fn create_agent_session_params_for_project(
         }
         _ => {
             let coordinator = session_is_coordinator(&runtime_settings);
-            let workspace_note = crate::workspaces::project_workspace_info(db, project)
-                .ok()
-                .flatten()
-                .map(|(workspace_id, workspace_name)| WorkspaceNoteContext {
-                    workspace_id,
-                    workspace_name,
-                });
+            let workspace_note = if crate::workspaces::session_skips_workspace_context(
+                project,
+                Some(&runtime_settings),
+            ) {
+                None
+            } else {
+                crate::workspaces::project_workspace_info(db, project)
+                    .ok()
+                    .flatten()
+                    .map(|(workspace_id, workspace_name)| WorkspaceNoteContext {
+                        workspace_id,
+                        workspace_name,
+                    })
+            };
             let mut plan = build_session_launch_plan_for_workspace(
                 AgentLaunchInput {
                     accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")

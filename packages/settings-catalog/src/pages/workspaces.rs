@@ -48,9 +48,24 @@ pub(crate) fn workspaces() -> Section {
                 "The Linear key this workspace's projects use, unless a project sets its own.",
             ),
             row(
+                "workspaceHomeMachine",
+                "Workspace computer",
+                "Which computer owns this workspace's agent instructions, Claude accounts and claude.ai connectors (no multi-PC sync).",
+            ),
+            row(
+                "workspaceAgentInstructions",
+                "Agent instructions",
+                "File-backed Markdown rules (up to 32 KB) Ghostex sends automatically to agents in this workspace without editing your CLAUDE.md or AGENTS.md files.",
+            ),
+            row(
                 "workspaceClaudeAccount",
-                "Claude account",
-                "Which of your Claude accounts agents in this workspace's projects use.",
+                "Claude accounts",
+                "Which of your Claude accounts agents in this workspace's projects use, including automatic rotation and usage-limit switches.",
+            ),
+            row(
+                "workspaceClaudeConnectors",
+                "claude.ai connectors",
+                "Slack, Linear and other apps seen on claude.ai per Claude account, with one-click setup in that account's isolated Browser profile.",
             ),
             row(
                 "workspaceBrowserSignins",

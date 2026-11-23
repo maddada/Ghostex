@@ -10,14 +10,15 @@ use super::super::super::super::native_modal_kit::{hsla, MODAL_MONO_FONT};
 use super::*;
 use gpui_component::v_flex;
 
-/// Matches `server/src/workspaces/instructions.rs::MAX_WORKSPACE_INSTRUCTIONS_CHARS`.
-const MAX_WORKSPACE_INSTRUCTIONS_CHARS: usize = 32_768;
+/// Matches `server/src/workspaces/instructions.rs::MAX_WORKSPACE_INSTRUCTIONS_BYTES`.
+const MAX_WORKSPACE_INSTRUCTIONS_BYTES: usize = 32_768;
 
 #[derive(Clone, Default)]
 pub(crate) struct WorkspaceInstructionsState {
     pub(crate) content: String,
     pub(crate) path: String,
     pub(crate) exists: bool,
+    pub(crate) truncated: bool,
     pub(crate) loaded: bool,
     pub(crate) loading: bool,
     pub(crate) saving: bool,
@@ -43,6 +44,8 @@ impl WorkspacesTab {
                             let content = text(entry, "content");
                             let path = text(entry, "path");
                             let exists = entry.get("exists").and_then(Value::as_bool) == Some(true);
+                            let truncated =
+                                entry.get("truncated").and_then(Value::as_bool) == Some(true);
                             let input_id = instructions_input_id(workspace_id);
                             let state = page
                                 .instructions
@@ -52,6 +55,7 @@ impl WorkspacesTab {
                             state.content = content.clone();
                             state.path = path;
                             state.exists = exists;
+                            state.truncated = truncated;
                             state.loaded = true;
                             state.loading = false;
                             // Refresh the visible textarea if the user has not edited away from
@@ -96,6 +100,8 @@ impl WorkspacesTab {
                             state.path = text(&entry, "path");
                             state.exists =
                                 entry.get("exists").and_then(Value::as_bool) == Some(true);
+                            state.truncated =
+                                entry.get("truncated").and_then(Value::as_bool) == Some(true);
                             state.loaded = true;
                             let input_id = instructions_input_id(&workspace_id);
                             page.drafts.remove(&input_id);
@@ -121,8 +127,6 @@ impl WorkspacesTab {
         &mut self,
         workspace_id: String,
         content: String,
-        create_file: bool,
-        open_after_save: bool,
         cx: &mut Context<Self>,
     ) {
         let state = self.instructions.entry(workspace_id.clone()).or_default();
@@ -138,7 +142,6 @@ impl WorkspacesTab {
             json!({
                 "workspaceId": workspace_id,
                 "content": content,
-                "createFile": create_file,
             }),
             RPC_TIMEOUT,
             move |result, cx| {
@@ -152,22 +155,13 @@ impl WorkspacesTab {
                             let exists =
                                 entry.get("exists").and_then(Value::as_bool) == Some(true);
                             state.content = saved;
-                            state.path = path.clone();
+                            state.path = path;
                             state.exists = exists;
+                            state.truncated = false;
                             state.loaded = true;
                             let input_id = instructions_input_id(&workspace_id);
                             page.drafts.remove(&input_id);
                             page.fields.textareas.remove(&input_id);
-                            if open_after_save && !path.is_empty() {
-                                post_store_message(
-                                    &page.store,
-                                    json!({
-                                        "type": "openWorkspaceInstructionsFile",
-                                        "path": path,
-                                    }),
-                                    cx,
-                                );
-                            }
                         }
                         Err(error) => {
                             page.toast(
@@ -222,13 +216,12 @@ impl WorkspacesTab {
             cx,
         );
         let changed = self.draft_changed(&input_id, &state.content);
-        let too_long = shown.chars().count() > MAX_WORKSPACE_INSTRUCTIONS_CHARS;
+        let too_long = shown.len() > MAX_WORKSPACE_INSTRUCTIONS_BYTES;
         let save_workspace = workspace_id.to_string();
         let save_id = input_id.clone();
         let discard_id = input_id.clone();
-        let open_workspace = workspace_id.to_string();
-        let open_id = input_id.clone();
-        let open_saved = state.content.clone();
+        let open_path = state.path.clone();
+        let can_open_file = state.exists && !open_path.is_empty();
         let reload_workspace = workspace_id.to_string();
 
         let status_label = if state.saving {
@@ -236,13 +229,15 @@ impl WorkspacesTab {
         } else if state.loading {
             "Reloading from file...".to_string()
         } else if too_long {
-            format!("At most {MAX_WORKSPACE_INSTRUCTIONS_CHARS} characters.")
+            "At most 32 KB.".to_string()
+        } else if state.truncated && !changed {
+            "File exceeds 32 KB · showing the first 32 KB".to_string()
         } else if changed {
             "Unsaved changes".to_string()
         } else if !state.content.trim().is_empty() {
-            "Saved on this computer · applies on next start or resume".to_string()
+            "Saved on this computer (max 32 KB)".to_string()
         } else {
-            "Empty · stored on this computer only".to_string()
+            "Empty · stored on this computer only (max 32 KB)".to_string()
         };
 
         let display_path = shorten_home_path(&state.path);
@@ -285,18 +280,12 @@ impl WorkspacesTab {
                                 None,
                                 ButtonVariant::Outline,
                                 state.saving || !changed || too_long,
-                                too_long.then(|| {
-                                    SharedString::from(format!(
-                                        "At most {MAX_WORKSPACE_INSTRUCTIONS_CHARS} characters."
-                                    ))
-                                }),
+                                too_long.then(|| SharedString::from("At most 32 KB.")),
                                 move |page: &mut Self, _window, cx| {
                                     let typed = page.draft(&save_id);
                                     page.save_workspace_instructions(
                                         save_workspace.clone(),
                                         typed,
-                                        false,
-                                        false,
                                         cx,
                                     );
                                 },
@@ -329,21 +318,21 @@ impl WorkspacesTab {
                                 "Open file",
                                 Some("modals/settings/file-text.svg"),
                                 ButtonVariant::Outline,
-                                state.saving || too_long || !self.rpc_available(cx),
-                                None,
+                                !can_open_file,
+                                (!can_open_file).then(|| {
+                                    SharedString::from("Save instructions first to create the file.")
+                                }),
                                 move |page: &mut Self, _window, cx| {
-                                    let content = page
-                                        .drafts
-                                        .get(&open_id)
-                                        .cloned()
-                                        .unwrap_or_else(|| open_saved.clone());
-                                    page.save_workspace_instructions(
-                                        open_workspace.clone(),
-                                        content,
-                                        true,
-                                        true,
-                                        cx,
-                                    );
+                                    if !open_path.is_empty() {
+                                        post_store_message(
+                                            &page.store,
+                                            json!({
+                                                "type": "openWorkspaceInstructionsFile",
+                                                "path": open_path,
+                                            }),
+                                            cx,
+                                        );
+                                    }
                                 },
                                 cx,
                             ))
@@ -411,7 +400,7 @@ impl WorkspacesTab {
             input_id,
             RowSpec::new("Agent instructions")
                 .description(
-                    "Sent automatically by Ghostex to Claude, Codex, Antigravity and other agents in this workspace (including phone and remote sessions). Backed by a Markdown file; never edits your global or repository CLAUDE.md / AGENTS.md files.",
+                    "Sent automatically by Ghostex to Claude, Droid, Pi, OMP, and Copilot on next start or resume, and to Codex, Antigravity, ZCode, Kiro, CodeBuddy, and Qoder on new, cleared, or compacted sessions (including phone and remote sessions). Cursor, OpenCode, Hermes, Empryo, and Grok Build do not receive workspace instructions automatically. Backed by a Markdown file (up to 32 KB); never edits your global or repository CLAUDE.md / AGENTS.md files.",
                 )
                 .wide(),
             None,

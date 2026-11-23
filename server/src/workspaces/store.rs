@@ -355,6 +355,11 @@ pub(crate) fn update_workspace_in(
     if params.contains_key("name") && bounded_text(params.get("name"), MAX_NAME_CHARS).is_none() {
         return Err(DomainStateError::bad_request("A workspace needs a name."));
     }
+    let prev_home_machine_id = workspace
+        .get("homeMachineId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .map(str::to_string);
     for key in [
         "name",
         "color",
@@ -376,13 +381,23 @@ pub(crate) fn update_workspace_in(
         }
     }
     // Clearing `homeMachineId` returns the workspace to this computer and drops any cached remote
-    // computer name.
+    // computer name; switching `homeMachineId` to another computer without supplying a new
+    // `homeMachineName` also drops the previous computer's cached name.
     if params
         .get("homeMachineId")
         .is_some_and(|v| v.is_null() || v.as_str().is_some_and(|s| s.trim().is_empty()))
     {
         workspace.remove("homeMachineId");
         workspace.remove("homeMachineName");
+    } else if params.contains_key("homeMachineId") && !params.contains_key("homeMachineName") {
+        let next_home_machine_id = workspace
+            .get("homeMachineId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .map(str::to_string);
+        if next_home_machine_id != prev_home_machine_id {
+            workspace.remove("homeMachineName");
+        }
     }
     // `claudeAccountIds` (new multi-account clients) and `claudeAccountId` (legacy single-account
     // clients) stay in sync so older phones and desktops always see a consistent choice.

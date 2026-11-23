@@ -325,7 +325,11 @@ pub(crate) fn to_agent_resume_input(
     let base_command = base_command
         .map(|command| with_resume_model_pin(agent_id.as_deref(), project, session, command))
         .map(|command| with_codex_moved_cwd(agent_id.as_deref(), session, command));
-    let workspace_note = if cfg!(test) {
+    let workspace_note = if cfg!(test)
+        || crate::workspaces::session_skips_workspace_context(
+            project,
+            session.get("runtimeSettings").and_then(Value::as_object),
+        ) {
         None
     } else {
         crate::storage::open_gxserver_database(&crate::paths::get_gxserver_paths(None))
