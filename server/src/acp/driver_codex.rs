@@ -333,6 +333,7 @@ struct CodexState {
     ignored_turn_ids: VecDeque<String>,
     completed_turn_ids: VecDeque<String>,
     working: bool,
+    last_turn_interrupted: bool,
     approval_level: AcpApprovalLevel,
     read_only: bool,
     deny_mode: CodexDenyMode,
@@ -387,6 +388,7 @@ impl CodexState {
             ignored_turn_ids: VecDeque::new(),
             completed_turn_ids: VecDeque::new(),
             working: false,
+            last_turn_interrupted: false,
             approval_level,
             read_only,
             deny_mode,
@@ -531,7 +533,7 @@ impl CodexActivityReporter {
         thread::spawn(move || {
             while rx.recv().is_ok() {
                 while rx.try_recv().is_ok() {}
-                let (act, sid, path, perm) = {
+                let (act, sid, path, perm, interrupted) = {
                     let s = state.lock().unwrap_or_else(|p| p.into_inner());
                     let front = s
                         .pending_requests
@@ -544,7 +546,13 @@ impl CodexActivityReporter {
                     } else {
                         "idle"
                     };
-                    (act, s.thread_id.clone(), s.thread_path.clone(), front)
+                    (
+                        act,
+                        s.thread_id.clone(),
+                        s.thread_path.clone(),
+                        front,
+                        s.last_turn_interrupted,
+                    )
                 };
                 ep.report_activity_with_path(
                     "codex",
@@ -552,6 +560,7 @@ impl CodexActivityReporter {
                     sid.as_deref(),
                     path.as_deref(),
                     perm.as_ref(),
+                    interrupted,
                 );
             }
         });
@@ -947,7 +956,10 @@ fn interrupt_active_codex_turn(
     if let Some(proc) = proc_opt.as_ref() {
         cancel_all_pending_codex(&proc.transport, state);
         let (tid_opt, turn_id_opt, still_working) = {
-            let s = state.lock().unwrap_or_else(|p| p.into_inner());
+            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            if s.working {
+                s.last_turn_interrupted = true;
+            }
             (s.thread_id.clone(), s.active_turn_id.clone(), s.working)
         };
         if still_working {
@@ -1866,6 +1878,16 @@ fn spawn_codex_stdout_reader(
                                 .pointer("/turn/id")
                                 .or_else(|| params.get("turnId"))
                                 .and_then(Value::as_str);
+                            let turn_interrupted = params
+                                .pointer("/turn/status")
+                                .or_else(|| params.get("status"))
+                                .and_then(Value::as_str)
+                                .is_some_and(|status| {
+                                    matches!(
+                                        status.to_ascii_lowercase().as_str(),
+                                        "interrupted" | "cancelled" | "canceled" | "aborted"
+                                    )
+                                });
                             let (stale_turn, orphaned): (bool, Vec<PendingCodexRequest>) = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                                 if let Some(done_id) = completed_tid {
@@ -1888,6 +1910,9 @@ fn spawn_codex_stdout_reader(
                                         (true, Vec::new())
                                     } else {
                                         s.working = false;
+                                        if turn_interrupted {
+                                            s.last_turn_interrupted = true;
+                                        }
                                         s.awaiting_turn_start = false;
                                         s.active_turn_id = None;
                                         s.file_change_items.clear();
@@ -1898,6 +1923,9 @@ fn spawn_codex_stdout_reader(
                                     (true, Vec::new())
                                 } else {
                                     s.working = false;
+                                    if turn_interrupted {
+                                        s.last_turn_interrupted = true;
+                                    }
                                     s.awaiting_turn_start = false;
                                     s.active_turn_id = None;
                                     s.file_change_items.clear();
@@ -2715,6 +2743,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        s.last_turn_interrupted = false;
                         s.awaiting_turn_start = true;
                         s.active_turn_id = None;
                         s.clear_live_turn_output();
@@ -2882,6 +2911,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        s.last_turn_interrupted = false;
                         s.awaiting_turn_start = true;
                         s.active_turn_id = None;
                         s.clear_live_turn_output();
@@ -2948,6 +2978,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     if let Some(proc) = proc_opt.as_ref() {
                         cancel_all_pending_codex(&proc.transport, &state);
                         if is_working {
+                            state
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .last_turn_interrupted = true;
                             if let (Some(tid_ref), Some(turn_id_ref)) =
                                 (tid.as_deref(), turn_id.as_deref())
                             {

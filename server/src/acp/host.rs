@@ -321,8 +321,16 @@ impl GxserverEndpoint {
         activity: &str,
         native_session_id: Option<&str>,
         pending_permission: Option<&PendingPermission>,
+        interrupted: bool,
     ) {
-        self.report_activity_with_path(family, activity, native_session_id, None, pending_permission);
+        self.report_activity_with_path(
+            family,
+            activity,
+            native_session_id,
+            None,
+            pending_permission,
+            interrupted,
+        );
     }
 
     pub(super) fn report_activity_with_path(
@@ -332,6 +340,7 @@ impl GxserverEndpoint {
         native_session_id: Option<&str>,
         explicit_transcript_path: Option<&str>,
         pending_permission: Option<&PendingPermission>,
+        interrupted: bool,
     ) {
         let event_name = match activity {
             "working" => {
@@ -342,6 +351,9 @@ impl GxserverEndpoint {
                 self.saw_working.store(true, Ordering::Relaxed);
                 "PermissionRequest"
             }
+            // An interrupted/cancelled turn settles as `Interrupt` (idle), never `Stop`, so
+            // gxserver never treats a user-stopped Non-CLI turn as finished.
+            _ if interrupted => "Interrupt",
             // Initial startup idle before any turn has run must report `SessionStart` (not `Stop`),
             // so brand-new Non-CLI drafts are not promoted out of draft status on boot.
             _ if self.saw_working.load(Ordering::Relaxed) => "Stop",
@@ -701,6 +713,7 @@ struct HostState {
     family: String,
     native_session_id: Option<String>,
     working: bool,
+    last_turn_interrupted: bool,
     turn_generation: u64,
     approval_level: AcpApprovalLevel,
     in_flight_target_level: Option<AcpApprovalLevel>,
@@ -740,6 +753,7 @@ impl HostState {
             family: family.to_string(),
             native_session_id: None,
             working: false,
+            last_turn_interrupted: false,
             turn_generation: 0,
             approval_level,
             in_flight_target_level: None,
@@ -1161,7 +1175,7 @@ impl ActivityReporter {
             while rx.recv().is_ok() {
                 // Coalesce burst updates so we always publish the latest state.
                 while rx.try_recv().is_ok() {}
-                let (act, sid, perm) = {
+                let (act, sid, perm, interrupted) = {
                     let s = state.lock().unwrap_or_else(|p| p.into_inner());
                     let front = s.pending_permissions.front().cloned();
                     let act = if front.is_some() {
@@ -1171,9 +1185,9 @@ impl ActivityReporter {
                     } else {
                         "idle"
                     };
-                    (act, s.native_session_id.clone(), front)
+                    (act, s.native_session_id.clone(), front, s.last_turn_interrupted)
                 };
-                ep.report_activity(&family, act, sid.as_deref(), perm.as_ref());
+                ep.report_activity(&family, act, sid.as_deref(), perm.as_ref(), interrupted);
             }
         });
         Self { tx: Some(tx) }
@@ -2069,11 +2083,13 @@ pub fn run(args: &[String]) -> i32 {
                     ep.ack(id, true, snap, None);
                 }
                 "abort" => {
-                    let sid = state
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .native_session_id
-                        .clone();
+                    let sid = {
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        if s.working {
+                            s.last_turn_interrupted = true;
+                        }
+                        s.native_session_id.clone()
+                    };
                     if let Some(sid) = sid {
                         let _ = transport.notify("session/cancel", json!({ "sessionId": sid }));
                     }
@@ -2346,6 +2362,10 @@ pub fn run(args: &[String]) -> i32 {
                         }
                     };
                     if is_working && interrupt {
+                        state
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .last_turn_interrupted = true;
                         cancel_all_pending_permissions(&transport, &state);
                         let _ = transport.notify("session/cancel", json!({ "sessionId": sid }));
                         let wait_until = SystemTime::now() + Duration::from_secs(4);
@@ -2361,6 +2381,7 @@ pub fn run(args: &[String]) -> i32 {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.turn_generation = s.turn_generation.wrapping_add(1);
                         s.working = true;
+                        s.last_turn_interrupted = false;
                         s.clear_live_turn_output();
                         s.turn_generation
                     };
@@ -2408,10 +2429,17 @@ pub fn run(args: &[String]) -> i32 {
                         };
                         println!("[Native] Turn finished ({stop_reason}).");
                         let _ = std::io::stdout().flush();
+                        let was_cancelled = matches!(
+                            stop_reason.to_ascii_lowercase().as_str(),
+                            "cancelled" | "canceled" | "interrupted" | "aborted"
+                        );
                         let (is_current_turn, orphaned_perms) = {
                             let mut s = st_turn.lock().unwrap_or_else(|p| p.into_inner());
                             if s.turn_generation == turn_gen {
                                 s.working = false;
+                                if was_cancelled {
+                                    s.last_turn_interrupted = true;
+                                }
                                 s.clear_live_turn_output();
                                 let drained: Vec<PendingPermission> =
                                     s.pending_permissions.drain(..).collect();
@@ -2455,6 +2483,10 @@ pub fn run(args: &[String]) -> i32 {
                     }
                     cancel_all_pending_permissions(&transport, &state);
                     if is_working {
+                        state
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .last_turn_interrupted = true;
                         if let Some(sid_ref) = sid.as_deref() {
                             let _ =
                                 transport.notify("session/cancel", json!({ "sessionId": sid_ref }));

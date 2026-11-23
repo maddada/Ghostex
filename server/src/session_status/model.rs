@@ -81,6 +81,11 @@ pub(super) struct ActivityState {
     /// Since when this working state has been only background work the agent left running after
     /// its turn ended (`backgroundOnlySince`, see `turn_end_keeps_working`).
     pub(super) background_only_since: Option<String>,
+    /// The user interrupted the current working turn (Escape in terminal or Stop / Interrupt from
+    /// chat). Kept until a new turn starts so late Stop hooks, OSC 7501 `done` reports, abort
+    /// bells, and title stops from the interrupted turn settle to idle instead of entering
+    /// `attention` (`finished`).
+    pub(super) user_interrupted: Option<bool>,
 }
 
 impl ActivityState {
@@ -111,6 +116,7 @@ pub(super) struct ActivityInput {
     pub(super) agent_id: Option<String>,
     pub(super) attention_source: Option<String>,
     pub(super) event: Option<String>,
+    pub(super) event_name: Option<String>,
     pub(super) now_iso: String,
     pub(super) now_ms: i64,
     pub(super) previous: ActivityState,
@@ -152,13 +158,21 @@ pub fn compute_activity_update(
     let previous_state = previous.clone();
     let program_status_activity = read_text(params, "programStatusActivity")
         .filter(|value| matches!(value.as_str(), "idle" | "working" | "attention"));
-    // An Escape says the user stopped this turn, so its idle is not a finished turn.
+    let event_name = read_text(params, "eventName").or_else(|| read_text(params, "rawEventName"));
+    // An Escape says the user stopped this turn, so its idle/done is not a finished turn.
     if event.as_deref() == Some("escape") {
         if let (Some(project_id), Some(session_id)) = (
             read_text_value(session, "projectId"),
             read_text_value(session, "sessionId"),
         ) {
             crate::program_status::note_program_status_interrupt(&project_id, &session_id);
+        }
+    } else if is_new_turn_start_event(event_name.as_deref()) {
+        if let (Some(project_id), Some(session_id)) = (
+            read_text_value(session, "projectId"),
+            read_text_value(session, "sessionId"),
+        ) {
+            crate::program_status::clear_program_status_interrupt(&project_id, &session_id);
         }
     }
     // Restoring detection's own view when a program stops driving the session
@@ -180,6 +194,7 @@ pub fn compute_activity_update(
             attention_source: read_text(params, "attentionSource")
                 .filter(|value| value == TURN_COMPLETE_ATTENTION_SOURCE),
             event: event.clone(),
+            event_name: event_name.clone(),
             now_iso: iso_from_ms(now_ms_value),
             now_ms: now_ms_value,
             previous: previous.clone(),
@@ -502,6 +517,9 @@ impl ActivityState {
             "backgroundOnlySince",
             self.background_only_since.clone(),
         );
+        if self.user_interrupted == Some(true) {
+            output.insert("userInterrupted".to_string(), Value::Bool(true));
+        }
         Value::Object(output)
     }
 }

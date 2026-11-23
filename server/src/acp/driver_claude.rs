@@ -282,6 +282,7 @@ impl PendingClaudeRequest {
 struct ClaudeState {
     native_session_id: Option<String>,
     working: bool,
+    last_turn_interrupted: bool,
     approval_level: AcpApprovalLevel,
     read_only: bool,
     native_mode: String,
@@ -317,6 +318,7 @@ impl ClaudeState {
         Self {
             native_session_id: None,
             working: false,
+            last_turn_interrupted: false,
             approval_level,
             read_only,
             native_mode: if read_only { "plan" } else { "default" }.to_string(),
@@ -450,7 +452,7 @@ impl ClaudeActivityReporter {
         thread::spawn(move || {
             while rx.recv().is_ok() {
                 while rx.try_recv().is_ok() {}
-                let (act, sid, perm) = {
+                let (act, sid, perm, interrupted) = {
                     let s = state.lock().unwrap_or_else(|p| p.into_inner());
                     let front = s
                         .pending_requests
@@ -463,9 +465,9 @@ impl ClaudeActivityReporter {
                     } else {
                         "idle"
                     };
-                    (act, s.native_session_id.clone(), front)
+                    (act, s.native_session_id.clone(), front, s.last_turn_interrupted)
                 };
-                ep.report_activity("claude", act, sid.as_deref(), perm.as_ref());
+                ep.report_activity("claude", act, sid.as_deref(), perm.as_ref(), interrupted);
             }
         });
         Self { tx: Some(tx) }
@@ -1147,10 +1149,22 @@ fn spawn_and_init_claude(
                                         }
                                     }
                                 }
+                                let result_interrupted = msg
+                                    .get("subtype")
+                                    .and_then(Value::as_str)
+                                    .is_some_and(|sub| {
+                                        let lower = sub.to_ascii_lowercase();
+                                        lower.contains("interrupt")
+                                            || lower.contains("cancel")
+                                            || lower.contains("abort")
+                                    });
                                 if !s.working {
                                     (true, Vec::new())
                                 } else {
                                     s.working = false;
+                                    if result_interrupted {
+                                        s.last_turn_interrupted = true;
+                                    }
                                     s.clear_live_turn_output();
                                     (false, s.pending_requests.drain(..).collect())
                                 }
@@ -1269,7 +1283,13 @@ fn drain_or_restart_claude_turn(
     process_gen: &Arc<AtomicU64>,
     wait_timeout: Duration,
 ) -> Result<(), String> {
-    let was_working = state.lock().unwrap_or_else(|p| p.into_inner()).working;
+    let was_working = {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        if s.working {
+            s.last_turn_interrupted = true;
+        }
+        s.working
+    };
     cancel_all_pending_claude(&proc.transport, state);
     if !was_working {
         return Ok(());
@@ -1890,6 +1910,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     let sid = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        s.last_turn_interrupted = false;
                         s.clear_live_turn_output();
                         s.native_session_id.clone()
                     };
@@ -1946,6 +1967,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     }
                     cancel_all_pending_claude(&proc.transport, &state);
                     if is_working {
+                        state
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .last_turn_interrupted = true;
                         let _ = proc.transport.control_request(
                             json!({ "subtype": "interrupt" }),
                             Duration::from_secs(3),

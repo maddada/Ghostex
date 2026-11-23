@@ -3,6 +3,7 @@ use std::env;
 use std::{
     collections::HashMap,
     io::{Read, Write},
+    sync::Arc,
 };
 
 use axum::{
@@ -31,6 +32,7 @@ const DEFAULT_ROWS: u16 = 30;
 
 #[derive(Clone)]
 pub(crate) struct TerminalWsState {
+    pub app_state: Arc<crate::server::AppState>,
     pub auth_token: String,
     pub device_api_tokens: DeviceApiTokens,
     /// The desktop's owner sessions, which open a terminal like the token file does.
@@ -107,6 +109,8 @@ pub(crate) async fn handle_terminal_socket(
     let cols = query_dimension(&query, "cols", DEFAULT_COLS);
     let rows = query_dimension(&query, "rows", DEFAULT_ROWS);
     let metadata_state = state.clone();
+    let ws_project_id = project_id.clone();
+    let ws_session_id = session_id.clone();
     let metadata = tokio::task::spawn_blocking(move || {
         resolve_attach_metadata(&metadata_state, project_id, session_id)
     })
@@ -145,7 +149,17 @@ pub(crate) async fn handle_terminal_socket(
             return;
         }
     };
-    run_terminal_socket(socket, spawned, zmx_name, cols, rows).await;
+    run_terminal_socket(
+        socket,
+        spawned,
+        zmx_name,
+        cols,
+        rows,
+        state.app_state,
+        ws_project_id,
+        ws_session_id,
+    )
+    .await;
 }
 
 fn resolve_attach_metadata(
@@ -289,6 +303,9 @@ async fn run_terminal_socket(
     zmx_name: String,
     cols: u16,
     rows: u16,
+    app_state: Arc<crate::server::AppState>,
+    project_id: String,
+    session_id: String,
 ) {
     let SpawnedTerminal {
         child,
@@ -326,6 +343,26 @@ async fn run_terminal_socket(
             message = socket_receiver.next() => {
                 match message {
                     Some(Ok(Message::Binary(bytes))) => {
+                        // A bare Escape keystroke (`\x1b`, not a multi-byte CSI/OSC/Alt sequence)
+                        // from a web or remote terminal reports the same user interrupt as the
+                        // desktop terminal's Escape key so interrupted turns never ring as finished.
+                        if bytes.as_ref() == b"\x1b" {
+                            let app_state = Arc::clone(&app_state);
+                            let project_id = project_id.clone();
+                            let session_id = session_id.clone();
+                            tokio::task::spawn_blocking(move || {
+                                let mut params = Map::new();
+                                params.insert("projectId".to_string(), json!(project_id));
+                                params.insert("sessionId".to_string(), json!(session_id));
+                                params.insert("event".to_string(), json!("escape"));
+                                let _ = crate::server::dispatch_agent_http_blocking(
+                                    &app_state,
+                                    "/api/updateAgentActivity".to_string(),
+                                    "terminal-ws-escape".to_string(),
+                                    params,
+                                );
+                            });
+                        }
                         if input_tx.send(bytes.to_vec()).await.is_err() {
                             break;
                         }

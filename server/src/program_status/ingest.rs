@@ -218,7 +218,16 @@ pub(crate) fn apply_program_status(
             }
             return;
         }
-        FinishedTurnStep::None => derived.state,
+        FinishedTurnStep::None => {
+            // An OSC 7501 `done` emitted after the user interrupted the turn (Codex 0.164+,
+            // Antigravity CLI, etc.) ends the interrupted turn quietly instead of raising a
+            // finished-turn blue dot or notification.
+            if derived.state == "done" && entry.interrupted {
+                "idle"
+            } else {
+                derived.state
+            }
+        }
     };
     set_program_status_applied(project_id, session_id, Some(key.clone()), Some(effective));
     if entry.applied_key.is_none() && already_seen(&session, derived.state, derived.record.as_ref())
@@ -254,14 +263,16 @@ pub(crate) fn apply_program_status(
     // Detection owns idle. A program's idle after its own
     // working or blocked hands the session to detection's view (its
     // shadow, which may still say working); a finished turn is `finished`
-    // above.
+    // above. When the user interrupted the turn, settle directly to idle
+    // instead of restoring a working shadow that has not expired yet.
     if effective == "idle" && matches!(entry.applied_state.as_deref(), Some("working" | "blocked"))
     {
-        let entry = program_status_entry(project_id, session_id).unwrap_or(entry);
-        hand_back_to_detection(state, project_id, session_id, &entry);
-        return;
-    }
-    if effective == "idle" {
+        if !entry.interrupted {
+            let entry = program_status_entry(project_id, session_id).unwrap_or(entry);
+            hand_back_to_detection(state, project_id, session_id, &entry);
+            return;
+        }
+    } else if effective == "idle" {
         if records_changed {
             let _ = schedule_presentation_session_delta(
                 state,

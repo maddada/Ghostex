@@ -115,17 +115,18 @@ impl GhostexGpuiApp {
         shell_session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(key) = self
-            .local_workspace_session_mappings
-            .iter()
-            .find_map(|(key, session_id)| (*session_id == shell_session_id).then(|| key.clone()))
-        else {
-            return;
-        };
-        self.gx_store_terminal_escape(
-            ghostex_gx_core::SessionKey::local(key.project_id, key.session_id),
-            cx,
-        );
+        match self.workspace_terminal_key_for_shell_session(shell_session_id) {
+            Some(GpuiWorkspaceTerminalSessionKey::Local(key)) => {
+                self.gx_store_terminal_escape(
+                    ghostex_gx_core::SessionKey::local(key.project_id, key.session_id),
+                    cx,
+                );
+            }
+            Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) => {
+                self.gx_store_terminal_escape(key.attention_session_key(), cx);
+            }
+            None => {}
+        }
     }
 
     /// Escape inside the blocking "Generating title" overlay cancels the gxserver first-prompt title

@@ -1,5 +1,42 @@
 use super::*;
 
+pub(super) fn is_new_turn_start_event(event_name: Option<&str>) -> bool {
+    let Some(event_name) = event_name else {
+        return false;
+    };
+    let compact = event_name
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['_', '-', '.'], "");
+    matches!(
+        compact.as_str(),
+        "userpromptsubmit"
+            | "promptsubmit"
+            | "beforesubmitprompt"
+            | "beforeagent"
+            | "beforeagentstart"
+            | "preinvocation"
+            | "agentstart"
+            | "onsessionstart"
+            | "onsessionreset"
+            | "sessionbusy"
+    )
+}
+
+fn is_post_tool_wind_down_event(event_name: Option<&str>) -> bool {
+    let Some(event_name) = event_name else {
+        return false;
+    };
+    let compact = event_name
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['_', '-', '.'], "");
+    matches!(
+        compact.as_str(),
+        "posttooluse" | "posttoolusefailure" | "posttoolcall" | "aftertool" | "postinvocation"
+    )
+}
+
 pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityState {
     let previous = input.previous.clone();
     let previous_activity = previous.activity.clone();
@@ -28,6 +65,7 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
         // The acknowledged stint's start no longer counts for anything (`ended_stint_start` in
         // model.rs); the next working stint sets a new one.
         next.working_started_at = None;
+        next.user_interrupted = None;
         return next;
     }
 
@@ -49,26 +87,31 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
             next.last_changed_at = Some(input.now_iso.clone());
             next.working_source = None;
             next.working_started_at = None;
-        } else if previous_activity == "working"
-            && previous.working_source.as_deref() == Some("explicit")
-        {
-            /*
-            CDXC:SessionStatus 2026-09-04 WHY:
-            Escape is how a turn gets interrupted, and Claude Code fires no Stop
-            hook for an interrupted turn (it has no interrupt hook either), so a
-            hook-backed working claim made by UserPromptSubmit or PreToolUse
-            survived forever after the user pressed Stop: a turn cut off after a
-            second never showed a spinner title, and the same-title stop rules
-            above need one, so the idle title was ignored for hours (observed
-            2026-09-03 and 2026-09-04). An Escape therefore ends the hook's
-            claim and hands the state to the title: the stale-title window
-            closes it to idle if the agent really stopped, the spinner heartbeat
-            keeps it working if Escape stopped nothing, and the next hook makes
-            it explicit again. Sent by the chat-view interrupt endpoint and the
-            terminal-pane Escape key alike.
-            */
-            next.working_source = Some("title".to_string());
-            next.last_title_change_at = Some(input.now_iso.clone());
+            next.user_interrupted = None;
+        } else if previous_activity == "working" {
+            // The user interrupted a running turn: remember this across the turn's wind-down and
+            // idle settle until a new turn starts so late Stop hooks, OSC 7501 `done` reports,
+            // abort bells, or title stops never enter `attention` (`finished`).
+            next.user_interrupted = Some(true);
+            if previous.working_source.as_deref() == Some("explicit") {
+                /*
+                CDXC:SessionStatus 2026-09-04 WHY:
+                Escape is how a turn gets interrupted, and Claude Code fires no Stop
+                hook for an interrupted turn (it has no interrupt hook either), so a
+                hook-backed working claim made by UserPromptSubmit or PreToolUse
+                survived forever after the user pressed Stop: a turn cut off after a
+                second never showed a spinner title, and the same-title stop rules
+                above need one, so the idle title was ignored for hours (observed
+                2026-09-03 and 2026-09-04). An Escape therefore ends the hook's
+                claim and hands the state to the title: the stale-title window
+                closes it to idle if the agent really stopped, the spinner heartbeat
+                keeps it working if Escape stopped nothing, and the next hook makes
+                it explicit again. Sent by the chat-view interrupt endpoint and the
+                terminal-pane Escape key alike.
+                */
+                next.working_source = Some("title".to_string());
+                next.last_title_change_at = Some(input.now_iso.clone());
+            }
             if next.last_changed_at.is_none() {
                 next.last_changed_at = Some(input.now_iso.clone());
             }
@@ -113,12 +156,14 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
     // CDXC:SessionStatus 2026-11-22 DECISION (Q4463):
     // Antigravity CLI emits `🔔 agy` titles and terminal BEL events at startup and between tool
     // calls while hooks report `working`, with no prompt on screen. Those non-explicit signals must
-    // never override explicit hook-backed `working` state or trigger false startup attention.
+    // never override explicit hook-backed `working` state, trigger false startup attention, or
+    // fire attention while an interrupted turn is unwinding.
     if is_antigravity
         && !has_explicit_activity
         && matches!(input.event.as_deref(), Some("title" | "bell"))
-        && previous.activity == "working"
-        && previous.working_source.as_deref() == Some("explicit")
+        && ((previous.activity == "working"
+            && previous.working_source.as_deref() == Some("explicit"))
+            || previous.user_interrupted == Some(true))
     {
         let mut next = previous.clone();
         next.agent_name = Some("antigravity".to_string());
@@ -230,6 +275,23 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
         active_attention_suppressed_until(&previous, input.now_ms);
 
     if requested.as_deref() == Some("working") {
+        let new_turn_start = is_new_turn_start_event(input.event_name.as_deref());
+        let post_tool_wind_down = is_post_tool_wind_down_event(input.event_name.as_deref());
+        // A cancelled tool reporting PostToolUse / PostToolUseFailure after the user interrupted
+        // must neither restart an already-settled idle session nor clear `user_interrupted` or
+        // re-promote a title-demoted working claim back to explicit.
+        if previous.user_interrupted == Some(true) && post_tool_wind_down {
+            if previous_activity != "working" {
+                let mut next = previous.clone();
+                next.agent_name = agent_name;
+                return next;
+            }
+            let mut next = previous.clone();
+            next.agent_name = agent_name;
+            next.last_title = title_transition.last_title;
+            next.last_title_change_at = title_transition.last_title_change_at;
+            return next;
+        }
         let working_source = if input.event.as_deref() == Some("title")
             && title_signal.as_ref().map(|signal| signal.state.as_str()) == Some("working")
         {
@@ -253,10 +315,21 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
                 &input.now_iso,
             );
         }
+        let keeps_interrupted = previous.user_interrupted == Some(true)
+            && previous_activity == "working"
+            && !new_turn_start
+            && working_source == "title";
+        let next_attention_suppressed_until = if new_turn_start
+            || (previous.user_interrupted == Some(true) && !keeps_interrupted)
+        {
+            None
+        } else {
+            active_attention_suppressed_until
+        };
         return ActivityState {
             activity: "working".to_string(),
             agent_name,
-            attention_suppressed_until: active_attention_suppressed_until,
+            attention_suppressed_until: next_attention_suppressed_until,
             has_seen_working: Some(true),
             is_acknowledged: Some(false),
             last_changed_at: Some(if previous_activity == "working" {
@@ -268,6 +341,7 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
             }),
             last_title: title_transition.last_title,
             last_title_change_at: title_transition.last_title_change_at,
+            user_interrupted: keeps_interrupted.then_some(true),
             working_source: Some(working_source.to_string()),
             working_started_at: Some(if previous_activity == "working" {
                 previous
@@ -281,6 +355,30 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
     }
 
     if requested.as_deref() == Some("attention") {
+        // A turn the user interrupted must never enter finished-turn attention (Stop hook, passive
+        // title stop, or abort bell): settle to idle and keep `user_interrupted` until a new turn
+        // begins so a second late signal from the same interrupted turn is suppressed too.
+        if previous.user_interrupted == Some(true)
+            && input.event.as_deref() != Some("terminalError")
+            && (input.attention_source.as_deref() == Some(TURN_COMPLETE_ATTENTION_SOURCE)
+                || !has_explicit_activity
+                || input.event.as_deref() == Some("bell"))
+        {
+            let mut next = previous.clone();
+            next.activity = "idle".to_string();
+            next.agent_name = agent_name;
+            next.attention_event_id = None;
+            next.attention_source = None;
+            next.attention_suppressed_until = active_attention_suppressed_until;
+            next.has_seen_working = Some(false);
+            next.is_acknowledged = Some(true);
+            next.last_changed_at = Some(input.now_iso.clone());
+            next.last_title = title_transition.last_title;
+            next.last_title_change_at = title_transition.last_title_change_at;
+            next.working_source = None;
+            next.working_started_at = None;
+            return next;
+        }
         if let Some(until) = active_attention_suppressed_until.clone() {
             if !matches!(input.event.as_deref(), Some("bell" | "terminalError")) {
                 return state_for_suppressed_attention(
@@ -369,6 +467,9 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
     next.last_title_change_at = title_transition.last_title_change_at;
     if let Some(until) = active_attention_suppressed_until {
         next.attention_suppressed_until = Some(until);
+    }
+    if input.event.as_deref() == Some("terminalExited") {
+        next.user_interrupted = None;
     }
     next.working_source = None;
     next.working_started_at = None;

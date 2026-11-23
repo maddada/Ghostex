@@ -252,11 +252,36 @@ pub(crate) fn ingest_agent_hook_event(
     let mut quiet_turn_end = false;
     let mut session_chat_prompt_changed = false;
     let mut session_chat_activity_changed = false;
+    let normalized_event = read_text(params, "eventName")
+        .or_else(|| read_text(params, "rawEventName"))
+        .unwrap_or_default();
+    if normalized_event.eq_ignore_ascii_case("interrupt") {
+        crate::program_status::note_program_status_interrupt(
+            &lifecycle.project_id,
+            &lifecycle.session_id,
+        );
+    }
     if normalize_agent_id(params.get("agentName").and_then(Value::as_str)).as_deref()
         == Some("antigravity")
     {
-        let stop = read_text(params, "eventName")
-            .is_some_and(|event| event.trim().eq_ignore_ascii_case("stop"));
+        let stop = normalized_event.eq_ignore_ascii_case("stop");
+        if stop
+            && params
+                .get("terminationReason")
+                .or_else(|| params.get("termination_reason"))
+                .and_then(Value::as_str)
+                .is_some_and(|reason| {
+                    let lower = reason.to_ascii_lowercase();
+                    lower.contains("cancel")
+                        || lower.contains("interrupt")
+                        || lower.contains("abort")
+                })
+        {
+            crate::program_status::note_program_status_interrupt(
+                &lifecycle.project_id,
+                &lifecycle.session_id,
+            );
+        }
         crate::program_status::note_antigravity_background_wait(
             &lifecycle.project_id,
             &lifecycle.session_id,
@@ -1282,6 +1307,7 @@ pub(crate) fn persistable_agent_activity_snapshot(value: Option<&Value>) -> Valu
         // false and the prompt would never reach disk.
         "sessionChatPrompt",
         "suppressedUntil",
+        "userInterrupted",
         "workingSource",
         "workingStartedAt",
         // The working stint is only background work after the turn ended (session_status).
@@ -1417,7 +1443,7 @@ pub(crate) fn normalize_agent_hook_activity(
         if lower == "stop" {
             return Some("attention".to_string());
         }
-        if matches!(lower.as_str(), "sessionend" | "session-end") {
+        if matches!(lower.as_str(), "interrupt" | "sessionend" | "session-end") {
             return Some("idle".to_string());
         }
     }
@@ -1460,7 +1486,7 @@ pub(crate) fn normalize_agent_hook_activity(
         ) {
             return Some("working".to_string());
         }
-        if matches!(lower.as_str(), "sessionend" | "session-end") {
+        if matches!(lower.as_str(), "interrupt" | "sessionend" | "session-end") {
             return Some("idle".to_string());
         }
     }
@@ -1563,7 +1589,7 @@ pub(crate) fn normalize_agent_hook_activity(
     if compact == "askuserquestion" {
         return Some("attention".to_string());
     }
-    if matches!(compact.as_str(), "sessionidle" | "stopfailure") {
+    if matches!(compact.as_str(), "interrupt" | "sessionidle" | "stopfailure") {
         return Some("idle".to_string());
     }
     if let Some(status) = status

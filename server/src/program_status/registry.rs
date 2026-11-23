@@ -393,6 +393,16 @@ pub(crate) fn note_program_status_interrupt(project_id: &str, session_id: &str) 
     }
 }
 
+/// A new user turn started (e.g. Interrupt & Send while OSC 7501 stayed `working`): clear any
+/// prior interrupt flag so the new turn's own completion counts as finished.
+pub(crate) fn clear_program_status_interrupt(project_id: &str, session_id: &str) {
+    if let Ok(mut registry) = registry().lock() {
+        if let Some(entry) = registry.get_mut(&registry_key(project_id, session_id)) {
+            entry.interrupted = false;
+        }
+    }
+}
+
 /// Forget a session whose watch ended (session stopped or slept): its
 /// daemon, and with it every record, is gone.
 pub(crate) fn forget_program_status(project_id: &str, session_id: &str) -> bool {

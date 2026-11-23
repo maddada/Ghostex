@@ -136,17 +136,19 @@ pub(super) async fn send_session_chat_message_attempt(
         // typed into zmx; route supported keys through the structured ACP channel instead.
         if crate::acp::session_is_acp(&target.session) {
             return match key {
-                "escape" => match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
-                    Ok(()) => {
-                        record_session_chat_interrupt(state, &target, &request_id);
-                        routed_json(
+                "escape" => {
+                    // Record the user interrupt BEFORE awaiting ACP abort so any idle/stop event
+                    // posted while the driver unwinds never races ahead and enters `attention`.
+                    record_session_chat_interrupt(state, &target, &request_id);
+                    match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
+                        Ok(()) => routed_json(
                             Some(endpoint_path),
                             StatusCode::OK,
                             rpc_success(request_id, json!({ "queued": true, "textBytes": 0 })),
-                        )
+                        ),
+                        Err(error) => domain_error_response(endpoint_path, request_id, error),
                     }
-                    Err(error) => domain_error_response(endpoint_path, request_id, error),
-                },
+                }
                 "shift-tab" => {
                     match crate::acp::channel::cycle_mode(
                         state,
@@ -247,6 +249,9 @@ pub(super) async fn send_session_chat_message_attempt(
                     message: "Cursor is waiting for an answer in the terminal; answer it before changing the mode.".to_string(),
                 },
             );
+        }
+        if key == "escape" {
+            record_session_chat_interrupt(state, &target, &request_id);
         }
         if let Err(error) = crate::session_chat_send::execute_session_chat_send(
             &target.project_id,
@@ -604,16 +609,16 @@ pub(crate) async fn handle_interrupt_session_chat_http(
         };
     }
     // An ACP-mode session cancels its active turn via ACP `session/cancel` (acp/channel.rs).
+    // Record the user interrupt BEFORE awaiting abort so any activity report from the host while
+    // cancelling never enters finished-turn `attention`.
     if crate::acp::session_is_acp(&target.session) {
+        record_session_chat_interrupt(state, &target, &request_id);
         return match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
-            Ok(()) => {
-                record_session_chat_interrupt(state, &target, &request_id);
-                routed_json(
-                    Some(endpoint_path),
-                    StatusCode::OK,
-                    rpc_success(request_id, json!({ "interrupted": true })),
-                )
-            }
+            Ok(()) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, json!({ "interrupted": true })),
+            ),
             Err(error) => domain_error_response(endpoint_path, request_id, error),
         };
     }
