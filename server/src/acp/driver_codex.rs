@@ -362,6 +362,7 @@ struct CodexState {
     usage_window_size: Option<u64>,
     session_title: Option<String>,
     last_event_at_ms: i64,
+    child_pid: u32,
     child_exited: bool,
 }
 
@@ -411,6 +412,7 @@ impl CodexState {
             usage_window_size: None,
             session_title: None,
             last_event_at_ms: now_ms(),
+            child_pid: 0,
             child_exited: false,
         }
     }
@@ -508,6 +510,7 @@ impl CodexState {
             "sessionTitle": self.session_title,
             "lastEventAtMs": self.last_event_at_ms,
             "transcriptPath": transcript_path,
+            "childPid": self.child_pid,
             "childExited": self.child_exited,
             "fatalError": self.fatal_error,
         })
@@ -673,6 +676,7 @@ fn spawn_and_init_codex(
     state: &Arc<Mutex<CodexState>>,
     activity: &CodexActivityReporter,
     child_pid: &Arc<AtomicU32>,
+    active_transport: &Arc<Mutex<Option<Arc<CodexTransport>>>>,
     process_gen: &Arc<AtomicU64>,
     my_gen: u64,
 ) -> Result<CodexProcess, String> {
@@ -693,18 +697,22 @@ fn spawn_and_init_codex(
             )
         })?;
     child_pid.store(child.id(), Ordering::Release);
+    state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = child.id();
     let Some(stdin) = child.stdin.take() else {
         let _ = child.kill();
         child_pid.store(0, Ordering::Release);
+        state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         return Err("Codex app-server stdin unavailable.".to_string());
     };
     let Some(stdout) = child.stdout.take() else {
         let _ = child.kill();
         child_pid.store(0, Ordering::Release);
+        state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         return Err("Codex app-server stdout unavailable.".to_string());
     };
     let stderr = child.stderr.take();
     let transport = Arc::new(CodexTransport::new(stdin, &cfg.spool_session_id));
+    *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = Some(transport.clone());
 
     if let Some(stderr) = stderr {
         let t_err = transport.clone();
@@ -739,6 +747,12 @@ fn spawn_and_init_codex(
         }),
         CODEX_RPC_TIMEOUT,
     ) {
+        // Bump generation before stopping so the reader's `CodexExitGuard` does not mark
+        // `child_exited = true` and kill `acp-host` (keeping `fatalError` visible and
+        // Switch to Terminal working).
+        process_gen.fetch_add(1, Ordering::AcqRel);
+        *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         stop_codex_gracefully(&transport, &mut child, child_pid);
         return Err(format!("Codex app-server initialize failed: {err}"));
     }
@@ -859,6 +873,9 @@ fn spawn_and_init_codex(
     let thread_res = match thread_res {
         Ok(res) => res,
         Err(err) => {
+            process_gen.fetch_add(1, Ordering::AcqRel);
+            *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
             stop_codex_gracefully(&transport, &mut child, child_pid);
             return Err(format!("Codex thread open/resume failed: {err}"));
         }
@@ -902,11 +919,63 @@ fn spawn_and_init_codex(
     };
 
     if fork_session && thread_id.is_none() {
+        process_gen.fetch_add(1, Ordering::AcqRel);
+        *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         stop_codex_gracefully(&transport, &mut child, child_pid);
         return Err("Codex thread/fork did not return a forked thread id.".to_string());
     }
 
     Ok(CodexProcess { child, transport })
+}
+
+/// Wait briefly if `turn/start` is still in flight so `active_turn_id` can arrive, then cancel
+/// any pending approvals, send `turn/interrupt`, and wait up to 5s for `turn/completed`.
+fn interrupt_active_codex_turn(
+    proc_opt: &Option<CodexProcess>,
+    state: &Arc<Mutex<CodexState>>,
+) {
+    let id_wait_until = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < id_wait_until {
+        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+        if !s.working || s.active_turn_id.is_some() || !s.awaiting_turn_start {
+            break;
+        }
+        drop(s);
+        thread::sleep(Duration::from_millis(50));
+    }
+    if let Some(proc) = proc_opt.as_ref() {
+        cancel_all_pending_codex(&proc.transport, state);
+        let (tid_opt, turn_id_opt, still_working) = {
+            let s = state.lock().unwrap_or_else(|p| p.into_inner());
+            (s.thread_id.clone(), s.active_turn_id.clone(), s.working)
+        };
+        if still_working {
+            let interrupted_ok = if let (Some(tid_int), Some(turn_id)) = (tid_opt, turn_id_opt) {
+                if let Err(err) = proc.transport.call(
+                    "turn/interrupt",
+                    json!({ "threadId": tid_int, "turnId": turn_id }),
+                    Duration::from_secs(5),
+                ) {
+                    eprintln!("[Codex Non-CLI] Warning: turn/interrupt failed: {err}");
+                    false
+                } else {
+                    true
+                }
+            } else {
+                false
+            };
+            if interrupted_ok {
+                let wait_until = Instant::now() + Duration::from_secs(5);
+                while Instant::now() < wait_until {
+                    if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(50));
+                }
+            }
+        }
+    }
 }
 
 /// Stop the current `codex app-server` (if running) under a new generation and restart + resume
@@ -920,9 +989,11 @@ fn restart_codex_process(
     state: &Arc<Mutex<CodexState>>,
     activity: &CodexActivityReporter,
     child_pid: &Arc<AtomicU32>,
+    active_transport: &Arc<Mutex<Option<Arc<CodexTransport>>>>,
     process_gen: &Arc<AtomicU64>,
 ) -> Result<(), String> {
     let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
+    *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
     if let Some(mut old) = proc_opt.take() {
         cancel_all_pending_codex(&old.transport, state);
         stop_codex_gracefully(&old.transport, &mut old.child, child_pid);
@@ -930,6 +1001,7 @@ fn restart_codex_process(
     let (resume_id, level, read_only, next_profile) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.working = false;
+        s.child_pid = 0;
         s.awaiting_turn_start = false;
         s.active_turn_id = None;
         s.file_change_items.clear();
@@ -948,6 +1020,7 @@ fn restart_codex_process(
         state,
         activity,
         child_pid,
+        active_transport,
         process_gen,
         new_gen,
     ) {
@@ -985,6 +1058,7 @@ fn apply_codex_approval_level(
     state: &Arc<Mutex<CodexState>>,
     activity: &CodexActivityReporter,
     child_pid: &Arc<AtomicU32>,
+    active_transport: &Arc<Mutex<Option<Arc<CodexTransport>>>>,
     process_gen: &Arc<AtomicU64>,
     desired: AcpApprovalLevel,
 ) -> Result<(), String> {
@@ -1014,58 +1088,20 @@ fn apply_codex_approval_level(
 
     let mut must_restart = false;
     if is_working && is_downgrade {
-        // Wait briefly if `turn/start` is in flight so `active_turn_id` can arrive.
-        let id_wait_until = Instant::now() + Duration::from_secs(2);
-        while Instant::now() < id_wait_until {
-            let s = state.lock().unwrap_or_else(|p| p.into_inner());
-            if !s.working || s.active_turn_id.is_some() || !s.awaiting_turn_start {
-                break;
-            }
-            drop(s);
-            thread::sleep(Duration::from_millis(50));
-        }
-
-        if let Some(proc) = proc_opt.as_ref() {
-            cancel_all_pending_codex(&proc.transport, state);
-            let (tid_opt, turn_id_opt, still_working) = {
-                let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                (s.thread_id.clone(), s.active_turn_id.clone(), s.working)
-            };
-            if still_working {
-                let interrupted_ok = if let (Some(tid_int), Some(turn_id)) = (tid_opt, turn_id_opt)
-                {
-                    proc.transport
-                        .call(
-                            "turn/interrupt",
-                            json!({ "threadId": tid_int, "turnId": turn_id }),
-                            Duration::from_secs(5),
-                        )
-                        .is_ok()
-                } else {
-                    false
-                };
-                if interrupted_ok {
-                    let wait_until = Instant::now() + Duration::from_secs(5);
-                    while Instant::now() < wait_until {
-                        if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
-                            break;
-                        }
-                        thread::sleep(Duration::from_millis(50));
-                    }
-                }
-            }
-        }
+        interrupt_active_codex_turn(proc_opt, state);
 
         // Fail closed: if the stronger turn is still running after interrupt/wait, immediately
         // stop the app-server process so it cannot execute anything further under the stronger level.
         if state.lock().unwrap_or_else(|p| p.into_inner()).working {
             process_gen.fetch_add(1, Ordering::AcqRel);
+            *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
             if let Some(mut old) = proc_opt.take() {
                 cancel_all_pending_codex(&old.transport, state);
                 stop_codex_gracefully(&old.transport, &mut old.child, child_pid);
             }
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
             s.working = false;
+            s.child_pid = 0;
             s.active_turn_id = None;
             s.awaiting_turn_start = false;
             s.file_change_items.clear();
@@ -1084,7 +1120,15 @@ fn apply_codex_approval_level(
     };
 
     if need_reload {
-        restart_codex_process(proc_opt, cfg, state, activity, child_pid, process_gen)?;
+        restart_codex_process(
+            proc_opt,
+            cfg,
+            state,
+            activity,
+            child_pid,
+            active_transport,
+            process_gen,
+        )?;
     }
     Ok(())
 }
@@ -2129,6 +2173,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let activity = CodexActivityReporter::start(endpoint.clone(), state.clone());
     let shutting_down = Arc::new(AtomicBool::new(false));
     let child_pid = Arc::new(AtomicU32::new(0));
+    let active_transport: Arc<Mutex<Option<Arc<CodexTransport>>>> = Arc::new(Mutex::new(None));
     let process_gen = Arc::new(AtomicU64::new(1));
 
     let mut proc_opt = match spawn_and_init_codex(
@@ -2141,6 +2186,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         &state,
         &activity,
         &child_pid,
+        &active_transport,
         &process_gen,
         1,
     ) {
@@ -2154,12 +2200,17 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     #[cfg(unix)]
     {
         let pid_sig = child_pid.clone();
+        let transport_sig = active_transport.clone();
         let down_sig = shutting_down.clone();
         let ep_sig = endpoint.clone();
         thread::spawn(move || {
             while !down_sig.load(Ordering::Acquire) {
                 if super::host::termination_requested() {
                     down_sig.store(true, Ordering::Release);
+                    if let Some(t) = transport_sig.lock().unwrap_or_else(|p| p.into_inner()).take()
+                    {
+                        t.close_stdin();
+                    }
                     let pid = pid_sig.swap(0, Ordering::AcqRel);
                     if pid != 0 {
                         let cpid = pid as libc::pid_t;
@@ -2275,6 +2326,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             &state,
                             &activity,
                             &child_pid,
+                            &active_transport,
                             &process_gen,
                             desired,
                         ) {
@@ -2314,31 +2366,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     ep.ack(id, true, snap, None);
                 }
                 "abort" => {
-                    let (was_working, tid, turn_id) = {
-                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        (s.working, s.thread_id.clone(), s.active_turn_id.clone())
-                    };
-                    if let Some(proc) = proc_opt.as_ref() {
-                        cancel_all_pending_codex(&proc.transport, &state);
-                        if was_working {
-                            if let (Some(tid), Some(turn_id)) = (tid, turn_id) {
-                                if let Err(err) = proc.transport.call(
-                                    "turn/interrupt",
-                                    json!({ "threadId": tid, "turnId": turn_id }),
-                                    Duration::from_secs(5),
-                                ) {
-                                    eprintln!("[Codex Non-CLI] Warning: turn/interrupt failed: {err}");
-                                }
-                            }
-                            let wait_until = Instant::now() + Duration::from_secs(5);
-                            while Instant::now() < wait_until {
-                                if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
-                                    break;
-                                }
-                                thread::sleep(Duration::from_millis(50));
-                            }
-                        }
-                    }
+                    interrupt_active_codex_turn(&proc_opt, &state);
                     if state.lock().unwrap_or_else(|p| p.into_inner()).working {
                         if let Err(err) = restart_codex_process(
                             &mut proc_opt,
@@ -2346,6 +2374,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             &state,
                             &activity,
                             &child_pid,
+                            &active_transport,
                             &process_gen,
                         ) {
                             ep.ack(id, false, Value::Null, Some(&err));
@@ -2535,6 +2564,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         &state,
                         &activity,
                         &child_pid,
+                        &active_transport,
                         &process_gen,
                         level,
                     ) {
@@ -2581,25 +2611,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                 continue;
                             }
                         }
-                        if let Some(proc) = proc_opt.as_ref() {
-                            cancel_all_pending_codex(&proc.transport, &state);
-                            if let (Some(tid_ref), Some(old_turn_id)) =
-                                (tid_initial.as_deref(), turn_id.as_deref())
-                            {
-                                let _ = proc.transport.call(
-                                    "turn/interrupt",
-                                    json!({ "threadId": tid_ref, "turnId": old_turn_id }),
-                                    Duration::from_secs(5),
-                                );
-                            }
-                            let wait_until = Instant::now() + Duration::from_secs(5);
-                            while Instant::now() < wait_until {
-                                if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
-                                    break;
-                                }
-                                thread::sleep(Duration::from_millis(50));
-                            }
-                        }
+                        interrupt_active_codex_turn(&proc_opt, &state);
                         if state.lock().unwrap_or_else(|p| p.into_inner()).working {
                             if let Err(err) = restart_codex_process(
                                 &mut proc_opt,
@@ -2607,6 +2619,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                 &state,
                                 &activity,
                                 &child_pid,
+                                &active_transport,
                                 &process_gen,
                             ) {
                                 ep.ack(id, false, Value::Null, Some(&err));
@@ -2629,6 +2642,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             &state,
                             &activity,
                             &child_pid,
+                            &active_transport,
                             &process_gen,
                         ) {
                             ep.ack(id, false, Value::Null, Some(&err));
@@ -2728,10 +2742,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
-                    let (is_working, tid_initial, turn_id) = {
-                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        (s.working, s.thread_id.clone(), s.active_turn_id.clone())
-                    };
+                    let is_working = state.lock().unwrap_or_else(|p| p.into_inner()).working;
                     if is_working && !interrupt {
                         ep.ack(id, false, Value::Null, Some("ACP_AGENT_BUSY"));
                         continue;
@@ -2766,25 +2777,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         // Interrupt-and-send ALWAYS calls `turn/interrupt` and waits for
                         // `turn/completed` (restarting app-server if it does not stop in time) so
                         // the new turn runs strictly under the current approval level and profile.
-                        if let Some(proc) = proc_opt.as_ref() {
-                            cancel_all_pending_codex(&proc.transport, &state);
-                            if let (Some(tid_ref), Some(old_turn_id)) =
-                                (tid_initial.as_deref(), turn_id.as_deref())
-                            {
-                                let _ = proc.transport.call(
-                                    "turn/interrupt",
-                                    json!({ "threadId": tid_ref, "turnId": old_turn_id }),
-                                    Duration::from_secs(5),
-                                );
-                            }
-                            let wait_until = Instant::now() + Duration::from_secs(5);
-                            while Instant::now() < wait_until {
-                                if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
-                                    break;
-                                }
-                                thread::sleep(Duration::from_millis(50));
-                            }
-                        }
+                        interrupt_active_codex_turn(&proc_opt, &state);
                         if state.lock().unwrap_or_else(|p| p.into_inner()).working {
                             if let Err(err) = restart_codex_process(
                                 &mut proc_opt,
@@ -2792,6 +2785,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                 &state,
                                 &activity,
                                 &child_pid,
+                                &active_transport,
                                 &process_gen,
                             ) {
                                 ep.ack(id, false, Value::Null, Some(&err));
@@ -2814,6 +2808,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             &state,
                             &activity,
                             &child_pid,
+                            &active_transport,
                             &process_gen,
                         ) {
                             ep.ack(id, false, Value::Null, Some(&err));

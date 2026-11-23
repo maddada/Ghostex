@@ -85,14 +85,103 @@ fn is_expected_login(agent: &str, expected_identity: &str, identity: &str) -> bo
     })
 }
 
+/// Check a live Non-CLI (`acp-host`) session's readiness and child login identity.
+/// Returns `None` when no new Non-CLI host is connected yet (or when `childPid` still belongs to
+/// the old process being replaced), and `Some((snapshot, login_identity))` once a new Non-CLI
+/// child process is running.
+async fn observe_new_acp_login(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    agent: &str,
+    home_dir: &Path,
+    previous_process_id: Option<i64>,
+) -> Option<(serde_json::Value, Option<String>)> {
+    let project = project_id.to_string();
+    let session = session_id.to_string();
+    let name = zmx_name.to_string();
+    let home = home_dir.to_path_buf();
+    let provider = agent.to_string();
+    tokio::task::spawn_blocking(move || {
+        let snap = crate::acp::channel::channel_state(&project, &session)?;
+        let child_pid = snap
+            .get("childPid")
+            .and_then(serde_json::Value::as_i64)
+            .filter(|&pid| pid > 0)?;
+        if Some(child_pid) == previous_process_id {
+            return None;
+        }
+        // Walk the session's zmx process tree starting at `child_pid` so wrappers like `cswap` /
+        // `xswap` resolve to the actual child `claude` / `codex` process whose env holds
+        // `CLAUDE_CONFIG_DIR` / `CODEX_HOME`, falling back to `child_pid` itself when `exec`'d.
+        let mut candidate_pids: Vec<i64> = Vec::new();
+        if let Ok(Some(tree)) = crate::zmx::read_zmx_session_tree(&name) {
+            let mut queue = std::collections::VecDeque::from([child_pid]);
+            let mut seen = std::collections::HashSet::new();
+            let mut agent_pids = Vec::new();
+            let mut other_pids = Vec::new();
+            while let Some(pid) = queue.pop_front() {
+                if !seen.insert(pid) {
+                    continue;
+                }
+                if let Some(proc_row) = tree.processes.iter().find(|p| p.pid == pid) {
+                    let lower = proc_row.command.to_ascii_lowercase();
+                    let matches_agent = match provider.as_str() {
+                        "claude" => lower.contains("claude") && !lower.contains("claude-swap"),
+                        "codex" => lower.contains("codex") && !lower.contains("codex-swap"),
+                        _ => false,
+                    };
+                    if matches_agent {
+                        agent_pids.push(pid);
+                    } else {
+                        other_pids.push(pid);
+                    }
+                }
+                for child in tree.processes.iter().filter(|p| p.ppid == pid) {
+                    queue.push_back(child.pid);
+                }
+            }
+            // Prefer deeper actual agent processes (inside cswap/xswap) before the wrapper pid.
+            agent_pids.reverse();
+            candidate_pids.extend(agent_pids);
+            candidate_pids.extend(other_pids);
+        }
+        if !candidate_pids.contains(&child_pid) {
+            candidate_pids.push(child_pid);
+        }
+        let identity = candidate_pids
+            .into_iter()
+            .find_map(|pid| super::process_login::identity(pid, &provider, &home));
+        Some((snap, identity))
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 /// Whether the agent the switch started runs on the selected login, whatever its screen shows.
 pub(crate) async fn runs_on_selected_login(
+    project_id: &str,
+    session_id: &str,
     zmx_name: &str,
     agent: &str,
     expected_identity: &str,
     home_dir: &Path,
     previous_process_id: Option<i64>,
 ) -> bool {
+    if let Some((_, identity)) = observe_new_acp_login(
+        project_id,
+        session_id,
+        zmx_name,
+        agent,
+        home_dir,
+        previous_process_id,
+    )
+    .await
+    {
+        return identity
+            .is_some_and(|identity| is_expected_login(agent, expected_identity, &identity));
+    }
     observe_new_login(zmx_name, agent, home_dir, previous_process_id)
         .await
         .flatten()
@@ -121,6 +210,59 @@ pub(crate) async fn wait_for_account_ready(
     loop {
         if cancelled() {
             return Err("The account switch was cancelled.".to_string());
+        }
+        if let Some((acp_snap, acp_identity)) = observe_new_acp_login(
+            target.project_id,
+            target.session_id,
+            zmx_name,
+            agent,
+            home_dir,
+            previous_process_id,
+        )
+        .await
+        {
+            saw_agent = true;
+            match acp_identity {
+                Some(identity) if is_expected_login(agent, expected_identity, &identity) => {
+                    if let Some(fatal) = acp_snap
+                        .get("fatalError")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                    {
+                        return Err(fatal.to_string());
+                    }
+                    let exited = acp_snap
+                        .get("childExited")
+                        .and_then(serde_json::Value::as_bool)
+                        == Some(true);
+                    let working = acp_snap
+                        .get("working")
+                        .and_then(serde_json::Value::as_bool)
+                        == Some(true);
+                    if !exited && !working && !cancelled() {
+                        return Ok(());
+                    }
+                    reason = "The selected account started; waiting for the Non-CLI agent to finish initializing."
+                        .to_string();
+                }
+                Some(_) => {
+                    return Err(
+                        "The agent started with a different login than the selected account."
+                            .to_string(),
+                    );
+                }
+                None => {
+                    reason =
+                        "Could not verify the new Non-CLI agent process's account login."
+                            .to_string();
+                }
+            }
+            if Instant::now() >= deadline {
+                return Err(reason);
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            continue;
         }
         let observation = observe_new_login(zmx_name, agent, home_dir, previous_process_id).await;
         if let Some(identity) = observation {

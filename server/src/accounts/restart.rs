@@ -114,7 +114,14 @@ pub(crate) fn plan(
             )
         })?
         .and_then(|tree| tree.agent_identity());
-    let previous_process_id = current_process.and_then(|identity| identity.process_id);
+    let project_id = session["projectId"].as_str().unwrap_or_default();
+    let session_id = session["sessionId"].as_str().unwrap_or_default();
+    let acp_child_pid = crate::acp::session_is_acp(session)
+        .then(|| crate::acp::channel::channel_state(project_id, session_id))
+        .flatten()
+        .and_then(|snap| snap.get("childPid").and_then(Value::as_i64))
+        .filter(|&pid| pid > 0);
+    let previous_process_id = acp_child_pid.or_else(|| current_process.and_then(|i| i.process_id));
     let background = if agent == "claude" {
         previous_process_id.and_then(|pid| {
             super::claude_background::resolve(
@@ -157,22 +164,65 @@ fn typed_resume_command(
     session: &Value,
     command: String,
 ) -> Result<String, DomainStateError> {
-    if command.len() <= TYPED_COMMAND_LIMIT {
+    let is_acp = crate::acp::session_is_acp(session);
+    if !is_acp && command.len() <= TYPED_COMMAND_LIMIT {
         return Ok(command);
     }
     let dir = state.paths.root_dir.join("account-switch");
     std::fs::create_dir_all(&dir).map_err(super::store::error)?;
+    let project_id = session["projectId"].as_str().unwrap_or_default();
+    let session_id = session["sessionId"].as_str().unwrap_or_default();
     let file = dir.join(format!(
         "{}-{}.{}",
-        session["projectId"].as_str().unwrap_or_default(),
-        session["sessionId"].as_str().unwrap_or_default(),
+        project_id,
+        session_id,
         if cfg!(windows) { "ps1" } else { "sh" }
     ));
-    std::fs::write(&file, format!("{command}\n")).map_err(super::store::error)?;
+    let quoted_file = crate::agents::quote_shell_arg(&file.to_string_lossy());
+    let script = if is_acp {
+        // `zmx/scripts.rs` unsets `GHOSTEX_ACP_CHANNEL_SECRET` when the previous `acp-host` exits
+        // back to the shell. Pass the secret strictly to the replacement `acp-host` process via a
+        // private self-deleting script so it never appears in the PTY or survives in shell env.
+        let secret = crate::acp::channel::channel_secret_for_session(
+            &state.auth_token,
+            project_id,
+            session_id,
+        );
+        if cfg!(windows) {
+            match secret {
+                Some(sec) => format!(
+                    "Remove-Item -LiteralPath {quoted_file} -ErrorAction SilentlyContinue\n$env:{}={}\ntry {{ {command} }} finally {{ Remove-Item -LiteralPath 'Env:{}' -ErrorAction SilentlyContinue }}\n",
+                    crate::acp::channel::ACP_CHANNEL_SECRET_ENV,
+                    crate::agents::quote_shell_arg(&sec),
+                    crate::acp::channel::ACP_CHANNEL_SECRET_ENV,
+                ),
+                None => format!(
+                    "Remove-Item -LiteralPath {quoted_file} -ErrorAction SilentlyContinue\n{command}\n"
+                ),
+            }
+        } else {
+            match secret {
+                Some(sec) => format!(
+                    "rm -f {quoted_file}\n{}={} {command}\n",
+                    crate::acp::channel::ACP_CHANNEL_SECRET_ENV,
+                    crate::agents::quote_shell_arg(&sec),
+                ),
+                None => format!("rm -f {quoted_file}\n{command}\n"),
+            }
+        }
+    } else {
+        format!("{command}\n")
+    };
+    std::fs::write(&file, script).map_err(super::store::error)?;
+    #[cfg(unix)]
+    if is_acp {
+        use std::os::unix::fs::PermissionsExt as _;
+        let _ = std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600));
+    }
     Ok(format!(
         "{} {}",
         if cfg!(windows) { "." } else { "source" },
-        crate::agents::quote_shell_arg(&file.to_string_lossy())
+        quoted_file
     ))
 }
 
@@ -394,6 +444,8 @@ async fn finish(
     };
     let runs_on_selected_login = result.is_err()
         && super::restart_verification::runs_on_selected_login(
+            &project_id,
+            &session_id,
             &started_login.zmx_name,
             &started_login.agent,
             &started_login.expected_identity,
