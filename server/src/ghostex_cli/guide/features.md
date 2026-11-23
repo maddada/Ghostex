@@ -6706,7 +6706,12 @@ what to do. On a Windows administrator account, pairing a phone with Easy
 Connect (and removing it from Paired devices) shows one more administrator
 prompt on the computer, because Windows' SSH reads administrators' keys from
 `C:\ProgramData\ssh\administrators_authorized_keys`; choose Yes. If the prompt
-is declined the phone says so: scan the new code and choose Yes. When a connection needs Ghostex's background service on Windows
+is declined the phone says so: scan the new code and choose Yes. A phone can't
+pair with a Windows computer signed in with a work or school account
+(Microsoft Entra ID, shown as `AzureAD\name` by `whoami`): Windows' SSH server
+does not let those accounts sign in with a key, so the phone says so when it
+scans the code. Use a local account or a personal Microsoft account on that
+computer for phone access. When a connection needs Ghostex's background service on Windows
 and you are signed in to that computer's desktop, the service starts in your
 desktop session, so agents there work as if you had opened Ghostex yourself.
 When nobody is signed in, it starts in the background as before, and opening

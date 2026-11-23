@@ -150,7 +150,15 @@ fn read_unix_hostname() -> Option<String> {
     (!hostname.is_empty()).then(|| hostname.to_string())
 }
 
+/// The user name SSH on this computer signs this account in with: the login name, except for a
+/// Microsoft Entra ID account on Windows, whose SSH user name is `AzureAD\user` (CDXC:RemotePairing
+/// 2026-11-23 in windows_account.rs).
 fn read_login_username() -> Result<String> {
+    if let Some(account) = super::windows_account::this_windows_account() {
+        if account.entra_id {
+            return Ok(account.qualified_name.clone());
+        }
+    }
     let env_name = if cfg!(windows) { "USERNAME" } else { "USER" };
     if let Ok(value) = std::env::var(env_name) {
         let value = value.trim().to_string();
