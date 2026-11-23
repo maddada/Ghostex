@@ -862,6 +862,22 @@ pub fn classify_suppressed_turn(message: &ChatMessage) -> Option<SuppressedTurn>
     if message.role == ChatRole::User && parse_cross_session_message(&text).is_some() {
         return None;
     }
+    // Claude Code's Code Mode internal REPL poll events (`<event kind="repl-eval" ...>` and
+    // `<event kind="repl-status" ...>`). Queued copies come from older gxserver instances that
+    // decoded `queue-operation` `enqueue` rows alongside `Poll`'s tool result, so they stay
+    // hidden; a non-queued standalone eval renders as a compact expandable event row.
+    if message.role == ChatRole::User {
+        if let Some(event) = parse_claude_repl_event(&text) {
+            return Some(match event {
+                ReplEvent::Status => SuppressedTurn::Hidden,
+                ReplEvent::Eval { .. } if message.queued => SuppressedTurn::Hidden,
+                ReplEvent::Eval { label, tone, .. } => SuppressedTurn::Status {
+                    label,
+                    tone: Some(tone),
+                },
+            });
+        }
+    }
     // gxserver's own row for an interrupted turn (Codex's `turn_aborted`, Claude's `interruptedMessageId`): the same marker Claude's "[Request interrupted" prompt gets, kept under the prompt instead of folded into "Worked for".
     if message.role == ChatRole::System
         && message.source == ChatSource::Transcript
@@ -1043,6 +1059,18 @@ pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
     // (`background_rows.rs`).
     let raw_text = js_trim(&joined_text(&message.blocks)).to_string();
 
+    if kind == "status" {
+        if let Some(ReplEvent::Eval {
+            label,
+            tone,
+            detail,
+            body,
+        }) = parse_claude_repl_event(&raw_text)
+        {
+            return repl_eval_note(&label, tone, detail, body);
+        }
+    }
+
     let command = parse_command_envelope(&raw_text);
     let model = model_set_by_command_output(&raw_text);
     let is_local_command = label == "Local command" || label == "Local command output";
@@ -1157,6 +1185,216 @@ fn command_output_note(raw_text: &str) -> Value {
         "label": first_line,
         "text": if expandable { body } else { String::new() },
         "tone": if stderr_only { "error" } else { "neutral" },
+        "expandable": expandable,
+    })
+}
+
+const AUTHENTIC_EVENT_NONCES_PREFIX: &str = "<system>authentic event nonces for this delivery:";
+
+/// A Claude Code Mode internal REPL poll event parsed from a transcript user row.
+enum ReplEvent {
+    /// `<event kind="repl-status" ...>`: pending-script bookkeeping, always hidden.
+    Status,
+    /// `<event kind="repl-eval" ...>`: settled async script output, drawn as a compact row when
+    /// delivered standalone outside `Poll`.
+    Eval {
+        label: String,
+        tone: &'static str,
+        detail: Option<String>,
+        body: String,
+    },
+}
+
+/// Parses Claude Code's Code Mode `<event kind="repl-eval" ...>` and `<event kind="repl-status" ...>`
+/// envelopes (with or without a nonce attribute or leading `<system>authentic event nonces...` line).
+/// A bare `<event>` without a Code Mode `kind` attribute returns `None` so user-pasted XML stays prose.
+fn parse_claude_repl_event(text: &str) -> Option<ReplEvent> {
+    let mut rest = js_trim_start(text);
+    if rest
+        .as_bytes()
+        .get(..AUTHENTIC_EVENT_NONCES_PREFIX.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(AUTHENTIC_EVENT_NONCES_PREFIX.as_bytes()))
+    {
+        let close_system = rest.find("</system>")?;
+        rest = js_trim_start(&rest[close_system + "</system>".len()..]);
+    }
+    let after_open = rest
+        .as_bytes()
+        .get(..6)
+        .filter(|head| head.eq_ignore_ascii_case(b"<event"))
+        .map(|_| &rest[6..])?;
+    if !after_open.starts_with(|ch: char| ch.is_ascii_whitespace()) {
+        return None;
+    }
+    let close = after_open
+        .as_bytes()
+        .iter()
+        .take(1024)
+        .position(|&byte| byte == b'>')?;
+    let attrs = &after_open[..close];
+    let kind = xml_attr(attrs, "kind")?;
+    if kind.eq_ignore_ascii_case("repl-status") {
+        return Some(ReplEvent::Status);
+    }
+    if !kind.eq_ignore_ascii_case("repl-eval") {
+        return None;
+    }
+
+    let inner = strip_repl_event_close(&after_open[close + 1..]);
+    let mut eval_id = xml_attr(attrs, "eval").map(str::to_string);
+    let mut ms = xml_attr(attrs, "ms").and_then(|value| value.parse::<i64>().ok());
+    let mut status = xml_attr(attrs, "status")
+        .map(ascii_lower)
+        .unwrap_or_default();
+    let mut has_error = false;
+    let body;
+
+    let trimmed_inner = js_trim(inner);
+    if eval_id.is_none() && trimmed_inner.starts_with('{') {
+        if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(trimmed_inner) {
+            eval_id = map.get("eval").and_then(|value| match value {
+                Value::Number(number) => Some(number.to_string()),
+                Value::String(text) if !text.trim().is_empty() => Some(text.trim().to_string()),
+                _ => None,
+            });
+            if ms.is_none() {
+                ms = map.get("ms").and_then(Value::as_i64);
+            }
+            if status.is_empty() {
+                status = map
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .map(ascii_lower)
+                    .unwrap_or_default();
+            }
+            let mut parts: Vec<String> = Vec::new();
+            if let Some(logs) = map.get("log").and_then(Value::as_array) {
+                for line in logs.iter().filter_map(Value::as_str) {
+                    if !line.is_empty() {
+                        parts.push(line.to_string());
+                    }
+                }
+            }
+            if let Some(result) = map.get("result").and_then(Value::as_str) {
+                if !result.is_empty() {
+                    parts.push(result.to_string());
+                }
+            }
+            if let Some(error) = map.get("error").and_then(Value::as_str) {
+                if !error.is_empty() {
+                    has_error = true;
+                    parts.push(error.to_string());
+                }
+            }
+            if let Some(refused) = map.get("refused").and_then(Value::as_str) {
+                if !refused.is_empty() {
+                    has_error = true;
+                    parts.push(refused.to_string());
+                }
+            }
+            body = if parts.is_empty() {
+                trimmed_inner.to_string()
+            } else {
+                parts.join("\n")
+            };
+        } else {
+            body = trimmed_inner.to_string();
+        }
+    } else {
+        let mut parts: Vec<&str> = Vec::new();
+        for tag in ["log", "result", "error", "refused"] {
+            for section in tagged_bodies(inner, tag) {
+                let clean = section.trim_matches(|ch| ch == '\n' || ch == '\r');
+                if !clean.is_empty() {
+                    if matches!(tag, "error" | "refused") {
+                        has_error = true;
+                    }
+                    parts.push(clean);
+                }
+            }
+        }
+        body = if parts.is_empty() {
+            inner
+                .trim_matches(|ch| ch == '\n' || ch == '\r')
+                .to_string()
+        } else {
+            parts.join("\n")
+        };
+    }
+
+    let label = match eval_id {
+        Some(id) if !id.is_empty() => format!("REPL eval #{id}"),
+        _ => "REPL eval".to_string(),
+    };
+    let detail = ms
+        .filter(|&value| value > 0)
+        .map(crate::transcript::work_summary::tool_time_label);
+    let tone =
+        if has_error || matches!(status.as_str(), "error" | "failed" | "rejected" | "refused") {
+            "error"
+        } else if status.is_empty() || matches!(status.as_str(), "settled" | "ok" | "completed") {
+            "ok"
+        } else {
+            "neutral"
+        };
+    Some(ReplEvent::Eval {
+        label,
+        tone,
+        detail,
+        body: strip_ansi(&body),
+    })
+}
+
+fn xml_attr<'a>(attrs: &'a str, name: &str) -> Option<&'a str> {
+    let needle = format!("{name}=\"");
+    let lower = ascii_lower(attrs);
+    let mut cursor = 0;
+    while let Some(pos) = lower[cursor..].find(&needle) {
+        let start = cursor + pos;
+        let boundary_ok = start == 0 || attrs.as_bytes()[start - 1].is_ascii_whitespace();
+        let value_start = start + needle.len();
+        if boundary_ok {
+            if let Some(end_rel) = attrs[value_start..].find('"') {
+                return Some(&attrs[value_start..value_start + end_rel]);
+            }
+        }
+        cursor = value_start;
+    }
+    None
+}
+
+fn strip_repl_event_close(text: &str) -> &str {
+    let trimmed = js_trim_end(text);
+    let lower = ascii_lower(trimmed);
+    let Some(close_at) = lower.rfind("</event") else {
+        return trimmed;
+    };
+    let tail = &trimmed[close_at + "</event".len()..];
+    if tail == ">"
+        || (tail.starts_with(" nonce=\"")
+            && tail.ends_with("\">")
+            && !tail[1..tail.len() - 1].contains('>'))
+    {
+        &trimmed[..close_at]
+    } else {
+        trimmed
+    }
+}
+
+fn repl_eval_note(label: &str, tone: &'static str, detail: Option<String>, body: String) -> Value {
+    let expandable = !body.trim().is_empty();
+    let row = StatusRow {
+        label: label.to_string(),
+        tone,
+        detail,
+    };
+    json!({
+        "kind": "status",
+        "subject": "command",
+        "label": label,
+        "text": if expandable { body } else { String::new() },
+        "tone": tone,
+        "statuses": [status_row_value(&row)],
         "expandable": expandable,
     })
 }

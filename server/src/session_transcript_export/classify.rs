@@ -302,6 +302,7 @@ const HARNESS_SYSTEM_TAG_NAMES: &[&str] = &[
 
 const HARNESS_INJECTED_TURN_PREFIXES: &[&str] = &[
     "<channel source=",
+    "<system>authentic event nonces for this delivery:",
     "[request interrupted",
     "a message arrived from ",
     "another claude session sent a message",
@@ -334,6 +335,9 @@ fn leading_tag_name(normalized: &str) -> Option<&str> {
 /// The section a user-role record belongs to when its body is harness plumbing.
 /// `None` means the record really is the user speaking.
 pub(super) fn harness_user_turn_section(text: &str) -> Option<TranscriptExportSection> {
+    if crate::session_chat_decode_claude::is_claude_repl_event_text(text) {
+        return Some(TranscriptExportSection::SystemMessage);
+    }
     let normalized = text.trim().to_ascii_lowercase();
     if normalized.is_empty() {
         return None;

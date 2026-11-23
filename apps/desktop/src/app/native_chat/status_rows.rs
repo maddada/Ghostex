@@ -38,6 +38,21 @@ fn tone(name: &str) -> &'static StatusTone {
     TONES.get(name).unwrap_or(&TONES["ok"])
 }
 
+fn fenced_verbatim_block(body: &str) -> String {
+    let mut max_run = 0usize;
+    let mut run = 0usize;
+    for byte in body.bytes() {
+        if byte == b'`' {
+            run += 1;
+            max_run = max_run.max(run);
+        } else {
+            run = 0;
+        }
+    }
+    let fence = "`".repeat(max_run.max(2) + 1);
+    format!("{fence}\n{body}\n{fence}")
+}
+
 /// The tint a tone paints its glyph with, muted when the tone has no color of its own.
 pub(super) fn tone_color(name: &str, p: &ChatAppearance) -> Hsla {
     tone(name)
@@ -168,7 +183,7 @@ impl NativeChatView {
                                 .bg(p.input)
                                 .child(self.markdown(
                                     format!("suppressed-body:{id}"),
-                                    format!("```\n{body}\n```"),
+                                    fenced_verbatim_block(&body),
                                     &Value::Null,
                                     p,
                                     cx,
@@ -324,7 +339,7 @@ impl NativeChatView {
                                 .bg(p.input)
                                 .child(self.markdown(
                                     format!("suppressed-body:{id}"),
-                                    format!("```\n{body}\n```"),
+                                    fenced_verbatim_block(&body),
                                     &Value::Null,
                                     p,
                                     cx,

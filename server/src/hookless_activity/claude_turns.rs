@@ -248,12 +248,13 @@ fn is_task_notice(content: &str) -> bool {
     content.starts_with("<task-notification")
 }
 
-/// A queued prompt the user typed, not a background task's notice or another session's message.
+/// A queued prompt the user typed, not a background task's notice, Code Mode REPL event, or another session's message.
 fn is_typed_prompt(content: &str) -> bool {
     !content.is_empty()
         && !["<task-notification", "<cross-session-message"]
             .iter()
             .any(|prefix| content.starts_with(prefix))
+        && !crate::session_chat_decode_claude::is_claude_repl_event_text(content)
 }
 
 enum Row {
