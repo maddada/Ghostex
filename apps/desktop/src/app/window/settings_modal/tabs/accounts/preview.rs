@@ -75,7 +75,8 @@ impl AccountsTab {
                     id: 1,
                     hub_id: "hub-preview".into(),
                     provider: "claude",
-                    url: "https://claude.ai/oauth/authorize?client_id=cliproxy&state=preview-state".into(),
+                    url: "https://claude.ai/oauth/authorize?client_id=cliproxy&state=preview-state"
+                        .into(),
                     state: "preview-state".into(),
                     is_local: false,
                     status: "waiting".into(),

@@ -130,7 +130,12 @@ fn management_v8_get(url: &str, key: &str, path: &str) -> Result<Answer, String>
     )
 }
 
-fn management_v8_post(url: &str, key: Option<&str>, path: &str, body: Value) -> Result<Answer, String> {
+fn management_v8_post(
+    url: &str,
+    key: Option<&str>,
+    path: &str,
+    body: Value,
+) -> Result<Answer, String> {
     let request = agent().post(format!("{url}/v8/management/{path}"));
     let request = match key {
         Some(key) => request.header("Authorization", format!("Bearer {key}")),
@@ -264,9 +269,7 @@ pub(crate) struct OAuthStart {
 
 fn validate_oauth_auth_url(raw: &str) -> Result<String, String> {
     let trimmed = raw.trim();
-    if trimmed.is_empty()
-        || trimmed.chars().count() > 2048
-        || trimmed.chars().any(char::is_control)
+    if trimmed.is_empty() || trimmed.chars().count() > 2048 || trimmed.chars().any(char::is_control)
     {
         return Err("The hub returned an invalid sign-in URL.".to_string());
     }
@@ -290,7 +293,9 @@ pub(crate) fn oauth_start(
     local_callback: bool,
 ) -> Result<OAuthStart, String> {
     if !matches!(provider, "claude" | "codex") {
-        return Err("Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string());
+        return Err(
+            "Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string(),
+        );
     }
     let path = if local_callback {
         format!("oauth/auth-url?provider={provider}&is_webui=true")
@@ -365,7 +370,9 @@ pub(crate) fn oauth_callback(
     input: &str,
 ) -> Result<(), String> {
     if !matches!(provider, "claude" | "codex") {
-        return Err("Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string());
+        return Err(
+            "Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string(),
+        );
     }
     let state = state.trim();
     if state.is_empty() || state.chars().any(char::is_control) {
@@ -444,9 +451,7 @@ pub(crate) fn oauth_callback(
         })
     } else {
         if trimmed.chars().any(char::is_whitespace) {
-            return Err(
-                "Paste the redirect URL or authorization code without spaces.".to_string(),
-            );
+            return Err("Paste the redirect URL or authorization code without spaces.".to_string());
         }
         json!({
             "provider": provider,
@@ -522,8 +527,7 @@ pub(crate) fn delete_account(url: &str, key: &str, file_name: &str) -> Result<()
 /// Clears a credential's cooldown state (`POST /v8/management/routing/cooldown/reset`, with v0 fallback).
 pub(crate) fn reset_cooldown(url: &str, key: &str, auth_index: &str) -> Result<(), String> {
     let payload = json!({ "auth_index": auth_index });
-    let response =
-        management_v8_post(url, Some(key), "routing/cooldown/reset", payload.clone())?;
+    let response = management_v8_post(url, Some(key), "routing/cooldown/reset", payload.clone())?;
     if is_missing_v8_route(&response) {
         let fallback = answer(
             agent()

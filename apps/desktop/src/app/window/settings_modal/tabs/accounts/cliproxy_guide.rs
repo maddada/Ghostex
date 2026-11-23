@@ -153,8 +153,8 @@ impl AccountsTab {
         let data = self.client.read(cx).data.clone();
         let hubs = data.as_ref().and_then(|d| d.hubs());
         let is_local = self.client.read(cx).machine().is_none();
-        let extension_on = hubs.is_some()
-            || (is_local && self.store.read(cx).bool("cliProxyApiEnabled"));
+        let extension_on =
+            hubs.is_some() || (is_local && self.store.read(cx).bool("cliProxyApiEnabled"));
         let hub_count = hubs.as_ref().map_or(0, Vec::len);
         let first_hub_id = hubs.as_ref().and_then(|list| list.first()).map(|h| h.id());
         let collapsed = self.cliproxy_card_collapsed;
@@ -285,7 +285,9 @@ impl AccountsTab {
                 SizedButtonSize::Sm,
                 false,
                 None,
-                move |page: &mut Self, _window, cx| page.select_pane(Pane::Hub(open_id.clone()), cx),
+                move |page: &mut Self, _window, cx| {
+                    page.select_pane(Pane::Hub(open_id.clone()), cx)
+                },
                 cx,
             ));
             actions.push(settings_sized_button(
@@ -534,32 +536,46 @@ impl AccountsTab {
             warning_box,
             step(vec![
                 heading("When CLIProxyAPI helps most"),
-                paragraph("CLIProxyAPI works best when you use several machines and one of them stays on (for example a Mac mini, home server, or always-on desktop). That machine holds your Claude and Codex logins, so your laptops and other desktops stop asking you to re-log in."),
-                paragraph("If you only have 1 to 2 accounts on 1 to 2 machines, Ghostex's built-in account management is simpler and needs no extra server."),
+                paragraph(
+                    "CLIProxyAPI works best when you use several machines and one of them stays on (for example a Mac mini, home server, or always-on desktop). That machine holds your Claude and Codex logins, so your laptops and other desktops stop asking you to re-log in.",
+                ),
+                paragraph(
+                    "If you only have 1 to 2 accounts on 1 to 2 machines, Ghostex's built-in account management is simpler and needs no extra server.",
+                ),
             ]),
             step(vec![
                 heading("1. Install CLIProxyAPI on your always-on machine"),
-                paragraph("On macOS, install with Homebrew, or download a prebuilt release binary for macOS, Linux, or Windows from GitHub."),
+                paragraph(
+                    "On macOS, install with Homebrew, or download a prebuilt release binary for macOS, Linux, or Windows from GitHub.",
+                ),
                 install_cmd,
                 h_flex().child(releases_btn).into_any_element(),
             ]),
             step(vec![
                 heading("2. Create ~/.cli-proxy-api/config.yaml"),
-                paragraph("Pick a strong client key (used by Claude and Codex sessions) and management key (used by Ghostex to list and sign in accounts). Keep routing.session-affinity set to true so each conversation stays on one account and keeps prompt caching warm. Use 127.0.0.1 instead of 0.0.0.0 if only that machine connects; otherwise keep the port on your Tailscale or private LAN."),
+                paragraph(
+                    "Pick a strong client key (used by Claude and Codex sessions) and management key (used by Ghostex to list and sign in accounts). Keep routing.session-affinity set to true so each conversation stays on one account and keeps prompt caching warm. Use 127.0.0.1 instead of 0.0.0.0 if only that machine connects; otherwise keep the port on your Tailscale or private LAN.",
+                ),
                 config_block,
             ]),
             step(vec![
                 heading("3. Start CLIProxyAPI"),
-                paragraph("Run CLIProxyAPI on the always-on machine (or run it as a background service with launchd, systemd, or brew services start cliproxyapi so it stays up across restarts)."),
+                paragraph(
+                    "Run CLIProxyAPI on the always-on machine (or run it as a background service with launchd, systemd, or brew services start cliproxyapi so it stays up across restarts).",
+                ),
                 run_cmd,
             ]),
             step(vec![
                 heading("4. Connect Ghostex on each machine"),
-                paragraph("Enable the CLIProxyAPI extension in Ghostex, then click Add a hub in Settings > Accounts and enter your hub address (for example http://my-server.ts.net:8317 or http://127.0.0.1:8317), your client key, and your management key. Ghostex enables session affinity automatically when you connect with a management key."),
+                paragraph(
+                    "Enable the CLIProxyAPI extension in Ghostex, then click Add a hub in Settings > Accounts and enter your hub address (for example http://my-server.ts.net:8317 or http://127.0.0.1:8317), your client key, and your management key. Ghostex enables session affinity automatically when you connect with a management key.",
+                ),
             ]),
             step(vec![
                 heading("5. Sign in Claude and Codex accounts and route new sessions"),
-                paragraph("Open the hub in Settings > Accounts and click Add Claude account or Add Codex account to sign in through your browser. Then open Claude rules or Codex rules and set New sessions start on to On the hub. Hub sessions automatically share your ~/.claude/CLAUDE.md, skills/, projects/, and history.jsonl."),
+                paragraph(
+                    "Open the hub in Settings > Accounts and click Add Claude account or Add Codex account to sign in through your browser. Then open Claude rules or Codex rules and set New sessions start on to On the hub. Hub sessions automatically share your ~/.claude/CLAUDE.md, skills/, projects/, and history.jsonl.",
+                ),
             ]),
         ];
 

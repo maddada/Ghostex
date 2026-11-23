@@ -303,7 +303,13 @@ fn stage_link(target: &Path, profile_item: &Path, is_dir: bool) -> io::Result<Pa
     let link_target = resolved_link_target(target);
     create_strict_link(&link_target, &staged, is_dir)?;
     let verified = is_link(&staged)
-        && fs::metadata(&staged).is_ok_and(|meta| if is_dir { meta.is_dir() } else { meta.is_file() });
+        && fs::metadata(&staged).is_ok_and(|meta| {
+            if is_dir {
+                meta.is_dir()
+            } else {
+                meta.is_file()
+            }
+        });
     if !verified {
         let _ = remove_link_only(&staged);
         return Err(io::Error::other(format!(
@@ -369,7 +375,12 @@ fn profile_is_quiescent(profile_dir: &Path) -> Result<(), String> {
     let entries = match fs::read_dir(&sessions_dir) {
         Ok(entries) => entries,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(format!("could not read {}: {error}", sessions_dir.display())),
+        Err(error) => {
+            return Err(format!(
+                "could not read {}: {error}",
+                sessions_dir.display()
+            ))
+        }
     };
     for entry in entries {
         let entry = entry.map_err(|error| format!("could not read session entry: {error}"))?;
@@ -397,7 +408,9 @@ fn profile_is_quiescent(profile_dir: &Path) -> Result<(), String> {
         if !pid_matches_proc_start(pid, proc_start) {
             continue;
         }
-        return Err(format!("live Claude session pid {pid} is using this profile"));
+        return Err(format!(
+            "live Claude session pid {pid} is using this profile"
+        ));
     }
     Ok(())
 }
@@ -441,10 +454,7 @@ fn validate_projects_tree(src: &Path, dst: &Path) -> io::Result<()> {
         } else if !meta.is_file() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!(
-                    "refusing to migrate non-regular entry {}",
-                    from.display()
-                ),
+                format!("refusing to migrate non-regular entry {}", from.display()),
             ));
         }
     }
@@ -796,7 +806,9 @@ fn share_claude_home(claude_home: &Path, profile_dir: &Path) {
                         );
                     }
                     Ok(staged) => match merge_projects_dir(&profile_projects, &shared_projects) {
-                        Ok(_) => finalize_staged_link(&staged, &shared_projects, &profile_projects, true),
+                        Ok(_) => {
+                            finalize_staged_link(&staged, &shared_projects, &profile_projects, true)
+                        }
                         Err(error) => {
                             let _ = remove_link_only(&staged);
                             eprintln!(
@@ -850,7 +862,9 @@ fn share_claude_home(claude_home: &Path, profile_dir: &Path) {
                         );
                     }
                     Ok(staged) => match merge_history_file(&profile_history, &shared_history) {
-                        Ok(()) => finalize_staged_link(&staged, &shared_history, &profile_history, false),
+                        Ok(()) => {
+                            finalize_staged_link(&staged, &shared_history, &profile_history, false)
+                        }
                         Err(error) => {
                             let _ = remove_link_only(&staged);
                             eprintln!(

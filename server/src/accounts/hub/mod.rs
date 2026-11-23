@@ -404,7 +404,12 @@ fn normalize_url(text: &str) -> Result<String, DomainStateError> {
     }
     let mut path = url.path().trim_end_matches('/').to_string();
     // The address of the hub's own management page (`…/management.html`) works too.
-    for suffix in ["/management.html", "/v8/management", "/v0/management", "/v1"] {
+    for suffix in [
+        "/management.html",
+        "/v8/management",
+        "/v0/management",
+        "/v1",
+    ] {
         if let Some(stripped) = path.strip_suffix(suffix) {
             path = stripped.to_string();
         }
@@ -474,9 +479,7 @@ fn managed_hub(
     Ok((hub, key))
 }
 
-fn parse_hub_account_id(
-    params: &Map<String, Value>,
-) -> Result<(String, String), DomainStateError> {
+fn parse_hub_account_id(params: &Map<String, Value>) -> Result<(String, String), DomainStateError> {
     let id = text_param(params, "accountId")
         .ok_or_else(|| DomainStateError::bad_request("accountId is required"))?;
     let (hub_id, auth_index) = id
@@ -540,9 +543,9 @@ fn ensure_supported_account(
     auth_index: &str,
 ) -> Result<(), DomainStateError> {
     if reading(&hub.id).is_some_and(|r| {
-        r.accounts
-            .iter()
-            .any(|a| a.auth_index == auth_index && matches!(a.provider.as_str(), "claude" | "codex"))
+        r.accounts.iter().any(|a| {
+            a.auth_index == auth_index && matches!(a.provider.as_str(), "claude" | "codex")
+        })
     }) {
         return Ok(());
     }

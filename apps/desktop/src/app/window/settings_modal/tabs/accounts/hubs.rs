@@ -762,10 +762,9 @@ impl AccountsTab {
             format!("{ready_count} accounts ready")
         };
 
-        let oauth_busy = self
-            .hub_oauth
-            .as_ref()
-            .is_some_and(|flow| flow.hub_id == hub_id && matches!(flow.status.as_str(), "starting" | "waiting"));
+        let oauth_busy = self.hub_oauth.as_ref().is_some_and(|flow| {
+            flow.hub_id == hub_id && matches!(flow.status.as_str(), "starting" | "waiting")
+        });
 
         let claude_hub_id = hub_id.clone();
         let add_claude = settings_sized_button(
@@ -857,7 +856,9 @@ impl AccountsTab {
                 (None, None) => status_tag(p, "Ready", TagTone::Plain),
             };
             let mut row = h_flex()
-                .id(SharedString::from(format!("accounts-hub-inline-{account_id}")))
+                .id(SharedString::from(format!(
+                    "accounts-hub-inline-{account_id}"
+                )))
                 .w_full()
                 .px(px(12.0))
                 .py(px(9.0))
@@ -995,12 +996,7 @@ impl AccountsTab {
             .into_any_element()
     }
 
-    fn start_hub_oauth(
-        &mut self,
-        hub_id: String,
-        provider: &'static str,
-        cx: &mut Context<Self>,
-    ) {
+    fn start_hub_oauth(&mut self, hub_id: String, provider: &'static str, cx: &mut Context<Self>) {
         if !matches!(provider, "claude" | "codex") {
             return;
         }
@@ -1020,9 +1016,9 @@ impl AccountsTab {
             submitting: false,
             poll: None,
         });
-        self.fields
-            .texts
-            .remove(&SharedString::from(format!("accounts-hub-oauth-input-{hub_id}")));
+        self.fields.texts.remove(&SharedString::from(format!(
+            "accounts-hub-oauth-input-{hub_id}"
+        )));
         cx.notify();
 
         let this = cx.weak_entity();
@@ -1104,16 +1100,17 @@ impl AccountsTab {
                             }),
                             move |result, cx| {
                                 let _ = weak.update(cx, |page, cx| {
-                                    let Some(flow) = page.hub_oauth.as_mut().filter(|f| {
-                                        f.id == flow_id && f.state == check_state
-                                    }) else {
+                                    let Some(flow) = page
+                                        .hub_oauth
+                                        .as_mut()
+                                        .filter(|f| f.id == flow_id && f.state == check_state)
+                                    else {
                                         return;
                                     };
                                     match result {
                                         Ok(answer) => {
-                                            let status = answer["status"]
-                                                .as_str()
-                                                .unwrap_or("wait");
+                                            let status =
+                                                answer["status"].as_str().unwrap_or("wait");
                                             if status == "ok" {
                                                 flow.status = "ok".to_string();
                                                 flow.error = None;
@@ -1215,9 +1212,10 @@ impl AccountsTab {
     fn cancel_hub_oauth(&mut self, cx: &mut Context<Self>) {
         let current = self.hub_oauth.take();
         if let Some(flow) = current {
-            self.fields
-                .texts
-                .remove(&SharedString::from(format!("accounts-hub-oauth-input-{}", flow.hub_id)));
+            self.fields.texts.remove(&SharedString::from(format!(
+                "accounts-hub-oauth-input-{}",
+                flow.hub_id
+            )));
             if flow.status == "waiting" && !flow.state.is_empty() {
                 AccountsClient::call(
                     &self.client.clone(),
@@ -1332,7 +1330,13 @@ impl AccountsTab {
                 |page: &mut Self, _window, cx| page.cancel_hub_oauth(cx),
                 cx,
             ));
-            parts.push(h_flex().gap(px(8.0)).flex_wrap().children(url_actions).into_any_element());
+            parts.push(
+                h_flex()
+                    .gap(px(8.0))
+                    .flex_wrap()
+                    .children(url_actions)
+                    .into_any_element(),
+            );
 
             let input_id = SharedString::from(format!("accounts-hub-oauth-input-{hub_id}"));
             let input_state = FieldStates::text_state(
@@ -1352,7 +1356,11 @@ impl AccountsTab {
             let submit_btn = settings_sized_button(
                 p,
                 "accounts-hub-oauth-submit",
-                if submitting { "Sending…" } else { "Submit callback" },
+                if submitting {
+                    "Sending…"
+                } else {
+                    "Submit callback"
+                },
                 None,
                 None,
                 SizedButtonVariant::Primary,
@@ -1367,12 +1375,14 @@ impl AccountsTab {
                     .w_full()
                     .gap(px(8.0))
                     .items_center()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .child(settings_text_input(p, &input_state, None, false, window, cx)),
-                    )
+                    .child(div().flex_1().min_w_0().child(settings_text_input(
+                        p,
+                        &input_state,
+                        None,
+                        false,
+                        window,
+                        cx,
+                    )))
                     .child(submit_btn)
                     .into_any_element(),
             );
@@ -1559,50 +1569,49 @@ impl AccountsTab {
         } else {
             format!("{provider_name} · on {} · read only", hub.label())
         };
-        let mut blocks: Vec<AnyElement> =
-            vec![
-                h_flex()
-                    .px(px(DETAIL_INSET))
-                    .gap(px(12.0))
-                    .items_center()
-                    .child(
-                        div()
-                            .size(px(42.0))
-                            .flex_shrink_0()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(px(10.0))
-                            .border_1()
-                            .border_color(hsla(p.hairline))
-                            .bg(hsla(p.foreground_alpha(0.03)))
-                            .child(account_logo(p, &provider, 22.0)),
-                    )
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .text_size(px(16.0))
-                                    .line_height(px(22.0))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(hsla(p.foreground))
-                                    .child(account_text(&account.name(), hide)),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(12.5))
-                                    .text_color(hsla(p.muted))
-                                    .child(subtitle),
-                            ),
-                    )
-                    .children(tag)
-                    .into_any_element(),
-            ];
+        let mut blocks: Vec<AnyElement> = vec![
+            h_flex()
+                .px(px(DETAIL_INSET))
+                .gap(px(12.0))
+                .items_center()
+                .child(
+                    div()
+                        .size(px(42.0))
+                        .flex_shrink_0()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(10.0))
+                        .border_1()
+                        .border_color(hsla(p.hairline))
+                        .bg(hsla(p.foreground_alpha(0.03)))
+                        .child(account_logo(p, &provider, 22.0)),
+                )
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(px(16.0))
+                                .line_height(px(22.0))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(hsla(p.foreground))
+                                .child(account_text(&account.name(), hide)),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(12.5))
+                                .text_color(hsla(p.muted))
+                                .child(subtitle),
+                        ),
+                )
+                .children(tag)
+                .into_any_element(),
+        ];
         let bars = account.usage_bars();
         let note = account.raw["statusMessage"]
             .as_str()
@@ -1699,7 +1708,9 @@ impl AccountsTab {
                         p,
                         SharedString::from(format!("accounts-hub-account-{account_id}-enabled")),
                         RowSpec::new("Enabled on hub")
-                            .description("Turns this login on or off in CLIProxyAPI's routing pool.")
+                            .description(
+                                "Turns this login on or off in CLIProxyAPI's routing pool.",
+                            )
                             .inset_x(0.0),
                         None,
                         switch_control(
