@@ -286,6 +286,60 @@ impl GhostexGpuiApp {
                     );
                 }
             }
+            // Settings > Workspaces' "Connect on claude.ai" / "Manage" (app/claude_cloud_page.rs).
+            "openClaudeAccountConnectors" => {
+                let text = |key: &str| command.get(key).and_then(serde_json::Value::as_str);
+                if let Some(account_id) = text("accountId") {
+                    let (account_id, name) = (
+                        account_id.to_string(),
+                        text("name").unwrap_or("this account").to_string(),
+                    );
+                    let email = text("email")
+                        .filter(|email| email.contains('@'))
+                        .map(str::to_string);
+                    self.step_settings_aside_for_claude_return(&account_id, "workspaces", cx);
+                    self.open_claude_account_connectors(
+                        &account_id,
+                        &name,
+                        email.as_deref(),
+                        window,
+                        cx,
+                    );
+                }
+            }
+            // Settings > Workspaces' "Open file" for per-workspace instructions Markdown files.
+            "openWorkspaceInstructionsFile" => {
+                if let Some(raw_path) = command.get("path").and_then(serde_json::Value::as_str) {
+                    let base_dir = shared_settings::ghostex_storage_paths()
+                        .config_dir
+                        .join("workspace-instructions");
+                    let candidate = std::path::PathBuf::from(raw_path);
+                    let is_md = candidate
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("md"));
+                    let allowed = is_md
+                        && std::fs::canonicalize(&base_dir).ok().zip(
+                            std::fs::canonicalize(&candidate).ok(),
+                        )
+                        .is_some_and(|(base, target)| target.starts_with(&base));
+                    if !allowed {
+                        self.dispatch_gpui_app_modal_toast(
+                            "warning",
+                            "Couldn't open instructions file",
+                            "The instructions file path was outside Ghostex's workspace-instructions folder.",
+                            cx,
+                        );
+                    } else if let Err(error) = gpui_open_path(&candidate) {
+                        self.dispatch_gpui_app_modal_toast(
+                            "warning",
+                            "Couldn't open instructions file",
+                            &error,
+                            cx,
+                        );
+                    }
+                }
+            }
             "signOutClaudeAccountFromClaudeAi" => {
                 if let Some(account_id) =
                     command.get("accountId").and_then(serde_json::Value::as_str)

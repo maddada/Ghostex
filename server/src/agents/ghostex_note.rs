@@ -141,10 +141,20 @@ pub(crate) fn current_launch_note_text(
     paths: &GxserverPaths,
     with_extensions: bool,
 ) -> Option<String> {
-    note_text_with(
+    current_launch_note_text_for_workspace(paths, with_extensions, None)
+}
+
+/// [`current_launch_note_text`] with optional per-workspace instructions appended.
+pub(crate) fn current_launch_note_text_for_workspace(
+    paths: &GxserverPaths,
+    with_extensions: bool,
+    workspace_instructions: Option<&str>,
+) -> Option<String> {
+    note_text_with_workspace(
         paths,
         super::marked_handovers_enabled(paths),
         with_extensions,
+        workspace_instructions,
     )
 }
 
@@ -152,24 +162,44 @@ pub(crate) fn current_launch_note_text(
 /// SessionStart hook hands an agent whose launch cannot carry it (activity.rs
 /// `session_start_note_context`), where a thread always marks its handovers and a coordinator
 /// follows its own setting.
+#[allow(dead_code)]
 pub(crate) fn note_text_with(
     paths: &GxserverPaths,
     marked_handovers: bool,
     with_extensions: bool,
 ) -> Option<String> {
+    note_text_with_workspace(paths, marked_handovers, with_extensions, None)
+}
+
+/// [`note_text_with`] with optional per-workspace instructions appended at the end so every
+/// session in that workspace (launch-flag agents and SessionStart-hook agents alike) receives them
+/// even when Ghostex note and Marked handovers are off.
+pub(crate) fn note_text_with_workspace(
+    paths: &GxserverPaths,
+    marked_handovers: bool,
+    with_extensions: bool,
+    workspace_instructions: Option<&str>,
+) -> Option<String> {
     let note = ghostex_note_enabled(paths)
         .then(|| ghostex_note_text(agent_preview_browser(paths), &paths.app_data_dir.join("i")));
     let text = launch_note_text(note.as_deref(), marked_handovers);
-    // Unit tests assert exact commands, which must not depend on the user's extensions.
-    if cfg!(test) {
-        return text;
-    }
-    let mut notes = if with_extensions {
-        crate::extensions::agent_notes::installed_agent_notes(paths)
-    } else {
+    let mut notes = if cfg!(test) {
         Vec::new()
+    } else {
+        let mut notes = if with_extensions {
+            crate::extensions::agent_notes::installed_agent_notes(paths)
+        } else {
+            Vec::new()
+        };
+        notes.extend(crate::grokbot::agent_note(paths));
+        notes
     };
-    notes.extend(crate::grokbot::agent_note(paths));
+    if let Some(workspace_note) = workspace_instructions
+        .map(str::trim)
+        .filter(|note| !note.is_empty())
+    {
+        notes.push(workspace_note.to_string());
+    }
     with_extension_notes(text, &notes)
 }
 

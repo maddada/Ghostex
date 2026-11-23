@@ -39,9 +39,103 @@ fn workspaces() -> Value {
         "sidebarWorkspaces": {
             "order": ["work", "personal"],
             "workspaces": {
-                "work": { "workspaceId": "work", "name": "Work", "letter": "W", "color": "#596fd1", "kind": "work", "claudeAccountId": null },
-                "personal": { "workspaceId": "personal", "name": "Personal", "letter": "P", "color": "#3aa675", "kind": "personal", "claudeAccountId": null }
+                "work": {
+                    "workspaceId": "work",
+                    "name": "Work",
+                    "letter": "W",
+                    "color": "#3aa675",
+                    "kind": "work",
+                    "claudeAccountId": "claude-acct-work",
+                    "claudeAccountIds": ["claude-acct-work"]
+                },
+                "personal": {
+                    "workspaceId": "personal",
+                    "name": "Personal",
+                    "letter": "P",
+                    "color": "#3f8fc7",
+                    "kind": "personal",
+                    "claudeAccountId": "claude-acct-personal-1",
+                    "claudeAccountIds": ["claude-acct-personal-1", "claude-acct-personal-2"]
+                }
             }
+        }
+    })
+}
+
+fn demo_claude_accounts() -> Value {
+    json!({
+        "accounts": [
+            {
+                "id": "claude-acct-work",
+                "provider": "claude",
+                "selector": "2",
+                "name": "work@company.example",
+                "email": "work@company.example",
+                "userDisabled": false,
+                "claudeAiConnectors": {
+                    "detected": true,
+                    "apps": ["Slack", "Linear", "Gmail", "Google Drive", "Notion"],
+                    "slack": true,
+                    "linear": true
+                }
+            },
+            {
+                "id": "claude-acct-personal-1",
+                "provider": "claude",
+                "selector": "1",
+                "name": "personal-one@example.com",
+                "email": "personal-one@example.com",
+                "userDisabled": false,
+                "claudeAiConnectors": {
+                    "detected": true,
+                    "apps": ["Gmail", "Google Calendar"],
+                    "slack": false,
+                    "linear": false
+                }
+            },
+            {
+                "id": "claude-acct-personal-2",
+                "provider": "claude",
+                "selector": "4",
+                "name": "personal-two@example.com",
+                "email": "personal-two@example.com",
+                "userDisabled": false,
+                "claudeAiConnectors": {
+                    "detected": true,
+                    "apps": ["Slack", "Notion"],
+                    "slack": true,
+                    "linear": false
+                }
+            }
+        ]
+    })
+}
+
+fn demo_workspace_instructions(params: &Value) -> Value {
+    let work_entry = json!({
+        "workspaceId": "work",
+        "name": "Work",
+        "content": "## Work rules\n- Use the claude.ai Slack and Linear connectors on work@company.example.\n- Read full Slack threads before summarizing; always ask before posting.\n- Keep company notes out of Personal projects.",
+        "path": "~/.config/ghostex/workspace-instructions/work.md",
+        "exists": true
+    });
+    let personal_entry = json!({
+        "workspaceId": "personal",
+        "name": "Personal",
+        "content": "## Personal rules\n- Never read or post company Slack threads from Personal sessions.",
+        "path": "~/.config/ghostex/workspace-instructions/personal.md",
+        "exists": true
+    });
+    if let Some(workspace_id) = params.get("workspaceId").and_then(Value::as_str) {
+        return match workspace_id {
+            "work" => work_entry,
+            _ => personal_entry,
+        };
+    }
+    json!({
+        "workspaces": {
+            "work": work_entry,
+            "personal": personal_entry
         }
     })
 }
@@ -142,11 +236,28 @@ pub(super) fn rpc(state: &str, path: &str, params: &Value) -> Option<Result<Valu
             "sidebarWorkspaces": {
                 "order": ["personal"],
                 "workspaces": {
-                    "personal": { "workspaceId": "personal", "name": "Personal", "letter": "P", "color": "#3aa675", "kind": "personal", "claudeAccountId": null }
+                    "personal": {
+                        "workspaceId": "personal",
+                        "name": "Personal",
+                        "letter": "P",
+                        "color": "#3f8fc7",
+                        "kind": "personal",
+                        "claudeAccountId": "claude-acct-personal-1",
+                        "claudeAccountIds": ["claude-acct-personal-1", "claude-acct-personal-2"]
+                    }
                 }
             }
         }),
         "/api/readWorkspaces" => workspaces(),
+        "/api/readWorkspaceInstructions" => demo_workspace_instructions(params),
+        "/api/writeWorkspaceInstructions" => json!({
+            "workspaceId": params.get("workspaceId").cloned().unwrap_or_else(|| json!("work")),
+            "name": "Work",
+            "content": params.get("content").cloned().unwrap_or_else(|| json!("")),
+            "path": "~/.config/ghostex/workspace-instructions/work.md",
+            "exists": true
+        }),
+        "/api/updateWorkspace" => workspaces(),
         "/api/readWorkModeStatus" if state == "projects-work-mode-own" => json!({
             "linearKeys": { "shared": true, "workspaces": ["work"], "projectOverrides": ["project-ghostex"] }
         }),
@@ -162,7 +273,7 @@ pub(super) fn rpc(state: &str, path: &str, params: &Value) -> Option<Result<Valu
             "projectId": params.get("projectId").cloned().unwrap_or(Value::Null),
             "account": { "name": "Yahia", "organization": "ShortPoint" },
         }),
-        "/api/agentAccounts" => json!({ "accounts": [] }),
+        "/api/agentAccounts" => demo_claude_accounts(),
         // The Work workspace uses GitHub as its team's tracker, and `gh` cannot read GitHub
         // Projects yet; Personal never picked one and has a Linear key.
         "/api/readWorkTracker"

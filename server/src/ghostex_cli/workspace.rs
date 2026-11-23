@@ -70,8 +70,25 @@ pub(super) fn workspace_command(args: &[String]) -> CliResult<()> {
             params.insert("workspaceId".to_string(), json!(workspace));
             call_and_print("/api/deleteWorkspace", params, flags)
         }
+        "instructions" => {
+            let workspace = joined(
+                rest,
+                "Pass the workspace: ghostex workspace instructions <workspace> [--set <text> | --clear].",
+            )?;
+            let mut params = Map::new();
+            params.insert("workspaceId".to_string(), json!(workspace));
+            if flags.truthy("clear") {
+                params.insert("content".to_string(), json!(""));
+                call_and_print("/api/writeWorkspaceInstructions", params, flags)
+            } else if let Some(text) = flags.string_value("set") {
+                params.insert("content".to_string(), json!(text));
+                call_and_print("/api/writeWorkspaceInstructions", params, flags)
+            } else {
+                call_and_print("/api/readWorkspaceInstructions", params, flags)
+            }
+        }
         other => Err(CliError::Other(format!(
-            "Unknown workspace command \"{other}\". Use list, create, rename, move-project or delete."
+            "Unknown workspace command \"{other}\". Use list, create, rename, move-project, instructions or delete."
         ))),
     }
 }
@@ -130,6 +147,7 @@ fn list(flags: &Flags) -> CliResult<()> {
                 "color": workspace.get("color"),
                 "letter": workspace.get("letter"),
                 "claudeAccountId": workspace.get("claudeAccountId"),
+                "claudeAccountIds": workspace.get("claudeAccountIds"),
                 "default": id == default_id,
                 "projects": names,
             })

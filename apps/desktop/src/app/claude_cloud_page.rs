@@ -173,8 +173,8 @@ impl GhostexGpuiApp {
         tab_id: BrowserTabId,
         url: &str,
     ) -> Option<String> {
-        // The Sign in Settings just asked for wins over anything the tab was before.
-        if url.starts_with("https://claude.ai/login")
+        // The Sign in or Connectors page Settings just asked for wins over anything the tab was before.
+        if url.starts_with("https://claude.ai/")
             && let Some(pending) = PENDING_SIGN_IN.with(|pending| pending.borrow_mut().take())
         {
             let profile = pending.profile.clone();
@@ -232,6 +232,45 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.open_claude_account_page(
+            account_id,
+            name,
+            email,
+            "https://claude.ai/login",
+            window,
+            cx,
+        );
+    }
+
+    /// Settings > Workspaces' "Connect on claude.ai" / "Manage": opens claude.ai's connectors
+    /// page in the account's own isolated Browser profile.
+    pub(crate) fn open_claude_account_connectors(
+        &mut self,
+        account_id: &str,
+        name: &str,
+        email: Option<&str>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.open_claude_account_page(
+            account_id,
+            name,
+            email,
+            "https://claude.ai/settings/connectors",
+            window,
+            cx,
+        );
+    }
+
+    fn open_claude_account_page(
+        &mut self,
+        account_id: &str,
+        name: &str,
+        email: Option<&str>,
+        url: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         self.ensure_claude_cloud_page_sweep(cx);
         PENDING_SIGN_IN.with(|pending| {
             *pending.borrow_mut() = Some(SignInTab {
@@ -243,7 +282,7 @@ impl GhostexGpuiApp {
         });
         self.open_browser_url_from_renderer_command(
             GpuiSidebarOpenBrowserUrlMessage {
-                url: "https://claude.ai/login".to_string(),
+                url: url.to_string(),
                 reuse: GpuiBrowserRendererOpenReuse::None,
                 from_quick_header: false,
                 project_id: None,
@@ -251,11 +290,11 @@ impl GhostexGpuiApp {
             window,
             cx,
         );
-        // A login tab whose page is made later (its profile was still being set up) keeps the
+        // A tab whose page is made later (its profile was still being set up) keeps the
         // account until then; nothing else may claim it.
         if let Some(pending) = PENDING_SIGN_IN.with(|pending| pending.borrow_mut().take())
             && let Some(tab) = self.browser_tabs.active_tab()
-            && tab.url.starts_with("https://claude.ai/login")
+            && tab.url.starts_with("https://claude.ai/")
             && !self.browser_surfaces.contains_key(&tab.id)
         {
             self.bind_claude_tab_account(tab.id, pending);

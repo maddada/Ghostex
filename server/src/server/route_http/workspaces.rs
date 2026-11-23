@@ -14,9 +14,11 @@ use crate::{
     work_mode::{store_linear_api_key, LinearKeyScope},
     workspaces::{
         assign_machine_workspace_in, assign_remote_project_workspace_in, create_workspace_in,
-        delete_workspace_in, find_workspace_id, move_project_to_workspace, read_sidebar_workspaces,
+        delete_workspace_in, delete_workspace_instructions_file, find_workspace_id,
+        move_project_to_workspace, read_sidebar_workspaces, read_workspace_instructions_file,
         reapply_workspace_defaults, resolve_project_reference, update_workspace_in,
-        write_sidebar_workspaces, DEFAULT_WORKSPACE_ID,
+        workspace_name, write_sidebar_workspaces, write_workspace_instructions_file,
+        DEFAULT_WORKSPACE_ID,
     },
 };
 
@@ -141,12 +143,87 @@ pub(super) async fn route_workspaces_http(
                         LinearKeyScope::Workspace(&workspace_id),
                         None,
                     );
+                    delete_workspace_instructions_file(&state.paths, &workspace_id);
                     Ok(json!({ "workspaceId": workspace_id, "sidebarWorkspaces": workspaces }))
                 },
             );
             spawn_work_mode_refresh(&state);
             response
         }
+        "/api/readWorkspaceInstructions" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, params, _| {
+                let workspaces = read_sidebar_workspaces(db)?;
+                if params.contains_key("workspaceId") {
+                    let workspace_id = required_workspace(&workspaces, params)?;
+                    let (content, path, exists) =
+                        read_workspace_instructions_file(&state.paths, &workspace_id)?;
+                    return Ok(json!({
+                        "workspaceId": workspace_id,
+                        "name": workspace_name(&workspaces, &workspace_id),
+                        "content": content,
+                        "path": path.to_string_lossy(),
+                        "exists": exists,
+                    }));
+                }
+                let mut entries = Map::new();
+                for workspace_id in workspaces
+                    .get("order")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                {
+                    let (content, path, exists) =
+                        read_workspace_instructions_file(&state.paths, workspace_id)?;
+                    entries.insert(
+                        workspace_id.to_string(),
+                        json!({
+                            "workspaceId": workspace_id,
+                            "name": workspace_name(&workspaces, workspace_id),
+                            "content": content,
+                            "path": path.to_string_lossy(),
+                            "exists": exists,
+                        }),
+                    );
+                }
+                Ok(json!({ "workspaces": entries }))
+            },
+        ),
+        "/api/writeWorkspaceInstructions" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, params, _| {
+                let workspaces = read_sidebar_workspaces(db)?;
+                let workspace_id = required_workspace(&workspaces, params)?;
+                let content = params
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let create_file = params
+                    .get("createFile")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let (saved, path, exists) = write_workspace_instructions_file(
+                    &state.paths,
+                    &workspace_id,
+                    content,
+                    create_file,
+                )?;
+                Ok(json!({
+                    "workspaceId": workspace_id,
+                    "name": workspace_name(&workspaces, &workspace_id),
+                    "content": saved,
+                    "path": path.to_string_lossy(),
+                    "exists": exists,
+                }))
+            },
+        ),
         "/api/moveProjectToWorkspace" => {
             let response = handle_domain_http(
                 &state,

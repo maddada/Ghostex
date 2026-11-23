@@ -12,6 +12,7 @@ const MAX_ID_CHARS: usize = 256;
 const MAX_NAME_CHARS: usize = 128;
 const MAX_MACHINE_ASSIGNMENTS: usize = 256;
 const MAX_REMOTE_PROJECT_ASSIGNMENTS: usize = 2048;
+const MAX_WORKSPACE_CLAUDE_ACCOUNTS: usize = 32;
 
 /// The workspace every project and Space without a `workspaceId` belongs to. It always exists
 /// and cannot be deleted.
@@ -105,14 +106,49 @@ pub fn workspace_exists(state: &Value, workspace_id: &str) -> bool {
         .is_some()
 }
 
-/// The Claude account a workspace's agents use, when one is chosen.
+/// The Claude account(s) a workspace's agents use, in the user's chosen order. Reads
+/// `claudeAccountIds` when present, falling back to legacy single `claudeAccountId`.
+pub fn workspace_claude_account_ids(state: &Value, workspace_id: &str) -> Vec<String> {
+    let Some(workspace) = state.get("workspaces").and_then(|ws| ws.get(workspace_id)) else {
+        return Vec::new();
+    };
+    let mut ids = Vec::new();
+    if let Some(list) = workspace.get("claudeAccountIds").and_then(Value::as_array) {
+        for item in list {
+            if let Some(id) = bounded_text(Some(item), MAX_ID_CHARS) {
+                if !ids.iter().any(|existing| existing == &id) {
+                    ids.push(id);
+                }
+            }
+        }
+    }
+    if ids.is_empty() {
+        if let Some(id) = bounded_text(workspace.get("claudeAccountId"), MAX_ID_CHARS) {
+            ids.push(id);
+        }
+    }
+    ids.truncate(MAX_WORKSPACE_CLAUDE_ACCOUNTS);
+    ids
+}
+
+/// The first Claude account a workspace's agents use, when one or more are chosen.
 pub fn workspace_claude_account_id(state: &Value, workspace_id: &str) -> Option<String> {
+    workspace_claude_account_ids(state, workspace_id)
+        .into_iter()
+        .next()
+}
+
+/// The display name of a workspace in a document, falling back to its id.
+pub fn workspace_name(state: &Value, workspace_id: &str) -> String {
     state
-        .get("workspaces")?
-        .get(workspace_id)?
-        .get("claudeAccountId")?
-        .as_str()
+        .get("workspaces")
+        .and_then(|workspaces| workspaces.get(workspace_id))
+        .and_then(|workspace| workspace.get("name"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
         .map(str::to_string)
+        .unwrap_or_else(|| workspace_id.to_string())
 }
 
 /// What a request is told when no workspace has the id or name it gave. It repeats nothing the
@@ -255,6 +291,7 @@ pub(crate) fn create_workspace_in(
         "icon",
         "kind",
         "claudeAccountId",
+        "claudeAccountIds",
         "tracker",
     ] {
         if let Some(value) = params.get(key) {
@@ -279,8 +316,9 @@ pub(crate) fn create_workspace_in(
     Ok((workspace_id, normalize_sidebar_workspaces_state(&next)))
 }
 
-/// Applies `params` (`name`, `color`, `letter`, `icon`, `kind`, `claudeAccountId`, `tracker`;
-/// `null` clears the icon, the account or the tracker) to one workspace.
+/// Applies `params` (`name`, `color`, `letter`, `icon`, `kind`, `claudeAccountId`,
+/// `claudeAccountIds`, `tracker`; `null` clears the icon, the account(s) or the tracker) to one
+/// workspace.
 pub(crate) fn update_workspace_in(
     state: &Value,
     workspace_id: &str,
@@ -297,15 +335,7 @@ pub(crate) fn update_workspace_in(
     if params.contains_key("name") && bounded_text(params.get("name"), MAX_NAME_CHARS).is_none() {
         return Err(DomainStateError::bad_request("A workspace needs a name."));
     }
-    for key in [
-        "name",
-        "color",
-        "letter",
-        "icon",
-        "kind",
-        "claudeAccountId",
-        "tracker",
-    ] {
+    for key in ["name", "color", "letter", "icon", "kind", "tracker"] {
         match params.get(key) {
             Some(Value::Null) => {
                 workspace.remove(key);
@@ -314,6 +344,29 @@ pub(crate) fn update_workspace_in(
                 workspace.insert(key.into(), value.clone());
             }
             None => {}
+        }
+    }
+    // `claudeAccountIds` (new multi-account clients) and `claudeAccountId` (legacy single-account
+    // clients) stay in sync so older phones and desktops always see a consistent choice.
+    if let Some(account_ids) = params.get("claudeAccountIds") {
+        workspace.remove("claudeAccountId");
+        match account_ids {
+            Value::Null => {
+                workspace.remove("claudeAccountIds");
+            }
+            value => {
+                workspace.insert("claudeAccountIds".into(), value.clone());
+            }
+        }
+    } else if let Some(account_id) = params.get("claudeAccountId") {
+        workspace.remove("claudeAccountIds");
+        match account_id {
+            Value::Null => {
+                workspace.remove("claudeAccountId");
+            }
+            value => {
+                workspace.insert("claudeAccountId".into(), value.clone());
+            }
         }
     }
     Ok(normalize_sidebar_workspaces_state(&next))
@@ -425,8 +478,25 @@ pub fn normalize_sidebar_workspaces_state(state: &Value) -> Value {
             workspace.insert("icon".into(), json!(icon));
         }
         workspace.insert("kind".into(), json!(kind.as_wire()));
-        if let Some(account_id) = bounded_text(source.get("claudeAccountId"), MAX_ID_CHARS) {
-            workspace.insert("claudeAccountId".into(), json!(account_id));
+        let mut account_ids: Vec<String> = Vec::new();
+        if let Some(list) = source.get("claudeAccountIds").and_then(Value::as_array) {
+            for item in list {
+                if let Some(id) = bounded_text(Some(item), MAX_ID_CHARS) {
+                    if !account_ids.iter().any(|existing| existing == &id) {
+                        account_ids.push(id);
+                    }
+                }
+            }
+        }
+        if account_ids.is_empty() {
+            if let Some(account_id) = bounded_text(source.get("claudeAccountId"), MAX_ID_CHARS) {
+                account_ids.push(account_id);
+            }
+        }
+        account_ids.truncate(MAX_WORKSPACE_CLAUDE_ACCOUNTS);
+        if let Some(first_account_id) = account_ids.first() {
+            workspace.insert("claudeAccountId".into(), json!(first_account_id));
+            workspace.insert("claudeAccountIds".into(), json!(account_ids));
         }
         // The primary tracker this computer picked (crate::work_mode::tracker): Linear, GitHub, or
         // a ticket command's id; absent = never picked, which resolves to Linear when a Linear key

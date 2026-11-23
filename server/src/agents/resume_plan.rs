@@ -325,11 +325,22 @@ pub(crate) fn to_agent_resume_input(
     let base_command = base_command
         .map(|command| with_resume_model_pin(agent_id.as_deref(), project, session, command))
         .map(|command| with_codex_moved_cwd(agent_id.as_deref(), session, command));
+    let workspace_note = if cfg!(test) {
+        None
+    } else {
+        crate::storage::open_gxserver_database(&crate::paths::get_gxserver_paths(None))
+            .ok()
+            .and_then(|db| crate::workspaces::project_workspace_info(&db, project).ok().flatten())
+            .map(|(workspace_id, workspace_name)| WorkspaceNoteContext {
+                workspace_id,
+                workspace_name,
+            })
+    };
     let runtime_command = agent_id
         .as_ref()
         .and_then(|agent_id| {
             base_command.as_ref().map(|command| {
-                resolve_session_launch_command(
+                resolve_session_launch_command_for_workspace(
                     agent_id,
                     command,
                     // A Claude the user restarted in Bypass from the Mode menu keeps starting in
@@ -348,6 +359,7 @@ pub(crate) fn to_agent_resume_input(
                         .or_else(|| read_text_from_map(&launch_settings, "icon"))
                         .as_deref(),
                     session_is_coordinator(&runtime_settings),
+                    workspace_note.as_ref(),
                 )
             })
         })

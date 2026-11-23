@@ -1247,18 +1247,26 @@ fn state_value(
     } else {
         session_account_counts(repository)?
     };
+    let include_claude_connectors = !titlebar && operation != Some("session");
     let mut rows = Vec::new();
     for found in &snapshot.accounts {
         let id = account_id(found);
         let saved = registry.accounts.iter().find(|a| a.id == id);
-        rows.push(json!({"id":id,"provider":found.provider,"selector":found.selector,"name":saved.map(|a|a.name.as_str()).unwrap_or(&found.name),"email":found.email,"indicator":saved.map(|a|a.indicator.as_str()).unwrap_or(""),"color":saved.map(|a|a.color.as_str()).unwrap_or("neutral"),"eligible":saved.is_some_and(|a|a.eligible),"registered":saved.is_some(),"showInTitlebar":saved.is_some_and(|a|a.show_in_titlebar&&!a.user_disabled),"userDisabled":saved.is_some_and(|a|a.user_disabled),"signInIgnored":saved.is_some_and(|a|a.sign_in_ignored),"sharedHistory":saved.is_some_and(|a|a.shared_history)||found.shared_history,"disabledReason":saved.and_then(|a|a.disabled.as_ref()).map(|d|d.reason.as_str()),"status":found.status,"usage":found.usage,"resetCredits":found.reset_credits,"resetCreditDetails":found.reset_credit_details,"resetCreditsError":found.reset_credits_error,"usageUpdatedAt":found.usage_updated_at,"usageError":found.usage_error,"usageStale":found.usage_stale,"sessionCount":session_counts.get(&id).copied().unwrap_or(0)}));
+        let mut row = json!({"id":id,"provider":found.provider,"selector":found.selector,"name":saved.map(|a|a.name.as_str()).unwrap_or(&found.name),"email":found.email,"indicator":saved.map(|a|a.indicator.as_str()).unwrap_or(""),"color":saved.map(|a|a.color.as_str()).unwrap_or("neutral"),"eligible":saved.is_some_and(|a|a.eligible),"registered":saved.is_some(),"showInTitlebar":saved.is_some_and(|a|a.show_in_titlebar&&!a.user_disabled),"userDisabled":saved.is_some_and(|a|a.user_disabled),"signInIgnored":saved.is_some_and(|a|a.sign_in_ignored),"sharedHistory":saved.is_some_and(|a|a.shared_history)||found.shared_history,"disabledReason":saved.and_then(|a|a.disabled.as_ref()).map(|d|d.reason.as_str()),"status":found.status,"usage":found.usage,"resetCredits":found.reset_credits,"resetCreditDetails":found.reset_credit_details,"resetCreditsError":found.reset_credits_error,"usageUpdatedAt":found.usage_updated_at,"usageError":found.usage_error,"usageStale":found.usage_stale,"sessionCount":session_counts.get(&id).copied().unwrap_or(0)});
         // A Codex login's ChatGPT account (workspace), which a hub account's twin check compares.
         if found.provider == Provider::Codex {
-            if let Some(row) = rows.last_mut() {
-                row["workspace"] =
-                    json!(super::codex_identity::codex_account_part(&found.identity));
-            }
+            row["workspace"] = json!(super::codex_identity::codex_account_part(&found.identity));
         }
+        if include_claude_connectors && found.provider == Provider::Claude {
+            row["claudeAiConnectors"] = json!(
+                super::claude_connectors::read_account_claude_ai_connectors(
+                    home,
+                    &found.selector,
+                    &found.identity,
+                )
+            );
+        }
+        rows.push(row);
     }
     let loading = titlebar && snapshot.fetched_at.is_none();
     for saved in &registry.accounts {
@@ -1273,6 +1281,15 @@ fn state_value(
                 if !loading && !saved.user_disabled {
                     row["usageError"] = json!(format!("Added from {}. Logins stay on each computer, so sign in here once to use it.", synced.from));
                 }
+            }
+            if include_claude_connectors && saved.provider == Provider::Claude {
+                row["claudeAiConnectors"] = json!(
+                    super::claude_connectors::read_account_claude_ai_connectors(
+                        home,
+                        &saved.selector,
+                        &saved.identity,
+                    )
+                );
             }
             rows.push(row);
         }
@@ -1327,16 +1344,19 @@ fn state_value(
             .transpose()?
             .flatten()
         {
-            if let Some(account_id) =
-                crate::workspaces::project_claude_account_id(repository.db, &project)?.filter(
-                    |id| {
-                        registry.accounts.iter().any(|account| {
-                            account.id == *id && account.provider == Provider::Claude
-                        })
-                    },
-                )
-            {
-                value["defaultAccounts"]["claude"] = json!(account_id);
+            let workspace_accounts =
+                crate::workspaces::project_claude_account_ids(repository.db, &project)?;
+            if !workspace_accounts.is_empty() {
+                let model = super::default_account::launch_model(Provider::Claude, None);
+                if let Some(account) = super::default_account::quick_launch_account_from_pool(
+                    registry,
+                    snapshot,
+                    Provider::Claude,
+                    &model,
+                    &workspace_accounts,
+                ) {
+                    value["defaultAccounts"]["claude"] = json!(account.id);
+                }
             }
         }
     }

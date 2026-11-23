@@ -15,6 +15,20 @@ pub(crate) fn quick_launch_account<'a>(
 ) -> Option<&'a SavedAccount> {
     pick(registry, snapshot, provider, model, Utc::now())
 }
+
+/// Picks the best Claude/Codex account for a new session from a workspace's explicit account pool.
+/// Ranks candidates using the provider's automatic rule (`Auto`, `MostRemaining`, `MostUsed`,
+/// `SoonestReset`, or `LastUsed` when the last-used account belongs to the pool), never choosing
+/// an account outside `allowed_ids`.
+pub(crate) fn quick_launch_account_from_pool<'a>(
+    registry: &'a Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    model: &str,
+    allowed_ids: &[String],
+) -> Option<&'a SavedAccount> {
+    pick_from_pool(registry, snapshot, provider, model, allowed_ids, Utc::now())
+}
 /// The model a new session of `provider` starts on when launched with `command`: the command's own `--model`, else the default Ghostex pins on new sessions (agent_model_pins.rs), else the model catalog's default row. Empty when none is known, which counts every window.
 pub(crate) fn launch_model(provider: Provider, command: Option<&str>) -> String {
     command
@@ -115,6 +129,101 @@ fn pick<'a>(
         })
         .map(|(a, _)| a)
 }
+fn pick_from_pool<'a>(
+    registry: &'a Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    model: &str,
+    allowed_ids: &[String],
+    now: DateTime<Utc>,
+) -> Option<&'a SavedAccount> {
+    if allowed_ids.is_empty() {
+        return None;
+    }
+    let usable: Vec<&SavedAccount> = registry
+        .accounts
+        .iter()
+        .filter(|a| {
+            a.provider == provider
+                && !a.user_disabled
+                && a.login_expired_at.is_none()
+                && allowed_ids.iter().any(|id| id == &a.id)
+        })
+        .collect();
+    if usable.is_empty() {
+        return None;
+    }
+    if usable.len() == 1 {
+        return usable.into_iter().next();
+    }
+    let stored_rule = registry
+        .new_session_accounts
+        .get(&provider)
+        .cloned()
+        .unwrap_or(NewSessionAccount::Auto);
+    if matches!(stored_rule, NewSessionAccount::LastUsed) {
+        if let Some(last_id) = registry.last_used_accounts.get(&provider) {
+            if let Some(account) = usable
+                .iter()
+                .copied()
+                .find(|a| &a.id == last_id && a.disabled.is_none())
+            {
+                return Some(account);
+            }
+        }
+    }
+    let rank_rule = match stored_rule {
+        NewSessionAccount::Auto
+        | NewSessionAccount::MostRemaining
+        | NewSessionAccount::MostUsed
+        | NewSessionAccount::SoonestReset => stored_rule,
+        NewSessionAccount::LastUsed | NewSessionAccount::Pinned { .. } => NewSessionAccount::Auto,
+    };
+    let auto_candidates: Vec<&SavedAccount> = usable
+        .iter()
+        .copied()
+        .filter(|a| a.auto_switchable())
+        .collect();
+    let pool = if !auto_candidates.is_empty() {
+        auto_candidates
+    } else {
+        usable
+    };
+    let usage = |account: &SavedAccount| {
+        snapshot
+            .accounts
+            .iter()
+            .find(|d| account_id(d) == account.id)
+            .filter(|d| d.status == "ready" && d.usage_error.is_none() && !d.usage.is_empty())
+            .map(|d| Reading {
+                windows: d
+                    .usage
+                    .iter()
+                    .filter(|w| super::recovery::relevant(w, model) && w.id != "spend")
+                    .map(|w| (w, reset_at(w).filter(|reset| *reset <= now).is_some()))
+                    .collect(),
+            })
+    };
+    let slot = |account: &SavedAccount| account.selector.parse::<u32>().unwrap_or(u32::MAX);
+    pool.into_iter()
+        .map(|a| (a, usage(a)))
+        .min_by(|(a, left), (b, right)| {
+            let by_usage = match (left, right) {
+                (Some(left), Some(right)) => left
+                    .exhausted()
+                    .cmp(&right.exhausted())
+                    .then_with(|| rank(&rank_rule, left, right, now)),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            };
+            by_usage
+                .then_with(|| slot(a).cmp(&slot(b)))
+                .then_with(|| a.id.cmp(&b.id))
+        })
+        .map(|(a, _)| a)
+}
+
 fn reset_at(window: &UsageWindow) -> Option<DateTime<Utc>> {
     window
         .resets_at

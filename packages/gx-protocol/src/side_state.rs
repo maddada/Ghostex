@@ -147,9 +147,14 @@ pub struct SidebarWorkspace {
     /// `work` or `personal`; sets the work-mode default of the workspace's projects.
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub kind: String,
-    /// The saved Claude account (`/api/agentAccounts` id) this workspace's agents launch with.
+    /// The first saved Claude account (`/api/agentAccounts` id) this workspace's agents launch
+    /// with; kept in sync with `claude_account_ids` for older clients and phones.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_account_id: Option<String>,
+    /// The saved Claude accounts (`/api/agentAccounts` ids) this workspace's agents may launch
+    /// with; empty means follow Settings > Accounts > Account for new sessions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub claude_account_ids: Vec<String>,
     /// `linear` or `github`: the primary tracker picked on this computer (server/src/work_mode/
     /// tracker.rs). Absent = never picked; a team's own choice is not in this document.
     #[serde(default, skip_serializing_if = "Option::is_none")]

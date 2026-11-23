@@ -13,8 +13,10 @@
 //! team-flow steps (`workspaces/flow_steps.rs`).
 //! SEE-ALSO: server/src/server/route_http/workspaces.rs, server/src/work_mode/credentials.rs,
 //! apps/desktop/src/app/workspace_browser.rs (`clear_workspace_browser_signins`).
+mod claude_accounts;
 mod drafts;
 mod flow_steps;
+mod instructions;
 mod slack_flow;
 mod team;
 mod tracker;
@@ -23,7 +25,7 @@ use super::super::catalog::SettingOption;
 use super::super::fields::notice::{greyed_out, is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, RowSpec, SettingsPage, setting_row, settings_button,
-    settings_section, settings_segmented, settings_select, settings_text_input, static_note,
+    settings_section, settings_segmented, settings_text_input, static_note,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -66,8 +68,12 @@ pub(crate) struct WorkspacesTab {
     error: Option<String>,
     /// `linearKeys` from `/api/readWorkModeStatus`: which keys exist.
     linear_keys: Option<Value>,
-    /// The saved Claude accounts, as (id, label).
-    claude_accounts: Vec<(String, String)>,
+    /// The saved Claude accounts with their detected `claude.ai` connectors.
+    claude_accounts: Vec<claude_accounts::ClaudeAccountInfo>,
+    /// Whether `/api/agentAccounts` is being refreshed.
+    reloading_accounts: bool,
+    /// Per-workspace file-backed agent instructions from `/api/readWorkspaceInstructions`.
+    instructions: HashMap<String, instructions::WorkspaceInstructionsState>,
     /// A Linear key typed but not saved yet, per workspace.
     key_drafts: HashMap<String, String>,
     /// Workspaces whose Linear key is being checked and saved.
@@ -112,6 +118,8 @@ impl WorkspacesTab {
             error: None,
             linear_keys: None,
             claude_accounts: Vec::new(),
+            reloading_accounts: false,
+            instructions: HashMap::new(),
             key_drafts: HashMap::new(),
             saving_keys: HashSet::new(),
             key_accounts: HashMap::new(),
@@ -178,22 +186,8 @@ impl WorkspacesTab {
             },
             cx,
         );
-        let this = cx.weak_entity();
-        store_gxserver_rpc(
-            &self.store.clone(),
-            "/api/agentAccounts",
-            json!({ "operation": "list", "cachedOnly": true }),
-            RPC_TIMEOUT,
-            move |result, cx| {
-                let _ = this.update(cx, |page, cx| {
-                    if let Ok(result) = result {
-                        page.claude_accounts = claude_accounts(&result);
-                        cx.notify();
-                    }
-                });
-            },
-            cx,
-        );
+        self.reload_claude_accounts(cx);
+        self.reload_all_workspace_instructions(cx);
     }
 
     /// One workspace write, then a reload so the page shows what the daemon kept.
@@ -517,55 +511,11 @@ impl WorkspacesTab {
         // Linear API key.
         rows.push(self.linear_key_row(p, &workspace_id, is_default, window, cx));
 
-        // Claude account.
-        let mut options = vec![SettingOption {
-            label: "Account for new sessions (Accounts page)".into(),
-            value: String::new(),
-        }];
-        let hide_emails = {
-            let store = self.store.read(cx);
-            store.bool("hideAccountEmails") || store.bool("screenshotMode")
-        };
-        options.extend(
-            self.claude_accounts
-                .iter()
-                .map(|(id, label)| SettingOption {
-                    label: super::accounts::widgets::account_text(label, hide_emails).into(),
-                    value: id.clone(),
-                }),
-        );
-        let account = text(workspace, "claudeAccountId");
-        let account_workspace = workspace_id.clone();
-        let account_select = settings_select(
-            self,
-            p,
-            format!("workspace-claude-{workspace_id}"),
-            &options,
-            &account,
-            Some(260.0),
-            false,
-            None,
-            move |page: &mut Self, value, _window, cx| {
-                let value = if value.is_empty() {
-                    Value::Null
-                } else {
-                    json!(value)
-                };
-                page.update_workspace(&account_workspace, json!({ "claudeAccountId": value }), cx);
-            },
-            window,
-            cx,
-        );
-        rows.push(setting_row(
-            p,
-            format!("workspace-claude-{workspace_id}"),
-            RowSpec::new("Claude account").description(
-                "The Claude account agents in this workspace's projects use, unless you pick one when you start them.",
-            ),
-            None,
-            account_select,
-            cx,
-        ));
+        // Agent instructions (file-backed Markdown).
+        rows.push(self.agent_instructions_row(p, &workspace_id, &name, window, cx));
+
+        // Claude accounts (multi-account) and per-account claude.ai connectors + guide.
+        rows.extend(self.claude_accounts_rows(p, workspace, cx));
 
         rows.extend(self.connection_rows(p, &workspace_id, window, cx));
 
@@ -843,7 +793,7 @@ impl Render for WorkspacesTab {
         }
         let intro = static_note(
             &p,
-            "Each workspace has its own projects, Spaces, Linear key, Claude account and browser sign-ins. Switch workspaces with the button left of your Spaces; each window shows one workspace.",
+            "Each workspace has its own projects, Spaces, Linear key, agent instructions, Claude accounts and browser sign-ins. Switch workspaces with the button left of your Spaces; each window shows one workspace.",
             false,
         );
         let new_button = settings_button(
@@ -939,39 +889,6 @@ fn hex(color: &str) -> gpui::Hsla {
         .map(rgb)
         .map(gpui::Hsla::from)
         .unwrap_or(gpui::Hsla::from(rgb(0x808080)))
-}
-
-/// The saved Claude accounts of an `/api/agentAccounts` list, by slot.
-fn claude_accounts(result: &Value) -> Vec<(String, String)> {
-    let mut accounts: Vec<(f64, String, String)> = result
-        .get("accounts")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|account| account.get("provider").and_then(Value::as_str) == Some("claude"))
-        .filter_map(|account| {
-            let id = account.get("id").and_then(Value::as_str)?.to_string();
-            let slot = text(account, "selector");
-            // As Settings > Accounts names it: the nickname (or the email it defaults to), else
-            // the email, and the number only when neither is known (gxserver's
-            // `CDXC:AgentProviders 2026-11-06` on `card_account_name`).
-            let label = [text(account, "name"), text(account, "email")]
-                .into_iter()
-                .map(|value| value.trim().to_string())
-                .find(|value| !value.is_empty())
-                .unwrap_or_else(|| format!("Account {slot}"));
-            Some((slot.parse::<f64>().unwrap_or(f64::MAX), id, label))
-        })
-        .collect();
-    accounts.sort_by(|left, right| {
-        left.0
-            .partial_cmp(&right.0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    accounts
-        .into_iter()
-        .map(|(_, id, label)| (id, label))
-        .collect()
 }
 
 /// "Name @ Organization" from a `/api/setLinearApiKey` answer.

@@ -634,8 +634,33 @@ fn coordinator_session_start_context(
     };
     let legacy_coordinator =
         coordinator && !crate::coordinators::coordinator_role_is_skill(session);
+    let workspace_instructions = if cfg!(test) {
+        None
+    } else {
+        repository
+            .get_project(&lifecycle.project_id)
+            .ok()
+            .flatten()
+            .and_then(|project| {
+                crate::workspaces::project_workspace_info(repository.connection(), &project)
+                    .ok()
+                    .flatten()
+            })
+            .and_then(|(workspace_id, workspace_name)| {
+                crate::workspaces::read_workspace_instructions_note(
+                    &paths,
+                    &workspace_id,
+                    &workspace_name,
+                )
+            })
+    };
     // Extension lines are for ordinary sessions only, as on a launch flag (marked_handovers.rs).
-    let note = super::note_text_with(&paths, marked, !coordinator && !thread);
+    let note = super::note_text_with_workspace(
+        &paths,
+        marked,
+        !coordinator && !thread,
+        workspace_instructions.as_deref(),
+    );
     let standing_role = crate::agents::standing_role::read_standing_role(
         repository.connection(),
         &lifecycle.project_id,

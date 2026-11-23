@@ -249,11 +249,14 @@ pub(crate) fn create_agent_session_params_for_project(
                 let registry = crate::accounts::store::read(db)?;
                 let workspace_account = match provider {
                     crate::accounts::model::Provider::Claude => {
-                        crate::workspaces::project_claude_account_id(db, project)?.filter(|id| {
-                            registry
-                                .accounts
-                                .iter()
-                                .any(|a| a.id == *id && a.provider == provider && !a.user_disabled)
+                        let allowed = crate::workspaces::project_claude_account_ids(db, project)?;
+                        allowed.into_iter().find(|id| {
+                            registry.accounts.iter().any(|a| {
+                                a.id == *id
+                                    && a.provider == provider
+                                    && !a.user_disabled
+                                    && a.login_expired_at.is_none()
+                            })
                         })
                     }
                     crate::accounts::model::Provider::Codex => None,
@@ -334,12 +337,12 @@ pub(crate) fn create_agent_session_params_for_project(
                 .entry("accountBaseCommand")
                 .or_insert(json!(command));
         }
-        let workspace_account_id = crate::workspaces::project_claude_account_id(db, project)?;
+        let workspace_account_ids = crate::workspaces::project_claude_account_ids(db, project)?;
         crate::accounts::launch::apply_new_session(
             db,
             &agent_id,
             agent_icon.as_deref(),
-            workspace_account_id.as_deref(),
+            &workspace_account_ids,
             &mut runtime_settings,
         )?
     };
@@ -431,7 +434,14 @@ pub(crate) fn create_agent_session_params_for_project(
         }
         _ => {
             let coordinator = session_is_coordinator(&runtime_settings);
-            let mut plan = build_session_launch_plan(
+            let workspace_note = crate::workspaces::project_workspace_info(db, project)
+                .ok()
+                .flatten()
+                .map(|(workspace_id, workspace_name)| WorkspaceNoteContext {
+                    workspace_id,
+                    workspace_name,
+                });
+            let mut plan = build_session_launch_plan_for_workspace(
                 AgentLaunchInput {
                     accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")
                         .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode")),
@@ -450,6 +460,7 @@ pub(crate) fn create_agent_session_params_for_project(
                     icon: agent_icon.clone(),
                 },
                 coordinator,
+                workspace_note.as_ref(),
             );
             // Only the command this launch runs names the id; `agentCommand` stays the base that
             // resume, fork and account wrapping rebuild from. Pi's id is minted here; Empryo's names
@@ -1370,17 +1381,28 @@ pub(crate) fn build_agent_launch_plan(input: AgentLaunchInput) -> Value {
 /// [`build_agent_launch_plan`] for a session that may be a `coordinator`
 /// ([`session_is_coordinator`]), which takes no extension lines in its launch note.
 pub(crate) fn build_session_launch_plan(input: AgentLaunchInput, coordinator: bool) -> Value {
+    build_session_launch_plan_for_workspace(input, coordinator, None)
+}
+
+/// [`build_session_launch_plan`] with optional workspace context so per-workspace instructions
+/// are attached to the launch command.
+pub(crate) fn build_session_launch_plan_for_workspace(
+    input: AgentLaunchInput,
+    coordinator: bool,
+    workspace: Option<&WorkspaceNoteContext>,
+) -> Value {
     let base_command = input
         .command
         .or_else(|| default_agent_command(&input.agent_id).map(str::to_string))
         .unwrap_or_default();
-    let launch_command = resolve_session_launch_command(
+    let launch_command = resolve_session_launch_command_for_workspace(
         &input.agent_id,
         &base_command,
         input.accept_all_mode.as_deref(),
         input.global_accept_all_enabled,
         input.icon.as_deref(),
         coordinator,
+        workspace,
     );
     let command = if input.agent_id == "cursor" {
         input
@@ -1497,6 +1519,27 @@ pub(crate) fn resolve_session_launch_command(
     icon: Option<&str>,
     coordinator: bool,
 ) -> String {
+    resolve_session_launch_command_for_workspace(
+        agent_id,
+        command,
+        accept_all_mode,
+        global_accept_all_enabled,
+        icon,
+        coordinator,
+        None,
+    )
+}
+
+/// [`resolve_session_launch_command`] with optional workspace context for workspace instructions.
+pub(crate) fn resolve_session_launch_command_for_workspace(
+    agent_id: &str,
+    command: &str,
+    accept_all_mode: Option<&str>,
+    global_accept_all_enabled: bool,
+    icon: Option<&str>,
+    coordinator: bool,
+    workspace: Option<&WorkspaceNoteContext>,
+) -> String {
     let enabled = match accept_all_mode {
         Some("enabled") => true,
         Some("disabled") => false,
@@ -1512,7 +1555,7 @@ pub(crate) fn resolve_session_launch_command(
     );
     let command = super::mode_picker_off::with_auto_mode(agent_id, icon, enabled, &command);
     let command = with_codex_no_daemon(agent_id, icon, &command);
-    let command = with_launch_notes(agent_id, icon, &command, coordinator);
+    let command = with_launch_notes_for_workspace(agent_id, icon, &command, coordinator, workspace);
     let command = crate::connectors::with_connector_tools(agent_id, icon, &command);
     // Last, so the steps above still read the program's own name (agent_cli/launch_path.rs).
     let command = crate::agent_cli::launch_path::with_reachable_program(&command);

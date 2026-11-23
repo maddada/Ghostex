@@ -1,6 +1,7 @@
 pub(crate) mod api_errors;
 pub(crate) mod autopilot;
 pub(crate) mod claude_background;
+pub(crate) mod claude_connectors;
 pub(crate) mod claude_resets;
 pub(crate) mod claude_swap_build;
 pub(crate) mod claude_swap_switch;

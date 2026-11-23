@@ -971,6 +971,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/createWorkspace"
         | "/api/updateWorkspace"
         | "/api/deleteWorkspace"
+        | "/api/readWorkspaceInstructions"
+        | "/api/writeWorkspaceInstructions"
         | "/api/moveProjectToWorkspace"
         | "/api/moveMachineToWorkspace"
         | "/api/moveRemoteProjectToWorkspace" => remote_allowed(path),

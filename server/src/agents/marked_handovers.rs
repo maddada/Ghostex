@@ -96,11 +96,29 @@ pub(crate) fn coordinator_marks_replies(paths: &GxserverPaths) -> bool {
 ///
 /// CDXC:Extensions 2026-11-16 WHY:
 /// A coordinator made since 2026-10-17 takes its role from the skill and has no system prompt flag of its own, so it took this note like any session; the lines extensions add (`agentNote`, extensions/agent_notes.rs) are for ordinary sessions only (Q3430), so a `coordinator` launch gets the note without them, from a file of its own so the two never overwrite each other between launches.
+/// Identifies a session's workspace when attaching per-workspace agent instructions.
+#[derive(Clone, Debug)]
+pub(crate) struct WorkspaceNoteContext {
+    pub(crate) workspace_id: String,
+    pub(crate) workspace_name: String,
+}
+
+#[allow(dead_code)]
 pub(crate) fn with_launch_notes(
     agent_id: &str,
     icon: Option<&str>,
     command: &str,
     coordinator: bool,
+) -> String {
+    with_launch_notes_for_workspace(agent_id, icon, command, coordinator, None)
+}
+
+pub(crate) fn with_launch_notes_for_workspace(
+    agent_id: &str,
+    icon: Option<&str>,
+    command: &str,
+    coordinator: bool,
+    workspace: Option<&WorkspaceNoteContext>,
 ) -> String {
     if command.trim().is_empty() {
         return command.to_string();
@@ -132,10 +150,59 @@ pub(crate) fn with_launch_notes(
             return command.to_string();
         }
     }
-    let Some(text) = super::current_launch_note_text(&paths, !coordinator) else {
+    let workspace_instructions = if cfg!(test) {
+        None
+    } else {
+        workspace.and_then(|ws| {
+            crate::workspaces::read_workspace_instructions_note(
+                &paths,
+                &ws.workspace_id,
+                &ws.workspace_name,
+            )
+        })
+    };
+    // A coordinator thread's saved command already carries Ghostex's marked-handovers flag; when its
+    // workspace also has instructions, combine both into a per-workspace thread note so threads
+    // follow workspace rules without clobbering user-supplied flags.
+    if let (Some(ws), Some(ws_note)) = (workspace, workspace_instructions.as_deref()) {
+        let safe_id = crate::workspaces::safe_workspace_file_stem(&ws.workspace_id);
+        let thread_note_file = paths.root_dir.join("marked-handovers").join("note.md");
+        let thread_note_quoted = quote_shell_arg(&thread_note_file.to_string_lossy());
+        if family == "claude" && command.contains(&thread_note_quoted) {
+            let combined = format!("{MARKED_HANDOVERS_NOTE}\n\n{ws_note}");
+            let combined_path = paths
+                .root_dir
+                .join("agent-note")
+                .join(format!("thread-workspace-{safe_id}.md"));
+            if write_note_file(&combined_path, &combined).is_ok() {
+                let replacement = quote_shell_arg(&combined_path.to_string_lossy());
+                return command.replacen(&thread_note_quoted, &replacement, 1);
+            }
+        }
+        if family == "codex" {
+            let thread_codex_arg = codex_note_arg(MARKED_HANDOVERS_NOTE);
+            if command.contains(&thread_codex_arg) {
+                let combined = format!("{MARKED_HANDOVERS_NOTE}\n\n{ws_note}");
+                return command.replacen(&thread_codex_arg, &codex_note_arg(&combined), 1);
+            }
+        }
+    }
+    let Some(text) = super::current_launch_note_text_for_workspace(
+        &paths,
+        !coordinator,
+        workspace_instructions.as_deref(),
+    ) else {
         return command.to_string();
     };
-    let path = if coordinator && text != MARKED_HANDOVERS_NOTE {
+    let path = if let (Some(ws), true) = (workspace, workspace_instructions.is_some()) {
+        let safe_id = crate::workspaces::safe_workspace_file_stem(&ws.workspace_id);
+        let filename = if coordinator {
+            format!("coordinator-workspace-{safe_id}.md")
+        } else {
+            format!("workspace-{safe_id}.md")
+        };
+        paths.root_dir.join("agent-note").join(filename)
+    } else if coordinator && text != MARKED_HANDOVERS_NOTE {
         paths
             .root_dir
             .join("agent-note")
