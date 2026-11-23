@@ -2047,7 +2047,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let cwd = cwd_path.to_string_lossy().to_string();
     let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);
-    let endpoint = GxserverEndpoint::from_env();
+    let endpoint = GxserverEndpoint::from_env_or_secret_file(parsed.channel_secret_file.as_deref());
     let spool_session_id = endpoint
         .as_ref()
         .map(|ep| ep.session_id.clone())

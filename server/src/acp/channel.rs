@@ -89,6 +89,73 @@ pub(crate) fn verify_channel_secret(
     expected.len() == provided.len() && bool::from(expected.as_bytes().ct_eq(provided.as_bytes()))
 }
 
+const ACP_SECRETS_DIR_NAME: &str = "acp-secrets";
+const ACCOUNT_SWITCH_DIR_NAME: &str = "account-switch";
+
+/// Atomically create a private (`0600` on Unix, under a `0700` directory) one-shot file holding
+/// the session's ACP host channel secret, with a random UUID filename so concurrent switches never
+/// collide and no TOCTOU world-readable window ever exists. `ghostex acp-host --channel-secret-file`
+/// reads and unlinks it immediately on startup; callers also remove it on error/cancel/finish, and
+/// `sweep_stale_channel_secret_files` clears any crash leftovers at daemon startup.
+pub(crate) fn write_one_shot_channel_secret_file(
+    root_dir: &std::path::Path,
+    auth_token: &str,
+    project_id: &str,
+    session_id: &str,
+) -> Result<Option<std::path::PathBuf>, std::io::Error> {
+    let Some(secret) = channel_secret_for_session(auth_token, project_id, session_id) else {
+        return Ok(None);
+    };
+    let dir = root_dir.join(ACP_SECRETS_DIR_NAME);
+    std::fs::create_dir_all(&dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+    }
+    let path = dir.join(format!(
+        "{project_id}-{session_id}-{}.secret",
+        uuid::Uuid::new_v4()
+    ));
+    let mut opts = std::fs::OpenOptions::new();
+    opts.create_new(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        opts.mode(0o600);
+    }
+    use std::io::Write as _;
+    let mut file = opts.open(&path)?;
+    file.write_all(secret.as_bytes())?;
+    file.flush()?;
+    Ok(Some(path))
+}
+
+/// Read a one-shot channel secret file and unlink it immediately before any child process spawns.
+pub(crate) fn read_and_remove_channel_secret_file(path: &std::path::Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok();
+    let _ = std::fs::remove_file(path);
+    content
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Remove any leftover one-shot secret files or account-switch scripts after a crash or restart.
+pub(crate) fn sweep_stale_channel_secret_files(root_dir: &std::path::Path) {
+    for subdir in [ACP_SECRETS_DIR_NAME, ACCOUNT_SWITCH_DIR_NAME] {
+        let dir = root_dir.join(subdir);
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
+}
+
 /// True when the stored session in SQLite is an ACP (Non-CLI) session; fails closed (`true`)
 /// if SQLite cannot be read so an ACP session cannot bypass the channel-secret gate on DB error.
 pub(crate) fn session_is_acp_in_db(state: &AppState, project_id: &str, session_id: &str) -> bool {

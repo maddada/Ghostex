@@ -204,73 +204,6 @@ pub(crate) async fn relay(
     // The mark rides in a header only this relay sets, so an older sender's body can't pass it.
     let user_send = crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded)
         && crate::session_chat_send::sender_mark::is_users_caller(caller);
-    let relayed_non_user_device = !caller.is_user_device();
-    // Defense-in-depth on the sending relay too (protects older receiving servers as well):
-    // refuse shift-tab approval cycling and elevated session creates from non-user-device callers.
-    if relayed_non_user_device {
-        if let Ok(parsed_body) = forwarded_body(&bytes) {
-            if let Some(params) = parsed_body.get("params").and_then(serde_json::Value::as_object) {
-                if forwarded == "/api/sendSessionChatMessage" {
-                    if let Some(key) = params.get("key").and_then(serde_json::Value::as_str) {
-                        let norm = key.trim().to_ascii_lowercase();
-                        if matches!(
-                            norm.as_str(),
-                            "shift-tab" | "shift+tab" | "backtab" | "\u{1b}[z"
-                        ) {
-                            return refusal(
-                                StatusCode::FORBIDDEN,
-                                "forbidden",
-                                "Only your own devices can cycle approval mode with Shift+Tab."
-                                    .to_string(),
-                                request_id,
-                            );
-                        }
-                    }
-                }
-                if matches!(
-                    forwarded,
-                    "/api/createSession" | "/api/createAgentSession" | "/api/createWorktreeSession"
-                ) {
-                    let level_elevated = params
-                        .get("runtimeSettings")
-                        .and_then(serde_json::Value::as_object)
-                        .and_then(|rt| rt.get(crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY))
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .is_some_and(|raw| {
-                            crate::acp::AcpApprovalLevel::parse(raw)
-                                != Some(crate::acp::AcpApprovalLevel::Ask)
-                        });
-                    let accept_all_elevated = params
-                        .get("launchSettings")
-                        .and_then(serde_json::Value::as_object)
-                        .and_then(|l| l.get("acceptAllMode"))
-                        .and_then(serde_json::Value::as_str)
-                        .is_some_and(|v| crate::acp::approval::is_accept_all_enabled_value(Some(v)));
-                    let raw_plan_on_create = forwarded == "/api/createSession"
-                        && params
-                            .get("launchSettings")
-                            .and_then(serde_json::Value::as_object)
-                            .is_some_and(|l| {
-                                l.get("agentLaunchPlan").is_some_and(|v| !v.is_null())
-                                    || l.get("startupText")
-                                        .and_then(serde_json::Value::as_str)
-                                        .is_some_and(|s| !s.trim().is_empty())
-                            });
-                    if level_elevated || accept_all_elevated || raw_plan_on_create {
-                        return refusal(
-                            StatusCode::FORBIDDEN,
-                            "forbidden",
-                            "Only your own devices can start a session with elevated approval or a raw launch plan."
-                                .to_string(),
-                            request_id,
-                        );
-                    }
-                }
-            }
-        }
-    }
     let protocol = header_text(&headers, GXSERVER_PROTOCOL_HEADER);
     let content_type = header_text(&headers, header::CONTENT_TYPE.as_str());
     let url = format!("{}{forwarded}", computer.base_url);
@@ -289,7 +222,6 @@ pub(crate) async fn relay(
                 content_type.as_deref(),
                 &forwarded_request_id,
                 user_send,
-                relayed_non_user_device,
                 bytes.to_vec(),
             )
         })
@@ -361,11 +293,6 @@ pub(crate) fn access_off_message(computer: &super::ConnectedComputer) -> String 
     }
 }
 
-/// Relay-only header marking that the originating caller on the sending computer was NOT a
-/// user device (`Principal::Session`, guest, extension). Receiving servers honor this only on
-/// authenticated `Principal::Peer` requests to keep non-user-device approval/launch guards active.
-pub(crate) const RELAYED_NON_USER_DEVICE_HEADER: &str = "x-ghostex-relayed-non-user-device";
-
 fn forward(
     method: &Method,
     url: &str,
@@ -374,7 +301,6 @@ fn forward(
     content_type: Option<&str>,
     request_id: &str,
     user_send: bool,
-    relayed_non_user_device: bool,
     body: Vec<u8>,
 ) -> Result<(u16, Option<String>, Vec<u8>), ureq::Error> {
     let agent = crate::http_agent::answering_agent();
@@ -386,9 +312,6 @@ fn forward(
             .header("x-request-id", request_id);
         if let Some(protocol) = protocol {
             request = request.header(GXSERVER_PROTOCOL_HEADER, protocol);
-        }
-        if relayed_non_user_device {
-            request = request.header(RELAYED_NON_USER_DEVICE_HEADER, "1");
         }
         request
             .config()
@@ -409,9 +332,6 @@ fn forward(
                 crate::session_chat_send::sender_mark::RELAYED_USER_SEND_HEADER,
                 "1",
             );
-        }
-        if relayed_non_user_device {
-            request = request.header(RELAYED_NON_USER_DEVICE_HEADER, "1");
         }
         // Long polls (`read-session-chat --wait-ms`) wait on the other computer, so the relay
         // leaves the time limit to the CLI that asked.

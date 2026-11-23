@@ -231,7 +231,7 @@ impl From<&crate::security::Principal> for Actor {
                 session_id: format!("{project_id}:{session_id}"),
             },
             Principal::LocalAgent => Self::current_or_shared_token(),
-            Principal::Peer { server_id, name, .. } => Self::ConnectedComputer {
+            Principal::Peer { server_id, name } => Self::ConnectedComputer {
                 server_id: server_id.clone(),
                 name: name.clone(),
             },

@@ -416,10 +416,6 @@ pub(in crate::server) async fn route_http(
         );
     }
 
-    let relayed_non_user_device = parts
-        .headers
-        .get(crate::connected_computers::RELAYED_NON_USER_DEVICE_HEADER)
-        .is_some_and(|value| value.as_bytes() == b"1");
     let caller = resolve_caller(
         is_authorized_headers(&parts.headers, &state.auth_token),
         token_principal,
@@ -428,7 +424,6 @@ pub(in crate::server) async fn route_http(
             .as_ref()
             .map(|(hash, device_id)| (hash.as_str(), device_id.as_deref())),
         peer.as_ref(),
-        relayed_non_user_device,
         share.as_ref(),
     );
 
@@ -784,7 +779,6 @@ fn resolve_caller(
     extension_id: Option<&str>,
     device: Option<(&str, Option<&str>)>,
     peer: Option<&PeerAuthorization>,
-    relayed_non_user_device: bool,
     share: Option<&ghostex_gx_protocol::collab_component::ShareScope>,
 ) -> Principal {
     if main_token {
@@ -811,7 +805,6 @@ fn resolve_caller(
         return Principal::Peer {
             server_id: server_id.clone(),
             name: name.clone(),
-            relayed_non_user_device,
         };
     }
     if let Some(share) = share {

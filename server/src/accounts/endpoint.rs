@@ -1150,7 +1150,7 @@ pub(crate) fn select(
         );
     }
     let restart_result = if let Some(command) = reuse_command {
-        super::drafts::switch_in_live_provider(repository, &updated, &command)
+        super::drafts::switch_in_live_provider(state, repository, &updated, &command)
     } else if let Some(plan) = restart {
         super::restart::start(state, repository, &updated, plan, source)
     } else if was_running {

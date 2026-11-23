@@ -86,8 +86,6 @@ pub fn restore_previous_session(
     let stored = repository.get_session(project_id, session_id)?;
     if !is_user_device {
         if let Some(session) = stored.as_ref() {
-            // Trust Ghostex's own stored launch plan / startup text / owner launcher command;
-            // only refuse restoring sessions that ran with accept-all or an elevated ACP level.
             let has_elevated_accept_all = crate::acp::approval::is_accept_all_enabled_value(
                 session
                     .pointer("/launchSettings/acceptAllMode")
@@ -95,7 +93,20 @@ pub fn restore_previous_session(
             );
             let has_elevated_level = crate::acp::approval::stored_session_approval_level(session)
                 .is_some_and(|level| level != crate::acp::AcpApprovalLevel::Ask);
-            if has_elevated_accept_all || has_elevated_level {
+            let has_elevated_cmd = [
+                "/launchSettings/startupText",
+                "/launchSettings/agentCommand",
+                "/launchSettings/agentLaunchPlan/startupText",
+                "/launchSettings/agentLaunchPlan/command",
+            ]
+            .iter()
+            .any(|ptr| {
+                session
+                    .pointer(ptr)
+                    .and_then(Value::as_str)
+                    .is_some_and(crate::acp::approval::command_has_accept_all_flag)
+            });
+            if has_elevated_accept_all || has_elevated_level || has_elevated_cmd {
                 return Err(DomainStateError {
                     code: "forbidden",
                     message: "Only your own devices can restore a session that ran with accept-all or elevated approval."
