@@ -1,6 +1,6 @@
 //! Drawing the rail: a 52pt column at the window's left, Toggle sidebar in the slot at its top
 //! (the sidebar's top row's height), the pinned icons, an unpinned item while its view shows
-//! (under a dashed line), ⋯, and at its foot the workspace and the account usage toggle.
+//! (under a dashed line), ⋯, and at its foot the account usage toggle.
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -358,10 +358,9 @@ impl GhostexGpuiApp {
             )
         });
         let more = self.render_sidebar_rail_more_button(layout.top.len(), &appearance, cx);
-        let workspace = self.render_sidebar_rail_workspace(&appearance, cx);
         let usage = (!self.account_usage_meters().is_empty())
             .then(|| self.render_sidebar_rail_usage_toggle(&appearance, cx));
-        let has_foot = workspace.is_some() || usage.is_some();
+        let has_foot = usage.is_some();
         let foot_drop_target = RailDropTarget {
             section: RailSection::Bottom,
             index: layout.bottom.len(),
@@ -372,13 +371,12 @@ impl GhostexGpuiApp {
                 .w(px(RAIL_BUTTON))
                 .items_center()
                 .gap(px(RAIL_GAP))
-                .children(workspace)
                 .children(usage)
                 .into_any_element();
             rail_drop_slot(foot, Some(foot_drop_target), cx)
         } else {
-            // Even without Workspace or Account usage at the foot, keep a trailing drop target so
-            // dragged items can always land after the last bottom-pinned item.
+            // Even without Account usage at the foot, keep a trailing drop target so dragged items
+            // can always land after the last bottom-pinned item.
             rail_drop_slot(
                 div().w(px(RAIL_BUTTON)).h(px(6.0)).into_any_element(),
                 Some(foot_drop_target),
@@ -436,8 +434,8 @@ impl GhostexGpuiApp {
                 app.sidebar_rail_reveal_hover(None, cx);
             }))
             // Right-clicking empty rail space opens the rail menu (Add separator at top/bottom,
-            // Add link…). Buttons, separators, ⋯ and Workspace stop propagation so their own
-            // menus open instead.
+            // Add link…). Buttons, separators and ⋯ stop propagation so their own menus open
+            // instead.
             .when(!cfg!(ghostex_web), |rail| {
                 rail.on_mouse_down(
                     MouseButton::Right,
@@ -554,125 +552,6 @@ impl GhostexGpuiApp {
             })
             .child(foot_slot)
             .into_any_element()
-    }
-
-    /// The workspace at the rail's foot, kept alongside the Spaces row's workspace tile so
-    /// switching still works while the sidebar is hidden: its icon, plain, one click switches to
-    /// the other workspace, a right click opens the workspace menu. Shown with two or more
-    /// workspaces.
-    fn render_sidebar_rail_workspace(
-        &self,
-        appearance: &SidebarAppearance,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        // As on the sidebar's tile: the workspace belongs to this computer, so not on another
-        // computer's tab (native_sidebar/workspace_tile.rs).
-        let local = self
-            .native_sidebar
-            .snapshot
-            .as_ref()
-            .is_some_and(|snapshot| {
-                snapshot.selected_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
-            });
-        if !local {
-            return None;
-        }
-        let tile = self.gx_store_workspace_tile()?;
-        let tooltip = match &tile.switch_to {
-            Some((_, name)) => match tile.switch_hotkey.as_deref() {
-                Some(hotkey) => format!("{}: click for {name} {hotkey}", tile.name),
-                None => format!("{}: click for {name}", tile.name),
-            },
-            None => tile.name.clone(),
-        };
-        let switch_to = tile.switch_to.map(|(workspace_id, _)| workspace_id);
-        let bounds = self.sidebar_rail.item_bounds("workspace");
-        let hover = appearance.hover;
-        let open_menu = {
-            let bounds = bounds.clone();
-            move |app: &mut Self,
-                  pointer: gpui::Point<gpui::Pixels>,
-                  window: &mut Window,
-                  cx: &mut Context<Self>| {
-                let Some(menu) = app.gx_store_workspace_menu(cx) else {
-                    return;
-                };
-                let at = bounds
-                    .get()
-                    .map_or(pointer, |b| gpui::point(b.right() + px(4.0), b.top()));
-                Self::show_native_sidebar_menu(&menu, at, 1.0, window, cx);
-            }
-        };
-        let click_menu = open_menu.clone();
-        let a11y_menu = open_menu.clone();
-        let rail = cx.entity().downgrade();
-        Some(
-            div()
-                .id("ghostex-gpui-sidebar-rail-workspace")
-                .role(gpui::Role::Button)
-                .aria_label(format!("Workspace {}", tile.name))
-                .flex_shrink_0()
-                .size(px(RAIL_BUTTON))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(RAIL_BUTTON_RADIUS))
-                .cursor_pointer()
-                .hover(move |button| button.bg(hover))
-                .on_prepaint(move |rect, _, _| bounds.set(Some(rect)))
-                // CDXC:Workspaces 2026-11-21 DECISION:
-                // User: "Just make it like a person icon for personal and the bag icon for work...
-                // without the background and color and all of that, it should also be matching the
-                // size of the other icons, for example, the accounts icon right there next to it".
-                // The rail draws the workspace's glyph (gx-protocol `icon_id`: the person for
-                // Personal, the bag for Work, a custom workspace's picked icon or its kind's
-                // default) plain, at the rail's icon size in its icon ink, like the account usage
-                // switch below it; no disc and no workspace colour. The Classic tile and the menus
-                // keep the disc (`workspace_badge`).
-                .child(
-                    gpui::svg()
-                        .path(gpui_sidebar_command_icon_asset_path(Some(&tile.icon)))
-                        .size(px(RAIL_ICON))
-                        .text_color(appearance.chrome_icon),
-                )
-                .on_click(
-                    cx.listener(move |app, event: &gpui::ClickEvent, window, cx| {
-                        cx.stop_propagation();
-                        match switch_to.clone() {
-                            Some(workspace_id) => app.gx_store_select_workspace(workspace_id, cx),
-                            None => click_menu(app, event.position(), window, cx),
-                        }
-                    }),
-                )
-                .on_mouse_down(
-                    MouseButton::Right,
-                    cx.listener(move |app, event: &MouseDownEvent, window, cx| {
-                        cx.stop_propagation();
-                        open_menu(app, event.position, window, cx);
-                    }),
-                )
-                // The right-click menu for VoiceOver and automation (AXShowMenu), hung where a
-                // right click hangs it (CDXC:Workspaces 2026-11-20 in native_sidebar/workspace_tile.rs).
-                .on_a11y_action(
-                    gpui::AccessibleAction::ShowContextMenu,
-                    move |_, window, cx| {
-                        let _ = rail.update(cx, |app, cx| {
-                            a11y_menu(app, gpui::point(px(0.0), px(0.0)), window, cx)
-                        });
-                    },
-                )
-                .managed_tooltip_with_placement(
-                    ManagedTooltipPlacement::Right,
-                    move |window, cx| {
-                        crate::app::native_sidebar::link_chips::sidebar_style_tooltip(
-                            tooltip.clone(),
-                            window,
-                            cx,
-                        )
-                    },
-                )
-                .into_any_element(),
-        )
     }
 
     fn render_sidebar_rail_button(

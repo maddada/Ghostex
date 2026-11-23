@@ -761,8 +761,7 @@ whole window like Claude and Grok Bot: the sidebar, the side panel and the
 Commands pane step aside, and clicking the lit icon again (or showing the
 sidebar, or opening a session) brings them back as they were. Agents Hub opened
 from the sidebar menu or the command palette still opens in its own window. At
-the rail's foot are your workspace (with two or more workspaces: click to
-switch, right-click for the workspace menu) and the account usage switch (once
+the rail's foot is the account usage switch (once
 an account is starred): one click pins or unpins the usage tiles at the bottom
 of the sidebar, and pointing at it shows them there while they are not pinned
 (they stay while you move onto them, and hide again when the pointer leaves).
@@ -784,8 +783,7 @@ use it, and it slides away when the pointer leaves both. A quick click on an ico
 that icon. Search leaves the sidebar's top row, Hermes leaves the Spaces
 row and
 Claude and Grok Bot leave the work area header (the workspace tile stays at the
-start of the Spaces row, and the rail's foot also keeps its workspace icon for
-when the sidebar is hidden). Pick Rail or Classic (the
+start of the Spaces row). Pick Rail or Classic (the
 sidebar without the rail) in Settings > Sidebar > Sidebar layout
 (`sidebarLayout`: `rail` or `classic`). New installs start on Rail. If you had
 Ghostex before the rail, the first start of 11.12.0 switches you to it and shows
@@ -1183,9 +1181,8 @@ Linear API key, Claude account and Browser sign-ins (cookies), and a window
 shows one workspace at a time. Every install starts with one workspace,
 Personal, holding all your projects and Spaces. Once you have two or more, the
 workspace tile is the first tile of the Spaces row (after your computers, if you
-have several), drawn as the workspace's icon in white on a disc of its colour;
-with the rail on, its plain icon also sits at the foot of the rail so you can
-switch while the sidebar is hidden. Workspace
+have several), drawn as the workspace's plain icon matching the neighbouring Space
+icons. Workspace
 icons are their own set (home, briefcase, building, user, users, coffee, camera and
 more), never a Space icon; pick each workspace's icon and colour in Settings >
 Workspaces (Personal starts as a person, a Work workspace as a briefcase). Click
