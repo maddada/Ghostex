@@ -80,6 +80,67 @@ impl NativeAutomateView {
         );
     }
 
+    pub(crate) fn mark_all_runs_read(&mut self, automation_id: &str, cx: &mut Context<Self>) {
+        let (Some(scope), Some(state)) = (self.scope.clone(), self.state.as_ref()) else {
+            return;
+        };
+        let requests: Vec<serde_json::Value> = state
+            .visible_runs()
+            .filter(|run| run.automation_id == automation_id && run.is_unread)
+            .map(|run| {
+                let project_id = self.target_project_id(Some(&run.project_id));
+                AutomateRequest::MarkRunRead {
+                    run_id: run.id.clone(),
+                    project_id,
+                }
+                .to_bridge_request(&scope, |id| self.project_path_for(id))
+            })
+            .collect();
+        if requests.is_empty() {
+            return;
+        }
+        self.busy_id = Some(automation_id.to_string());
+        let context = self.context.clone();
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result = background
+                .spawn(async move {
+                    let mut last_state = None;
+                    for request in &requests {
+                        let (state, _) =
+                            super::requests::run_automate_request(request, context.as_ref())?;
+                        last_state = Some(state);
+                    }
+                    Ok::<Option<serde_json::Value>, String>(last_state)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.busy_id = None;
+                match result {
+                    Ok(last_state) => {
+                        this.error_message = None;
+                        if this.is_all_projects() {
+                            this.load(cx);
+                        } else if let Some(state) = last_state {
+                            this.state = Some(super::model::AutomationState::from_json(&state));
+                        }
+                    }
+                    Err(error) => {
+                        let message = if error.trim().is_empty() {
+                            "Could not mark automation runs read.".to_string()
+                        } else {
+                            error
+                        };
+                        this.error_message = Some(message);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
     pub(crate) fn open_run_session(&mut self, run: &AutomationRun, cx: &mut Context<Self>) {
         let project_id = self.target_project_id(Some(&run.project_id));
         self.mutate_with_notice(

@@ -97,6 +97,10 @@ impl NativeAutomateView {
                     None => "Not scheduled".to_string(),
                 });
                 let id = automation.id.clone();
+                let unread_id = automation.id.clone();
+                let unread_label = format!("View {unread} unread runs for {}", automation.name);
+                let unread_bg = p.accent.opacity(0.14);
+                let unread_hover = p.accent.opacity(0.24);
                 let toggle = automation.clone();
                 let enabled = automation.enabled;
                 list_row(
@@ -140,9 +144,26 @@ impl NativeAutomateView {
                                 .when(unread > 0, |this| {
                                     this.child(
                                         div()
+                                            .id(("automate-automation-unread", index))
+                                            .role(gpui::Role::Button)
+                                            .aria_label(unread_label)
                                             .flex_shrink_0()
+                                            .px(px(7.0))
+                                            .py(px(1.0))
+                                            .rounded(px(ROW_RADIUS))
+                                            .bg(unread_bg)
                                             .text_size(px(12.0))
                                             .text_color(p.accent)
+                                            .cursor_pointer()
+                                            .hover(move |this| this.bg(unread_hover))
+                                            .on_click(cx.listener(
+                                                move |this, _: &ClickEvent, _window, cx| {
+                                                    cx.stop_propagation();
+                                                    this.open_unread_runs_for_automation(
+                                                        &unread_id, cx,
+                                                    );
+                                                },
+                                            ))
                                             .child(format!("{unread} unread")),
                                     )
                                 }),

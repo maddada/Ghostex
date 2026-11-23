@@ -181,12 +181,45 @@ impl NativeAutomateView {
         let Some(state) = self.state.as_ref() else {
             return div().into_any_element();
         };
+        let active_filter = (!triage).then_some(self.run_filter.as_ref()).flatten();
         let runs: Vec<_> = if triage {
             state.triage_runs()
+        } else if let Some(filter) = active_filter {
+            state
+                .visible_runs()
+                .filter(|run| {
+                    run.automation_id == filter.automation_id
+                        && (!filter.unread_only || run.is_unread)
+                })
+                .collect()
         } else {
             state.visible_runs().collect()
         };
         if runs.is_empty() {
+            if let Some(filter) = active_filter {
+                let name = state
+                    .automations
+                    .iter()
+                    .find(|automation| automation.id == filter.automation_id)
+                    .map(|automation| automation.name.as_str())
+                    .unwrap_or(&filter.automation_id);
+                let action = secondary_button(
+                    p,
+                    "automate-clear-run-filter",
+                    None,
+                    "Show all runs",
+                    |this: &mut Self, _window, cx| this.clear_run_filter(cx),
+                    cx,
+                )
+                .into_any_element();
+                return empty_state(
+                    p,
+                    ICON_BELL,
+                    "All caught up",
+                    format!("No unread runs left for {name}."),
+                    Some(action),
+                );
+            }
             // Like the Automations tab: one centred empty state instead of the split view.
             let (title, description) = if triage {
                 (
@@ -207,7 +240,96 @@ impl NativeAutomateView {
             .and_then(|id| runs.iter().find(|run| run.id == id))
             .or_else(|| runs.first())
             .copied();
-        let list = self.render_run_list(p, state, &runs, selected.map(|run| run.id.as_str()), cx);
+        let run_list =
+            self.render_run_list(p, state, &runs, selected.map(|run| run.id.as_str()), cx);
+        let list = if let Some(filter) = active_filter {
+            let name = state
+                .automations
+                .iter()
+                .find(|automation| automation.id == filter.automation_id)
+                .map(|automation| automation.name.clone())
+                .unwrap_or_else(|| filter.automation_id.clone());
+            let mark_all_id = filter.automation_id.clone();
+            let busy = self.busy_id.as_deref() == Some(filter.automation_id.as_str());
+            let has_unread = runs.iter().any(|run| run.is_unread);
+            let hover = p.hover;
+            v_flex()
+                .size_full()
+                .min_h_0()
+                .child(
+                    h_flex()
+                        .w_full()
+                        .flex_shrink_0()
+                        .px(px(12.0))
+                        .py(px(8.0))
+                        .gap(px(8.0))
+                        .items_center()
+                        .justify_between()
+                        .border_b_1()
+                        .border_color(p.border)
+                        .child(
+                            truncated(format!("Unread \u{b7} {name}"))
+                                .text_size(px(12.0))
+                                .text_color(p.muted),
+                        )
+                        .child(
+                            h_flex()
+                                .flex_shrink_0()
+                                .gap(px(4.0))
+                                .items_center()
+                                .when(has_unread, |this| {
+                                    this.child(
+                                        div()
+                                            .id("automate-filter-mark-all-read")
+                                            .role(gpui::Role::Button)
+                                            .aria_label("Mark all runs read")
+                                            .px(px(8.0))
+                                            .py(px(3.0))
+                                            .rounded(px(ROW_RADIUS))
+                                            .text_size(px(12.0))
+                                            .text_color(p.accent)
+                                            .when(busy, |this| this.opacity(0.4))
+                                            .when(!busy, |this| {
+                                                this.cursor_pointer()
+                                                    .hover(move |this| this.bg(hover))
+                                                    .on_click(cx.listener(
+                                                        move |this, _: &ClickEvent, _window, cx| {
+                                                            this.mark_all_runs_read(
+                                                                &mark_all_id,
+                                                                cx,
+                                                            );
+                                                        },
+                                                    ))
+                                            })
+                                            .child("Mark all read"),
+                                    )
+                                })
+                                .child(
+                                    div()
+                                        .id("automate-filter-clear")
+                                        .role(gpui::Role::Button)
+                                        .aria_label("Show all runs")
+                                        .px(px(8.0))
+                                        .py(px(3.0))
+                                        .rounded(px(ROW_RADIUS))
+                                        .text_size(px(12.0))
+                                        .text_color(p.muted)
+                                        .cursor_pointer()
+                                        .hover(move |this| this.bg(hover))
+                                        .on_click(cx.listener(
+                                            |this, _: &ClickEvent, _window, cx| {
+                                                this.clear_run_filter(cx);
+                                            },
+                                        ))
+                                        .child("Show all"),
+                                ),
+                        ),
+                )
+                .child(div().flex_1().min_h_0().w_full().child(run_list))
+                .into_any_element()
+        } else {
+            run_list
+        };
         let detail = self.render_run_detail(p, state, selected, cx);
         Self::split(p, list, detail)
     }

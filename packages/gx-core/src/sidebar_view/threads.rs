@@ -311,9 +311,6 @@ pub(crate) fn nest_threads(
             !session.is_focused && !session.is_visible && !is_recent_thread(&session.row, now_ms)
         })
         .collect();
-    for list in children.values_mut() {
-        list.sort_by_key(|child| is_older[*child]);
-    }
     let shows_older: Vec<bool> = sessions
         .iter()
         .map(|session| older_shown.contains(&session.row.sidebar_session_id))
@@ -339,6 +336,12 @@ pub(crate) fn nest_threads(
     let hidden = |parent: usize, child: usize| {
         !lead_parent[parent] && !shows_older[parent] && is_older[child]
     };
+    // Only move children hidden behind "N older threads" after the drawn ones so `lay_out_tree`
+    // marks the last drawn child cleanly; leads and coordinators with older threads shown hide
+    // nothing, so clicking a row never jumps it to the top of its group (#725).
+    for (&parent, list) in children.iter_mut() {
+        list.sort_by_key(|child| hidden(parent, *child));
+    }
     let threads_of = |index: usize| {
         let list = children.get(&index).cloned().unwrap_or_default();
         let drawn = list.iter().filter(|child| !hidden(index, **child)).count();
