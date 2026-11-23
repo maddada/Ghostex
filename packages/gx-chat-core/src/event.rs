@@ -387,6 +387,18 @@ pub struct ChatSettings {
     /// The "Compact chats above" threshold in tokens (`claudeIdleCompactAbove`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compact_chats_above: Option<u64>,
+    /// Global default view (`preferredAgentInterface`: `"chat"` | `"terminal"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_agent_interface: Option<String>,
+    /// Per-agent default view overrides (`preferredAgentInterfaceOverrides`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_agent_interface_overrides: Option<std::collections::BTreeMap<String, String>>,
+    /// Per-agent session mode map (`agentSessionMode`: `{ family: "non-cli" | "agent-cli" }`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_session_mode: Option<std::collections::BTreeMap<String, String>>,
+    /// Per-agent dismissals of the "Switch to Native" chip (`nativeSwitchOfferDismissedAgents`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_switch_dismissed_agents: Option<Vec<String>>,
 }
 
 /// A size or position only the renderer can know, folded back into the document.

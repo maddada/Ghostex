@@ -157,6 +157,8 @@ pub struct SessionChatQueueSnapshot {
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
     /// True while this session runs in Non-CLI (ACP) mode.
     pub non_cli_mode: bool,
+    /// True while a Terminal -> Native switch is queued until the active reply ends (`Q4771`).
+    pub switch_to_native_queued: bool,
     /// The question forms and pages the user removed without answering (`session_chat_open_questions::read_removed_ids`).
     pub removed_question_ids: Vec<String>,
     /// The pages their agent retired (`visual_pages::read_retired_page_ids`).
@@ -205,6 +207,10 @@ impl SessionChatQueueSnapshot {
             json!(self.unavailable_modes),
         );
         target.insert("nonCliMode".to_string(), json!(self.non_cli_mode));
+        target.insert(
+            "switchToNativeQueued".to_string(),
+            json!(self.switch_to_native_queued),
+        );
         target.insert(
             "removedQuestionIds".to_string(),
             json!(self.removed_question_ids),
@@ -268,6 +274,11 @@ impl SessionChatQueueSnapshot {
             "|nonCli:1"
         } else {
             "|nonCli:0"
+        });
+        revision.push_str(if self.switch_to_native_queued {
+            "|swNative:1"
+        } else {
+            "|swNative:0"
         });
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.retired_page_ids).unwrap_or_default());
@@ -1250,6 +1261,7 @@ fn read_snapshot(
                 db, project_id, session_id,
             ),
             non_cli_mode: read_non_cli_mode(db, project_id, session_id),
+            switch_to_native_queued: crate::acp::pending_switch::is_pending(project_id, session_id),
             removed_question_ids: crate::session_chat_open_questions::read_removed_ids(
                 db, project_id, session_id,
             ),

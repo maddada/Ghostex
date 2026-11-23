@@ -380,6 +380,7 @@ impl NativeChatView {
                 .into_iter()
                 .collect(),
             "chatToolbar" => self.folded_toolbar_rows(),
+            "switchToNative" => self.switch_to_native_menu_row().into_iter().collect(),
             "view" => vec![self.view_modes_row()],
             "stopReading" => self.stop_reading_row().map(named).into_iter().collect(),
             "branches" => self.branches_row().into_iter().collect(),
@@ -422,6 +423,36 @@ impl NativeChatView {
             }
             _ => Vec::new(),
         }
+    }
+
+    /// Manual "Switch to Native" (or "Cancel Switch to Native" while queued) row in `•••`
+    /// (`Q4768`, `Q4770`, `Q4771`, `Q4772`): stays available even after the strip chip is
+    /// dismissed or on coordinator threads, and hides quietly on older remote servers.
+    fn switch_to_native_menu_row(&self) -> Option<Value> {
+        let offer = self.native_switch_offer()?;
+        if offer["showMenuItem"] != true {
+            return None;
+        }
+        if offer["queued"] == true {
+            return Some(json!({
+                "label": "Cancel Switch to Native",
+                "iconPath": "titlebar/clock.svg",
+                "detail": "Queued",
+                "command": { "type": "host", "action": "cancelSwitchToNative" },
+            }));
+        }
+        Some(json!({
+            "label": "Switch to Native",
+            "iconPath": "titlebar/bolt.svg",
+            "command": {
+                "type": "host",
+                "action": "switchToNative",
+                "family": offer["family"],
+                "agentName": offer["agentName"],
+                "nativeDefault": offer["nativeDefault"],
+                "working": self.snapshot["working"] == true,
+            },
+        }))
     }
 
     fn host_action(&self, id: &str) -> Option<&Value> {

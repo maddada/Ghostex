@@ -24,6 +24,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // `"agent-cli"` (interactive terminal); `"non-cli"` runs supported agents through a structured
     // host inside `zmx`.
     ("agentSessionMode", J::Obj(&[])),
+    // Per-agent dismissals of the chat strip's "Switch to Native" offer (Q4770), comma-separated
+    // canonical families (e.g. `"claude,codex"`).
+    ("nativeSwitchOfferDismissedAgents", J::Str("")),
     // CDXC:AgentProviders 2026-11-14 DECISION: off by default, and on only with its confirmation
     // beside it (folder_trust.rs).
     ("trustProjectFoldersAutomatically", J::Bool(false)),
@@ -893,7 +896,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("terminalFontWeight", J::Num(300.0)),
     ("terminalBoldUsesHeavierFont", J::Bool(true)),
     ("terminalColorScheme", J::Str("app")),
-    ("terminalGhosttyLightTheme", J::Str("Ghostex Everforest Light")),
+    (
+        "terminalGhosttyLightTheme",
+        J::Str("Ghostex Everforest Light"),
+    ),
     ("terminalGhosttyTheme", J::Str("Ghostex Nord")),
     ("terminalBackgroundOpacity", J::Num(100.0)),
     ("terminalBackgroundImage", J::Str("")),

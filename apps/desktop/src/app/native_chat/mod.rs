@@ -72,6 +72,7 @@ mod launch;
 mod link_words;
 mod menu_toggle;
 mod minimap;
+mod native_switch_chip;
 mod nested_scroll;
 pub(crate) mod new_chat_tips;
 mod new_session_welcome;

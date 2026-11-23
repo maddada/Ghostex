@@ -91,6 +91,14 @@ pub struct CoreState {
     /// True once the host has supplied `compactChatsAbove` via `ChatSettings`, so a remote or
     /// stale `readSessionChat` cannot overwrite the local computer's threshold.
     pub compact_chats_above_from_host: bool,
+    /// Local host's `preferredAgentInterface` (`"chat"` | `"terminal"`), from `ChatSettings`.
+    pub preferred_agent_interface: Option<String>,
+    /// Local host's `preferredAgentInterfaceOverrides`, from `ChatSettings`.
+    pub preferred_agent_interface_overrides: Option<std::collections::BTreeMap<String, String>>,
+    /// Local host's `agentSessionMode` map (`{ family: "non-cli" | "agent-cli" }`), from `ChatSettings`.
+    pub agent_session_mode: Option<std::collections::BTreeMap<String, String>>,
+    /// Local host's `nativeSwitchOfferDismissedAgents` canonical families, from `ChatSettings`.
+    pub native_switch_dismissed_agents: Option<Vec<String>>,
     /// The session's display title, or `None` when it has none.
     pub title: Option<String>,
     /// Every deadline the core is waiting on. Any family may arm one by key; the host only ever

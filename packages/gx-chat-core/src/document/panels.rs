@@ -259,3 +259,21 @@ pub struct AccountStatus {
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
 }
+
+/// The "Switch to Native" strip chip and `•••` menu offer (`extras/native_switch.rs`, `Q4768`–`Q4772`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeSwitchOffer {
+    /// Canonical agent family: `"antigravity"`, `"claude"`, or `"codex"`.
+    pub family: String,
+    /// User-facing agent display name: `"Antigravity"`, `"Claude Code"`, or `"Codex"`.
+    pub agent_name: String,
+    /// Whether the chip shows in the composer's pill strip.
+    pub show_chip: bool,
+    /// Whether a mid-reply switch is currently queued on gxserver.
+    pub queued: bool,
+    /// Whether Native mode is already enabled as the default for this agent.
+    pub native_default: bool,
+    /// Whether the manual "Switch to Native" / "Cancel Switch to Native" row shows in `•••`.
+    pub show_menu_item: bool,
+}

@@ -127,6 +127,9 @@ pub fn side_state_moves(
         || side
             .non_cli_mode
             .is_some_and(|mode| session.non_cli_mode != mode)
+        || side
+            .switch_to_native_queued
+            .is_some_and(|queued| session.switch_to_native_queued != queued)
         || side.removed_question_ids.is_some()
         || side.retired_page_ids.is_some()
         || side.starred_page_ids.is_some()

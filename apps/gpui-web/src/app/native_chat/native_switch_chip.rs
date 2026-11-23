@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_chat/native_switch_chip.rs

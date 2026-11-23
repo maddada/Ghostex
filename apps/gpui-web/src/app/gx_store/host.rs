@@ -20,6 +20,9 @@ pub(crate) struct GxStoreHost {
     pub(crate) core: Core,
     /// The close a close confirmation holds while it is open (`sidebar_close_confirm.rs`).
     pub(crate) pending_session_close: Option<super::sidebar_close_confirm::PendingSessionClose>,
+    /// The action a checkbox confirmation dialog holds while it is open (`sidebar_close_confirm.rs`).
+    pub(crate) pending_session_confirm_checkbox:
+        Option<super::sidebar_close_confirm::PendingSessionConfirmWithCheckbox>,
     /// Set while a confirmed close runs, so the same close does not ask again.
     pub(crate) session_close_confirmed: bool,
     pub(crate) endpoint: Option<GxserverEndpoint>,

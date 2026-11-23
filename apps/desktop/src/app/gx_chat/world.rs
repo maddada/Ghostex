@@ -602,6 +602,24 @@ fn settings_moved(
             .compact_chats_above
             .is_some_and(|above| Some(above) != state.core.compact_chats_above)
         || settings
+            .preferred_agent_interface
+            .as_ref()
+            .is_some_and(|pref| state.core.preferred_agent_interface.as_ref() != Some(pref))
+        || settings
+            .preferred_agent_interface_overrides
+            .as_ref()
+            .is_some_and(|map| {
+                state.core.preferred_agent_interface_overrides.as_ref() != Some(map)
+            })
+        || settings
+            .agent_session_mode
+            .as_ref()
+            .is_some_and(|map| state.core.agent_session_mode.as_ref() != Some(map))
+        || settings
+            .native_switch_dismissed_agents
+            .as_ref()
+            .is_some_and(|list| state.core.native_switch_dismissed_agents.as_ref() != Some(list))
+        || settings
             .status_line
             .is_some_and(|on| on == state.pickers.context.status_line_off))
     .then(|| Event::SettingsChanged(Box::new(settings.clone())))

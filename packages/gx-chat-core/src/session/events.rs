@@ -192,6 +192,18 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
                 state.core.compact_chats_above_from_host = true;
                 state.core.compact_chats_above = Some(above);
             }
+            if let Some(pref) = settings.preferred_agent_interface.as_ref() {
+                state.core.preferred_agent_interface = Some(pref.clone());
+            }
+            if let Some(overrides) = settings.preferred_agent_interface_overrides.as_ref() {
+                state.core.preferred_agent_interface_overrides = Some(overrides.clone());
+            }
+            if let Some(modes) = settings.agent_session_mode.as_ref() {
+                state.core.agent_session_mode = Some(modes.clone());
+            }
+            if let Some(dismissed) = settings.native_switch_dismissed_agents.as_ref() {
+                state.core.native_switch_dismissed_agents = Some(dismissed.clone());
+            }
             state.core.request_publish();
             Vec::new()
         }
@@ -330,6 +342,18 @@ pub fn boot_read(
         if let Some(above) = settings.compact_chats_above {
             state.core.compact_chats_above_from_host = true;
             state.core.compact_chats_above = Some(above);
+        }
+        if let Some(pref) = settings.preferred_agent_interface {
+            state.core.preferred_agent_interface = Some(pref);
+        }
+        if let Some(overrides) = settings.preferred_agent_interface_overrides {
+            state.core.preferred_agent_interface_overrides = Some(overrides);
+        }
+        if let Some(modes) = settings.agent_session_mode {
+            state.core.agent_session_mode = Some(modes);
+        }
+        if let Some(dismissed) = settings.native_switch_dismissed_agents {
+            state.core.native_switch_dismissed_agents = Some(dismissed);
         }
     }
     let config = state.session.boot_config.clone().unwrap_or_default();

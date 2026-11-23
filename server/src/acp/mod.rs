@@ -26,9 +26,59 @@ pub(crate) mod channel;
 mod driver_claude;
 mod driver_codex;
 pub mod host;
+pub(crate) mod pending_switch;
 pub(crate) mod spec;
 
 pub use approval::{AcpApprovalLevel, SESSION_ACP_APPROVAL_LEVEL_KEY};
+
+/// Settings key (comma-separated canonical agent families, e.g. `"claude,codex"`) recording
+/// per-agent dismissals of the chat strip's "Switch to Native" offer (`Q4770`).
+pub const NATIVE_SWITCH_OFFER_DISMISSED_KEY: &str = "nativeSwitchOfferDismissedAgents";
+
+/// Canonical Native-capable agent family (`"antigravity"`, `"claude"`, or `"codex"`).
+pub fn canonical_native_family(agent_family: &str) -> Option<&'static str> {
+    spec::spec_for_family(agent_family).map(|spec| spec.family)
+}
+
+/// Canonical families whose "Switch to Native" strip offer the user dismissed in Settings.
+pub fn dismissed_native_switch_families(
+    settings: &serde_json::Map<String, Value>,
+) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    match settings.get(NATIVE_SWITCH_OFFER_DISMISSED_KEY) {
+        Some(Value::String(raw)) => {
+            for part in raw.split(',') {
+                if let Some(family) = canonical_native_family(part) {
+                    if !out.contains(&family) {
+                        out.push(family);
+                    }
+                }
+            }
+        }
+        Some(Value::Array(items)) => {
+            for item in items {
+                if let Some(family) = item.as_str().and_then(canonical_native_family) {
+                    if !out.contains(&family) {
+                        out.push(family);
+                    }
+                }
+            }
+        }
+        Some(Value::Object(map)) => {
+            for (key, value) in map {
+                if value.as_bool() == Some(true) {
+                    if let Some(family) = canonical_native_family(key) {
+                        if !out.contains(&family) {
+                            out.push(family);
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
 
 /// Settings key (object map of `<agentFamily>: "non-cli" | "agent-cli"`) storing per-agent
 /// session mode (`Agent CLI` default vs `Non-CLI`).

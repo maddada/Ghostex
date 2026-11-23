@@ -22,6 +22,10 @@ use crate::app::window::{
 pub(crate) type PendingSessionClose =
     Box<dyn FnOnce(&mut GhostexGpuiApp, &mut gpui::Context<GhostexGpuiApp>)>;
 
+/// A confirmation callback that also receives the optional checkbox's final checked state.
+pub(crate) type PendingSessionConfirmWithCheckbox =
+    Box<dyn FnOnce(&mut GhostexGpuiApp, bool, &mut gpui::Context<GhostexGpuiApp>)>;
+
 impl GhostexGpuiApp {
     /// Asks first when closing `sessions` would stop a coordinator or a busy agent: opens the
     /// question, keeps `close` for its Close button, and answers true, so the caller stops. Answers
@@ -56,6 +60,7 @@ impl GhostexGpuiApp {
         action: PendingSessionClose,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.gx_store.pending_session_confirm_checkbox = None;
         self.gx_store.pending_session_close = Some(action);
         let palette = self.gpui_native_dialog_palette();
         let host = self.native_app_modal_host(cx, |app, command, cx| {
@@ -84,6 +89,47 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// Asks `confirmation` with an optional checkbox row (e.g. Q4769 "Use Native for new chats
+    /// with <agent>") and a primary or danger confirm button, handing the checkbox state to
+    /// `action` on confirm.
+    pub(crate) fn gx_store_confirm_with_checkbox(
+        &mut self,
+        confirmation: CloseConfirmation,
+        checkbox: Option<(String, bool)>,
+        primary_tone: bool,
+        action: PendingSessionConfirmWithCheckbox,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.gx_store.pending_session_close = None;
+        self.gx_store.pending_session_confirm_checkbox = Some(action);
+        let palette = self.gpui_native_dialog_palette();
+        let host = self.native_app_modal_host(cx, |app, command, cx| {
+            app.gx_store_answer_close_confirmation(command, cx);
+        });
+        self.open_native_app_modal(
+            GpuiAppModalKind::CloseSessionsConfirm,
+            CLOSE_SESSIONS_CONFIRM_MODAL_WIDTH,
+            CLOSE_SESSIONS_CONFIRM_MODAL_INITIAL_HEIGHT,
+            move |window, cx| {
+                cx.new(|cx| {
+                    GpuiCloseSessionsConfirmModalWindow::with_options(
+                        palette,
+                        host,
+                        confirmation,
+                        checkbox,
+                        primary_tone,
+                        window,
+                        cx,
+                    )
+                })
+            },
+            cx,
+        );
+        if self.native_app_modal_kind() != Some(GpuiAppModalKind::CloseSessionsConfirm) {
+            self.gx_store.pending_session_confirm_checkbox = None;
+        }
+    }
+
     /// The sidebar's doors: a row's Close button, middle click and menu item, a multi-selection's
     /// Close, a project's Close Inactive, and a menu batch of them. True when it asked.
     pub(crate) fn gx_store_ask_before_sidebar_close(
@@ -109,11 +155,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         self.release_native_app_modal_window(GpuiAppModalKind::CloseSessionsConfirm, cx);
-        let pending = self.gx_store.pending_session_close.take();
-        if let (CloseSessionsConfirmModalCommand::Close, Some(close)) = (command, pending) {
-            self.gx_store.session_close_confirmed = true;
-            close(self, cx);
-            self.gx_store.session_close_confirmed = false;
+        let pending_close = self.gx_store.pending_session_close.take();
+        let pending_checkbox = self.gx_store.pending_session_confirm_checkbox.take();
+        if let CloseSessionsConfirmModalCommand::Close { checkbox_checked } = command {
+            if let Some(close) = pending_close {
+                self.gx_store.session_close_confirmed = true;
+                close(self, cx);
+                self.gx_store.session_close_confirmed = false;
+            } else if let Some(confirm) = pending_checkbox {
+                confirm(self, checkbox_checked, cx);
+            }
         }
         cx.notify();
     }

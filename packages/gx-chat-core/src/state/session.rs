@@ -40,6 +40,18 @@ pub struct SessionState {
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
     /// True while this session runs through a Non-CLI (ACP) host. Absent means unchanged.
     pub non_cli_mode: bool,
+    /// True while a Terminal -> Native switch is queued until the active reply finishes (`Q4771`).
+    pub switch_to_native_queued: bool,
+    /// True when this session's gxserver supports Terminal -> Native switching (`Q4772`).
+    pub native_mode_switch_capable: bool,
+    /// Whether this computer's `agentSessionMode` already enables Native for this session's agent.
+    pub native_default_for_agent: Option<bool>,
+    /// Whether the user dismissed the "Switch to Native" strip chip for this session's agent.
+    pub native_switch_dismissed: Option<bool>,
+    /// Whether this session's agent opens in Chat by default on this computer.
+    pub preferred_chat_first: Option<bool>,
+    /// True when this session is a coordinator worker thread (`Q4772`).
+    pub is_coordinator_thread: bool,
     /// The question forms and pages the user removed without answering, as gxserver keeps them
     /// (`crate::questions::later`). Absent means unchanged.
     pub removed_question_ids: crate::state::Stamped<Vec<String>>,
@@ -205,6 +217,12 @@ impl Default for SessionState {
             later_question_ids: Default::default(),
             unavailable_modes: Vec::new(),
             non_cli_mode: false,
+            switch_to_native_queued: false,
+            native_mode_switch_capable: false,
+            native_default_for_agent: None,
+            native_switch_dismissed: None,
+            preferred_chat_first: None,
+            is_coordinator_thread: false,
             removed_question_ids: Default::default(),
             retired_page_ids: Vec::new(),
             starred_page_ids: Vec::new(),

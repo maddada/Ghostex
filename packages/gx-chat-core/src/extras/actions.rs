@@ -41,6 +41,12 @@ pub fn handle_with_ids(
         | ActionKind::DismissBoostHint => {
             crate::extras::boosts::handle(state, action, &mut next_request_id)
         }
+        ActionKind::DismissNativeSwitchOffer => {
+            if let Some(family) = action.param("family").and_then(Value::as_str) {
+                crate::extras::native_switch::handle_dismiss(state, family);
+            }
+            Vec::new()
+        }
         ActionKind::ToggleAgentFleet => {
             state.extras.panels.fleet_open = Some(flag(action, "open"));
             Vec::new()

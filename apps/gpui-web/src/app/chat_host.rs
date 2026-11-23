@@ -376,6 +376,219 @@ impl GhostexGpuiApp {
                 })
                 .detach();
             }
+            // "Switch to Native" strip chip & `•••` menu actions (`Q4768`–`Q4772`).
+            Some("switchToNative") => {
+                let family = message["family"]
+                    .as_str()
+                    .or_else(|| message["params"]["family"].as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let agent_name = message["agentName"]
+                    .as_str()
+                    .or_else(|| message["params"]["agentName"].as_str())
+                    .unwrap_or("this agent")
+                    .to_string();
+                let native_default =
+                    message["nativeDefault"] == true || message["params"]["nativeDefault"] == true;
+                let row_working = self
+                    .gx_store
+                    .core
+                    .presentation()
+                    .loaded(&session.machine)
+                    .and_then(|loaded| {
+                        loaded.server_session(&session.project_id, &session.session_id)
+                    })
+                    .is_some_and(|row| row.activity.as_str() == "working");
+                let is_working = row_working
+                    || message["working"] == true
+                    || message["params"]["working"] == true;
+                let body = if is_working {
+                    format!(
+                        "{agent_name} is replying now. Ghostex will switch to Native mode automatically as soon as this reply finishes, keeping your chat history."
+                    )
+                } else {
+                    format!(
+                        "Ghostex will reopen {agent_name} in Native mode. Your chat history stays, and you can switch back to Terminal anytime."
+                    )
+                };
+                let confirmation = ghostex_gx_core::CloseConfirmation {
+                    title: "Switch to Native?".to_string(),
+                    message: body,
+                    confirm_label: "Switch to Native".to_string(),
+                };
+                let checkbox = (!native_default)
+                    .then(|| (format!("Use Native for new chats with {agent_name}"), true));
+                let session = session.clone();
+                self.gx_store_confirm_with_checkbox(
+                    confirmation,
+                    checkbox,
+                    true,
+                    Box::new(move |app, use_as_default, cx| {
+                        let target = match &session.machine {
+                            ghostex_gx_core::MachineId::Local => Ok(None),
+                            ghostex_gx_core::MachineId::Remote(machine_id) => app
+                                .gpui_remote_gxserver_request_target(machine_id)
+                                .map(Some)
+                                .ok_or_else(|| {
+                                    "Switching a remote session to Native is not available in the web build yet."
+                                        .to_string()
+                                }),
+                        };
+                        let target = match target {
+                            Ok(target) => target,
+                            Err(err) => {
+                                app.dispatch_gpui_app_modal_toast(
+                                    "warning",
+                                    "Could not switch to Native",
+                                    &err,
+                                    cx,
+                                );
+                                return;
+                            }
+                        };
+                        if use_as_default && !family.is_empty() && target.is_none() {
+                            let mut settings =
+                                crate::shared_settings::shared_sidebar_settings_snapshot()
+                                    .object()
+                                    .clone();
+                            let mut modes = settings
+                                .get("agentSessionMode")
+                                .and_then(Value::as_object)
+                                .cloned()
+                                .unwrap_or_default();
+                            modes.insert(family.clone(), json!("non-cli"));
+                            settings.insert("agentSessionMode".into(), Value::Object(modes.clone()));
+                            crate::shared_settings::install(settings);
+                            cx.refresh_windows();
+                            cx.spawn(async move |_, _| {
+                                let _ = crate::app::gx_store::gx_rpc(
+                                    None,
+                                    "/api/dispatchRendererCommand",
+                                    json!({
+                                        "action": "updateSettingsPatch",
+                                        "payload": {
+                                            "patch": { "agentSessionMode": modes },
+                                            "source": "chat:switchToNative",
+                                        },
+                                    }),
+                                )
+                                .await;
+                            })
+                            .detach();
+                        }
+                        let params = json!({
+                            "projectId": session.project_id,
+                            "sessionId": session.session_id,
+                        });
+                        cx.spawn(async move |this, cx| {
+                            let res = crate::app::gx_store::gx_rpc(
+                                target,
+                                "/api/switchSessionCliToAcp",
+                                params,
+                            )
+                            .await;
+                            if let Err(err) = res {
+                                let _ = this.update(cx, |this, cx| {
+                                    this.dispatch_gpui_app_modal_toast(
+                                        "warning",
+                                        "Could not switch to Native",
+                                        &err.message,
+                                        cx,
+                                    );
+                                });
+                            }
+                        })
+                        .detach();
+                    }),
+                    cx,
+                );
+            }
+            Some("cancelSwitchToNative") => {
+                let target = match &session.machine {
+                    ghostex_gx_core::MachineId::Local => Some(None),
+                    ghostex_gx_core::MachineId::Remote(machine_id) => self
+                        .gpui_remote_gxserver_request_target(machine_id)
+                        .map(Some),
+                };
+                if let Some(target) = target {
+                    let params = json!({
+                        "projectId": session.project_id,
+                        "sessionId": session.session_id,
+                        "cancel": true,
+                    });
+                    cx.spawn(async move |this, cx| {
+                        if let Err(err) = crate::app::gx_store::gx_rpc(
+                            target,
+                            "/api/switchSessionCliToAcp",
+                            params,
+                        )
+                        .await
+                        {
+                            let _ = this.update(cx, |this, cx| {
+                                this.dispatch_gpui_app_modal_toast(
+                                    "warning",
+                                    "Could not cancel switch",
+                                    &err.message,
+                                    cx,
+                                );
+                            });
+                        }
+                    })
+                    .detach();
+                }
+            }
+            Some("dismissNativeSwitchOffer") => {
+                let raw_family = message["family"]
+                    .as_str()
+                    .or_else(|| message["params"]["family"].as_str())
+                    .unwrap_or_default();
+                if let Some((canonical, _)) =
+                    ghostex_gx_chat_core::extras::native_switch::canonical_native_agent(raw_family)
+                {
+                    if matches!(session.machine, ghostex_gx_core::MachineId::Local) {
+                        let mut settings =
+                            crate::shared_settings::shared_sidebar_settings_snapshot()
+                                .object()
+                                .clone();
+                        let mut families: Vec<String> = settings
+                            .get("nativeSwitchOfferDismissedAgents")
+                            .and_then(Value::as_str)
+                            .map(|raw| {
+                                raw.split(',')
+                                    .map(str::trim)
+                                    .filter(|s| !s.is_empty())
+                                    .map(str::to_string)
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        if !families.iter().any(|existing| existing == canonical) {
+                            families.push(canonical.to_string());
+                        }
+                        let joined = families.join(",");
+                        settings.insert(
+                            "nativeSwitchOfferDismissedAgents".into(),
+                            Value::String(joined.clone()),
+                        );
+                        crate::shared_settings::install(settings);
+                        cx.refresh_windows();
+                        cx.spawn(async move |_, _| {
+                            let _ = crate::app::gx_store::gx_rpc(
+                                None,
+                                "/api/dispatchRendererCommand",
+                                json!({
+                                    "action": "updateSettingsPatch",
+                                    "payload": {
+                                        "patch": { "nativeSwitchOfferDismissedAgents": joined },
+                                        "source": "chat:nativeSwitchOfferDismiss",
+                                    },
+                                }),
+                            )
+                            .await;
+                        })
+                        .detach();
+                    }
+                }
+            }
             // A chat's zoom chords. The page cannot save Settings, so the zoom changes every chat
             // on this page until it reloads.
             Some("setChatZoomPercent") => {

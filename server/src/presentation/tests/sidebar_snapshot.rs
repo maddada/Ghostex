@@ -189,6 +189,7 @@ fn snapshot_publishes_session_lifecycle_state_and_capability_flags() {
             "spaces": true,
             "workspaces": crate::workspaces::workspaces_feature_enabled(),
             "worktreeSessions": true,
+            "nativeModeSwitch": true,
         }))
     );
     let sessions = snapshot
@@ -458,6 +459,7 @@ fn the_git_status_capability_follows_the_sidebar_version_gate() {
                 "spaces": true,
                 "workspaces": crate::workspaces::workspaces_feature_enabled(),
                 "worktreeSessions": true,
+                "nativeModeSwitch": true,
             }),
             "settings {settings} must advertise sessionGitStatus {expected_git_status} \
              and leave the lifecycle/worktree capabilities alone"

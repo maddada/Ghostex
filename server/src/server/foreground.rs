@@ -524,6 +524,8 @@ pub async fn run_gxserver_foreground(
     super::security_http::start_security_events(state.clone());
     bot_sync::start_bot_project_sync(state.clone());
     close_after_done_runtime::start_close_after_done_runtime(state.clone());
+    // Queued Terminal -> Native switches waiting for an active reply to finish (Q4771).
+    crate::acp::pending_switch::start_pending_switch_runtime(state.clone());
     // The Mode menu's "Restart in Bypass when idle" switches that were on when gxserver stopped.
     crate::session_chat_mode_restart::resume_waiting_restarts(&state);
     coordinator_runtime::start_coordinator_runtime(state.clone());

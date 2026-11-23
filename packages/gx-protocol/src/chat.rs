@@ -456,6 +456,10 @@ pub struct ChatSideState {
     /// Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub non_cli_mode: Option<bool>,
+    /// True while a Terminal -> Native switch is queued until the active reply finishes (`Q4771`).
+    /// Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub switch_to_native_queued: Option<bool>,
     /// The question forms and pages the user removed without answering (form or page ids,
     /// server/src/session_chat_open_questions.rs): no longer counted as waiting. Absent means
     /// unchanged.
@@ -740,6 +744,22 @@ pub struct ReadSessionChatResult {
     /// The "Compact chats above" token threshold (`claudeIdleCompactAbove`), the same way; absent on older daemons.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compact_chats_above: Option<u64>,
+    /// True when this computer's gxserver supports Terminal -> Native switching with mid-reply queueing (`Q4772`).
+    /// Absent on older daemons, which hides the offer quietly on remote computers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_mode_switch_capable: Option<bool>,
+    /// True when this computer's `agentSessionMode` already enables Native for this session's agent (`Q4770`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_default_for_agent: Option<bool>,
+    /// True when the user dismissed the "Switch to Native" strip chip for this session's agent (`Q4770`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_switch_dismissed: Option<bool>,
+    /// True when this session's agent opens in Chat by default on this computer (`Q4768`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_chat_first: Option<bool>,
+    /// True when this session is a coordinator worker thread (`Q4772`: hides the strip chip).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_coordinator_thread: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_info: Option<ChatForkInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

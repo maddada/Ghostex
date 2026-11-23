@@ -38,6 +38,7 @@ pub fn document_with_board(
     into.terminal_activity = tri(state.session.terminal_activity.clone());
     into.agent_fleet = tri(state.session.agent_fleet.clone());
     into.agent_tasks = tri(state.session.agent_tasks.clone());
+    into.native_switch = crate::extras::native_switch::project(state);
 
     let (fleet_strip, tasks_panel, _) = panels::project(state, context);
     let threads_panel = coordinator_threads::project(

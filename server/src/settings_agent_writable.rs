@@ -9,9 +9,12 @@ use std::sync::OnceLock;
 
 use serde_json::{Map, Value};
 
-/// Keys the API may write although the catalog lists them as JSON: the hotkey maps `ghostex
-/// settings hotkeys` saves whole (ghostex_cli/settings_hotkeys.rs), theme roles, and saved themes.
-fn api_writable_json_keys() -> [&'static str; 4] {
+/// Keys the API may write although the catalog lists them as JSON or app-managed: the hotkey maps
+/// `ghostex settings hotkeys` saves whole (ghostex_cli/settings_hotkeys.rs), theme roles, saved
+/// themes, per-agent session mode (`agentSessionMode` for the "Use Native for new chats" checkbox
+/// and phone announcement sheet), and per-agent "Switch to Native" offer dismissals
+/// (`nativeSwitchOfferDismissedAgents`, Q4767/Q4769/Q4770).
+fn api_writable_json_keys() -> [&'static str; 6] {
     [
         "hotkeys",
         ghostex_settings_catalog::TERMINAL_HOTKEYS_SETTING_KEY,
@@ -19,6 +22,8 @@ fn api_writable_json_keys() -> [&'static str; 4] {
         ghostex_settings_catalog::theme_roles::THEME_ROLES_SETTING,
         // The saved themes `ghostex theme save` appends to (server/src/theme/).
         "savedThemes",
+        crate::acp::SESSION_MODE_SETTING_KEY,
+        crate::acp::NATIVE_SWITCH_OFFER_DISMISSED_KEY,
     ]
 }
 

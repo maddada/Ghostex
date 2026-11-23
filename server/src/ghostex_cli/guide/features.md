@@ -4086,7 +4086,11 @@ terminal with instant switching between Chat and Terminal) or **Native**
 scraping). For a Native session, **Switch to Terminal** lives in the chat's
 More actions (`•••`) menu instead of the composer toolbar; choosing it asks
 first and explains that switching is not instant and interrupts any active turn
-before reopening the conversation in Terminal mode.
+before reopening the conversation in Terminal mode. On a Terminal chat for those
+agents, chat-first users also see a dismissible **Switch to Native** chip in the
+chat pill strip (and a **Switch to Native** item in the chat box's `•••` menu);
+confirming optionally sets Native as the default for new chats with that agent,
+and clicking mid-reply queues the switch until the reply finishes.
 
 Prompt history search (**Find**, `ghostex f`) indexes both your prompts and each
 agent turn's closing answer in a rebuildable local SQLite FTS5 store, with a

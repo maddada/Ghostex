@@ -717,6 +717,7 @@ pub(crate) async fn switch_to_cli(
     session_id: &str,
     interrupt: bool,
 ) -> Result<Value, DomainStateError> {
+    super::pending_switch::cancel(project_id, session_id);
     let (native_session_id, switched_live) = if live(project_id, session_id, "switch_to_cli")
         .is_some()
     {
@@ -880,10 +881,126 @@ pub(crate) async fn switch_to_cli(
     }))
 }
 
-/// Switch a CLI session whose agent supports Non-CLI mode back to Non-CLI (`acp-host`) by
-/// updating `runtimeSettings.nonCliMode = true` and cycling the session cleanly onto its same
-/// conversation id.
+/// Switch a Terminal session whose agent supports Native mode into Native (`acp-host`).
+///
+/// CDXC:AgentProviders 2026-11-24 DECISION:
+/// User (Q4771): never cycle a running session mid-reply. When `activity == "working"`, queue the
+/// switch and run it automatically as soon as the turn finishes, reporting `{ queued: true }` so
+/// clients show a cancelable pending state in the pill strip.
 pub(crate) async fn switch_to_acp(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    caller_is_user_device: bool,
+) -> Result<Value, DomainStateError> {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    let precheck = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, server_id.as_str());
+        let session = repository
+            .get_session(&pid, &sid)?
+            .ok_or_else(|| DomainStateError {
+                code: "notFound",
+                message: "The session no longer exists.".to_string(),
+            })?;
+        let family = session
+            .pointer("/runtimeSettings/acpFamily")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
+            .ok_or_else(|| DomainStateError {
+                code: "invalidParams",
+                message: "This session does not belong to an agent that supports Native mode."
+                    .to_string(),
+            })?;
+        if !super::supports_acp(&family) {
+            return Err(DomainStateError {
+                code: "invalidParams",
+                message: format!("Agent `{family}` does not support Native mode."),
+            });
+        }
+        let already_acp = super::session_is_acp(&session);
+        let running = crate::presentation::effective_lifecycle_state(&session) == "running";
+        let now = crate::presentation::now_iso();
+        let working =
+            running && crate::presentation::presentation_activity(&session, &now) == "working";
+        Ok::<_, DomainStateError>((already_acp, family, working))
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Could not inspect session for Native mode: {error}"),
+    })??;
+
+    let (already_acp, family, working) = precheck;
+    if already_acp {
+        super::pending_switch::cancel(project_id, session_id);
+        return Ok(json!({
+            "switched": true,
+            "queued": false,
+            "restarted": false,
+            "family": family,
+        }));
+    }
+
+    if working {
+        super::pending_switch::queue(project_id, session_id, caller_is_user_device);
+        super::pending_switch::broadcast_state(state, project_id, session_id).await;
+        log(
+            LogLevel::Info,
+            "acp.switchToAcpQueued",
+            json!({
+                "projectId": project_id,
+                "sessionId": session_id,
+                "family": family,
+            }),
+        );
+        return Ok(json!({
+            "switched": false,
+            "queued": true,
+            "restarted": false,
+            "family": family,
+        }));
+    }
+
+    super::pending_switch::cancel(project_id, session_id);
+    execute_switch_to_acp(state, project_id, session_id, caller_is_user_device).await
+}
+
+/// Cancel a queued Terminal-to-Native switch before the turn finishes (`Q4771`).
+pub(crate) async fn cancel_switch_to_acp(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Result<Value, DomainStateError> {
+    let cancelled = super::pending_switch::cancel(project_id, session_id);
+    super::pending_switch::broadcast_state(state, project_id, session_id).await;
+    log(
+        LogLevel::Info,
+        "acp.switchToAcpCancelled",
+        json!({
+            "projectId": project_id,
+            "sessionId": session_id,
+            "cancelled": cancelled,
+        }),
+    );
+    Ok(json!({
+        "cancelled": cancelled,
+        "queued": false,
+    }))
+}
+
+/// Execute the Terminal-to-Native switch immediately by updating `runtimeSettings.nonCliMode = true`
+/// and cycling a running session cleanly onto its same conversation id.
+pub(crate) async fn execute_switch_to_acp(
     state: &AppState,
     project_id: &str,
     session_id: &str,
@@ -976,15 +1093,17 @@ pub(crate) async fn switch_to_acp(
     if already_acp {
         return Ok(json!({
             "switched": true,
+            "queued": false,
             "restarted": false,
             "family": family,
         }));
     }
 
     if was_running {
-        if let Err(failure) =
-            crate::session_chat_queue_runtime::cycle_session_explained(state, project_id, session_id)
-                .await
+        if let Err(failure) = crate::session_chat_queue_runtime::cycle_session_explained(
+            state, project_id, session_id,
+        )
+        .await
         {
             // Roll back nonCliMode flag if cycling the provider failed.
             let paths = state.paths.clone();
@@ -1018,26 +1137,7 @@ pub(crate) async fn switch_to_acp(
         }
     }
 
-    let paths = state.paths.clone();
-    let server_id = state.metadata.server_id.clone();
-    let pid = project_id.to_string();
-    let sid = session_id.to_string();
-    if let Ok(Ok(Some(updated_session))) = tokio::task::spawn_blocking(move || {
-        let db = open_gxserver_database(&paths)?;
-        let repo = DomainRepository::new(&db, server_id.as_str());
-        Ok::<_, anyhow::Error>(repo.get_session(&pid, &sid).ok().flatten())
-    })
-    .await
-    {
-        state.event_hub.broadcast(json!({
-            "type": "sessionUpdated",
-            "projectId": project_id,
-            "session": updated_session,
-        }));
-    }
-    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
-        state, project_id, session_id,
-    );
+    super::pending_switch::broadcast_state(state, project_id, session_id).await;
 
     log(
         LogLevel::Info,
@@ -1052,6 +1152,7 @@ pub(crate) async fn switch_to_acp(
 
     Ok(json!({
         "switched": true,
+        "queued": false,
         "restarted": was_running,
         "family": family,
     }))

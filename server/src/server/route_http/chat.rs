@@ -642,14 +642,22 @@ pub(super) async fn route_chat_http(
                 Ok(id) => id,
                 Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
             };
-            match crate::acp::channel::switch_to_acp(
-                &state,
-                &project_id,
-                &session_id,
-                caller.is_user_device(),
-            )
-            .await
-            {
+            let cancel = params
+                .get("cancel")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let outcome = if cancel {
+                crate::acp::channel::cancel_switch_to_acp(&state, &project_id, &session_id).await
+            } else {
+                crate::acp::channel::switch_to_acp(
+                    &state,
+                    &project_id,
+                    &session_id,
+                    caller.is_user_device(),
+                )
+                .await
+            };
+            match outcome {
                 Ok(result) => routed_json(
                     Some(endpoint.path),
                     StatusCode::OK,

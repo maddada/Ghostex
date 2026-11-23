@@ -102,6 +102,7 @@ action_kinds! {
     RefreshBoosts => "refreshBoosts",
     SaveAsBoost => "saveAsBoost",
     DismissBoostHint => "dismissBoostHint",
+    DismissNativeSwitchOffer => "dismissNativeSwitchOffer",
     DismissCoordinatorQuality => "dismissCoordinatorQuality",
     SetCollabGuest => "setCollabGuest",
     ResolveCollabMessage => "resolveCollabMessage",

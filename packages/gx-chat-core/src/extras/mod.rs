@@ -24,6 +24,7 @@ pub mod dock_stack;
 pub mod document;
 pub mod minimap;
 pub mod minimap_rail;
+pub mod native_switch;
 pub mod needs_you;
 pub mod new_chat_tips;
 pub mod panels;

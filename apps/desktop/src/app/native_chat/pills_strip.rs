@@ -561,7 +561,10 @@ impl NativeChatView {
     /// pill is reachable on a new chat too), or the transcript has rows and another pill, timer or
     /// view chip calls for it.
     pub(super) fn pills_strip_shown(&self) -> bool {
-        if self.saved_draft_offered() || !self.minimized_pages.is_empty() || self.boost_pill_shown()
+        if self.saved_draft_offered()
+            || !self.minimized_pages.is_empty()
+            || self.boost_pill_shown()
+            || self.native_switch_chip_shown()
         {
             return true;
         }
@@ -639,8 +642,8 @@ impl NativeChatView {
         }
         let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list, p.scale);
         let (where_pill, chips, pills) = if shown {
-            let mut chips: Vec<AnyElement> =
-                self.saved_draft_pill_element(p, cx).into_iter().collect();
+            let mut chips: Vec<AnyElement> = self.native_switch_chip(p, cx).into_iter().collect();
+            chips.extend(self.saved_draft_pill_element(p, cx));
             chips.extend(self.view_chips(p, cx));
             chips.extend(self.compact_hint_chip(p));
             self.pills_strip

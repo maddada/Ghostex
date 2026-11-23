@@ -199,6 +199,10 @@ pub struct Document {
     /// the chat is long and its prompt cache has expired. Family d.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compact_before_send: Option<super::panels::CompactBeforeSendOffer>,
+    /// The "Switch to Native" strip chip and `•••` menu offer (`extras::native_switch`), absent
+    /// for Native chats, unsupported agents, guests, and older remote servers. Family f.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_switch: Option<super::panels::NativeSwitchOffer>,
     pub note: Note,
     /// The Catch me up button and card. Family d.
     #[serde(default)]

@@ -81,6 +81,9 @@ pub fn apply_state_frame(
     if let Some(non_cli) = frame.state.non_cli_mode {
         state.session.non_cli_mode = non_cli;
     }
+    if let Some(queued) = frame.state.switch_to_native_queued {
+        state.session.switch_to_native_queued = queued;
+    }
     if let Some(ids) = frame.state.removed_question_ids.clone() {
         *state.session.removed_question_ids = ids;
     }
@@ -212,6 +215,7 @@ pub fn apply_agent_identity(state: &mut ChatState, patch: &AgentIdentity) {
         *session.later_question_ids = Vec::new();
         session.unavailable_modes = Vec::new();
         session.non_cli_mode = false;
+        session.switch_to_native_queued = false;
         *session.removed_question_ids = Vec::new();
         session.retired_page_ids = Vec::new();
         session.starred_page_ids = Vec::new();
@@ -523,6 +527,21 @@ pub fn apply_draft_agent_carriage(state: &mut ChatState, result: &ReadSessionCha
             state.core.compact_chats_above = Some(above);
         }
     }
+    if let Some(capable) = result.native_mode_switch_capable {
+        state.session.native_mode_switch_capable = capable;
+    }
+    if let Some(default_native) = result.native_default_for_agent {
+        state.session.native_default_for_agent = Some(default_native);
+    }
+    if let Some(dismissed) = result.native_switch_dismissed {
+        state.session.native_switch_dismissed = Some(dismissed);
+    }
+    if let Some(chat_first) = result.preferred_chat_first {
+        state.session.preferred_chat_first = Some(chat_first);
+    }
+    if let Some(is_thread) = result.is_coordinator_thread {
+        state.session.is_coordinator_thread = is_thread;
+    }
 }
 
 /// Applies one authoritative result: a seed read, a resync read, a snapshot, or the cached
@@ -671,6 +690,9 @@ pub fn apply_authoritative(
     }
     if let Some(non_cli) = result.state.non_cli_mode {
         state.session.non_cli_mode = non_cli;
+    }
+    if let Some(queued) = result.state.switch_to_native_queued {
+        state.session.switch_to_native_queued = queued;
     }
     if let Some(ids) = result.state.removed_question_ids.clone() {
         *state.session.removed_question_ids = ids;

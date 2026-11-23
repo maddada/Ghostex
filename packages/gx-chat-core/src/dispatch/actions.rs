@@ -229,6 +229,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::RefreshBoosts
         | ActionKind::SaveAsBoost
         | ActionKind::DismissBoostHint
+        | ActionKind::DismissNativeSwitchOffer
         | ActionKind::DismissCoordinatorQuality
         | ActionKind::SetCollabGuest
         | ActionKind::ResolveCollabMessage
@@ -426,6 +427,7 @@ fn clears_error(kind: &ActionKind) -> bool {
         | ActionKind::RefreshBoosts
         | ActionKind::SaveAsBoost
         | ActionKind::DismissBoostHint
+        | ActionKind::DismissNativeSwitchOffer
         | ActionKind::DismissCoordinatorQuality
         | ActionKind::SetCollabGuest
         | ActionKind::ResolveCollabMessage
@@ -509,6 +511,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::RefreshBoosts
             | ActionKind::SaveAsBoost
             | ActionKind::DismissBoostHint
+            | ActionKind::DismissNativeSwitchOffer
             | ActionKind::DismissCoordinatorQuality
             | ActionKind::SetCollabGuest
             | ActionKind::ResolveCollabMessage

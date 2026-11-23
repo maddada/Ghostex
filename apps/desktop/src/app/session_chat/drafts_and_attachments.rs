@@ -331,6 +331,291 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /// Asks for confirmation (with the Q4769 "Use Native for new chats with <agent>" checkbox)
+    /// before switching a Terminal session into Native mode.
+    pub(crate) fn ask_and_switch_session_to_native(
+        &mut self,
+        session_id: TerminalSessionId,
+        family: String,
+        agent_name: String,
+        native_default: bool,
+        working: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let is_working = working
+            || self
+                .session_non_cli_mode_info(session_id)
+                .is_some_and(|(_, busy)| busy);
+        let message = if is_working {
+            format!(
+                "{agent_name} is replying now. Ghostex will switch to Native mode automatically as soon as this reply finishes, keeping your chat history."
+            )
+        } else {
+            format!(
+                "Ghostex will reopen {agent_name} in Native mode. Your chat history stays, and you can switch back to Terminal anytime."
+            )
+        };
+        let confirmation = ghostex_gx_core::CloseConfirmation {
+            title: "Switch to Native?".to_string(),
+            message,
+            confirm_label: "Switch to Native".to_string(),
+        };
+        let checkbox = (!native_default)
+            .then(|| (format!("Use Native for new chats with {agent_name}"), true));
+        self.gx_store_confirm_with_checkbox(
+            confirmation,
+            checkbox,
+            true,
+            Box::new(move |app, use_as_default, cx| {
+                app.confirm_switch_session_to_native(session_id, family, use_as_default, cx);
+            }),
+            cx,
+        );
+    }
+
+    fn confirm_switch_session_to_native(
+        &mut self,
+        session_id: TerminalSessionId,
+        family: String,
+        use_as_default: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let is_remote = self.agents_chat_local_key_for_session(session_id).is_none();
+        if use_as_default && !family.is_empty() {
+            if !is_remote {
+                let mut modes = crate::shared_settings::shared_sidebar_settings_snapshot()
+                    .object()
+                    .get("agentSessionMode")
+                    .and_then(serde_json::Value::as_object)
+                    .cloned()
+                    .unwrap_or_default();
+                modes.insert(family.clone(), serde_json::json!("non-cli"));
+                self.handle_gpui_app_modal_update_settings_patch_message(
+                    &serde_json::json!({
+                        "patch": { "agentSessionMode": modes },
+                        "source": "chat:switchToNative",
+                        "type": "updateSettingsPatch",
+                    }),
+                    cx,
+                );
+            } else if let Some(key) = self.agents_chat_remote_key_for_session(session_id)
+                && let Some(target) =
+                    self.gpui_remote_gxserver_request_target(&key.remote_machine_id)
+            {
+                let family = family.clone();
+                cx.background_executor()
+                    .spawn(async move {
+                        let mut modes = gpui_remote_gxserver_rpc_result(
+                            &target,
+                            "/api/readSharedSettings",
+                            &serde_json::json!({}),
+                            std::time::Duration::from_secs(10),
+                        )
+                        .ok()
+                        .and_then(|res| {
+                            res.get("settings")
+                                .and_then(|s| s.get("agentSessionMode"))
+                                .and_then(serde_json::Value::as_object)
+                                .cloned()
+                        })
+                        .unwrap_or_default();
+                        modes.insert(family, serde_json::json!("non-cli"));
+                        let _ = gpui_remote_gxserver_rpc_result(
+                            &target,
+                            "/api/dispatchRendererCommand",
+                            &serde_json::json!({
+                                "action": "updateSettingsPatch",
+                                "payload": {
+                                    "patch": { "agentSessionMode": modes },
+                                    "source": "chat:switchToNative",
+                                },
+                            }),
+                            std::time::Duration::from_secs(10),
+                        );
+                    })
+                    .detach();
+            }
+        }
+        let request = if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
+            let params = serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+            });
+            cx.background_executor().spawn(async move {
+                gpui_gxserver_rpc_result(
+                    "/api/switchSessionCliToAcp",
+                    &params,
+                    std::time::Duration::from_secs(20),
+                )
+            })
+        } else if let Some(key) = self.agents_chat_remote_key_for_session(session_id)
+            && let Some(target) = self.gpui_remote_gxserver_request_target(&key.remote_machine_id)
+        {
+            let params = serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+            });
+            cx.background_executor().spawn(async move {
+                gpui_remote_gxserver_rpc_result(
+                    &target,
+                    "/api/switchSessionCliToAcp",
+                    &params,
+                    std::time::Duration::from_secs(20),
+                )
+            })
+        } else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let result = request.await;
+            let _ = this.update(cx, |this, cx| {
+                if let Err(error) = result {
+                    this.dispatch_gpui_workspace_action_toast(
+                        "error",
+                        "Could not switch to Native",
+                        &error,
+                        cx,
+                    );
+                }
+            });
+        })
+        .detach();
+    }
+
+    pub(crate) fn cancel_switch_session_to_native(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let request = if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
+            let params = serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+                "cancel": true,
+            });
+            cx.background_executor().spawn(async move {
+                gpui_gxserver_rpc_result(
+                    "/api/switchSessionCliToAcp",
+                    &params,
+                    std::time::Duration::from_secs(10),
+                )
+            })
+        } else if let Some(key) = self.agents_chat_remote_key_for_session(session_id)
+            && let Some(target) = self.gpui_remote_gxserver_request_target(&key.remote_machine_id)
+        {
+            let params = serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+                "cancel": true,
+            });
+            cx.background_executor().spawn(async move {
+                gpui_remote_gxserver_rpc_result(
+                    &target,
+                    "/api/switchSessionCliToAcp",
+                    &params,
+                    std::time::Duration::from_secs(10),
+                )
+            })
+        } else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            if let Err(error) = request.await {
+                let _ = this.update(cx, |this, cx| {
+                    this.dispatch_gpui_workspace_action_toast(
+                        "error",
+                        "Could not cancel switch",
+                        &error,
+                        cx,
+                    );
+                });
+            }
+        })
+        .detach();
+    }
+
+    pub(crate) fn dismiss_native_switch_offer(
+        &mut self,
+        session_id: TerminalSessionId,
+        family: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some((canonical, _)) =
+            ghostex_gx_chat_core::extras::native_switch::canonical_native_agent(&family)
+        else {
+            return;
+        };
+        if self.agents_chat_local_key_for_session(session_id).is_some() {
+            let mut families: Vec<String> =
+                crate::shared_settings::shared_sidebar_settings_snapshot()
+                    .object()
+                    .get("nativeSwitchOfferDismissedAgents")
+                    .and_then(serde_json::Value::as_str)
+                    .map(|raw| {
+                        raw.split(',')
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+            if !families.iter().any(|existing| existing == canonical) {
+                families.push(canonical.to_string());
+            }
+            self.handle_gpui_app_modal_update_settings_patch_message(
+                &serde_json::json!({
+                    "patch": { "nativeSwitchOfferDismissedAgents": families.join(",") },
+                    "source": "chat:nativeSwitchOfferDismiss",
+                    "type": "updateSettingsPatch",
+                }),
+                cx,
+            );
+        } else if let Some(key) = self.agents_chat_remote_key_for_session(session_id)
+            && let Some(target) = self.gpui_remote_gxserver_request_target(&key.remote_machine_id)
+        {
+            let canonical = canonical.to_string();
+            cx.background_executor()
+                .spawn(async move {
+                    let mut families: Vec<String> = gpui_remote_gxserver_rpc_result(
+                        &target,
+                        "/api/readSharedSettings",
+                        &serde_json::json!({}),
+                        std::time::Duration::from_secs(10),
+                    )
+                    .ok()
+                    .and_then(|res| {
+                        res.get("settings")
+                            .and_then(|s| s.get("nativeSwitchOfferDismissedAgents"))
+                            .and_then(serde_json::Value::as_str)
+                            .map(|raw| {
+                                raw.split(',')
+                                    .map(str::trim)
+                                    .filter(|s| !s.is_empty())
+                                    .map(str::to_string)
+                                    .collect()
+                            })
+                    })
+                    .unwrap_or_default();
+                    if !families.iter().any(|existing| existing == &canonical) {
+                        families.push(canonical);
+                    }
+                    let _ = gpui_remote_gxserver_rpc_result(
+                        &target,
+                        "/api/dispatchRendererCommand",
+                        &serde_json::json!({
+                            "action": "updateSettingsPatch",
+                            "payload": {
+                                "patch": { "nativeSwitchOfferDismissedAgents": families.join(",") },
+                                "source": "chat:nativeSwitchOfferDismiss",
+                            },
+                        }),
+                        std::time::Duration::from_secs(10),
+                    );
+                })
+                .detach();
+        }
+    }
+
     pub(crate) fn request_session_chat_handoff_to_terminal(
         &mut self,
         session_id: TerminalSessionId,
