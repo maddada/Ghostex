@@ -190,7 +190,7 @@ impl std::error::Error for SessionTranscriptExportError {}
 
 pub(super) fn agent_display_name(agent: SessionChatTranscriptAgent) -> &'static str {
     match agent {
-        SessionChatTranscriptAgent::Antigravity => "Antigravity CLI",
+        SessionChatTranscriptAgent::Antigravity => "Antigravity",
         SessionChatTranscriptAgent::Claude => "Claude",
         SessionChatTranscriptAgent::Codex => "Codex",
         SessionChatTranscriptAgent::Copilot => "GitHub Copilot",

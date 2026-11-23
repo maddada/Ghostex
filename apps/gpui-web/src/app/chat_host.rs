@@ -67,7 +67,7 @@ impl GhostexGpuiApp {
                             .gpui_remote_gxserver_request_target(machine_id)
                             .map(Some)
                             .ok_or_else(|| {
-                                "Switching a remote Non-CLI session to Terminal is not available in the web build yet."
+                                "Switching a remote Native session to Terminal is not available in the web build yet."
                                     .to_string()
                             }),
                     };

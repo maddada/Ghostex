@@ -261,7 +261,7 @@ pub(crate) async fn wait_for_account_ready(
                     if !exited && !working && !cancelled() {
                         return Ok(());
                     }
-                    reason = "The selected account started; waiting for the Non-CLI agent to finish initializing."
+                    reason = "The selected account started; waiting for the Native agent to finish initializing."
                         .to_string();
                 }
                 Some(_) => {
@@ -272,7 +272,7 @@ pub(crate) async fn wait_for_account_ready(
                 }
                 None => {
                     reason =
-                        "Could not verify the new Non-CLI agent process's account login."
+                        "Could not verify the new Native agent process's account login."
                             .to_string();
                 }
             }

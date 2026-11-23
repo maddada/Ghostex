@@ -806,7 +806,7 @@ pub(crate) fn create_agent_session_params_for_project(
                         if !ignored_owner_tokens.is_empty() {
                             let joined = ignored_owner_tokens.join(" ");
                             eprintln!(
-                                "[Non-CLI] Ignoring extra flags/env in command string for {fam} ({agent_id}): {joined}"
+                                "[Native] Ignoring extra flags/env in command string for {fam} ({agent_id}): {joined}"
                             );
                             crate::acp::channel::log(
                                 crate::logging::LogLevel::Warn,
@@ -1114,7 +1114,7 @@ fn apply_requested_agent_model(
         })
         .ok_or_else(|| {
             DomainStateError::bad_request(
-                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI agents; Cursor CLI takes a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's model and variant.",
+                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity agents; Cursor CLI takes a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's model and variant.",
             )
         })?;
     if effort.is_some() {
@@ -1484,7 +1484,7 @@ pub(crate) fn normalize_agent_session_title_name(value: Option<&str>) -> Option<
 pub(crate) fn default_agent_session_title_name(agent_id: &str) -> Option<&'static str> {
     match agent_id.trim().to_ascii_lowercase().as_str() {
         "amp" => Some("Amp CLI"),
-        "antigravity" => Some("Antigravity CLI"),
+        "antigravity" => Some("Antigravity"),
         "claude" => Some("Claude"),
         "codebuddy" => Some("CodeBuddy"),
         "codex" => Some("Codex"),

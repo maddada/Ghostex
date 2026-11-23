@@ -60,7 +60,7 @@ const INTEGRATION_SESSIONS: [(&str, &str, &str); 3] = [
 /// Shown until detection answers: how Ghostex follows the three agents most people have.
 const DEFAULT_FOLLOWING: [(&str, &str, Option<&str>); 3] = [
     ("claude", "Claude Code", None),
-    ("codex", "Codex CLI", None),
+    ("codex", "Codex", None),
     ("cursor", "Cursor Agent", Some("~/.cursor/hooks.json")),
 ];
 const CURSOR_PATH: [(f32, f32); 6] = [

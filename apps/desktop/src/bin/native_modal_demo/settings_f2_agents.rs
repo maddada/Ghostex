@@ -50,7 +50,7 @@ fn default_agent_buttons() -> Value {
         { "agentId": "copilot", "command": "copilot", "icon": "copilot", "isDefault": true, "name": "Copilot" },
         { "agentId": "droid", "command": "droid", "icon": "factory-droid", "isDefault": true, "name": "Factory Droid" },
         { "agentId": "grok", "command": "grok", "icon": "grok-build", "isDefault": true, "name": "Grok Build" },
-        { "agentId": "antigravity", "command": "agy", "icon": "antigravity-cli", "isDefault": true, "name": "Antigravity CLI" },
+        { "agentId": "antigravity", "command": "agy", "icon": "antigravity-cli", "isDefault": true, "name": "Antigravity" },
         { "agentId": "amp", "command": "amp", "icon": "amp-cli", "isDefault": true, "name": "Amp CLI" },
         { "agentId": "hermes-agent", "command": "hermes", "icon": "hermes-agent", "isDefault": true, "name": "Hermes Agent" },
         { "agentId": "mastra", "command": "mastracode", "icon": "mastra", "isDefault": true, "name": "Mastra Code" },

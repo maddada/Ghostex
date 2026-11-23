@@ -957,7 +957,7 @@ fn interrupt_active_codex_turn(
                     json!({ "threadId": tid_int, "turnId": turn_id }),
                     Duration::from_secs(5),
                 ) {
-                    eprintln!("[Codex Non-CLI] Warning: turn/interrupt failed: {err}");
+                    eprintln!("[Codex Native] Warning: turn/interrupt failed: {err}");
                     false
                 } else {
                     true
@@ -1594,7 +1594,7 @@ fn spawn_codex_stdout_reader(
                                 ) {
                                     PermissionDecision::AutoApprove { .. } => {
                                         println!(
-                                            "\r\n[Codex Non-CLI] Auto-approved ({}): Bash ({})",
+                                            "\r\n[Codex Native] Auto-approved ({}): Bash ({})",
                                             level.label(),
                                             command
                                         );
@@ -1682,7 +1682,7 @@ fn spawn_codex_stdout_reader(
                                 ) {
                                     PermissionDecision::AutoApprove { .. } => {
                                         println!(
-                                            "\r\n[Codex Non-CLI] Auto-approved ({}): Edit ({})",
+                                            "\r\n[Codex Native] Auto-approved ({}): Edit ({})",
                                             level.label(),
                                             summary
                                         );
@@ -1928,7 +1928,7 @@ fn spawn_codex_stdout_reader(
                                     }
                                 }
                             }
-                            println!("[Codex Non-CLI] Turn finished.");
+                            println!("[Codex Native] Turn finished.");
                             let _ = std::io::stdout().flush();
                             act_out.sync();
                         }
@@ -2037,7 +2037,7 @@ fn spawn_codex_stdout_reader(
                     }
                 }));
                 if res.is_err() {
-                    eprintln!("[Codex Non-CLI] Warning: recovered from panic in stdout reader.");
+                    eprintln!("[Codex Native] Warning: recovered from panic in stdout reader.");
                 }
             }
         });
@@ -2053,7 +2053,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         .map(|ep| ep.session_id.clone())
         .unwrap_or_else(|| format!("local-{}", std::process::id()));
 
-    println!("Ghostex Non-CLI Host · {} · Starting...", spec.display_name);
+    println!("Ghostex Native Host · {} · Starting...", spec.display_name);
     let _ = std::io::stdout().flush();
 
     let gx_paths = crate::paths::get_gxserver_paths(None);
@@ -2062,7 +2062,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let Some((acp_envs, prog, mut argv)) =
         build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
-        eprintln!("Invalid Codex Non-CLI command.");
+        eprintln!("Invalid Codex Native command.");
         return 1;
     };
     // Synthesize Ghostex's own server-side Codex flags strictly from `parsed.profile` and Ghostex
@@ -2281,7 +2281,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         .thread_id
         .clone();
     println!(
-        "Ghostex Non-CLI Host · {} · Ready (thread: {})",
+        "Ghostex Native Host · {} · Ready (thread: {})",
         spec.display_name,
         thread_id.as_deref().unwrap_or("pending")
     );
@@ -2310,7 +2310,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             break;
         }
         if state.lock().unwrap_or_else(|p| p.into_inner()).child_exited {
-            println!("\r\n[Codex Non-CLI] Agent process exited.");
+            println!("\r\n[Codex Native] Agent process exited.");
             break;
         }
         let Some(ep) = endpoint.as_ref() else {
@@ -2356,7 +2356,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             &process_gen,
                             desired,
                         ) {
-                            eprintln!("[Codex Non-CLI] Warning: could not sync approval level: {err}");
+                            eprintln!("[Codex Native] Warning: could not sync approval level: {err}");
                         }
                     }
                 }
@@ -2886,7 +2886,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         s.active_turn_id = None;
                         s.clear_live_turn_output();
                     }
-                    println!("\r\n[Codex Non-CLI] Turn started...");
+                    println!("\r\n[Codex Native] Turn started...");
                     let _ = std::io::stdout().flush();
                     match proc.transport.call(
                         "turn/start",
@@ -2979,7 +2979,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         id,
                         false,
                         Value::Null,
-                        Some(&format!("Unsupported Codex Non-CLI command: {other}")),
+                        Some(&format!("Unsupported Codex Native command: {other}")),
                     );
                 }
             }

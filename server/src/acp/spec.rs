@@ -20,7 +20,7 @@ pub struct AcpAgentSpec {
 
 const ANTIGRAVITY_SPEC: AcpAgentSpec = AcpAgentSpec {
     family: "antigravity",
-    display_name: "Antigravity CLI",
+    display_name: "Antigravity",
     // `--cli_dir_name ghostex-acp` keeps `agy acp` on its default `request-review` policy
     // (isolated from any `toolPermission: always-proceed` in the user's CLI settings.json) while
     // sharing the user's existing login and `~/.gemini/antigravity-cli/brain/` transcripts so

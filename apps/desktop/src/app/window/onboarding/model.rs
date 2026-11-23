@@ -13,8 +13,8 @@ pub(crate) const INSTALL_GUIDE_URL: &str =
 /// CDXC:Onboarding 2026-11-21 DECISION: User: Antigravity is "one of the fully supported options in the onboarding": a row of its own beside Claude and Codex, with its install, its sign-in check (server/src/agent_sign_in.rs) and the default pick, which Chief of Staff then runs on (Gemini Neon at High, server/src/chief/model.rs).
 pub(crate) const PRIMARY_AGENTS: [(&str, &str); 5] = [
     ("claude", "Claude Code"),
-    ("codex", "Codex CLI"),
-    ("antigravity", "Antigravity CLI"),
+    ("codex", "Codex"),
+    ("antigravity", "Antigravity"),
     ("cursor", "Cursor Agent"),
     ("grok", "Grok Build"),
 ];
@@ -100,8 +100,8 @@ pub(crate) enum ComputerUseState {
 fn display_name_override(agent_id: &str) -> Option<&'static str> {
     match agent_id {
         "claude" => Some("Claude Code"),
-        "codex" => Some("Codex CLI"),
-        "antigravity" => Some("Antigravity CLI"),
+        "codex" => Some("Codex"),
+        "antigravity" => Some("Antigravity"),
         _ => None,
     }
 }

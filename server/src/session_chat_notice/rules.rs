@@ -1126,7 +1126,7 @@ NoticeRule {
     kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
     severity: SessionChatTerminalNoticeSeverity::Warning,
     title: "Finish signing in",
-    detail: "Antigravity CLI is waiting for you to sign in. Finish or cancel it in the terminal, then send your message.",
+    detail: "Antigravity is waiting for you to sign in. Finish or cancel it in the terminal, then send your message.",
     blocks_input: true,
     signatures: &[NoticeSignature {
         scope: NoticeScope::Dialog,

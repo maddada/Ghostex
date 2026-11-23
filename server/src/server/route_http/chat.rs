@@ -585,7 +585,7 @@ pub(super) async fn route_chat_http(
                     DomainStateError {
                         code: "forbidden",
                         message:
-                            "Only your own devices can switch a session between Non-CLI and terminal mode."
+                            "Only your own devices can switch a session between Native and Terminal mode."
                                 .to_string(),
                     },
                 ));
@@ -625,7 +625,7 @@ pub(super) async fn route_chat_http(
                     DomainStateError {
                         code: "forbidden",
                         message:
-                            "Only your own devices can switch a session between Non-CLI and terminal mode."
+                            "Only your own devices can switch a session between Native and Terminal mode."
                                 .to_string(),
                     },
                 ));

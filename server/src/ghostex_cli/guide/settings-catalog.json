@@ -10739,8 +10739,8 @@
           "value": "Grok Build"
         },
         {
-          "label": "Antigravity CLI",
-          "value": "Antigravity CLI"
+          "label": "Antigravity",
+          "value": "Antigravity"
         },
         {
           "label": "Amp CLI",
@@ -10927,7 +10927,7 @@
     {
       "key": "agentSessionMode",
       "title": "Session mode",
-      "subtitle": "Choose Agent CLI (interactive terminal, instant switching between Chat and Terminal) or Non-CLI (structured host without terminal scraping; switching to Terminal asks first and interrupts any active turn). Applies to sessions started or resumed after you change it.",
+      "subtitle": "Choose Terminal (interactive terminal, instant switching between Chat and Terminal) or Native (structured host without terminal scraping; switching to Terminal asks first and interrupts any active turn). Applies to sessions started or resumed after you change it.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "agentList",
@@ -11016,7 +11016,7 @@
           "value": "pi"
         },
         {
-          "label": "Antigravity CLI",
+          "label": "Antigravity",
           "value": "antigravity"
         },
         {
@@ -11156,7 +11156,7 @@
           "value": "pi"
         },
         {
-          "label": "Antigravity CLI",
+          "label": "Antigravity",
           "value": "antigravity"
         },
         {
@@ -11225,8 +11225,8 @@
           "value": "Grok Build"
         },
         {
-          "label": "Antigravity CLI",
-          "value": "Antigravity CLI"
+          "label": "Antigravity",
+          "value": "Antigravity"
         },
         {
           "label": "Amp CLI",

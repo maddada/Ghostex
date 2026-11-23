@@ -584,7 +584,7 @@ const DEFAULT_AGENT_NAMES: &[(&str, &str)] = &[
     ("copilot", "Copilot"),
     ("droid", "Factory Droid"),
     ("grok", "Grok Build"),
-    ("antigravity", "Antigravity CLI"),
+    ("antigravity", "Antigravity"),
     ("amp", "Amp CLI"),
     ("hermes-agent", "Hermes Agent"),
     ("rovodev", "Rovo Dev"),

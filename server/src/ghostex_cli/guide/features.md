@@ -1880,7 +1880,7 @@ when you open it.
   the star on a result stars it, pull down rebuilds the index, and tapping a
   result shows the whole prompt with Resume, Fork, Copy and Star.
   It lists prompts from Claude, Codex, Pi, OpenCode, Cursor, Grok, Empryo
-  (from every repository Empryo has run in), Antigravity CLI, Hermes Agent
+  (from every repository Empryo has run in), Antigravity, Hermes Agent
   (every profile), Copilot CLI, Factory Droid, OMP and ZCode, and resuming
   one reopens that agent's session, or focuses it when it is already open in
   the sidebar. A prompt can
@@ -2423,7 +2423,7 @@ model to save the default, or right-click to apply it only to this session.
 Use `/compact` to summarize the conversation. Forms with conditional fields or
 external sign-in steps offer an Open terminal action. Commands:
 `ghostex send-session-chat-message`, `ghostex answer-session-chat-prompt`.
-Antigravity CLI chats show its replies, its thinking, the commands it runs, the
+Antigravity chats show its replies, its thinking, the commands it runs, the
 files it reads and searches, and its file edits with their changes. When
 Antigravity asks questions, they appear as a card in the chat: pick options,
 write your own answer, or skip a question, and the answer goes to Antigravity
@@ -3183,7 +3183,7 @@ things, and then reads the details from `ghostex agent-guide`. The note also
 asks every agent to link the files, PRs and issues it mentions so you can
 click them, and to keep the images it shows you in Ghostex's image folder, so
 they still open after a restart. It reaches
-Claude Code, Codex, ZCode, Antigravity CLI, Grok Build, Copilot, Kiro,
+Claude Code, Codex, ZCode, Antigravity, Grok Build, Copilot, Kiro,
 CodeBuddy, Qoder, Pi, OMP and Factory Droid when they start; in other agents
 (OpenCode, Cursor, Kimi Code and the rest) type `/ghostex` (`$ghostex` in
 Codex) to send the agent to `ghostex agent-guide`. That Ghostex skill installs
@@ -4050,8 +4050,8 @@ Settings > Size & Zoom), `terminalGhosttyTheme`, `terminalColorScheme`, `termina
 ## Agents, actions, and orchestration
 
 Agents are the launch buttons per project: Claude Code, Codex, Cursor,
-OpenCode, Pi, Antigravity CLI and more are built in. Gemini CLI is no longer
-supported (Google refuses its sign-in for individuals); Antigravity CLI runs
+OpenCode, Pi, Antigravity and more are built in. Gemini CLI is no longer
+supported (Google refuses its sign-in for individuals); Antigravity runs
 Google's Gemini models instead. An older Gemini CLI session stays in the
 sidebar, but Ghostex no longer resumes its conversation or tracks its activity. In Settings > Agents every agent has a
 switch: turn on the agents you use and they appear in the New session menu, the
@@ -4078,20 +4078,20 @@ expanded row; built-in agents are only turned off. Expand an agent row to edit
 its name, command, permission mode and default view, duplicate it as a custom
 agent, install or update its CLI, see its installed version (and the newer one
 when available) and command output, or open its Install docs link. For agents
-that support Non-CLI mode (currently Antigravity CLI), the row also offers
-**Session mode** (`agentSessionMode`): **Agent CLI** (default, interactive
-terminal with instant switching between Chat and Terminal) or **Non-CLI**
+that support Native mode (Claude Code, Codex, and Antigravity), the row also offers
+**Session mode** (`agentSessionMode`): **Terminal** (default, interactive
+terminal with instant switching between Chat and Terminal) or **Native**
 (structured host inside `zmx` that survives Ghostex reloads without terminal
-scraping). Switching a Non-CLI session to Terminal asks first and explains that
+scraping). Switching a Native session to Terminal asks first and explains that
 switching is not instant and interrupts any active turn before reopening the
-conversation in Agent CLI mode.
+conversation in Terminal mode.
 
 Prompt history search (**Find**, `ghostex f`) indexes both your prompts and each
 agent turn's closing answer in a rebuildable local SQLite FTS5 store, with a
 scope toggle for **All**, **Prompts**, or **Answers**. Session Handoff / Export
 also offers a **Final answers only** toggle (and `preset: "prompts_and_answers"`
 plus `/api/handoffToExistingSession` delta handovers tracked in
-`session_handovers`) for compact transfers between Agent CLI and Non-CLI
+`session_handovers`) for compact transfers between Terminal and Native
 sessions. Claude Code, Codex, Cursor Agent
 and Grok Build install through their official installers (PowerShell on
 Windows; Claude Code doesn't need Git for Windows to install). Pi installs with
@@ -4356,7 +4356,7 @@ with nothing to install. For "make Claude Code control Codex":
    `ghostex wait-for-text`.
    To pick the worker's model and effort, add `--model <model> --effort <level>`
    to `create-agent` or `board start-work` (Claude, Codex, Pi, OMP, Copilot,
-   Grok Build, Hermes Agent, Empryo and Antigravity CLI, or the model alone for Cursor CLI; for Pi and Empryo the model is `<provider>/<model>`, as in
+   Grok Build, Hermes Agent, Empryo and Antigravity, or the model alone for Cursor CLI; for Pi and Empryo the model is `<provider>/<model>`, as in
    Pi's `/model`, and Pi's effort is its thinking level, such as `high`). The choice
    applies to that session only, survives a resume, and leaves your default
    model unchanged. For `board start-work`, these flags apply only when a new
@@ -8277,7 +8277,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   window colour (or an uncapped custom colour) with a live preview of Ghostex
   beside it, plus All options to open the compact Theme editor right after
   setup; the agents found on
-  this computer, with Install buttons for Claude Code, Codex, Antigravity CLI,
+  this computer, with Install buttons for Claude Code, Codex, Antigravity,
   Cursor Agent and Grok Build (an Add to PATH button when an installed CLI is not on PATH; a
   command that is only a launcher installing the agent the first time it runs,
   like Omarchy's, shows as not installed yet), an Install guide that installs
@@ -8286,7 +8286,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   small Ghostex helper for agents that need one, like Cursor Agent, which setup
   adds when you go on (the button names it, "Connect Cursor Agent & continue";
   it says Next when nothing needs a helper). A line checks the chosen agent is
-  signed in (Claude Code, Codex, Antigravity CLI and Cursor; a saved account in
+  signed in (Claude Code, Codex, Antigravity and Cursor; a saved account in
   Settings > Accounts counts) with a Sign in button that opens the agent's own
   sign-in in your browser (Google's for Antigravity) (starting an agent that needs a helper and was installed after
   setup asks once to connect it, and Not now there is remembered for that

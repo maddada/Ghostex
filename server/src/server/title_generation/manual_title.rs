@@ -110,7 +110,7 @@ pub(crate) async fn handle_generate_session_title_http(
                     DomainStateError {
                         code: "invalidParams",
                         message:
-                            "generateSessionTitle requires text for this agent; only Claude Code, Codex, Cursor CLI, Antigravity CLI, and Empryo sessions can generate from recent messages."
+                            "generateSessionTitle requires text for this agent; only Claude Code, Codex, Cursor CLI, Antigravity, and Empryo sessions can generate from recent messages."
                                 .to_string(),
                     },
                 );

@@ -61,7 +61,7 @@ pub fn picker_agent(provider: ModelPickerProvider) -> PickerAgent {
             icon: "grok-build",
         },
         ModelPickerProvider::Antigravity => PickerAgent {
-            name: "Antigravity CLI",
+            name: "Antigravity",
             icon: "antigravity-cli",
         },
     }

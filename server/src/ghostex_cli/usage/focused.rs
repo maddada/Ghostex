@@ -314,7 +314,7 @@ Behavior:
   Without --agent, the bead assignee is matched case-insensitively against configured agents,
   falling back to the default prompt agent. An --agent turned off in Settings > Agents is refused
   unless --allow-hidden is passed.
-  --model and --effort start a new Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo or Antigravity CLI worker
+  --model and --effort start a new Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo or Antigravity worker
   on that model and effort for this session only (a Pi, OMP or Empryo model is <provider>/<model>, a Pi or OMP effort a
   thinking level; Cursor CLI takes --model only); your default
   model is unchanged, and a resumed worker keeps them. A reused worker keeps

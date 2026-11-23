@@ -172,11 +172,11 @@ const IGNORED_PLACEHOLDER_SESSION_TITLES = new Set([
   'rovodev session',
 ]);
 const DEFAULT_SESSION_AGENT_TITLE_NAMES = new Map<string, string>([
-  ['agy', 'Antigravity CLI'],
+  ['agy', 'Antigravity'],
   ['amp', 'Amp CLI'],
   ['amp-cli', 'Amp CLI'],
-  ['antigravity', 'Antigravity CLI'],
-  ['antigravity-cli', 'Antigravity CLI'],
+  ['antigravity', 'Antigravity'],
+  ['antigravity-cli', 'Antigravity'],
   ['claude', 'Claude'],
   ['claude-code', 'Claude'],
   ['codebuddy', 'CodeBuddy'],

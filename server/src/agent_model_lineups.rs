@@ -304,7 +304,7 @@ fn antigravity_lineup(output: &str) -> Option<Value> {
         })
         .collect();
     Some(agent_entry(
-        "Antigravity CLI",
+        "Antigravity",
         json!({ "available": false }),
         rows,
     ))
@@ -369,7 +369,7 @@ fn codex_lineup(output: &str) -> Option<Value> {
         first["default"] = json!(true);
     }
     Some(agent_entry(
-        "Codex CLI",
+        "Codex",
         json!({ "available": true, "command": "/fast", "scope": "default" }),
         rows,
     ))

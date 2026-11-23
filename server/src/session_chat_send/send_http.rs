@@ -188,7 +188,7 @@ pub(super) async fn send_session_chat_message_attempt(
                     DomainStateError {
                         code: "invalidParams",
                         message: format!(
-                            "ACP sessions do not accept raw terminal key \"{key}\"; switch to Terminal first."
+                            "Native sessions do not accept raw terminal key \"{key}\"; switch to Terminal first."
                         ),
                     },
                 ),

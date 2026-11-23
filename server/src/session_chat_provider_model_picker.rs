@@ -983,7 +983,7 @@ impl PickerDriver<'_> {
                 .await?;
             match refused {
                 Some(reason) => Err(unsupported_selection(format!(
-                    "Antigravity CLI refused the model: {reason}."
+                    "Antigravity refused the model: {reason}."
                 ))),
                 None => Ok(()),
             }

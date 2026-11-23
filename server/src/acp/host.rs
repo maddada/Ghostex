@@ -880,14 +880,14 @@ impl AcpTransport {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let Some(stdin) = guard.as_mut() else {
-            return Err("ACP server stdin is closed.".to_string());
+            return Err("Native host stdin is closed.".to_string());
         };
         let encoded = serde_json::to_string(message).map_err(|e| e.to_string())?;
         stdin
             .write_all(encoded.as_bytes())
             .and_then(|_| stdin.write_all(b"\n"))
             .and_then(|_| stdin.flush())
-            .map_err(|e| format!("Failed writing to ACP server: {e}"))
+            .map_err(|e| format!("Failed writing to Native host: {e}"))
     }
 
     fn close_stdin(&self) {
@@ -933,7 +933,7 @@ impl AcpTransport {
                     let message = error
                         .get("message")
                         .and_then(Value::as_str)
-                        .unwrap_or("ACP request failed");
+                        .unwrap_or("Native host request failed");
                     Err(message.to_string())
                 } else {
                     Ok(resp.get("result").cloned().unwrap_or(Value::Null))
@@ -944,7 +944,7 @@ impl AcpTransport {
                     .lock()
                     .unwrap_or_else(|p| p.into_inner())
                     .remove(&id);
-                Err(format!("ACP request `{method}` timed out."))
+                Err(format!("Native host request `{method}` timed out."))
             }
         }
     }
@@ -1239,7 +1239,7 @@ fn resync_native_mode_if_drifted(
         if let Err(err) = apply_approval_level_and_sync_native_mode_locked(transport, state, level)
         {
             eprintln!(
-                "[ACP] Warning: agent switched to native mode `{drifted_mode}` while level is {}: {err}",
+                "[Native] Warning: agent switched to native mode `{drifted_mode}` while level is {}: {err}",
                 level.label()
             );
         }
@@ -1440,7 +1440,7 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
     let Some(spec) = spec_for_family(&parsed.family) else {
-        eprintln!("Agent `{}` does not support ACP mode yet.", parsed.family);
+        eprintln!("Agent `{}` does not support Native mode yet.", parsed.family);
         return 2;
     };
     if spec.family == "claude" {
@@ -1458,7 +1458,7 @@ pub fn run(args: &[String]) -> i32 {
         .map(|ep| ep.session_id.clone())
         .unwrap_or_else(|| format!("local-{}", std::process::id()));
 
-    println!("Ghostex Non-CLI Host · {} · Starting...", spec.display_name);
+    println!("Ghostex Native Host · {} · Starting...", spec.display_name);
     let _ = std::io::stdout().flush();
 
     let gx_paths = crate::paths::get_gxserver_paths(None);
@@ -1467,7 +1467,7 @@ pub fn run(args: &[String]) -> i32 {
     let Some((acp_envs, prog, argv)) =
         build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
-        eprintln!("Invalid ACP server command for {}", spec.family);
+        eprintln!("Invalid Native host command for {}", spec.family);
         return 1;
     };
     let mut child = match Command::new(&prog)
@@ -1488,12 +1488,12 @@ pub fn run(args: &[String]) -> i32 {
     };
     let child_pid = Arc::new(AtomicU32::new(child.id()));
     let Some(stdin) = child.stdin.take() else {
-        eprintln!("Failed to open stdin pipe to ACP server.");
+        eprintln!("Failed to open stdin pipe to Native host.");
         let _ = child.kill();
         return 1;
     };
     let Some(stdout) = child.stdout.take() else {
-        eprintln!("Failed to open stdout pipe from ACP server.");
+        eprintln!("Failed to open stdout pipe from Native host.");
         let _ = child.kill();
         return 1;
     };
@@ -1637,7 +1637,7 @@ pub fn run(args: &[String]) -> i32 {
                                 ) {
                                     PermissionDecision::AutoApprove { option_id } => {
                                         println!(
-                                            "\r\n[ACP] Auto-approved ({}): {} ({})",
+                                            "\r\n[Native] Auto-approved ({}): {} ({})",
                                             level.label(),
                                             perm.tool_name,
                                             perm.summary
@@ -1660,7 +1660,7 @@ pub fn run(args: &[String]) -> i32 {
                                 }
                             }
                             println!(
-                                "\r\n[ACP] Waiting for {}: {} ({})",
+                                "\r\n[Native] Waiting for {}: {} ({})",
                                 if perm.is_question {
                                     "question answer"
                                 } else {
@@ -1846,7 +1846,7 @@ pub fn run(args: &[String]) -> i32 {
                 }));
                 if handle_res.is_err() {
                     eprintln!(
-                        "[ACP] Warning: recovered from panic while handling ACP stdout message."
+                        "[Native] Warning: recovered from panic while handling host stdout message."
                     );
                 }
             }
@@ -1866,7 +1866,7 @@ pub fn run(args: &[String]) -> i32 {
         },
     });
     if let Err(err) = transport.call("initialize", init_params, ACP_RPC_TIMEOUT) {
-        eprintln!("ACP initialize failed: {err}");
+        eprintln!("Native host initialize failed: {err}");
         stop_child_gracefully(&transport, &mut child, &child_pid);
         return 1;
     }
@@ -1909,7 +1909,7 @@ pub fn run(args: &[String]) -> i32 {
     let session_result = match session_result {
         Ok(res) => res,
         Err(err) => {
-            eprintln!("ACP session open failed: {err}");
+            eprintln!("Native session open failed: {err}");
             stop_child_gracefully(&transport, &mut child, &child_pid);
             return 1;
         }
@@ -1929,7 +1929,7 @@ pub fn run(args: &[String]) -> i32 {
         &mode_sync_lock,
         parsed.approval_level,
     ) {
-        eprintln!("[ACP] Warning: could not sync initial native mode: {err}");
+        eprintln!("[Native] Warning: could not sync initial native mode: {err}");
     }
 
     if let Some(model) = parsed.model.as_deref().filter(|m| !m.is_empty()) {
@@ -1953,12 +1953,12 @@ pub fn run(args: &[String]) -> i32 {
     }
 
     println!(
-        "Ghostex Non-CLI Host · {} · Ready (conversation: {})",
+        "Ghostex Native Host · {} · Ready (conversation: {})",
         spec.display_name,
         native_session_id.as_deref().unwrap_or("pending")
     );
     println!(
-        "Use Chat View to talk with this agent, or switch to Terminal to open Agent CLI mode."
+        "Use Chat View to talk with this agent, or switch to Terminal to open Terminal mode."
     );
     let _ = std::io::stdout().flush();
 
@@ -1986,7 +1986,7 @@ pub fn run(args: &[String]) -> i32 {
             break;
         }
         if state.lock().unwrap_or_else(|p| p.into_inner()).child_exited {
-            println!("\r\n[ACP] Agent process exited.");
+            println!("\r\n[Native] Agent process exited.");
             break;
         }
         let Some(ep) = endpoint.as_ref() else {
@@ -2030,7 +2030,7 @@ pub fn run(args: &[String]) -> i32 {
                             desired,
                         ) {
                             eprintln!(
-                                "[ACP] Warning: failed to sync persisted approval level {}: {err}",
+                                "[Native] Warning: failed to sync persisted approval level {}: {err}",
                                 desired.label()
                             );
                         }
@@ -2123,9 +2123,9 @@ pub fn run(args: &[String]) -> i32 {
                     };
                     let Some(perm) = perm else {
                         let msg = if target_tool_use_id.is_some() {
-                            "That ACP approval request is no longer pending."
+                            "That Native approval request is no longer pending."
                         } else {
-                            "No pending ACP approval."
+                            "No pending Native approval."
                         };
                         ep.ack(id, false, Value::Null, Some(msg));
                         continue;
@@ -2213,7 +2213,7 @@ pub fn run(args: &[String]) -> i32 {
                             id,
                             false,
                             Value::Null,
-                            Some("ACP session not initialized yet."),
+                            Some("Native session not initialized yet."),
                         );
                         continue;
                     };
@@ -2330,7 +2330,7 @@ pub fn run(args: &[String]) -> i32 {
                             id,
                             false,
                             Value::Null,
-                            Some("ACP session not initialized yet."),
+                            Some("Native session not initialized yet."),
                         );
                         continue;
                     };
@@ -2376,7 +2376,7 @@ pub fn run(args: &[String]) -> i32 {
                     let st_turn = state.clone();
                     let act_turn = activity.clone();
                     thread::spawn(move || {
-                        println!("\r\n[Non-CLI] Turn started...");
+                        println!("\r\n[Native] Turn started...");
                         let _ = std::io::stdout().flush();
                         let res = t_turn.call(
                             "session/prompt",
@@ -2406,7 +2406,7 @@ pub fn run(args: &[String]) -> i32 {
                             }
                             Err(err) => format!("error: {err}"),
                         };
-                        println!("[Non-CLI] Turn finished ({stop_reason}).");
+                        println!("[Native] Turn finished ({stop_reason}).");
                         let _ = std::io::stdout().flush();
                         let (is_current_turn, orphaned_perms) = {
                             let mut s = st_turn.lock().unwrap_or_else(|p| p.into_inner());
@@ -2449,7 +2449,7 @@ pub fn run(args: &[String]) -> i32 {
                             id,
                             false,
                             Value::Null,
-                            Some("The ACP agent is currently working on a turn. Interrupt it or wait for it to finish before switching to Terminal."),
+                            Some("The agent is currently working on a turn. Interrupt it or wait for it to finish before switching to Terminal."),
                         );
                         continue;
                     }
@@ -2487,7 +2487,7 @@ pub fn run(args: &[String]) -> i32 {
                         id,
                         false,
                         Value::Null,
-                        Some(&format!("Unsupported ACP host command: {other}")),
+                        Some(&format!("Unsupported Native host command: {other}")),
                     );
                 }
             }

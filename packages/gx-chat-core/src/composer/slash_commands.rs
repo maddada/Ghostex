@@ -24,7 +24,7 @@ pub struct SlashCommand {
 /// The picker's section heading: the agent's display name, or `Commands`.
 pub fn slash_heading_for_agent(agent: Option<&str>) -> &'static str {
     match agent {
-        Some("antigravity") => "Antigravity CLI",
+        Some("antigravity") => "Antigravity",
         Some("claude") => "Claude Code",
         Some("codex") => "Codex",
         Some("copilot") => "Copilot",

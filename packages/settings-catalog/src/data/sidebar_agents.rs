@@ -53,7 +53,7 @@ pub const AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS: J = J::Arr(&[
         ("agentId", J::Str("antigravity")),
         ("command", J::Str("agy")),
         ("icon", J::Str("antigravity-cli")),
-        ("name", J::Str("Antigravity CLI")),
+        ("name", J::Str("Antigravity")),
     ]),
     J::Obj(&[
         ("agentId", J::Str("amp")),
@@ -213,7 +213,7 @@ pub const DEFAULT_SIDEBAR_AGENTS: J = J::Arr(&[
         ("agentId", J::Str("antigravity")),
         ("command", J::Str("agy")),
         ("icon", J::Str("antigravity-cli")),
-        ("name", J::Str("Antigravity CLI")),
+        ("name", J::Str("Antigravity")),
     ]),
     J::Obj(&[
         ("agentId", J::Str("amp")),

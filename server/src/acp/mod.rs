@@ -145,7 +145,7 @@ pub(crate) fn validate_acp_image_path(
     let allowed_dirs = allowed_acp_image_dirs(paths);
     if !allowed_dirs.iter().any(|dir| canonical.starts_with(dir)) {
         return Err(
-            "Image attachments for ACP sessions must live inside Ghostex's attachment directory."
+            "Image attachments for Native sessions must live inside Ghostex's attachment directory."
                 .to_string(),
         );
     }

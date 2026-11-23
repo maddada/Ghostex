@@ -221,7 +221,7 @@ pub(super) fn supports_chat_view(agent_id: &str, icon: Option<&str>) -> bool {
 /// terminal CLI).
 pub(super) fn non_cli_mode_family(agent_id: &str, icon: Option<&str>) -> Option<&'static str> {
     let check = |value: &str| match value.trim().to_ascii_lowercase().as_str() {
-        "antigravity" | "agy" => Some("antigravity"),
+        "antigravity" | "antigravity-cli" | "agy" => Some("antigravity"),
         "claude" | "claude-code" => Some("claude"),
         "codex" | "codex-cli" => Some("codex"),
         _ => None,
@@ -233,11 +233,11 @@ pub(super) fn non_cli_mode_family(agent_id: &str, icon: Option<&str>) -> Option<
 pub(super) fn session_mode_options() -> Vec<SettingOption> {
     vec![
         SettingOption {
-            label: "Agent CLI".to_string(),
+            label: "Terminal".to_string(),
             value: "agent-cli".to_string(),
         },
         SettingOption {
-            label: "Non-CLI".to_string(),
+            label: "Native".to_string(),
             value: "non-cli".to_string(),
         },
     ]

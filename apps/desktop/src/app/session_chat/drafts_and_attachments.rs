@@ -210,14 +210,14 @@ impl GhostexGpuiApp {
         };
         let confirmation = if is_working {
             ghostex_gx_core::CloseConfirmation {
-                title: "Interrupt and switch to Agent CLI?".to_string(),
-                message: "This session is running in Non-CLI mode and currently working. Switching to Terminal is not instant: Ghostex will interrupt the active turn and reopen the agent in Agent CLI mode.".to_string(),
+                title: "Interrupt and switch to Terminal?".to_string(),
+                message: "This session is running in Native mode and currently working. Switching to Terminal is not instant: Ghostex will interrupt the active turn and reopen the agent in Terminal mode.".to_string(),
                 confirm_label: "Interrupt & Switch".to_string(),
             }
         } else {
             ghostex_gx_core::CloseConfirmation {
-                title: "Switch to Agent CLI?".to_string(),
-                message: "This session is running in Non-CLI mode. Switching to Terminal is not instant: Ghostex will stop the Non-CLI host and reopen the agent in Agent CLI mode.".to_string(),
+                title: "Switch to Terminal?".to_string(),
+                message: "This session is running in Native mode. Switching to Terminal is not instant: Ghostex will stop the Native host and reopen the agent in Terminal mode.".to_string(),
                 confirm_label: "Switch to Terminal".to_string(),
             }
         };

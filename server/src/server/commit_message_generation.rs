@@ -450,7 +450,7 @@ pub(crate) fn resolve_commit_message_generation_agent(
 pub(crate) fn default_agent_name(agent_id: &str) -> Option<&'static str> {
     match agent_id {
         "amp" => Some("Amp CLI"),
-        "antigravity" => Some("Antigravity CLI"),
+        "antigravity" => Some("Antigravity"),
         "claude" => Some("Claude"),
         "codebuddy" => Some("CodeBuddy"),
         "codex" => Some("Codex"),

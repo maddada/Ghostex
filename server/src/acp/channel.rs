@@ -222,7 +222,7 @@ pub(crate) async fn send(
     if live(&target.project_id, &target.session_id, "send").is_none() {
         return Err(DomainStateError {
             code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
-            message: "The Non-CLI agent is still starting up. Your message is queued and will send as soon as it is ready.".to_string(),
+            message: "The Native agent is still starting up. Your message is queued and will send as soon as it is ready.".to_string(),
         });
     }
     let params = json!({
@@ -242,12 +242,12 @@ pub(crate) async fn send(
         Ok(result) => Ok(result),
         Err(ChannelError::Unavailable(_)) => Err(DomainStateError {
             code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
-            message: "The Non-CLI host is reconnecting. Your message will be retried automatically."
+            message: "The Native host is reconnecting. Your message will be retried automatically."
                 .to_string(),
         }),
         Err(ChannelError::Failed(message)) if message == "ACP_AGENT_BUSY" => Err(DomainStateError {
             code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
-            message: "The Non-CLI agent is currently working on a turn. Your message is queued and will send as soon as it finishes.".to_string(),
+            message: "The Native agent is currently working on a turn. Your message is queued and will send as soon as it finishes.".to_string(),
         }),
         Err(ChannelError::Failed(message)) => Err(DomainStateError {
             code: "invalidState",
@@ -259,7 +259,7 @@ pub(crate) async fn send(
         }),
         Err(ChannelError::NoAnswer) => Err(DomainStateError {
             code: "deliveryUnconfirmed",
-            message: "The Non-CLI agent took the message but did not confirm delivery. Check the chat before sending again.".to_string(),
+            message: "The Native agent took the message but did not confirm delivery. Check the chat before sending again.".to_string(),
         }),
     }
 }
@@ -288,7 +288,7 @@ pub(crate) async fn steer(
         Err(ChannelError::Unsupported(_)) => send(paths, target, text, &[], true).await,
         Err(ChannelError::Unavailable(_)) => Err(DomainStateError {
             code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
-            message: "The Non-CLI host is reconnecting. Your answer will be retried automatically."
+            message: "The Native host is reconnecting. Your answer will be retried automatically."
                 .to_string(),
         }),
         Err(ChannelError::Failed(message)) => Err(DomainStateError {
@@ -297,7 +297,7 @@ pub(crate) async fn steer(
         }),
         Err(ChannelError::NoAnswer) => Err(DomainStateError {
             code: "deliveryUnconfirmed",
-            message: "The Non-CLI agent took the answer but did not confirm delivery.".to_string(),
+            message: "The Native agent took the answer but did not confirm delivery.".to_string(),
         }),
     }
 }
@@ -307,7 +307,7 @@ pub(crate) async fn abort(project_id: &str, session_id: &str) -> Result<(), Doma
     if live(project_id, session_id, "abort").is_none() {
         return Err(DomainStateError {
             code: "dependencyUnavailable",
-            message: "The ACP host is not connected.".to_string(),
+            message: "The Native host is not connected.".to_string(),
         });
     }
     request(
@@ -321,7 +321,7 @@ pub(crate) async fn abort(project_id: &str, session_id: &str) -> Result<(), Doma
     .map(|_| ())
     .map_err(|error| DomainStateError {
         code: "sessionInputFailed",
-        message: format!("Could not stop the ACP turn: {error}"),
+        message: format!("Could not stop the Native turn: {error}"),
     })
 }
 
@@ -336,7 +336,7 @@ pub(crate) async fn answer_permission(
     if live(project_id, session_id, "approve").is_none() {
         return Err(DomainStateError {
             code: "dependencyUnavailable",
-            message: "The ACP host is not connected to receive this approval.".to_string(),
+            message: "The Native host is not connected to receive this approval.".to_string(),
         });
     }
     request(
@@ -353,7 +353,7 @@ pub(crate) async fn answer_permission(
     .await
     .map_err(|error| DomainStateError {
         code: "invalidState",
-        message: format!("Could not answer the ACP approval: {error}"),
+        message: format!("Could not answer the Native approval: {error}"),
     })
 }
 
@@ -367,7 +367,7 @@ pub(crate) async fn answer_question(
     if live(project_id, session_id, "answer_question").is_none() {
         return Err(DomainStateError {
             code: "dependencyUnavailable",
-            message: "The Non-CLI host is not connected to receive this answer.".to_string(),
+            message: "The Native host is not connected to receive this answer.".to_string(),
         });
     }
     request(
@@ -384,11 +384,11 @@ pub(crate) async fn answer_question(
     .map_err(|error| match error {
         ChannelError::Failed(msg) if msg == "NO_PENDING_QUESTION" => DomainStateError {
             code: "noPendingQuestion",
-            message: "No blocking Non-CLI question prompt is pending.".to_string(),
+            message: "No blocking Native question prompt is pending.".to_string(),
         },
         other => DomainStateError {
             code: "invalidState",
-            message: format!("Could not answer the Non-CLI question: {other}"),
+            message: format!("Could not answer the Native question: {other}"),
         },
     })
 }
@@ -403,7 +403,7 @@ pub(crate) async fn set_model(
     if live(project_id, session_id, "model").is_none() {
         return Err(DomainStateError {
             code: "dependencyUnavailable",
-            message: "The ACP host is not connected yet.".to_string(),
+            message: "The Native host is not connected yet.".to_string(),
         });
     }
     request(
@@ -419,7 +419,7 @@ pub(crate) async fn set_model(
     .await
     .map_err(|error| DomainStateError {
         code: "invalidParams",
-        message: format!("ACP model change failed: {error}"),
+        message: format!("Native model change failed: {error}"),
     })
 }
 
@@ -468,7 +468,7 @@ pub(crate) async fn persist_approval_level(
     .await
     .map_err(|error| DomainStateError {
         code: "internalError",
-        message: format!("Could not save ACP approval level: {error}"),
+        message: format!("Could not save Native approval level: {error}"),
     })?
 }
 
@@ -620,7 +620,7 @@ async fn set_approval_level_locked(
                 crate::pi_chat_channel::mark_approval_sync_needed(project_id, session_id);
                 return Err(DomainStateError {
                     code: "dependencyUnavailable",
-                    message: "The ACP host is busy or reconnecting. Your approval level was saved and will apply on its next poll.".to_string(),
+                    message: "The Native host is busy or reconnecting. Your approval level was saved and will apply on its next poll.".to_string(),
                 });
             }
             Err(error) => {
@@ -633,7 +633,7 @@ async fn set_approval_level_locked(
                 }
                 return Err(DomainStateError {
                     code: crate::session_chat_codex_picker::UNSUPPORTED_SELECTION_CODE,
-                    message: format!("ACP approval level change failed: {error}"),
+                    message: format!("Native approval level change failed: {error}"),
                 });
             }
         }
@@ -670,7 +670,7 @@ async fn set_approval_level_locked(
 
     Err(DomainStateError {
         code: "dependencyUnavailable",
-        message: "The ACP host is starting or reconnecting. Your approval level was saved and will apply as soon as it reconnects.".to_string(),
+        message: "The Native host is starting or reconnecting. Your approval level was saved and will apply as soon as it reconnects.".to_string(),
     })
 }
 
@@ -730,7 +730,7 @@ pub(crate) async fn switch_to_cli(
         .await
         .map_err(|error| DomainStateError {
             code: "sessionInputFailed",
-            message: format!("Could not switch Non-CLI session to Agent CLI: {error}"),
+            message: format!("Could not switch Native session to Terminal: {error}"),
         })?;
         let native_id = reply
             .get("nativeSessionId")
@@ -777,13 +777,13 @@ pub(crate) async fn switch_to_cli(
             }
             Err(DomainStateError {
                 code: "dependencyUnavailable",
-                message: "The ACP host is starting or reconnecting. Wait a moment and try switching to Terminal again.".to_string(),
+                message: "The Native host is starting or reconnecting. Wait a moment and try switching to Terminal again.".to_string(),
             })
         })
         .await
         .map_err(|error| DomainStateError {
             code: "internalError",
-            message: format!("Could not inspect ACP session state: {error}"),
+            message: format!("Could not inspect Native session state: {error}"),
         })??;
         let (already_switched, existing_native) = precheck;
         if already_switched {
@@ -849,7 +849,7 @@ pub(crate) async fn switch_to_cli(
     .await
     .map_err(|error| DomainStateError {
         code: "internalError",
-        message: format!("Could not persist ACP-to-CLI transition: {error}"),
+        message: format!("Could not persist Native-to-Terminal transition: {error}"),
     })??;
 
     // Broadcast updated session and queue state so desktop/web/phone drop the ACP flag right away.
@@ -914,13 +914,13 @@ pub(crate) async fn switch_to_acp(
             .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
             .ok_or_else(|| DomainStateError {
                 code: "invalidParams",
-                message: "This session does not belong to an agent that supports Non-CLI mode."
+                message: "This session does not belong to an agent that supports Native mode."
                     .to_string(),
             })?;
         if !super::supports_acp(&family) {
             return Err(DomainStateError {
                 code: "invalidParams",
-                message: format!("Agent `{family}` does not support Non-CLI mode."),
+                message: format!("Agent `{family}` does not support Native mode."),
             });
         }
         let running = crate::presentation::effective_lifecycle_state(&session) == "running";
@@ -970,7 +970,7 @@ pub(crate) async fn switch_to_acp(
     .await
     .map_err(|error| DomainStateError {
         code: "internalError",
-        message: format!("Could not update session for Non-CLI mode: {error}"),
+        message: format!("Could not update session for Native mode: {error}"),
     })??;
 
     if already_acp {
@@ -1013,7 +1013,7 @@ pub(crate) async fn switch_to_acp(
             .await;
             return Err(DomainStateError {
                 code: "sessionInputFailed",
-                message: format!("Could not switch back to Non-CLI mode: {failure}"),
+                message: format!("Could not switch back to Native mode: {failure}"),
             });
         }
     }

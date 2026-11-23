@@ -755,7 +755,7 @@ fn spawn_and_init_claude(
     let Some((acp_envs, prog, mut argv)) =
         build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
-        return Err("Invalid Claude Non-CLI command.".to_string());
+        return Err("Invalid Claude Native command.".to_string());
     };
     if read_only {
         // `--read-only` threads start Claude in its native `plan` mode, matching CLI `--read-only`.
@@ -944,7 +944,7 @@ fn spawn_and_init_claude(
                                     {
                                         PermissionDecision::AutoApprove { .. } => {
                                             println!(
-                                                "\r\n[Claude Non-CLI] Auto-approved ({}): {} ({})",
+                                                "\r\n[Claude Native] Auto-approved ({}): {} ({})",
                                                 level.label(),
                                                 tool_name,
                                                 summary
@@ -963,7 +963,7 @@ fn spawn_and_init_claude(
                                     }
                                 }
                                 println!(
-                                    "\r\n[Claude Non-CLI] Waiting for {}: {} ({})",
+                                    "\r\n[Claude Native] Waiting for {}: {} ({})",
                                     if is_question { "question answer" } else { "approval" },
                                     tool_name,
                                     summary
@@ -1166,7 +1166,7 @@ fn spawn_and_init_claude(
                                     req.tool_use_id.as_deref(),
                                 );
                             }
-                            println!("[Claude Non-CLI] Turn finished.");
+                            println!("[Claude Native] Turn finished.");
                             let _ = std::io::stdout().flush();
                             act_out.sync();
                         }
@@ -1174,7 +1174,7 @@ fn spawn_and_init_claude(
                     }
                 }));
                 if res.is_err() {
-                    eprintln!("[Claude Non-CLI] Warning: recovered from panic in stdout reader.");
+                    eprintln!("[Claude Native] Warning: recovered from panic in stdout reader.");
                 }
             }
         });
@@ -1224,7 +1224,7 @@ fn spawn_and_init_claude(
             *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
             state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
             stop_claude_gracefully(&transport, &mut child, child_pid);
-            return Err(format!("Claude Non-CLI initialize failed: {err}"));
+            return Err(format!("Claude Native initialize failed: {err}"));
         }
     }
 
@@ -1242,7 +1242,7 @@ fn spawn_and_init_claude(
         approval_level,
         false,
     ) {
-        eprintln!("[Claude Non-CLI] Warning: could not sync approval level: {err}");
+        eprintln!("[Claude Native] Warning: could not sync approval level: {err}");
     }
 
     Ok(ClaudeProcess { child, transport })
@@ -1278,7 +1278,7 @@ fn drain_or_restart_claude_turn(
         .transport
         .control_request(json!({ "subtype": "interrupt" }), Duration::from_secs(5));
     if let Err(err) = &interrupt_res {
-        eprintln!("[Claude Non-CLI] Warning: interrupt control_request failed: {err}");
+        eprintln!("[Claude Native] Warning: interrupt control_request failed: {err}");
     }
     let wait_until = Instant::now() + wait_timeout;
     while Instant::now() < wait_until {
@@ -1377,7 +1377,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         .map(|ep| ep.session_id.clone())
         .unwrap_or_else(|| format!("local-{}", std::process::id()));
 
-    println!("Ghostex Non-CLI Host · {} · Starting...", spec.display_name);
+    println!("Ghostex Native Host · {} · Starting...", spec.display_name);
     let _ = std::io::stdout().flush();
 
     let gx_paths = crate::paths::get_gxserver_paths(None);
@@ -1490,7 +1490,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         .native_session_id
         .clone();
     println!(
-        "Ghostex Non-CLI Host · {} · Ready (conversation: {})",
+        "Ghostex Native Host · {} · Ready (conversation: {})",
         spec.display_name,
         native_sid.as_deref().unwrap_or("pending")
     );
@@ -1518,7 +1518,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             break;
         }
         if state.lock().unwrap_or_else(|p| p.into_inner()).child_exited {
-            println!("\r\n[Claude Non-CLI] Agent process exited.");
+            println!("\r\n[Claude Native] Agent process exited.");
             break;
         }
         let Some(ep) = endpoint.as_ref() else {
@@ -1903,7 +1903,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     if let Some(sid_str) = sid.as_deref() {
                         user_msg["session_id"] = json!(sid_str);
                     }
-                    println!("\r\n[Claude Non-CLI] Turn started...");
+                    println!("\r\n[Claude Native] Turn started...");
                     let _ = std::io::stdout().flush();
                     match proc.transport.write_json(&user_msg) {
                         Ok(()) => {
@@ -1969,7 +1969,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         id,
                         false,
                         Value::Null,
-                        Some(&format!("Unsupported Claude Non-CLI command: {other}")),
+                        Some(&format!("Unsupported Claude Native command: {other}")),
                     );
                 }
             }

@@ -393,7 +393,7 @@ impl AgentsTab {
                     p,
                     SharedString::from(format!("agent-session-mode-row-{agent_id}")),
                     RowSpec::new("Session mode").description(
-                        "Choose Agent CLI (interactive terminal) or Non-CLI (structured host; switching to Terminal asks first and interrupts any active turn). Applies to new or resumed sessions.",
+                        "Choose Terminal (interactive terminal) or Native (structured host; switching to Terminal asks first and interrupts any active turn). Applies to new or resumed sessions.",
                     ),
                     None,
                     select,

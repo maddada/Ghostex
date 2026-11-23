@@ -307,7 +307,7 @@ fn acp_terminal_notice(
         "Custom flags ignored",
     )
     .with_detail(
-        "Non-CLI mode skipped extra flags or environment settings from this agent's command. Switch to Terminal if you need them.",
+        "Native mode skipped extra flags or environment settings from this agent's command. Switch to Terminal if you need them.",
     )
     .with_details(Some(ignored.to_string()))
     .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(

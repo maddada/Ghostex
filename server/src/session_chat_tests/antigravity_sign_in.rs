@@ -63,7 +63,7 @@ fn antigravitys_sign_in_menu_raises_the_finish_signing_in_card() {
     assert_eq!(notice.title, "Finish signing in");
     assert_eq!(
         notice.detail.as_deref(),
-        Some("Antigravity CLI is waiting for you to sign in. Finish or cancel it in the terminal, then send your message.")
+        Some("Antigravity is waiting for you to sign in. Finish or cancel it in the terminal, then send your message.")
     );
     assert!(notice.blocks_input());
     assert_eq!(

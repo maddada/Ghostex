@@ -1012,7 +1012,7 @@ fn antigravity_mode() -> OptionDescriptor {
         })
         .collect(),
     );
-    descriptor.description = Some("Select Antigravity CLI's mode.".to_string());
+    descriptor.description = Some("Select Antigravity's mode.".to_string());
     descriptor
 }
 

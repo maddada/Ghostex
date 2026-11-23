@@ -139,7 +139,7 @@ pub(super) async fn route_agents_http(
                             request_id,
                             DomainStateError {
                                 code: "forbidden",
-                                message: "An ACP session token cannot access its chat channel without the host channel secret.".to_string(),
+                                message: "A Native session token cannot access its chat channel without the host channel secret.".to_string(),
                             },
                         ));
                     }

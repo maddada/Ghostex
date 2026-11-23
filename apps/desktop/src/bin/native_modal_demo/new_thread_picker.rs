@@ -130,7 +130,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             agent(
                 light,
                 "antigravity",
-                "Antigravity CLI",
+                "Antigravity",
                 Some("antigravity-cli"),
             ),
             agent(light, "zcode", "ZCode", Some("zcode")),

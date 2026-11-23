@@ -40,7 +40,7 @@ const CATALOG: [(&str, &str, &str); 23] = [
     ("copilot", "Copilot", "copilot"),
     ("droid", "Factory Droid", "factory-droid"),
     ("grok", "Grok Build", "grok-build"),
-    ("antigravity", "Antigravity CLI", "antigravity-cli"),
+    ("antigravity", "Antigravity", "antigravity-cli"),
     ("amp", "Amp CLI", "amp-cli"),
     ("hermes-agent", "Hermes Agent", "hermes-agent"),
     ("rovodev", "Rovo Dev", "rovo-dev"),
