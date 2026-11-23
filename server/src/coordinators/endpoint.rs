@@ -510,8 +510,20 @@ fn watch_pending_message(
     Ok(true)
 }
 
+/// How far a finished turn's end stamp may sit before the working stamp and still be that same
+/// turn (a late hook/plugin report stamped right after the turn ended, same slack as
+/// `opencode_turn_activity::IDLE_STAMP_SLACK_MS`).
+const TURN_END_SLACK_MS: i64 = 2_000;
+
 /// A thread whose session the resolve is about to close must have nothing left running: closing
 /// stops its agent mid-turn or under an unanswered question.
+///
+/// CDXC:Coordinators 2026-11-23 FIX:
+/// GitHub #721: OpenCode threads whose last turn already finished with a final report were refused
+/// by `coordinator resolve` because leftover idle shells kept the session marked working. When the
+/// thread has run, has no pending message, retry, compaction or active subagent fleet, and its
+/// live OpenCode service or transcript confirms the last turn finished before/with the current
+/// working stint, allow resolving and closing its session.
 fn refuse_closing_unfinished(
     repository: &DomainRepository<'_>,
     thread: &ThreadRecord,
@@ -522,13 +534,59 @@ fn refuse_closing_unfinished(
         ..ThreadProgress::of(thread)
     };
     match super::live::classify_thread_live(session.as_ref(), progress, &now_iso()) {
-        ThreadState::Working => Err(DomainStateError::bad_request(
-            "The thread is still working, so its session was not closed. Wait for its report, or pass --keep-open to only mark it done.",
-        )),
+        ThreadState::Working => {
+            if session
+                .as_ref()
+                .is_some_and(|session| finished_with_only_leftover_shells(session, thread))
+            {
+                return Ok(());
+            }
+            Err(DomainStateError::bad_request(
+                "The thread is still working, so its session was not closed. Wait for its report, or pass --keep-open to only mark it done.",
+            ))
+        }
         ThreadState::Waiting => Err(DomainStateError::bad_request(
             "The thread is waiting for an answer, so its session was not closed. Answer it first, or pass --keep-open to only mark it done.",
         )),
         _ => Ok(()),
+    }
+}
+
+/// Whether a thread classified as `Working` has actually finished its newest turn and is only
+/// held working by leftover idle shells (or a stale working claim from that finished turn).
+fn finished_with_only_leftover_shells(session: &Value, thread: &ThreadRecord) -> bool {
+    if !ThreadProgress::of(thread).has_run
+        || thread.pending_message.is_some()
+        || crate::accounts::api_errors::quick_retry_pending(session)
+        || crate::session_chat_compacting::session_chat_compacting_detected_at(session).is_some()
+        || crate::session_chat_compacting::session_chat_fleet_detected_at(session).is_some()
+    {
+        return false;
+    }
+    if crate::session_chat_follower::session_chat_agent_for_session(session).as_deref()
+        == Some("opencode")
+    {
+        if let Some(finished) = crate::session_chat_opencode::lead_turn_finished(session) {
+            return finished;
+        }
+    }
+    let mut gate = crate::session_chat_queue_runtime::SessionChatTranscriptGate::default();
+    let Some(lifecycle) = gate.lifecycle(session) else {
+        return false;
+    };
+    if lifecycle.state == crate::session_chat::SessionChatTurnLifecycleState::Working {
+        return false;
+    }
+    let working_started_ms = session
+        .pointer("/runtimeSettings/agentActivity/workingStartedAt")
+        .or_else(|| session.pointer("/runtimeSettings/agentActivity/lastChangedAt"))
+        .and_then(Value::as_str)
+        .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| at.timestamp_millis());
+    match (lifecycle.timestamp, working_started_ms) {
+        (Some(ended_ms), Some(started_ms)) => ended_ms + TURN_END_SLACK_MS >= started_ms,
+        (Some(_), None) => true,
+        (None, _) => thread.reported_at.is_some() && !thread.observed_working,
     }
 }
 

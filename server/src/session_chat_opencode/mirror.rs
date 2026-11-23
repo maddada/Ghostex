@@ -16,6 +16,9 @@ pub(crate) struct Snapshot {
     pub(crate) messages: Vec<Value>,
     pub(crate) permissions: Vec<Value>,
     pub(crate) forms: Vec<Value>,
+    /// Whether the lead conversation itself is active in `/api/session/active` (excluding leftover
+    /// shells after the turn ended).
+    pub(crate) lead_active: bool,
     pub(crate) working: bool,
 }
 
@@ -102,7 +105,8 @@ pub(crate) fn snapshot(id: &str) -> Result<Snapshot, DomainStateError> {
         .cloned()
         .ok_or_else(|| error("Invalid OpenCode forms response."))?;
     let active = client.request("GET", "/api/session/active", None)?;
-    let working = active["data"].get(id).is_some()
+    let lead_active = active["data"].get(id).is_some();
+    let working = lead_active
         || messages
             .iter()
             .any(|m| m["type"] == "shell" && m["status"] == "running");
@@ -111,6 +115,7 @@ pub(crate) fn snapshot(id: &str) -> Result<Snapshot, DomainStateError> {
         messages,
         permissions,
         forms,
+        lead_active,
         working,
     };
     let (live, _) = super::events::live(id, Some(&snapshot.messages));
@@ -190,6 +195,32 @@ pub(crate) fn refresh_for_path(path: &Path) {
     if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
         let _ = snapshot(id);
     }
+}
+
+/// Whether OpenCode's live service says the lead conversation's last turn has finished (idle after
+/// its newest user turn, no pending permission/form, no child subagent working), ignoring leftover
+/// idle shells. `None` when the session has no OpenCode conversation id or the service is not
+/// reachable.
+pub(crate) fn lead_turn_finished(session: &Value) -> Option<bool> {
+    let id = super::session_id(session).ok()?;
+    invalidate(&id);
+    let current = snapshot(&id).ok()?;
+    if current.lead_active || !current.permissions.is_empty() || !current.forms.is_empty() {
+        return Some(false);
+    }
+    match super::fleet(&id, &current.messages) {
+        Ok(Some(fleet)) if fleet.is_working() => return Some(false),
+        Ok(_) => {}
+        Err(_) => return Some(false),
+    }
+    let last_user_ts = current
+        .messages
+        .iter()
+        .rev()
+        .find(|message| message["type"] == "user")
+        .and_then(|message| message["time"]["created"].as_i64())?;
+    let idle_at = current.info["time"]["idle"].as_i64()?;
+    Some(idle_at >= last_user_ts)
 }
 
 pub(crate) fn detect(session: &Value) -> SessionChatTerminalDetection {

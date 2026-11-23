@@ -498,9 +498,12 @@ pub(crate) fn record_session_chat_interrupt(
     );
     /*
     CDXC:SessionChat 2026-10-17 WHY:
-    Copilot's Stop is a Ctrl+C that aborts the turn (session_chat_copilot_interrupt.rs), and Copilot fires no hook for an aborted turn and keeps no status in its terminal title, so the Escape rule above left the session "working" for good. Its chat Stop settles it idle; an Escape typed in Copilot's terminal pane only backgrounds a running shell and keeps the rule above.
+    Copilot's Stop is a Ctrl+C that aborts the turn (session_chat_copilot_interrupt.rs), and Copilot fires no hook for an aborted turn and keeps no status in its terminal title, so the Escape rule above left the session "working" for good. Its chat Stop settles it idle; an Escape typed in Copilot's terminal pane only backgrounds a running shell and keeps the rule above. OpenCode titles also carry no status (`titles_carry_no_status`), so an interrupt settles it idle too (GitHub #721).
     */
-    if session_chat_agent_for_session(&target.session).as_deref() == Some("copilot") {
+    if matches!(
+        session_chat_agent_for_session(&target.session).as_deref(),
+        Some("copilot" | "opencode")
+    ) {
         let mut idle_params = Map::new();
         idle_params.insert("projectId".to_string(), json!(target.project_id));
         idle_params.insert("sessionId".to_string(), json!(target.session_id));
@@ -569,6 +572,7 @@ pub(crate) async fn handle_interrupt_session_chat_http(
             .get("toolUseId")
             .and_then(Value::as_str)
             .map(str::to_owned);
+        let cancelling_prompt = prompt_id.is_some();
         let result = tokio::task::spawn_blocking(move || {
             let id = id?;
             crate::session_chat_opencode::interrupt(&id, prompt_id.as_deref())?;
@@ -581,6 +585,9 @@ pub(crate) async fn handle_interrupt_session_chat_http(
                 "OpenCode interrupt task failed.",
             ))
         });
+        if result.is_ok() && !cancelling_prompt {
+            record_session_chat_interrupt(state, &target, &request_id);
+        }
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,
