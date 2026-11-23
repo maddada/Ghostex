@@ -301,8 +301,7 @@ pub(crate) fn thread_wait_copy(
     now_ms: i64,
 ) -> (String, String, &'static str, &'static str) {
     let thread_title = text(thread, "title").trim();
-    let is_approval =
-        text(thread, "waitKind") == "approval" || thread["needsApproval"] == true;
+    let is_approval = text(thread, "waitKind") == "approval" || thread["needsApproval"] == true;
     let wait_kind = if is_approval {
         "approval"
     } else {
@@ -913,7 +912,10 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
 /// among the hidden rows and never says "need you" of a row that does not (`needs` is false for
 /// finished work). The phone's copy is `dockMoreLabel` in WorkCards.tsx.
 pub fn dock_more_label(hidden_rows: &[Value]) -> String {
-    let needs = hidden_rows.iter().filter(|row| row["needs"] == true).count();
+    let needs = hidden_rows
+        .iter()
+        .filter(|row| row["needs"] == true)
+        .count();
     let blocked = hidden_rows
         .iter()
         .filter(|row| row["needs"] != true && text(row, "kind") == "blocked")
@@ -1299,7 +1301,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .filter(|undo| undo.expires_at_ms > now_ms && undo.count > 0)
         .map(|undo| {
             json!({
-                "label": format!("Marked {} read", undo.count),
+                "label": format!("Marked {} done", undo.count),
                 "undoLabel": "Undo",
                 "command": { "type": "undoMarkAllInboxRead" },
                 "dismiss": { "type": "dismissMarkAllReadUndo" },
@@ -1346,8 +1348,8 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             }
         } else if row["needsYou"] == true {
             let buttons = row["buttons"].as_array().map_or(&[][..], Vec::as_slice);
-            let only_done = buttons.is_empty()
-                || (buttons.len() == 1 && text(&buttons[0], "label") == "Done");
+            let only_done =
+                buttons.is_empty() || (buttons.len() == 1 && text(&buttons[0], "label") == "Done");
             let tag = text(row, "tag");
             if only_done && !tag.is_empty() {
                 clear_todo_tags.push(tag.to_string());
@@ -1380,7 +1382,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             summary_parts.push(format!("{} done", clear_finished_keys.len()));
         }
         json!({
-            "label": format!("Mark all read ({clear_total})"),
+            "label": format!("Mark all done ({clear_total})"),
             "summary": summary_parts.join(" \u{b7} "),
             "count": clear_total,
             "command": {
@@ -1605,7 +1607,10 @@ fn bundle_same_turn_pages(
             } else {
                 format!("win:{}", at / 120_000)
             };
-            page_groups.entry(turn_key).or_default().push((sinks, at, row));
+            page_groups
+                .entry(turn_key)
+                .or_default()
+                .push((sinks, at, row));
         } else {
             kept.push((sinks, at, row));
         }
@@ -1625,8 +1630,7 @@ fn bundle_same_turn_pages(
         let newest_at = group[0].1;
         let sinks = group.iter().all(|(s, _, _)| *s);
         let all_opened = group.iter().all(|(_, _, r)| r["opened"] == true);
-        let is_last_turn = newest_turn_idx
-            .is_some_and(|idx| turn_key == format!("turn:{idx}"))
+        let is_last_turn = newest_turn_idx.is_some_and(|idx| turn_key == format!("turn:{idx}"))
             || newest_at == newest_at_overall;
         let page_ids: Vec<String> = group
             .iter()
@@ -1653,7 +1657,7 @@ fn bundle_same_turn_pages(
             "pageIds": page_ids,
             "bundlePages": pages,
             "dismiss": { "type": "markPagesSeen", "ids": page_ids },
-            "dismissLabel": "Read all",
+            "dismissLabel": "Mark all done",
             "buttons": [],
             "detail": [],
             "needs": true,
@@ -1901,9 +1905,9 @@ fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>)
         "buttons": [],
         "mention": mention_of(item),
         "dismiss": card["dismiss"],
-        // A finished row asks nothing, so its silent dismiss reads Mark as read (the desktop's
+        // A finished row asks nothing, so its silent dismiss reads Done (the desktop's
         // hover check and both menus, the phone's trailing check).
-        "dismissLabel": if done_key.is_some() { json!("Mark as read") } else { Value::Null },
+        "dismissLabel": if done_key.is_some() { json!("Done") } else { Value::Null },
         "chips": card["chips"],
         "showInChat": show_in_chat(turns, changed_at, &key),
         "needs": false,
@@ -2044,9 +2048,9 @@ fn question_rows_of(
                 "messageId": asker.message_id,
                 "tags": asker.tags,
                 "dismiss": { "type": "cancelQuestion", "id": asker.id },
-                // A page that only waits to be seen asks no question: Mark as read, not Dismiss
-                // (server/src/session_chat_dismissed.rs, where the decision lives).
-                "dismissLabel": if asker.seen_only { "Mark as read" } else { "Dismiss" },
+                // A page that only waits to be seen asks no question: Done, not Dismiss
+                // (server/src/session_chat_dismissed.rs, where the quiet-dismiss decision lives).
+                "dismissLabel": if asker.seen_only { "Done" } else { "Dismiss" },
                 // A page that only waits to be seen asks nothing to answer.
                 "markAnswered": if asker.seen_only { Value::Null } else { json!({ "type": "markQuestionAnswered", "id": asker.id }) },
                 "snooze": snooze,

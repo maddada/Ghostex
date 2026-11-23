@@ -30,12 +30,12 @@ pub(super) const CHOOSE_ANSWER: &str = "Choices";
 pub(super) const DETAILS_ICON: &str = "titlebar/file-text.svg";
 /// A Needs you row's Jump to context: the icon Show in chat has in the row's panel.
 pub(super) const CONTEXT_ICON: &str = "titlebar/focus-2.svg";
-/// A Needs you row's Mark as read: an open envelope (`dock_mark_read_icon`).
-pub(super) const MARK_READ_ICON: &str = "titlebar/mail-opened.svg";
-/// Whether a dock row carries a question the reader must answer, so it has no Mark as read: an ask
+/// A Needs you row's Done action: a check mark (`dock_mark_read_icon`).
+pub(super) const MARK_READ_ICON: &str = "titlebar/check.svg";
+/// Whether a dock row carries a question the reader must answer, so it has no Done button: an ask
 /// with answers, a one-click question, a form or a page with open questions, an approval with
 /// buttons, a to-do that offers its own choices. A page that only waits to be seen (its dismiss
-/// reads "Mark as read"), a to-do with only Done, a blocked line of work and a notice with no
+/// reads "Done"), a to-do with only Done, a blocked line of work and a notice with no
 /// answers ask nothing. The phone has the same rule (workItemParts.tsx `rowAsksQuestion`).
 ///
 /// CDXC:Coordinators 2026-11-21 DECISION:
@@ -48,7 +48,8 @@ pub(super) fn row_asks_question(row: &Value) -> bool {
         return true;
     }
     if key.starts_with("dock-questions:") {
-        return text(row, "dismissLabel") != "Mark as read";
+        let label = text(row, "dismissLabel");
+        return label != "Done" && label != "Mark as read";
     }
     // A to-do with no choices of its own has only Done.
     let only_done =
@@ -429,18 +430,18 @@ impl NativeChatView {
         )
     }
 
-    /// Mark as read as an icon button, left of a dock row's other buttons: runs the row's own
-    /// `dismiss`, the command its ⋯ and right-click menus' Dismiss / Mark as read run (a page's
+    /// Done as an icon button, left of a dock row's other buttons: runs the row's own
+    /// `dismiss`, the command its ⋯ and right-click menus' Dismiss / Done run (a page's
     /// `cancelQuestion`, an ask's cancel, a to-do's `coordinatorBoardAnswer` cancel, a terminal
     /// notice's `dismissNotice`), so the agent is told exactly what it is told today: nothing at
     /// the time, the dismissal with its next message. `None` for a row with no dismiss, for a
-    /// finished row, whose hover check in the age's place already is its Mark as read, and for a
+    /// finished row, whose hover check in the age's place already is its Done button, and for a
     /// row that asks a question (`row_asks_question`).
     ///
-    /// CDXC:Coordinators 2026-11-21 DECISION:
-    /// User, of two Needs you rows (a page and an ask) with Details and Reply: "all these dont
-    /// have any questions. can we add the message open icon to mark as read to be to the left of
-    /// the current 2 buttons that are there?"
+    /// CDXC:Coordinators 2026-11-24 DECISION:
+    /// Opening a page already marks it read, so the Inbox row's clear button means "I'm done with
+    /// this one": renamed to "Done" with a check-mark icon (`titlebar/check.svg`), superseding the
+    /// 2026-11-21 open-envelope "Mark as read" wording and icon.
     pub(super) fn dock_mark_read_icon(
         &self,
         key: &str,
@@ -455,13 +456,13 @@ impl NativeChatView {
         Some(
             self.tone_square_icon_button(
                 gpui::SharedString::from(format!("work-row-read:{key}")),
-                "Mark as read",
+                "Done",
                 MARK_READ_ICON,
                 false,
                 p,
             )
             .tooltip(|window, cx| {
-                gpui_component::tooltip::Tooltip::new("Mark as read")
+                gpui_component::tooltip::Tooltip::new("Done")
                     .keys(super::composer::hotkey_chord(Some("inboxMarkRead")))
                     .build(window, cx)
             })
@@ -870,16 +871,20 @@ impl NativeChatView {
                 )),
             );
         }
-        // Dismiss reads Mark as read on one that asks no question (gx-chat-core's `dismissLabel`).
-        let dismiss_label: &'static str = if actions["dismissLabel"] == "Mark as read" {
-            "Mark as read"
+        // Dismiss reads Done on one that asks no question (gx-chat-core's `dismissLabel`).
+        let is_done = matches!(
+            actions["dismissLabel"].as_str(),
+            Some("Done" | "Mark as read")
+        );
+        let (dismiss_icon, dismiss_label): (&'static str, &'static str) = if is_done {
+            ("titlebar/check.svg", "Done")
         } else {
-            "Dismiss"
+            ("titlebar/x.svg", "Dismiss")
         };
         for (field, icon, label) in [
             ("open", "titlebar/arrow-up-right.svg", "Open"),
             ("showInChat", "titlebar/focus-2.svg", "Show in chat"),
-            ("dismiss", "titlebar/x.svg", dismiss_label),
+            ("dismiss", dismiss_icon, dismiss_label),
         ] {
             let command = actions[field].clone();
             if command.is_object() {

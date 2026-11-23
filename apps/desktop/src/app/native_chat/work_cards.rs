@@ -115,13 +115,18 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
     if row["markAnswered"].is_object() {
         rows.push(json!({ "label": "Mark answered", "iconPath": "titlebar/circle-check.svg", "command": row["markAnswered"] }));
     }
-    // Dismiss, or Mark as read on a row that asks no question (a to-do, a page that only
+    // Dismiss, or Done on a row that asks no question (a to-do, a page that only
     // waits to be seen): gx-chat-core's `dismissLabel`. Both send the agent nothing.
     if row["dismiss"].is_object() {
         let label = row["dismissLabel"].as_str().unwrap_or("Dismiss");
+        let icon = if matches!(label, "Done" | "Mark all done" | "Mark as read") {
+            "titlebar/check.svg"
+        } else {
+            "titlebar/x.svg"
+        };
         rows.push(json!({
             "label": label,
-            "iconPath": "titlebar/x.svg",
+            "iconPath": icon,
             "hotkeyAction": "inboxMarkRead",
             "command": row["dismiss"],
         }));
@@ -728,13 +733,13 @@ impl NativeChatView {
                 let focused = self.board.inbox_focus == Some(idx);
                 list = list.child(self.dock_row_at(row, focused, p, cx));
             }
-            // Mark all read (Q4685 A): breakdown summary on left + "Mark all read (N)" button on right.
+            // Mark all done (Q4685 A): breakdown summary on left + "Mark all done (N)" button on right.
             let mark_all_summary = text(&dock["markAllSeen"], "summary");
             let mark_all_seen = dock["markAllSeen"]["command"].is_object().then(|| {
                 let command = dock["markAllSeen"]["command"].clone();
                 let label = dock["markAllSeen"]["label"]
                     .as_str()
-                    .unwrap_or("Mark all read")
+                    .unwrap_or("Mark all done")
                     .to_string();
                 div()
                     .id("work-dock-mark-all-seen")
@@ -752,7 +757,7 @@ impl NativeChatView {
                     .hover(|style| style.bg(p.foreground.opacity(0.09)))
                     .tooltip(|window, cx| {
                         gpui_component::tooltip::Tooltip::new(
-                            "Mark all pages, plain to-dos, and finished items read",
+                            "Mark all pages, plain to-dos, and finished items done",
                         )
                         .build(window, cx)
                     })
@@ -1657,11 +1662,11 @@ impl NativeChatView {
                                 .chat_cursor_pointer()
                                 .hover(|style| style.bg(p.foreground.opacity(0.09)))
                                 .tooltip(|window, cx| {
-                                    gpui_component::tooltip::Tooltip::new("Mark all pages read")
+                                    gpui_component::tooltip::Tooltip::new("Mark all pages done")
                                         .keys(super::composer::hotkey_chord(Some("inboxMarkRead")))
                                         .build(window, cx)
                                 })
-                                .child("Read all")
+                                .child("Mark all done")
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     cx.stop_propagation();
                                     this.invoke(dismiss.clone(), cx);
@@ -3035,11 +3040,7 @@ impl NativeChatView {
         let row = row.clone();
         let menu_key = key.to_owned();
         let (button_id, label, icon) = if mark_read {
-            (
-                format!("dock-row-read:{key}"),
-                "Mark as read",
-                "titlebar/check.svg",
-            )
+            (format!("dock-row-read:{key}"), "Done", "titlebar/check.svg")
         } else {
             (
                 format!("dock-row-menu:{key}"),
@@ -3241,16 +3242,15 @@ impl NativeChatView {
                     .child(right),
             );
         }
-        // A finished card in the dock goes away with its × (gx-chat-core `dock`). It asks no
-        // question, so the × reads Mark as read, as the dock's finished row does (the rule since
-        // the Quiet Dismiss work: Mark as read when there's no question); it sends nothing.
+        // A finished card in the dock goes away with its check (gx-chat-core `dock`). It asks no
+        // question, so it reads Done, as the dock's finished row does; it sends nothing.
         let dismiss = card["dismiss"].clone();
         if dismiss.is_object() {
             top = top.child(
                 div()
                     .id(gpui::SharedString::from(format!("work-dismiss:{key}")))
                     .role(gpui::Role::Button)
-                    .aria_label("Mark as read")
+                    .aria_label("Done")
                     .flex_shrink_0()
                     .size(px(20.0 * s))
                     .flex()
@@ -3260,11 +3260,11 @@ impl NativeChatView {
                     .chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.08)))
                     .tooltip(|window, cx| {
-                        gpui_component::tooltip::Tooltip::new("Mark as read").build(window, cx)
+                        gpui_component::tooltip::Tooltip::new("Done").build(window, cx)
                     })
                     .child(
                         svg()
-                            .path("titlebar/x.svg")
+                            .path("titlebar/check.svg")
                             .size(px(12.0 * s))
                             .text_color(p.muted),
                     )

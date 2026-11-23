@@ -118,9 +118,9 @@ pub fn rows_split(
             .filter(|picked| *picked != "Done" && !offered.contains(picked))
             .unwrap_or_default();
         let is_snoozed = super::work_cards::snoozed(item, &key, state, now_ms);
-        let snooze = super::work_cards::snooze_choices(|hours| {
-            json!({ "type": "snoozeWorkAsk", "key": key, "item": tag, "ask": "", "hours": hours })
-        });
+        let snooze = super::work_cards::snooze_choices(
+            |hours| json!({ "type": "snoozeWorkAsk", "key": key, "item": tag, "ask": "", "hours": hours }),
+        );
         let mut row = json!({
             "key": key,
             "kind": "ask",
@@ -142,9 +142,9 @@ pub fn rows_split(
             "replied": replied,
             "reply": { "item": tag, "key": key, "tag": "", "name": reply_name(title) },
             "mention": "",
-            // Mark as read: a to-do asks no question, so it is not Dismiss. It sends the
+            // Done: a to-do asks no question, so it is not Dismiss. It sends the
             // agent nothing; gxserver tells it with its next message
-            // (server/src/session_chat_dismissed.rs, where the decision lives).
+            // (server/src/session_chat_dismissed.rs, where the quiet-dismiss decision lives).
             "dismiss": {
                 "type": "coordinatorBoardAnswer",
                 "op": "cancel",
@@ -152,7 +152,7 @@ pub fn rows_split(
                 "item": tag,
                 "label": "Dismissed",
             },
-            "dismissLabel": "Mark as read",
+            "dismissLabel": "Done",
             "snooze": snooze,
             "chips": [],
             "needs": true,

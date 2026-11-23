@@ -2632,7 +2632,7 @@ press it the page sits in the list above the chat box of things that need you
 ("Page, not seen yet") and counts in its "need you". Pressing it tells the agent
 you saw the page, with your reply if you wrote one, and the page's card then
 says Seen. Pages an agent showed before this came in don't wait. When two or
-more pages wait only to be seen, Mark all read at the bottom of that list clears
+more pages wait only to be seen, Mark all done at the bottom of that list clears
 them all at once (their cards say Seen, and nothing is sent to the agent). When
 an agent shows a newer version of the same file, the older cards say Replaced
 and stop counting in every chat that shows them: the newest card is the page.

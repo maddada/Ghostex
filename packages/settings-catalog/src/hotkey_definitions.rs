@@ -72,8 +72,8 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "inboxMarkRead",
-        title: "Inbox: Mark Read / Dismiss",
-        description: "While the Session Inbox has keyboard focus, mark the highlighted item read or dismiss it.",
+        title: "Inbox: Done / Dismiss",
+        description: "While the Session Inbox has keyboard focus, mark the highlighted item done or dismiss it.",
         default_key: "e",
         windows_linux_default_key: None,
         alternate_default_keys: &[],

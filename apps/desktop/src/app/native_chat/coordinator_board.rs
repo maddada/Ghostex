@@ -289,7 +289,12 @@ fn board_menu_entries(row: &Value) -> Vec<Value> {
     }
     if dock["dismiss"].is_object() {
         let label = dock["dismissLabel"].as_str().unwrap_or("Dismiss");
-        extra.push(json!({"label": label, "icon": "x", "command": dock["dismiss"]}));
+        let icon = if matches!(label, "Done" | "Mark all done" | "Mark as read") {
+            "check"
+        } else {
+            "x"
+        };
+        extra.push(json!({"label": label, "icon": icon, "command": dock["dismiss"]}));
     }
     if dock["snooze"]
         .as_array()
