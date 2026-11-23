@@ -2,6 +2,9 @@
 //! (app/titlebar/updates_menu_rows.rs) and the Start menu's rows use
 //! (app/titlebar/actions_menu_rows.rs), so the demo draws those rows from the app's own files.
 //! Colours are the app's dark-theme values.
+#[path = "../../app/element/count_badge.rs"]
+pub(crate) mod element;
+
 /// The chat host's computer icons (`app/gx_chat/session_directory.rs`): the preview has no
 /// computers, so every one wears the plain computer.
 pub(crate) mod gx_chat {

@@ -157,7 +157,7 @@ pub(crate) fn session_tooltip(
         };
         lines.push(if input.pending_question_count > 0 {
             format!(
-                "{prefix}Answer requested ({})",
+                "{prefix}Answer requested · {}",
                 input.pending_question_count
             )
         } else {

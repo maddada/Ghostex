@@ -325,16 +325,16 @@ fn note_quiet(
         .map_err(sql_error)?;
     let checks = |count: i64| {
         if count > 1 {
-            format!(" ({count} checks)")
+            format!(" · {count} checks")
         } else {
-            String::new()
+            ".".to_string()
         }
     };
     if let Some((run_id, message, count)) = newest {
         if message.starts_with(QUIET_PREFIX) {
             db.execute(
                 "UPDATE automation_runs SET errorMessage = ?2, completedAt = ?3, updatedAt = ?3 WHERE runId = ?1",
-                params![run_id, format!("{QUIET_PREFIX} {reason}{}.", checks(count)), now_iso()],
+                params![run_id, format!("{QUIET_PREFIX} {reason}{}", checks(count)), now_iso()],
             )
             .map_err(sql_error)?;
             return Ok(());

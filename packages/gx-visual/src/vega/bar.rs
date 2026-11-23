@@ -210,7 +210,7 @@ pub(crate) fn render(spec: &ChartSpec, width: f32, theme: &Theme) -> Result<Bloc
         }
         let value = if normalize {
             format!(
-                "{} ({})",
+                "{} · {}",
                 format_percent(bar.v1 - bar.v0),
                 format_number(bar.value)
             )

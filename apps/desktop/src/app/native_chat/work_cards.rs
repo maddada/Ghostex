@@ -748,7 +748,7 @@ impl NativeChatView {
                 let focused = self.board.inbox_focus == Some(idx);
                 list = list.child(self.dock_row_at(row, focused, p, cx));
             }
-            // Archive all (Q4685 A / Q4758): breakdown summary on left + "Archive all (N)" button on right.
+            // Archive all (Q4685 A / Q4758): breakdown summary on left + "Archive all" + count badge on right.
             let mark_all_summary = text(&dock["markAllSeen"], "summary");
             let mark_all_seen = dock["markAllSeen"]["command"].is_object().then(|| {
                 let command = dock["markAllSeen"]["command"].clone();
@@ -756,11 +756,21 @@ impl NativeChatView {
                     .as_str()
                     .unwrap_or("Archive all")
                     .to_string();
+                let count = dock["markAllSeen"]["count"].as_u64().filter(|n| *n > 0);
+                let aria = match count {
+                    Some(n) => format!("{label}, {n}"),
+                    None => label.clone(),
+                };
                 div()
                     .id("work-dock-mark-all-seen")
                     .role(gpui::Role::Button)
+                    .aria_label(aria)
                     .flex_shrink_0()
-                    .px(px(8.0 * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .pl(px(9.0 * s))
+                    .pr(px(if count.is_some() { 6.0 } else { 9.0 } * s))
                     .py(px(3.0 * s))
                     .rounded(px(6.0 * s))
                     .border_1()
@@ -777,6 +787,13 @@ impl NativeChatView {
                         .build(window, cx)
                     })
                     .child(label)
+                    .when_some(count, |btn, n| {
+                        btn.child(crate::app::element::count_badge(
+                            n.to_string(),
+                            p.foreground,
+                            s,
+                        ))
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.invoke(command.clone(), cx);
                     }))
@@ -1006,13 +1023,14 @@ impl NativeChatView {
             .first()
             .and_then(|row| row["age"].as_str())
             .filter(|age| !age.is_empty());
-        let label = match soonest {
-            Some(age) if !open => format!("Snoozed ({}) \u{b7} {age}", snoozed.len()),
-            _ => format!("Snoozed ({})", snoozed.len()),
+        let aria = match soonest {
+            Some(age) if !open => format!("Snoozed, {}, {age}", snoozed.len()),
+            _ => format!("Snoozed, {}", snoozed.len()),
         };
         let line = div()
             .id("work-dock-snoozed")
             .role(gpui::Role::Button)
+            .aria_label(aria)
             .aria_expanded(open)
             .w_full()
             .min_w_0()
@@ -1036,7 +1054,29 @@ impl NativeChatView {
                     .size(px(13.0 * s))
                     .text_color(p.card_muted),
             )
-            .child(div().flex_1().min_w_0().truncate().child(label))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .child("Snoozed")
+                    .child(crate::app::element::count_badge(
+                        snoozed.len().to_string(),
+                        p.foreground,
+                        s,
+                    ))
+                    .when_some(soonest.filter(|_| !open), |row, age| {
+                        row.child(
+                            div()
+                                .min_w_0()
+                                .truncate()
+                                .text_color(p.card_muted)
+                                .child(format!("\u{b7} {age}")),
+                        )
+                    }),
+            )
             .child(
                 svg()
                     .path("titlebar/chevron-down.svg")
@@ -1082,6 +1122,7 @@ impl NativeChatView {
         let line = div()
             .id("work-dock-answered")
             .role(gpui::Role::Button)
+            .aria_label(format!("Answered, {}", answered.len()))
             .aria_expanded(open)
             .w_full()
             .min_w_0()
@@ -1109,8 +1150,15 @@ impl NativeChatView {
                 div()
                     .flex_1()
                     .min_w_0()
-                    .truncate()
-                    .child(format!("Answered ({})", answered.len())),
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .child("Answered")
+                    .child(crate::app::element::count_badge(
+                        answered.len().to_string(),
+                        p.foreground,
+                        s,
+                    )),
             )
             .child(
                 svg()

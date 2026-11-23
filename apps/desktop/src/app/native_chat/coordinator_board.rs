@@ -3270,7 +3270,7 @@ impl NativeChatView {
                             .child(more)
                             .when(not_shown > 0, |this| {
                                 this.child(div().text_color(p.muted).child(format!(
-                                    "({not_shown} older in ghostex coordinator board)"
+                                    "· {not_shown} older in ghostex coordinator board"
                                 )))
                             })
                             .on_click(

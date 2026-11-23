@@ -1382,7 +1382,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             summary_parts.push(format!("{} done", clear_finished_keys.len()));
         }
         json!({
-            "label": format!("Archive all ({clear_total})"),
+            "label": "Archive all",
             "summary": summary_parts.join(" \u{b7} "),
             "count": clear_total,
             "command": {

@@ -96,7 +96,7 @@ impl GhostexGpuiApp {
         let header = h_flex()
             .id(format!("native-unified-group-header-{key}"))
             .role(gpui::Role::Button)
-            .aria_label(format!("{} ({})", group.label, group.count))
+            .aria_label(format!("{}, {}", group.label, group.count))
             .aria_expanded(!folded)
             .relative()
             .mx(px(3.0 * scale))

@@ -545,20 +545,34 @@ impl NativeChatView {
                     }
                 }
                 let more = text(section, "moreLabel");
+                let more_count = section["moreCount"].as_u64().filter(|count| *count > 0);
                 if !more.is_empty() {
+                    let aria = match more_count {
+                        Some(count) => format!("{more}, {count}"),
+                        None => more.clone(),
+                    };
                     block = block.child(
                         div()
                             .id(SharedString::from(format!("files-links-more:{id}")))
                             .role(gpui::Role::Button)
+                            .aria_label(aria)
                             .h(px(LINE_HEIGHT * s))
                             .flex()
                             .items_center()
+                            .gap(px(6.0 * s))
                             .px(px(6.0 * s))
                             .text_size(px(12.0 * s))
                             .text_color(p.card_muted)
                             .chat_cursor_pointer()
                             .hover(|style| style.text_color(p.foreground))
                             .child(more)
+                            .when_some(more_count, |row, count| {
+                                row.child(crate::app::element::count_badge(
+                                    count.to_string(),
+                                    p.foreground,
+                                    s,
+                                ))
+                            })
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.invoke(json!({"type":"filesLinksShowAll","section":id}), cx)
                             })),

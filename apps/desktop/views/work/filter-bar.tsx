@@ -133,7 +133,7 @@ export function WorkFilterBar({
             type='button'
             aria-haspopup='menu'
             aria-expanded={open}
-            title={count ? `Filters (${count} set)` : 'Filters'}
+            title={count ? `Filters · ${count} active` : 'Filters'}
             className={cx('w-toggle', 'work-filter-button', count > 0 && 'is-on', open && 'is-focus')}
             onClick={toggle}
           >

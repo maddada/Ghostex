@@ -137,6 +137,8 @@ pub struct QuickAccessGroup {
 pub struct QuickAccessOption {
     pub value: String,
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<usize>,
     pub detail: String,
     pub color: String,
     pub icon: QuickAccessIcon,
@@ -151,6 +153,7 @@ impl QuickAccessOption {
         Self {
             value: value.to_string(),
             label: label.to_string(),
+            count: None,
             detail: String::new(),
             color: String::new(),
             icon: QuickAccessIcon::None,
@@ -165,6 +168,8 @@ impl QuickAccessOption {
 #[serde(rename_all = "camelCase")]
 pub struct QuickAccessSelect {
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<usize>,
     pub detail: String,
     pub color: String,
     pub options: Vec<QuickAccessOption>,

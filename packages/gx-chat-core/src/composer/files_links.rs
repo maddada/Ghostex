@@ -131,8 +131,11 @@ pub struct FilesLinksSectionView {
     pub label: String,
     pub count: usize,
     pub groups: Vec<FilesLinksGroup>,
-    /// "Show all 120" while capped, "Show fewer" while shown whole, else empty.
+    /// "Show more" while capped, "Show fewer" while shown whole, else empty.
     pub more_label: String,
+    /// Remaining hidden items when capped, drawn in a count badge beside `more_label`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub more_count: Option<usize>,
 }
 
 /// The document's `filesLinks`.
@@ -631,12 +634,12 @@ pub fn document(state: &ChatState, context: &ChatContext) -> FilesLinks {
         if count == 0 {
             continue;
         }
-        let more_label = if shown < count {
-            format!("Show more ({shown} of {count} shown)")
+        let (more_label, more_count) = if shown < count {
+            ("Show more".to_string(), Some(count - shown))
         } else if pages > 0 {
-            "Show fewer".to_string()
+            ("Show fewer".to_string(), None)
         } else {
-            String::new()
+            (String::new(), None)
         };
         document.sections.push(FilesLinksSectionView {
             id: id.to_string(),
@@ -644,6 +647,7 @@ pub fn document(state: &ChatState, context: &ChatContext) -> FilesLinks {
             count,
             groups,
             more_label,
+            more_count,
         });
     }
     document.filter = total >= FILTER_FROM;

@@ -881,6 +881,7 @@ pub(crate) fn tag_select(state: &SessionsTabState, data: &QuickAccessData) -> Qu
         options.push(QuickAccessOption {
             value: filter.to_string(),
             label: tag_label(Some(filter), &catalog).unwrap_or_else(|| filter.to_string()),
+            count: None,
             detail: String::new(),
             color: String::new(),
             icon: QuickAccessIcon::asset(
@@ -902,6 +903,7 @@ pub(crate) fn tag_select(state: &SessionsTabState, data: &QuickAccessData) -> Qu
         } else {
             format!("{} tags", state.tag_filters.len())
         },
+        count: None,
         detail: String::new(),
         color: String::new(),
         options,
@@ -936,6 +938,7 @@ pub(crate) fn project_select(
     }));
     QuickAccessSelect {
         label,
+        count: None,
         detail: String::new(),
         color: String::new(),
         options,

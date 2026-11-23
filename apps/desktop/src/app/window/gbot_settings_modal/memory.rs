@@ -271,10 +271,13 @@ impl GpuiGbotSettingsModalWindow {
         let p = self.palette;
         let fill = self.level_color(view.level);
         let note = match view.level {
-            GbotMemoryLevel::Ok => format!(
-                "When it fills up, the oldest notes move to the archive ({} there now).",
-                view.archive_notes
-            ),
+            GbotMemoryLevel::Ok => {
+                let count = view.archive_notes;
+                let verb = if count == 1 { "is" } else { "are" };
+                format!(
+                    "When it fills up, the oldest notes move to the archive. {count} {verb} there now."
+                )
+            }
             GbotMemoryLevel::Amber => {
                 "Nearly full: the next note moves the oldest ones to the archive.".to_string()
             }

@@ -571,11 +571,21 @@ impl GpuiOnboardingWindow {
                 div()
                     .flex_1()
                     .min_w_0()
-                    .child(nm(s, 17.0, 500.0).child(if other_missing.is_empty() {
-                        "Other agents".to_string()
-                    } else {
-                        format!("Other agents (+{})", other_missing.len())
-                    }))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(s.px(8.0))
+                            .child(nm(s, 17.0, 500.0).child("Other agents"))
+                            .when(!other_missing.is_empty(), |row| {
+                                row.child(crate::app::element::count_badge_sized(
+                                    other_missing.len().to_string(),
+                                    white(1.0),
+                                    20.0 * s.0,
+                                    12.0 * s.0,
+                                ))
+                            }),
+                    )
                     .child(ss(s, 12.5).child(if other_names.is_empty() {
                         "Pi Agent, OpenCode, Copilot, and more.".to_string()
                     } else {

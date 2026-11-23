@@ -253,6 +253,9 @@ pub(crate) fn quick_access_filter_trigger<V: 'static>(
                 .text_ellipsis()
                 .child(select.label.clone()),
         )
+        .children(select.count.map(|count| {
+            crate::app::element::count_badge(count.to_string(), hsla(p.foreground), 1.0)
+        }))
         .child(
             svg()
                 .path(ICON_SELECTOR)
@@ -548,12 +551,25 @@ pub(crate) fn quick_access_select_trigger<V: 'static>(
                         .flex_1()
                         .min_w_0()
                         .child(
-                            div()
+                            h_flex()
                                 .min_w_0()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .child(select.label.clone()),
+                                .items_center()
+                                .gap(px(6.0))
+                                .child(
+                                    div()
+                                        .min_w_0()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .child(select.label.clone()),
+                                )
+                                .children(select.count.map(|count| {
+                                    crate::app::element::count_badge(
+                                        count.to_string(),
+                                        hsla(p.foreground),
+                                        1.0,
+                                    )
+                                })),
                         )
                         .children((!select.detail.is_empty()).then(|| {
                             div()
@@ -671,12 +687,25 @@ pub(crate) fn quick_access_select_menu<V: 'static>(
                                 .flex_1()
                                 .min_w_0()
                                 .child(
-                                    div()
+                                    h_flex()
                                         .min_w_0()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .child(option.label.clone()),
+                                        .items_center()
+                                        .gap(px(6.0))
+                                        .child(
+                                            div()
+                                                .min_w_0()
+                                                .overflow_hidden()
+                                                .whitespace_nowrap()
+                                                .text_ellipsis()
+                                                .child(option.label.clone()),
+                                        )
+                                        .children(option.count.map(|count| {
+                                            crate::app::element::count_badge(
+                                                count.to_string(),
+                                                hsla(p.foreground),
+                                                1.0,
+                                            )
+                                        })),
                                 )
                                 .children((!option.detail.is_empty()).then(|| {
                                     div()

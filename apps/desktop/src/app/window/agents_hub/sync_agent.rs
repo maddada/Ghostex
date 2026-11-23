@@ -404,19 +404,26 @@ impl GpuiAgentsHubModalWindow {
                 // `.agents-hub-sync-group-label`: no hairline above the rows it labels.
                 let first = rows.is_empty();
                 rows.push(
-                    div()
+                    h_flex()
                         .w_full()
+                        .items_center()
+                        .gap(px(6.0))
                         .when(!first, |this| this.border_t_1().border_color(line_color))
                         .px(px(14.0))
                         .pt(px(8.8))
                         .pb(px(4.0))
                         .text_size(px(12.0))
                         .text_color(hsla(hp.muted))
-                        .child(format!(
-                            "{label} ({}{})",
-                            entries.len(),
-                            sub.map(|sub| format!(", {sub}")).unwrap_or_default()
+                        .child(*label)
+                        .child(crate::app::element::count_badge_sized(
+                            entries.len().to_string(),
+                            hsla(hp.foreground),
+                            17.0,
+                            10.5,
                         ))
+                        .when_some(*sub, |row, sub| {
+                            row.child(div().text_color(hsla(hp.muted)).child(format!("· {sub}")))
+                        })
                         .into_any_element(),
                 );
                 for (index, entry) in entries.iter().take(visible).enumerate() {

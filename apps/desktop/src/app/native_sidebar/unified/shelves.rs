@@ -54,7 +54,7 @@ impl GhostexGpuiApp {
                 h_flex()
                     .id(format!("native-unified-shelf-{key}"))
                     .role(gpui::Role::Button)
-                    .aria_label(format!("{} ({})", shelf_label(kind), shelf.cards.len()))
+                    .aria_label(format!("{}, {}", shelf_label(kind), shelf.cards.len()))
                     .aria_expanded(open)
                     .mx(px(3.0 * scale))
                     .h(px(30.0 * scale))
