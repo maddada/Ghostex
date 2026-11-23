@@ -315,6 +315,7 @@ impl ClaudeObserver {
         events.extend(due.into_iter().map(settle_turn_end));
         let mut live_panes = HashSet::new();
         let mut live_pids = HashSet::new();
+        let mut handled_panes = HashSet::new();
         for LiveRecord { config_dir, record } in live {
             if record["kind"] != "interactive" {
                 continue;
@@ -338,6 +339,10 @@ impl ClaudeObserver {
                 continue;
             };
             if pane_owner.get(&pane).map(|(_, _, owner)| *owner) != Some(pid) {
+                continue;
+            }
+            // Process at most one record per pane per pass even if two records share a pid.
+            if !handled_panes.insert(pane.clone()) {
                 continue;
             }
             // A terminal showing a daemon-hosted conversation: that conversation's record speaks.

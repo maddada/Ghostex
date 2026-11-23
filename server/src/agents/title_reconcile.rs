@@ -719,7 +719,7 @@ fn claude_title_resume_guard(file: &fs::File, end: u64) -> Option<u64> {
 fn claude_custom_title_line(line: &[u8]) -> Option<Option<String>> {
     let line = String::from_utf8_lossy(line);
     let line = line.trim();
-    if line.is_empty() {
+    if line.is_empty() || !line.contains("\"custom-title\"") {
         return None;
     }
     let entry = serde_json::from_str::<Value>(line).ok()?;

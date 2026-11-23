@@ -183,7 +183,7 @@ pub(crate) fn run_session_links_refresh_once(
         }
 
         // What the transcript says.
-        if let Some((agent, path)) = session_transcript(state, &project_id, &session_id) {
+        if let Some((agent, path)) = session_transcript(session) {
             let first_read = needs_full_scan(&path);
             if !first_read || full_scans > 0 {
                 if first_read {
@@ -329,23 +329,23 @@ pub(crate) fn run_session_links_refresh_once(
 }
 
 /// The session's transcript, when its agent writes one Ghostex can read.
+/// Resolves directly from the already-loaded session row rather than running a full
+/// `resolve_session_chat_read_state` (which re-opens SQLite, queries projects/queues,
+/// checks CLI availability, and builds mobile long-poll fingerprints only to discard them).
 fn session_transcript(
-    state: &AppState,
-    project_id: &str,
-    session_id: &str,
+    session: &Value,
 ) -> Option<(
     crate::session_chat::SessionChatTranscriptAgent,
     std::path::PathBuf,
 )> {
-    let resolution = crate::session_chat_read::resolve_session_chat_read_state(
-        state, project_id, session_id, None,
-    )
-    .ok()?;
-    let (family, path) = resolution.transcript();
-    Some((
-        crate::session_chat::resolve_session_chat_transcript_agent(family)?,
-        path?.to_path_buf(),
-    ))
+    let family = crate::session_chat_follower::session_chat_display_agent_for_session(session)?;
+    let agent = crate::session_chat::resolve_session_chat_transcript_agent(Some(&family))?;
+    let path = crate::session_chat::resolve_session_chat_transcript_path(
+        agent,
+        crate::server::read_runtime_text(session, "agentSessionId").as_deref(),
+        crate::server::read_runtime_text(session, "agentSessionPath").as_deref(),
+    )?;
+    Some((agent, path))
 }
 
 /// Reads what is due among every open session's links, within the pass's budgets: a link of a

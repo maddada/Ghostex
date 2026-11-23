@@ -224,6 +224,9 @@ pub(crate) struct SessionChatTranscriptGate {
     /// Cache resolution by agent and conversation identity; resolving can scan agent homes.
     identity: String,
     path: Option<PathBuf>,
+    /// When a negative (`None`) resolution last ran for `identity`, so callers polling every
+    /// 2 seconds do not re-scan agent homes while a conversation still has no file on disk.
+    negative_resolved_at: Option<std::time::Instant>,
     /// The last `tail` read, kept while the transcript file is unchanged.
     tail: Option<CachedTranscriptTail>,
 }
@@ -342,6 +345,16 @@ impl SessionChatTranscriptGate {
             .then(|| self.path.clone())
             .flatten()
             .filter(|path| path.is_file());
+        if cached.is_none()
+            && !cfg!(test)
+            && self.identity == identity
+            && self.path.is_none()
+            && self
+                .negative_resolved_at
+                .is_some_and(|at| at.elapsed() < std::time::Duration::from_secs(15))
+        {
+            return None;
+        }
         let path = match cached {
             Some(path) => {
                 // The Empryo chat is a mirror only a resolve or an open chat keeps current.
@@ -364,6 +377,11 @@ impl SessionChatTranscriptGate {
             ),
         };
         self.identity = identity;
+        self.negative_resolved_at = if path.is_none() {
+            Some(std::time::Instant::now())
+        } else {
+            None
+        };
         self.path = path.clone();
         Some((transcript_agent, path?))
     }

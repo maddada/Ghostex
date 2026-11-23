@@ -132,6 +132,10 @@ pub async fn run_session_chat_follower(
     let mut published_agent_gone = false;
     // The statusline watch fired during the resolve-poll sleep; the next pass probes for it.
     let mut statusline_landed = false;
+    // Back off repeated transcript path lookups independently of the 1s statusline/screen poll
+    // so unresolved Claude sessions never re-scan project folders every second.
+    let mut next_transcript_resolve_at: Option<std::time::Instant> = None;
+    let mut last_resolved_identity: Option<(Option<String>, Option<String>)> = None;
     let mut reconcile_ticks: u64 = 0;
     let mut startup_option_reconcile_ticks: u64 = 0;
     // CDXC:AgentScreenDetection 2026-09-02: reconciles left in the
@@ -180,6 +184,8 @@ pub async fn run_session_chat_follower(
                 // Codex rewind adopts a new conversation before requesting this snapshot. Re-resolve now instead of re-sending the abandoned file until the idle successor scan.
                 identity.adopt(live);
                 resolved = None;
+                next_transcript_resolve_at = None;
+                last_resolved_identity = None;
                 file_state = FollowerFileState::new();
                 transcript_prompt = SessionChatTranscriptPromptState::default();
                 emitted_starting = false;
@@ -232,18 +238,33 @@ pub async fn run_session_chat_follower(
                     identity.adopt(read_live_state());
                 }
             }
-            let agent_session_id = identity.agent_session_id.clone();
-            let agent_session_path = identity.agent_session_path.clone();
-            resolved = tokio::task::spawn_blocking(move || {
-                resolve_session_chat_transcript_path(
-                    transcript_agent,
-                    agent_session_id.as_deref(),
-                    agent_session_path.as_deref(),
-                )
-            })
-            .await
-            .ok()
-            .flatten();
+            let current_identity_key = (
+                identity.agent_session_id.clone(),
+                identity.agent_session_path.clone(),
+            );
+            let resolve_due = statusline_landed
+                || last_resolved_identity.as_ref() != Some(&current_identity_key)
+                || next_transcript_resolve_at.is_none_or(|due| std::time::Instant::now() >= due);
+            if resolve_due {
+                let agent_session_id = identity.agent_session_id.clone();
+                let agent_session_path = identity.agent_session_path.clone();
+                resolved = tokio::task::spawn_blocking(move || {
+                    resolve_session_chat_transcript_path(
+                        transcript_agent,
+                        agent_session_id.as_deref(),
+                        agent_session_path.as_deref(),
+                    )
+                })
+                .await
+                .ok()
+                .flatten();
+                last_resolved_identity = Some(current_identity_key);
+                next_transcript_resolve_at = if resolved.is_none() {
+                    Some(std::time::Instant::now() + resolve_delay)
+                } else {
+                    None
+                };
+            }
             if resolved.is_none() {
                 /*
                 CDXC:AgentScreenDetection 2026-09-01:
@@ -391,6 +412,7 @@ pub async fn run_session_chat_follower(
                         epoch = stream.begin_generation();
                         emitted_starting = false;
                         want_snapshot = true;
+                        next_transcript_resolve_at = None;
                     }
                     _ = statusline_payload_written(
                         config.options_change_watch.as_ref(),
@@ -441,6 +463,8 @@ pub async fn run_session_chat_follower(
                 // Rotation to a missing path — resolve-poll again and deliver
                 // an authoritative frame once the successor file appears.
                 resolved = None;
+                next_transcript_resolve_at = None;
+                last_resolved_identity = None;
                 resolve_delay = INITIAL_RESOLVE_POLL;
                 epoch = stream.begin_generation();
                 emitted_starting = false;

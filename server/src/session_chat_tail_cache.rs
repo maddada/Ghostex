@@ -130,6 +130,11 @@ pub(crate) fn tail_page(
         if bytes <= KEPT_BYTES {
             let shared = std::sync::Arc::new(page.clone());
             if let Ok(mut kept) = kept().lock() {
+                // Earlier versions of a growing transcript can never hit again; drop them right
+                // away so dead pages do not linger in memory until `KEPT_BYTES` fills.
+                kept.retain(|existing_key, existing| {
+                    existing_key.path != key.path || existing.version == version
+                });
                 kept.insert(
                     key.clone(),
                     Kept {

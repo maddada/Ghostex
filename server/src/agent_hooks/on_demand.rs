@@ -205,25 +205,57 @@ fn command_name(word: &str) -> String {
     name
 }
 
+const MISE_WHICH_CACHE_TTL: Duration = Duration::from_secs(60);
+
+fn mise_which_cache(
+) -> &'static std::sync::Mutex<
+    std::collections::HashMap<(String, PathBuf), (std::time::Instant, Option<String>)>,
+> {
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<
+            std::collections::HashMap<(String, PathBuf), (std::time::Instant, Option<String>)>,
+        >,
+    > = std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
 /// The installed binary mise runs for `binary`; `mise which` only reads, it never installs.
 fn mise_installed(binary: &str, home: &Path) -> Option<String> {
-    let mise = super::probing::resolve_cli_command("mise", home)?;
-    let mut command = crate::platform::process::background_command(&mise);
-    command
-        .args(["which", binary])
-        .current_dir(home)
-        .env("HOME", home);
-    #[cfg(not(windows))]
-    command.env(
-        "PATH",
-        super::probing::normalize_gxserver_process_path(
-            std::env::var("PATH").ok().as_deref(),
-            home,
-        ),
-    );
-    super::probing::run_command_stdout_with_timeout(command, Duration::from_secs(3))
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty() && !value.contains(['\r', '\n']))
+    let key = (binary.to_string(), home.to_path_buf());
+    if !cfg!(test) {
+        if let Ok(cache) = mise_which_cache().lock() {
+            if let Some((checked_at, cached)) = cache.get(&key) {
+                if checked_at.elapsed() < MISE_WHICH_CACHE_TTL {
+                    return cached.clone();
+                }
+            }
+        }
+    }
+    let result = (|| {
+        let mise = super::probing::resolve_cli_command("mise", home)?;
+        let mut command = crate::platform::process::background_command(&mise);
+        command
+            .args(["which", binary])
+            .current_dir(home)
+            .env("HOME", home);
+        #[cfg(not(windows))]
+        command.env(
+            "PATH",
+            super::probing::normalize_gxserver_process_path(
+                std::env::var("PATH").ok().as_deref(),
+                home,
+            ),
+        );
+        super::probing::run_command_stdout_with_timeout(command, Duration::from_secs(3))
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty() && !value.contains(['\r', '\n']))
+    })();
+    if !cfg!(test) {
+        if let Ok(mut cache) = mise_which_cache().lock() {
+            cache.insert(key, (std::time::Instant::now(), result.clone()));
+        }
+    }
+    result
 }
 
 fn same_file(left: &Path, right: &Path) -> bool {

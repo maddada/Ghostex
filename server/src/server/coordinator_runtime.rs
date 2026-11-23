@@ -744,13 +744,22 @@ fn supervise(
             CDXC:Coordinators 2026-11-13 DECISION:
             Coordinator, after G2z88 was nudged again and again while idle (see CDXC:Coordinators 2026-11-13 in session_status/model.rs): "Never nudge the same session again after it answered a nudge with no new work, until something new happens (new output, a new message, its turn starts again)." A thread whose hooks still say working, but whose transcript's newest turn was started by Ghostex's stall nudge and has ended, answered the nudge and took nothing new since, so it is finished, not quiet: no second nudge and no second "no new output" report. Any new prompt (a message, a task notification) opens a new turn and makes it working again. The read is cached until the transcript changes.
             */
-            let reading = read_turn(
-                memory.transcript_gates.entry(key.clone()).or_default(),
-                &session,
-            );
-            let answered = reading.answered_stall_nudge;
-            let open = reading.open;
-            memory.turns.insert(key.clone(), reading);
+            let read_due = memory
+                .activity_read_at
+                .get(&key)
+                .is_none_or(|at| now - at >= ACTIVITY_READ_EVERY_MS)
+                || !memory.turns.contains_key(&key);
+            if read_due {
+                memory.activity_read_at.insert(key.clone(), now);
+                let reading = read_turn(
+                    memory.transcript_gates.entry(key.clone()).or_default(),
+                    &session,
+                );
+                memory.turns.insert(key.clone(), reading);
+            }
+            let reading = memory.turns.get(&key);
+            let answered = reading.is_some_and(|reading| reading.answered_stall_nudge);
+            let open = reading.is_some_and(|reading| reading.open);
             // A turn that ended and then only Claude's idle compaction is finished too
             // (CDXC:Coordinators 2026-11-18 in coordinators/idle_compaction.rs).
             if answered || (!open && coordinators::idle_compacted_after_turn_end(&session)) {

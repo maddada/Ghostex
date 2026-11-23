@@ -245,11 +245,78 @@ fn find_claude_chat_transcript(session_id: &str) -> Option<PathBuf> {
 
 const CLAUDE_EMBEDDED_ID_SCAN_FILE_LIMIT: usize = 50;
 pub(crate) const CLAUDE_EMBEDDED_ID_SCAN_HEAD_BYTES: u64 = 256 * 1024;
+const CLAUDE_EMBEDDED_ID_NEGATIVE_CACHE_TTL: std::time::Duration =
+    std::time::Duration::from_secs(15);
+const CLAUDE_EMBEDDED_ID_CACHE_MAX_ENTRIES: usize = 512;
+
+struct CachedEmbeddedLookup {
+    checked_at: std::time::Instant,
+    roots_stamp: u64,
+    path: Option<PathBuf>,
+}
+
+fn claude_embedded_lookup_cache(
+) -> &'static std::sync::Mutex<std::collections::HashMap<String, CachedEmbeddedLookup>> {
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, CachedEmbeddedLookup>>,
+    > = std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+/// Fingerprint of the Claude project roots and their project subfolders' modification times.
+/// Appending to existing transcripts does not change a folder's mtime, whereas creating a new
+/// transcript file does, so negative lookups stay cached during steady turns and invalidate as
+/// soon as a new file appears.
+fn claude_project_roots_stamp(roots: &[PathBuf]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for root in roots {
+        root.hash(&mut hasher);
+        if let Ok(meta) = fs::metadata(root) {
+            if let Ok(modified) = meta.modified() {
+                if let Ok(elapsed) = modified.duration_since(std::time::UNIX_EPOCH) {
+                    elapsed.as_nanos().hash(&mut hasher);
+                }
+            }
+        }
+        if let Ok(project_dirs) = fs::read_dir(root) {
+            for project_dir in project_dirs.flatten() {
+                let path = project_dir.path();
+                path.hash(&mut hasher);
+                if let Ok(meta) = project_dir.metadata() {
+                    if let Ok(modified) = meta.modified() {
+                        if let Ok(elapsed) = modified.duration_since(std::time::UNIX_EPOCH) {
+                            elapsed.as_nanos().hash(&mut hasher);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    hasher.finish()
+}
 
 fn find_claude_transcript_by_embedded_session_id(session_id: &str) -> Option<PathBuf> {
+    let roots = crate::agent_transcripts::claude_project_roots();
+    let roots_stamp = claude_project_roots_stamp(&roots);
+    if !cfg!(test) {
+        if let Ok(cache) = claude_embedded_lookup_cache().lock() {
+            if let Some(entry) = cache.get(session_id) {
+                match &entry.path {
+                    Some(path) if path.is_file() => return Some(path.clone()),
+                    None if entry.roots_stamp == roots_stamp
+                        && entry.checked_at.elapsed() < CLAUDE_EMBEDDED_ID_NEGATIVE_CACHE_TTL =>
+                    {
+                        return None;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
     let mut candidates: Vec<(PathBuf, std::time::SystemTime)> = Vec::new();
-    for root in crate::agent_transcripts::claude_project_roots() {
-        let Ok(project_dirs) = fs::read_dir(&root) else {
+    for root in &roots {
+        let Ok(project_dirs) = fs::read_dir(root) else {
             continue;
         };
         for project_dir in project_dirs.flatten() {
@@ -275,15 +342,38 @@ fn find_claude_transcript_by_embedded_session_id(session_id: &str) -> Option<Pat
         }
     }
     candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.1));
+    let mut found = None;
     for (path, _) in candidates
         .into_iter()
         .take(CLAUDE_EMBEDDED_ID_SCAN_FILE_LIMIT)
     {
         if head_declares_session_id(&path, session_id) {
-            return Some(path);
+            found = Some(path);
+            break;
         }
     }
-    None
+    if !cfg!(test) {
+        if let Ok(mut cache) = claude_embedded_lookup_cache().lock() {
+            if cache.len() >= CLAUDE_EMBEDDED_ID_CACHE_MAX_ENTRIES {
+                cache.retain(|_, entry| {
+                    entry.path.is_some()
+                        || entry.checked_at.elapsed() < CLAUDE_EMBEDDED_ID_NEGATIVE_CACHE_TTL
+                });
+                if cache.len() >= CLAUDE_EMBEDDED_ID_CACHE_MAX_ENTRIES {
+                    cache.clear();
+                }
+            }
+            cache.insert(
+                session_id.to_string(),
+                CachedEmbeddedLookup {
+                    checked_at: std::time::Instant::now(),
+                    roots_stamp,
+                    path: found.clone(),
+                },
+            );
+        }
+    }
+    found
 }
 
 /// Sub-agent transcripts (`agent-<hash>.jsonl`) record the PARENT session's id

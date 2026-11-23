@@ -24,8 +24,8 @@ use std::time::{Duration, Instant};
 use ghostex_gx_chat_core::protocol::ChatMessage;
 use ghostex_gx_chat_core::questions::resource_index::{self, ResourceEntry};
 use ghostex_gx_chat_core::transcript::open_questions::{
-    asker_entries, askers, linkable_tags, mark_inherited, settle_askers, share_answers,
-    tags_answered_in_words, AskerKind, Found, TagState,
+    asker_entries, linkable_tags, settle_askers, share_answers, tags_answered_in_words, AskerKind,
+    Found, TagState,
 };
 use ghostex_gx_chat_core::transcript::page_answers::answers_page_ids;
 use ghostex_gx_chat_core::transcript::question_forms::{question_forms, QuestionForm};
@@ -168,6 +168,12 @@ pub(crate) struct Ledger {
     /// What the replies ask and withdraw, in order, kept small: the readings behind `entries`'
     /// statuses (`asking` keeps the messages themselves for the open questions).
     found: Vec<Found>,
+    /// Parsed question forms indexed by form id, built incrementally as `asking` messages arrive
+    /// so `open()` never re-clones or re-parses the whole conversation's markdown every sweep.
+    forms: HashMap<String, QuestionForm>,
+    /// Cached `tag_states(&[], |_| false)` for `asked_question_tags`, invalidated when `observe()`
+    /// adds new questions or answers.
+    cached_tag_states: Option<HashMap<String, bool>>,
     /// The index as last stored, loaded on first use and kept current, so a sweep that finds
     /// nothing new never reads or writes the table.
     stored: Option<Vec<ResourceEntry>>,
@@ -832,6 +838,7 @@ impl Ledger {
                             self.answers_at.entry(id.clone()).or_insert(at);
                         }
                         self.answered.push(id.clone());
+                        self.cached_tag_states = None;
                     }
                     // Answers in the user's own words ("Q12: yes"), and the tags an answers
                     // envelope names ("Q1277": …), settle questions asked before them whatever id
@@ -846,6 +853,7 @@ impl Ledger {
                             if !found.is_empty() {
                                 self.found.extend(found);
                                 self.asking.push((converted, self.turns));
+                                self.cached_tag_states = None;
                             }
                         }
                     }
@@ -882,7 +890,14 @@ impl Ledger {
                         if asks {
                             let found =
                                 asker_entries(std::slice::from_ref(&converted), &self.found);
-                            self.found.extend(found);
+                            if !found.is_empty() {
+                                self.found.extend(found);
+                                self.cached_tag_states = None;
+                            }
+                            let row = Arc::new(converted.clone());
+                            for form in question_forms(std::slice::from_ref(&row)) {
+                                self.forms.insert(form.id.clone(), form);
+                            }
                             self.asking.push((converted, self.turns));
                         }
                     }
@@ -899,11 +914,6 @@ impl Ledger {
         forked_at: Option<i64>,
         page_answered: impl Fn(&str) -> bool,
     ) -> Vec<OpenAsker> {
-        let messages: Vec<ghostex_gx_chat_core::state::ChatRow> = self
-            .asking
-            .iter()
-            .map(|(message, _)| std::sync::Arc::new(message.clone()))
-            .collect();
         let turn_of: HashMap<&str, usize> = self
             .asking
             .iter()
@@ -911,9 +921,12 @@ impl Ledger {
             .collect();
         let mut answered = self.answered.clone();
         answered.extend(also_answered.iter().cloned());
-        let forms = question_forms(&messages);
-        let mut found = askers(&messages, &answered);
-        mark_inherited(&mut found, &messages, forked_at);
+        let mut found = settle_askers(&self.found, &answered);
+        if let Some(forked_at) = forked_at {
+            for asker in &mut found {
+                asker.inherited = asker.at.is_some_and(|at| at < forked_at);
+            }
+        }
         for asker in &mut found {
             if asker.kind == AskerKind::Page && !asker.answered && page_answered(&asker.id) {
                 asker.answered = true;
@@ -925,7 +938,7 @@ impl Ledger {
             .into_iter()
             .filter(|asker| !asker.answered && !asker.obsolete && !asker.inherited)
             .map(|asker| {
-                let form = forms.iter().find(|form| form.id == asker.id).cloned();
+                let form = self.forms.get(&asker.id).cloned();
                 OpenAsker {
                     waiting: asker.waiting(form.as_ref()),
                     form,
@@ -1277,11 +1290,16 @@ impl Ledger {
         let mut incremental = SessionChatIncrementalState::new();
         incremental.rebase(saved.offset);
         incremental.seed_last_message_timestamp(saved.last_message_timestamp);
-        // `found` is what `observe` read off the kept replies, in order.
+        // `found` and `forms` are what `observe` read off the kept replies, in order.
         let mut found = Vec::new();
+        let mut forms = HashMap::new();
         for (message, _) in &saved.asking {
             let more = asker_entries(std::slice::from_ref(message), &found);
             found.extend(more);
+            let row = Arc::new(message.clone());
+            for form in question_forms(std::slice::from_ref(&row)) {
+                forms.insert(form.id.clone(), form);
+            }
         }
         Some(Ledger {
             path: saved.path,
@@ -1294,6 +1312,8 @@ impl Ledger {
             notified: saved.notified.into_iter().collect(),
             entries: saved.entries,
             found,
+            forms,
+            cached_tag_states: None,
             stored: None,
             saved_offset: saved.offset,
             saved_at: Some(Instant::now()),
@@ -1344,10 +1364,15 @@ pub(crate) fn asked_question_tags(project_id: &str, session_id: &str) -> HashMap
     else {
         return HashMap::new();
     };
-    let Ok(ledger) = entry.lock() else {
+    let Ok(mut ledger) = entry.lock() else {
         return HashMap::new();
     };
-    ledger.tag_states(&[], |_| false)
+    if let Some(cached) = &ledger.cached_tag_states {
+        return cached.clone();
+    }
+    let states = ledger.tag_states(&[], |_| false);
+    ledger.cached_tag_states = Some(states.clone());
+    states
 }
 
 /// The highest `Q` tag (`Q2101` is 2101) among `tags`.

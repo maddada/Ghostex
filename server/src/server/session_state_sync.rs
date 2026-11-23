@@ -767,6 +767,11 @@ pub(crate) fn apply_session_state_sidecar(
         "eventName".to_string(),
         Value::String("legacy-session-state".to_string()),
     );
+    // Respect hook-free observation: when an agent's hookless watcher owns this session,
+    // a stale legacy `.env` sidecar must not bypass `hook_superseded` and revert its identity.
+    if crate::hookless_activity::hook_superseded(state, "/api/ingestAgentHookEvent", &params) {
+        return Ok(false);
+    }
     let output = dispatch_agent_endpoint(
         repository,
         db,
