@@ -5,9 +5,24 @@
 //! SEE-ALSO: apps/desktop/src/app/titlebar/resources_snapshot.rs (the Resources panel's session rows), apps/desktop/src/app/helpers/titlebar/resource_monitor.rs (the same ledger read).
 
 use std::collections::{HashMap, HashSet};
+#[cfg(unix)]
+use std::sync::OnceLock;
+#[cfg(unix)]
+use std::time::{Duration, Instant};
+
+#[cfg(unix)]
+use super::async_cache::{AsyncSectionCache, SectionLoad};
+
+/// How long one `ps` process table snapshot is reused across sessions and panel polls.
+#[cfg(unix)]
+const PROCESS_TABLE_FRESH_FOR: Duration = Duration::from_secs(10);
+/// Hard cap on a single `ps` invocation.
+#[cfg(unix)]
+const PS_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// One `ps -axo pid=,ppid=,rss=,command=` line.
 #[cfg_attr(not(unix), allow(dead_code))]
+#[derive(Clone)]
 struct Process {
     pid: u32,
     ppid: u32,
@@ -106,19 +121,62 @@ fn phys_footprint_bytes(pid: u32) -> Option<u64> {
     (status == 0).then_some(info.ri_phys_footprint)
 }
 
-/// The bytes zmx session `zmx_name` uses, or `None` when none of its processes is running.
 #[cfg(unix)]
-pub(super) fn read_session_memory_bytes(zmx_name: &str) -> Option<u64> {
-    let output = std::process::Command::new("ps")
+fn process_table_cache() -> &'static AsyncSectionCache<(), Vec<Process>> {
+    static CACHE: OnceLock<AsyncSectionCache<(), Vec<Process>>> = OnceLock::new();
+    CACHE.get_or_init(|| AsyncSectionCache::new(1))
+}
+
+#[cfg(unix)]
+fn fetch_process_table() -> Vec<Process> {
+    let mut command = std::process::Command::new("ps");
+    command
         .args(["-axo", "pid=,ppid=,rss=,command="])
-        .stderr(std::process::Stdio::null())
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    let Ok(mut child) = command.spawn() else {
+        return Vec::new();
+    };
+    let Some(mut stdout) = child.stdout.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Vec::new();
+    };
+    let reader = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut buf = Vec::new();
+        let _ = stdout.read_to_end(&mut buf);
+        buf
+    });
+    let deadline = Instant::now() + PS_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return Vec::new();
+                }
+                break;
+            }
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Vec::new();
+            }
+        }
     }
-    let processes = parse_processes(&String::from_utf8_lossy(&output.stdout));
-    let tree = session_tree(&processes, zmx_name);
+    let Ok(bytes) = reader.join() else {
+        return Vec::new();
+    };
+    parse_processes(&String::from_utf8_lossy(&bytes))
+}
+
+#[cfg(unix)]
+fn memory_bytes_from_table(processes: &[Process], zmx_name: &str) -> Option<u64> {
+    let tree = session_tree(processes, zmx_name);
     if tree.is_empty() {
         return None;
     }
@@ -137,6 +195,37 @@ pub(super) fn read_session_memory_bytes(zmx_name: &str) -> Option<u64> {
             })
             .sum(),
     )
+}
+
+/// Non-blocking RAM lookup: returns cached value immediately (refreshing in background if stale)
+/// or `None` while the first `ps` snapshot runs in the background.
+#[cfg(unix)]
+pub(super) fn read_session_memory_bytes_progressive(zmx_name: &str) -> Option<u64> {
+    match process_table_cache().get_or_start((), PROCESS_TABLE_FRESH_FOR, false, fetch_process_table)
+    {
+        SectionLoad::Ready(processes) => memory_bytes_from_table(&processes, zmx_name),
+        SectionLoad::Pending => None,
+    }
+}
+
+/// The bytes zmx session `zmx_name` uses, or `None` when none of its processes is running.
+/// Cached process-wide for [`PROCESS_TABLE_FRESH_FOR`] and time-boxed.
+#[cfg(unix)]
+pub(super) fn read_session_memory_bytes(zmx_name: &str) -> Option<u64> {
+    let processes = process_table_cache().get_or_wait(
+        (),
+        PROCESS_TABLE_FRESH_FOR,
+        false,
+        PS_TIMEOUT,
+        fetch_process_table,
+    )?;
+    memory_bytes_from_table(&processes, zmx_name)
+}
+
+/// Native Windows sessions run under wmx, which this read does not walk yet; the row stays hidden.
+#[cfg(not(unix))]
+pub(super) fn read_session_memory_bytes_progressive(_zmx_name: &str) -> Option<u64> {
+    None
 }
 
 /// Native Windows sessions run under wmx, which this read does not walk yet; the row stays hidden.

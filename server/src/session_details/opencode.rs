@@ -13,8 +13,14 @@ use serde_json::{json, Value};
 use crate::server::read_runtime_text;
 use crate::session_chat_opencode::{safe_id, snapshot, Client};
 
+use super::async_cache::{AsyncSectionCache, SectionLoad};
+
 /// How long the model list (for the context window) is reused.
 const MODELS_FRESH_FOR: Duration = Duration::from_secs(5 * 60);
+/// How long an OpenCode session's live section snapshot is reused before background refresh.
+const DETAILS_FRESH_FOR: Duration = Duration::from_secs(10);
+/// Hard cap for a synchronous (non-progressive) OpenCode read.
+const DETAILS_SYNC_WAIT: Duration = Duration::from_secs(3);
 /// Finished background shells kept for the panel's fold.
 const FINISHED_KEPT: usize = 20;
 const MAX_TITLE_CHARS: usize = 160;
@@ -155,16 +161,24 @@ fn background(client: &Client, directory: &str, id: &str, messages: &[Value]) ->
         .then(|| json!({"running": running, "finished": finished}))
 }
 
-/// Fills Context's window, Connectors and Background tasks for an OpenCode session. Blocking.
-pub(super) fn read_opencode_details(session: &Value, folder: Option<&str>, result: &mut Value) {
-    let Some(id) = read_runtime_text(session, "agentSessionId").filter(|id| safe_id(id)) else {
-        return;
-    };
-    let Ok(snapshot) = snapshot(&id) else {
-        return;
+#[derive(Clone, Default)]
+struct OpenCodeSections {
+    context_window: Option<u64>,
+    servers: Vec<Value>,
+    background: Option<Value>,
+}
+
+fn details_cache() -> &'static AsyncSectionCache<String, OpenCodeSections> {
+    static CACHE: OnceLock<AsyncSectionCache<String, OpenCodeSections>> = OnceLock::new();
+    CACHE.get_or_init(|| AsyncSectionCache::new(32))
+}
+
+fn fetch_opencode_sections(id: &str, folder: Option<&str>) -> OpenCodeSections {
+    let Ok(snapshot) = snapshot(id) else {
+        return OpenCodeSections::default();
     };
     let Ok(client) = Client::discover() else {
-        return;
+        return OpenCodeSections::default();
     };
     let Some(directory) = snapshot
         .info
@@ -173,20 +187,79 @@ pub(super) fn read_opencode_details(session: &Value, folder: Option<&str>, resul
         .map(str::to_string)
         .or_else(|| folder.map(str::to_string))
     else {
+        return OpenCodeSections::default();
+    };
+    let provider = snapshot.info["model"]["providerID"]
+        .as_str()
+        .map(str::to_string);
+    let model = snapshot.info["model"]["id"].as_str().map(str::to_string);
+    let messages = &snapshot.messages;
+
+    // Fetch model window, MCP servers and running shells in parallel.
+    std::thread::scope(|scope| {
+        let window_handle = scope.spawn(|| match (provider.as_deref(), model.as_deref()) {
+            (Some(p), Some(m)) => context_window(&client, &directory, p, m),
+            _ => None,
+        });
+        let mcp_handle = scope.spawn(|| mcp_servers(&client, &directory));
+        let bg_handle = scope.spawn(|| background(&client, &directory, id, messages));
+        OpenCodeSections {
+            context_window: window_handle.join().ok().flatten(),
+            servers: mcp_handle.join().ok().unwrap_or_default(),
+            background: bg_handle.join().ok().flatten(),
+        }
+    })
+}
+
+fn apply_opencode_sections(sections: OpenCodeSections, result: &mut Value) {
+    if let Some(window) = sections.context_window {
+        result["context"] = json!({"live": {"windowSize": window}});
+    }
+    if !sections.servers.is_empty() {
+        result["connectors"] = json!({"workspace": Value::Null, "servers": sections.servers});
+    }
+    if let Some(background) = sections.background {
+        result["background"] = background;
+    }
+}
+
+/// Non-blocking progressive OpenCode read.
+pub(super) fn read_opencode_details_progressive(
+    session: &Value,
+    folder: Option<&str>,
+    result: &mut Value,
+    pending: &mut Vec<&'static str>,
+) {
+    let Some(id) = read_runtime_text(session, "agentSessionId").filter(|id| safe_id(id)) else {
         return;
     };
-    let model = &snapshot.info["model"];
-    if let (Some(provider), Some(model)) = (model["providerID"].as_str(), model["id"].as_str()) {
-        if let Some(window) = context_window(&client, &directory, provider, model) {
-            result["context"] = json!({"live": {"windowSize": window}});
+    let id_owned = id.clone();
+    let folder_owned = folder.map(str::to_string);
+    match details_cache().get_or_start(id, DETAILS_FRESH_FOR, false, move || {
+        fetch_opencode_sections(&id_owned, folder_owned.as_deref())
+    }) {
+        SectionLoad::Ready(sections) => apply_opencode_sections(sections, result),
+        SectionLoad::Pending => {
+            if !pending.contains(&"connectors") {
+                pending.push("connectors");
+            }
         }
     }
-    let servers = mcp_servers(&client, &directory);
-    if !servers.is_empty() {
-        result["connectors"] = json!({"workspace": Value::Null, "servers": servers});
-    }
-    if let Some(background) = background(&client, &directory, &id, &snapshot.messages) {
-        result["background"] = background;
+}
+
+/// Fills Context's window, Connectors and Background tasks for an OpenCode session.
+pub(super) fn read_opencode_details(session: &Value, folder: Option<&str>, result: &mut Value) {
+    let Some(id) = read_runtime_text(session, "agentSessionId").filter(|id| safe_id(id)) else {
+        return;
+    };
+    let id_owned = id.clone();
+    let folder_owned = folder.map(str::to_string);
+    if let Some(sections) =
+        details_cache().get_or_wait(id, DETAILS_FRESH_FOR, false, DETAILS_SYNC_WAIT, move || {
+            fetch_opencode_sections(&id_owned, folder_owned.as_deref())
+        })
+    {
+        apply_opencode_sections(sections, result);
     }
 }
 

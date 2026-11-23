@@ -19,6 +19,7 @@
 //! SEE-ALSO: packages/gx-chat-core/src/extras/session_details/ (the rows both chats draw), apps/desktop/src/app/native_chat/session_details/ (the panel), packages/settings-catalog/src/data/official_extensions.rs (the switch).
 
 mod agents;
+mod async_cache;
 mod background;
 mod changes;
 mod codex;

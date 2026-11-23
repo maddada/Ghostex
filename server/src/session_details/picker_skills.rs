@@ -5,26 +5,28 @@
 //! CDXC:SessionDetails 2026-10-25 WHY:
 //! Only Claude's transcript says which skills it listed to the model and which the session used. Other agents record neither, so their card lists what is installed where the agent loads skills from, the same list the `$` picker shows, and has no "used in this session" part.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::OnceLock;
+use std::time::Duration;
 
 use serde_json::{json, Value};
 
 use crate::paths::GxserverPaths;
 
+use super::async_cache::{AsyncSectionCache, SectionLoad};
+
 /// How long one agent's list for one folder is reused (Grok's comes from `grok inspect`).
 const FRESH_FOR: Duration = Duration::from_secs(60);
+/// Hard cap for a synchronous (non-progressive) skills scan.
+const SYNC_WAIT: Duration = Duration::from_secs(4);
 /// The head of a SKILL.md read for its front matter.
 const FRONT_MATTER_BYTES: usize = 8 * 1024;
 const MAX_DESCRIPTION_CHARS: usize = 400;
 
-type Cache = Mutex<HashMap<(String, Option<PathBuf>), (Instant, Option<Value>)>>;
-
-fn cache() -> &'static Cache {
-    static CACHE: OnceLock<Cache> = OnceLock::new();
-    CACHE.get_or_init(Mutex::default)
+fn cache() -> &'static AsyncSectionCache<(String, Option<PathBuf>), Option<Value>> {
+    static CACHE: OnceLock<AsyncSectionCache<(String, Option<PathBuf>), Option<Value>>> =
+        OnceLock::new();
+    CACHE.get_or_init(|| AsyncSectionCache::new(64))
 }
 
 /// The `description:` of a SKILL.md's front matter, a folded (`>-`, `|`) value joined into one line.
@@ -92,26 +94,36 @@ fn read(paths: &GxserverPaths, agent: &str, folder: Option<&Path>) -> Option<Val
     })
 }
 
+/// Non-blocking skills lookup for progressive reads: returns cached/stale immediately, or starts
+/// a deduplicated background scan (including `grok inspect`) and returns `SectionLoad::Pending`.
+pub(super) fn picker_skills_progressive(
+    paths: &GxserverPaths,
+    agent: &str,
+    folder: Option<&Path>,
+) -> SectionLoad<Option<Value>> {
+    let key = (agent.to_string(), folder.map(Path::to_path_buf));
+    let paths_owned = paths.clone();
+    let agent_owned = agent.to_string();
+    let folder_owned = folder.map(Path::to_path_buf);
+    cache().get_or_start(key, FRESH_FOR, false, move || {
+        read(&paths_owned, &agent_owned, folder_owned.as_deref())
+    })
+}
+
 /// `{tracksUse: false, used: [], available}` for `agent` in `folder`, or `None` when it has no
-/// skills. Blocking; cached a minute.
+/// skills. Cached with stale-while-revalidate and time-boxed.
 pub(super) fn picker_skills(
     paths: &GxserverPaths,
     agent: &str,
     folder: Option<&Path>,
 ) -> Option<Value> {
     let key = (agent.to_string(), folder.map(Path::to_path_buf));
-    if let Some((_, value)) = cache()
-        .lock()
-        .ok()
-        .and_then(|cache| cache.get(&key).cloned())
-        .filter(|(at, _)| at.elapsed() < FRESH_FOR)
-    {
-        return value;
-    }
-    let value = read(paths, agent, folder);
-    if let Ok(mut cache) = cache().lock() {
-        cache.retain(|_, (at, _)| at.elapsed() < FRESH_FOR);
-        cache.insert(key, (Instant::now(), value.clone()));
-    }
-    value
+    let paths_owned = paths.clone();
+    let agent_owned = agent.to_string();
+    let folder_owned = folder.map(Path::to_path_buf);
+    cache()
+        .get_or_wait(key, FRESH_FOR, false, SYNC_WAIT, move || {
+            read(&paths_owned, &agent_owned, folder_owned.as_deref())
+        })
+        .flatten()
 }

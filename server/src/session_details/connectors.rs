@@ -4,14 +4,14 @@
 //! CDXC:SessionDetails 2026-10-25 DECISION:
 //! User: "for connectors we have connectors in the app but we need to surface which ones are active now for this session". From the mockups (Q10) they picked "Workspace apps and MCP servers, in two groups": the connected apps and signed-in CLIs of the session's Connectors workspace (they reach Claude as the one `ghostex-connectors` MCP server, which is therefore not listed again), then the MCP servers Claude's transcript shows this session loaded, green when connected and amber while connecting or needing a sign-in.
 
-use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::OnceLock;
+use std::time::Duration;
 
 use serde_json::{json, Map, Value};
 
 use crate::server::AppState;
 
+use super::async_cache::{AsyncSectionCache, SectionLoad};
 use super::scan::{mcp_server_key, TranscriptFacts};
 
 /// The MCP server Ghostex Connectors adds to every Claude launch (connectors/agent/launch.rs).
@@ -19,31 +19,50 @@ const CONNECTORS_SERVER: &str = "ghostex-connectors";
 
 /// How long a workspace's app list is reused (reading it can start the workspace's Executor).
 const WORKSPACE_FRESH_FOR: Duration = Duration::from_secs(60);
+/// Hard cap for a synchronous (non-progressive) workspace connectors read.
+const WORKSPACE_SYNC_WAIT: Duration = Duration::from_secs(3);
 
-/// The workspace group, remembered for a minute per session. Blocking.
+fn workspace_cache() -> &'static AsyncSectionCache<(String, String), Option<Value>> {
+    static CACHE: OnceLock<AsyncSectionCache<(String, String), Option<Value>>> = OnceLock::new();
+    CACHE.get_or_init(|| AsyncSectionCache::new(64))
+}
+
+/// Non-blocking workspace group lookup for progressive reads.
+pub(super) fn workspace_group_progressive(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> SectionLoad<Option<Value>> {
+    if !crate::connectors::connectors_enabled(&state.paths) {
+        return SectionLoad::Ready(None);
+    }
+    let key = (project_id.to_string(), session_id.to_string());
+    let state_owned = state.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    workspace_cache().get_or_start(key, WORKSPACE_FRESH_FOR, false, move || {
+        read_workspace_group(&state_owned, &pid, &sid)
+    })
+}
+
+/// The workspace group, remembered for a minute per session with stale-while-revalidate.
 pub(super) fn workspace_group(
     state: &AppState,
     project_id: &str,
     session_id: &str,
 ) -> Option<Value> {
-    static KNOWN: OnceLock<Mutex<HashMap<(String, String), (Instant, Option<Value>)>>> =
-        OnceLock::new();
+    if !crate::connectors::connectors_enabled(&state.paths) {
+        return None;
+    }
     let key = (project_id.to_string(), session_id.to_string());
-    let known = KNOWN.get_or_init(Mutex::default);
-    if let Some((_, group)) = known
-        .lock()
-        .ok()
-        .and_then(|known| known.get(&key).cloned())
-        .filter(|(at, _)| at.elapsed() < WORKSPACE_FRESH_FOR)
-    {
-        return group;
-    }
-    let group = read_workspace_group(state, project_id, session_id);
-    if let Ok(mut known) = known.lock() {
-        known.retain(|_, (at, _)| at.elapsed() < WORKSPACE_FRESH_FOR);
-        known.insert(key, (Instant::now(), group.clone()));
-    }
-    group
+    let state_owned = state.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    workspace_cache()
+        .get_or_wait(key, WORKSPACE_FRESH_FOR, false, WORKSPACE_SYNC_WAIT, move || {
+            read_workspace_group(&state_owned, &pid, &sid)
+        })
+        .flatten()
 }
 
 /// The workspace group, or `None` while Connectors is off. Blocking.
@@ -117,6 +136,28 @@ pub(super) fn read_connectors(
     mcp_status: Option<&Value>,
 ) -> Value {
     let workspace = workspace_group(state, project_id, session_id);
+    build_connectors(workspace, facts, mcp_status)
+}
+
+/// Non-blocking progressive Connectors read for Claude sessions.
+pub(super) fn read_connectors_progressive(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    facts: Option<&TranscriptFacts>,
+    mcp_status: Option<&Value>,
+) -> (Value, bool) {
+    match workspace_group_progressive(state, project_id, session_id) {
+        SectionLoad::Ready(workspace) => (build_connectors(workspace, facts, mcp_status), false),
+        SectionLoad::Pending => (build_connectors(None, facts, mcp_status), true),
+    }
+}
+
+fn build_connectors(
+    workspace: Option<Value>,
+    facts: Option<&TranscriptFacts>,
+    mcp_status: Option<&Value>,
+) -> Value {
     let mut servers = Vec::new();
     if let Some(facts) = facts {
         let mut keys: Vec<&String> = facts

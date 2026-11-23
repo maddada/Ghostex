@@ -15,6 +15,8 @@ use crate::wire::{ChatRpcMethod, RpcOutcome};
 const POLL_MS: f64 = 10_000.0;
 /// How soon it reads again while Claude's breakdown is being counted.
 const COUNTING_POLL_MS: f64 = 2_500.0;
+/// Safety cap on consecutive progressive `afterRevision` follow-ups before falling back to polling.
+const MAX_PROGRESSIVE_FOLLOWUPS: u8 = 20;
 
 /// The panel applies to this chat: the extension is on and the chat knows its session's agent.
 ///
@@ -29,14 +31,26 @@ pub fn claude(state: &ChatState) -> bool {
     state.session.agent.as_deref() == Some("claude")
 }
 
-fn read(state: &mut ChatState, refresh: bool, request_id: u64) -> Effect {
+fn read(
+    state: &mut ChatState,
+    refresh: bool,
+    after_revision: Option<u64>,
+    request_id: u64,
+) -> Effect {
     let details = &mut state.extras.session_details;
     details.request = Some(request_id);
     details.refreshing = refresh;
+    let mut params = json!({
+        "breakdown": if refresh { "refresh" } else { "auto" },
+        "progressive": true,
+    });
+    if let Some(revision) = after_revision {
+        params["afterRevision"] = json!(revision);
+    }
     Effect::SendRpc {
         request_id,
         method: ChatRpcMethod::ReadSessionDetails,
-        params: Box::new(json!({ "breakdown": if refresh { "refresh" } else { "auto" } })),
+        params: Box::new(params),
     }
 }
 
@@ -51,6 +65,7 @@ pub fn set_visible(
         return Vec::new();
     }
     details.visible = visible;
+    details.progressive_followups = 0;
     state.core.request_publish();
     if !visible {
         // The Tasks card comes back in its short form the next time the panel is shown.
@@ -67,7 +82,7 @@ pub fn set_visible(
         key: collapsed_key(),
     }];
     if state.extras.session_details.request.is_none() {
-        effects.push(read(state, false, next_request_id()));
+        effects.push(read(state, false, None, next_request_id()));
     }
     effects
 }
@@ -81,12 +96,19 @@ pub fn refresh(state: &mut ChatState, mut next_request_id: impl FnMut() -> u64) 
         state.extras.session_details.refresh_queued = true;
         return Vec::new();
     }
+    state.extras.session_details.progressive_followups = 0;
     state.core.request_publish();
-    vec![read(state, true, next_request_id())]
+    vec![read(state, true, None, next_request_id())]
 }
 
 fn counting(data: Option<&Value>) -> bool {
     data.and_then(|data| data.pointer("/context/breakdownRunning")) == Some(&Value::Bool(true))
+}
+
+fn has_pending_sections(data: Option<&Value>) -> bool {
+    data.and_then(|data| data.get("pendingSections"))
+        .and_then(Value::as_array)
+        .is_some_and(|sections| !sections.is_empty())
 }
 
 /// An answer to one of the panel's requests, or `None` when it was not the panel's.
@@ -133,10 +155,11 @@ pub fn settle_rpc(
     let details = &mut state.extras.session_details;
     details.request = None;
     details.refreshing = false;
-    match outcome {
+    let ok = match outcome {
         RpcOutcome::Ok { result } => {
             details.data = Some(result.clone());
             details.error = None;
+            true
         }
         // An older gxserver has no `readSessionDetails` and refuses it without a sentence.
         RpcOutcome::Err { message, .. } if !message.chars().any(char::is_alphabetic) => {
@@ -144,16 +167,37 @@ pub fn settle_rpc(
                 "Ghostex on this computer is too old for the Session details panel. Update it and try again."
                     .to_string(),
             );
+            false
         }
-        RpcOutcome::Err { message, .. } => details.error = Some(message.clone()),
-    }
+        RpcOutcome::Err { message, .. } => {
+            details.error = Some(message.clone());
+            false
+        }
+    };
     state.core.request_publish();
     let mut effects = Vec::new();
     if state.extras.session_details.visible {
         if std::mem::take(&mut state.extras.session_details.refresh_queued) {
-            effects.push(read(state, true, next_request_id()));
+            state.extras.session_details.progressive_followups = 0;
+            effects.push(read(state, true, None, next_request_id()));
+        } else if ok
+            && has_pending_sections(state.extras.session_details.data.as_ref())
+            && state.extras.session_details.progressive_followups < MAX_PROGRESSIVE_FOLLOWUPS
+        {
+            let revision = state
+                .extras
+                .session_details
+                .data
+                .as_ref()
+                .and_then(|data| data.get("revision"))
+                .and_then(Value::as_u64);
+            state.extras.session_details.progressive_followups += 1;
+            effects.push(read(state, false, revision, next_request_id()));
         } else {
-            let delay = if counting(state.extras.session_details.data.as_ref()) {
+            state.extras.session_details.progressive_followups = 0;
+            let delay = if counting(state.extras.session_details.data.as_ref())
+                || has_pending_sections(state.extras.session_details.data.as_ref())
+            {
                 COUNTING_POLL_MS
             } else {
                 POLL_MS
@@ -176,7 +220,8 @@ pub fn settle_tick(state: &mut ChatState, next_request_id: impl FnOnce() -> u64)
     {
         return Vec::new();
     }
-    vec![read(state, false, next_request_id())]
+    state.extras.session_details.progressive_followups = 0;
+    vec![read(state, false, None, next_request_id())]
 }
 
 /// The remembered folds arrived.
