@@ -247,6 +247,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 ..
             } => {
                 eprintln!("gxserver rpc: {path} {params}");
+                if path == "/api/boosts" && host_state == "page-boosts" {
+                    let result = forward_local_boosts(&params);
+                    cx.defer(move |cx| reply(result, cx));
+                    return;
+                }
                 if settings_machines::forwards_accounts(&host_state, &path) {
                     let background = cx.background_executor().clone();
                     cx.spawn(async move |cx| {
@@ -469,6 +474,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         || settings_secrets::owns(&state)
         || settings_grok_bot::owns(&state)
         || settings_voice::owns(&state)
+        || state == "page-boosts"
         || state.starts_with("theme")
     {
         true
@@ -807,6 +813,53 @@ thread_local! {
     /// overrides; `…-overrides…`: overrides written).
     static ORCHESTRATOR_PLAYBOOK: std::cell::RefCell<Option<(String, bool)>> =
         const { std::cell::RefCell::new(None) };
+}
+
+/// Forwards `/api/boosts` to the throwaway test gxserver `GHOSTEX_NATIVE_MODAL_DEMO_LOCAL_ENV`
+/// names (a `cargo xtask test-server` env.sh), or falls back to the built-in Boosts when unset.
+fn forward_local_boosts(params: &Value) -> Result<Value, String> {
+    if let Ok(env_file) = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_LOCAL_ENV")
+        && !env_file.trim().is_empty()
+    {
+        let body = json!({ "protocolVersion": 1, "params": params }).to_string();
+        let output = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(r#". "$1" && exec curl -s -X POST -H "Authorization: Bearer $(cat "$GHOSTEX_GXSERVER_AUTH_TOKEN_FILE")" -H 'content-type: application/json' --data-binary "$2" "$GHOSTEX_GXSERVER_BASE_URL/api/boosts""#)
+            .arg("sh")
+            .arg(&env_file)
+            .arg(&body)
+            .output()
+            .map_err(|error| error.to_string())?;
+        let answer: Value = serde_json::from_slice(&output.stdout)
+            .map_err(|_| String::from_utf8_lossy(&output.stderr).trim().to_string())?;
+        return if answer["ok"] == true {
+            Ok(answer["result"].clone())
+        } else {
+            Err(answer["message"]
+                .as_str()
+                .unwrap_or("The test gxserver refused the request.")
+                .to_string())
+        };
+    }
+    Ok(json!({
+        "on": true,
+        "hintSeen": true,
+        "boosts": ghostex_gx_chat_core::extras::boosts::BOOSTS
+            .iter()
+            .map(|boost| json!({
+                "id": boost.id,
+                "label": boost.label,
+                "category": boost.category,
+                "iconPath": boost.icon,
+                "description": boost.description,
+                "prompt": boost.prompt,
+                "edited": false,
+                "default": boost.prompt,
+            }))
+            .collect::<Vec<_>>(),
+        "custom": [],
+        "icons": ghostex_gx_chat_core::extras::boosts::CUSTOM_ICONS,
+    }))
 }
 
 /// The scripted gxserver's `/api/readCoordinatorPlaybook` and `/api/setCoordinatorPlaybook`

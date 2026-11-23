@@ -1293,8 +1293,8 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                 }),
             )
             .into_any_element(),
-        // Inbox it! and Schedule it: the card each leaves, as the dock and All Automations show it.
-        "inbox" | "schedule" => div()
+        // Triage messages, Add to Pings, Inbox it! and Schedule it: the cards each leaves.
+        "triage-messages" | "needs-you" | "inbox" | "schedule" => div()
             .size_full()
             .flex()
             .flex_col()
@@ -1303,6 +1303,15 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
             .p(px(8.0 * s))
             .children(
                 match kind {
+                    "triage-messages" => vec![
+                        ("DM: Launch timeline", "Urgent · suggested reply", "Reply"),
+                        ("@you: Review copy", "Today · unanswered ask", "Reply"),
+                    ],
+                    "needs-you" => vec![(
+                        "Check billing on mobile",
+                        "Verify totals before release",
+                        "Done",
+                    )],
                     "inbox" => vec![(
                         "Why does CI fail on main?",
                         "A race in the token refresh",
@@ -1328,14 +1337,14 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                         .border_color(strong)
                         .child(
                             svg()
-                                .path(if kind == "inbox" {
-                                    "titlebar/circle-dot.svg"
-                                } else {
-                                    "titlebar/clock.svg"
+                                .path(match kind {
+                                    "triage-messages" => "titlebar/message-circle.svg",
+                                    "needs-you" | "inbox" => "titlebar/circle-dot.svg",
+                                    _ => "titlebar/clock.svg",
                                 })
                                 .flex_none()
                                 .size(px(12.0 * s))
-                                .text_color(if kind == "inbox" {
+                                .text_color(if matches!(kind, "needs-you" | "inbox") {
                                     gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR)
                                         .into()
                                 } else {

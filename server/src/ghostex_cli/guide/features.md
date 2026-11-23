@@ -2575,9 +2575,12 @@ the problem first, then shows the same screenshot or test passing after its fix 
 place of Show screenshots, whose pill still works); Second opinion, where an agent on another
 model checks the answer and, when code changed, reviews the diff), Work (Triage requests,
 which explains issues, pull requests or tickets one by one on a Live page with a decision for
-each; Plan with workers; Try it in a worktree; Ship it, which commits the work on a branch,
+each; Triage messages, which puts open mentions, DMs, promises and unanswered asks on a Live
+page grouped by urgency with suggested replies, choices and a note box; Plan with workers; Try
+it in a worktree; Ship it, which commits the work on a branch,
 pushes it and opens a pull request, never merging it; Save to Docs; Steps for me, which lists
-what only you can do under Needs you; Inbox it!, where the agent answers on your Needs you
+what only you can do under Needs you; Add to Pings, which files a Ping about the
+message with context and a Done button or choices; Inbox it!, where the agent answers on your Needs you
 list instead of in the chat: your ask and its answer arrive as one to-do with Done (or
 choices), which Details opens in full; Schedule it, which saves the job as an automation that
 runs once later or on repeat and reports back, changed or stopped in All Automations; Tell me
