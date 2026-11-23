@@ -76,6 +76,9 @@ impl GxStoreHost {
                 // This computer's settings sync notes: the "changed on X · Undo" toast
                 // (gx_store/settings_sync.rs).
                 effect @ Effect::SettingsSyncNote { .. } => self.app_effects.push(effect),
+                // Agent-initiated view switch requests from this computer or any connected remote
+                // computer become clickable toasts (app/switch_requests.rs).
+                effect @ Effect::SwitchRequest { .. } => self.app_effects.push(effect),
                 // Connectors are this computer's (their sign-ins never leave it).
                 Effect::ConnectorsChanged { machine } if machine.is_local() => {
                     self.app_effects.push(Effect::ConnectorsChanged { machine });
@@ -169,6 +172,9 @@ impl GhostexGpuiApp {
             }
             Effect::RefetchCloudBoxes => self.gx_store_refresh_cloud_boxes(cx),
             Effect::SettingsSyncNote { note } => self.gx_store_show_settings_sync_note(&note, cx),
+            Effect::SwitchRequest { machine, request } => {
+                self.show_gpui_switch_request_toast(machine, *request, cx)
+            }
             Effect::ApprovalRequestsChanged {
                 machine,
                 change,

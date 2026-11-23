@@ -16219,6 +16219,20 @@
       "description": "Move the keyboard to the sidebar's session list, showing the sidebar if it is hidden: arrow keys move through the sessions and Enter opens one. Escape or the same key gives the keyboard back.",
       "defaultKey": "cmd+shift+j",
       "terminalDefaultKey": "cmd+shift+j"
+    },
+    {
+      "id": "acceptSwitchRequestToast",
+      "title": "Accept Switch Request Toast",
+      "description": "Accept the visible switch-request toast (Switch or Open) when an agent asks to change what you are looking at.",
+      "defaultKey": "cmd+shift+j",
+      "terminalDefaultKey": "cmd+shift+j"
+    },
+    {
+      "id": "openSwitchRequestExternal",
+      "title": "Open Switch Request Externally",
+      "description": "Open a visible browser switch-request toast in your default external browser instead of Ghostex's built-in Browser.",
+      "defaultKey": "cmd+shift+e",
+      "terminalDefaultKey": "cmd+shift+e"
     }
   ]
 }

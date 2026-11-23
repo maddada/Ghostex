@@ -171,3 +171,5 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Unfocus Terminal | terminal only |  | `cmd+shift+m` |  | Take the keyboard out of the terminal, so the hotkeys that apply outside a terminal work next. | `unfocusTerminal` |
 | Focus Last Terminal | `cmd+shift+m` |  | none |  | Put the keyboard back in the terminal that had it last, bringing its session forward if it is not on screen. | `focusLastTerminal` |
 | Focus Sidebar | `cmd+shift+j` |  | `cmd+shift+j` |  | Move the keyboard to the sidebar's session list, showing the sidebar if it is hidden: arrow keys move through the sessions and Enter opens one. Escape or the same key gives the keyboard back. | `focusSidebar` |
+| Accept Switch Request Toast | `cmd+shift+j` |  | `cmd+shift+j` |  | Accept the visible switch-request toast (Switch or Open) when an agent asks to change what you are looking at. | `acceptSwitchRequestToast` |
+| Open Switch Request Externally | `cmd+shift+e` |  | `cmd+shift+e` |  | Open a visible browser switch-request toast in your default external browser instead of Ghostex's built-in Browser. | `openSwitchRequestExternal` |

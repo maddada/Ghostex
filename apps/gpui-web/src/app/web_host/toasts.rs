@@ -11,9 +11,11 @@ use crate::app::window::notice_modal::{
 };
 use crate::app::window::toast::{
     GPUI_APP_TOAST_BOTTOM_MARGIN, GPUI_APP_TOAST_DEFAULT_DURATION_MS, GPUI_APP_TOAST_MAX_VISIBLE,
-    GPUI_APP_TOAST_WINDOW_WIDTH, GpuiAppToast, GpuiAppToastAction, GpuiAppToastLevel,
-    GpuiAppToastWindow, gpui_app_toast_from_bridge_message, gpui_app_toast_stack_height,
-    gpui_app_toast_without_repeats, gpui_normalized_app_toast_description,
+    GPUI_APP_TOAST_WINDOW_WIDTH, GPUI_SWITCH_REQUEST_TOAST_DURATION_MS,
+    GPUI_SWITCH_REQUEST_TOAST_ID, GpuiAppToast, GpuiAppToastAction, GpuiAppToastLevel,
+    GpuiAppToastWindow, GpuiSwitchRequestToast, gpui_app_toast_from_bridge_message,
+    gpui_app_toast_stack_height, gpui_app_toast_without_repeats,
+    gpui_normalized_app_toast_description, gpui_switch_request_now_ms, switch_request_hotkey_chord,
 };
 
 #[derive(Default)]
@@ -140,6 +142,9 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) {
         match action {
+            GpuiAppToastAction::SwitchRequest(_) => {
+                let _ = self.accept_gpui_switch_request_toast(None, cx);
+            }
             GpuiAppToastAction::OpenAccounts { .. } => self.dispatch_gpui_workspace_action_toast(
                 "info",
                 "Not in the browser",
@@ -225,6 +230,7 @@ impl GhostexGpuiApp {
                     app,
                     toasts,
                     hovered_toast_id: None,
+                    hovered_switch_button: None,
                     blur_region: Vec::new(),
                 }));
             }
@@ -319,4 +325,277 @@ impl GhostexGpuiApp {
 
     /// The page gives focus back by itself when the notice window goes.
     pub(crate) fn app_notice_window_closed(&mut self, _cx: &mut Context<Self>) {}
+
+    /// Shows (or replaces in place, latest wins) an agent switch-request toast in gpui-web.
+    pub(crate) fn show_gpui_switch_request_toast(
+        &mut self,
+        machine: ghostex_gx_core::MachineId,
+        request: ghostex_gx_protocol::SwitchRequest,
+        cx: &mut Context<Self>,
+    ) {
+        let machine_id = machine.remote_id().map(str::to_string);
+        let primary_label = if request.primary_label.trim().is_empty() {
+            "Switch".to_string()
+        } else {
+            request.primary_label.clone()
+        };
+        let description = request.subtitle.clone();
+        let switch_request = GpuiSwitchRequestToast {
+            external_url: request.external_url.clone(),
+            icon: request.icon.clone(),
+            primary_label,
+            machine_id,
+            request: request.clone(),
+            started_at_ms: gpui_switch_request_now_ms(),
+            remaining_ms: GPUI_SWITCH_REQUEST_TOAST_DURATION_MS,
+            paused: false,
+        };
+        let title = if request.title.trim().is_empty() {
+            "Switch view".to_string()
+        } else {
+            request.title
+        };
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: GPUI_SWITCH_REQUEST_TOAST_ID.to_string(),
+                level: GpuiAppToastLevel::Info,
+                title,
+                description,
+                copy_text: None,
+                action: Some(GpuiAppToastAction::SwitchRequest(Box::new(switch_request))),
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_SWITCH_REQUEST_TOAST_DURATION_MS,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn has_gpui_switch_request_toast(&self) -> bool {
+        self.web_host
+            .toasts
+            .toasts
+            .iter()
+            .any(|toast| toast.id == GPUI_SWITCH_REQUEST_TOAST_ID)
+    }
+
+    pub(crate) fn pause_gpui_switch_request_toast(&mut self, cx: &mut Context<Self>) {
+        let now = gpui_switch_request_now_ms();
+        let mut changed = false;
+        self.web_host.toasts.epoch = self.web_host.toasts.epoch.wrapping_add(1);
+        let next_epoch = self.web_host.toasts.epoch;
+        if let Some(toast) = self
+            .web_host
+            .toasts
+            .toasts
+            .iter_mut()
+            .find(|toast| toast.id == GPUI_SWITCH_REQUEST_TOAST_ID)
+        {
+            if let Some(GpuiAppToastAction::SwitchRequest(sr)) = &mut toast.action {
+                if !sr.paused {
+                    let elapsed = now.saturating_sub(sr.started_at_ms);
+                    sr.remaining_ms = sr.remaining_ms.saturating_sub(elapsed).max(250);
+                    sr.paused = true;
+                    toast.epoch = next_epoch;
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            self.sync_web_toasts(cx);
+        }
+    }
+
+    pub(crate) fn resume_gpui_switch_request_toast(&mut self, cx: &mut Context<Self>) {
+        let now = gpui_switch_request_now_ms();
+        let mut schedule: Option<(String, u64, u64)> = None;
+        self.web_host.toasts.epoch = self.web_host.toasts.epoch.wrapping_add(1);
+        let next_epoch = self.web_host.toasts.epoch;
+        if let Some(toast) = self
+            .web_host
+            .toasts
+            .toasts
+            .iter_mut()
+            .find(|toast| toast.id == GPUI_SWITCH_REQUEST_TOAST_ID)
+        {
+            if let Some(GpuiAppToastAction::SwitchRequest(sr)) = &mut toast.action {
+                if sr.paused {
+                    sr.paused = false;
+                    sr.started_at_ms = now;
+                    toast.epoch = next_epoch;
+                    schedule = Some((toast.id.clone(), next_epoch, sr.remaining_ms));
+                }
+            }
+        }
+        if let Some((toast_id, epoch, remaining_ms)) = schedule {
+            cx.spawn(async move |this, cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(remaining_ms))
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    if this
+                        .web_host
+                        .toasts
+                        .toasts
+                        .iter()
+                        .any(|toast| toast.id == toast_id && toast.epoch == epoch)
+                    {
+                        this.remove_gpui_app_toast(&toast_id, cx);
+                    }
+                });
+            })
+            .detach();
+            self.sync_web_toasts(cx);
+        }
+    }
+
+    pub(crate) fn accept_gpui_switch_request_toast(
+        &mut self,
+        _window: Option<&mut gpui::Window>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let sr = self
+            .web_host
+            .toasts
+            .toasts
+            .iter()
+            .find(|toast| toast.id == GPUI_SWITCH_REQUEST_TOAST_ID)
+            .and_then(|toast| match &toast.action {
+                Some(GpuiAppToastAction::SwitchRequest(sr)) => Some((**sr).clone()),
+                _ => None,
+            });
+        let Some(sr) = sr else {
+            return false;
+        };
+        self.remove_gpui_app_toast(GPUI_SWITCH_REQUEST_TOAST_ID, cx);
+        let machine = match sr.machine_id {
+            Some(id) => ghostex_gx_core::MachineId::Remote(id),
+            None => ghostex_gx_core::MachineId::Local,
+        };
+        match sr.request.action.as_str() {
+            "focusSession" | "renameCommand" => {
+                if let (Some(project_id), Some(session_id)) =
+                    (sr.request.project_id.clone(), sr.request.session_id.clone())
+                {
+                    let key = ghostex_gx_core::SessionKey {
+                        machine,
+                        project_id,
+                        session_id,
+                    };
+                    let terminal = self.show_terminal;
+                    self.web_open_session_in_work_area(key, terminal, cx);
+                }
+            }
+            "openBrowser" | "openBrowserPane" => {
+                if let Some(url) = sr.external_url.as_deref() {
+                    crate::app::helpers::gpui_open_external_url(url, cx);
+                }
+            }
+            "focusGroup" | "switchProject" => {
+                if let Some(project_id) = sr.request.project_id.as_deref() {
+                    if let Some(session) = self
+                        .gx_store
+                        .sidebar_view()
+                        .groups
+                        .iter()
+                        .find(|group| {
+                            group.core.group_id == project_id || group.core.storage_id == project_id
+                        })
+                        .and_then(|group| group.core.sessions.first())
+                        .and_then(|session| session.row.key.clone())
+                    {
+                        let terminal = self.show_terminal;
+                        self.web_open_session_in_work_area(session, terminal, cx);
+                    }
+                }
+            }
+            _ => {
+                self.dispatch_gpui_workspace_action_toast(
+                    "info",
+                    "Not in the browser",
+                    "This switch action is available in the Ghostex desktop app.",
+                    cx,
+                );
+            }
+        }
+        true
+    }
+
+    pub(crate) fn open_gpui_switch_request_external(&mut self, cx: &mut Context<Self>) -> bool {
+        let url = self
+            .web_host
+            .toasts
+            .toasts
+            .iter()
+            .find(|toast| toast.id == GPUI_SWITCH_REQUEST_TOAST_ID)
+            .and_then(|toast| match &toast.action {
+                Some(GpuiAppToastAction::SwitchRequest(sr)) => sr.external_url.clone(),
+                _ => None,
+            });
+        let Some(url) = url else {
+            return false;
+        };
+        self.remove_gpui_app_toast(GPUI_SWITCH_REQUEST_TOAST_ID, cx);
+        crate::app::helpers::gpui_open_external_url(&url, cx);
+        true
+    }
+
+    pub(crate) fn handle_web_switch_request_key_down(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.has_gpui_switch_request_toast() {
+            return false;
+        }
+        let mac = crate::terminal_element::uses_macos_text_editing();
+        if switch_request_hotkey_chord("acceptSwitchRequestToast")
+            .as_deref()
+            .is_some_and(|chord| web_keystroke_matches_chord(&event.keystroke, chord, mac))
+        {
+            return self.accept_gpui_switch_request_toast(None, cx);
+        }
+        if switch_request_hotkey_chord("openSwitchRequestExternal")
+            .as_deref()
+            .is_some_and(|chord| web_keystroke_matches_chord(&event.keystroke, chord, mac))
+        {
+            return self.open_gpui_switch_request_external(cx);
+        }
+        false
+    }
+}
+
+fn web_keystroke_matches_chord(keystroke: &gpui::Keystroke, chord: &str, mac: bool) -> bool {
+    let mut want_cmd = false;
+    let mut want_ctrl = false;
+    let mut want_alt = false;
+    let mut want_shift = false;
+    let mut want_key: Option<&str> = None;
+    for part in chord.split('+') {
+        let part = part.trim();
+        if part.eq_ignore_ascii_case("cmd") || part.eq_ignore_ascii_case("command") {
+            if mac {
+                want_cmd = true;
+            } else {
+                want_ctrl = true;
+            }
+        } else if part.eq_ignore_ascii_case("ctrl") || part.eq_ignore_ascii_case("control") {
+            want_ctrl = true;
+        } else if part.eq_ignore_ascii_case("alt") || part.eq_ignore_ascii_case("option") {
+            want_alt = true;
+        } else if part.eq_ignore_ascii_case("shift") {
+            want_shift = true;
+        } else if !part.is_empty() {
+            want_key = Some(part);
+        }
+    }
+    let Some(want_key) = want_key else {
+        return false;
+    };
+    keystroke.modifiers.platform == want_cmd
+        && keystroke.modifiers.control == want_ctrl
+        && keystroke.modifiers.alt == want_alt
+        && keystroke.modifiers.shift == want_shift
+        && keystroke.key.eq_ignore_ascii_case(want_key)
 }

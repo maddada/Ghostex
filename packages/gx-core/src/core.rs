@@ -197,6 +197,12 @@ pub enum Effect {
         change: String,
         request: Option<ghostex_gx_protocol::approval::ApprovalRequest>,
     },
+    /// `switchRequest` from a computer's gxserver: an agent asked to switch what the user is
+    /// looking at; show a clickable toast instead of switching right away.
+    SwitchRequest {
+        machine: MachineId,
+        request: Box<ghostex_gx_protocol::SwitchRequest>,
+    },
     /// The machine's stream just went live: a first connect, or back after a loss, when the
     /// payload-less announcements above may have been missed. Read the HUD, the recent projects
     /// and the notification feed again (`refetch.rs`).
@@ -598,6 +604,13 @@ impl Core {
                     machine: machine.clone(),
                     change: frame.change,
                     request: frame.request,
+                });
+            }
+            // Agent-initiated view switch requests become clickable toasts on every connected client.
+            ServerEvent::SwitchRequest(frame) => {
+                output.effects.push(Effect::SwitchRequest {
+                    machine: machine.clone(),
+                    request: Box::new(frame.request),
                 });
             }
             // Only this computer's gxserver is home to boxes; a box's own gxserver or a remote

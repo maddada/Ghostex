@@ -71,6 +71,10 @@ pub const VIEW_SCOPED_HOTKEY_IDS: &[&str] = &[
     "inboxOpenItem",
     "inboxMarkRead",
     "inboxSnooze",
+    // Active only while a switch-request toast is on screen, so Cmd+Shift+J still focuses the
+    // sidebar whenever no switch-request toast is visible.
+    "acceptSwitchRequestToast",
+    "openSwitchRequestExternal",
 ];
 
 /// The settings key that holds the Terminal focused bindings, the way `hotkeys` holds the normal

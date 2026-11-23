@@ -155,6 +155,7 @@ impl GhostexGpuiApp {
                     app,
                     toasts,
                     hovered_toast_id: None,
+                    hovered_switch_button: None,
                     blur_region: Vec::new(),
                 })
             })

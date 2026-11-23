@@ -225,6 +225,8 @@ fn macos_normal_bindings_keep_their_chords() {
         ("unfocusTerminal", "cmd-shift-m"),
         ("focusLastTerminal", "cmd-shift-m"),
         ("focusSidebar", "cmd-shift-j"),
+        ("acceptSwitchRequestToast", "cmd-shift-j"),
+        ("openSwitchRequestExternal", "cmd-shift-e"),
     ]);
     // Only the Terminal focused section has these.
     for id in TERMINAL_ONLY_HOTKEY_IDS {
@@ -416,6 +418,8 @@ fn windows_and_linux_normal_bindings_are_the_ones_the_app_always_had() {
         ("sleepFocusedSessionSecondKey", "alt-shift-s"),
         ("focusLastTerminal", "ctrl-shift-m"),
         ("focusSidebar", "ctrl-shift-j"),
+        ("acceptSwitchRequestToast", "ctrl-shift-j"),
+        ("openSwitchRequestExternal", "ctrl-shift-e"),
     ]);
     for platform in WINDOWS_AND_LINUX {
         assert_eq!(normal_keystrokes(platform), expected, "{platform:?}");

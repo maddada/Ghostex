@@ -380,6 +380,9 @@ impl GhostexGpuiApp {
                 | ghostex_gx_core::Effect::DomainProjectChanged { .. }) => {
                     self.gx_store_perform_hud_effect(effect, cx)
                 }
+                ghostex_gx_core::Effect::SwitchRequest { machine, request } => {
+                    self.show_gpui_switch_request_toast(machine, *request, cx);
+                }
                 _ => {}
             }
         }

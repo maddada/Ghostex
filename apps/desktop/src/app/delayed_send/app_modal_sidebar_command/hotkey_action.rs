@@ -50,6 +50,15 @@ impl GhostexGpuiApp {
                     self.toggle_sidebar_keyboard_focus(window, cx);
                     return;
                 }
+                // app/switch_requests.rs
+                if action_id == "acceptSwitchRequestToast" {
+                    let _ = self.accept_gpui_switch_request_toast(Some(window), cx);
+                    return;
+                }
+                if action_id == "openSwitchRequestExternal" {
+                    let _ = self.open_gpui_switch_request_external(cx);
+                    return;
+                }
                 if gpui_focused_chat_hotkey_action_id(action_id) {
                     self.run_focused_chat_hotkey(action_id, window, cx);
                     return;

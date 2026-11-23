@@ -1817,4 +1817,29 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("focusSidebar")), ("kind", J::Str("terminalFocus"))]),
     },
+    // CDXC:SwitchRequests 2026-11-23 DECISION:
+    // User (Q4709): Cmd+Shift+J accepts a visible switch-request toast (Switch / Open); while no
+    // toast is shown, Cmd+Shift+J keeps focusing the sidebar. Open external uses Cmd+Shift+E
+    // because Cmd+Shift+O is already bound to New Agent Session (and Ctrl+Shift+X is reserved for
+    // strikethrough on Windows/Linux). Both are rebindable here.
+    HotkeyDefinition {
+        id: "acceptSwitchRequestToast",
+        title: "Accept Switch Request Toast",
+        description: "Accept the visible switch-request toast (Switch or Open) when an agent asks to change what you are looking at.",
+        default_key: "cmd+shift+j",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("acceptSwitchRequestToast")), ("kind", J::Str("switchRequestToast"))]),
+    },
+    HotkeyDefinition {
+        id: "openSwitchRequestExternal",
+        title: "Open Switch Request Externally",
+        description: "Open a visible browser switch-request toast in your default external browser instead of Ghostex's built-in Browser.",
+        default_key: "cmd+shift+e",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("openSwitchRequestExternal")), ("kind", J::Str("switchRequestToast"))]),
+    },
 ];

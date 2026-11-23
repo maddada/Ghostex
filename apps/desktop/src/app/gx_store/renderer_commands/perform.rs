@@ -45,6 +45,25 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> Result<Value, RendererCommandError> {
+        self.gx_store_perform_renderer_command_inner(command, false, window, cx)
+    }
+
+    pub(crate) fn gx_store_perform_renderer_command_allowing_rename_hop(
+        &mut self,
+        command: &RendererCommand,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Result<Value, RendererCommandError> {
+        self.gx_store_perform_renderer_command_inner(command, true, window, cx)
+    }
+
+    fn gx_store_perform_renderer_command_inner(
+        &mut self,
+        command: &RendererCommand,
+        allow_rename_focus_hop: bool,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Result<Value, RendererCommandError> {
         let payload = super::project_path::with_registered_project_folder(
             &self.gx_store.core,
             &command.payload,
@@ -76,8 +95,49 @@ impl GhostexGpuiApp {
             RendererVerb::RenameCommand {
                 session,
                 title,
-                command,
+                command: rename_command_text,
             } => {
+                // CDXC:SwitchRequests 2026-11-23 (Q4705):
+                // Do not steal focus to rename an unfocused session unless the user explicitly
+                // accepted the switch-request toast.
+                #[cfg(not(ghostex_web))]
+                if !allow_rename_focus_hop
+                    && self.gx_store.core.focus().focused_session.as_ref() != Some(&session.key)
+                {
+                    let target_title = self
+                        .gx_store
+                        .core
+                        .presentation()
+                        .session(&session.key)
+                        .map(|row| row.title.clone())
+                        .filter(|value| !value.trim().is_empty())
+                        .unwrap_or_else(|| session.key.session_id.clone());
+                    let request = ghostex_gx_core::protocol::SwitchRequest {
+                        id: command.command_id.clone(),
+                        action: "renameCommand".to_string(),
+                        payload: command.payload.clone(),
+                        title: format!("Rename {target_title}"),
+                        subtitle: (!title.trim().is_empty()).then(|| format!("New title: {title}")),
+                        primary_label: "Switch".to_string(),
+                        icon: None,
+                        requester_title: None,
+                        project_id: Some(session.key.project_id.clone()),
+                        session_id: Some(session.key.session_id.clone()),
+                        external_url: None,
+                        created_at: command.created_at.clone(),
+                    };
+                    self.show_gpui_switch_request_toast(session.key.machine.clone(), request, cx);
+                    return Ok(json!({
+                        "accepted": true,
+                        "action": "renameCommand",
+                        "ok": true,
+                        "shown": false,
+                        "toastShown": true,
+                        "reason": "switchRequestToast",
+                        "session": session_json(&session),
+                    }));
+                }
+                let _ = allow_rename_focus_hop;
                 // Surfacing the session first is what the old runtime did before it posted the
                 // rename; the Rust delivery then focuses and waits for the terminal to mount.
                 if !self.dispatch_gpui_status_activation(&session.sidebar_session_id, cx) {
@@ -89,7 +149,7 @@ impl GhostexGpuiApp {
                     "projectId": session.key.project_id,
                     "sessionId": session.key.session_id,
                     "title": title,
-                    "command": command,
+                    "command": rename_command_text,
                 });
                 self.receive_sidebar_workspace_terminal_rename_command_payload(
                     &payload.to_string(),

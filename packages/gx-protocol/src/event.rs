@@ -168,6 +168,50 @@ pub struct ApprovalRequestsChangedFrame {
     pub request: Option<crate::approval::ApprovalRequest>,
 }
 
+/// Wire `type` of [`SwitchRequestFrame`].
+pub const SWITCH_REQUEST_EVENT_TYPE: &str = "switchRequest";
+
+/// One programmatic request from an agent session asking Ghostex to change what the user is
+/// looking at (focus a session, switch project, open a URL, open a file, open Settings, or hop
+/// for a legacy rename command). Clients show it as a clickable toast instead of switching right
+/// away.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SwitchRequest {
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub id: String,
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub action: String,
+    #[serde(default)]
+    pub payload: Value,
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub primary_label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requester_title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_url: Option<String>,
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SwitchRequestFrame {
+    #[serde(flatten)]
+    pub header: EventHeader,
+    pub request: SwitchRequest,
+}
+
 /// A command the daemon dispatches to the registered renderer socket. It must be answered with a
 /// `rendererCommandResult` before `timeout_ms`, or the originating RPC fails with
 /// `dependencyUnavailable`.
@@ -217,6 +261,7 @@ pub enum ServerEvent {
     ConnectorsChanged(ConnectorsChangedFrame),
     SettingsSyncNote(SettingsSyncNoteFrame),
     ApprovalRequestsChanged(Box<ApprovalRequestsChangedFrame>),
+    SwitchRequest(Box<SwitchRequestFrame>),
     CloudBoxesChanged(Box<crate::cloud_box::CloudBoxesChangedFrame>),
     RendererCommand(RendererCommandFrame),
     SessionChatSnapshot(Box<ChatSnapshotFrame>),
@@ -294,6 +339,7 @@ impl ServerEvent {
             Self::ConnectorsChanged(_) => "connectorsChanged",
             Self::SettingsSyncNote(_) => "settingsSyncNote",
             Self::ApprovalRequestsChanged(_) => "approvalRequestsChanged",
+            Self::SwitchRequest(_) => SWITCH_REQUEST_EVENT_TYPE,
             Self::CloudBoxesChanged(_) => crate::cloud_box::CLOUD_BOXES_CHANGED_EVENT_TYPE,
             Self::RendererCommand(_) => "rendererCommand",
             Self::SessionChatSnapshot(_) => "sessionChatSnapshot",
@@ -327,6 +373,7 @@ impl ServerEvent {
             Self::ConnectorsChanged(frame) => &frame.header,
             Self::SettingsSyncNote(frame) => &frame.header,
             Self::ApprovalRequestsChanged(frame) => &frame.header,
+            Self::SwitchRequest(frame) => &frame.header,
             Self::CloudBoxesChanged(frame) => &frame.header,
             Self::RendererCommand(frame) => &frame.header,
             Self::SessionChatSnapshot(frame) | Self::SessionChatReplaced(frame) => {
@@ -386,6 +433,7 @@ impl ServerEvent {
             "connectorsChanged" => source.read().map(Self::ConnectorsChanged),
             "settingsSyncNote" => source.read().map(Self::SettingsSyncNote),
             "approvalRequestsChanged" => source.read().map(Self::ApprovalRequestsChanged),
+            SWITCH_REQUEST_EVENT_TYPE => source.read().map(Self::SwitchRequest),
             crate::cloud_box::CLOUD_BOXES_CHANGED_EVENT_TYPE => {
                 source.read().map(Self::CloudBoxesChanged)
             }

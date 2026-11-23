@@ -432,6 +432,9 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("focusLastTerminal", "cmd+shift+m"),
     // The Focus Sidebar hotkey (#558, gx_store/sidebar_keyboard.rs).
     ("focusSidebar", "cmd+shift+j"),
+    // Switch-request toast hotkeys (CDXC:SwitchRequests 2026-11-23, Q4709).
+    ("acceptSwitchRequestToast", "cmd+shift+j"),
+    ("openSwitchRequestExternal", "cmd+shift+e"),
 ];
 
 #[cfg(all(target_os = "macos", not(ghostex_web)))]
@@ -885,6 +888,9 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
             | "focusLastTerminal"
             // Focus Sidebar reaches the sidebar from any surface, and gives the keyboard back.
             | "focusSidebar"
+            // Switch-request toast hotkeys act from any surface while a toast is visible.
+            | "acceptSwitchRequestToast"
+            | "openSwitchRequestExternal"
     ) {
         return true;
     }
@@ -1164,6 +1170,33 @@ impl GhostexGpuiApp {
         if action_id == "readAloudStop" {
             crate::app::gx_chat::read_aloud_stop();
             return true;
+        }
+        // CDXC:SwitchRequests 2026-11-23 (Q4709):
+        // While a switch-request toast is visible, Cmd+Shift+J (or whatever the user bound)
+        // accepts the toast. When no toast is visible and acceptSwitchRequestToast shares its
+        // chord with focusSidebar, Cmd+Shift+J falls back to Focus Sidebar.
+        if action_id == "acceptSwitchRequestToast" {
+            if self.accept_gpui_switch_request_toast(Some(window), cx) {
+                return true;
+            }
+            #[cfg(not(ghostex_web))]
+            if gpui_configured_hotkey_key("acceptSwitchRequestToast")
+                == gpui_configured_hotkey_key("focusSidebar")
+            {
+                self.toggle_sidebar_keyboard_focus(window, cx);
+                return true;
+            }
+            return false;
+        }
+        if action_id == "focusSidebar"
+            && self.has_gpui_switch_request_toast()
+            && gpui_configured_hotkey_key("acceptSwitchRequestToast")
+                == gpui_configured_hotkey_key("focusSidebar")
+        {
+            return self.accept_gpui_switch_request_toast(Some(window), cx);
+        }
+        if action_id == "openSwitchRequestExternal" {
+            return self.open_gpui_switch_request_external(cx);
         }
         self.handle_gpui_app_modal_sidebar_command(
             serde_json::json!({

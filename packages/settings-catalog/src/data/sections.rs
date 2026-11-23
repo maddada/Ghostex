@@ -244,6 +244,8 @@ pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
                 J::Str("openNotifications"),
                 J::Str("jumpToLatestUnreadNotification"),
                 J::Str("deferNotificationAndJumpNext"),
+                J::Str("acceptSwitchRequestToast"),
+                J::Str("openSwitchRequestExternal"),
             ]),
         ),
     ]),

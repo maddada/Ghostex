@@ -262,9 +262,14 @@ pub(super) async fn route_agents_http(
             } else {
                 None
             };
-            let response =
-                handle_zmx_session_interaction_http(&state, endpoint.path, request_id, &body_json)
-                    .await;
+            let response = handle_zmx_session_interaction_http(
+                &state,
+                &caller,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await;
             crate::session_chat_send::sender_mark::record_as_user_log(as_user_log, &response);
             response
         }
@@ -280,7 +285,8 @@ pub(super) async fn route_agents_http(
                     ),
                 ));
             }
-            handle_renderer_command_http(&state, endpoint.path, request_id, &body_json).await
+            handle_renderer_command_http(&state, &caller, endpoint.path, request_id, &body_json)
+                .await
         }
         _ => {
             return Err(RouteHttpRequest {

@@ -39,8 +39,12 @@ pub(crate) struct AppNotices {
 
 impl GpuiAppToast {
     /// A toast with a button (an action, or Copy details) is shown as a notice modal instead.
+    /// Switch-request toasts (`GpuiAppToastAction::SwitchRequest`) stay inline in the bottom-center
+    /// toast stack (CDXC:SwitchRequests 2026-11-23, Q4706).
     pub(crate) fn has_buttons(&self) -> bool {
-        self.action.is_some() || self.copy_text.is_some()
+        (self.action.is_some()
+            && !matches!(self.action, Some(GpuiAppToastAction::SwitchRequest(_))))
+            || self.copy_text.is_some()
     }
 
     fn is_approval(&self) -> bool {

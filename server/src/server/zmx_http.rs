@@ -343,6 +343,7 @@ pub(crate) fn kill_all_tracked_zmx_sessions(state: &AppState) -> ZmxStopAllCount
 
 pub(crate) async fn handle_zmx_session_interaction_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -386,6 +387,34 @@ pub(crate) async fn handle_zmx_session_interaction_http(
             Ok(command) => command,
             Err(error) => return zmx_error_response(endpoint_path, request_id, error),
         };
+        if let Some((caller_project_id, caller_session_id)) =
+            crate::switch_requests::caller_agent_session(state, caller)
+        {
+            let switch_request = crate::switch_requests::emit_focus_session_toast(
+                state,
+                caller_project_id,
+                caller_session_id,
+                &session,
+                payload,
+            );
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(
+                    request_id,
+                    merge_session_with_renderer_result(
+                        session,
+                        json!({
+                            "ok": true,
+                            "shown": false,
+                            "toastShown": true,
+                            "reason": "switchRequestToast",
+                            "switchRequestId": switch_request.id,
+                        }),
+                    ),
+                ),
+            );
+        }
         return match state
             .event_hub
             .dispatch_renderer_command("focusSession".to_string(), payload, 15_000)
@@ -530,6 +559,7 @@ pub(crate) fn zmx_error_response(
 
 pub(crate) async fn handle_renderer_command_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -623,6 +653,35 @@ pub(crate) async fn handle_renderer_command_http(
             );
         }
     };
+    if crate::switch_requests::is_agent_switch_request_action(&action) {
+        if let Some((caller_project_id, caller_session_id)) =
+            crate::switch_requests::caller_agent_session(state, caller)
+        {
+            let switch_request = crate::switch_requests::emit_renderer_command_toast(
+                state,
+                caller_project_id,
+                caller_session_id,
+                &action,
+                payload,
+            );
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(
+                    request_id,
+                    json!({
+                        "accepted": true,
+                        "action": action,
+                        "ok": true,
+                        "shown": false,
+                        "toastShown": true,
+                        "reason": "switchRequestToast",
+                        "switchRequestId": switch_request.id,
+                    }),
+                ),
+            );
+        }
+    }
     let answer = if action == "updateSettingsPatch" {
         save_settings_patch(state, payload, timeout_ms).await
     } else {

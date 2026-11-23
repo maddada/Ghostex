@@ -565,6 +565,12 @@ impl Render for GhostexGpuiApp {
                     app.handle_native_sidebar_action(action, window, cx)
                 }),
             )
+            .on_key_down(cx.listener(|app, event: &gpui::KeyDownEvent, window, cx| {
+                if app.handle_web_switch_request_key_down(event, cx) {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                }
+            }))
             .children(rail)
             .when_some(sidebar, |shell, sidebar| {
                 shell
