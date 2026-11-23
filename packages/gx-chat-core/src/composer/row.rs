@@ -67,16 +67,24 @@ pub struct ComposerRow {
 const NOT_READY: &str = "The terminal is not ready for a message. Open Terminal View to see why.";
 
 /// The `composerRow` of this state.
+///
+/// CDXC:SessionChat 2026-11-24 DECISION:
+/// User: for Native (Non-CLI) sessions, move "Switch to Terminal" out of the composer toolbar into
+/// the More actions (•••) menu instead of showing the `>_` button in the regular chat toolbar
+/// (Terminal sessions keep their toolbar button as before). Native sessions have no CLI terminal
+/// input box, so they never report a `terminalIssue` either.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/actions.rs (`folded_toolbar_rows`), apps/mobile/app/src/chat/native/composer/menus.ts.
 pub fn document(state: &ChatState) -> ComposerRow {
     let settings = state.core.composer_row;
+    let non_cli = state.session.non_cli_mode;
     let mut folded = Vec::new();
     if !settings.maximize {
         folded.push("maximize".to_string());
     }
-    if !settings.terminal_button {
+    if !settings.terminal_button || non_cli {
         folded.push("terminal".to_string());
     }
-    let terminal_issue = (!settings.terminal_button)
+    let terminal_issue = (!settings.terminal_button && !non_cli)
         .then(|| crate::extras::terminal_tail::project(&state.extras.terminal_tail))
         .filter(|tail| tail.readiness.as_deref() == Some("notReady"))
         .map(|tail| {

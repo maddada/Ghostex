@@ -1246,10 +1246,24 @@ pub fn read_session_terminal_tail(
                 "Session {session_id} does not exist."
             ))
         })?;
-    let zmx_name = crate::zmx::provider_zmx_session_name(&session)?;
     let agent = agent_id
         .map(str::to_string)
         .or_else(|| session_chat_composer_agent_id(&session));
+    // Native (Non-CLI) sessions run `ghostex acp-host`, not an interactive CLI with a terminal
+    // input box. Judging their zmx pane as a CLI composer returns `notReady` and triggers red
+    // readiness / Copy Report UI on desktop, web and older phones.
+    if crate::acp::session_is_non_cli(&session) {
+        return Ok(serde_json::json!({
+            "agentId": agent,
+            "captured": false,
+            "composerState": SessionChatComposerState::Unknown.as_str(),
+            "lines": [],
+            "reason": serde_json::Value::Null,
+            "sessionId": session_id,
+            "projectId": project_id,
+        }));
+    }
+    let zmx_name = crate::zmx::provider_zmx_session_name(&session)?;
     let capture = read_session_composer_verdict_capture(&zmx_name, agent.as_deref());
     let readiness = match capture.as_ref() {
         Some(capture) => session_composer_verdict(agent.as_deref(), &capture.text),

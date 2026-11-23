@@ -62,6 +62,9 @@ pub struct Document {
     pub agent_tasks: Tri<Value>,
     /// Latched once gxserver has read this session's screen.
     pub screen_probed: bool,
+    /// True while this session runs in Native (Non-CLI) mode instead of an interactive Terminal CLI.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub non_cli_mode: bool,
     /// The session's Cloud Box is paused or stopped; sending a message wakes it
     /// (`session/cloud_box.rs`). The composer's placeholder already says so.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

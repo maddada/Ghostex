@@ -48,10 +48,11 @@ impl GhostexGpuiApp {
             .as_str()
             .or_else(|| message["method"].as_str())
         {
-            // The composer's terminal button: the same session, as a terminal. For Non-CLI
-            // sessions, switch the host into interactive Agent CLI mode first, matching desktop.
+            // The composer's terminal button: the same session, as a terminal. For Native
+            // sessions, ask for confirmation (warning if a turn is active) before switching the
+            // host into interactive Terminal mode, matching desktop.
             Some("terminalView" | "switchToTerminal") => {
-                let is_non_cli = self
+                let non_cli_info = self
                     .gx_store
                     .core
                     .presentation()
@@ -59,8 +60,9 @@ impl GhostexGpuiApp {
                     .and_then(|loaded| {
                         loaded.server_session(&session.project_id, &session.session_id)
                     })
-                    .is_some_and(|row| row.non_cli_mode);
-                if is_non_cli {
+                    .filter(|row| row.non_cli_mode)
+                    .map(|row| row.activity.as_str() == "working");
+                if let Some(is_working) = non_cli_info {
                     let remote_target = match &session.machine {
                         ghostex_gx_core::MachineId::Local => Ok(None),
                         ghostex_gx_core::MachineId::Remote(machine_id) => self
@@ -83,29 +85,31 @@ impl GhostexGpuiApp {
                             return;
                         }
                     };
+                    let confirmation = if is_working {
+                        ghostex_gx_core::CloseConfirmation {
+                            title: "Interrupt and switch to Terminal?".to_string(),
+                            message: "This session is running in Native mode and currently working. Switching to Terminal is not instant: Ghostex will interrupt the active turn and reopen the agent in Terminal mode.".to_string(),
+                            confirm_label: "Interrupt & Switch".to_string(),
+                        }
+                    } else {
+                        ghostex_gx_core::CloseConfirmation {
+                            title: "Switch to Terminal?".to_string(),
+                            message: "This session is running in Native mode. Switching to Terminal is not instant: Ghostex will stop the Native host and reopen the agent in Terminal mode.".to_string(),
+                            confirm_label: "Switch to Terminal".to_string(),
+                        }
+                    };
                     let params = json!({
                         "projectId": session.project_id,
                         "sessionId": session.session_id,
                         "interrupt": true,
                     });
-                    cx.spawn(async move |this, cx| {
-                        let res = crate::app::gx_store::gx_rpc(
-                            target,
-                            "/api/switchSessionAcpToCli",
-                            params,
-                        )
-                        .await;
-                        let _ = this.update(cx, |this, cx| match res {
-                            Ok(_) => this.web_show_terminal(true, cx),
-                            Err(err) => this.dispatch_gpui_app_modal_toast(
-                                "warning",
-                                "Could not switch to Terminal",
-                                &err.message,
-                                cx,
-                            ),
-                        });
-                    })
-                    .detach();
+                    self.gx_store_confirm_in_app(
+                        confirmation,
+                        Box::new(move |app, cx| {
+                            app.web_confirm_switch_non_cli_to_terminal(target, params, cx);
+                        }),
+                        cx,
+                    );
                 } else {
                     self.web_show_terminal(true, cx);
                 }
@@ -801,6 +805,30 @@ impl GhostexGpuiApp {
                     "error",
                     "Could not switch account",
                     &error.message,
+                    cx,
+                ),
+            });
+        })
+        .detach();
+    }
+
+    /// Runs `/api/switchSessionAcpToCli` after the user confirms switching a Native session to
+    /// Terminal, matching desktop's `confirm_switch_session_non_cli_to_terminal`.
+    fn web_confirm_switch_non_cli_to_terminal(
+        &mut self,
+        target: Option<crate::app::model::GpuiRemoteGxserverRequestTarget>,
+        params: Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            let res =
+                crate::app::gx_store::gx_rpc(target, "/api/switchSessionAcpToCli", params).await;
+            let _ = this.update(cx, |this, cx| match res {
+                Ok(_) => this.web_show_terminal(true, cx),
+                Err(err) => this.dispatch_gpui_app_modal_toast(
+                    "warning",
+                    "Could not switch to Terminal",
+                    &err.message,
                     cx,
                 ),
             });

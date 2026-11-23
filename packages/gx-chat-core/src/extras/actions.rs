@@ -105,9 +105,11 @@ pub fn handle_with_ids(
         // A row of the In progress list shows its line of work in the Work panel, the chat staying
         // where it is (`open_questions::show`).
         // A page row in the dock asks how many of the page's questions are answered.
-        ActionKind::LoadPageQuestionCounts => {
-            crate::extras::work_cards::load_page_counts(state, text(action, "pageId"), next_request_id)
-        }
+        ActionKind::LoadPageQuestionCounts => crate::extras::work_cards::load_page_counts(
+            state,
+            text(action, "pageId"),
+            next_request_id,
+        ),
         ActionKind::JumpToWorkCard => {
             crate::extras::coordinator_board::focus_row(state, text(action, "key"))
         }
@@ -273,11 +275,7 @@ pub fn handle_with_ids(
                 }
             }
             for key in &finished_keys {
-                state
-                    .extras
-                    .panels
-                    .work_dock_dismissed
-                    .insert(key.clone());
+                state.extras.panels.work_dock_dismissed.insert(key.clone());
             }
             state.extras.panels.last_mark_all_read = Some(crate::state::MarkAllReadUndo {
                 page_ids,
@@ -405,6 +403,9 @@ pub fn handle_with_ids(
         }
 
         ActionKind::TerminalTailHover => {
+            if state.session.non_cli_mode {
+                return Vec::new();
+            }
             let request_id = next_request_id();
             state.extras.terminal_tail.hover_request = Some(request_id);
             vec![read_terminal_tail(request_id)]

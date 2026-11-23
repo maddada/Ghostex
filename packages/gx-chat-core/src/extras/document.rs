@@ -142,7 +142,11 @@ pub fn document_with_board(
         &state.transcript_view.session_directory,
     ));
     into.background_tasks_panel = Tri::Value(background);
-    into.terminal_tail = terminal_tail::project(&extras.terminal_tail);
+    into.terminal_tail = if state.session.non_cli_mode {
+        crate::document::TerminalTail::default()
+    } else {
+        terminal_tail::project(&extras.terminal_tail)
+    };
     into.subagent = Tri::Value(subagent::project(state));
     into.transcript_search = Tri::Value(search::project(&extras.search));
     into.save_markdown = Tri::Value(save_markdown::project(&extras.save_markdown));
