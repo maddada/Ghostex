@@ -89,6 +89,8 @@ pub(crate) fn build_agent_resume_plan(
     );
     insert_optional_string(&mut plan, "primaryCommand", primary_command.clone());
     insert_optional_string(&mut plan, "runtimeCommand", input.agent_command.clone());
+    insert_optional_string(&mut plan, "acpModel", input.acp_model.clone());
+    insert_optional_string(&mut plan, "acpEffort", input.acp_effort.clone());
     if let Some(command) = primary_command {
         /*
         CDXC:Zmx 2026-06-22-06:58:
@@ -238,7 +240,9 @@ pub(crate) const CLAUDE_CONVERSATIONS_SET_ASIDE_AT: &str = "claudeConversationsS
 #[derive(Clone)]
 pub(crate) struct AgentResumeInput {
     acp_approval_level: crate::acp::AcpApprovalLevel,
+    acp_effort: Option<String>,
     acp_mode: bool,
+    acp_model: Option<String>,
     acp_profile: crate::acp::spec::AcpLaunchProfile,
     acp_read_only: bool,
     agent_command: Option<String>,
@@ -470,40 +474,85 @@ pub(crate) fn to_agent_resume_input(
                 .unwrap_or_else(|| crate::acp::agent_acp_enabled_in_shared_settings(fam))
         }),
     };
-    let acp_profile = if acp_mode {
+    let (acp_profile, acp_model, acp_effort) = if acp_mode {
         if let Some(fam) = agent_id.as_deref() {
-            let (account_wrapper, _, _) = crate::acp::spec::extract_account_wrapper_and_ignored(
+            let stored_account_cmd = read_text_from_map(&runtime_settings, "accountCommand");
+            let account_wrapper = crate::acp::spec::account_wrapper_from_ghostex_account(
                 fam,
-                match fam {
-                    "claude" => "claude",
-                    "codex" => "codex",
-                    _ => "agy",
-                },
-                runtime_command.as_deref(),
+                Some(&runtime_settings),
+                stored_account_cmd.as_deref(),
             );
-            let (append_system_prompt_file, developer_instructions) =
-                super::acp_launch_note(fam, session_is_coordinator(&runtime_settings), false);
-            crate::acp::spec::AcpLaunchProfile {
-                account_wrapper,
-                hub_id: crate::accounts::hub::launch::picked_hub(&runtime_settings),
-                connector_envs: crate::connectors::project_cli_env_for_acp_resume(project),
-                append_system_prompt_file,
-                developer_instructions,
-                gbot_chat: is_gbot_chat(Some(&runtime_settings)),
-                gbot_api_chat: is_gbot_api_chat(Some(&runtime_settings)),
-                gbot_computer_use_off: super::gbot_computer_use(Some(&runtime_settings))
-                    == Some(false),
-                lean_worker: super::is_lean_worker(Some(&runtime_settings)),
-            }
+            let thread_marked_handovers =
+                runtime_settings
+                    .get("markedHandovers")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                    || super::is_lean_worker(Some(&runtime_settings));
+            let (append_system_prompt_file, developer_instructions) = super::acp_launch_note(
+                fam,
+                session_is_coordinator(&runtime_settings),
+                thread_marked_handovers,
+            );
+            let session_pin = read_text_value(session, "projectId")
+                .or_else(|| read_text_value(project, "projectId"))
+                .zip(read_text_value(session, "sessionId"))
+                .and_then(|(project_id, session_id)| {
+                    crate::agent_model_pins::session_choice(
+                        &project_id,
+                        &session_id,
+                        fam,
+                        agent_session_id.as_deref(),
+                    )
+                });
+            let pin_obj = runtime_settings
+                .get(crate::agent_model_pins::SESSION_PIN_KEY)
+                .and_then(Value::as_object);
+            let (cmd_model, cmd_effort) = read_text_from_map(&agent_config, "command")
+                .as_deref()
+                .map(|cmd| {
+                    crate::acp::spec::extract_safe_model_and_effort_from_command(fam, cmd)
+                })
+                .unwrap_or((None, None));
+            let default_pin = crate::agent_model_pins::launch_default(fam);
+            let acp_model = session_pin
+                .as_ref()
+                .map(|p| p.model.clone())
+                .or_else(|| pin_obj.and_then(|m| read_text_from_map(m, "model")))
+                .or(cmd_model)
+                .or_else(|| default_pin.as_ref().map(|p| p.model.clone()));
+            let acp_effort = session_pin
+                .as_ref()
+                .and_then(|p| p.effort.clone())
+                .or_else(|| pin_obj.and_then(|m| read_text_from_map(m, "effort")))
+                .or(cmd_effort)
+                .or_else(|| default_pin.as_ref().and_then(|p| p.effort.clone()));
+            (
+                crate::acp::spec::AcpLaunchProfile {
+                    account_wrapper,
+                    hub_id: crate::accounts::hub::launch::picked_hub(&runtime_settings),
+                    connector_envs: crate::connectors::project_cli_env_for_acp_resume(project),
+                    append_system_prompt_file,
+                    developer_instructions,
+                    gbot_chat: is_gbot_chat(Some(&runtime_settings)),
+                    gbot_api_chat: is_gbot_api_chat(Some(&runtime_settings)),
+                    gbot_computer_use_off: super::gbot_computer_use(Some(&runtime_settings))
+                        == Some(false),
+                    lean_worker: super::is_lean_worker(Some(&runtime_settings)),
+                },
+                acp_model,
+                acp_effort,
+            )
         } else {
-            crate::acp::spec::AcpLaunchProfile::default()
+            (crate::acp::spec::AcpLaunchProfile::default(), None, None)
         }
     } else {
-        crate::acp::spec::AcpLaunchProfile::default()
+        (crate::acp::spec::AcpLaunchProfile::default(), None, None)
     };
     AgentResumeInput {
         acp_approval_level,
+        acp_effort,
         acp_mode,
+        acp_model,
         acp_profile,
         acp_read_only,
         agent_command: runtime_command,
@@ -711,8 +760,8 @@ pub(crate) fn build_agent_resume_command(
                     Some(&reference),
                     input.acp_approval_level,
                     &[],
-                    None,
-                    None,
+                    input.acp_model.as_deref(),
+                    input.acp_effort.as_deref(),
                     false,
                     input.acp_read_only,
                     &input.acp_profile,
@@ -768,8 +817,8 @@ pub(crate) fn build_agent_resume_command(
                         resume_ref,
                         input.acp_approval_level,
                         &[],
-                        None,
-                        None,
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
                         false,
                         input.acp_read_only,
                         &input.acp_profile,
@@ -816,8 +865,8 @@ pub(crate) fn build_agent_resume_command(
                         resume_ref,
                         input.acp_approval_level,
                         &[],
-                        None,
-                        None,
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
                         false,
                         input.acp_read_only,
                         &input.acp_profile,

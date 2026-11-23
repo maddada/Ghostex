@@ -177,11 +177,83 @@ pub fn global_accept_all_enabled_in_shared_settings(paths: &crate::paths::Gxserv
 /// (`Principal::Session`, guests, extensions). Ghostex injects its own settings, profiles, and
 /// connector env server-side AFTER this guard runs.
 pub fn command_has_accept_all_flag(cmd: &str) -> bool {
+    // Reject shell command chaining / subshell metacharacters from untrusted callers.
+    if cmd.contains(';')
+        || cmd.contains('|')
+        || cmd.contains('&')
+        || cmd.contains('`')
+        || cmd.contains("$(")
+        || cmd.contains('\n')
+        || cmd.contains('\r')
+    {
+        return true;
+    }
+
     let raw_tokens = super::spec::tokenize_cli_command(cmd);
+    if raw_tokens
+        .first()
+        .is_some_and(|t| matches!(t.as_str(), "env" | "/usr/bin/env"))
+    {
+        return true;
+    }
     let (leading_envs, exec_tokens) = super::spec::split_leading_env_assignments(raw_tokens);
     // Non-user-device callers may never inject leading env vars (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
     // `PATH`, `DYLD_*`, `LD_*`, `BASH_ENV`, `ENV`, `NODE_OPTIONS`, proxy overrides, etc.).
     if !leading_envs.is_empty() {
+        return true;
+    }
+
+    // Non-user-device callers may never execute path-qualified binaries (`/path/to/claude`,
+    // `./cswap`, `C:\evil\claude.exe`), shell/launcher wrappers, or `cswap`/`xswap` account
+    // wrapper commands directly (accounts are chosen strictly through Ghostex's account API so
+    // manual-only account gates and slot validation stay enforced).
+    let token_stem = |tok: &str| -> String {
+        let lower = tok.to_ascii_lowercase();
+        let base = lower.rsplit(['/', '\\']).next().unwrap_or(&lower);
+        [".exe", ".cmd", ".bat", ".ps1"]
+            .iter()
+            .find_map(|suffix| base.strip_suffix(suffix))
+            .unwrap_or(base)
+            .to_string()
+    };
+    if let Some(first) = exec_tokens.first() {
+        if first.contains('/')
+            || first.contains('\\')
+            || first.starts_with('.')
+            || first.starts_with('~')
+            || first.starts_with('$')
+        {
+            return true;
+        }
+        let stem = token_stem(first);
+        if matches!(
+            stem.as_str(),
+            "cswap"
+                | "xswap"
+                | "sh"
+                | "bash"
+                | "zsh"
+                | "fish"
+                | "dash"
+                | "ksh"
+                | "cmd"
+                | "powershell"
+                | "pwsh"
+                | "exec"
+                | "command"
+                | "nohup"
+                | "sudo"
+                | "su"
+                | "eval"
+                | "osascript"
+        ) {
+            return true;
+        }
+    }
+    if exec_tokens
+        .iter()
+        .any(|tok| matches!(token_stem(tok).as_str(), "cswap" | "xswap"))
+    {
         return true;
     }
 
@@ -444,10 +516,21 @@ pub fn guard_create_session_params(
         runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
         if !is_user_device {
             // Non-user-device callers may never spoof GBot chat metadata (which carries server-side
-            // approval / computer-use policy) or CLIProxyAPI hub profile selection.
+            // approval / computer-use policy), CLIProxyAPI hub profile selection, or pre-resolved
+            // account wrapper metadata (accounts must be selected through Ghostex's account API).
             runtime.remove("gbot");
             runtime.remove("gbotHome");
             runtime.remove(crate::accounts::hub::launch::RUNTIME_KEY);
+            for key in [
+                "accountCommand",
+                "accountSlot",
+                "accountBaseCommand",
+                "accountProvider",
+                "accountName",
+                "accountId",
+            ] {
+                runtime.remove(key);
+            }
         }
     }
     if !is_user_device {
@@ -491,19 +574,32 @@ pub fn guard_update_session_params(
 
     if cleaned.contains_key("runtimeSettings") {
         let is_object = cleaned.get("runtimeSettings").is_some_and(Value::is_object);
+        let stored_is_read_only = stored_runtime
+            .and_then(|m| m.get(crate::coordinators::READ_ONLY_THREAD_KEY))
+            .and_then(Value::as_bool)
+            == Some(true);
         if !is_object {
             // Passing `"runtimeSettings": null` (or a non-object) would overwrite the stored
-            // runtime object with `{}` in `merge_session_update`, wiping `acpApprovalLevel`.
-            if !is_user_device
-                && stored_runtime
+            // runtime object with `{}` in `merge_session_update`, wiping protected server fields.
+            if !is_user_device {
+                if stored_is_read_only {
+                    return Err(DomainStateError {
+                        code: "forbidden",
+                        message: "Only your own devices can clear read-only mode on a session."
+                            .to_string(),
+                    });
+                }
+                if stored_runtime
                     .and_then(|m| m.get(SESSION_ACP_APPROVAL_LEVEL_KEY))
                     .is_some()
-            {
-                return Err(DomainStateError {
-                    code: "forbidden",
-                    message: "Only your own devices can clear or raise a session's approval level."
-                        .to_string(),
-                });
+                {
+                    return Err(DomainStateError {
+                        code: "forbidden",
+                        message:
+                            "Only your own devices can clear or raise a session's approval level."
+                                .to_string(),
+                    });
+                }
             }
             cleaned.insert("runtimeSettings".to_string(), Value::Object(Map::new()));
         }
@@ -512,6 +608,18 @@ pub fn guard_update_session_params(
             .and_then(Value::as_object_mut)
         {
             if !is_user_device {
+                if stored_is_read_only
+                    && incoming_runtime
+                        .get(crate::coordinators::READ_ONLY_THREAD_KEY)
+                        .and_then(Value::as_bool)
+                        != Some(true)
+                {
+                    return Err(DomainStateError {
+                        code: "forbidden",
+                        message: "Only your own devices can clear read-only mode on a session."
+                            .to_string(),
+                    });
+                }
                 if let Some(raw_requested) = incoming_runtime
                     .get(SESSION_ACP_APPROVAL_LEVEL_KEY)
                     .and_then(Value::as_str)
@@ -528,6 +636,31 @@ pub fn guard_update_session_params(
                             message: "Only your own devices can raise a session's approval level."
                                 .to_string(),
                         });
+                    }
+                }
+                // Preserve server-owned security/mode/account/hub fields from the stored session
+                // so non-user-device callers can never clear `readOnlyThread`, inject
+                // `cliproxyHubId`, toggle Non-CLI mode/family, or forge account wrapper metadata.
+                for protected_key in [
+                    crate::coordinators::READ_ONLY_THREAD_KEY,
+                    crate::accounts::hub::launch::RUNTIME_KEY,
+                    crate::acp::SESSION_NON_CLI_ACTIVE_KEY,
+                    crate::acp::SESSION_ACP_ACTIVE_KEY,
+                    crate::acp::SESSION_ACP_FAMILY_KEY,
+                    "accountCommand",
+                    "accountSlot",
+                    "accountBaseCommand",
+                    "accountProvider",
+                    "accountName",
+                    "accountId",
+                ] {
+                    match stored_runtime.and_then(|m| m.get(protected_key)) {
+                        Some(val) => {
+                            incoming_runtime.insert(protected_key.to_string(), val.clone());
+                        }
+                        None => {
+                            incoming_runtime.remove(protected_key);
+                        }
                     }
                 }
             }

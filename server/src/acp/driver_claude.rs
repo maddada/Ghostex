@@ -282,11 +282,6 @@ impl PendingClaudeRequest {
 struct ClaudeState {
     native_session_id: Option<String>,
     working: bool,
-    /// Bounded grace window after `abort` or `send(..., interrupt: true)` times out waiting for
-    /// the interrupted turn's `result`. Absorbs a single delayed stale `result` arriving before
-    /// the new turn produces output, while NEVER permanently wedging `working = true` if Claude
-    /// drops the old turn without emitting a `result`.
-    aborted_turn_pending_until: Option<Instant>,
     approval_level: AcpApprovalLevel,
     read_only: bool,
     native_mode: String,
@@ -321,7 +316,6 @@ impl ClaudeState {
         Self {
             native_session_id: None,
             working: false,
-            aborted_turn_pending_until: None,
             approval_level,
             read_only,
             native_mode: if read_only { "plan" } else { "default" }.to_string(),
@@ -481,13 +475,25 @@ impl ClaudeActivityReporter {
     }
 }
 
-struct ClaudeExitGuard(Arc<Mutex<ClaudeState>>);
+struct ClaudeExitGuard {
+    state: Arc<Mutex<ClaudeState>>,
+    process_gen: Arc<AtomicU64>,
+    my_gen: u64,
+}
 impl Drop for ClaudeExitGuard {
     fn drop(&mut self) {
-        let mut s = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        if self.process_gen.load(Ordering::Acquire) != self.my_gen {
+            return;
+        }
+        let mut s = self.state.lock().unwrap_or_else(|p| p.into_inner());
         s.child_exited = true;
         s.working = false;
     }
+}
+
+struct ClaudeProcess {
+    child: Child,
+    transport: Arc<ClaudeTransport>,
 }
 
 fn claude_tool_kind(tool_name: &str) -> &'static str {
@@ -723,29 +729,31 @@ fn stop_claude_gracefully(transport: &ClaudeTransport, child: &mut Child, child_
     }
 }
 
-pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
-    let cwd_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let cwd = cwd_path.to_string_lossy().to_string();
-    let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);
-    let endpoint = GxserverEndpoint::from_env();
-    let spool_session_id = endpoint
-        .as_ref()
-        .map(|ep| ep.session_id.clone())
-        .unwrap_or_else(|| format!("local-{}", std::process::id()));
-
-    println!("Ghostex Non-CLI Host · {} · Starting...", spec.display_name);
-    let _ = std::io::stdout().flush();
-
-    let gx_paths = crate::paths::get_gxserver_paths(None);
-    let signal_guard = TerminationSignalGuard::install();
-
+#[allow(clippy::too_many_arguments)]
+fn spawn_and_init_claude(
+    spec: &AcpAgentSpec,
+    parsed: &HostArgs,
+    cwd: &str,
+    spool_session_id: &str,
+    resume_session_id: Option<&str>,
+    fork_session: bool,
+    model: Option<&str>,
+    effort: Option<&str>,
+    read_only: bool,
+    approval_level: AcpApprovalLevel,
+    state: &Arc<Mutex<ClaudeState>>,
+    activity: &ClaudeActivityReporter,
+    mode_sync_lock: &Arc<Mutex<()>>,
+    child_pid: &Arc<AtomicU32>,
+    process_gen: &Arc<AtomicU64>,
+    my_gen: u64,
+) -> Result<ClaudeProcess, String> {
     let Some((acp_envs, prog, mut argv)) =
         build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
     else {
-        eprintln!("Invalid Claude Non-CLI command.");
-        return 1;
+        return Err("Invalid Claude Non-CLI command.".to_string());
     };
-    if parsed.read_only {
+    if read_only {
         // `--read-only` threads start Claude in its native `plan` mode, matching CLI `--read-only`.
         for idx in 0..argv.len() {
             if argv[idx] == "--permission-mode" && idx + 1 < argv.len() {
@@ -755,11 +763,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     }
     // Synthesize Ghostex's own `--settings` JSON strictly from server-generated fields (never
     // from untrusted command strings, never containing hooks, command helpers, or allow rules).
-    if let Some(settings_json) = build_ghostex_claude_settings_json(
-        &parsed.profile,
-        Some(&cwd),
-        parsed.effort.as_deref(),
-    ) {
+    if let Some(settings_json) =
+        build_ghostex_claude_settings_json(&parsed.profile, Some(cwd), effort, false)
+    {
         argv.push("--settings".to_string());
         argv.push(settings_json);
     }
@@ -769,134 +775,46 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         argv.push("--append-system-prompt-file".to_string());
         argv.push(prompt_file);
     }
-    if let Some(resume_id) = parsed
-        .resume_session_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
+    if let Some(resume_id) = resume_session_id.map(str::trim).filter(|s| !s.is_empty()) {
         argv.push("--resume".to_string());
         argv.push(resume_id.to_string());
-        if parsed.fork_session {
+        if fork_session {
             argv.push("--fork-session".to_string());
         }
     }
-    if let Some(model) = parsed
-        .model
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
+    if let Some(model) = model.map(str::trim).filter(|s| !s.is_empty()) {
         argv.push("--model".to_string());
         argv.push(model.to_string());
     }
-    if let Some(effort) = parsed
-        .effort
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
+    if let Some(effort) = effort.map(str::trim).filter(|s| !s.is_empty()) {
         argv.push("--effort".to_string());
         argv.push(effort.to_string());
     }
 
-    let mut child = match Command::new(&prog)
+    let mut child = Command::new(&prog)
         .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
         .env_remove("CLAUDECODE")
         .envs(acp_envs)
         .args(&argv)
-        .current_dir(&cwd)
+        .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-    {
-        Ok(child) => child,
-        Err(err) => {
-            eprintln!("Failed to start `{prog} {}`: {err}", argv.join(" "));
-            return 1;
-        }
-    };
-    let child_pid = Arc::new(AtomicU32::new(child.id()));
+        .map_err(|err| format!("Failed to start `{prog} {}`: {err}", argv.join(" ")))?;
+    child_pid.store(child.id(), Ordering::Release);
     let Some(stdin) = child.stdin.take() else {
         let _ = child.kill();
-        return 1;
+        child_pid.store(0, Ordering::Release);
+        return Err("Claude child stdin unavailable.".to_string());
     };
     let Some(stdout) = child.stdout.take() else {
         let _ = child.kill();
-        return 1;
+        child_pid.store(0, Ordering::Release);
+        return Err("Claude child stdout unavailable.".to_string());
     };
     let stderr = child.stderr.take();
-
-    let transport = Arc::new(ClaudeTransport::new(stdin, &spool_session_id));
-    let state = Arc::new(Mutex::new(ClaudeState::new(
-        parsed.approval_level,
-        parsed.read_only,
-        cwd_path.clone(),
-        writable_roots,
-        parsed.model.clone(),
-        parsed.effort.clone(),
-    )));
-    let mode_sync_lock = Arc::new(Mutex::new(()));
-    if !parsed.fork_session {
-        if let Some(resume_id) = parsed.resume_session_id.as_deref().filter(|s| !s.is_empty()) {
-            state
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .native_session_id = Some(resume_id.to_string());
-        }
-    }
-    let activity = ClaudeActivityReporter::start(endpoint.clone(), state.clone());
-    let shutting_down = Arc::new(AtomicBool::new(false));
-
-    #[cfg(unix)]
-    {
-        let t_sig = transport.clone();
-        let pid_sig = child_pid.clone();
-        let down_sig = shutting_down.clone();
-        let ep_sig = endpoint.clone();
-        thread::spawn(move || {
-            while !down_sig.load(Ordering::Acquire) {
-                if super::host::termination_requested() {
-                    down_sig.store(true, Ordering::Release);
-                    t_sig.close_stdin();
-                    let pid = pid_sig.swap(0, Ordering::AcqRel);
-                    if pid != 0 {
-                        let cpid = pid as libc::pid_t;
-                        unsafe {
-                            libc::kill(cpid, libc::SIGTERM);
-                        }
-                        let deadline = Instant::now() + Duration::from_secs(1);
-                        let mut reaped = false;
-                        while Instant::now() < deadline {
-                            let waited =
-                                unsafe { libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG) };
-                            if waited > 0
-                                || (waited < 0
-                                    && std::io::Error::last_os_error().raw_os_error()
-                                        != Some(libc::EINTR))
-                            {
-                                reaped = true;
-                                break;
-                            }
-                            thread::sleep(Duration::from_millis(50));
-                        }
-                        if !reaped {
-                            unsafe {
-                                libc::kill(cpid, libc::SIGKILL);
-                                let _ = libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG);
-                            }
-                        }
-                    }
-                    if let Some(ep) = ep_sig.as_ref() {
-                        ep.close_channel();
-                    }
-                    std::process::exit(143);
-                }
-                thread::sleep(Duration::from_millis(50));
-            }
-        });
-    }
+    let transport = Arc::new(ClaudeTransport::new(stdin, spool_session_id));
 
     if let Some(stderr) = stderr {
         let t_err = transport.clone();
@@ -911,16 +829,24 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         });
     }
 
-    // Stdout NDJSON reader loop.
+    // Stdout NDJSON reader loop scoped to `my_gen`.
     {
         let t_out = transport.clone();
         let st_out = state.clone();
         let act_out = activity.clone();
         let mode_lock_out = mode_sync_lock.clone();
+        let gen_out = process_gen.clone();
         thread::spawn(move || {
-            let _exit_guard = ClaudeExitGuard(st_out.clone());
+            let _exit_guard = ClaudeExitGuard {
+                state: st_out.clone(),
+                process_gen: gen_out.clone(),
+                my_gen,
+            };
             let reader = BufReader::new(stdout);
             for line in reader.lines().map_while(Result::ok) {
+                if gen_out.load(Ordering::Acquire) != my_gen {
+                    break;
+                }
                 let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     let trimmed = line.trim();
                     if trimmed.is_empty() {
@@ -930,6 +856,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         return;
                     };
                     t_out.spool_event(&msg);
+                    if gen_out.load(Ordering::Acquire) != my_gen {
+                        return;
+                    }
                     {
                         let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                         s.last_event_at_ms = now_ms();
@@ -1192,7 +1121,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             }
                         }
                         "result" => {
-                            let (stale_result, orphaned): (bool, Vec<PendingClaudeRequest>) = {
+                            // Deterministic 1:1 turn correlation: `abort` and `send(interrupt)`
+                            // never write a new `user` turn until the previous turn's `result`
+                            // has arrived or the old process has been replaced by a new `my_gen`.
+                            let (ignored, orphaned): (bool, Vec<PendingClaudeRequest>) = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                                 if let Some(model_usage) =
                                     msg.get("modelUsage").and_then(Value::as_object)
@@ -1207,33 +1139,15 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                         }
                                     }
                                 }
-                                let absorb_stale = if !s.working {
-                                    s.aborted_turn_pending_until = None;
-                                    true
-                                } else if s
-                                    .aborted_turn_pending_until
-                                    .is_some_and(|until| Instant::now() < until)
-                                    && s.live_stream_text.is_empty()
-                                    && s.live_thought_text.is_empty()
-                                {
-                                    // Delayed `result` from an interrupted earlier turn arriving
-                                    // before the new turn emits any output: absorb once so we do
-                                    // not clobber the new turn or drain its pending approvals.
-                                    s.aborted_turn_pending_until = None;
-                                    true
-                                } else {
-                                    false
-                                };
-                                if absorb_stale {
+                                if !s.working {
                                     (true, Vec::new())
                                 } else {
-                                    s.aborted_turn_pending_until = None;
                                     s.working = false;
                                     s.clear_live_turn_output();
                                     (false, s.pending_requests.drain(..).collect())
                                 }
                             };
-                            if stale_result {
+                            if ignored {
                                 return;
                             }
                             for req in orphaned {
@@ -1295,21 +1209,211 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             }
         }
         Err(err) => {
-            eprintln!("Claude Non-CLI initialize failed: {err}");
-            stop_claude_gracefully(&transport, &mut child, &child_pid);
-            return 1;
+            stop_claude_gracefully(&transport, &mut child, child_pid);
+            return Err(format!("Claude Non-CLI initialize failed: {err}"));
         }
     }
 
-    // 2. Apply starting approval level cleanly (preserving `plan` mode on `--read-only`).
+    // 2. Apply approval level cleanly (preserving `plan` mode on `--read-only`).
     if let Err(err) = apply_claude_approval_level(
         &transport,
-        &state,
-        &mode_sync_lock,
-        parsed.approval_level,
+        state,
+        mode_sync_lock,
+        approval_level,
         false,
     ) {
-        eprintln!("[Claude Non-CLI] Warning: could not sync initial approval level: {err}");
+        eprintln!("[Claude Non-CLI] Warning: could not sync approval level: {err}");
+    }
+
+    Ok(ClaudeProcess { child, transport })
+}
+
+/// Deterministically finish an interrupted Claude turn:
+/// - If already idle, cancels any stale pending permissions and returns immediately.
+/// - Otherwise sends `interrupt` and waits for the aborted turn's `result` (`working == false`).
+/// - If `result` does not arrive within the timeout (or `interrupt` fails), replaces the Claude
+///   process with a fresh resumed process under a new generation so stale events/results can never
+///   correlate with the next turn.
+#[allow(clippy::too_many_arguments)]
+fn drain_or_restart_claude_turn(
+    proc: &mut ClaudeProcess,
+    spec: &AcpAgentSpec,
+    parsed: &HostArgs,
+    cwd: &str,
+    spool_session_id: &str,
+    state: &Arc<Mutex<ClaudeState>>,
+    activity: &ClaudeActivityReporter,
+    mode_sync_lock: &Arc<Mutex<()>>,
+    child_pid: &Arc<AtomicU32>,
+    process_gen: &Arc<AtomicU64>,
+    wait_timeout: Duration,
+) -> Result<(), String> {
+    let was_working = state.lock().unwrap_or_else(|p| p.into_inner()).working;
+    cancel_all_pending_claude(&proc.transport, state);
+    if !was_working {
+        return Ok(());
+    }
+    let interrupt_res = proc
+        .transport
+        .control_request(json!({ "subtype": "interrupt" }), Duration::from_secs(5));
+    if let Err(err) = &interrupt_res {
+        eprintln!("[Claude Non-CLI] Warning: interrupt control_request failed: {err}");
+    }
+    let wait_until = Instant::now() + wait_timeout;
+    while Instant::now() < wait_until {
+        if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    // The aborted turn's `result` did not arrive in time: deterministically restart and resume
+    // Claude under a fresh generation so every future `result` maps 1:1 to a new turn.
+    let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
+    stop_claude_gracefully(&proc.transport, &mut proc.child, child_pid);
+    let (resume_id, model, effort, read_only, level) = {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.working = false;
+        s.pending_requests.clear();
+        s.clear_live_turn_output();
+        (
+            s.native_session_id.clone(),
+            s.current_model.clone(),
+            s.current_effort.clone(),
+            s.read_only,
+            s.approval_level,
+        )
+    };
+    let next_proc = spawn_and_init_claude(
+        spec,
+        parsed,
+        cwd,
+        spool_session_id,
+        resume_id.as_deref(),
+        false,
+        model.as_deref(),
+        effort.as_deref(),
+        read_only,
+        level,
+        state,
+        activity,
+        mode_sync_lock,
+        child_pid,
+        process_gen,
+        new_gen,
+    )?;
+    *proc = next_proc;
+    Ok(())
+}
+
+pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
+    let cwd_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let cwd = cwd_path.to_string_lossy().to_string();
+    let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);
+    let endpoint = GxserverEndpoint::from_env();
+    let spool_session_id = endpoint
+        .as_ref()
+        .map(|ep| ep.session_id.clone())
+        .unwrap_or_else(|| format!("local-{}", std::process::id()));
+
+    println!("Ghostex Non-CLI Host · {} · Starting...", spec.display_name);
+    let _ = std::io::stdout().flush();
+
+    let gx_paths = crate::paths::get_gxserver_paths(None);
+    let signal_guard = TerminationSignalGuard::install();
+
+    let state = Arc::new(Mutex::new(ClaudeState::new(
+        parsed.approval_level,
+        parsed.read_only,
+        cwd_path.clone(),
+        writable_roots,
+        parsed.model.clone(),
+        parsed.effort.clone(),
+    )));
+    let mode_sync_lock = Arc::new(Mutex::new(()));
+    if !parsed.fork_session {
+        if let Some(resume_id) = parsed.resume_session_id.as_deref().filter(|s| !s.is_empty()) {
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .native_session_id = Some(resume_id.to_string());
+        }
+    }
+    let activity = ClaudeActivityReporter::start(endpoint.clone(), state.clone());
+    let shutting_down = Arc::new(AtomicBool::new(false));
+    let child_pid = Arc::new(AtomicU32::new(0));
+    let process_gen = Arc::new(AtomicU64::new(1));
+
+    let mut proc = match spawn_and_init_claude(
+        spec,
+        &parsed,
+        &cwd,
+        &spool_session_id,
+        parsed.resume_session_id.as_deref(),
+        parsed.fork_session,
+        parsed.model.as_deref(),
+        parsed.effort.as_deref(),
+        parsed.read_only,
+        parsed.approval_level,
+        &state,
+        &activity,
+        &mode_sync_lock,
+        &child_pid,
+        &process_gen,
+        1,
+    ) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("{err}");
+            return 1;
+        }
+    };
+
+    #[cfg(unix)]
+    {
+        let pid_sig = child_pid.clone();
+        let down_sig = shutting_down.clone();
+        let ep_sig = endpoint.clone();
+        thread::spawn(move || {
+            while !down_sig.load(Ordering::Acquire) {
+                if super::host::termination_requested() {
+                    down_sig.store(true, Ordering::Release);
+                    let pid = pid_sig.swap(0, Ordering::AcqRel);
+                    if pid != 0 {
+                        let cpid = pid as libc::pid_t;
+                        unsafe {
+                            libc::kill(cpid, libc::SIGTERM);
+                        }
+                        let deadline = Instant::now() + Duration::from_secs(1);
+                        let mut reaped = false;
+                        while Instant::now() < deadline {
+                            let waited =
+                                unsafe { libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG) };
+                            if waited > 0
+                                || (waited < 0
+                                    && std::io::Error::last_os_error().raw_os_error()
+                                        != Some(libc::EINTR))
+                            {
+                                reaped = true;
+                                break;
+                            }
+                            thread::sleep(Duration::from_millis(50));
+                        }
+                        if !reaped {
+                            unsafe {
+                                libc::kill(cpid, libc::SIGKILL);
+                                let _ = libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG);
+                            }
+                        }
+                    }
+                    if let Some(ep) = ep_sig.as_ref() {
+                        ep.close_channel();
+                    }
+                    std::process::exit(143);
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+        });
     }
 
     let native_sid = state
@@ -1383,7 +1487,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .approval_level;
                     if desired != current {
                         let _ = apply_claude_approval_level(
-                            &transport,
+                            &proc.transport,
                             &state,
                             &mode_sync_lock,
                             desired,
@@ -1423,29 +1527,29 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     ep.ack(id, true, snap, None);
                 }
                 "abort" => {
-                    let interrupt_res = transport
-                        .control_request(json!({ "subtype": "interrupt" }), Duration::from_secs(8));
-                    cancel_all_pending_claude(&transport, &state);
-                    let wait_until = SystemTime::now() + Duration::from_secs(2);
-                    while SystemTime::now() < wait_until {
-                        if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
-                            break;
+                    match drain_or_restart_claude_turn(
+                        &mut proc,
+                        spec,
+                        &parsed,
+                        &cwd,
+                        &spool_session_id,
+                        &state,
+                        &activity,
+                        &mode_sync_lock,
+                        &child_pid,
+                        &process_gen,
+                        Duration::from_secs(5),
+                    ) {
+                        Ok(()) => {
+                            activity.sync();
+                            ep.ack(id, true, json!({ "aborted": true }), None);
                         }
-                        thread::sleep(Duration::from_millis(50));
-                    }
-                    if interrupt_res.is_err()
-                        || state.lock().unwrap_or_else(|p| p.into_inner()).working
-                    {
-                        if let Err(err) = &interrupt_res {
-                            eprintln!("[Claude Non-CLI] Warning: interrupt control_request failed: {err}");
+                        Err(err) => {
+                            state.lock().unwrap_or_else(|p| p.into_inner()).child_exited = true;
+                            activity.sync();
+                            ep.ack(id, false, Value::Null, Some(&err));
                         }
-                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        s.working = false;
-                        s.aborted_turn_pending_until = Some(Instant::now() + Duration::from_secs(8));
-                        s.clear_live_turn_output();
                     }
-                    activity.sync();
-                    ep.ack(id, true, json!({ "aborted": true }), None);
                 }
                 "approve" => {
                     let decision = params
@@ -1492,14 +1596,14 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     );
                     let leaving_plan = !is_deny && req.tool_name == "ExitPlanMode";
                     let res = if is_deny {
-                        transport.control_respond_deny(
+                        proc.transport.control_respond_deny(
                             &req.request_id,
                             "User denied permission.",
                             false,
                             req.tool_use_id.as_deref(),
                         )
                     } else {
-                        transport.control_respond_allow(
+                        proc.transport.control_respond_allow(
                             &req.request_id,
                             req.raw_input,
                             req.tool_use_id.as_deref(),
@@ -1514,7 +1618,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                     s.approval_level
                                 };
                                 let _ = apply_claude_approval_level(
-                                    &transport,
+                                    &proc.transport,
                                     &state,
                                     &mode_sync_lock,
                                     level,
@@ -1561,13 +1665,13 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     let res = if let Some(updated_input) =
                         build_ask_user_answers(&req.raw_input, &selections)
                     {
-                        transport.control_respond_allow(
+                        proc.transport.control_respond_allow(
                             &req.request_id,
                             updated_input,
                             req.tool_use_id.as_deref(),
                         )
                     } else {
-                        transport.control_respond_deny(
+                        proc.transport.control_respond_deny(
                             &req.request_id,
                             "User dismissed the question.",
                             false,
@@ -1594,7 +1698,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .unwrap_or_default()
                         .to_string();
                     if !model.is_empty() {
-                        if let Err(err) = transport.control_request(
+                        if let Err(err) = proc.transport.control_request(
                             json!({ "subtype": "set_model", "model": model }),
                             CLAUDE_CTRL_TIMEOUT,
                         ) {
@@ -1604,7 +1708,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         state.lock().unwrap_or_else(|p| p.into_inner()).current_model = Some(model);
                     }
                     if !effort.is_empty() {
-                        if let Err(err) = transport.control_request(
+                        if let Err(err) = proc.transport.control_request(
                             json!({
                                 "subtype": "apply_flag_settings",
                                 "settings": { "effortLevel": effort },
@@ -1645,7 +1749,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         continue;
                     };
                     if let Err(err) = apply_claude_approval_level(
-                        &transport,
+                        &proc.transport,
                         &state,
                         &mode_sync_lock,
                         level,
@@ -1693,28 +1797,28 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                     };
                     if is_working && interrupt {
-                        cancel_all_pending_claude(&transport, &state);
-                        let _ = transport.control_request(
-                            json!({ "subtype": "interrupt" }),
+                        if let Err(err) = drain_or_restart_claude_turn(
+                            &mut proc,
+                            spec,
+                            &parsed,
+                            &cwd,
+                            &spool_session_id,
+                            &state,
+                            &activity,
+                            &mode_sync_lock,
+                            &child_pid,
+                            &process_gen,
                             Duration::from_secs(5),
-                        );
-                        let wait_until = SystemTime::now() + Duration::from_secs(4);
-                        while SystemTime::now() < wait_until {
-                            if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
-                                break;
-                            }
-                            thread::sleep(Duration::from_millis(50));
+                        ) {
+                            state.lock().unwrap_or_else(|p| p.into_inner()).child_exited = true;
+                            activity.sync();
+                            ep.ack(id, false, Value::Null, Some(&err));
+                            continue;
                         }
                     }
-                    cancel_all_pending_claude(&transport, &state);
+                    cancel_all_pending_claude(&proc.transport, &state);
                     let sid = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        if s.working {
-                            // Interrupted turn did not finish within the 4s wait: mark a bounded
-                            // grace window so its late `result` cannot kill the new turn.
-                            s.aborted_turn_pending_until =
-                                Some(Instant::now() + Duration::from_secs(8));
-                        }
                         s.working = true;
                         s.clear_live_turn_output();
                         s.native_session_id.clone()
@@ -1731,7 +1835,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     }
                     println!("\r\n[Claude Non-CLI] Turn started...");
                     let _ = std::io::stdout().flush();
-                    match transport.write_json(&user_msg) {
+                    match proc.transport.write_json(&user_msg) {
                         Ok(()) => {
                             activity.sync();
                             ep.ack(
@@ -1770,15 +1874,16 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                         continue;
                     }
-                    cancel_all_pending_claude(&transport, &state);
+                    cancel_all_pending_claude(&proc.transport, &state);
                     if is_working {
-                        let _ = transport.control_request(
+                        let _ = proc.transport.control_request(
                             json!({ "subtype": "interrupt" }),
                             Duration::from_secs(3),
                         );
                     }
                     shutting_down.store(true, Ordering::Release);
-                    stop_claude_gracefully(&transport, &mut child, &child_pid);
+                    process_gen.fetch_add(1, Ordering::AcqRel);
+                    stop_claude_gracefully(&proc.transport, &mut proc.child, &child_pid);
                     ep.ack(
                         id,
                         true,
@@ -1823,7 +1928,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     }
 
     shutting_down.store(true, Ordering::Release);
-    stop_claude_gracefully(&transport, &mut child, &child_pid);
+    process_gen.fetch_add(1, Ordering::AcqRel);
+    stop_claude_gracefully(&proc.transport, &mut proc.child, &child_pid);
     if let Some(ep) = endpoint.as_ref() {
         ep.close_channel();
     }

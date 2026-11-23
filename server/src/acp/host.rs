@@ -182,8 +182,13 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
     if family.is_empty() {
         return Err("acp-host requires --agent <family>.".to_string());
     }
-    if let (Some(bin), Some(slot)) = (wrapper_bin, wrapper_slot) {
-        profile.account_wrapper = Some(AcpAccountWrapper { bin, slot });
+    if let Some(slot) = wrapper_slot.filter(|s| super::spec::is_valid_account_wrapper_slot(s)) {
+        // Ignore any caller-supplied `--account-wrapper-bin` path; always resolve the installed
+        // `cswap` / `xswap` executable through Ghostex's own accounts helper.
+        let _ = wrapper_bin;
+        if let Some(bin) = super::spec::resolve_account_wrapper_executable(&family) {
+            profile.account_wrapper = Some(AcpAccountWrapper { bin, slot });
+        }
     }
     Ok(HostArgs {
         family,

@@ -434,7 +434,11 @@ pub(crate) fn codex_deny_paths_for_session(
     if folders.is_empty() {
         return None;
     }
-    Some((false, codex_paths(&folders)))
+    let expanded = codex_paths(&folders);
+    if expanded.is_empty() {
+        return None;
+    }
+    Some((false, expanded))
 }
 
 /// Format a Codex TOML string literal (used by `driver_codex` when synthesizing Ghostex-generated
