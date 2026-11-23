@@ -1275,6 +1275,7 @@ pub(super) async fn answer(
     params["sessionId"] = json!(key.1);
     let routed = crate::session_chat_send::handle_answer_session_chat_prompt_http(
         state,
+        None,
         "/api/answerSessionChatPrompt".to_string(),
         Uuid::new_v4().to_string(),
         &json!({ "params": params }),

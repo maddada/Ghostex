@@ -282,14 +282,24 @@ pub(super) async fn route_chat_http(
             })
         }
         "/api/answerSessionChatPrompt" => {
+            let caller = caller.clone();
             let mut response = crate::session_chat_send_requests::send_once(
                 &state,
                 endpoint.path,
                 request_id.clone(),
                 &body_json,
-                |state, endpoint_path, request_id, body| async move {
-                    handle_answer_session_chat_prompt_http(&state, endpoint_path, request_id, &body)
+                move |state, endpoint_path, request_id, body| {
+                    let caller = caller.clone();
+                    async move {
+                        handle_answer_session_chat_prompt_http(
+                            &state,
+                            Some(&caller),
+                            endpoint_path,
+                            request_id,
+                            &body,
+                        )
                         .await
+                    }
                 },
             )
             .await;

@@ -34,12 +34,11 @@ Ghostex list the hub's accounts and their usage. Keys are read only from a file 
 from standard input (-), never from the command line, and never printed:
   ssh me@hub 'cat ~/hub-client-key' \\
     | ghostex accounts hub add --name Hub --address http://100.64.0.1:8317 --client-key-stdin
-  ghostex secret request --label \"Hub client key\" --reason \"…\"   (then --client-key-file <its file>)
 Only one key can come from standard input per command. A new --address needs the client key
 again (and the management key, when the hub has one): saved keys never go to a new address.
 
-Run it from your own terminal on each computer that should use the hub (agent sessions
-can't add, change or remove hubs).";
+Run hub add, update, or remove in Settings > Accounts or from a terminal outside Ghostex
+(agent sessions and Ghostex terminal panes can't add, change or remove hubs).";
 
 #[derive(Default)]
 struct Options {
@@ -156,7 +155,7 @@ fn parse(args: &[String]) -> CliResult<Options> {
             }
             "--computer" => {
                 return Err(CliError::Other(
-                    "Hubs are added on each computer itself: run this command from your own terminal on that computer.".into(),
+                    "Hubs are added on each computer itself: use Settings > Accounts or run this command from a terminal outside Ghostex on that computer.".into(),
                 ))
             }
             // `--flag=value`: never repeated, since the value may be a key.

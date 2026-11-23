@@ -8,7 +8,7 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::io::{self, Write as _};
+use std::io::{self, Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
@@ -232,22 +232,11 @@ fn unlock_exclusive(file: &fs::File) -> io::Result<()> {
     }
 }
 
+/// True for symlinks on Unix, and for real symlinks and NTFS directory junctions on Windows.
+/// Rust's `file_type().is_symlink()` on Windows checks `IO_REPARSE_TAG_SYMLINK` and
+/// `IO_REPARSE_TAG_MOUNT_POINT` only, never OneDrive cloud placeholders or WOF-compressed files.
 fn is_link(path: &Path) -> bool {
-    let Ok(meta) = fs::symlink_metadata(path) else {
-        return false;
-    };
-    if meta.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-            return true;
-        }
-    }
-    false
+    fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
 }
 
 fn remove_link_only(path: &Path) -> io::Result<()> {
@@ -413,78 +402,179 @@ fn profile_is_quiescent(profile_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Scans `dir` without following symlinks; returns `true` if any symlink or Windows reparse point
-/// exists inside it.
-fn contains_symlink(dir: &Path) -> io::Result<bool> {
-    for entry in fs::read_dir(dir)? {
+/// Pre-scans `src` against `dst` without following symlinks: rejects any symlink/junction inside
+/// `src`, any non-regular/non-dir entry, and any directory-vs-file type collision against `dst`
+/// before a single file is moved.
+fn validate_projects_tree(src: &Path, dst: &Path) -> io::Result<()> {
+    for entry in fs::read_dir(src)? {
         let entry = entry?;
-        let path = entry.path();
-        if is_link(&path) {
-            return Ok(true);
+        let from = entry.path();
+        if is_link(&from) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "profile projects directory contains a symlink ({}); skipping migration",
+                    from.display()
+                ),
+            ));
         }
-        let meta = fs::symlink_metadata(&path)?;
-        if meta.is_dir() && contains_symlink(&path)? {
-            return Ok(true);
+        let meta = fs::symlink_metadata(&from)?;
+        let to = dst.join(entry.file_name());
+        if meta.is_dir() {
+            match fs::symlink_metadata(&to) {
+                Ok(dst_meta) if is_link(&to) || !dst_meta.is_dir() => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "dir-vs-file collision between {} and {}; skipping migration",
+                            from.display(),
+                            to.display()
+                        ),
+                    ));
+                }
+                Ok(_) => validate_projects_tree(&from, &to)?,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    validate_projects_tree(&from, &to)?;
+                }
+                Err(error) => return Err(error),
+            }
+        } else if !meta.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "refusing to migrate non-regular entry {}",
+                    from.display()
+                ),
+            ));
         }
     }
-    Ok(false)
+    Ok(())
 }
 
-/// Moves a regular file `from` to `to`, falling back to a fsynced temp-file copy + rename across
-/// filesystems and only unlinking `from` after `to` is safely in place.
+/// Moves a regular file `from` to `to`, falling back to a streamed, fsynced temp-file copy + rename
+/// across filesystems and only unlinking `from` after `to` is safely in place.
 fn move_file_safely(from: &Path, to: &Path) -> io::Result<()> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
     if let Some(parent) = to.parent() {
         private_dir(parent)?;
     }
     if fs::rename(from, to).is_ok() {
         return Ok(());
     }
-    let bytes = fs::read(from)?;
-    write_private(to, &bytes)?;
+    let name = to
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "file".to_string());
+    let temp = to.with_file_name(format!(
+        "{name}.{}-{}.ghostex-tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let copy_result = (|| -> io::Result<()> {
+        let mut src = fs::File::open(from)?;
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut dst = options.open(&temp)?;
+        io::copy(&mut src, &mut dst)?;
+        dst.sync_all()?;
+        Ok(())
+    })();
+    if let Err(error) = copy_result {
+        let _ = fs::remove_file(&temp);
+        return Err(error);
+    }
+    fs::rename(&temp, to).inspect_err(|_| {
+        let _ = fs::remove_file(&temp);
+    })?;
     fs::remove_file(from)
 }
 
 /// Picks a non-colliding quarantine path right next to `target` (e.g. `MEMORY.md.ghostex-conflict`,
-/// `sess.jsonl.ghostex-conflict`), never overwriting an existing file.
-fn quarantine_path_next_to(target: &Path) -> PathBuf {
+/// `sess.jsonl.ghostex-conflict`), never overwriting an existing file and only treating
+/// `ErrorKind::NotFound` as unused.
+fn quarantine_path_next_to(target: &Path) -> io::Result<PathBuf> {
     let base_name = target
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "file".to_string());
     let first = target.with_file_name(format!("{base_name}.ghostex-conflict"));
-    if fs::symlink_metadata(&first).is_err() {
-        return first;
+    match fs::symlink_metadata(&first) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(first),
+        Ok(_) => {}
+        Err(error) => return Err(error),
     }
     for n in 2.. {
         let candidate = target.with_file_name(format!("{base_name}.ghostex-conflict.{n}"));
-        if fs::symlink_metadata(&candidate).is_err() {
-            return candidate;
+        match fs::symlink_metadata(&candidate) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(candidate),
+            Ok(_) => {}
+            Err(error) => return Err(error),
         }
     }
     unreachable!()
 }
 
-/// True when `profile_file` adds no information beyond `shared_file` (identical bytes, or a `.jsonl`
-/// prefix already contained at the start of `shared_file`).
+/// Streamed comparison: true when `profile_file` adds no information beyond `shared_file`
+/// (identical bytes, or a `.jsonl` prefix already contained at the start of `shared_file`).
 fn adds_nothing(shared_file: &Path, profile_file: &Path) -> io::Result<bool> {
-    let shared_bytes = fs::read(shared_file)?;
-    let profile_bytes = fs::read(profile_file)?;
-    if shared_bytes == profile_bytes {
-        return Ok(true);
-    }
+    let mut shared = fs::File::open(shared_file)?;
+    let mut profile = fs::File::open(profile_file)?;
+    let shared_len = shared.metadata()?.len();
+    let profile_len = profile.metadata()?.len();
     let is_jsonl = profile_file
         .extension()
         .and_then(|ext| ext.to_str())
         .is_some_and(|ext| ext.eq_ignore_ascii_case("jsonl"));
-    if is_jsonl && shared_bytes.starts_with(&profile_bytes) {
-        if profile_bytes.is_empty()
-            || profile_bytes.ends_with(b"\n")
-            || shared_bytes.get(profile_bytes.len()) == Some(&b'\n')
-        {
-            return Ok(true);
-        }
+
+    if profile_len > shared_len {
+        return Ok(false);
     }
-    Ok(false)
+    if profile_len < shared_len && !is_jsonl {
+        return Ok(false);
+    }
+    if profile_len == 0 {
+        return Ok(shared_len == 0 || is_jsonl);
+    }
+
+    const CHUNK: usize = 64 * 1024;
+    let mut p_buf = [0u8; CHUNK];
+    let mut s_buf = [0u8; CHUNK];
+    let mut remaining = profile_len;
+    let mut last_profile_byte = 0u8;
+
+    while remaining > 0 {
+        let want = (remaining as usize).min(CHUNK);
+        let n = profile.read(&mut p_buf[..want])?;
+        if n == 0 {
+            // File shrank unexpectedly while comparing; fail safe so we don't drop it.
+            return Ok(false);
+        }
+        shared.read_exact(&mut s_buf[..n])?;
+        if p_buf[..n] != s_buf[..n] {
+            return Ok(false);
+        }
+        last_profile_byte = p_buf[n - 1];
+        remaining -= n as u64;
+    }
+
+    if profile_len == shared_len {
+        // Confirm neither file grew past `profile_len` during comparison.
+        let mut extra = [0u8; 1];
+        return Ok(profile.read(&mut extra)? == 0 && shared.read(&mut extra)? == 0);
+    }
+    // `is_jsonl` and `profile_len < shared_len`: prefix must end at a newline boundary.
+    if last_profile_byte == b'\n' {
+        return Ok(true);
+    }
+    let mut next_shared = [0u8; 1];
+    Ok(shared.read(&mut next_shared)? == 1 && next_shared[0] == b'\n')
 }
 
 fn merge_projects_recursive(src: &Path, dst: &Path, quarantined: &mut usize) -> io::Result<()> {
@@ -503,20 +593,24 @@ fn merge_projects_recursive(src: &Path, dst: &Path, quarantined: &mut usize) -> 
         if meta.is_dir() {
             merge_projects_recursive(&from, &to, quarantined)?;
         } else if meta.is_file() {
-            if let Ok(target_meta) = fs::symlink_metadata(&to) {
-                if !is_link(&to) && target_meta.is_file() && adds_nothing(&to, &from)? {
-                    fs::remove_file(&from)?;
-                } else {
-                    let parked = quarantine_path_next_to(&to);
-                    move_file_safely(&from, &parked)?;
-                    *quarantined += 1;
-                    eprintln!(
-                        "[cliproxy-hub] kept colliding project file beside shared copy: {}",
-                        parked.display()
-                    );
+            match fs::symlink_metadata(&to) {
+                Ok(target_meta) => {
+                    if !is_link(&to) && target_meta.is_file() && adds_nothing(&to, &from)? {
+                        fs::remove_file(&from)?;
+                    } else {
+                        let parked = quarantine_path_next_to(&to)?;
+                        move_file_safely(&from, &parked)?;
+                        *quarantined += 1;
+                        eprintln!(
+                            "[cliproxy-hub] kept colliding project file beside shared copy: {}",
+                            parked.display()
+                        );
+                    }
                 }
-            } else {
-                move_file_safely(&from, &to)?;
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    move_file_safely(&from, &to)?;
+                }
+                Err(error) => return Err(error),
             }
         } else {
             return Err(io::Error::new(
@@ -537,12 +631,7 @@ fn merge_projects_dir(profile_projects: &Path, shared_projects: &Path) -> io::Re
             "profile projects directory already points at shared projects",
         ));
     }
-    if contains_symlink(profile_projects)? {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "profile projects directory contains a symlink; skipping migration",
-        ));
-    }
+    validate_projects_tree(profile_projects, shared_projects)?;
     let mut quarantined = 0;
     merge_projects_recursive(profile_projects, shared_projects, &mut quarantined)?;
     Ok(quarantined)
@@ -637,6 +726,25 @@ fn finalize_staged_link(staged: &Path, shared_target: &Path, profile_item: &Path
 /// Links `profile_dir/<name>` to `claude_home/<name>` like `cswap --share-history`, safely
 /// migrating any pre-existing `projects/` or `history.jsonl` under a lock and quiescence check.
 fn share_claude_home(claude_home: &Path, profile_dir: &Path) {
+    let shared_projects = claude_home.join("projects");
+    let profile_projects = profile_dir.join("projects");
+    let shared_history = claude_home.join("history.jsonl");
+    let profile_history = profile_dir.join("history.jsonl");
+
+    // Fast path: skip the cross-process migration lock when projects/, history.jsonl, and any
+    // present CLAUDE.md / skills/ are already in place, so hub launches never stall behind cswap.
+    let projects_done =
+        is_link(&profile_projects) || fsx::same_entry(&profile_projects, &shared_projects);
+    let history_done =
+        is_link(&profile_history) || fsx::same_entry(&profile_history, &shared_history);
+    let extras_done = ["CLAUDE.md", "skills"].iter().all(|name| {
+        fs::symlink_metadata(claude_home.join(name)).is_err()
+            || fs::symlink_metadata(profile_dir.join(name)).is_ok()
+    });
+    if projects_done && history_done && extras_done {
+        return;
+    }
+
     if let Err(error) = private_dir(claude_home) {
         eprintln!(
             "[cliproxy-hub] could not prepare {}: {error}",
@@ -656,8 +764,6 @@ fn share_claude_home(claude_home: &Path, profile_dir: &Path) {
     };
 
     // 1. projects/ (ensure target exists, migrate safely if profile has its own directory, then link).
-    let shared_projects = claude_home.join("projects");
-    let profile_projects = profile_dir.join("projects");
     if let Err(error) = private_dir(&shared_projects) {
         eprintln!(
             "[cliproxy-hub] could not prepare {}: {error}",
@@ -712,8 +818,6 @@ fn share_claude_home(claude_home: &Path, profile_dir: &Path) {
     }
 
     // 2. history.jsonl (create shared file as 0600, migrate safely with dedupe + fsync, then link).
-    let shared_history = claude_home.join("history.jsonl");
-    let profile_history = profile_dir.join("history.jsonl");
     if let Err(error) = ensure_private_file(&shared_history) {
         eprintln!(
             "[cliproxy-hub] could not prepare {}: {error}",

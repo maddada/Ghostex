@@ -119,6 +119,7 @@ User: answer a thread's approval card from its coordinator's chat, "and u pick w
 */
 pub(crate) async fn handle_answer_session_chat_prompt_http(
     state: &AppState,
+    caller: Option<&crate::security::Principal>,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -197,6 +198,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
     });
     let response = answer_session_chat_prompt(
         state,
+        caller,
         endpoint_path,
         request_id,
         rerouted.as_ref().unwrap_or(body),
@@ -215,6 +217,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
 
 async fn answer_session_chat_prompt(
     state: &AppState,
+    caller: Option<&crate::security::Principal>,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -315,6 +318,15 @@ async fn answer_session_chat_prompt(
                     params.get("accountId").cloned().unwrap_or_default(),
                 );
                 request.insert("enabled".to_string(), json!(true));
+                if let Some(caller) = caller {
+                    if let Some(error) = crate::server::accounts_http::refuse_non_user_account_op(
+                        caller,
+                        "setEnabled",
+                        &request,
+                    ) {
+                        return domain_error_response(endpoint_path, request_id, error);
+                    }
+                }
             }
             "accountUse" => {
                 request.insert("operation".to_string(), json!("select"));
