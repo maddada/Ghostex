@@ -240,16 +240,18 @@ fn fork_session_with(
     })
 }
 
-fn acp_profile_from_plan(plan: &Value, fam: &str, cmd: Option<&str>) -> crate::acp::spec::AcpLaunchProfile {
-    let (account_wrapper, _, _) = crate::acp::spec::extract_account_wrapper_and_ignored(
-        fam,
-        match fam {
-            "claude" => "claude",
-            "codex" => "codex",
-            _ => "agy",
-        },
-        cmd,
-    );
+fn acp_profile_from_plan(plan: &Value, fam: &str) -> crate::acp::spec::AcpLaunchProfile {
+    let account_wrapper = plan
+        .get("acpAccountSlot")
+        .and_then(Value::as_str)
+        .filter(|slot| crate::acp::spec::is_valid_account_wrapper_slot(slot))
+        .and_then(|slot| {
+            let bin = crate::acp::spec::resolve_account_wrapper_executable(fam)?;
+            Some(crate::acp::spec::AcpAccountWrapper {
+                bin,
+                slot: slot.to_string(),
+            })
+        });
     let hub_id = plan
         .get("acpHubId")
         .and_then(Value::as_str)
@@ -316,7 +318,9 @@ fn at_message_plan(plan: &mut Value) -> Result<String, DomainStateError> {
             .get("acpReadOnly")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let profile = acp_profile_from_plan(plan, fam, Some(command));
+        let acp_model = plan.get("acpModel").and_then(Value::as_str);
+        let acp_effort = plan.get("acpEffort").and_then(Value::as_str);
+        let profile = acp_profile_from_plan(plan, fam);
         crate::acp::spec::build_acp_host_launch_command_with_profile(
             fam,
             Some(command),
@@ -327,8 +331,8 @@ fn at_message_plan(plan: &mut Value) -> Result<String, DomainStateError> {
                 level
             },
             &[],
-            None,
-            None,
+            acp_model,
+            acp_effort,
             // `fork_claude_at.rs` already wrote the truncated transcript under `fork_id`.
             false,
             read_only,
@@ -368,15 +372,17 @@ fn side_chat_plan(plan: &mut Value) {
                 .get("acpReadOnly")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            let profile = acp_profile_from_plan(plan, &fam, cli_cmd.as_deref());
+            let acp_model = plan.get("acpModel").and_then(Value::as_str).map(str::to_string);
+            let acp_effort = plan.get("acpEffort").and_then(Value::as_str).map(str::to_string);
+            let profile = acp_profile_from_plan(plan, &fam);
             let command = crate::acp::spec::build_acp_host_launch_command_with_profile(
                 &fam,
                 cli_cmd.as_deref(),
                 reference.as_deref(),
                 crate::acp::AcpApprovalLevel::Ask,
                 &[],
-                None,
-                None,
+                acp_model.as_deref(),
+                acp_effort.as_deref(),
                 true,
                 read_only,
                 &profile,
@@ -430,18 +436,29 @@ pub(crate) fn build_agent_fork_plan(
     };
     let source_runtime = session.get("runtimeSettings").and_then(Value::as_object);
     let source_is_coordinator = source_runtime.is_some_and(session_is_coordinator);
-    let build_fork_profile = |fam: &str, cmd: &str| -> crate::acp::spec::AcpLaunchProfile {
-        let (account_wrapper, _, _) = crate::acp::spec::extract_account_wrapper_and_ignored(
+    let acp_model = resume_plan
+        .get("acpModel")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let acp_effort = resume_plan
+        .get("acpEffort")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let build_fork_profile = |fam: &str| -> crate::acp::spec::AcpLaunchProfile {
+        let source_account_cmd =
+            source_runtime.and_then(|rt| read_text_from_map(rt, "accountCommand"));
+        let account_wrapper = crate::acp::spec::account_wrapper_from_ghostex_account(
             fam,
-            match fam {
-                "claude" => "claude",
-                "codex" => "codex",
-                _ => "agy",
-            },
-            Some(cmd),
+            source_runtime,
+            source_account_cmd.as_deref(),
         );
+        let thread_marked_handovers = source_runtime
+            .and_then(|rt| rt.get("markedHandovers"))
+            .and_then(Value::as_bool)
+            == Some(true)
+            || super::is_lean_worker(source_runtime);
         let (append_system_prompt_file, developer_instructions) =
-            super::acp_launch_note(fam, source_is_coordinator, false);
+            super::acp_launch_note(fam, source_is_coordinator, thread_marked_handovers);
         crate::acp::spec::AcpLaunchProfile {
             account_wrapper,
             hub_id: source_runtime.and_then(crate::accounts::hub::launch::picked_hub),
@@ -463,15 +480,15 @@ pub(crate) fn build_agent_fork_plan(
             .map(|reference| {
                 acp_fork_family = Some("codex".to_string());
                 acp_fork_reference = Some(reference.clone());
-                let profile = build_fork_profile("codex", command);
+                let profile = build_fork_profile("codex");
                 crate::acp::spec::build_acp_host_launch_command_with_profile(
                     "codex",
                     Some(command),
                     Some(&reference),
                     source_acp_level,
                     &[],
-                    None,
-                    None,
+                    acp_model.as_deref(),
+                    acp_effort.as_deref(),
                     true,
                     source_read_only,
                     &profile,
@@ -483,15 +500,15 @@ pub(crate) fn build_agent_fork_plan(
             .map(|reference| {
                 acp_fork_family = Some("claude".to_string());
                 acp_fork_reference = Some(reference.clone());
-                let profile = build_fork_profile("claude", command);
+                let profile = build_fork_profile("claude");
                 crate::acp::spec::build_acp_host_launch_command_with_profile(
                     "claude",
                     Some(command),
                     Some(&reference),
                     source_acp_level,
                     &[],
-                    None,
-                    None,
+                    acp_model.as_deref(),
+                    acp_effort.as_deref(),
                     true,
                     source_read_only,
                     &profile,
@@ -557,7 +574,7 @@ pub(crate) fn build_agent_fork_plan(
         runtime_command.map(str::to_string),
     );
     if let Some(fam) = acp_fork_family {
-        let profile = build_fork_profile(&fam, runtime_command.unwrap_or_default());
+        let profile = build_fork_profile(&fam);
         plan.insert("acpFork".to_string(), json!(true));
         plan.insert("acpFamily".to_string(), json!(fam));
         plan.insert("acpReadOnly".to_string(), json!(source_read_only));
@@ -566,6 +583,13 @@ pub(crate) fn build_agent_fork_plan(
             json!(source_acp_level.as_str()),
         );
         insert_optional_string(&mut plan, "acpForkReference", acp_fork_reference);
+        insert_optional_string(
+            &mut plan,
+            "acpAccountSlot",
+            profile.account_wrapper.map(|w| w.slot),
+        );
+        insert_optional_string(&mut plan, "acpModel", acp_model);
+        insert_optional_string(&mut plan, "acpEffort", acp_effort);
         insert_optional_string(&mut plan, "acpHubId", profile.hub_id);
         if !profile.connector_envs.is_empty() {
             plan.insert(
