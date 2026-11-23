@@ -711,14 +711,37 @@ pub(crate) fn switch_draft_agent(
             &lifecycle.project_id,
             &lifecycle.session_id,
         );
+        let (typed_command, mut cleanup_paths) =
+            if crate::acp::session_is_acp(&updated) || command.trim().contains(" acp-host ") {
+                let paths = crate::paths::get_gxserver_paths(None);
+                let auth_token = std::fs::read_to_string(&context.auth_token_file)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default();
+                let (prepared, guard_files) =
+                    crate::accounts::restart::prepare_non_cli_in_place_launch_command(
+                        &paths,
+                        &auth_token,
+                        &lifecycle.project_id,
+                        &lifecycle.session_id,
+                        command,
+                    )?;
+                (format!(" {prepared}"), guard_files)
+            } else {
+                (
+                    command,
+                    crate::accounts::restart::TempFilesGuard(Vec::new()),
+                )
+            };
         let completion = crate::session_chat_send::enqueue_session_write_sequence_with_completion(
             &updated,
             &lifecycle.project_id,
             &lifecycle.session_id,
             DRAFT_AGENT_SWITCH_SEND_SOURCE,
-            build_draft_agent_switch_steps(&command),
+            build_draft_agent_switch_steps(&typed_command),
             None,
         )?;
+        cleanup_paths.disarm();
         switch_guard.finish_after(completion);
         return Ok(AgentEndpointOutput {
             presentation_session: Some((
