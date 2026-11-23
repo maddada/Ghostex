@@ -105,8 +105,9 @@ pub(crate) fn register(cx: &App) {
 pub(crate) const APP_FONT_SETTING: &str = "sessionChatFontFamily";
 
 /// Every family the app asks for when it draws ordinary, non-monospace text, its implicit default
-/// included. Each surface keeps its own look (Inter in the chrome, the system face in chat and
-/// dialogs) until an app font is picked, and then all of them draw in it.
+/// included. Each surface keeps its own look (Inter in the chrome, DM Sans in chat on macOS and
+/// Windows or the system face on Linux, the system face in dialogs) until an app font is picked,
+/// and then all of them draw in it.
 ///
 /// CDXC:DesignSystem 2026-10-31 DECISION:
 /// User: "add list of the fonts so person can pick one of the installed fonts for the app" and "Font should apply everywhere (except for monospace, monospace should remain as is font)". The pick reaches every surface through one substitution in gpui's text system (`TextSystem::set_font_family_substitution`), not through the call sites: text with no family of its own inherits gpui's default, and measuring asks for the same fonts as drawing, so a list of call sites would keep missing some. No pick installs no substitution, so the default look is untouched. A new proportional family goes in this list, and `every_named_family_is_classified` fails until it does.
