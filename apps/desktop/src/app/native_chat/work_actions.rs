@@ -25,17 +25,18 @@ use serde_json::{Value, json};
 
 /// The button an ask's answers fold into when they do not fit on one line (`answers_dropdown`).
 pub(super) const CHOOSE_ANSWER: &str = "Choices";
-/// The one icon of a Needs you row's Details, whatever it opens (a question's panel, a form, a
-/// Live page).
-pub(super) const DETAILS_ICON: &str = "titlebar/file-text.svg";
-/// A Needs you row's Jump to context: the icon Show in chat has in the row's panel.
-pub(super) const CONTEXT_ICON: &str = "titlebar/focus-2.svg";
-/// A Needs you row's Done action: a check mark (`dock_mark_read_icon`).
+/// The icon of a Needs you row's Details button when opening a question or form popup.
+pub(super) const DETAILS_ICON: &str = "titlebar/message-question.svg";
+/// The icon of a Needs you row's Open button when opening a Live page.
+pub(super) const PAGE_OPEN_ICON: &str = "titlebar/external-link.svg";
+/// A Needs you row's Jump to context: matches Show in chat.
+pub(super) const CONTEXT_ICON: &str = "titlebar/message-share.svg";
+/// A Needs you row's Archive action: a check mark (`dock_mark_read_icon`).
 pub(super) const MARK_READ_ICON: &str = "titlebar/check.svg";
-/// Whether a dock row carries a question the reader must answer, so it has no Done button: an ask
-/// with answers, a one-click question, a form or a page with open questions, an approval with
+/// Whether a dock row carries a question the reader must answer, so it has no Archive button: an
+/// ask with answers, a one-click question, a form or a page with open questions, an approval with
 /// buttons, a to-do that offers its own choices. A page that only waits to be seen (its dismiss
-/// reads "Done"), a to-do with only Done, a blocked line of work and a notice with no
+/// reads "Archive"), a to-do with only Done, a blocked line of work and a notice with no
 /// answers ask nothing. The phone has the same rule (workItemParts.tsx `rowAsksQuestion`).
 ///
 /// CDXC:Coordinators 2026-11-21 DECISION:
@@ -49,7 +50,7 @@ pub(super) fn row_asks_question(row: &Value) -> bool {
     }
     if key.starts_with("dock-questions:") {
         let label = text(row, "dismissLabel");
-        return label != "Done" && label != "Mark as read";
+        return !matches!(label.as_str(), "Archive" | "Done" | "Mark as read");
     }
     // A to-do with no choices of its own has only Done.
     let only_done =
@@ -362,16 +363,22 @@ impl NativeChatView {
         let open = row["open"].clone();
         if row["details"] == true || open.is_object() {
             let shown = key.to_string();
+            let is_page = row["page"] == true && open.is_object();
+            let (label, icon) = if is_page {
+                ("Open page", PAGE_OPEN_ICON)
+            } else {
+                ("Details", DETAILS_ICON)
+            };
             return Some(
                 self.tone_square_icon_button(
                     gpui::SharedString::from(format!("work-row-details:{key}")),
-                    "Details",
-                    DETAILS_ICON,
+                    label,
+                    icon,
                     false,
                     p,
                 )
-                .tooltip(|window, cx| {
-                    gpui_component::tooltip::Tooltip::new("Details")
+                .tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(label)
                         .keys(super::composer::hotkey_chord(Some("inboxOpenItem")))
                         .build(window, cx)
                 })
@@ -456,13 +463,13 @@ impl NativeChatView {
         Some(
             self.tone_square_icon_button(
                 gpui::SharedString::from(format!("work-row-read:{key}")),
-                "Done",
+                "Archive",
                 MARK_READ_ICON,
                 false,
                 p,
             )
             .tooltip(|window, cx| {
-                gpui_component::tooltip::Tooltip::new("Done")
+                gpui_component::tooltip::Tooltip::new("Archive")
                     .keys(super::composer::hotkey_chord(Some("inboxMarkRead")))
                     .build(window, cx)
             })
@@ -871,19 +878,19 @@ impl NativeChatView {
                 )),
             );
         }
-        // Dismiss reads Done on one that asks no question (gx-chat-core's `dismissLabel`).
-        let is_done = matches!(
+        // Dismiss reads Archive on one that asks no question (gx-chat-core's `dismissLabel`).
+        let is_archive = matches!(
             actions["dismissLabel"].as_str(),
-            Some("Done" | "Mark as read")
+            Some("Archive" | "Archive all" | "Done" | "Mark all done" | "Mark as read")
         );
-        let (dismiss_icon, dismiss_label): (&'static str, &'static str) = if is_done {
-            ("titlebar/check.svg", "Done")
+        let (dismiss_icon, dismiss_label): (&'static str, &'static str) = if is_archive {
+            ("titlebar/check.svg", "Archive")
         } else {
             ("titlebar/x.svg", "Dismiss")
         };
         for (field, icon, label) in [
-            ("open", "titlebar/arrow-up-right.svg", "Open"),
-            ("showInChat", "titlebar/focus-2.svg", "Show in chat"),
+            ("open", "titlebar/external-link.svg", "Open"),
+            ("showInChat", "titlebar/message-share.svg", "Show in chat"),
             ("dismiss", dismiss_icon, dismiss_label),
         ] {
             let command = actions[field].clone();
@@ -917,7 +924,7 @@ impl NativeChatView {
             row = row.child(
                 self.work_icon_button(
                     format!("work-snooze:{key}"),
-                    "titlebar/alarm.svg",
+                    "titlebar/clock.svg",
                     "Snooze",
                     false,
                     p,

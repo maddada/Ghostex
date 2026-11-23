@@ -142,7 +142,7 @@ pub fn rows_split(
             "replied": replied,
             "reply": { "item": tag, "key": key, "tag": "", "name": reply_name(title) },
             "mention": "",
-            // Done: a to-do asks no question, so it is not Dismiss. It sends the
+            // Archive: a to-do asks no question, so it is not Dismiss. It sends the
             // agent nothing; gxserver tells it with its next message
             // (server/src/session_chat_dismissed.rs, where the quiet-dismiss decision lives).
             "dismiss": {
@@ -152,7 +152,7 @@ pub fn rows_split(
                 "item": tag,
                 "label": "Dismissed",
             },
-            "dismissLabel": "Done",
+            "dismissLabel": "Archive",
             "snooze": snooze,
             "chips": [],
             "needs": true,

@@ -256,7 +256,7 @@ Answers:
   again or withdraw it. A pill `[<title>](answering:W<n>.Q<n>)` in a message is the same answer, its
   words after it up to the next pill (`regarding:` is about a whole form or page and answers none of
   it). `"skipped"` means skipped on purpose: ask again only if it blocks the work.
-- A Dismiss (or Done) sends you nothing at the time: your next message carries "Dismissed by
+- A Dismiss (or Archive) sends you nothing at the time: your next message carries "Dismissed by
   the user since your last message, don't ask again: …" in a `<ghostex-system>` block, naming each by
   its tags and title. It is withdrawn for good already; never ask it again or reply about it. A
   snoozed question (1, 6 or 24 hours) comes back by itself: leave it alone.

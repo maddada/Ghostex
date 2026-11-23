@@ -864,7 +864,7 @@ fn export_button(
         })
         .child(
             svg()
-                .path("titlebar/download.svg")
+                .path("titlebar/file-down.svg")
                 .size(px(13.0 * s))
                 .text_color(p.foreground),
         )

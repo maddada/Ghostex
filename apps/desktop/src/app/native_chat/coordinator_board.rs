@@ -281,7 +281,7 @@ fn board_menu_entries(row: &Value) -> Vec<Value> {
     let mut extra = Vec::new();
     if dock["showInChat"].is_object() {
         extra.push(
-            json!({"label": "Show in chat", "icon": "message", "command": dock["showInChat"]}),
+            json!({"label": "Show in chat", "icon": "message-share", "command": dock["showInChat"]}),
         );
     }
     if dock["markAnswered"].is_object() {
@@ -289,7 +289,10 @@ fn board_menu_entries(row: &Value) -> Vec<Value> {
     }
     if dock["dismiss"].is_object() {
         let label = dock["dismissLabel"].as_str().unwrap_or("Dismiss");
-        let icon = if matches!(label, "Done" | "Mark all done" | "Mark as read") {
+        let icon = if matches!(
+            label,
+            "Archive" | "Archive all" | "Done" | "Mark all done" | "Mark as read"
+        ) {
             "check"
         } else {
             "x"

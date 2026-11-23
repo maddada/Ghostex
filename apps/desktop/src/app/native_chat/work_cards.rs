@@ -105,21 +105,24 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
     let mut rows = Vec::new();
     // A snoozed row's Unsnooze (gx-chat-core `dock_with`'s `snoozed`): back under Needs you now.
     if row["unsnooze"].is_object() {
-        rows.push(json!({ "label": "Unsnooze", "iconPath": "titlebar/alarm.svg", "command": row["unsnooze"] }));
+        rows.push(json!({ "label": "Unsnooze", "iconPath": "titlebar/alarm-off.svg", "command": row["unsnooze"] }));
     }
     if row["showInChat"].is_object() {
-        rows.push(json!({ "label": "Show in chat", "iconPath": "titlebar/message.svg", "command": row["showInChat"] }));
+        rows.push(json!({ "label": "Show in chat", "iconPath": "titlebar/message-share.svg", "command": row["showInChat"] }));
     }
     // Mark answered, beside Dismiss: one answered in the chat box closes by hand
     // (gx-chat-core `questions::later::mark_answered`).
     if row["markAnswered"].is_object() {
         rows.push(json!({ "label": "Mark answered", "iconPath": "titlebar/circle-check.svg", "command": row["markAnswered"] }));
     }
-    // Dismiss, or Done on a row that asks no question (a to-do, a page that only
+    // Dismiss, or Archive on a row that asks no question (a to-do, a page that only
     // waits to be seen): gx-chat-core's `dismissLabel`. Both send the agent nothing.
     if row["dismiss"].is_object() {
         let label = row["dismissLabel"].as_str().unwrap_or("Dismiss");
-        let icon = if matches!(label, "Done" | "Mark all done" | "Mark as read") {
+        let icon = if matches!(
+            label,
+            "Archive" | "Archive all" | "Done" | "Mark all done" | "Mark as read"
+        ) {
             "titlebar/check.svg"
         } else {
             "titlebar/x.svg"
@@ -263,11 +266,12 @@ fn row_markdown(row: &Value, forms: &Value) -> String {
 /// (without html written there in the icon) but colored pink". A question keeps its circle.
 pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::Hsla) {
     let status = text(row, "status");
+    let kind = text(row, "kind");
     let (icon, color) = status_look(&status, p);
-    if text(row, "kind") == "threadWait" {
+    if kind == "threadWait" {
         return match text(row, "waitKind").as_str() {
             "approval" => (
-                "titlebar/shield-check.svg",
+                "titlebar/shield-alert.svg",
                 gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
             ),
             "signIn" | "usageLimit" => (
@@ -275,20 +279,23 @@ pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::
                 gpui::rgb(crate::app::native_sidebar::status::WORKING_COLOR).into(),
             ),
             _ if row["needsApproval"] == true => (
-                "titlebar/shield-check.svg",
+                "titlebar/shield-alert.svg",
                 gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
             ),
             _ => (icon, color),
         };
     }
-    if text(row, "kind") == "pageBundle" {
+    if kind == "approval" {
+        return (
+            "titlebar/shield-alert.svg",
+            gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
+        );
+    }
+    if kind == "pageBundle" {
         return (
             "titlebar/stack.svg",
             gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR).into(),
         );
-    }
-    if row["opened"] == true && row["page"] == true {
-        return ("titlebar/mail-opened.svg", p.muted);
     }
     if row["page"] == true && status == "needs" {
         return ("titlebar/file.svg", color);
@@ -299,8 +306,16 @@ pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::
     // CDXC:Coordinators 2026-11-12 DECISION:
     // User, of a form's row that showed the question ring: "use this icon for this one when it's
     // a question form (keep pink color)". Work item asks and pages keep theirs.
-    if text(row, "kind") == "form" && row["page"] != true && status == "needs" {
+    if kind == "form" && row["page"] != true && status == "needs" {
         return ("titlebar/list-check.svg", color);
+    }
+    // Q4761 all-literal left type icons: to-dos get a checkbox, questions get a help-circle.
+    if status == "needs" && (row["needsYou"] == true || text(row, "key").starts_with("needs-you:"))
+    {
+        return ("titlebar/checkbox.svg", color);
+    }
+    if status == "needs" {
+        return ("titlebar/help-circle.svg", color);
     }
     (icon, color)
 }
@@ -733,13 +748,13 @@ impl NativeChatView {
                 let focused = self.board.inbox_focus == Some(idx);
                 list = list.child(self.dock_row_at(row, focused, p, cx));
             }
-            // Mark all done (Q4685 A): breakdown summary on left + "Mark all done (N)" button on right.
+            // Archive all (Q4685 A / Q4758): breakdown summary on left + "Archive all (N)" button on right.
             let mark_all_summary = text(&dock["markAllSeen"], "summary");
             let mark_all_seen = dock["markAllSeen"]["command"].is_object().then(|| {
                 let command = dock["markAllSeen"]["command"].clone();
                 let label = dock["markAllSeen"]["label"]
                     .as_str()
-                    .unwrap_or("Mark all done")
+                    .unwrap_or("Archive all")
                     .to_string();
                 div()
                     .id("work-dock-mark-all-seen")
@@ -757,7 +772,7 @@ impl NativeChatView {
                     .hover(|style| style.bg(p.foreground.opacity(0.09)))
                     .tooltip(|window, cx| {
                         gpui_component::tooltip::Tooltip::new(
-                            "Mark all pages, plain to-dos, and finished items done",
+                            "Archive all pages, plain to-dos, and finished items",
                         )
                         .build(window, cx)
                     })
@@ -1586,17 +1601,7 @@ impl NativeChatView {
                     .h(px(PROSE_LINE_HEIGHT * s))
                     .flex()
                     .items_center()
-                    .gap(px(5.0 * s))
                     .flex_shrink_0()
-                    .when(unread, |slot| {
-                        slot.child(
-                            div()
-                                .size(px(6.0 * s))
-                                .rounded_full()
-                                .bg(pink)
-                                .flex_shrink_0(),
-                        )
-                    })
                     .child(
                         svg()
                             .path("titlebar/stack.svg")
@@ -1609,8 +1614,7 @@ impl NativeChatView {
                     .flex_1()
                     .min_w_0()
                     .truncate()
-                    .when(unread, |t| t.font_weight(FontWeight::SEMIBOLD))
-                    .text_color(p.strengthened(p.prose))
+                    .text_color(if unread { p.foreground } else { p.card_muted })
                     .child(title),
             )
             .child(
@@ -1662,11 +1666,11 @@ impl NativeChatView {
                                 .chat_cursor_pointer()
                                 .hover(|style| style.bg(p.foreground.opacity(0.09)))
                                 .tooltip(|window, cx| {
-                                    gpui_component::tooltip::Tooltip::new("Mark all pages done")
+                                    gpui_component::tooltip::Tooltip::new("Archive all pages")
                                         .keys(super::composer::hotkey_chord(Some("inboxMarkRead")))
                                         .build(window, cx)
                                 })
-                                .child("Mark all done")
+                                .child("Archive all")
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     cx.stop_propagation();
                                     this.invoke(dismiss.clone(), cx);
@@ -1722,26 +1726,21 @@ impl NativeChatView {
                         .flex()
                         .items_center()
                         .gap(px(8.0 * s))
-                        .when(opened, |el| el.opacity(0.62))
                         .chat_cursor_pointer()
                         .hover(|style| style.bg(p.foreground.opacity(0.04)))
                         .child(
                             svg()
-                                .path(if opened {
-                                    "titlebar/mail-opened.svg"
-                                } else {
-                                    "titlebar/file.svg"
-                                })
+                                .path("titlebar/file.svg")
                                 .flex_shrink_0()
                                 .size(px(12.0 * s))
-                                .text_color(if opened { p.muted } else { pink }),
+                                .text_color(pink),
                         )
                         .child(
                             div()
                                 .flex_1()
                                 .min_w_0()
                                 .truncate()
-                                .text_color(p.strengthened(p.prose))
+                                .text_color(if opened { p.card_muted } else { p.foreground })
                                 .child(page_title),
                         )
                         .when(!page_age.is_empty(), |el| {
@@ -1943,7 +1942,6 @@ impl NativeChatView {
         });
         let in_dock = look.age.is_none();
         let unread = in_dock && row["unread"] == true;
-        let opened_read = in_dock && row["opened"] == true;
         let duplicates: Vec<Value> = if in_dock {
             row["duplicates"].as_array().cloned().unwrap_or_default()
         } else {
@@ -1999,6 +1997,13 @@ impl NativeChatView {
                     cx.notify();
                 }))
         });
+        let title_color = if settled {
+            p.card_muted
+        } else if in_dock {
+            if unread { p.foreground } else { p.card_muted }
+        } else {
+            body
+        };
         let question = div()
             .flex_1()
             .min_w_0()
@@ -2010,12 +2015,8 @@ impl NativeChatView {
                 &title,
                 &row["titleRuns"],
                 !wrap,
-                if unread {
-                    FontWeight::SEMIBOLD
-                } else {
-                    FontWeight::NORMAL
-                },
-                body,
+                FontWeight::NORMAL,
+                title_color,
                 PROSE_SIZE,
                 PROSE_LINE_HEIGHT,
                 p,
@@ -2037,17 +2038,7 @@ impl NativeChatView {
                     .h(px(PROSE_LINE_HEIGHT * s))
                     .flex()
                     .items_center()
-                    .gap(px(5.0 * s))
                     .flex_shrink_0()
-                    .when(unread, |slot| {
-                        slot.child(
-                            div()
-                                .size(px(6.0 * s))
-                                .rounded_full()
-                                .bg(pink_dot)
-                                .flex_shrink_0(),
-                        )
-                    })
                     .child(svg().path(icon).size(px(13.0 * s)).text_color(color)),
             )
             .child(question);
@@ -2163,7 +2154,6 @@ impl NativeChatView {
             // Named after its row, so accessibility clients (cua-driver, VoiceOver) can find it.
             .aria_label(text(row, "title"))
             .group(hover.clone())
-            .when(opened_read, |press| press.opacity(0.62))
             .when(look.focused, |press| {
                 press
                     .bg(pink_dot.opacity(if p.light { 0.10 } else { 0.14 }))
@@ -3040,7 +3030,11 @@ impl NativeChatView {
         let row = row.clone();
         let menu_key = key.to_owned();
         let (button_id, label, icon) = if mark_read {
-            (format!("dock-row-read:{key}"), "Done", "titlebar/check.svg")
+            (
+                format!("dock-row-read:{key}"),
+                "Archive",
+                "titlebar/check.svg",
+            )
         } else {
             (
                 format!("dock-row-menu:{key}"),
@@ -3243,14 +3237,14 @@ impl NativeChatView {
             );
         }
         // A finished card in the dock goes away with its check (gx-chat-core `dock`). It asks no
-        // question, so it reads Done, as the dock's finished row does; it sends nothing.
+        // question, so it reads Archive, as the dock's finished row does; it sends nothing.
         let dismiss = card["dismiss"].clone();
         if dismiss.is_object() {
             top = top.child(
                 div()
                     .id(gpui::SharedString::from(format!("work-dismiss:{key}")))
                     .role(gpui::Role::Button)
-                    .aria_label("Done")
+                    .aria_label("Archive")
                     .flex_shrink_0()
                     .size(px(20.0 * s))
                     .flex()
@@ -3260,7 +3254,7 @@ impl NativeChatView {
                     .chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.08)))
                     .tooltip(|window, cx| {
-                        gpui_component::tooltip::Tooltip::new("Done").build(window, cx)
+                        gpui_component::tooltip::Tooltip::new("Archive").build(window, cx)
                     })
                     .child(
                         svg()

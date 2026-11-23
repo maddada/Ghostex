@@ -628,7 +628,7 @@ works.
 
    A page with no questions (a report, a mockup to look at, a comparison)
    waits for the reader until they mark it seen: Ghostex ends it with a
-   "Reply about this page" box and a Done button on its own, and its
+   "Reply about this page" box and an Archive button on its own, and its
    block carries `"awaitsSeen": true`, which keeps it in the reader's list of
    things that need them. Once they press it you receive the page's answers
    message with `{"seen": true}`, plus `"reply"` when they wrote one:

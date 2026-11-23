@@ -1301,7 +1301,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .filter(|undo| undo.expires_at_ms > now_ms && undo.count > 0)
         .map(|undo| {
             json!({
-                "label": format!("Marked {} done", undo.count),
+                "label": format!("Archived {}", undo.count),
                 "undoLabel": "Undo",
                 "command": { "type": "undoMarkAllInboxRead" },
                 "dismiss": { "type": "dismissMarkAllReadUndo" },
@@ -1382,7 +1382,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             summary_parts.push(format!("{} done", clear_finished_keys.len()));
         }
         json!({
-            "label": format!("Mark all done ({clear_total})"),
+            "label": format!("Archive all ({clear_total})"),
             "summary": summary_parts.join(" \u{b7} "),
             "count": clear_total,
             "command": {
@@ -1657,7 +1657,7 @@ fn bundle_same_turn_pages(
             "pageIds": page_ids,
             "bundlePages": pages,
             "dismiss": { "type": "markPagesSeen", "ids": page_ids },
-            "dismissLabel": "Mark all done",
+            "dismissLabel": "Archive all",
             "buttons": [],
             "detail": [],
             "needs": true,
@@ -1905,9 +1905,9 @@ fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>)
         "buttons": [],
         "mention": mention_of(item),
         "dismiss": card["dismiss"],
-        // A finished row asks nothing, so its silent dismiss reads Done (the desktop's
+        // A finished row asks nothing, so its silent dismiss reads Archive (the desktop's
         // hover check and both menus, the phone's trailing check).
-        "dismissLabel": if done_key.is_some() { json!("Done") } else { Value::Null },
+        "dismissLabel": if done_key.is_some() { json!("Archive") } else { Value::Null },
         "chips": card["chips"],
         "showInChat": show_in_chat(turns, changed_at, &key),
         "needs": false,
@@ -2048,9 +2048,9 @@ fn question_rows_of(
                 "messageId": asker.message_id,
                 "tags": asker.tags,
                 "dismiss": { "type": "cancelQuestion", "id": asker.id },
-                // A page that only waits to be seen asks no question: Done, not Dismiss
+                // A page that only waits to be seen asks no question: Archive, not Dismiss
                 // (server/src/session_chat_dismissed.rs, where the quiet-dismiss decision lives).
-                "dismissLabel": if asker.seen_only { "Done" } else { "Dismiss" },
+                "dismissLabel": if asker.seen_only { "Archive" } else { "Dismiss" },
                 // A page that only waits to be seen asks nothing to answer.
                 "markAnswered": if asker.seen_only { Value::Null } else { json!({ "type": "markQuestionAnswered", "id": asker.id }) },
                 "snooze": snooze,

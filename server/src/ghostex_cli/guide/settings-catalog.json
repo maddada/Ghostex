@@ -14951,8 +14951,8 @@
     },
     {
       "id": "inboxMarkRead",
-      "title": "Inbox: Done / Dismiss",
-      "description": "While the Session Inbox has keyboard focus, mark the highlighted item done or dismiss it.",
+      "title": "Inbox: Archive / Dismiss",
+      "description": "While the Session Inbox has keyboard focus, archive or dismiss the highlighted item.",
       "defaultKey": "e",
       "noTerminalBinding": true
     },
