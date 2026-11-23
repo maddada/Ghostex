@@ -261,8 +261,6 @@ fn build_acp_host_launch_command_for_platform(
     }
     if let Some(wrapper) = profile.account_wrapper.as_ref() {
         if is_valid_account_wrapper(family, wrapper) {
-            parts.push("--account-wrapper-bin".to_string());
-            parts.push(quote_acp_launch_arg(&wrapper.bin, windows));
             parts.push("--account-wrapper-slot".to_string());
             parts.push(quote_acp_launch_arg(&wrapper.slot, windows));
         }
@@ -525,18 +523,6 @@ pub(crate) fn split_leading_env_assignments(
     (envs, tokens[idx..].to_vec())
 }
 
-fn is_account_wrapper_bin(token: &str) -> bool {
-    let base = token
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(token)
-        .to_ascii_lowercase();
-    matches!(
-        base.as_str(),
-        "cswap" | "cswap.exe" | "xswap" | "xswap.exe"
-    )
-}
-
 pub(crate) fn is_safe_hub_id(id: &str) -> bool {
     let trimmed = id.trim();
     !trimmed.is_empty()
@@ -558,95 +544,205 @@ pub(crate) fn is_allowed_connector_env_key(key: &str) -> bool {
         || key.starts_with("GOOGLE_WORKSPACE_")
 }
 
-fn is_valid_account_wrapper_slot(slot: &str) -> bool {
+pub(crate) fn is_valid_account_wrapper_slot(slot: &str) -> bool {
     !slot.is_empty()
+        && slot
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric())
+        && !slot.contains("..")
         && slot
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
-pub(crate) fn is_valid_account_wrapper(family: &str, wrapper: &AcpAccountWrapper) -> bool {
-    let base = wrapper
-        .bin
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(&wrapper.bin)
-        .to_ascii_lowercase();
-    let bin_matches = match family {
-        "claude" => matches!(base.as_str(), "cswap" | "cswap.exe"),
-        "codex" => matches!(base.as_str(), "xswap" | "xswap.exe"),
-        _ => false,
+/// Resolve Ghostex's installed `cswap` or `xswap` executable strictly from Ghostex's own accounts
+/// helper (never from a caller-supplied command path). Falls back to the bare helper name on PATH.
+pub(crate) fn resolve_account_wrapper_executable(family: &str) -> Option<String> {
+    let helper = match family {
+        "claude" => "cswap",
+        "codex" => "xswap",
+        _ => return None,
     };
-    bin_matches && is_valid_account_wrapper_slot(&wrapper.slot)
+    let resolved = crate::accounts::launch::home()
+        .ok()
+        .and_then(|home| crate::accounts::helpers::executable(&home, helper))
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| helper.to_string());
+    Some(resolved)
 }
 
-/// Extract ONLY a validated `cswap run <slot>` / `xswap run <slot>` account wrapper or a plain
-/// family executable path from a command string (never forwarding arbitrary flags or leading env
-/// vars). Returns `(wrapper, custom_bin, ignored)` so Non-CLI callers can log discarded tokens.
-pub(crate) fn extract_account_wrapper_and_ignored(
+pub(crate) fn is_valid_account_wrapper(family: &str, wrapper: &AcpAccountWrapper) -> bool {
+    matches!(family, "claude" | "codex") && is_valid_account_wrapper_slot(&wrapper.slot)
+}
+
+/// Derive a validated `AcpAccountWrapper` strictly from Ghostex's own server-side account state
+/// (`account_command` produced by `accounts::launch::apply_new_session` / `runtimeSettings.accountCommand`,
+/// or `runtimeSettings.accountSlot`) and resolve the helper executable through `accounts::helpers::executable`.
+/// NEVER parses an untrusted `agentCommand` or `cli_command`.
+pub(crate) fn account_wrapper_from_ghostex_account(
     family: &str,
-    default_cli_bin: &str,
-    cli_command: Option<&str>,
-) -> (Option<AcpAccountWrapper>, Option<String>, Vec<String>) {
-    let Some(raw) = cli_command.map(str::trim).filter(|s| !s.is_empty()) else {
-        return (None, None, Vec::new());
+    runtime_settings: Option<&serde_json::Map<String, serde_json::Value>>,
+    account_command: Option<&str>,
+) -> Option<AcpAccountWrapper> {
+    let expected_helper = match family {
+        "claude" => "cswap",
+        "codex" => "xswap",
+        _ => return None,
+    };
+    let slot_from_cmd = account_command
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .and_then(|cmd| {
+            let tokens = tokenize_cli_command(cmd);
+            let (_, base_tokens) = split_leading_env_assignments(tokens);
+            let first = base_tokens.first()?;
+            let base = first
+                .rsplit(['/', '\\'])
+                .next()
+                .unwrap_or(first)
+                .to_ascii_lowercase();
+            let matches_helper = base == expected_helper || base == format!("{expected_helper}.exe");
+            if !matches_helper || base_tokens.get(1).map(String::as_str) != Some("run") {
+                return None;
+            }
+            let slot = base_tokens.get(2)?.trim();
+            is_valid_account_wrapper_slot(slot).then(|| slot.to_string())
+        });
+    let slot = slot_from_cmd.or_else(|| {
+        runtime_settings
+            .and_then(|rt| rt.get("accountSlot"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|s| is_valid_account_wrapper_slot(s))
+            .map(str::to_string)
+    })?;
+    let bin = resolve_account_wrapper_executable(family)?;
+    Some(AcpAccountWrapper { bin, slot })
+}
+
+fn is_safe_model_or_effort_token(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && !trimmed.starts_with('-')
+        && !trimmed.contains("..")
+        && trimmed.chars().all(|c| {
+            c.is_ascii_alphanumeric()
+                || matches!(c, '-' | '_' | '.' | ':' | '/' | '@' | '[' | ']' | '=' | '+')
+        })
+}
+
+/// Extract safe `--model` / `-m` and `--effort` values from an owner-configured agent command
+/// (used only as a fallback when no explicit create param or remembered model pin is present).
+pub(crate) fn extract_safe_model_and_effort_from_command(
+    family: &str,
+    cmd: &str,
+) -> (Option<String>, Option<String>) {
+    if !matches!(family, "claude" | "codex" | "antigravity") {
+        return (None, None);
+    }
+    let tokens = tokenize_cli_command(cmd);
+    let (_, base_tokens) = split_leading_env_assignments(tokens);
+    let mut model = None;
+    let mut effort = None;
+    let mut i = 1;
+    while i < base_tokens.len() {
+        let tok = base_tokens[i].as_str();
+        if let Some(v) = tok
+            .strip_prefix("--model=")
+            .or_else(|| tok.strip_prefix("-m="))
+        {
+            if model.is_none() && is_safe_model_or_effort_token(v) {
+                model = Some(v.trim().to_string());
+            }
+        } else if matches!(tok, "--model" | "-m") {
+            if let Some(next) = base_tokens.get(i + 1) {
+                if model.is_none() && is_safe_model_or_effort_token(next) {
+                    model = Some(next.trim().to_string());
+                }
+                i += 1;
+            }
+        } else if let Some(v) = tok.strip_prefix("--effort=") {
+            if effort.is_none() && is_safe_model_or_effort_token(v) {
+                effort = Some(v.trim().to_string());
+            }
+        } else if tok == "--effort" {
+            if let Some(next) = base_tokens.get(i + 1) {
+                if effort.is_none() && is_safe_model_or_effort_token(next) {
+                    effort = Some(next.trim().to_string());
+                }
+                i += 1;
+            }
+        }
+        i += 1;
+    }
+    (model, effort)
+}
+
+/// Inspect an owner-configured raw agent command (`agent_config.command` / `launchSettings.agentCommand`
+/// BEFORE Ghostex appends its own wrappers or flags) and return any leading env vars, custom binary
+/// paths/wrappers, or extra flags that Non-CLI mode does not forward (excluding the bare default
+/// family CLI and honored `--model` / `-m` / `--effort`).
+pub(crate) fn ignored_owner_command_tokens(
+    family: &str,
+    owner_command: Option<&str>,
+) -> Vec<String> {
+    let default_cli_bin = match family {
+        "claude" => "claude",
+        "codex" => "codex",
+        "antigravity" => "agy",
+        _ => return Vec::new(),
+    };
+    let Some(raw) = owner_command.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Vec::new();
     };
     let tokens = tokenize_cli_command(raw);
     let (envs, base_tokens) = split_leading_env_assignments(tokens);
     let mut ignored: Vec<String> = envs.into_iter().map(|(k, _)| format!("{k}=...")).collect();
     let Some(first) = base_tokens.first() else {
-        return (None, None, ignored);
+        return ignored;
     };
-    if is_account_wrapper_bin(first) {
-        let base = first
-            .rsplit(['/', '\\'])
-            .next()
-            .unwrap_or(first)
-            .to_ascii_lowercase();
-        let expected_wrapper = match family {
-            "claude" => matches!(base.as_str(), "cswap" | "cswap.exe"),
-            "codex" => matches!(base.as_str(), "xswap" | "xswap.exe"),
-            _ => false,
-        };
-        if expected_wrapper
-            && base_tokens.get(1).map(String::as_str) == Some("run")
-            && base_tokens
-                .get(2)
-                .is_some_and(|slot| is_valid_account_wrapper_slot(slot))
-        {
-            let wrapper = AcpAccountWrapper {
-                bin: first.clone(),
-                slot: base_tokens[2].clone(),
-            };
-            for tok in base_tokens.iter().skip(3) {
-                if !matches!(tok.as_str(), "--share-history" | "--")
-                    && tok.as_str() != default_cli_bin
-                {
-                    ignored.push(tok.clone());
-                }
-            }
-            return (Some(wrapper), None, ignored);
-        }
-        ignored.extend(base_tokens.into_iter());
-        return (None, None, ignored);
-    }
-
-    let base_name = first.rsplit(['/', '\\']).next().unwrap_or(first);
-    let stem = base_name
-        .strip_suffix(".exe")
-        .or_else(|| base_name.strip_suffix(".EXE"))
-        .unwrap_or(base_name)
-        .to_ascii_lowercase();
-    let custom_bin = if stem == default_cli_bin {
-        Some(first.clone())
+    // Plain bare CLI binary (or `command claude`) is normal; a path-qualified or custom wrapper
+    // binary is ignored in Non-CLI mode.
+    let (cmd_tok, rest_start) = if first == "command" && base_tokens.len() > 1 {
+        (base_tokens[1].as_str(), 2usize)
     } else {
-        ignored.push(first.clone());
-        None
+        (first.as_str(), 1usize)
     };
-    if base_tokens.len() > 1 {
-        ignored.extend(base_tokens.into_iter().skip(1));
+    let lower_cmd = cmd_tok.to_ascii_lowercase();
+    let is_plain_default = !cmd_tok.contains('/')
+        && !cmd_tok.contains('\\')
+        && (lower_cmd == default_cli_bin || lower_cmd == format!("{default_cli_bin}.exe"));
+    if !is_plain_default {
+        ignored.push(cmd_tok.to_string());
     }
-    (None, custom_bin, ignored)
+    let mut i = rest_start;
+    while i < base_tokens.len() {
+        let tok = base_tokens[i].as_str();
+        if let Some(v) = tok
+            .strip_prefix("--model=")
+            .or_else(|| tok.strip_prefix("-m="))
+            .or_else(|| tok.strip_prefix("--effort="))
+        {
+            if !is_safe_model_or_effort_token(v) {
+                ignored.push(tok.to_string());
+            }
+        } else if matches!(tok, "--model" | "-m" | "--effort") {
+            if let Some(next) = base_tokens.get(i + 1) {
+                if !is_safe_model_or_effort_token(next) {
+                    ignored.push(tok.to_string());
+                    ignored.push(next.clone());
+                }
+                i += 1;
+            } else {
+                ignored.push(tok.to_string());
+            }
+        } else {
+            ignored.push(tok.to_string());
+        }
+        i += 1;
+    }
+    ignored
 }
 
 /// Resolve Ghostex's own CLIProxyAPI hub profile directory (`~/.claude-profiles/ghostex-<id>` or
@@ -671,31 +767,26 @@ pub(crate) fn resolve_hub_profile_dir(family: &str, hub_id: &str) -> Option<Path
 /// Build `(envs, program, args)` to launch the agent's stdio ACP/SDK subprocess strictly from
 /// Ghostex's static per-agent spec and server-generated `AcpLaunchProfile`.
 ///
-/// NEVER forwards arbitrary flags or leading environment assignments from a user- or
-/// agent-supplied command string (`cli_command`); any extra flags or env vars in `cli_command` are
-/// logged and ignored.
+/// NEVER forwards arbitrary flags, leading environment assignments, custom binary paths, or account
+/// wrappers parsed from a user- or agent-supplied command string (`cli_command`).
 pub fn build_acp_server_argv(
     spec: &AcpAgentSpec,
-    cli_command: Option<&str>,
+    _cli_command: Option<&str>,
     profile: &AcpLaunchProfile,
 ) -> Option<(Vec<(String, String)>, String, Vec<String>)> {
     let (default_prog, acp_args) = spec.acp_argv.split_first()?;
-    let (extracted_wrapper, custom_bin, ignored) =
-        extract_account_wrapper_and_ignored(spec.family, spec.default_cli_bin, cli_command);
-    if !ignored.is_empty() {
-        eprintln!(
-            "[Non-CLI] Ignoring extra flags/env in command string for {}: {}",
-            spec.family,
-            ignored.join(" ")
-        );
-    }
 
     let wrapper = profile
         .account_wrapper
         .as_ref()
         .filter(|w| is_valid_account_wrapper(spec.family, w))
-        .cloned()
-        .or(extracted_wrapper);
+        .and_then(|w| {
+            let bin = resolve_account_wrapper_executable(spec.family)?;
+            Some(AcpAccountWrapper {
+                bin,
+                slot: w.slot.clone(),
+            })
+        });
 
     let mut envs: Vec<(String, String)> = Vec::new();
     if wrapper.is_none() {
@@ -723,7 +814,7 @@ pub fn build_acp_server_argv(
         return Some((envs, wrapper.bin, args));
     }
 
-    let program = custom_bin.unwrap_or_else(|| (*default_prog).to_string());
+    let program = (*default_prog).to_string();
     let args: Vec<String> = acp_args.iter().map(|s| (*s).to_string()).collect();
     Some((envs, program, args))
 }
@@ -736,6 +827,7 @@ pub(crate) fn build_ghostex_claude_settings_json(
     profile: &AcpLaunchProfile,
     cwd: Option<&str>,
     effort: Option<&str>,
+    skip_dangerous_prompt: bool,
 ) -> Option<String> {
     let mut settings = serde_json::Map::new();
     let mut env_map = serde_json::Map::new();
@@ -753,6 +845,12 @@ pub(crate) fn build_ghostex_claude_settings_json(
         .is_some_and(|e| matches!(e, "low" | "medium" | "high" | "xhigh" | "max"))
     {
         settings.insert("ultracode".to_string(), serde_json::Value::Bool(false));
+    }
+    if skip_dangerous_prompt {
+        settings.insert(
+            "skipDangerousModePermissionPrompt".to_string(),
+            serde_json::Value::Bool(true),
+        );
     }
     crate::agent_skills_session::write_ghostex_skills_into_settings(&mut settings);
 
@@ -801,24 +899,28 @@ pub(crate) fn validated_ghostex_prompt_file(raw: Option<&str>) -> Option<String>
 /// structured `AcpLaunchProfile`, preserving `--permission-mode plan` /
 /// `--sandbox read-only --ask-for-approval on-request` for `--read-only` threads and re-applying
 /// Ghostex's own deny profiles cleanly for the session's current approval level (never leaking
-/// untrusted command flags or a full-write `ghostex-home` profile on downgrade).
+/// untrusted command flags, arbitrary binary paths, or a full-write `ghostex-home` profile on
+/// downgrade).
 pub fn build_cli_switch_argv_with_options(
     spec: &AcpAgentSpec,
-    cli_command: Option<&str>,
+    _cli_command: Option<&str>,
     native_session_id: Option<&str>,
     accept_all: bool,
     read_only: bool,
     profile: &AcpLaunchProfile,
     cwd: Option<&str>,
 ) -> (Vec<(String, String)>, String, Vec<String>) {
-    let (extracted_wrapper, custom_bin, _) =
-        extract_account_wrapper_and_ignored(spec.family, spec.default_cli_bin, cli_command);
     let wrapper = profile
         .account_wrapper
         .as_ref()
         .filter(|w| is_valid_account_wrapper(spec.family, w))
-        .cloned()
-        .or(extracted_wrapper);
+        .and_then(|w| {
+            let bin = resolve_account_wrapper_executable(spec.family)?;
+            Some(AcpAccountWrapper {
+                bin,
+                slot: w.slot.clone(),
+            })
+        });
 
     let mut envs: Vec<(String, String)> = Vec::new();
     if wrapper.is_none() {
@@ -843,7 +945,9 @@ pub fn build_cli_switch_argv_with_options(
     }
 
     if spec.family == "claude" {
-        if let Some(settings_json) = build_ghostex_claude_settings_json(profile, cwd, None) {
+        if let Some(settings_json) =
+            build_ghostex_claude_settings_json(profile, cwd, None, accept_all && !read_only)
+        {
             inner_args.push("--settings".to_string());
             inner_args.push(settings_json);
         }
@@ -937,21 +1041,25 @@ pub fn build_cli_switch_argv_with_options(
                 ),
             )
         } else if read_only {
+            let mut fs_entries = vec!["\"/\"=\"read\"".to_string()];
+            fs_entries.extend(denies);
             (
                 "ghostex-home",
                 format!(
-                    "{{filesystem={{\"/\"=\"read\", {}}}, network={{enabled=false}}}}",
-                    denies.join(", ")
+                    "{{filesystem={{{}}}, network={{enabled=false}}}}",
+                    fs_entries.join(", ")
                 ),
             )
         } else if accept_all {
             inner_args.push("--ask-for-approval".to_string());
             inner_args.push("never".to_string());
+            let mut fs_entries = vec!["\"/\"=\"write\"".to_string()];
+            fs_entries.extend(denies);
             (
                 "ghostex-home",
                 format!(
-                    "{{filesystem={{\"/\"=\"write\", {}}}, network={{enabled=true}}}}",
-                    denies.join(", ")
+                    "{{filesystem={{{}}}, network={{enabled=true}}}}",
+                    fs_entries.join(", ")
                 ),
             )
         } else {
@@ -981,6 +1089,5 @@ pub fn build_cli_switch_argv_with_options(
         return (envs, wrapper.bin, args);
     }
 
-    let program = custom_bin.unwrap_or_else(|| spec.default_cli_bin.to_string());
-    (envs, program, inner_args)
+    (envs, spec.default_cli_bin.to_string(), inner_args)
 }

@@ -337,9 +337,12 @@ struct CodexState {
     read_only: bool,
     deny_mode: CodexDenyMode,
     active_profile: Option<&'static str>,
-    /// True if a live downgrade failed to reload the more restrictive Codex permission profile,
-    /// forcing explicit restrictive `sandboxPolicy` on `turn/start` so `"/"="write"` never leaks.
-    force_restrictive_sandbox: bool,
+    /// True when a mid-turn upgrade needs a different Ghostex deny profile; applied deterministically
+    /// at the next turn boundary (by restarting `app-server` and resuming the thread).
+    pending_profile_reload: bool,
+    /// Non-empty when restarting/resuming `app-server` under the new approval profile failed
+    /// (fail-closed: refuses new turns and surfaces a visible error notice instead of running looser).
+    fatal_error: Option<String>,
     developer_instructions: Option<String>,
     cwd: PathBuf,
     writable_roots: Vec<PathBuf>,
@@ -387,7 +390,8 @@ impl CodexState {
             read_only,
             deny_mode,
             active_profile,
-            force_restrictive_sandbox: false,
+            pending_profile_reload: false,
+            fatal_error: None,
             developer_instructions,
             cwd,
             writable_roots,
@@ -505,6 +509,7 @@ impl CodexState {
             "lastEventAtMs": self.last_event_at_ms,
             "transcriptPath": transcript_path,
             "childExited": self.child_exited,
+            "fatalError": self.fatal_error,
         })
     }
 }
@@ -557,13 +562,33 @@ impl CodexActivityReporter {
     }
 }
 
-struct CodexExitGuard(Arc<Mutex<CodexState>>);
+struct CodexExitGuard {
+    state: Arc<Mutex<CodexState>>,
+    process_gen: Arc<AtomicU64>,
+    my_gen: u64,
+}
 impl Drop for CodexExitGuard {
     fn drop(&mut self) {
-        let mut s = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        if self.process_gen.load(Ordering::Acquire) != self.my_gen {
+            return;
+        }
+        let mut s = self.state.lock().unwrap_or_else(|p| p.into_inner());
         s.child_exited = true;
         s.working = false;
     }
+}
+
+struct CodexProcess {
+    child: Child,
+    transport: Arc<CodexTransport>,
+}
+
+struct CodexSpawnConfig {
+    prog: String,
+    argv: Vec<String>,
+    acp_envs: Vec<(String, String)>,
+    cwd: String,
+    spool_session_id: String,
 }
 
 /// Build `(approvalPolicy, approvalsReviewer, sandboxPolicy)` for Codex `turn/start` matching
@@ -633,183 +658,433 @@ fn approval_level_rank(level: AcpApprovalLevel) -> u8 {
     }
 }
 
-/// Apply a new approval level on Codex:
-/// 1. When lowering a level while a turn is active, interrupt the running turn (`turn/interrupt`)
-///    and return `Err` if interrupting fails so the stronger policy is never silently left running
-///    under a weaker UI label.
-/// 2. When a Ghostex deny profile is active (`HomeOrGbot` or `GbotApi`) and the effective profile
-///    changes (for example stepping down from `ghostex-full` to `ghostex-ws` / `ghostex-ro`),
-///    unsubscribe and reload the thread with `config: { "default_permissions": new_profile }` so
-///    Codex enforces BOTH the narrower level sandbox (`workspaceWrite`/no-network or `readOnly`)
-///    AND the secret-folder denies. If reload fails on a downgrade, set `force_restrictive_sandbox`
-///    so `turn/start` enforces explicit restrictive `sandboxPolicy` instead of keeping `"/"="write"`.
-fn apply_codex_approval_level(
-    transport: &CodexTransport,
-    state: &Mutex<CodexState>,
+/// Spawn a fresh `codex app-server --stdio` process, run `initialize`/`initialized`, populate
+/// models if needed, and open/resume/fork the thread under the requested profile. Never falls back
+/// to a deny-dropping `sandboxPolicy`: if `thread/resume` fails (other than `"no rollout found"` on
+/// a thread with no turns yet), stops the child and returns `Err`.
+#[allow(clippy::too_many_arguments)]
+fn spawn_and_init_codex(
+    cfg: &CodexSpawnConfig,
+    resume_thread_id: Option<&str>,
+    fork_session: bool,
+    approval_level: AcpApprovalLevel,
+    read_only: bool,
+    profile: Option<&'static str>,
+    state: &Arc<Mutex<CodexState>>,
     activity: &CodexActivityReporter,
-    desired: AcpApprovalLevel,
-) -> Result<(), String> {
-    let (
-        prev_level,
-        effective_read_only,
-        deny_mode,
-        prev_profile,
-        interrupt_target,
-        tid,
-        cwd_str,
-        roots,
-        model,
-        dev_instr,
-    ) = {
-        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-        let prev = s.approval_level;
-        let next_ro = if desired != AcpApprovalLevel::Ask {
-            false
-        } else {
-            s.read_only
-        };
-        let need_interrupt = s.working && approval_level_rank(desired) < approval_level_rank(prev);
-        let target = if need_interrupt {
-            if let Some(tid_old) = s.active_turn_id.clone() {
-                push_capped_turn_id(&mut s.ignored_turn_ids, tid_old);
+    child_pid: &Arc<AtomicU32>,
+    process_gen: &Arc<AtomicU64>,
+    my_gen: u64,
+) -> Result<CodexProcess, String> {
+    let mut child = Command::new(&cfg.prog)
+        .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
+        .envs(cfg.acp_envs.iter().cloned())
+        .args(&cfg.argv)
+        .current_dir(&cfg.cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| {
+            format!(
+                "Failed to start `{} {}`: {err}",
+                cfg.prog,
+                cfg.argv.join(" ")
+            )
+        })?;
+    child_pid.store(child.id(), Ordering::Release);
+    let Some(stdin) = child.stdin.take() else {
+        let _ = child.kill();
+        child_pid.store(0, Ordering::Release);
+        return Err("Codex app-server stdin unavailable.".to_string());
+    };
+    let Some(stdout) = child.stdout.take() else {
+        let _ = child.kill();
+        child_pid.store(0, Ordering::Release);
+        return Err("Codex app-server stdout unavailable.".to_string());
+    };
+    let stderr = child.stderr.take();
+    let transport = Arc::new(CodexTransport::new(stdin, &cfg.spool_session_id));
+
+    if let Some(stderr) = stderr {
+        let t_err = transport.clone();
+        thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines().map_while(Result::ok) {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    t_err.spool_event(&json!({ "stderr": trimmed }));
+                }
             }
-            Some((s.thread_id.clone(), s.active_turn_id.clone()))
-        } else {
-            None
-        };
+        });
+    }
+
+    spawn_codex_stdout_reader(
+        stdout,
+        transport.clone(),
+        state.clone(),
+        activity.clone(),
+        process_gen.clone(),
+        my_gen,
+    );
+
+    if let Err(err) = transport.call(
+        "initialize",
+        json!({
+            "clientInfo": {
+                "name": "ghostex",
+                "version": env!("CARGO_PKG_VERSION"),
+            },
+            "capabilities": { "experimentalApi": true },
+        }),
+        CODEX_RPC_TIMEOUT,
+    ) {
+        stop_codex_gracefully(&transport, &mut child, child_pid);
+        return Err(format!("Codex app-server initialize failed: {err}"));
+    }
+    let _ = transport.notify("initialized", json!({}));
+
+    let need_models = state
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .available_models
+        .as_array()
+        .is_none_or(Vec::is_empty);
+    if need_models {
+        if let Ok(list) = transport.call("model/list", json!({}), CODEX_RPC_TIMEOUT) {
+            if let Some(data) = list.get("data").and_then(Value::as_array) {
+                let mapped: Vec<Value> = data
+                    .iter()
+                    .filter_map(|m| {
+                        let id = m
+                            .get("model")
+                            .or_else(|| m.get("id"))
+                            .and_then(Value::as_str)?;
+                        let name = m
+                            .get("displayName")
+                            .and_then(Value::as_str)
+                            .unwrap_or(id);
+                        Some(json!({
+                            "modelId": id,
+                            "name": name,
+                            "supportedReasoningEfforts": m.get("supportedReasoningEfforts").cloned().unwrap_or(json!([])),
+                        }))
+                    })
+                    .collect();
+                state
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .available_models = Value::Array(mapped);
+            }
+        }
+    }
+
+    let (roots, model, dev_instr) = {
+        let s = state.lock().unwrap_or_else(|p| p.into_inner());
         (
-            prev,
-            next_ro,
-            s.deny_mode,
-            s.active_profile,
-            target,
-            s.thread_id.clone(),
-            s.cwd.to_string_lossy().to_string(),
             s.writable_roots.clone(),
             s.current_model.clone(),
             s.developer_instructions.clone(),
         )
     };
+    let (init_approval, init_reviewer, _) =
+        codex_turn_policies(approval_level, read_only, &roots);
+    let init_sandbox_mode = match approval_level {
+        AcpApprovalLevel::FullAccess => "danger-full-access",
+        AcpApprovalLevel::Ask if read_only => "read-only",
+        AcpApprovalLevel::Ask | AcpApprovalLevel::AutoEdits | AcpApprovalLevel::Auto => {
+            "workspace-write"
+        }
+    };
 
-    if let Some((Some(tid_int), Some(turn_id))) = interrupt_target {
-        cancel_all_pending_codex(transport, state);
-        if let Err(err) = transport.call(
-            "turn/interrupt",
-            json!({ "threadId": tid_int, "turnId": turn_id }),
-            Duration::from_secs(5),
-        ) {
-            return Err(format!(
-                "Could not interrupt active Codex turn to lower approval level: {err}"
-            ));
+    let open_fresh_thread = || -> Result<Value, String> {
+        let mut start_params = Map::new();
+        start_params.insert("cwd".to_string(), json!(cfg.cwd));
+        start_params.insert("approvalPolicy".to_string(), init_approval.clone());
+        start_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
+        if let Some(prof) = profile {
+            start_params.insert("config".to_string(), json!({ "default_permissions": prof }));
+        } else {
+            start_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
         }
-        let wait_until = SystemTime::now() + Duration::from_secs(2);
-        while SystemTime::now() < wait_until {
-            if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
-                break;
+        if let Some(m) = model.as_deref().filter(|s| !s.is_empty()) {
+            start_params.insert("model".to_string(), json!(m));
+        }
+        if let Some(instr) = dev_instr.as_deref().filter(|s| !s.is_empty()) {
+            start_params.insert("developerInstructions".to_string(), json!(instr));
+        }
+        transport.call(
+            "thread/start",
+            Value::Object(start_params),
+            CODEX_RPC_TIMEOUT,
+        )
+    };
+
+    let thread_res = if let Some(resume_id) = resume_thread_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let method = if fork_session {
+            "thread/fork"
+        } else {
+            "thread/resume"
+        };
+        let mut req_params = Map::new();
+        req_params.insert("threadId".to_string(), json!(resume_id));
+        req_params.insert("cwd".to_string(), json!(cfg.cwd));
+        req_params.insert("approvalPolicy".to_string(), init_approval.clone());
+        req_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
+        if let Some(prof) = profile {
+            req_params.insert("config".to_string(), json!({ "default_permissions": prof }));
+        } else {
+            req_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
+        }
+        if let Some(instr) = dev_instr.as_deref().filter(|s| !s.is_empty()) {
+            req_params.insert("developerInstructions".to_string(), json!(instr));
+        }
+        match transport.call(method, Value::Object(req_params), CODEX_RPC_TIMEOUT) {
+            Ok(res) => Ok(res),
+            Err(err)
+                if !fork_session && err.to_ascii_lowercase().contains("no rollout found") =>
+            {
+                // Thread has never persisted a turn yet: start a fresh thread under the new profile.
+                open_fresh_thread()
             }
-            thread::sleep(Duration::from_millis(50));
+            Err(err) => Err(err),
         }
+    } else {
+        open_fresh_thread()
+    };
+
+    let thread_res = match thread_res {
+        Ok(res) => res,
+        Err(err) => {
+            stop_codex_gracefully(&transport, &mut child, child_pid);
+            return Err(format!("Codex thread open/resume failed: {err}"));
+        }
+    };
+
+    let thread_id = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-        s.working = false;
-        s.active_turn_id = None;
-        s.awaiting_turn_start = false;
-        s.clear_live_turn_output();
-        drop(s);
-        activity.sync();
+        let tid = thread_res
+            .pointer("/thread/id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| {
+                if fork_session {
+                    None
+                } else {
+                    resume_thread_id.map(str::to_string)
+                }
+            });
+        s.thread_id = tid.clone();
+        s.thread_path = thread_res
+            .pointer("/thread/path")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        if s.current_model.is_none() {
+            s.current_model = thread_res
+                .get("model")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+        }
+        if s.current_effort.is_none() {
+            s.current_effort = thread_res
+                .get("reasoningEffort")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+        }
+        s.active_profile = profile;
+        s.pending_profile_reload = false;
+        s.fatal_error = None;
+        s.child_exited = false;
+        tid
+    };
+
+    if fork_session && thread_id.is_none() {
+        stop_codex_gracefully(&transport, &mut child, child_pid);
+        return Err("Codex thread/fork did not return a forked thread id.".to_string());
     }
 
+    Ok(CodexProcess { child, transport })
+}
+
+/// Stop the current `codex app-server` (if running) under a new generation and restart + resume
+/// the thread with the current server-generated approval level and deny profile. Fails closed: if
+/// restarting/resuming fails, `*proc_opt` stays `None` and `s.fatal_error` records the error so
+/// the session errors visibly rather than running under a looser profile.
+#[allow(clippy::too_many_arguments)]
+fn restart_codex_process(
+    proc_opt: &mut Option<CodexProcess>,
+    cfg: &CodexSpawnConfig,
+    state: &Arc<Mutex<CodexState>>,
+    activity: &CodexActivityReporter,
+    child_pid: &Arc<AtomicU32>,
+    process_gen: &Arc<AtomicU64>,
+) -> Result<(), String> {
+    let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
+    if let Some(mut old) = proc_opt.take() {
+        cancel_all_pending_codex(&old.transport, state);
+        stop_codex_gracefully(&old.transport, &mut old.child, child_pid);
+    }
+    let (resume_id, level, read_only, next_profile) = {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.working = false;
+        s.awaiting_turn_start = false;
+        s.active_turn_id = None;
+        s.file_change_items.clear();
+        s.pending_requests.clear();
+        s.clear_live_turn_output();
+        let prof = desired_codex_profile(s.deny_mode, s.approval_level, s.read_only);
+        (s.thread_id.clone(), s.approval_level, s.read_only, prof)
+    };
+    match spawn_and_init_codex(
+        cfg,
+        resume_id.as_deref(),
+        false,
+        level,
+        read_only,
+        next_profile,
+        state,
+        activity,
+        child_pid,
+        process_gen,
+        new_gen,
+    ) {
+        Ok(next_proc) => {
+            *proc_opt = Some(next_proc);
+            activity.sync();
+            Ok(())
+        }
+        Err(err) => {
+            {
+                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                s.fatal_error = Some(err.clone());
+                s.working = false;
+            }
+            activity.sync();
+            Err(err)
+        }
+    }
+}
+
+/// Apply a new approval level on Codex deterministically:
+/// 1. Mid-turn upgrade: record the new level and defer any profile change (`pending_profile_reload`)
+///    to the next turn boundary without disrupting the running turn.
+/// 2. Mid-turn downgrade: wait briefly if `awaiting_turn_start`, cancel pending approvals, interrupt
+///    the running turn (`turn/interrupt`), and wait up to 5s for `turn/completed`. Fail closed: if
+///    the turn does not end in time (or `turn/interrupt` fails / no turn ID arrived), immediately
+///    stop the `app-server` process so the stronger policy cannot keep running.
+/// 3. Idle (or after stopping `app-server`): if the server-generated deny profile changed or the
+///    process was stopped, restart `app-server` and resume the thread under the new profile. Never
+///    falls back to a deny-dropping `sandboxPolicy`; returns `Err` visibly on failure.
+#[allow(clippy::too_many_arguments)]
+fn apply_codex_approval_level(
+    proc_opt: &mut Option<CodexProcess>,
+    cfg: &CodexSpawnConfig,
+    state: &Arc<Mutex<CodexState>>,
+    activity: &CodexActivityReporter,
+    child_pid: &Arc<AtomicU32>,
+    process_gen: &Arc<AtomicU64>,
+    desired: AcpApprovalLevel,
+) -> Result<(), String> {
+    let (prev_level, effective_read_only, deny_mode, prev_profile, is_working) = {
+        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+        let next_ro = if desired != AcpApprovalLevel::Ask {
+            false
+        } else {
+            s.read_only
+        };
+        (s.approval_level, next_ro, s.deny_mode, s.active_profile, s.working)
+    };
+    let is_downgrade = approval_level_rank(desired) < approval_level_rank(prev_level);
     let next_profile = desired_codex_profile(deny_mode, desired, effective_read_only);
-    {
+
+    if is_working && !is_downgrade {
+        // Mid-turn upgrade: keep the running turn undisturbed and reload the profile cleanly at
+        // the next turn boundary.
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.approval_level = desired;
         s.read_only = effective_read_only;
+        if next_profile != prev_profile {
+            s.pending_profile_reload = true;
+        }
+        return Ok(());
     }
 
-    if let (Some(new_prof), Some(thread_id)) = (next_profile, tid) {
-        if prev_profile != Some(new_prof) {
-            let (new_approval, new_reviewer, _) =
-                codex_turn_policies(desired, effective_read_only, &roots);
-            let _ = transport.call(
-                "thread/unsubscribe",
-                json!({ "threadId": thread_id }),
-                Duration::from_secs(5),
-            );
-            thread::sleep(Duration::from_millis(120));
-            let mut resume_params = Map::new();
-            resume_params.insert("threadId".to_string(), json!(thread_id));
-            resume_params.insert("cwd".to_string(), json!(cwd_str));
-            resume_params.insert("approvalPolicy".to_string(), new_approval.clone());
-            resume_params.insert("approvalsReviewer".to_string(), json!(new_reviewer));
-            resume_params.insert(
-                "config".to_string(),
-                json!({ "default_permissions": new_prof }),
-            );
-            if let Some(instr) = dev_instr.as_deref().filter(|s| !s.is_empty()) {
-                resume_params.insert("developerInstructions".to_string(), json!(instr));
+    let mut must_restart = false;
+    if is_working && is_downgrade {
+        // Wait briefly if `turn/start` is in flight so `active_turn_id` can arrive.
+        let id_wait_until = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < id_wait_until {
+            let s = state.lock().unwrap_or_else(|p| p.into_inner());
+            if !s.working || s.active_turn_id.is_some() || !s.awaiting_turn_start {
+                break;
             }
-            match transport.call(
-                "thread/resume",
-                Value::Object(resume_params),
-                CODEX_RPC_TIMEOUT,
-            ) {
-                Ok(_) => {
-                    let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                    s.active_profile = Some(new_prof);
-                    s.force_restrictive_sandbox = false;
-                }
-                Err(err) if err.to_ascii_lowercase().contains("no rollout found") => {
-                    // Thread has not run a turn yet: start a fresh thread with the new profile.
-                    let mut start_params = Map::new();
-                    start_params.insert("cwd".to_string(), json!(cwd_str));
-                    start_params.insert("approvalPolicy".to_string(), new_approval);
-                    start_params.insert("approvalsReviewer".to_string(), json!(new_reviewer));
-                    start_params.insert(
-                        "config".to_string(),
-                        json!({ "default_permissions": new_prof }),
-                    );
-                    if let Some(m) = model.as_deref().filter(|v| !v.is_empty()) {
-                        start_params.insert("model".to_string(), json!(m));
-                    }
-                    if let Some(instr) = dev_instr.as_deref().filter(|s| !s.is_empty()) {
-                        start_params.insert("developerInstructions".to_string(), json!(instr));
-                    }
-                    match transport.call(
-                        "thread/start",
-                        Value::Object(start_params),
-                        CODEX_RPC_TIMEOUT,
-                    ) {
-                        Ok(res) => {
-                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                            if let Some(new_tid) =
-                                res.pointer("/thread/id").and_then(Value::as_str)
-                            {
-                                s.thread_id = Some(new_tid.to_string());
-                            }
-                            s.active_profile = Some(new_prof);
-                            s.force_restrictive_sandbox = false;
+            drop(s);
+            thread::sleep(Duration::from_millis(50));
+        }
+
+        if let Some(proc) = proc_opt.as_ref() {
+            cancel_all_pending_codex(&proc.transport, state);
+            let (tid_opt, turn_id_opt, still_working) = {
+                let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                (s.thread_id.clone(), s.active_turn_id.clone(), s.working)
+            };
+            if still_working {
+                let interrupted_ok = if let (Some(tid_int), Some(turn_id)) = (tid_opt, turn_id_opt)
+                {
+                    proc.transport
+                        .call(
+                            "turn/interrupt",
+                            json!({ "threadId": tid_int, "turnId": turn_id }),
+                            Duration::from_secs(5),
+                        )
+                        .is_ok()
+                } else {
+                    false
+                };
+                if interrupted_ok {
+                    let wait_until = Instant::now() + Duration::from_secs(5);
+                    while Instant::now() < wait_until {
+                        if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                            break;
                         }
-                        Err(start_err) => {
-                            eprintln!("[Codex Non-CLI] Warning: could not switch deny profile to {new_prof}: {start_err}");
-                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                            if approval_level_rank(desired) < approval_level_rank(prev_level)
-                                || effective_read_only
-                            {
-                                s.force_restrictive_sandbox = true;
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    eprintln!("[Codex Non-CLI] Warning: could not reload thread with deny profile {new_prof}: {err}");
-                    let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                    if approval_level_rank(desired) < approval_level_rank(prev_level)
-                        || effective_read_only
-                    {
-                        s.force_restrictive_sandbox = true;
+                        thread::sleep(Duration::from_millis(50));
                     }
                 }
             }
         }
+
+        // Fail closed: if the stronger turn is still running after interrupt/wait, immediately
+        // stop the app-server process so it cannot execute anything further under the stronger level.
+        if state.lock().unwrap_or_else(|p| p.into_inner()).working {
+            process_gen.fetch_add(1, Ordering::AcqRel);
+            if let Some(mut old) = proc_opt.take() {
+                cancel_all_pending_codex(&old.transport, state);
+                stop_codex_gracefully(&old.transport, &mut old.child, child_pid);
+            }
+            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            s.working = false;
+            s.active_turn_id = None;
+            s.awaiting_turn_start = false;
+            s.file_change_items.clear();
+            s.clear_live_turn_output();
+            drop(s);
+            must_restart = true;
+        }
+        activity.sync();
+    }
+
+    let need_reload = {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.approval_level = desired;
+        s.read_only = effective_read_only;
+        must_restart || proc_opt.is_none() || next_profile != s.active_profile || s.fatal_error.is_some()
+    };
+
+    if need_reload {
+        restart_codex_process(proc_opt, cfg, state, activity, child_pid, process_gen)?;
     }
     Ok(())
 }
@@ -1170,239 +1445,48 @@ fn stop_codex_gracefully(transport: &CodexTransport, child: &mut Child, child_pi
     }
 }
 
-pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
-    let cwd_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let cwd = cwd_path.to_string_lossy().to_string();
-    let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);
-    let endpoint = GxserverEndpoint::from_env();
-    let spool_session_id = endpoint
-        .as_ref()
-        .map(|ep| ep.session_id.clone())
-        .unwrap_or_else(|| format!("local-{}", std::process::id()));
-
-    println!("Ghostex Non-CLI Host · {} · Starting...", spec.display_name);
-    let _ = std::io::stdout().flush();
-
-    let gx_paths = crate::paths::get_gxserver_paths(None);
-    let signal_guard = TerminationSignalGuard::install();
-
-    let Some((acp_envs, prog, mut argv)) =
-        build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
-    else {
-        eprintln!("Invalid Codex Non-CLI command.");
-        return 1;
-    };
-    // Synthesize Ghostex's own server-side Codex flags strictly from `parsed.profile` and Ghostex
-    // settings (never from untrusted command strings).
-    for (k, v) in &parsed.profile.connector_envs {
-        if is_allowed_connector_env_key(k) {
-            argv.push("-c".to_string());
-            argv.push(format!(
-                "shell_environment_policy.set.{k}={}",
-                serde_json::to_string(v).unwrap_or_default()
-            ));
-        }
-    }
-    if parsed.profile.gbot_computer_use_off {
-        let codex_home = acp_envs
-            .iter()
-            .find(|(k, _)| k == "CODEX_HOME")
-            .map(|(_, v)| PathBuf::from(v));
-        for srv in crate::agents::codex_disabled_screen_servers(codex_home.as_deref()) {
-            argv.push("-c".to_string());
-            argv.push(format!("mcp_servers.{srv}.enabled=false"));
-        }
-    }
-    if parsed.profile.lean_worker {
-        for feat in crate::agents::lean_codex_disabled_features_if_enabled() {
-            argv.push("--disable".to_string());
-            argv.push(feat);
-        }
-    }
-
-    let (deny_mode, init_profile) = if let Some((is_api, deny_paths)) =
-        crate::agents::codex_deny_paths_for_session(
-            Some(&cwd),
-            parsed.profile.gbot_chat,
-            parsed.profile.gbot_api_chat,
-        )
-    {
-        let denies: Vec<String> = deny_paths
-            .iter()
-            .map(|p| format!("{}=\"deny\"", crate::agents::codex_toml_string(p)))
-            .collect();
-        let mode = if is_api {
-            let ro_fs = format!("\"/\"=\"read\", {}", denies.join(", "));
-            let mut ws_entries = vec!["\"/\"=\"read\"".to_string()];
-            if !cwd.trim().is_empty() {
-                ws_entries.push(format!("{}=\"write\"", crate::agents::codex_toml_string(&cwd)));
-            }
-            ws_entries.extend(denies.iter().cloned());
-            argv.push("-c".to_string());
-            argv.push(format!(
-                "permissions.ghostex-api-ro={{filesystem={{{ro_fs}}}, network={{enabled=false}}}}"
-            ));
-            argv.push("-c".to_string());
-            argv.push(format!(
-                "permissions.ghostex-api-ws={{filesystem={{{}}}, network={{enabled=true}}}}",
-                ws_entries.join(", ")
-            ));
-            CodexDenyMode::GbotApi
-        } else {
-            let deny_list = denies.join(", ");
-            argv.push("-c".to_string());
-            argv.push(format!(
-                "permissions.ghostex-ro={{filesystem={{\"/\"=\"read\", {deny_list}}}, network={{enabled=false}}}}"
-            ));
-            argv.push("-c".to_string());
-            argv.push(format!(
-                "permissions.ghostex-ws={{extends=\":workspace\", filesystem={{{deny_list}}}, network={{enabled=false}}}}"
-            ));
-            argv.push("-c".to_string());
-            argv.push(format!(
-                "permissions.ghostex-full={{filesystem={{\"/\"=\"write\", {deny_list}}}, network={{enabled=true}}}}"
-            ));
-            CodexDenyMode::HomeOrGbot
+fn spawn_codex_stdout_reader(
+    stdout: std::process::ChildStdout,
+    t_out: Arc<CodexTransport>,
+    st_out: Arc<Mutex<CodexState>>,
+    act_out: CodexActivityReporter,
+    gen_out: Arc<AtomicU64>,
+    my_gen: u64,
+) {
+    thread::spawn(move || {
+        let _exit_guard = CodexExitGuard {
+            state: st_out.clone(),
+            process_gen: gen_out.clone(),
+            my_gen,
         };
-        let prof = desired_codex_profile(mode, parsed.approval_level, parsed.read_only);
-        (mode, prof)
-    } else {
-        (CodexDenyMode::None, None)
-    };
-
-    let mut child = match Command::new(&prog)
-        .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
-        .envs(acp_envs)
-        .args(&argv)
-        .current_dir(&cwd)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
-        Ok(child) => child,
-        Err(err) => {
-            eprintln!("Failed to start `{prog} {}`: {err}", argv.join(" "));
-            return 1;
-        }
-    };
-    let child_pid = Arc::new(AtomicU32::new(child.id()));
-    let Some(stdin) = child.stdin.take() else {
-        let _ = child.kill();
-        return 1;
-    };
-    let Some(stdout) = child.stdout.take() else {
-        let _ = child.kill();
-        return 1;
-    };
-    let stderr = child.stderr.take();
-
-    let transport = Arc::new(CodexTransport::new(stdin, &spool_session_id));
-    let state = Arc::new(Mutex::new(CodexState::new(
-        parsed.approval_level,
-        parsed.read_only,
-        deny_mode,
-        init_profile,
-        parsed.profile.developer_instructions.clone(),
-        cwd_path.clone(),
-        writable_roots,
-        parsed.model.clone(),
-        parsed.effort.clone(),
-    )));
-    let activity = CodexActivityReporter::start(endpoint.clone(), state.clone());
-    let shutting_down = Arc::new(AtomicBool::new(false));
-
-    #[cfg(unix)]
-    {
-        let t_sig = transport.clone();
-        let pid_sig = child_pid.clone();
-        let down_sig = shutting_down.clone();
-        let ep_sig = endpoint.clone();
-        thread::spawn(move || {
-            while !down_sig.load(Ordering::Acquire) {
-                if super::host::termination_requested() {
-                    down_sig.store(true, Ordering::Release);
-                    t_sig.close_stdin();
-                    let pid = pid_sig.swap(0, Ordering::AcqRel);
-                    if pid != 0 {
-                        let cpid = pid as libc::pid_t;
-                        unsafe {
-                            libc::kill(cpid, libc::SIGTERM);
-                        }
-                        let deadline = Instant::now() + Duration::from_secs(1);
-                        let mut reaped = false;
-                        while Instant::now() < deadline {
-                            let waited =
-                                unsafe { libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG) };
-                            if waited > 0
-                                || (waited < 0
-                                    && std::io::Error::last_os_error().raw_os_error()
-                                        != Some(libc::EINTR))
-                            {
-                                reaped = true;
-                                break;
-                            }
-                            thread::sleep(Duration::from_millis(50));
-                        }
-                        if !reaped {
-                            unsafe {
-                                libc::kill(cpid, libc::SIGKILL);
-                                let _ = libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG);
-                            }
-                        }
-                    }
-                    if let Some(ep) = ep_sig.as_ref() {
-                        ep.close_channel();
-                    }
-                    std::process::exit(143);
-                }
-                thread::sleep(Duration::from_millis(50));
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().map_while(Result::ok) {
+            if gen_out.load(Ordering::Acquire) != my_gen {
+                break;
             }
-        });
-    }
-
-    if let Some(stderr) = stderr {
-        let t_err = transport.clone();
-        thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines().map_while(Result::ok) {
+            let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 let trimmed = line.trim();
-                if !trimmed.is_empty() {
-                    t_err.spool_event(&json!({ "stderr": trimmed }));
+                if trimmed.is_empty() {
+                    return;
                 }
-            }
-        });
-    }
+                let Ok(msg) = serde_json::from_str::<Value>(trimmed) else {
+                    return;
+                };
+                t_out.spool_event(&msg);
+                if gen_out.load(Ordering::Acquire) != my_gen {
+                    return;
+                }
+                {
+                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                    s.last_event_at_ms = now_ms();
+                }
+                let has_method = msg.get("method").and_then(Value::as_str).is_some();
+                let has_id = msg.get("id").is_some();
 
-    // Stdout JSON-RPC reader loop.
-    {
-        let t_out = transport.clone();
-        let st_out = state.clone();
-        let act_out = activity.clone();
-        thread::spawn(move || {
-            let _exit_guard = CodexExitGuard(st_out.clone());
-            let reader = BufReader::new(stdout);
-            for line in reader.lines().map_while(Result::ok) {
-                let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() {
-                        return;
-                    }
-                    let Ok(msg) = serde_json::from_str::<Value>(trimmed) else {
-                        return;
-                    };
-                    t_out.spool_event(&msg);
-                    {
-                        let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                        s.last_event_at_ms = now_ms();
-                    }
-                    let has_method = msg.get("method").and_then(Value::as_str).is_some();
-                    let has_id = msg.get("id").is_some();
-
-                    // RPC response to our call.
-                    if !has_method && has_id {
-                        if let Some(id) = msg.get("id").and_then(Value::as_u64) {
-                            if let Some(tx) = t_out
+                // RPC response to our call.
+                if !has_method && has_id {
+                    if let Some(id) = msg.get("id").and_then(Value::as_u64) {
+                        if let Some(tx) = t_out
                                 .pending
                                 .lock()
                                 .unwrap_or_else(|p| p.into_inner())
@@ -1913,173 +1997,212 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                 }
             }
         });
-    }
+}
 
-    // 1. Initialize Codex app-server.
-    if let Err(err) = transport.call(
-        "initialize",
-        json!({
-            "clientInfo": {
-                "name": "ghostex",
-                "version": env!("CARGO_PKG_VERSION"),
-            },
-            "capabilities": { "experimentalApi": true },
-        }),
-        CODEX_RPC_TIMEOUT,
-    ) {
-        eprintln!("Codex app-server initialize failed: {err}");
-        stop_codex_gracefully(&transport, &mut child, &child_pid);
+pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
+    let cwd_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let cwd = cwd_path.to_string_lossy().to_string();
+    let writable_roots = canonicalize_writable_roots(&cwd_path, &parsed.writable_roots);
+    let endpoint = GxserverEndpoint::from_env();
+    let spool_session_id = endpoint
+        .as_ref()
+        .map(|ep| ep.session_id.clone())
+        .unwrap_or_else(|| format!("local-{}", std::process::id()));
+
+    println!("Ghostex Non-CLI Host · {} · Starting...", spec.display_name);
+    let _ = std::io::stdout().flush();
+
+    let gx_paths = crate::paths::get_gxserver_paths(None);
+    let signal_guard = TerminationSignalGuard::install();
+
+    let Some((acp_envs, prog, mut argv)) =
+        build_acp_server_argv(spec, parsed.cli_command.as_deref(), &parsed.profile)
+    else {
+        eprintln!("Invalid Codex Non-CLI command.");
         return 1;
+    };
+    // Synthesize Ghostex's own server-side Codex flags strictly from `parsed.profile` and Ghostex
+    // settings (never from untrusted command strings).
+    for (k, v) in &parsed.profile.connector_envs {
+        if is_allowed_connector_env_key(k) {
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "shell_environment_policy.set.{k}={}",
+                serde_json::to_string(v).unwrap_or_default()
+            ));
+        }
     }
-    let _ = transport.notify("initialized", json!({}));
-
-    // 2. Fetch available models.
-    if let Ok(list) = transport.call("model/list", json!({}), CODEX_RPC_TIMEOUT) {
-        if let Some(data) = list.get("data").and_then(Value::as_array) {
-            let mapped: Vec<Value> = data
-                .iter()
-                .filter_map(|m| {
-                    let id = m
-                        .get("model")
-                        .or_else(|| m.get("id"))
-                        .and_then(Value::as_str)?;
-                    let name = m
-                        .get("displayName")
-                        .and_then(Value::as_str)
-                        .unwrap_or(id);
-                    Some(json!({
-                        "modelId": id,
-                        "name": name,
-                        "supportedReasoningEfforts": m.get("supportedReasoningEfforts").cloned().unwrap_or(json!([])),
-                    }))
-                })
-                .collect();
-            state
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .available_models = Value::Array(mapped);
+    if parsed.profile.gbot_computer_use_off {
+        let codex_home = acp_envs
+            .iter()
+            .find(|(k, _)| k == "CODEX_HOME")
+            .map(|(_, v)| PathBuf::from(v));
+        for srv in crate::agents::codex_disabled_screen_servers(codex_home.as_deref()) {
+            argv.push("-c".to_string());
+            argv.push(format!("mcp_servers.{srv}.enabled=false"));
+        }
+    }
+    if parsed.profile.lean_worker {
+        for feat in crate::agents::lean_codex_disabled_features_if_enabled() {
+            argv.push("--disable".to_string());
+            argv.push(feat);
         }
     }
 
-    // 3. Start, fork, or resume thread with explicit approvalPolicy/sandbox so any user-global
-    // `approval_policy = "never"` in `~/.codex/config.toml` cannot override Ghostex's level.
-    // When Ghostex passed a custom permission profile (`default_permissions="ghostex-*"`, e.g.
-    // home secret-folder denies or GBot API chat sandbox), omit `sandbox` so Codex enforces the
-    // custom deny profile instead of overriding it.
-    let (init_approval, init_reviewer, _init_sandbox_policy) = {
-        let s = state.lock().unwrap_or_else(|p| p.into_inner());
-        codex_turn_policies(s.approval_level, s.read_only, &s.writable_roots)
-    };
-    let init_sandbox_mode = match parsed.approval_level {
-        AcpApprovalLevel::FullAccess => "danger-full-access",
-        AcpApprovalLevel::Ask if parsed.read_only => "read-only",
-        AcpApprovalLevel::Ask | AcpApprovalLevel::AutoEdits | AcpApprovalLevel::Auto => {
-            "workspace-write"
-        }
-    };
-    let thread_res = if let Some(resume_id) = parsed
-        .resume_session_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        let method = if parsed.fork_session {
-            "thread/fork"
-        } else {
-            "thread/resume"
-        };
-        let mut req_params = Map::new();
-        req_params.insert("threadId".to_string(), json!(resume_id));
-        req_params.insert("cwd".to_string(), json!(cwd));
-        req_params.insert("approvalPolicy".to_string(), init_approval);
-        req_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
-        if let Some(prof) = init_profile {
-            req_params.insert("config".to_string(), json!({ "default_permissions": prof }));
-        } else {
-            req_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
-        }
-        if let Some(instr) = parsed
-            .profile
-            .developer_instructions
-            .as_deref()
-            .filter(|s| !s.is_empty())
-        {
-            req_params.insert("developerInstructions".to_string(), json!(instr));
-        }
-        transport.call(method, Value::Object(req_params), CODEX_RPC_TIMEOUT)
-    } else {
-        let mut start_params = Map::new();
-        start_params.insert("cwd".to_string(), json!(cwd));
-        start_params.insert("approvalPolicy".to_string(), init_approval);
-        start_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
-        if let Some(prof) = init_profile {
-            start_params.insert("config".to_string(), json!({ "default_permissions": prof }));
-        } else {
-            start_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
-        }
-        if let Some(m) = parsed.model.as_deref().filter(|s| !s.is_empty()) {
-            start_params.insert("model".to_string(), json!(m));
-        }
-        if let Some(instr) = parsed
-            .profile
-            .developer_instructions
-            .as_deref()
-            .filter(|s| !s.is_empty())
-        {
-            start_params.insert("developerInstructions".to_string(), json!(instr));
-        }
-        transport.call(
-            "thread/start",
-            Value::Object(start_params),
-            CODEX_RPC_TIMEOUT,
+    let (deny_mode, init_profile) = if let Some((is_api, deny_paths)) =
+        crate::agents::codex_deny_paths_for_session(
+            Some(&cwd),
+            parsed.profile.gbot_chat,
+            parsed.profile.gbot_api_chat,
         )
+    {
+        let denies: Vec<String> = deny_paths
+            .iter()
+            .map(|p| format!("{}=\"deny\"", crate::agents::codex_toml_string(p)))
+            .collect();
+        let mode = if is_api {
+            let mut ro_entries = vec!["\"/\"=\"read\"".to_string()];
+            ro_entries.extend(denies.iter().cloned());
+            let mut ws_entries = vec!["\"/\"=\"read\"".to_string()];
+            if !cwd.trim().is_empty() {
+                ws_entries.push(format!("{}=\"write\"", crate::agents::codex_toml_string(&cwd)));
+            }
+            ws_entries.extend(denies.iter().cloned());
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "permissions.ghostex-api-ro={{filesystem={{{}}}, network={{enabled=false}}}}",
+                ro_entries.join(", ")
+            ));
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "permissions.ghostex-api-ws={{filesystem={{{}}}, network={{enabled=true}}}}",
+                ws_entries.join(", ")
+            ));
+            CodexDenyMode::GbotApi
+        } else {
+            let mut ro_entries = vec!["\"/\"=\"read\"".to_string()];
+            ro_entries.extend(denies.iter().cloned());
+            let mut full_entries = vec!["\"/\"=\"write\"".to_string()];
+            full_entries.extend(denies.iter().cloned());
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "permissions.ghostex-ro={{filesystem={{{}}}, network={{enabled=false}}}}",
+                ro_entries.join(", ")
+            ));
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "permissions.ghostex-ws={{extends=\":workspace\", filesystem={{{}}}, network={{enabled=false}}}}",
+                denies.join(", ")
+            ));
+            argv.push("-c".to_string());
+            argv.push(format!(
+                "permissions.ghostex-full={{filesystem={{{}}}, network={{enabled=true}}}}",
+                full_entries.join(", ")
+            ));
+            CodexDenyMode::HomeOrGbot
+        };
+        let prof = desired_codex_profile(mode, parsed.approval_level, parsed.read_only);
+        (mode, prof)
+    } else {
+        (CodexDenyMode::None, None)
     };
-    let thread_res = match thread_res {
-        Ok(res) => res,
+
+    let spawn_cfg = CodexSpawnConfig {
+        prog,
+        argv,
+        acp_envs,
+        cwd: cwd.clone(),
+        spool_session_id,
+    };
+
+    let state = Arc::new(Mutex::new(CodexState::new(
+        parsed.approval_level,
+        parsed.read_only,
+        deny_mode,
+        init_profile,
+        parsed.profile.developer_instructions.clone(),
+        cwd_path.clone(),
+        writable_roots,
+        parsed.model.clone(),
+        parsed.effort.clone(),
+    )));
+    let activity = CodexActivityReporter::start(endpoint.clone(), state.clone());
+    let shutting_down = Arc::new(AtomicBool::new(false));
+    let child_pid = Arc::new(AtomicU32::new(0));
+    let process_gen = Arc::new(AtomicU64::new(1));
+
+    let mut proc_opt = match spawn_and_init_codex(
+        &spawn_cfg,
+        parsed.resume_session_id.as_deref(),
+        parsed.fork_session,
+        parsed.approval_level,
+        parsed.read_only,
+        init_profile,
+        &state,
+        &activity,
+        &child_pid,
+        &process_gen,
+        1,
+    ) {
+        Ok(proc) => Some(proc),
         Err(err) => {
-            eprintln!("Codex thread open failed: {err}");
-            stop_codex_gracefully(&transport, &mut child, &child_pid);
+            eprintln!("{err}");
             return 1;
         }
     };
-    let thread_id = {
-        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-        let tid = thread_res
-            .pointer("/thread/id")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .or_else(|| {
-                if parsed.fork_session {
-                    None
-                } else {
-                    parsed.resume_session_id.clone()
+
+    #[cfg(unix)]
+    {
+        let pid_sig = child_pid.clone();
+        let down_sig = shutting_down.clone();
+        let ep_sig = endpoint.clone();
+        thread::spawn(move || {
+            while !down_sig.load(Ordering::Acquire) {
+                if super::host::termination_requested() {
+                    down_sig.store(true, Ordering::Release);
+                    let pid = pid_sig.swap(0, Ordering::AcqRel);
+                    if pid != 0 {
+                        let cpid = pid as libc::pid_t;
+                        unsafe {
+                            libc::kill(cpid, libc::SIGTERM);
+                        }
+                        let deadline = Instant::now() + Duration::from_secs(1);
+                        let mut reaped = false;
+                        while Instant::now() < deadline {
+                            let waited =
+                                unsafe { libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG) };
+                            if waited > 0
+                                || (waited < 0
+                                    && std::io::Error::last_os_error().raw_os_error()
+                                        != Some(libc::EINTR))
+                            {
+                                reaped = true;
+                                break;
+                            }
+                            thread::sleep(Duration::from_millis(50));
+                        }
+                        if !reaped {
+                            unsafe {
+                                libc::kill(cpid, libc::SIGKILL);
+                                let _ = libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG);
+                            }
+                        }
+                    }
+                    if let Some(ep) = ep_sig.as_ref() {
+                        ep.close_channel();
+                    }
+                    std::process::exit(143);
                 }
-            });
-        s.thread_id = tid.clone();
-        s.thread_path = thread_res
-            .pointer("/thread/path")
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        if s.current_model.is_none() {
-            s.current_model = thread_res
-                .get("model")
-                .and_then(Value::as_str)
-                .map(str::to_string);
-        }
-        if s.current_effort.is_none() {
-            s.current_effort = thread_res
-                .get("reasoningEffort")
-                .and_then(Value::as_str)
-                .map(str::to_string);
-        }
-        tid
-    };
-    if parsed.fork_session && thread_id.is_none() {
-        eprintln!("Codex thread/fork did not return a forked thread id.");
-        stop_codex_gracefully(&transport, &mut child, &child_pid);
-        return 1;
+                thread::sleep(Duration::from_millis(50));
+            }
+        });
     }
 
+    let thread_id = state
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .thread_id
+        .clone();
     println!(
         "Ghostex Non-CLI Host · {} · Ready (thread: {})",
         spec.display_name,
@@ -2146,9 +2269,15 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .unwrap_or_else(|p| p.into_inner())
                         .approval_level;
                     if desired != current {
-                        if let Err(err) =
-                            apply_codex_approval_level(&transport, &state, &activity, desired)
-                        {
+                        if let Err(err) = apply_codex_approval_level(
+                            &mut proc_opt,
+                            &spawn_cfg,
+                            &state,
+                            &activity,
+                            &child_pid,
+                            &process_gen,
+                            desired,
+                        ) {
                             eprintln!("[Codex Non-CLI] Warning: could not sync approval level: {err}");
                         }
                     }
@@ -2185,47 +2314,52 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     ep.ack(id, true, snap, None);
                 }
                 "abort" => {
-                    let (tid, turn_id) = {
+                    let (was_working, tid, turn_id) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        (s.thread_id.clone(), s.active_turn_id.clone())
+                        (s.working, s.thread_id.clone(), s.active_turn_id.clone())
                     };
-                    let interrupt_res = if let (Some(tid), Some(turn_id)) = (tid, turn_id.clone()) {
-                        Some(transport.call(
-                            "turn/interrupt",
-                            json!({ "threadId": tid, "turnId": turn_id }),
-                            Duration::from_secs(8),
-                        ))
-                    } else {
-                        None
-                    };
-                    cancel_all_pending_codex(&transport, &state);
-                    let wait_until = SystemTime::now() + Duration::from_secs(2);
-                    while SystemTime::now() < wait_until {
-                        if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
-                            break;
+                    if let Some(proc) = proc_opt.as_ref() {
+                        cancel_all_pending_codex(&proc.transport, &state);
+                        if was_working {
+                            if let (Some(tid), Some(turn_id)) = (tid, turn_id) {
+                                if let Err(err) = proc.transport.call(
+                                    "turn/interrupt",
+                                    json!({ "threadId": tid, "turnId": turn_id }),
+                                    Duration::from_secs(5),
+                                ) {
+                                    eprintln!("[Codex Non-CLI] Warning: turn/interrupt failed: {err}");
+                                }
+                            }
+                            let wait_until = Instant::now() + Duration::from_secs(5);
+                            while Instant::now() < wait_until {
+                                if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                                    break;
+                                }
+                                thread::sleep(Duration::from_millis(50));
+                            }
                         }
-                        thread::sleep(Duration::from_millis(50));
                     }
-                    if interrupt_res.as_ref().is_some_and(Result::is_err)
-                        || state.lock().unwrap_or_else(|p| p.into_inner()).working
-                    {
-                        if let Some(Err(err)) = &interrupt_res {
-                            eprintln!("[Codex Non-CLI] Warning: turn/interrupt failed: {err}");
+                    if state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                        if let Err(err) = restart_codex_process(
+                            &mut proc_opt,
+                            &spawn_cfg,
+                            &state,
+                            &activity,
+                            &child_pid,
+                            &process_gen,
+                        ) {
+                            ep.ack(id, false, Value::Null, Some(&err));
+                            continue;
                         }
-                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        if let Some(tid_old) = turn_id {
-                            push_capped_turn_id(&mut s.ignored_turn_ids, tid_old);
-                        }
-                        s.working = false;
-                        s.awaiting_turn_start = false;
-                        s.active_turn_id = None;
-                        s.file_change_items.clear();
-                        s.clear_live_turn_output();
                     }
                     activity.sync();
                     ep.ack(id, true, json!({ "aborted": true }), None);
                 }
                 "approve" => {
+                    let Some(proc) = proc_opt.as_ref() else {
+                        ep.ack(id, false, Value::Null, Some("Codex process is not running."));
+                        continue;
+                    };
                     let decision = params
                         .get("decision")
                         .and_then(Value::as_str)
@@ -2273,13 +2407,14 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         CodexRequestKind::CommandApproval
                         | CodexRequestKind::FileChangeApproval => {
                             let val = if is_deny { "decline" } else { "accept" };
-                            transport.respond(req.rpc_id, json!({ "decision": val }))
+                            proc.transport.respond(req.rpc_id, json!({ "decision": val }))
                         }
                         CodexRequestKind::PermissionsApproval { permissions } => {
                             if is_deny {
-                                transport.respond(req.rpc_id, json!({ "permissions": {} }))
+                                proc.transport
+                                    .respond(req.rpc_id, json!({ "permissions": {} }))
                             } else {
-                                transport.respond(
+                                proc.transport.respond(
                                     req.rpc_id,
                                     json!({ "permissions": permissions, "scope": "turn" }),
                                 )
@@ -2287,10 +2422,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                         CodexRequestKind::McpElicitation { .. } => {
                             let action = if is_deny { "decline" } else { "accept" };
-                            transport.respond(req.rpc_id, json!({ "action": action }))
+                            proc.transport
+                                .respond(req.rpc_id, json!({ "action": action }))
                         }
                         CodexRequestKind::UserInput { .. } => {
-                            transport.respond(req.rpc_id, json!({ "answers": {} }))
+                            proc.transport.respond(req.rpc_id, json!({ "answers": {} }))
                         }
                     };
                     match res {
@@ -2302,6 +2438,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     }
                 }
                 "answer_question" => {
+                    let Some(proc) = proc_opt.as_ref() else {
+                        ep.ack(id, false, Value::Null, Some("Codex process is not running."));
+                        continue;
+                    };
                     let selections = params
                         .get("selections")
                         .and_then(Value::as_array)
@@ -2341,7 +2481,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                         _ => json!({ "answers": {} }),
                     };
-                    match transport.respond(req.rpc_id, body) {
+                    match proc.transport.respond(req.rpc_id, body) {
                         Ok(()) => {
                             activity.sync();
                             ep.ack(id, true, json!({ "answered": true }), None);
@@ -2389,9 +2529,15 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                         continue;
                     };
-                    if let Err(err) =
-                        apply_codex_approval_level(&transport, &state, &activity, level)
-                    {
+                    if let Err(err) = apply_codex_approval_level(
+                        &mut proc_opt,
+                        &spawn_cfg,
+                        &state,
+                        &activity,
+                        &child_pid,
+                        &process_gen,
+                        level,
+                    ) {
                         ep.ack(id, false, Value::Null, Some(&err));
                         continue;
                     }
@@ -2407,42 +2553,23 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .and_then(Value::as_str)
                         .unwrap_or_default()
                         .to_string();
-                    let (
-                        is_working,
-                        tid,
-                        turn_id,
-                        level,
-                        read_only,
-                        use_profile_sandbox,
-                        roots,
-                        model,
-                        effort,
-                    ) = {
+                    let (is_working, tid_initial, turn_id) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        (
-                            s.working,
-                            s.thread_id.clone(),
-                            s.active_turn_id.clone(),
-                            s.approval_level,
-                            s.read_only,
-                            s.active_profile.is_some() && !s.force_restrictive_sandbox,
-                            s.writable_roots.clone(),
-                            s.current_model.clone(),
-                            s.current_effort.clone(),
-                        )
-                    };
-                    let Some(tid) = tid else {
-                        ep.ack(id, false, Value::Null, Some("Codex thread not initialized."));
-                        continue;
+                        (s.working, s.thread_id.clone(), s.active_turn_id.clone())
                     };
                     let input = vec![json!({ "type": "text", "text": text })];
                     if is_working {
-                        if let Some(ref active_tid) = turn_id {
-                            if transport
+                        if let (Some(proc), Some(tid_ref), Some(active_tid)) = (
+                            proc_opt.as_ref(),
+                            tid_initial.as_deref(),
+                            turn_id.as_deref(),
+                        ) {
+                            if proc
+                                .transport
                                 .call(
                                     "turn/steer",
                                     json!({
-                                        "threadId": tid,
+                                        "threadId": tid_ref,
                                         "expectedTurnId": active_tid,
                                         "input": input,
                                     }),
@@ -2454,29 +2581,80 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                                 continue;
                             }
                         }
-                        cancel_all_pending_codex(&transport, &state);
-                        if let Some(old_turn_id) = turn_id {
-                            push_capped_turn_id(
-                                &mut state
-                                    .lock()
-                                    .unwrap_or_else(|p| p.into_inner())
-                                    .ignored_turn_ids,
-                                old_turn_id.clone(),
-                            );
-                            let _ = transport.call(
-                                "turn/interrupt",
-                                json!({ "threadId": tid, "turnId": old_turn_id }),
-                                Duration::from_secs(5),
-                            );
-                        }
-                        let wait_until = SystemTime::now() + Duration::from_secs(4);
-                        while SystemTime::now() < wait_until {
-                            if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
-                                break;
+                        if let Some(proc) = proc_opt.as_ref() {
+                            cancel_all_pending_codex(&proc.transport, &state);
+                            if let (Some(tid_ref), Some(old_turn_id)) =
+                                (tid_initial.as_deref(), turn_id.as_deref())
+                            {
+                                let _ = proc.transport.call(
+                                    "turn/interrupt",
+                                    json!({ "threadId": tid_ref, "turnId": old_turn_id }),
+                                    Duration::from_secs(5),
+                                );
                             }
-                            thread::sleep(Duration::from_millis(50));
+                            let wait_until = Instant::now() + Duration::from_secs(5);
+                            while Instant::now() < wait_until {
+                                if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                                    break;
+                                }
+                                thread::sleep(Duration::from_millis(50));
+                            }
+                        }
+                        if state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                            if let Err(err) = restart_codex_process(
+                                &mut proc_opt,
+                                &spawn_cfg,
+                                &state,
+                                &activity,
+                                &child_pid,
+                                &process_gen,
+                            ) {
+                                ep.ack(id, false, Value::Null, Some(&err));
+                                continue;
+                            }
                         }
                     }
+                    // Apply any pending profile reload (from a mid-turn upgrade) or recover at
+                    // the turn boundary before starting the next turn.
+                    let need_reload = {
+                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        proc_opt.is_none()
+                            || s.pending_profile_reload
+                            || s.fatal_error.is_some()
+                    };
+                    if need_reload {
+                        if let Err(err) = restart_codex_process(
+                            &mut proc_opt,
+                            &spawn_cfg,
+                            &state,
+                            &activity,
+                            &child_pid,
+                            &process_gen,
+                        ) {
+                            ep.ack(id, false, Value::Null, Some(&err));
+                            continue;
+                        }
+                    }
+                    let Some(proc) = proc_opt.as_ref() else {
+                        ep.ack(id, false, Value::Null, Some("Codex process is not running."));
+                        continue;
+                    };
+                    let (tid, level, read_only, use_profile_sandbox, roots, model, effort) = {
+                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        (
+                            s.thread_id.clone(),
+                            s.approval_level,
+                            s.read_only,
+                            s.deny_mode != CodexDenyMode::None,
+                            s.writable_roots.clone(),
+                            s.current_model.clone(),
+                            s.current_effort.clone(),
+                        )
+                    };
+                    let Some(tid) = tid else {
+                        ep.ack(id, false, Value::Null, Some("Codex thread not initialized."));
+                        continue;
+                    };
                     let (approval_policy, reviewer, sandbox_policy) =
                         codex_turn_policies(level, read_only, &roots);
                     let mut turn_params = Map::new();
@@ -2501,8 +2679,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         s.active_turn_id = None;
                         s.clear_live_turn_output();
                     }
-                    match transport.call("turn/start", Value::Object(turn_params), CODEX_RPC_TIMEOUT)
-                    {
+                    match proc.transport.call(
+                        "turn/start",
+                        Value::Object(turn_params),
+                        CODEX_RPC_TIMEOUT,
+                    ) {
                         Ok(res) => {
                             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                             s.awaiting_turn_start = false;
@@ -2547,33 +2728,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
-                    let (
-                        is_working,
-                        tid,
-                        turn_id,
-                        level,
-                        read_only,
-                        use_profile_sandbox,
-                        roots,
-                        model,
-                        effort,
-                    ) = {
+                    let (is_working, tid_initial, turn_id) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        (
-                            s.working,
-                            s.thread_id.clone(),
-                            s.active_turn_id.clone(),
-                            s.approval_level,
-                            s.read_only,
-                            s.active_profile.is_some() && !s.force_restrictive_sandbox,
-                            s.writable_roots.clone(),
-                            s.current_model.clone(),
-                            s.current_effort.clone(),
-                        )
-                    };
-                    let Some(tid) = tid else {
-                        ep.ack(id, false, Value::Null, Some("Codex thread not initialized."));
-                        continue;
+                        (s.working, s.thread_id.clone(), s.active_turn_id.clone())
                     };
                     if is_working && !interrupt {
                         ep.ack(id, false, Value::Null, Some("ACP_AGENT_BUSY"));
@@ -2606,33 +2763,84 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }));
                     }
                     if is_working && interrupt {
-                        // Interrupt-and-send ALWAYS calls `turn/interrupt` so the new turn starts
-                        // cleanly under the current approval level and sandbox policy (never
-                        // steering into an older turn's stronger policy).
-                        cancel_all_pending_codex(&transport, &state);
-                        if let Some(old_turn_id) = turn_id {
-                            push_capped_turn_id(
-                                &mut state
-                                    .lock()
-                                    .unwrap_or_else(|p| p.into_inner())
-                                    .ignored_turn_ids,
-                                old_turn_id.clone(),
-                            );
-                            let _ = transport.call(
-                                "turn/interrupt",
-                                json!({ "threadId": tid, "turnId": old_turn_id }),
-                                Duration::from_secs(5),
-                            );
-                        }
-                        let wait_until = SystemTime::now() + Duration::from_secs(4);
-                        while SystemTime::now() < wait_until {
-                            if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
-                                break;
+                        // Interrupt-and-send ALWAYS calls `turn/interrupt` and waits for
+                        // `turn/completed` (restarting app-server if it does not stop in time) so
+                        // the new turn runs strictly under the current approval level and profile.
+                        if let Some(proc) = proc_opt.as_ref() {
+                            cancel_all_pending_codex(&proc.transport, &state);
+                            if let (Some(tid_ref), Some(old_turn_id)) =
+                                (tid_initial.as_deref(), turn_id.as_deref())
+                            {
+                                let _ = proc.transport.call(
+                                    "turn/interrupt",
+                                    json!({ "threadId": tid_ref, "turnId": old_turn_id }),
+                                    Duration::from_secs(5),
+                                );
                             }
-                            thread::sleep(Duration::from_millis(50));
+                            let wait_until = Instant::now() + Duration::from_secs(5);
+                            while Instant::now() < wait_until {
+                                if !state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                                    break;
+                                }
+                                thread::sleep(Duration::from_millis(50));
+                            }
+                        }
+                        if state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                            if let Err(err) = restart_codex_process(
+                                &mut proc_opt,
+                                &spawn_cfg,
+                                &state,
+                                &activity,
+                                &child_pid,
+                                &process_gen,
+                            ) {
+                                ep.ack(id, false, Value::Null, Some(&err));
+                                continue;
+                            }
                         }
                     }
-                    cancel_all_pending_codex(&transport, &state);
+                    // Apply any pending profile reload (from a mid-turn upgrade) or fail-closed
+                    // recovery deterministically at the turn boundary before `turn/start`.
+                    let need_reload = {
+                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        proc_opt.is_none()
+                            || s.pending_profile_reload
+                            || s.fatal_error.is_some()
+                    };
+                    if need_reload {
+                        if let Err(err) = restart_codex_process(
+                            &mut proc_opt,
+                            &spawn_cfg,
+                            &state,
+                            &activity,
+                            &child_pid,
+                            &process_gen,
+                        ) {
+                            ep.ack(id, false, Value::Null, Some(&err));
+                            continue;
+                        }
+                    }
+                    let Some(proc) = proc_opt.as_ref() else {
+                        ep.ack(id, false, Value::Null, Some("Codex process is not running."));
+                        continue;
+                    };
+                    cancel_all_pending_codex(&proc.transport, &state);
+                    let (tid, level, read_only, use_profile_sandbox, roots, model, effort) = {
+                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        (
+                            s.thread_id.clone(),
+                            s.approval_level,
+                            s.read_only,
+                            s.deny_mode != CodexDenyMode::None,
+                            s.writable_roots.clone(),
+                            s.current_model.clone(),
+                            s.current_effort.clone(),
+                        )
+                    };
+                    let Some(tid) = tid else {
+                        ep.ack(id, false, Value::Null, Some("Codex thread not initialized."));
+                        continue;
+                    };
                     let (approval_policy, reviewer, sandbox_policy) =
                         codex_turn_policies(level, read_only, &roots);
                     let mut turn_params = Map::new();
@@ -2659,8 +2867,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     }
                     println!("\r\n[Codex Non-CLI] Turn started...");
                     let _ = std::io::stdout().flush();
-                    match transport.call("turn/start", Value::Object(turn_params), CODEX_RPC_TIMEOUT)
-                    {
+                    match proc.transport.call(
+                        "turn/start",
+                        Value::Object(turn_params),
+                        CODEX_RPC_TIMEOUT,
+                    ) {
                         Ok(res) => {
                             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                             s.awaiting_turn_start = false;
@@ -2713,19 +2924,25 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                         continue;
                     }
-                    cancel_all_pending_codex(&transport, &state);
-                    if is_working {
-                        if let (Some(tid_ref), Some(turn_id_ref)) = (tid.as_deref(), turn_id.as_deref())
-                        {
-                            let _ = transport.call(
-                                "turn/interrupt",
-                                json!({ "threadId": tid_ref, "turnId": turn_id_ref }),
-                                Duration::from_secs(3),
-                            );
+                    if let Some(proc) = proc_opt.as_ref() {
+                        cancel_all_pending_codex(&proc.transport, &state);
+                        if is_working {
+                            if let (Some(tid_ref), Some(turn_id_ref)) =
+                                (tid.as_deref(), turn_id.as_deref())
+                            {
+                                let _ = proc.transport.call(
+                                    "turn/interrupt",
+                                    json!({ "threadId": tid_ref, "turnId": turn_id_ref }),
+                                    Duration::from_secs(3),
+                                );
+                            }
                         }
                     }
                     shutting_down.store(true, Ordering::Release);
-                    stop_codex_gracefully(&transport, &mut child, &child_pid);
+                    process_gen.fetch_add(1, Ordering::AcqRel);
+                    if let Some(mut old) = proc_opt.take() {
+                        stop_codex_gracefully(&old.transport, &mut old.child, &child_pid);
+                    }
                     ep.ack(
                         id,
                         true,
@@ -2770,7 +2987,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     }
 
     shutting_down.store(true, Ordering::Release);
-    stop_codex_gracefully(&transport, &mut child, &child_pid);
+    process_gen.fetch_add(1, Ordering::AcqRel);
+    if let Some(mut old) = proc_opt.take() {
+        stop_codex_gracefully(&old.transport, &mut old.child, &child_pid);
+    }
     if let Some(ep) = endpoint.as_ref() {
         ep.close_channel();
     }

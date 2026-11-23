@@ -258,6 +258,73 @@ pub fn detect_session_chat_selection(
     Some(found)
 }
 
+/// Build a chat notice for an ACP (Non-CLI) session when a fatal approval-profile reload error
+/// occurred or when Non-CLI mode skipped owner-configured extra flags/env from the agent's command.
+fn acp_terminal_notice(
+    acp_state: Option<&Value>,
+    session: Option<&Value>,
+) -> Option<crate::session_chat_notice::SessionChatTerminalNotice> {
+    use crate::session_chat_notice::{
+        SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
+        SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
+    };
+
+    if let Some(err) = acp_state
+        .and_then(|s| s.get("fatalError"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return Some(
+            SessionChatTerminalNotice::new(
+                crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_ERROR,
+                SessionChatTerminalNoticeSeverity::Error,
+                SessionChatTerminalNoticeSource::Watchdog,
+                "Approval change failed",
+            )
+            .with_detail(
+                "Could not reload the agent with the new approval level. Start a new chat or switch to Terminal.",
+            )
+            .with_details(Some(err.to_string()))
+            .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+                "Switch to Terminal",
+            )])
+            .with_input_blocking(false),
+        );
+    }
+
+    let ignored = session
+        .and_then(|s| s.get("runtimeSettings"))
+        .and_then(Value::as_object)
+        .and_then(|rt| rt.get(crate::acp::SESSION_NON_CLI_IGNORED_COMMAND_KEY))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+    let mut notice = SessionChatTerminalNotice::new(
+        "nonCliIgnoredCommand",
+        SessionChatTerminalNoticeSeverity::Info,
+        SessionChatTerminalNoticeSource::Watchdog,
+        "Custom flags ignored",
+    )
+    .with_detail(
+        "Non-CLI mode skipped extra flags or environment settings from this agent's command. Switch to Terminal if you need them.",
+    )
+    .with_details(Some(ignored.to_string()))
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        "Switch to Terminal",
+    )])
+    .with_input_blocking(false);
+    if let Some(created_at) = session
+        .and_then(|s| s.get("createdAt"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        notice.detected_at = created_at.to_string();
+    }
+    Some(notice)
+}
+
 /// Bottom-most Codex composer prompt row (`›` or `»`), so footer detection never climbs into chat
 /// prose above the input box when the real status line is unrecognized.
 fn codex_footer_prompt(lines: &[String]) -> Option<usize> {
@@ -528,9 +595,15 @@ pub fn detect_session_chat_terminal_state(
         };
         let options = Some(SessionChatDetectedOptions::new(selection));
         let options = with_checkout_status(repository, project_id, session_id, agent_id, options);
+        let session_row = repository
+            .get_session(project_id, session_id)
+            .ok()
+            .flatten();
+        let notice = acp_terminal_notice(Some(&acp_state), session_row.as_ref());
         let mut detection = SessionChatTerminalDetection::default();
         detection.options = options;
         detection.activity = activity;
+        detection.notice = notice;
         detection.captured = true;
         detection.attempted = true;
         return detection;
@@ -558,6 +631,7 @@ pub fn detect_session_chat_terminal_state(
                 with_checkout_status(repository, project_id, session_id, agent_id, options);
             let mut detection = SessionChatTerminalDetection::default();
             detection.options = options;
+            detection.notice = acp_terminal_notice(None, Some(&session));
             detection.attempted = true;
             return detection;
         }

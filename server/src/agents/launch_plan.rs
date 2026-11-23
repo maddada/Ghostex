@@ -102,6 +102,7 @@ pub(crate) fn create_agent_session_params_for_project(
         .or_else(|| read_text_from_map(&launch_settings, "icon"));
     let configured_command = read_text_from_map(&agent_config, "command")
         .or_else(|| read_text_from_map(&launch_settings, "agentCommand"));
+    let raw_owner_configured_command = configured_command.clone();
     let (configured_command, empryo_session_id) = apply_requested_agent_model(
         project,
         &agent_id,
@@ -206,6 +207,11 @@ pub(crate) fn create_agent_session_params_for_project(
             super::codex_lean::COORDINATOR_THREAD_KEY.to_string(),
             json!(true),
         );
+    }
+    let thread_marked_handovers =
+        params.get("markedHandovers").and_then(Value::as_bool) == Some(true);
+    if thread_marked_handovers {
+        runtime_settings.insert("markedHandovers".to_string(), json!(true));
     }
     let configured_command = if agentbox_provider.is_none() {
         apply_thread_marked_handovers(
@@ -451,6 +457,7 @@ pub(crate) fn create_agent_session_params_for_project(
         }
         _ => {
             let coordinator = session_is_coordinator(&runtime_settings);
+            let acp_account_command = account_command.clone();
             let workspace_note = if crate::workspaces::session_skips_workspace_context(
                 project,
                 Some(&runtime_settings),
@@ -706,6 +713,7 @@ pub(crate) fn create_agent_session_params_for_project(
                         == Some(false);
                 let use_acp = agentbox_provider.is_none()
                     && !runtime_acp_off
+                    && teleport.is_none()
                     && family.as_deref().is_some_and(|fam| {
                         crate::acp::supports_acp(fam)
                             && match explicit_acp {
@@ -765,28 +773,63 @@ pub(crate) fn create_agent_session_params_for_project(
                                 &settings,
                             )
                         };
-                        let req_model = read_text(params, "agentModel");
-                        let req_effort = read_text(params, "agentEffort");
-                        // Build Ghostex's server-side structured `AcpLaunchProfile` (never
-                        // forwarding arbitrary flags or leading env vars from `agentCommand`).
-                        let (account_wrapper, _, _) =
-                            crate::acp::spec::extract_account_wrapper_and_ignored(
+                        let pin_obj = runtime_settings
+                            .get(crate::agent_model_pins::SESSION_PIN_KEY)
+                            .and_then(Value::as_object);
+                        let (cmd_model, cmd_effort) = raw_owner_configured_command
+                            .as_deref()
+                            .map(|cmd| {
+                                crate::acp::spec::extract_safe_model_and_effort_from_command(
+                                    fam, cmd,
+                                )
+                            })
+                            .unwrap_or((None, None));
+                        let req_model = read_text(params, "agentModel")
+                            .or_else(|| pin_obj.and_then(|m| read_text_from_map(m, "model")))
+                            .or(cmd_model);
+                        let req_effort = read_text(params, "agentEffort")
+                            .or_else(|| pin_obj.and_then(|m| read_text_from_map(m, "effort")))
+                            .or(cmd_effort);
+                        // Record any owner-configured flags/env/custom binary skipped by Non-CLI
+                        // mode so logs and Chat View both surface a visible one-line notice.
+                        let ignored_owner_tokens = crate::acp::spec::ignored_owner_command_tokens(
+                            fam,
+                            raw_owner_configured_command.as_deref(),
+                        );
+                        if !ignored_owner_tokens.is_empty() {
+                            let joined = ignored_owner_tokens.join(" ");
+                            eprintln!(
+                                "[Non-CLI] Ignoring extra flags/env in command string for {fam} ({agent_id}): {joined}"
+                            );
+                            crate::acp::channel::log(
+                                crate::logging::LogLevel::Warn,
+                                "acp.non_cli.ignored_command_tokens",
+                                json!({
+                                    "family": fam,
+                                    "agentId": agent_id,
+                                    "ignored": joined,
+                                }),
+                            );
+                            runtime_settings.insert(
+                                crate::acp::SESSION_NON_CLI_IGNORED_COMMAND_KEY.to_string(),
+                                json!(joined),
+                            );
+                        } else {
+                            runtime_settings.remove(crate::acp::SESSION_NON_CLI_IGNORED_COMMAND_KEY);
+                        }
+                        // Build Ghostex's server-side structured `AcpLaunchProfile` strictly from
+                        // Ghostex's own account state and settings (never parsing `agentCommand`).
+                        let account_wrapper =
+                            crate::acp::spec::account_wrapper_from_ghostex_account(
                                 fam,
-                                match fam {
-                                    "claude" => "claude",
-                                    "codex" => "codex",
-                                    _ => "agy",
-                                },
-                                base_cli_cmd.as_deref(),
+                                Some(&runtime_settings),
+                                acp_account_command.as_deref(),
                             );
                         let (append_system_prompt_file, developer_instructions) =
                             super::acp_launch_note(
                                 fam,
                                 session_is_coordinator(&runtime_settings),
-                                params
-                                    .get("markedHandovers")
-                                    .and_then(Value::as_bool)
-                                    == Some(true),
+                                thread_marked_handovers,
                             );
                         let acp_profile = crate::acp::spec::AcpLaunchProfile {
                             account_wrapper,

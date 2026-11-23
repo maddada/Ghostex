@@ -47,6 +47,10 @@ pub const SESSION_ACP_ACTIVE_KEY: &str = "acpMode";
 /// Session `runtimeSettings` key naming the Non-CLI agent family (`antigravity`, future `codex`, ...).
 pub const SESSION_ACP_FAMILY_KEY: &str = "acpFamily";
 
+/// Session `runtimeSettings` key holding extra owner-configured command flags/env vars that
+/// Non-CLI mode ignored, so the chat UI can display a visible one-line info notice.
+pub const SESSION_NON_CLI_IGNORED_COMMAND_KEY: &str = "nonCliIgnoredCommand";
+
 /// Whether Ghostex currently offers a Non-CLI host for `agent_family`.
 pub fn supports_acp(agent_family: &str) -> bool {
     spec::spec_for_family(agent_family).is_some()
