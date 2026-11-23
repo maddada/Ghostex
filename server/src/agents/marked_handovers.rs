@@ -216,28 +216,61 @@ pub(crate) fn with_launch_notes_for_workspace(
     with_note_at(&family, command, &text, &path)
 }
 
-/// Server-side Ghostex launch note / marked-handovers prompt for Non-CLI sessions, returning
-/// `(claude_prompt_file, codex_developer_instructions)` without scraping any command string.
+/// Server-side Ghostex launch note / marked-handovers / workspace-instructions prompt for Non-CLI
+/// sessions, returning `(claude_prompt_file, codex_developer_instructions)` without scraping any
+/// command string. Never places workspace instruction text inline on a shell command line: Claude
+/// receives workspace instructions via a generated per-workspace note file (same path as CLI),
+/// while Codex and Antigravity receive workspace instructions via their SessionStart hook
+/// (`agents/activity.rs`).
 pub(crate) fn acp_launch_note(
     family: &str,
     coordinator: bool,
     thread_marked_handovers: bool,
+    workspace: Option<&WorkspaceNoteContext>,
 ) -> (Option<String>, Option<String>) {
     if cfg!(test) {
         return (None, None);
     }
     let paths = get_gxserver_paths(None);
-    let text = if thread_marked_handovers {
-        Some(MARKED_HANDOVERS_NOTE.to_string())
+    let workspace_instructions = if family == "claude" {
+        workspace.and_then(|ws| {
+            crate::workspaces::read_workspace_instructions_note(
+                &paths,
+                &ws.workspace_id,
+                &ws.workspace_name,
+            )
+        })
     } else {
-        super::current_launch_note_text(&paths, !coordinator)
+        None
+    };
+    let text = if thread_marked_handovers {
+        match workspace_instructions.as_deref() {
+            Some(ws_note) => Some(format!("{MARKED_HANDOVERS_NOTE}\n\n{ws_note}")),
+            None => Some(MARKED_HANDOVERS_NOTE.to_string()),
+        }
+    } else {
+        super::current_launch_note_text_for_workspace(
+            &paths,
+            !coordinator,
+            workspace_instructions.as_deref(),
+        )
     };
     let Some(text) = text else {
         return (None, None);
     };
     match family {
         "claude" => {
-            let path = if coordinator && text != MARKED_HANDOVERS_NOTE {
+            let path = if let (Some(ws), true) = (workspace, workspace_instructions.is_some()) {
+                let safe_id = crate::workspaces::safe_workspace_file_stem(&ws.workspace_id);
+                let filename = if thread_marked_handovers {
+                    format!("thread-workspace-{safe_id}.md")
+                } else if coordinator {
+                    format!("coordinator-workspace-{safe_id}.md")
+                } else {
+                    format!("workspace-{safe_id}.md")
+                };
+                paths.root_dir.join("agent-note").join(filename)
+            } else if coordinator && text != MARKED_HANDOVERS_NOTE {
                 paths
                     .root_dir
                     .join("agent-note")

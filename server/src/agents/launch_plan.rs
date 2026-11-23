@@ -837,6 +837,7 @@ pub(crate) fn create_agent_session_params_for_project(
                                 fam,
                                 session_is_coordinator(&runtime_settings),
                                 thread_marked_handovers,
+                                workspace_note.as_ref(),
                             );
                         let acp_profile = crate::acp::spec::AcpLaunchProfile {
                             account_wrapper,

@@ -444,6 +444,19 @@ pub(crate) fn build_agent_fork_plan(
         .get("acpEffort")
         .and_then(Value::as_str)
         .map(str::to_string);
+    let fork_workspace_note = if cfg!(test)
+        || crate::workspaces::session_skips_workspace_context(project, source_runtime)
+    {
+        None
+    } else {
+        crate::storage::open_gxserver_database(&crate::paths::get_gxserver_paths(None))
+            .ok()
+            .and_then(|db| crate::workspaces::project_workspace_info(&db, project).ok().flatten())
+            .map(|(workspace_id, workspace_name)| super::WorkspaceNoteContext {
+                workspace_id,
+                workspace_name,
+            })
+    };
     let build_fork_profile = |fam: &str| -> crate::acp::spec::AcpLaunchProfile {
         let source_account_cmd =
             source_runtime.and_then(|rt| read_text_from_map(rt, "accountCommand"));
@@ -457,8 +470,12 @@ pub(crate) fn build_agent_fork_plan(
             .and_then(Value::as_bool)
             == Some(true)
             || super::is_lean_worker(source_runtime);
-        let (append_system_prompt_file, developer_instructions) =
-            super::acp_launch_note(fam, source_is_coordinator, thread_marked_handovers);
+        let (append_system_prompt_file, developer_instructions) = super::acp_launch_note(
+            fam,
+            source_is_coordinator,
+            thread_marked_handovers,
+            fork_workspace_note.as_ref(),
+        );
         crate::acp::spec::AcpLaunchProfile {
             account_wrapper,
             hub_id: source_runtime.and_then(crate::accounts::hub::launch::picked_hub),

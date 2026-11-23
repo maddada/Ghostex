@@ -544,6 +544,7 @@ pub(crate) fn to_agent_resume_input(
                 fam,
                 session_is_coordinator(&runtime_settings),
                 thread_marked_handovers,
+                workspace_note.as_ref(),
             );
             let session_pin = read_text_value(session, "projectId")
                 .or_else(|| read_text_value(project, "projectId"))

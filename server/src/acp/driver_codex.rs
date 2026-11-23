@@ -2126,8 +2126,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         } else {
             let mut ro_entries = vec!["\"/\"=\"read\"".to_string()];
             ro_entries.extend(denies.iter().cloned());
-            let mut full_entries = vec!["\"/\"=\"write\"".to_string()];
-            full_entries.extend(denies.iter().cloned());
+            let full_fs = crate::agents::codex_bypass_filesystem(
+                Some(&cwd),
+                &deny_paths,
+                cfg!(target_os = "linux"),
+            );
             argv.push("-c".to_string());
             argv.push(format!(
                 "permissions.ghostex-ro={{filesystem={{{}}}, network={{enabled=false}}}}",
@@ -2140,8 +2143,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             ));
             argv.push("-c".to_string());
             argv.push(format!(
-                "permissions.ghostex-full={{filesystem={{{}}}, network={{enabled=true}}}}",
-                full_entries.join(", ")
+                "permissions.ghostex-full={{filesystem={{{full_fs}}}, network={{enabled=true}}}}"
             ));
             CodexDenyMode::HomeOrGbot
         };
