@@ -148,6 +148,8 @@ impl NativeChatView {
                 } else {
                     None
                 };
+                let show_draft_dot =
+                    reply.is_object() && !picked && !locked && self.has_reply_draft();
                 self.dock_tone_button(
                     gpui::SharedString::from(format!("work-answer:{key}:{index}")),
                     &label,
@@ -157,6 +159,11 @@ impl NativeChatView {
                     (busy || locked) && !picked,
                     p,
                 )
+                .when(show_draft_dot, |button| {
+                    button
+                        .relative()
+                        .child(super::reply_popover::reply_draft_dot(p))
+                })
                 // An approval's answer in the agent's long words keeps to the row's width.
                 .when(key.starts_with("approval:"), |button| button.max_w_full())
                 // A short answer's full words (an approval's "Yes" is "Yes, proceed", gx-chat-core
@@ -567,6 +574,7 @@ impl NativeChatView {
         } else {
             return None;
         };
+        let show_draft_dot = !open.is_object() && reply.is_object() && self.has_reply_draft();
         Some(
             self.dock_tone_button(
                 gpui::SharedString::from(id),
@@ -577,6 +585,11 @@ impl NativeChatView {
                 false,
                 p,
             )
+            .when(show_draft_dot, |button| {
+                button
+                    .relative()
+                    .child(super::reply_popover::reply_draft_dot(p))
+            })
             .on_click(
                 cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                     cx.stop_propagation();

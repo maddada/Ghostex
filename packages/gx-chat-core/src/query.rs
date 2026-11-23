@@ -104,10 +104,31 @@ pub fn answer_query(
             state.transcript_view.items.iter(),
             first?,
         )),
-        // `null` for a key the card does not know.
+        // `toolAppLogo(key)`: an MCP app's logo SVG for a tool-call card's icon.
         Query::ToolAppLogo => to_json(&crate::transcript::tool_apps::tool_app_svg(
             first.and_then(Value::as_str)?,
         )),
+        // `replyMentions(text, caret)`: the `*` Boost, `+` agent, or `/` / `$` skill menu for a
+        // reply box, reusing the composer's triggers and catalogs.
+        Query::ReplyMentions => {
+            let text = first.and_then(Value::as_str)?;
+            let caret = usize_argument(arguments, 1).unwrap_or_else(|| text.encode_utf16().count());
+            let sources = crate::composer::view::suggestion_sources(state);
+            to_json(&crate::composer::suggestions::reply_mention_popup(
+                text, caret, &sources,
+            ))
+        }
+        // `completeReplyMention(text, caret, index)`: applies a pick from `replyMentions`,
+        // returning `{text, caret}` with the exact token and spacing the composer inserts.
+        Query::CompleteReplyMention => {
+            let text = first.and_then(Value::as_str)?;
+            let caret = usize_argument(arguments, 1)?;
+            let index = usize_argument(arguments, 2)?;
+            let sources = crate::composer::view::suggestion_sources(state);
+            to_json(&crate::composer::suggestions::complete_reply_mention(
+                text, caret, &sources, index,
+            ))
+        }
     })
 }
 
@@ -211,6 +232,10 @@ pub enum Query {
     /// `toolAppLogo(key)`: an MCP app's logo SVG for a tool-call card's icon
     /// (transcript/tool_apps.rs), so the phone's logos ship with the core.
     ToolAppLogo,
+    /// `replyMentions(text, caret)`: compact `*` / `+` / `/` / `$` mention menu for reply boxes.
+    ReplyMentions,
+    /// `completeReplyMention(text, caret, index)`: inserts the picked reply mention token.
+    CompleteReplyMention,
 }
 
 impl Query {
@@ -233,6 +258,8 @@ impl Query {
             Self::SpeakableMarkdown => "speakableMarkdown",
             Self::TranscriptPictures => "transcriptPictures",
             Self::ToolAppLogo => "toolAppLogo",
+            Self::ReplyMentions => "replyMentions",
+            Self::CompleteReplyMention => "completeReplyMention",
         }
     }
 
@@ -255,6 +282,8 @@ impl Query {
             "speakableMarkdown" => Self::SpeakableMarkdown,
             "transcriptPictures" => Self::TranscriptPictures,
             "toolAppLogo" => Self::ToolAppLogo,
+            "replyMentions" => Self::ReplyMentions,
+            "completeReplyMention" => Self::CompleteReplyMention,
             _ => return None,
         })
     }

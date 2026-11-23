@@ -14,6 +14,8 @@ use ghostex_gx_chat_core::composer::keys::ComposerKeyEvent;
 use ghostex_gx_chat_core::composer::queries::{
     composer_key_intent, composer_references, reference_menu, send_blocked_toast, transcript_menu,
 };
+use ghostex_gx_chat_core::composer::suggestions::{complete_reply_mention, reply_mention_popup};
+use ghostex_gx_chat_core::composer::view::suggestion_sources;
 use ghostex_gx_chat_core::query::{answer_attachments_edit, chat_reference_removal};
 use ghostex_gx_chat_core::{ChatContext, ChatState};
 use serde_json::Value;
@@ -55,6 +57,22 @@ pub(super) fn answer(
         }
         "insertAnswerAttachments" => to_value(&answer_attachments_edit(arguments)?),
         "removeChatReference" => to_value(&chat_reference_removal(arguments)?),
+        "replyMentions" => {
+            let text = first.and_then(Value::as_str)?;
+            let caret = arguments
+                .get(1)
+                .and_then(Value::as_u64)
+                .map_or_else(|| text.encode_utf16().count(), |v| v as usize);
+            let sources = suggestion_sources(state);
+            to_value(&reply_mention_popup(text, caret, &sources))
+        }
+        "completeReplyMention" => {
+            let text = first.and_then(Value::as_str)?;
+            let caret = arguments.get(1).and_then(Value::as_u64)? as usize;
+            let index = arguments.get(2).and_then(Value::as_u64)? as usize;
+            let sources = suggestion_sources(state);
+            to_value(&complete_reply_mention(text, caret, &sources, index))
+        }
         _ => return None,
     })
 }

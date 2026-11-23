@@ -76,6 +76,11 @@ pub(in crate::server) async fn route_http(
         return crate::visual_pages::read_draft(state.clone(), path).await;
     }
 
+    // `GET /visual/<id>/mentions` lists Boosts, agents and skills for `*`, `+`, `/` and `$` menus.
+    if method == Method::GET && crate::visual_pages::is_mentions_route(&path) {
+        return crate::visual_pages::read_page_mentions(state.clone(), path).await;
+    }
+
     // `GET /visual/<id>/image?path=…` is a picture the page's boxes refer to (images.rs `read`).
     if method == Method::GET && crate::visual_pages::is_image_route(&path) {
         let query = parts.uri.query().map(str::to_string);

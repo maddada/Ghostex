@@ -127,12 +127,14 @@ impl NativeChatView {
                 })
                 .into_any_element()
         });
+        let has_reply_draft = clickable && self.has_reply_draft();
         // The last segment opens the Reply popover for the reader's own words (reply_popover.rs).
         let own = clickable.then(|| {
             let form = form_id.clone();
             let tag = tag.clone();
             div()
                 .id(gpui::SharedString::from(format!("inline-answer-own:{key}")))
+                .relative()
                 .flex()
                 .items_center()
                 .gap(px(6.0 * s))
@@ -169,6 +171,9 @@ impl NativeChatView {
                 .when(stacked, |segment| {
                     segment.child(div().flex_1().min_w_0().child("Write your own answer"))
                 })
+                .when(stacked && has_reply_draft, |segment| {
+                    segment.child(super::reply_popover::reply_draft_dot_inset(p))
+                })
                 .tooltip(move |window, cx| {
                     gpui_component::tooltip::Tooltip::new("Write your own answer").build(window, cx)
                 })
@@ -191,6 +196,16 @@ impl NativeChatView {
             .overflow_hidden()
             .children(segments)
             .children(own);
+        let pill = if !stacked && has_reply_draft {
+            div()
+                .relative()
+                .flex_none()
+                .child(pill)
+                .child(super::reply_popover::reply_draft_dot(p))
+                .into_any_element()
+        } else {
+            pill.into_any_element()
+        };
         // The reader's own words, which no segment shows.
         let words = own_answer.map_or_else(String::new, |own| format!(" “{}”", short(own)));
         let status = if withdrawn {

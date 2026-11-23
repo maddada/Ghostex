@@ -7,6 +7,15 @@ use serde_json::json;
 struct ComposerKey {
     key: String,
 }
+
+/// Keys intercepted by the Reply popover's compact mention menu (`reply_popover.rs`) only while
+/// the menu is open (the `"ReplyPopoverMenu"` key context is attached only then, so the textarea's
+/// own bindings stay untouched whenever the menu is closed).
+#[derive(Clone, Debug, PartialEq, gpui::Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(super) struct ReplyPopoverMenuKey {
+    pub(super) key: String,
+}
 struct ComposerKeysRegistered;
 impl gpui::Global for ComposerKeysRegistered {}
 
@@ -119,6 +128,24 @@ pub(super) fn register(cx: &mut gpui::App) {
     })
     .collect();
     cx.bind_keys(composer_keys);
+    let reply_menu_keys: Vec<_> = [
+        ("up", "up"),
+        ("down", "down"),
+        ("enter", "enter"),
+        ("tab", "tab"),
+        ("escape", "escape"),
+    ]
+    .into_iter()
+    .map(|(binding, key)| {
+        crate::app::hotkeys::gpui_runtime_key_binding(
+            binding,
+            ReplyPopoverMenuKey { key: key.into() },
+            Some("ReplyPopoverMenu > Input"),
+            cx,
+        )
+    })
+    .collect();
+    cx.bind_keys(reply_menu_keys);
 }
 
 /// CDXC:SessionChat 2026-09-17 WHY:

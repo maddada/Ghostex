@@ -163,6 +163,47 @@ pub(crate) fn used_in(text: &str) -> (Vec<&'static str>, usize) {
     (built_in, other)
 }
 
+fn custom_description(prompt: &str) -> String {
+    const MAX: usize = 110;
+    let flat = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
+    if flat.chars().count() <= MAX {
+        return flat;
+    }
+    let cut: String = flat.chars().take(MAX).collect();
+    let cut = cut.rsplit_once(' ').map_or(cut.as_str(), |(head, _)| head);
+    format!("{}\u{2026}", cut.trim_end_matches([',', '.', ';', ':']))
+}
+
+/// Enabled Boosts formatted for Live page `*` mention menus: Ghostex's built-in Boosts followed
+/// by the user's custom Boosts, empty when Boosts are turned off in Settings.
+pub(crate) fn mention_choices(paths: &GxserverPaths) -> Vec<Value> {
+    let saved = read(paths);
+    if saved.off {
+        return Vec::new();
+    }
+    BOOSTS
+        .iter()
+        .map(|boost| {
+            json!({
+                "id": boost.id,
+                "label": boost.label,
+                "description": boost.description,
+                "section": core::tab_label_of(boost.id),
+                "token": core::boost_link(boost.id, boost.label),
+            })
+        })
+        .chain(saved.custom.iter().map(|boost| {
+            json!({
+                "id": boost.id,
+                "label": boost.label,
+                "description": custom_description(&boost.prompt),
+                "section": "Custom",
+                "token": core::boost_link(&boost.id, &boost.label),
+            })
+        }))
+        .collect()
+}
+
 fn listing(saved: &Saved) -> Value {
     json!({
         "on": !saved.off,

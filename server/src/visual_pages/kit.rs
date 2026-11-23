@@ -371,6 +371,22 @@ gx-question.gx-q-tied>.gx-choices{display:none}
 .gx-rowbar-all{flex:none;font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .gx-rowbar>.gx-send-button{margin-left:0}
 .gx-tally.gx-tally-off{visibility:hidden}
+/* Compact mention menu (`*` Boosts, `+` agents, `/` or `$` skills) in any editable box on a Live page. */
+#gx-mention{position:fixed;left:0;top:0;z-index:2147483647;margin:0;inset:auto;display:none;flex-direction:column;gap:2px;box-sizing:border-box;width:min(320px,calc(100vw - 16px));max-height:224px;overflow-y:auto;padding:4px;border-radius:10px;border:1px solid var(--gx-tip-border);background:var(--gx-tip-bg);color:var(--gx-tip-fg);-webkit-backdrop-filter:blur(20px) saturate(1.15);backdrop-filter:blur(20px) saturate(1.15);box-shadow:var(--gx-tip-shadow);font:400 12.5px/1.35 Inter,var(--font-sans);letter-spacing:0;text-align:left}
+#gx-mention.gx-m-on{display:flex}
+#gx-mention .gx-m-head{padding:5px 8px 3px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:color-mix(in srgb,var(--gx-tip-fg) 52%,transparent)}
+#gx-mention .gx-m-row{display:flex;align-items:center;gap:7px;width:100%;box-sizing:border-box;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:var(--gx-tip-fg);font:inherit;text-align:left;cursor:pointer}
+#gx-mention .gx-m-row:hover,#gx-mention .gx-m-row.gx-m-sel{background:color-mix(in srgb,var(--gx-tip-fg) 10%,transparent)}
+#gx-mention .gx-m-ico{flex:none;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:color-mix(in srgb,var(--gx-tip-fg) 68%,transparent)}
+#gx-mention .gx-m-ico svg{width:14px;height:14px;display:block}
+#gx-mention .gx-m-ico.gx-m-boost{color:#d8a344}
+html[data-gx-theme=light] #gx-mention .gx-m-ico.gx-m-boost{color:#a96c00}
+#gx-mention .gx-m-ico.gx-m-main{color:#e2b93b}
+html[data-gx-theme=light] #gx-mention .gx-m-ico.gx-m-main{color:#b08415}
+#gx-mention .gx-m-lbl{flex:none;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+#gx-mention .gx-m-det{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:color-mix(in srgb,var(--gx-tip-fg) 56%,transparent);font-size:12px}
+#gx-mention .gx-m-det.gx-m-work{color:#f5a524}
+#gx-mention .gx-m-empty{padding:6px 8px;color:color-mix(in srgb,var(--gx-tip-fg) 56%,transparent);font-size:12px}
 </style>"#;
 
 /// The kit's behaviour: turns the first `<gx-questions>` into a working form once the page has
@@ -1183,9 +1199,288 @@ function setupTabs(){
     var start=0;panes.forEach(function(p,i){if(p.hasAttribute("data-tab-default"))start=i;});show(start);
   });
 }
+/* Mention menus (`*` Boosts, `+` agents, `/` or `$` skills) in every editable box on a Live page:
+   kit note/reply boxes (`.gx-box`) and plain `<textarea>` / text `<input>` elements. Fetches the
+   page's catalog from `GET /visual/<id>/mentions` and inserts the exact composer mention token. */
+var BOOST_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/></svg>';
+var CROWN_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6l4 6 5-4-2 10H5L3 8l5 4z"/></svg>';
+var AGENT_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 4v4M9 13v2M15 13v2"/></svg>';
+var mentionCatalog=null,mentionFetch=null,mentionFetchedAt=0,mentionMenu=null,mentionState=null,mentionDismiss=null;
+function canFetchMentions(){return !(window.ghostex&&(ghostex.exported||ghostex.answered))&&/^\/visual\/[0-9a-f]{32}$/.test(base);}
+function loadMentions(force){
+  if(!canFetchMentions())return Promise.resolve(null);
+  var fresh=mentionCatalog&&Date.now()-mentionFetchedAt<10000;
+  if(!force&&fresh)return Promise.resolve(mentionCatalog);
+  if(mentionFetch)return mentionFetch;
+  mentionFetch=fetch(base+"/mentions").then(function(r){return r.ok?r.json():null;}).then(function(j){
+    mentionFetch=null;
+    if(j&&j.ok){mentionCatalog=j;mentionFetchedAt=Date.now();if(mentionState&&mentionState.target===activeEditable())updateMention(mentionState.target,false);}
+    return mentionCatalog;
+  },function(){mentionFetch=null;return mentionCatalog;});
+  return mentionFetch;
+}
+function isMentionTarget(node){
+  if(!node||node.nodeType!==1)return false;
+  if(node.classList&&node.classList.contains("gx-box"))return !!(node.__gxArea&&!node.__gxArea.readOnly&&!node.__gxArea.disabled);
+  if(node.tagName==="TEXTAREA")return !node.classList.contains("gx-src")&&!node.readOnly&&!node.disabled;
+  if(node.tagName==="INPUT"){
+    if(node.classList.contains("gx-row-filter")||node.readOnly||node.disabled)return false;
+    var t=(node.type||"text").toLowerCase();
+    return t==="text"||t==="search"||t==="";
+  }
+  return false;
+}
+function activeEditable(){var a=document.activeElement;return isMentionTarget(a)?a:null;}
+function editableState(target){
+  if(target.classList&&target.classList.contains("gx-box")){
+    var area=target.__gxArea,c=caretIn(target);
+    if(!area||!c)return null;
+    return{text:area.value,start:c.start,end:c.end,box:target,area:area};
+  }
+  var s=typeof target.selectionStart==="number"?target.selectionStart:target.value.length;
+  var e=typeof target.selectionEnd==="number"?target.selectionEnd:s;
+  return{text:target.value||"",start:s,end:e,box:null,area:target};
+}
+function filterBoosts(list,query){
+  var q=(query||"").toLowerCase();
+  return(list||[]).filter(function(b){
+    if(!q)return true;
+    return(b.label||"").toLowerCase().split(/[^a-z0-9]+/).some(function(w){return w&&w.indexOf(q)===0;});
+  });
+}
+function filterSessions(list,query){
+  var q=(query||"").trim().toLowerCase();
+  if(!q)return(list||[]).slice();
+  var words=q.split(/\s+/).filter(Boolean),sections=[],matched=[];
+  (list||[]).forEach(function(s,idx){
+    var title=(s.title||"").toLowerCase(),hay=title+" "+(s.projectName||"").toLowerCase()+" "+(s.computer||"").toLowerCase();
+    if(!words.every(function(w){return hay.indexOf(w)>=0;}))return;
+    var sec=sections.indexOf(s.section||"");if(sec<0){sec=sections.length;sections.push(s.section||"");}
+    matched.push({sec:sec,later:title.indexOf(q)!==0?1:0,idx:idx,item:s});
+  });
+  matched.sort(function(a,b){return a.sec-b.sec||a.later-b.later||a.idx-b.idx;});
+  return matched.map(function(m){return m.item;});
+}
+function filterSkills(list,query){
+  var q=(query||"").trim().toLowerCase();
+  function rank(s){
+    var name=(s.name||"").toLowerCase(),det=(s.detail||"").toLowerCase();
+    if(!q)return 0;
+    if(name===q)return 0;
+    if(name.indexOf(q)===0)return 1;
+    if(name.indexOf(q)>0)return 2;
+    if(det.indexOf(q)>=0)return 3;
+    return -1;
+  }
+  var out=[];
+  (list||[]).forEach(function(s,idx){var r=rank(s);if(r>=0)out.push({cmd:s.command?1:0,r:r,name:(s.name||"").toLowerCase(),idx:idx,item:s});});
+  out.sort(function(a,b){return a.cmd-b.cmd||a.r-b.r||(a.name<b.name?-1:a.name>b.name?1:a.idx-b.idx);});
+  return out.map(function(m){return m.item;});
+}
+function detectMention(text,caret){
+  var before=text.slice(0,caret),lastWs=-1;
+  for(var i=before.length-1;i>=0;i--)if(/\s/.test(before.charAt(i))){lastWs=i;break;}
+  var tokStart=lastWs+1,tok=before.slice(tokStart);
+  if(tok.charAt(0)==="*")return{kind:"boost",start:tokStart,end:caret,query:tok.slice(1)};
+  if(tok.charAt(0)==="$"){var q=tok.slice(1);if(!/\s/.test(q))return{kind:"skill",slash:false,start:tokStart,end:caret,query:q};}
+  if(tok.charAt(0)==="/"){var sq=tok.slice(1);if(sq.indexOf("/")<0)return{kind:"skill",slash:true,start:tokStart,end:caret,query:sq};}
+  /* `+` session trigger: allows spaces in multi-word titles up to 60 chars, matching trigger.rs. */
+  var from=Math.max(0,caret-60);
+  for(var p=caret-1;p>=from;p--){
+    var ch=before.charAt(p);
+    if(ch==="\n"||ch==="\r")break;
+    if(ch==="+"&&(p===0||/\s/.test(before.charAt(p-1)))){
+      var tail=before.slice(p+1);
+      if(tail.length>0&&/^[0-9+\-\s]/.test(tail))continue;
+      if(/\s$/.test(tail)&&tail.trim().length===0)continue;
+      return{kind:"session",start:p,end:caret,query:tail};
+    }
+  }
+  return null;
+}
+function buildMentionPopup(trigger,cat){
+  if(!trigger||!cat)return null;
+  var rows=[],heading="",empty=null;
+  if(trigger.kind==="boost"){
+    var b=filterBoosts(cat.boosts,trigger.query);
+    if(!b.length)return null;
+    var firstB=b[0].section||"Boosts",prev=firstB;
+    heading=firstB;
+    b.forEach(function(item,i){
+      var sec=item.section||"";
+      rows.push({label:item.label,detail:item.description||"",token:item.token,section:i>0&&sec&&sec!==prev?sec:"",spaced:false,kind:"boost"});
+      if(sec)prev=sec;
+    });
+    return{kind:"boost",heading:heading,rows:rows,empty:null,trigger:trigger};
+  }
+  if(trigger.kind==="session"){
+    var ss=filterSessions(cat.sessions,trigger.query);
+    if(!ss.length)return null;
+    var firstSec=ss[0].section||"Agents in this project",prevS=firstSec;
+    heading=firstSec;
+    ss.forEach(function(item,i){
+      var sec=item.section||"";
+      rows.push({label:item.title,detail:item.detail||"",token:item.token,section:i>0&&sec&&sec!==prevS?sec:"",spaced:true,kind:"session",working:!!item.working,coordinator:!!item.coordinator,mainCoordinator:!!item.mainCoordinator});
+      if(sec)prevS=sec;
+    });
+    return{kind:"session",heading:heading,rows:rows,empty:null,trigger:trigger};
+  }
+  if(trigger.kind==="skill"){
+    var sk=filterSkills(cat.skills,trigger.query);
+    if(!sk.length){
+      if(trigger.slash)return null;
+      return{kind:"skill",heading:cat.skillsHeading||"Skills",rows:[],empty:"No skills found",trigger:trigger};
+    }
+    var baseHead=cat.skillsHeading||"Skills",firstCmd=sk[0].command;
+    heading=firstCmd?"Custom commands":baseHead;
+    var sawCmd=firstCmd;
+    sk.forEach(function(item,i){
+      var sec="";
+      if(i>0&&item.command&&!sawCmd){sec="Custom commands";sawCmd=true;}
+      rows.push({label:(trigger.slash?"/":"$")+item.name,detail:item.detail||"",token:item.token,section:sec,spaced:false,kind:"skill"});
+    });
+    return{kind:"skill",heading:heading,rows:rows,empty:null,trigger:trigger};
+  }
+  return null;
+}
+function hideMention(){
+  mentionState=null;
+  if(mentionMenu){
+    mentionMenu.classList.remove("gx-m-on");
+    if(mentionMenu.hidePopover&&mentionMenu.matches(":popover-open"))try{mentionMenu.hidePopover();}catch(x){}
+  }
+}
+function placeMention(target){
+  if(!mentionMenu)return;
+  var r=target.getBoundingClientRect();
+  if(target.classList&&target.classList.contains("gx-box")){
+    var sel=getSelection();
+    if(sel&&sel.rangeCount&&target.contains(sel.anchorNode)){
+      var cr=sel.getRangeAt(0).getBoundingClientRect();
+      if(cr&&(cr.width>0||cr.height>0))r=cr;
+    }
+  }
+  var w=mentionMenu.offsetWidth||300,h=mentionMenu.offsetHeight||180,vw=document.documentElement.clientWidth||innerWidth,vh=innerHeight,m=8,gap=6;
+  var x=Math.min(Math.max(r.left,m),Math.max(m,vw-w-m));
+  var y=r.bottom+gap;
+  if(y+h>vh-m&&r.top-gap-h>=m)y=r.top-gap-h;
+  else if(y+h>vh-m)y=Math.max(m,vh-h-m);
+  mentionMenu.style.left=Math.round(x)+"px";mentionMenu.style.top=Math.round(y)+"px";
+}
+function renderMention(){
+  if(!mentionState){hideMention();return;}
+  if(!mentionMenu){
+    mentionMenu=el("div");mentionMenu.id="gx-mention";mentionMenu.setAttribute("role","listbox");
+    if(mentionMenu.showPopover)mentionMenu.setAttribute("popover","manual");
+    mentionMenu.addEventListener("pointerdown",function(e){e.preventDefault();});
+    mentionMenu.addEventListener("mousedown",function(e){e.preventDefault();});
+  }
+  if(!mentionMenu.isConnected&&document.body)document.body.append(mentionMenu);
+  var pop=mentionState.popup,sel=mentionState.selected;
+  mentionMenu.textContent="";
+  if(pop.heading)mentionMenu.append(el("div","gx-m-head",pop.heading));
+  if(!pop.rows.length&&pop.empty)mentionMenu.append(el("div","gx-m-empty",pop.empty));
+  pop.rows.forEach(function(row,idx){
+    if(row.section)mentionMenu.append(el("div","gx-m-head",row.section));
+    var b=el("button","gx-m-row"+(idx===sel?" gx-m-sel":""));b.type="button";b.setAttribute("role","option");b.setAttribute("aria-selected",idx===sel?"true":"false");
+    if(row.kind==="boost"){var ic=el("span","gx-m-ico gx-m-boost");ic.innerHTML=BOOST_ICON;b.append(ic);}
+    else if(row.kind==="session"){
+      var sic=el("span","gx-m-ico"+(row.coordinator&&row.mainCoordinator?" gx-m-main":""));
+      sic.innerHTML=row.coordinator?CROWN_ICON:AGENT_ICON;b.append(sic);
+    }
+    b.append(el("span","gx-m-lbl",row.label));
+    if(row.detail)b.append(el("span","gx-m-det"+(row.working?" gx-m-work":""),row.detail));
+    b.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();pickMention(idx);});
+    mentionMenu.append(b);
+  });
+  mentionMenu.classList.add("gx-m-on");
+  if(mentionMenu.showPopover&&!mentionMenu.matches(":popover-open"))try{mentionMenu.showPopover();}catch(x){}
+  placeMention(mentionState.target);
+  var active=mentionMenu.querySelector(".gx-m-sel");
+  if(active&&active.scrollIntoView)try{active.scrollIntoView({block:"nearest"});}catch(x){}
+}
+function pickMention(index){
+  if(!mentionState)return;
+  var target=mentionState.target,pop=mentionState.popup,row=pop.rows[index];
+  if(!row){hideMention();return;}
+  var ed=editableState(target);
+  if(!ed){hideMention();return;}
+  var tr=pop.trigger,before=ed.text.slice(0,tr.start),after=ed.text.slice(tr.end);
+  var lead=row.spaced&&before.length>0&&!/\s$/.test(before)?" ":"";
+  var hasSpace=after.charAt(0)===" ";
+  var ins=lead+row.token+(hasSpace?"":" ");
+  var next=before+ins+after,caret=before.length+lead.length+row.token.length+1;
+  mentionDismiss=null;
+  hideMention();
+  if(ed.box){
+    ed.area.value=next;
+    fire(ed.area);
+    renderBox(ed.area);
+    ed.box.focus();
+    setCaret(ed.box,caret);
+  }else{
+    ed.area.value=next;
+    ed.area.focus();
+    try{ed.area.setSelectionRange(caret,caret);}catch(x){}
+    fire(ed.area);
+  }
+}
+function updateMention(target,refreshBoosts){
+  if(!isMentionTarget(target)||!canFetchMentions()){hideMention();return;}
+  var ed=editableState(target);
+  if(!ed||ed.start!==ed.end){hideMention();return;}
+  var tr=detectMention(ed.text,ed.start);
+  if(!tr){mentionDismiss=null;hideMention();return;}
+  if(mentionDismiss&&mentionDismiss.target===target&&mentionDismiss.kind===tr.kind&&mentionDismiss.start===tr.start){hideMention();return;}
+  if(!mentionCatalog){loadMentions(false);mentionState={target:target,popup:{kind:tr.kind,heading:"",rows:[],empty:null,trigger:tr},selected:0};return;}
+  if(refreshBoosts&&tr.kind==="boost"&&Date.now()-mentionFetchedAt>=10000)loadMentions(true);
+  var pop=buildMentionPopup(tr,mentionCatalog);
+  if(!pop){hideMention();return;}
+  var prevSel=mentionState&&mentionState.target===target&&mentionState.popup.kind===pop.kind&&mentionState.popup.trigger.start===tr.start?mentionState.selected:0;
+  mentionState={target:target,popup:pop,selected:pop.rows.length?Math.min(prevSel,pop.rows.length-1):0};
+  renderMention();
+}
+function setupMentions(){
+  if(!canFetchMentions())return;
+  document.addEventListener("focusin",function(e){if(isMentionTarget(e.target))loadMentions(false);},true);
+  document.addEventListener("input",function(e){var t=activeEditable();if(t)updateMention(t,true);},true);
+  document.addEventListener("selectionchange",function(){var t=activeEditable();if(t)updateMention(t,false);});
+  document.addEventListener("focusout",function(){setTimeout(function(){if(!activeEditable())hideMention();},0);},true);
+  document.addEventListener("pointerdown",function(e){
+    if(!mentionState)return;
+    var t=e.target;
+    if(mentionMenu&&t&&mentionMenu.contains(t))return;
+    if(t&&mentionState.target&&(t===mentionState.target||mentionState.target.contains(t)))return;
+    hideMention();
+  },true);
+  document.addEventListener("keydown",function(e){
+    if(!mentionState||!mentionState.popup||!mentionMenu||!mentionMenu.classList.contains("gx-m-on"))return;
+    var t=activeEditable();if(!t||t!==mentionState.target)return;
+    var rows=mentionState.popup.rows;
+    if(e.key==="Escape"){
+      e.preventDefault();e.stopPropagation();
+      mentionDismiss={target:t,kind:mentionState.popup.kind,start:mentionState.popup.trigger.start};
+      hideMention();return;
+    }
+    if(!rows.length)return;
+    if(e.key==="ArrowDown"){
+      e.preventDefault();e.stopPropagation();
+      mentionState.selected=(mentionState.selected+1)%rows.length;renderMention();return;
+    }
+    if(e.key==="ArrowUp"){
+      e.preventDefault();e.stopPropagation();
+      mentionState.selected=(mentionState.selected+rows.length-1)%rows.length;renderMention();return;
+    }
+    if((e.key==="Enter"&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey)||e.key==="Tab"){
+      e.preventDefault();e.stopPropagation();
+      pickMention(mentionState.selected);return;
+    }
+  },true);
+  ["scroll","resize"].forEach(function(name){addEventListener(name,function(){if(mentionState&&mentionMenu&&mentionMenu.classList.contains("gx-m-on"))placeMention(mentionState.target);},true);});
+}
 /* SEEN_FOOTER: a page that asks nothing, published to wait until the reader has looked at it (`awaitsSeen`, server/src/visual_pages/publish.rs), ends with a reply box and Mark as read, which send `{"seen": true, "reply": …}` as its answers. It goes at the very end of the page, so the reader reaches the end to press it. */
 function seenFooter(){var r=document.createElement("gx-questions");r.setAttribute("data-gx-seen","");r.setAttribute("submit","Mark as read");(document.querySelector("gx-page")||document.body).append(r);setup(r);}
-function init(){followPaint();addThemeSwitch();setupTabs();var root=document.querySelector("gx-questions");if(root)setup(root);else if(window.ghostex&&ghostex.awaitsSeen)seenFooter();}
+function init(){followPaint();addThemeSwitch();setupTabs();var root=document.querySelector("gx-questions");if(root)setup(root);else if(window.ghostex&&ghostex.awaitsSeen)seenFooter();setupMentions();}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 addEventListener("load",followPaint);
 })();</script>"#;
