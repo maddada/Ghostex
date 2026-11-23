@@ -966,7 +966,7 @@ dependencies = [
 
 [[package]]
 name = "cef"
-version = "156.3.0+156.0.15"
+version = "156.7.0+156.0.31"
 dependencies = [
  "cef-dll-sys",
  "libloading 0.9.1",
@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "cef-dll-sys"
-version = "156.3.0+156.0.15"
+version = "156.7.0+156.0.31"
 dependencies = [
  "anyhow",
  "cc",
@@ -1825,7 +1825,7 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
 name = "download-cef"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "bzip2",
  "clap",
