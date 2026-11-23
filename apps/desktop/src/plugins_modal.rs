@@ -9,6 +9,7 @@ enum PluginsModalStatus {
     NotInstalled,
     Installing(component_store::ComponentStoreProgressPhase),
     Failed,
+    Unavailable,
 }
 
 impl PluginsModalStatus {
@@ -17,6 +18,7 @@ impl PluginsModalStatus {
             Self::Installed => "Installed".to_string(),
             Self::NotInstalled => "Not installed".to_string(),
             Self::Failed => "Install failed".to_string(),
+            Self::Unavailable => "Restart required".to_string(),
             Self::Installing(phase) => match phase {
                 component_store::ComponentStoreProgressPhase::Checking => "Checking…",
                 component_store::ComponentStoreProgressPhase::Downloading => "Downloading…",
@@ -145,6 +147,7 @@ impl GhostexGpuiApp {
                     crate::app::helpers::web_runtime::web_runtime_state(),
                     crate::app::helpers::web_runtime::WebRuntimeState::Installed
                         | crate::app::helpers::web_runtime::WebRuntimeState::Running
+                        | crate::app::helpers::web_runtime::WebRuntimeState::Unavailable(_)
                 );
                 self.install_web_runtime(reinstall, cx);
             }
@@ -295,7 +298,8 @@ fn plugin_settings_status(app: &PluginStatusAppState) -> serde_json::Value {
             // "failed"); a failed install or start shows its message.
             if id == "cef" {
                 if error_message.is_none()
-                    && let crate::app::helpers::web_runtime::WebRuntimeState::Failed(message) =
+                    && let crate::app::helpers::web_runtime::WebRuntimeState::Failed(message)
+                    | crate::app::helpers::web_runtime::WebRuntimeState::Unavailable(message) =
                         crate::app::helpers::web_runtime::web_runtime_state()
                 {
                     error_message = Some(message);
@@ -348,7 +352,7 @@ fn plugin_settings_status_wire(status: PluginsModalStatus) -> (&'static str, Str
     let wire = match status {
         PluginsModalStatus::Installed => "installed",
         PluginsModalStatus::NotInstalled => "notInstalled",
-        PluginsModalStatus::Failed => "failed",
+        PluginsModalStatus::Failed | PluginsModalStatus::Unavailable => "failed",
         PluginsModalStatus::Installing(phase) => match phase {
             component_store::ComponentStoreProgressPhase::Checking => "checking",
             component_store::ComponentStoreProgressPhase::Downloading => "downloading",
@@ -388,6 +392,7 @@ fn cef_row(
     let status = match state {
         WebRuntimeState::Installing(phase) => PluginsModalStatus::Installing(phase),
         WebRuntimeState::Failed(_) => PluginsModalStatus::Failed,
+        WebRuntimeState::Unavailable(_) => PluginsModalStatus::Unavailable,
         WebRuntimeState::Installed | WebRuntimeState::Running => PluginsModalStatus::Installed,
         WebRuntimeState::NotInstalled => PluginsModalStatus::NotInstalled,
     };

@@ -92,6 +92,9 @@ pub(crate) fn prepare_workspace_browser_context(
     profile: &str,
 ) -> Result<WorkspaceBrowserContextState> {
     if !super::context_initialized() {
+        if super::init_permanently_failed() {
+            anyhow::bail!("CEF runtime failed to initialize");
+        }
         super::request_runtime();
         return Ok(WorkspaceBrowserContextState::RuntimeNotReady);
     }

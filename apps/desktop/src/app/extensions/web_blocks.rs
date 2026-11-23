@@ -221,11 +221,15 @@ impl GhostexGpuiApp {
             if crate::app::helpers::web_runtime::web_runtime_available() {
                 cef::request_runtime();
             } else {
+                let message = match crate::app::helpers::web_runtime::web_runtime_state() {
+                    crate::app::helpers::web_runtime::WebRuntimeState::Unavailable(message)
+                    | crate::app::helpers::web_runtime::WebRuntimeState::Failed(message) => message,
+                    _ => "Install the web runtime in Settings to show this.".to_string(),
+                };
                 for (key, _) in wanted {
-                    self.extension_web_blocks.failed.insert(
-                        key,
-                        "Install the web runtime in Settings to show this.".to_string(),
-                    );
+                    self.extension_web_blocks
+                        .failed
+                        .insert(key, message.clone());
                 }
                 cx.notify();
             }

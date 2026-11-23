@@ -14,6 +14,22 @@ pub fn initialize(_cx: &gpui::App) -> Result<()> {
 
 pub fn shutdown() {}
 
+pub fn context_initialized() -> bool {
+    false
+}
+
+pub fn runtime_start_error() -> Option<String> {
+    None
+}
+
+pub fn init_permanently_failed() -> bool {
+    false
+}
+
+pub fn init_failed_process_notified() -> bool {
+    false
+}
+
 pub fn focus_native_view(_native_view: *mut std::ffi::c_void) {}
 
 pub fn focus_gpui_root_view(_native_view: *mut std::ffi::c_void) {}

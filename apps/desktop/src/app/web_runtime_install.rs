@@ -71,22 +71,38 @@ impl GhostexGpuiApp {
         self.initialize_cef(cx);
     }
 
-    /// Verification or `cef::initialize` failed: the web views show `message` and Retry.
+    /// Verification or `cef::initialize` failed: the web views show the failure notice (and Retry
+    /// only when initialization can still be retried in this process).
     pub(crate) fn fail_web_runtime_start(&mut self, message: String, cx: &mut gpui::Context<Self>) {
         self.cef_runtime_requested = false;
+        let permanent = cef::init_permanently_failed();
         support_logs::append(
             support_logs::GpuiSupportLog::CrashReports,
             "gpui.cefRuntime.startFailed",
-            serde_json::json!({ "error": message }),
+            serde_json::json!({ "error": message, "restartRequired": permanent }),
         );
-        set_web_runtime_state(WebRuntimeState::Failed(message));
-        self.refresh_web_runtime_views(cx);
+        if permanent {
+            set_web_runtime_state(WebRuntimeState::Unavailable(cef_init_unavailable_notice()));
+            self.refresh_web_runtime_views(cx);
+            crate::app::workspace_windows::refresh_web_runtime_views_in_other_windows(
+                cx.entity_id(),
+                cx,
+            );
+        } else {
+            set_web_runtime_state(WebRuntimeState::Failed(message));
+            self.refresh_web_runtime_views(cx);
+        }
     }
 
-    /// Whether Chromium was started in this process: it cannot be unloaded or restarted, so its
-    /// files stay in use until Ghostex quits.
+    /// Whether Chromium was started (or attempted initialization) in this process: it cannot be
+    /// unloaded or restarted, so its files stay in use until Ghostex quits.
     pub(crate) fn web_runtime_started_in_process(&self) -> bool {
-        self.cef_runtime_requested || web_runtime_state() == WebRuntimeState::Running
+        self.cef_runtime_requested
+            || matches!(
+                web_runtime_state(),
+                WebRuntimeState::Running | WebRuntimeState::Unavailable(_)
+            )
+            || cef::init_permanently_failed()
     }
 
     /// Install (a web view's prompt, Plugins) or Reinstall (Plugins). Only a click starts it.
@@ -196,6 +212,13 @@ impl GhostexGpuiApp {
 
     /// Retry on a web view: start again when a runtime is on disk, otherwise install it.
     pub(crate) fn retry_web_runtime(&mut self, cx: &mut gpui::Context<Self>) {
+        if cef::init_permanently_failed()
+            || matches!(web_runtime_state(), WebRuntimeState::Unavailable(_))
+        {
+            set_web_runtime_state(WebRuntimeState::Unavailable(cef_init_unavailable_notice()));
+            self.refresh_web_runtime_views(cx);
+            return;
+        }
         #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
         let found = cef_component_window::configure_cef_framework_path_for_process();
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]

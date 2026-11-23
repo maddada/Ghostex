@@ -168,6 +168,9 @@ wrap_task! {
 
 /// CEF objects are used on its UI thread, so each frame from gxserver is handled there.
 fn post_relay_frame(frame: String) {
+    if !context_initialized() || CEF_SHUTDOWN_IN_PROGRESS.load(Ordering::Acquire) {
+        return;
+    }
     let mut task = GhostexDevtoolsRelayFrame::new(frame);
     post_task(ThreadId::UI, Some(&mut task));
 }

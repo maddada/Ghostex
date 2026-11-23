@@ -52,6 +52,12 @@ impl GhostexGpuiApp {
     /// web views that were waiting for it. A runtime that cannot start is reported on those views
     /// (CDXC:CefRuntime 2026-09-28 in app/helpers/web_runtime.rs).
     pub(crate) fn initialize_cef(&mut self, cx: &mut gpui::Context<Self>) {
+        if cef::init_permanently_failed() {
+            let error = cef::runtime_start_error()
+                .unwrap_or_else(|| "CEF initialization already failed".to_string());
+            self.fail_web_runtime_start(format!("The web runtime could not start: {error}"), cx);
+            return;
+        }
         if let Err(error) = cef::initialize(cx) {
             self.fail_web_runtime_start(format!("The web runtime could not start: {error:#}"), cx);
             return;
@@ -70,7 +76,7 @@ impl GhostexGpuiApp {
                         .timer(Duration::from_millis(25))
                         .await;
                     // macOS starts CEF on a later run-loop turn (cef/macos.rs `start_cef`).
-                    if let Some(error) = cef::take_runtime_start_error() {
+                    if let Some(error) = cef::runtime_start_error() {
                         let _ = this.update(cx, |this, cx| {
                             this.cef_context_initialization_waiting = false;
                             this.fail_web_runtime_start(

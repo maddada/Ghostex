@@ -80,12 +80,30 @@ the platform module converts them to an NSView*, HWND, or X11 window id.
 */
 use super::platform;
 
-struct CefRuntimeState {
-    _platform: platform::PlatformCefRuntime,
-    _app: cef::App,
+enum CefRuntimeState {
+    NotStarted,
+    Active {
+        _platform: platform::PlatformCefRuntime,
+        _app: cef::App,
+    },
+    /// CDXC:CefRuntime 2026-11-23 WHY:
+    /// GitHub #724: calling `cef::initialize` a second time in the same process after the first
+    /// returned false null-dereferences at 0xb8 inside `CefMainRunner::ContentMainInitialize`.
+    /// Dropping `PlatformCefRuntime` after a failed init would also call `cef::unload_library` on
+    /// a framework whose globals/ObjC state were partially initialized. Keep the handles alive
+    /// until process exit and refuse every later initialization attempt in this process.
+    InitFailed {
+        _platform: Option<platform::PlatformCefRuntime>,
+        _app: Option<cef::App>,
+        error: String,
+    },
 }
 
-static CEF_RUNTIME: OnceLock<Mutex<Option<CefRuntimeState>>> = OnceLock::new();
+static CEF_RUNTIME: OnceLock<Mutex<CefRuntimeState>> = OnceLock::new();
+static CEF_INITIALIZED: AtomicBool = AtomicBool::new(false);
+static CEF_INIT_ATTEMPTED: AtomicBool = AtomicBool::new(false);
+static CEF_INIT_FAILED: AtomicBool = AtomicBool::new(false);
+static CEF_INIT_FAILED_PROCESS_NOTIFIED: AtomicBool = AtomicBool::new(false);
 static CEF_CONTEXT_INITIALIZED: AtomicBool = AtomicBool::new(false);
 static CEF_SHUTDOWN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 const CEF_CONTEXT_MENU_INSPECT_ELEMENT_COMMAND_ID: c_int = 26_001;

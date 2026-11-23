@@ -303,7 +303,7 @@ impl GpuiVisualPageModalWindow {
             return None;
         }
         match web_runtime_state() {
-            WebRuntimeState::Failed(message) => {
+            WebRuntimeState::Failed(message) | WebRuntimeState::Unavailable(message) => {
                 open_timing::finish("webRuntimeFailed");
                 self.error = Some(message);
                 cx.notify();

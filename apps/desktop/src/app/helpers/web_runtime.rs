@@ -24,8 +24,22 @@ pub(crate) enum WebRuntimeState {
     Installed,
     /// `cef::initialize` returned; pages are created once its context is up.
     Running,
-    /// Installing, verifying or starting failed; the message is shown on the web views.
+    /// Installing, verifying or starting failed before Chromium entered initialization; the
+    /// message is shown on the web views with Retry.
     Failed(String),
+    /// `cef::initialize` failed in this process and cannot be retried without restarting Ghostex;
+    /// browser features stay off and every web view shows this notice with no Retry button.
+    Unavailable(String),
+}
+
+/// Plain notice shown on web views when `cef::initialize` failed in this process.
+pub(crate) fn cef_init_unavailable_notice() -> String {
+    if crate::cef::init_failed_process_notified() {
+        "Browser features could not start because another copy of Ghostex is already using them. Close any other Ghostex windows and restart Ghostex to try again.".to_string()
+    } else {
+        "Browser features could not start, so they are off for now. Restart Ghostex to try again."
+            .to_string()
+    }
 }
 
 static WEB_RUNTIME_STATE: Mutex<WebRuntimeState> = Mutex::new(WebRuntimeState::NotInstalled);
@@ -107,6 +121,11 @@ pub(crate) fn web_runtime_install_prompt(subject: &str) -> Option<WebRuntimeProm
             title: Some("The web runtime needs another try".to_string()),
             message,
             action: Some(WebRuntimePromptAction::Retry),
+        }),
+        WebRuntimeState::Unavailable(message) => Some(WebRuntimePrompt {
+            title: Some("Browser features unavailable".to_string()),
+            message,
+            action: None,
         }),
     }
 }

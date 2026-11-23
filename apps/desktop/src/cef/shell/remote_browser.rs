@@ -77,6 +77,9 @@ fn configure_proxy(context: &RequestContext, port: u16) -> Result<()> {
 /// A restored remote tab prepares its proxy before browser creation reaches the deferred-init gate. Creating its request-context handler then aborts CEF with API version -1; context preparation must request the runtime and wait for initialization too.
 pub(crate) fn prepare_remote_browser_context(profile: &str, port: u16) -> Result<bool> {
     if !super::context_initialized() {
+        if super::init_permanently_failed() {
+            anyhow::bail!("CEF runtime failed to initialize");
+        }
         super::request_runtime();
         return Ok(false);
     }
