@@ -101,7 +101,7 @@ pub(super) const KIT_STYLE: &str = r#"<style id="ghostex-kit">
 gx-page,gx-questions{display:grid;grid-template-columns:minmax(var(--gx-gutter),1fr) minmax(0,var(--gx-text-width)) minmax(var(--gx-gutter),1fr);row-gap:20px;align-content:start;padding:56px 0 88px;font-size:15px;line-height:1.65;color:var(--gx-text);overflow-wrap:break-word}
 gx-page{display:grid}
 gx-page>*,gx-questions>*{grid-column:2;min-width:0}
-/* The Mark as read footer (SEEN_FOOTER) inside a page's own layout takes the page's width, not gutters of its own. */
+/* The Done footer (SEEN_FOOTER) inside a page's own layout takes the page's width, not gutters of its own. */
 gx-page gx-questions[data-gx-seen]{grid-template-columns:0 minmax(0,1fr) 0;padding:36px 0 0}
 gx-page>gx-wide,gx-questions>gx-wide{grid-column:1/-1;justify-self:center;box-sizing:border-box;width:min(100% - 2*var(--gx-gutter),var(--gx-wide-width));display:flex;flex-direction:column;align-items:center;gap:20px}
 gx-page>gx-wide[size=full],gx-questions>gx-wide[size=full]{width:100%}
@@ -267,6 +267,7 @@ html[data-gx-theme=light] .gx-ref{color:#5f9878}
 [data-question][data-choice].gx-picked:not(h1,h2,h3,h4,h5,h6){border-color:color-mix(in srgb,var(--gx-pick) 78%,transparent);box-shadow:0 0 0 5px color-mix(in srgb,var(--gx-pick) 10%,transparent),var(--gx-glass-shadow)}
 .gx-send{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px;padding:10px 14px;border:1px solid var(--gx-card-border);border-radius:16px;background:var(--gx-footer);box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15)}
 .gx-send-button{display:inline-flex;align-items:center;gap:6px;margin-left:auto;height:28px;box-sizing:border-box;padding:0 11px;font:inherit;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--gx-control);background:var(--gx-control);color:var(--gx-bg);cursor:pointer}
+.gx-send-button>svg{width:14px;height:14px;flex:none}
 .gx-send-button:hover:not(:disabled){opacity:.9}
 .gx-send-button:disabled{opacity:.5;cursor:default}
 .gx-skip-all{display:inline-flex;align-items:center;gap:6px;margin-left:auto;height:28px;box-sizing:border-box;padding:0 11px;font:inherit;font-size:13px;font-weight:500;border-radius:8px;border:1px solid transparent;background:color-mix(in srgb,var(--gx-fg) 9%,transparent);color:var(--gx-text);cursor:pointer}
@@ -946,7 +947,7 @@ function tidyCards(questions,ties){
   return cards;
 }
 function setup(root){
-  /* A page that asks nothing and waits to be seen (SEEN_FOOTER below): the same footer with no questions, a reply box and Mark as read. */
+  /* A page that asks nothing and waits to be seen (SEEN_FOOTER below): the same footer with no questions, a reply box and Done. */
   var seen=root.hasAttribute("data-gx-seen");
   var used={},questions=[],options=[];
   function collect(){var out={};questions.forEach(function(q){q.collect(out);});if(seen)out.seen=true;var t=notes&&notes.value.trim();if(t)out[notesKey]=t;return out;}
@@ -1002,10 +1003,10 @@ function setup(root){
   var infoText=seen?"The agent is told you saw the page, with your reply if you write one.":"Questions you leave blank are sent as skipped.";info.type="button";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);info.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/></svg>';status.append(info);
   var mac=/Mac|iPhone|iPad/.test(navigator.platform||"");
   /* The shortcuts show in the kit's tooltip as key caps, the keys this platform uses, not on the buttons. */
-  button.setAttribute("data-gx-tip",seen?"Mark as read":"Send answers");button.setAttribute("data-gx-tip-keys",mac?"⌘ Enter":"Ctrl Enter");
+  button.setAttribute("data-gx-tip",seen?"Done":"Send answers");button.setAttribute("data-gx-tip-keys",mac?"⌘ Enter":"Ctrl Enter");
   /* Skip all: sends at once with every question as skipped and no notes, whatever is picked or typed (see the SessionChat DECISION on SKIPPED in packages/gx-visual/src/questions.rs). */
   var skipAll=el("button","gx-skip-all");skipAll.type="button";skipAll.append(el("span",null,"Skip all"));skipAll.setAttribute("data-gx-tip","Skip all");skipAll.setAttribute("data-gx-tip-keys",mac?"⌘ ⇧ Enter":"Ctrl Shift Enter");
-  button.type="button";button.append(label);if(seen)bar.append(status,button);else bar.append(status,skipAll,button);if(notesCard)root.append(notesCard);root.append(bar);
+  button.type="button";if(seen)button.insertAdjacentHTML("afterbegin",'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>');button.append(label);if(seen)bar.append(status,button);else bar.append(status,skipAll,button);if(notesCard)root.append(notesCard);root.append(bar);
   skipAll.addEventListener("click",function(){
     if(button.disabled)return;
     var out={};questions.forEach(function(q){out[q.key]=SKIPPED;});
@@ -1013,7 +1014,7 @@ function setup(root){
     send(out,function(){restore({});root.querySelectorAll("textarea").forEach(function(t){t.value="";});});
   });
   var dictStop=null;
-  function lock(){if(dictStop)dictStop();questions.forEach(function(q){q.lock();});if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent=seen?"Seen":"Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?"Marked as seen. The agent was told.":"Sent to the agent.";}
+  function lock(){if(dictStop)dictStop();questions.forEach(function(q){q.lock();});if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent=seen?"Done":"Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?"Marked done. The agent was told.":"Sent to the agent.";}
   /* CDXC:SessionChat 2026-11-11 DECISION:
      User: "please show number of questions answered so far in bottom right corner always". A page with questions shows "3 of 10 answered" in a small glass pill fixed at the window's bottom right, whatever the scroll, updated as the reader answers. A question counts as answered as the tile's check and Send count it (`gx-has-answer`): a choice picked, or a note or text written; one left blank counts as not answered, also after Skip all. All answered turns it green. (2026-11-12: it stays fully on screen: User, on an Android phone's page sheet where the pill's right end was cut off by the screen's edge: "make questions bottom right not off screen pls". Its margin is the page's own gutter (16px on a phone, 24px otherwise) or the safe area, it shrinks with an ellipsis if the screen is narrower than its text, and the script places it by the visual viewport, so a web view whose layout is wider than the screen cannot push it off.) The page gets room at its end (the gutter plus 34px; measured from the pill since 2026-11-15, below), so scrolled to the bottom the pill sits below the send bar instead of on it. The floating window, a browser tab and the phone's page sheet all get it from here.
      CDXC:SessionChat 2026-11-15 DECISION: User, with a screenshot of a page on their Android foldable where the "1 of 2 answered" pill sat over an option card, among cards that overflowed and overlapped: "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." Asked whether the pill should fade whenever content is under it or always show, the user answered "Always show", so the "always" above stands: the pill never hides. It cannot hide a control: clicks and taps go through it (`pointer-events:none`), and the page's room at its end is measured from the pill itself (its margin, its height at the current text size and a 12px gap), so scrolled to the end every card, the send bar and its buttons sit clear above it. Supersedes the fading pill tried the same day. */
@@ -1073,7 +1074,7 @@ function setup(root){
   if(ghostex.answered){restore(ghostex.answers||{});lock();return;}
   /* An exported page has no Ghostex to send to: Send becomes Export answers, which shows the answers to copy or download, and the page stays open for more (exported.rs). */
   var exported=!!ghostex.exported;
-  if(exported){label.textContent="Export answers";button.setAttribute("data-gx-tip","Export answers");skipAll.remove();infoText=seen?"Exports that you saw the page, with your reply if you write one.":"Questions you leave blank are exported as skipped.";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);}
+  if(exported){var svg=button.querySelector("svg");if(svg)svg.remove();label.textContent="Export answers";button.setAttribute("data-gx-tip","Export answers");skipAll.remove();infoText=seen?"Exports that you saw the page, with your reply if you write one.":"Questions you leave blank are exported as skipped.";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);}
   var saved=ghostex.__draft&&ghostex.__draft("kit");if(saved&&typeof saved==="object"){restore(saved);syncOptions();}
   /* Pasted images: see the Clipboard DECISIONs on KIT_SCRIPT. */
   var pendingImages=0,kept={},keptSize=0,savedThumbs=ghostex.__draft&&ghostex.__draft("thumbs");
@@ -1477,8 +1478,8 @@ function setupMentions(){
   },true);
   ["scroll","resize"].forEach(function(name){addEventListener(name,function(){if(mentionState&&mentionMenu&&mentionMenu.classList.contains("gx-m-on"))placeMention(mentionState.target);},true);});
 }
-/* SEEN_FOOTER: a page that asks nothing, published to wait until the reader has looked at it (`awaitsSeen`, server/src/visual_pages/publish.rs), ends with a reply box and Mark as read, which send `{"seen": true, "reply": …}` as its answers. It goes at the very end of the page, so the reader reaches the end to press it. */
-function seenFooter(){var r=document.createElement("gx-questions");r.setAttribute("data-gx-seen","");r.setAttribute("submit","Mark as read");(document.querySelector("gx-page")||document.body).append(r);setup(r);}
+/* SEEN_FOOTER: a page that asks nothing, published to wait until the reader has looked at it (`awaitsSeen`, server/src/visual_pages/publish.rs), ends with a reply box and Done, which send `{"seen": true, "reply": …}` as its answers. It goes at the very end of the page, so the reader reaches the end to press it. */
+function seenFooter(){var r=document.createElement("gx-questions");r.setAttribute("data-gx-seen","");r.setAttribute("submit","Done");(document.querySelector("gx-page")||document.body).append(r);setup(r);}
 function init(){followPaint();addThemeSwitch();setupTabs();var root=document.querySelector("gx-questions");if(root)setup(root);else if(window.ghostex&&ghostex.awaitsSeen)seenFooter();setupMentions();}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 addEventListener("load",followPaint);
