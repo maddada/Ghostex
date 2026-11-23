@@ -5,9 +5,13 @@
 //! replaces something this run moved to its backup: when the link cannot be made,
 //! the original goes back (CDXC:AgentSync 2026-10-27 in fsx.rs).
 
+use crate::catalog::source_root;
 use crate::fsx;
-use crate::plan::{build_plan, PlanGroupKind, PlanOp, PlanOptions, PlanVerb, SyncPlan};
+use crate::plan::{
+    build_plan, resolve_seed_source, PlanGroupKind, PlanOp, PlanOptions, PlanVerb, SyncPlan,
+};
 use crate::scan::scan;
+use crate::SyncScope;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
@@ -129,6 +133,20 @@ pub(crate) fn restore_after_failed_link(error: String, path: &Path, backup: &Pat
     }
 }
 
+fn main_md_is_ready_on_disk(home: &Path) -> bool {
+    let path = source_root(home).join("main.md");
+    path.is_file()
+        && fs::read_to_string(&path)
+            .map(|text| {
+                !text
+                    .strip_prefix('\u{feff}')
+                    .unwrap_or(&text)
+                    .trim()
+                    .is_empty()
+            })
+            .unwrap_or(false)
+}
+
 /// Scan, plan, and run the enabled groups of the plan.
 pub fn apply(home: &Path, options: &PlanOptions, enabled: &[PlanGroupKind]) -> ApplyResult {
     apply_with(home, options, enabled, &REAL_LINKER)
@@ -146,10 +164,75 @@ pub(crate) fn apply_with(
     let mut failed = Vec::new();
     let mut skipped_keeps = 0;
     let mut drops: Vec<(std::path::PathBuf, String)> = Vec::new();
-    // What this run moved aside, by the path it came from, to put back if its link fails.
+    // What this run moved aside, by the path it came from, to put back if its link or write fails.
     let mut backed_up: HashMap<PathBuf, PathBuf> = HashMap::new();
+    let main_md_path = source_root(home).join("main.md");
+    let any_in_scope_instructions = report.agents.iter().any(|agent| {
+        agent.detected
+            && agent.instructions.is_some()
+            && match &options.scope {
+                SyncScope::All => true,
+                SyncScope::Agent(id) => id == &agent.id,
+            }
+    });
+
+    if let Some(selector) = options.seed_main_from.as_deref() {
+        if enabled.contains(&PlanGroupKind::SeedMainMd) {
+            if let Err(error) = resolve_seed_source(home, &report, selector) {
+                failed.push(ApplyFailure {
+                    op: PlanOp {
+                        verb: PlanVerb::Write,
+                        path: fsx::display_path(&main_md_path, home),
+                        target: None,
+                        note: None,
+                        agent_id: None,
+                        content: None,
+                        abs_path: main_md_path.clone(),
+                        abs_target: None,
+                    },
+                    error,
+                });
+            }
+        }
+    }
+
     for group in &plan.groups {
         if !enabled.contains(&group.kind) {
+            continue;
+        }
+        // Defense-in-depth: never write or back up pointer files unless ~/.agents/main.md
+        // actually exists with non-whitespace content on disk right now.
+        if group.kind == PlanGroupKind::PointerFiles && !main_md_is_ready_on_disk(home) {
+            if any_in_scope_instructions {
+                let reason = if main_md_path.is_file() {
+                    "~/.agents/main.md is empty"
+                } else {
+                    "~/.agents/main.md does not exist"
+                };
+                let hint = if let Some(best) = &plan.seed_recommendation {
+                    format!(
+                        " Create main.md from {} ({}, {} bytes) first with `--seed-main-from {}`.",
+                        best.display_name, best.path, best.bytes, best.agent_id
+                    )
+                } else {
+                    " Create ~/.agents/main.md with your shared instructions first.".to_string()
+                };
+                failed.push(ApplyFailure {
+                    op: PlanOp {
+                        verb: PlanVerb::Write,
+                        path: fsx::display_path(&main_md_path, home),
+                        target: None,
+                        note: Some("pointer-files group refused".to_string()),
+                        agent_id: None,
+                        content: None,
+                        abs_path: main_md_path.clone(),
+                        abs_target: None,
+                    },
+                    error: format!(
+                        "Refused pointer-files: {reason}. No instruction files were changed.{hint}"
+                    ),
+                });
+            }
             continue;
         }
         for op in &group.ops {
@@ -170,7 +253,7 @@ pub(crate) fn apply_with(
                         done.push(op.clone());
                     }
                     Err(error) => {
-                        let backup = (op.verb == PlanVerb::Link)
+                        let backup = matches!(op.verb, PlanVerb::Link | PlanVerb::Write)
                             .then(|| backed_up.remove(&op.abs_path))
                             .flatten();
                         let error = match backup {
@@ -250,6 +333,7 @@ mod tests {
             stamp: "test".to_string(),
             backup_root: home.join("backups"),
             pointer_policy: PointerPolicy::Replace,
+            seed_main_from: None,
             link_hooks: true,
             link_lock: false,
         }

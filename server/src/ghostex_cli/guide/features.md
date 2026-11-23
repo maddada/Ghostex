@@ -4236,7 +4236,7 @@ scripts cards. Review and fix all, a row's Fix, or an agent's Review and fix
 opens a plan first:
 one relative symlink per skill in every agent's skills folder, whole-folder links
 converted to per-skill links, the one-line pointer written into each agent's
-instruction file (a file with other content is backed up first), and the hooks
+instruction file (a file with other content is backed up first, or you can choose to prepend the pointer or leave existing files alone; pointer files are never written while `~/.agents/main.md` is missing or empty, and Sync offers to create `main.md` from the richest existing instruction file first), and the hooks
 folder and lock file linked into Claude Code and Codex (when `~/.agents` has no
 `hooks` folder or lock file, the Hook scripts card says "Nothing shared" and
 there is nothing to fix there). Nothing is deleted:
@@ -4249,9 +4249,9 @@ GitHub Copilot, Pi, Amp, Cursor, OpenCode) get no links, and links already in
 their folders are removed so they do not load each skill twice; Claude Code and
 the others get one link per skill. Old `<name>.pre-sync-<stamp>.bak` backup
 folders left inside skills folders are moved to the same backup folder. The same scan, plan, and apply run from the CLI:
-`ghostex agent-sync status`, `ghostex agent-sync plan [--agent <id>]`, and
+`ghostex agent-sync status`, `ghostex agent-sync plan [--agent <id>] [--seed-main-from <agent|path>] [--pointer-policy <replace|prepend|leave-alone>]`, and
 `ghostex agent-sync apply --yes [--agent <id>] [--group <group>...]
-[--prune-lock]`; `ghostex agent-sync agents` lists the ids.
+[--prune-lock] [--seed-main-from <agent|path>] [--pointer-policy <replace|prepend|leave-alone>]`; `ghostex agent-sync agents` lists the ids.
 
 Use `ghostex agents --help` to create, message, and close other agent sessions.
 `ghostex agents whoami --json` identifies the caller; `agents types` lists

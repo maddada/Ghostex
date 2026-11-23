@@ -53,8 +53,16 @@ impl GhostexGpuiApp {
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or("all")
                     .to_string();
+                let seed_main_from = command
+                    .get("seedMainFrom")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                let pointer_policy = command
+                    .get("pointerPolicy")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
                 self.run_gpui_app_modal_sidebar_status_task(
-                    move || gpui_agent_sync_plan_message(scope),
+                    move || gpui_agent_sync_plan_message(scope, seed_main_from, pointer_policy),
                     cx,
                 );
             }
@@ -75,8 +83,18 @@ impl GhostexGpuiApp {
                             .collect()
                     })
                     .unwrap_or_default();
+                let seed_main_from = command
+                    .get("seedMainFrom")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                let pointer_policy = command
+                    .get("pointerPolicy")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
                 self.run_gpui_app_modal_sidebar_status_task(
-                    move || gpui_agent_sync_apply_message(scope, groups),
+                    move || {
+                        gpui_agent_sync_apply_message(scope, groups, seed_main_from, pointer_policy)
+                    },
                     cx,
                 );
             }

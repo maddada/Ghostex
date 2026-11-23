@@ -22,12 +22,13 @@ pub mod scan;
 pub use apply::{apply, ApplyFailure, ApplyResult};
 pub use catalog::{agent_catalog, AgentKind, AgentSpec, InstructionKind, SOURCE_DIR_NAME};
 pub use plan::{
-    build_plan, PlanGroup, PlanGroupKind, PlanOp, PlanOptions, PlanSummary, PlanVerb, SyncPlan,
+    build_plan, resolve_seed_source, PlanGroup, PlanGroupKind, PlanOp, PlanOptions, PlanSummary,
+    PlanVerb, PointerPolicy, ResolvedSeed, SyncPlan,
 };
 pub use scan::{
     scan, AgentReport, AgentStatus, HooksReport, HooksState, InstructionReport, InstructionState,
-    LockLinkReport, Problem, ProblemKind, ReportSummary, SkillDirState, SkillEntry,
-    SkillEntryState, SkillsReport, SourceInfo, SyncReport,
+    LockLinkReport, MainMdSeedCandidate, Problem, ProblemKind, ReportSummary, SkillDirState,
+    SkillEntry, SkillEntryState, SkillsReport, SourceInfo, SyncReport,
 };
 
 /// The scope of a plan or apply run: every detected agent, or one agent id

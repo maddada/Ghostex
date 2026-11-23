@@ -56,10 +56,14 @@ pub(crate) enum AgentsHubModalCommand {
     RequestSyncReport,
     RequestSyncPlan {
         scope: String,
+        seed_main_from: Option<String>,
+        pointer_policy: Option<String>,
     },
     ApplySyncPlan {
         scope: String,
         groups: Vec<String>,
+        seed_main_from: Option<String>,
+        pointer_policy: Option<String>,
     },
     Close,
 }
@@ -89,13 +93,15 @@ pub(crate) enum SyncFilter {
     All,
 }
 
-/// The open plan sheet: its scope, the groups a problem row chose before the plan arrived, and
-/// the groups the user switched since.
+/// The open plan sheet: its scope, the groups a problem row chose before the plan arrived,
+/// optional main.md seed source, pointer policy, and the groups the user switched since.
 #[derive(Clone, Debug)]
 pub(crate) struct SyncSheet {
     pub(crate) scope: String,
     pub(crate) preset: Option<Vec<String>>,
     pub(crate) enabled: Option<Vec<String>>,
+    pub(crate) seed_main_from: Option<String>,
+    pub(crate) pointer_policy: String,
 }
 
 /// The Agent Sync tab's own state. The React tab unmounted when another tab was chosen, so
@@ -166,18 +172,26 @@ impl SyncTabState {
         self.apply_result = apply_result;
     }
 
-    /// The groups the sheet applies: the user's switches, else the row's preset, else the plan's defaults.
+    /// The groups the sheet applies: the user's switches, else the row's preset, else the plan's defaults,
+    /// filtered to groups that actually have operations in the loaded plan.
     pub(crate) fn enabled_groups(&self) -> Vec<String> {
         let Some(sheet) = self.sheet.as_ref() else {
             return Vec::new();
         };
-        if let Some(enabled) = sheet.enabled.as_ref() {
-            return enabled.clone();
+        let raw = if let Some(enabled) = sheet.enabled.as_ref() {
+            enabled.clone()
+        } else if let Some(preset) = sheet.preset.as_ref() {
+            preset.clone()
+        } else {
+            return default_plan_groups(self.sheet_plan());
+        };
+        match self.sheet_plan() {
+            Some(plan) => raw
+                .into_iter()
+                .filter(|kind| plan.groups.iter().any(|group| group.kind == *kind))
+                .collect(),
+            None => raw,
         }
-        if let Some(preset) = sheet.preset.as_ref() {
-            return preset.clone();
-        }
-        default_plan_groups(self.sheet_plan())
     }
 
     /// The plan, when it answers the open sheet's scope.
@@ -771,16 +785,90 @@ impl GpuiAgentsHubModalWindow {
         preset: Option<Vec<String>>,
         cx: &mut Context<Self>,
     ) {
+        self.open_sync_plan_with_seed(scope, preset, None, cx);
+    }
+
+    pub(crate) fn open_sync_plan_with_seed(
+        &mut self,
+        scope: String,
+        preset: Option<Vec<String>>,
+        seed_main_from: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let pointer_policy = "replace".to_string();
         self.sync.sheet = Some(SyncSheet {
             scope: scope.clone(),
             preset,
             enabled: None,
+            seed_main_from: seed_main_from.clone(),
+            pointer_policy: pointer_policy.clone(),
         });
         self.sync.expanded_plan_groups.clear();
         self.sync.script_copied_at = None;
         // A sheet opened again must not show the last run's result while its plan loads.
         self.sync.apply_result = None;
-        self.send(AgentsHubModalCommand::RequestSyncPlan { scope }, cx);
+        self.send(
+            AgentsHubModalCommand::RequestSyncPlan {
+                scope,
+                seed_main_from,
+                pointer_policy: Some(pointer_policy),
+            },
+            cx,
+        );
+        cx.notify();
+    }
+
+    pub(crate) fn set_sync_seed_source(
+        &mut self,
+        seed_main_from: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(sheet) = self.sync.sheet.as_mut() else {
+            return;
+        };
+        sheet.seed_main_from = seed_main_from.clone();
+        // Reset explicit group overrides so the newly seeded group + pointerFiles turn on cleanly.
+        sheet.enabled = None;
+        if seed_main_from.is_some() {
+            if let Some(preset) = sheet.preset.as_mut() {
+                if !preset.iter().any(|g| g == "seedMainMd") {
+                    preset.insert(0, "seedMainMd".to_string());
+                }
+            }
+        }
+        let scope = sheet.scope.clone();
+        let pointer_policy = sheet.pointer_policy.clone();
+        self.sync.apply_result = None;
+        self.send(
+            AgentsHubModalCommand::RequestSyncPlan {
+                scope,
+                seed_main_from,
+                pointer_policy: Some(pointer_policy),
+            },
+            cx,
+        );
+        cx.notify();
+    }
+
+    pub(crate) fn set_sync_pointer_policy(&mut self, policy: String, cx: &mut Context<Self>) {
+        let Some(sheet) = self.sync.sheet.as_mut() else {
+            return;
+        };
+        if sheet.pointer_policy == policy {
+            return;
+        }
+        sheet.pointer_policy = policy.clone();
+        let scope = sheet.scope.clone();
+        let seed_main_from = sheet.seed_main_from.clone();
+        self.sync.apply_result = None;
+        self.send(
+            AgentsHubModalCommand::RequestSyncPlan {
+                scope,
+                seed_main_from,
+                pointer_policy: Some(policy),
+            },
+            cx,
+        );
         cx.notify();
     }
 
@@ -796,11 +884,32 @@ impl GpuiAgentsHubModalWindow {
     }
 
     pub(crate) fn toggle_sync_plan_group(&mut self, kind: String, cx: &mut Context<Self>) {
+        let main_md_ready = self
+            .sync
+            .report
+            .as_ref()
+            .is_some_and(|report| report.source.main_md_ready());
+        let has_seed_group = self
+            .sync
+            .sheet_plan()
+            .is_some_and(|plan| plan.groups.iter().any(|group| group.kind == "seedMainMd"));
         let mut enabled = self.sync.enabled_groups();
         if let Some(index) = enabled.iter().position(|group| *group == kind) {
             enabled.remove(index);
+            // Switching off seedMainMd while main.md is missing/empty must also turn off pointerFiles.
+            if kind == "seedMainMd" && !main_md_ready {
+                enabled.retain(|group| group != "pointerFiles");
+            }
         } else {
-            enabled.push(kind);
+            enabled.push(kind.clone());
+            // Turning on pointerFiles while main.md is missing/empty turns on seedMainMd when available.
+            if kind == "pointerFiles"
+                && !main_md_ready
+                && has_seed_group
+                && !enabled.iter().any(|group| group == "seedMainMd")
+            {
+                enabled.insert(0, "seedMainMd".to_string());
+            }
         }
         if let Some(sheet) = self.sync.sheet.as_mut() {
             sheet.enabled = Some(enabled);
@@ -809,12 +918,23 @@ impl GpuiAgentsHubModalWindow {
     }
 
     pub(crate) fn apply_sync_plan(&mut self, cx: &mut Context<Self>) {
-        let Some(scope) = self.sync.sheet.as_ref().map(|sheet| sheet.scope.clone()) else {
+        let Some(sheet) = self.sync.sheet.as_ref() else {
             return;
         };
+        let scope = sheet.scope.clone();
+        let seed_main_from = sheet.seed_main_from.clone();
+        let pointer_policy = Some(sheet.pointer_policy.clone());
         let groups = self.sync.enabled_groups();
         self.sync.applying = true;
-        self.send(AgentsHubModalCommand::ApplySyncPlan { scope, groups }, cx);
+        self.send(
+            AgentsHubModalCommand::ApplySyncPlan {
+                scope,
+                groups,
+                seed_main_from,
+                pointer_policy,
+            },
+            cx,
+        );
         cx.notify();
     }
 

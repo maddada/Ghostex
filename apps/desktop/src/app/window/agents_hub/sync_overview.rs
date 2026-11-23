@@ -255,7 +255,8 @@ fn problem_icon(kind: &str) -> &'static str {
         "danglingLinks" | "sourceBrokenLinks" | "redundantLinks" => ICON_LINK_OFF,
         "copiedFolders" | "backupFolders" => ICON_COPY,
         "wholeFolderLinks" => ICON_FOLDER,
-        "missingPointers" => ICON_FILE_TEXT,
+        "missingPointers" | "missingMainMd" => ICON_FILE_TEXT,
+        "danglingPointers" => ICON_ALERT,
         _ => ICON_ALERT,
     }
 }
@@ -328,7 +329,11 @@ impl GpuiAgentsHubModalWindow {
         let to_fix: Vec<&SyncProblem> = report
             .problems
             .iter()
-            .filter(|problem| problem.fixable && problem.kind != "staleLockEntries")
+            .filter(|problem| {
+                (problem.fixable
+                    || matches!(problem.kind.as_str(), "danglingPointers" | "missingMainMd"))
+                    && problem.kind != "staleLockEntries"
+            })
             .collect();
         let stale_lock = report
             .problems
@@ -872,6 +877,68 @@ impl GpuiAgentsHubModalWindow {
                     ))
                     .into_any_element()
             };
+            let is_main_md_problem =
+                matches!(problem.kind.as_str(), "danglingPointers" | "missingMainMd");
+            let best_seed = report.source.main_md_seed_candidates.first().cloned();
+            let source_path_for_open = report.source.path.clone();
+            let home_for_open = report.home.clone();
+            let action_button = if is_main_md_problem {
+                if let Some(best) = best_seed {
+                    let seed_id = best.agent_id.clone();
+                    let label = format!("Create main.md from {}…", best.display_name);
+                    hub_button(
+                        hp,
+                        ("agents-hub-sync-fix", index),
+                        HubButtonVariant::Outline,
+                        HubButtonSize::Small,
+                        None,
+                        Some(label.into()),
+                        false,
+                        move |this: &mut Self, _window, cx| {
+                            this.open_sync_plan_with_seed(
+                                "all".to_string(),
+                                Some(groups.clone()),
+                                Some(seed_id.clone()),
+                                cx,
+                            );
+                        },
+                        cx,
+                    )
+                } else {
+                    hub_button(
+                        hp,
+                        ("agents-hub-sync-fix", index),
+                        HubButtonVariant::Outline,
+                        HubButtonSize::Small,
+                        Some(ICON_EXTERNAL_LINK),
+                        Some("Open ~/.agents".into()),
+                        false,
+                        move |this: &mut Self, _window, cx| {
+                            this.send(
+                                super::window::AgentsHubModalCommand::OpenPath {
+                                    path: expand_home_path(&source_path_for_open, &home_for_open),
+                                },
+                                cx,
+                            );
+                        },
+                        cx,
+                    )
+                }
+            } else {
+                hub_button(
+                    hp,
+                    ("agents-hub-sync-fix", index),
+                    HubButtonVariant::Outline,
+                    HubButtonSize::Small,
+                    None,
+                    Some(if open { "Review fix…" } else { "Fix…" }.into()),
+                    false,
+                    move |this: &mut Self, _window, cx| {
+                        this.open_sync_plan("all".to_string(), Some(groups.clone()), cx);
+                    },
+                    cx,
+                )
+            };
             let row = h_flex()
                 .id(("agents-hub-sync-fix-row", index))
                 .w_full()
@@ -902,19 +969,7 @@ impl GpuiAgentsHubModalWindow {
                                 .child(agents_note),
                         ),
                 )
-                .child(hub_button(
-                    hp,
-                    ("agents-hub-sync-fix", index),
-                    HubButtonVariant::Outline,
-                    HubButtonSize::Small,
-                    None,
-                    Some(if open { "Review fix…" } else { "Fix…" }.into()),
-                    false,
-                    move |this: &mut Self, _window, cx| {
-                        this.open_sync_plan("all".to_string(), Some(groups.clone()), cx);
-                    },
-                    cx,
-                ))
+                .child(action_button)
                 .child(
                     div()
                         .id(("agents-hub-sync-fix-chevron", index))

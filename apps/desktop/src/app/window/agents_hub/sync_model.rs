@@ -120,15 +120,40 @@ pub(crate) struct SyncSourceSkill {
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct SyncSeedCandidate {
+    #[serde(default)]
+    pub(crate) agent_id: String,
+    #[serde(default)]
+    pub(crate) display_name: String,
+    #[serde(default)]
+    pub(crate) path: String,
+    #[serde(default)]
+    pub(crate) bytes: usize,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct SyncSourceInfo {
     #[serde(default)]
     pub(crate) hook_script_count: usize,
+    #[serde(default)]
+    pub(crate) main_md_exists: bool,
+    #[serde(default)]
+    pub(crate) main_md_empty: bool,
+    #[serde(default)]
+    pub(crate) main_md_seed_candidates: Vec<SyncSeedCandidate>,
     #[serde(default)]
     pub(crate) md_files: Vec<String>,
     #[serde(default)]
     pub(crate) path: String,
     #[serde(default)]
     pub(crate) skills: Vec<SyncSourceSkill>,
+}
+
+impl SyncSourceInfo {
+    pub(crate) fn main_md_ready(&self) -> bool {
+        self.main_md_exists && !self.main_md_empty
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -243,6 +268,14 @@ pub(crate) struct SyncPlan {
     #[serde(default)]
     pub(crate) backup_dir: String,
     #[serde(default)]
+    pub(crate) main_md_blocked: bool,
+    #[serde(default)]
+    pub(crate) seed_recommendation: Option<SyncSeedCandidate>,
+    #[serde(default)]
+    pub(crate) seed_candidates: Vec<SyncSeedCandidate>,
+    #[serde(default)]
+    pub(crate) warnings: Vec<String>,
+    #[serde(default)]
     pub(crate) summary: SyncPlanSummary,
     #[serde(default)]
     pub(crate) error_message: Option<String>,
@@ -325,7 +358,8 @@ pub(crate) enum SyncPart {
 pub(crate) const SYNC_PARTS: [SyncPart; 3] =
     [SyncPart::Skills, SyncPart::Instructions, SyncPart::Hooks];
 
-pub(crate) const PLAN_GROUP_KINDS: [&str; 8] = [
+pub(crate) const PLAN_GROUP_KINDS: [&str; 9] = [
+    "seedMainMd",
     "removeDangling",
     "removeRedundantLinks",
     "moveBackups",
@@ -339,6 +373,7 @@ pub(crate) const PLAN_GROUP_KINDS: [&str; 8] = [
 /// The plan groups a problem row's fix button enables.
 pub(crate) fn problem_fix_groups(kind: &str) -> Vec<&'static str> {
     match kind {
+        "danglingPointers" | "missingMainMd" => vec!["seedMainMd", "pointerFiles"],
         "danglingLinks" | "sourceBrokenLinks" => vec!["removeDangling"],
         "redundantLinks" => vec!["removeRedundantLinks"],
         "backupFolders" => vec!["moveBackups"],
@@ -455,7 +490,11 @@ pub(crate) fn part_fix_groups(agent: &SyncAgentReport, part: SyncPart) -> Vec<&'
                 .instructions
                 .as_ref()
                 .map(|value| value.state.as_str());
-            if agent.detected && matches!(state, Some("missing" | "legacyPointer" | "otherContent"))
+            if agent.detected
+                && matches!(
+                    state,
+                    Some("missing" | "danglingPointer" | "legacyPointer" | "otherContent")
+                )
             {
                 vec!["pointerFiles"]
             } else {
@@ -509,7 +548,7 @@ pub(crate) fn problem_part(kind: &str) -> Option<SyncPart> {
     match kind {
         "danglingLinks" | "copiedFolders" | "wholeFolderLinks" | "redundantLinks"
         | "backupFolders" => Some(SyncPart::Skills),
-        "missingPointers" => Some(SyncPart::Instructions),
+        "missingPointers" | "danglingPointers" | "missingMainMd" => Some(SyncPart::Instructions),
         _ => None,
     }
 }
@@ -687,11 +726,71 @@ pub(crate) fn problem_copy(problem: &SyncProblem, report: &SyncReport) -> Proble
             ),
             tone: SyncTone::Warn,
         },
+        "danglingPointers" => {
+            let reason = if report.source.main_md_empty {
+                "empty"
+            } else {
+                "missing"
+            };
+            let first_step = match report.source.main_md_seed_candidates.first() {
+                Some(best) => format!(
+                    "Create ~/.agents/main.md from {} ({}) as the first step.",
+                    best.display_name, best.path
+                ),
+                None => {
+                    "Create ~/.agents/main.md with your shared instructions, or restore your original files from Ghostex's backup folder."
+                        .to_string()
+                }
+            };
+            ProblemCopy {
+                steps: vec![
+                    first_step,
+                    "Sync will not write new instruction pointers until ~/.agents/main.md has content."
+                        .to_string(),
+                ],
+                sub: format!(
+                    "These agents are told to read ~/.agents/main.md, which is {reason}."
+                ),
+                title: format!(
+                    "{} to a {reason} shared instructions file",
+                    plural(count, "agent points", "agents point")
+                ),
+                tone: SyncTone::Err,
+            }
+        }
+        "missingMainMd" => {
+            let reason = if report.source.main_md_empty {
+                "empty"
+            } else {
+                "missing"
+            };
+            let first_step = match report.source.main_md_seed_candidates.first() {
+                Some(best) => format!(
+                    "Create ~/.agents/main.md from {} ({}) first.",
+                    best.display_name, best.path
+                ),
+                None => {
+                    "Add your shared instructions to ~/.agents/main.md before linking agent instruction files."
+                        .to_string()
+                }
+            };
+            ProblemCopy {
+                steps: vec![
+                    first_step,
+                    "Existing agent instruction files are never replaced while ~/.agents/main.md is missing or empty."
+                        .to_string(),
+                ],
+                sub: "Agent Sync waits to write instruction pointers until ~/.agents/main.md has content."
+                    .to_string(),
+                title: format!("Shared instructions file (~/.agents/main.md) is {reason}"),
+                tone: SyncTone::Warn,
+            }
+        }
         "missingPointers" => ProblemCopy {
             steps: vec![
                 "Each agent gets a one-line instruction file that tells it to read ~/.agents/main.md."
                     .to_string(),
-                "A file that already has other content is first moved to Ghostex's backup folder."
+                "A file that already has other content is first moved to Ghostex's backup folder (or you can prepend or leave it alone in the plan)."
                     .to_string(),
             ],
             sub: "Their instruction file does not mention ~/.agents/main.md.".to_string(),
@@ -729,6 +828,23 @@ fn agent_problem_count(agent: &SyncAgentReport, kind: &str) -> usize {
         "wholeFolderLinks" => usize::from(
             !agent.universal && skills.is_some_and(|s| s.dir_state == "wholeFolderLink"),
         ),
+        "danglingPointers" => {
+            let state = agent
+                .instructions
+                .as_ref()
+                .map(|value| value.state.as_str());
+            usize::from(agent.detected && state == Some("danglingPointer"))
+        }
+        "missingMainMd" => {
+            let state = agent
+                .instructions
+                .as_ref()
+                .map(|value| value.state.as_str());
+            usize::from(
+                agent.detected
+                    && matches!(state, Some("missing" | "legacyPointer" | "otherContent")),
+            )
+        }
         "missingPointers" => {
             let state = agent
                 .instructions
@@ -862,8 +978,13 @@ pub(crate) fn expand_home_path(path: &str, home: &str) -> String {
     if path == "~" {
         return home.to_string();
     }
-    match path.strip_prefix("~/") {
-        Some(rest) => format!("{home}/{rest}"),
+    match path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
+        Some(rest) => rest
+            .split(['/', '\\'])
+            .filter(|part| !part.is_empty())
+            .fold(std::path::PathBuf::from(home), |acc, part| acc.join(part))
+            .display()
+            .to_string(),
         None => path.to_string(),
     }
 }

@@ -1,8 +1,8 @@
 //! Agent Sync's plan sheet (packages/core-ui/agents-hub-sync/sync-plan-sheet.tsx (deleted 2026-10-01)): the plan as
 //! switchable groups of operations over a scrim, then the apply result.
 use super::super::native_modal_kit::{
-    MODAL_MONO_FONT, MODAL_UI_FONT, SwitchRowExt as _, a11y_toggled, bind_press, hsla, modal_rgba,
-    modal_switch, rgba_of, switch_row_wash,
+    MODAL_MONO_FONT, MODAL_UI_FONT, ModalRailItem, SwitchRowExt as _, a11y_toggled, bind_press,
+    hsla, modal_bordered_segmented_control, modal_rgba, modal_switch, rgba_of, switch_row_wash,
 };
 use super::palette::HubPalette;
 use super::sync_model::*;
@@ -203,7 +203,15 @@ impl GpuiAgentsHubModalWindow {
                         .child(pill(
                             hp,
                             PillTone::Info,
-                            format!("{} pointer files", plan.summary.writes),
+                            format!(
+                                "{} {}",
+                                plan.summary.writes,
+                                if plan.groups.iter().any(|group| group.kind == "seedMainMd") {
+                                    "files to write"
+                                } else {
+                                    "pointer files"
+                                }
+                            ),
                         ))
                         .child(pill(
                             hp,
@@ -282,7 +290,7 @@ impl GpuiAgentsHubModalWindow {
                         .child(SharedString::from(message.clone()))
                         .into_any_element(),
                 ));
-            } else if plan.groups.is_empty() {
+            } else if plan.groups.is_empty() && !plan.main_md_blocked && plan.warnings.is_empty() {
                 body = body.child(
                     div()
                         .px(px(14.0))
@@ -292,24 +300,175 @@ impl GpuiAgentsHubModalWindow {
                         .child("Everything is in sync. There is nothing to change."),
                 );
             } else {
-                let before = "Nothing is deleted. Anything in the way of a link is moved to ";
-                let code = plan.backup_dir.clone();
-                let after = " first, dangling links are removed, and every other file is left alone. Switch a group off to skip it.";
-                let text = format!("{before}{code}{after}");
-                let runs = vec![
-                    run(before, MODAL_UI_FONT, FontWeight::NORMAL, hp.foreground),
-                    run(&code, MODAL_MONO_FONT, FontWeight::NORMAL, hp.foreground),
-                    run(after, MODAL_UI_FONT, FontWeight::NORMAL, hp.foreground),
-                ];
-                body = body.child(verdict(
-                    hp,
-                    VerdictTone::Neutral,
-                    div()
-                        .child(StyledText::new(text).with_runs(runs))
-                        .into_any_element(),
-                ));
-                for (index, group) in plan.groups.iter().enumerate() {
-                    body = body.child(self.render_plan_group(hp, index, group, &enabled, cx));
+                for warning in &plan.warnings {
+                    body = body.child(verdict(
+                        hp,
+                        VerdictTone::Warn,
+                        div()
+                            .child(SharedString::from(warning.clone()))
+                            .into_any_element(),
+                    ));
+                }
+                if plan.main_md_blocked {
+                    if let Some(best) = plan.seed_recommendation.as_ref() {
+                        let best_id = best.agent_id.clone();
+                        let best_label =
+                            format!("Create main.md from {} ({})", best.display_name, best.path);
+                        let mut seed_row = h_flex()
+                            .w_full()
+                            .flex_wrap()
+                            .items_center()
+                            .gap(px(8.0))
+                            .child(hub_button(
+                                hp,
+                                "agents-hub-sync-seed-richest",
+                                HubButtonVariant::Quiet,
+                                HubButtonSize::Small,
+                                Some(ICON_FILE_TEXT),
+                                Some(best_label.into()),
+                                applying,
+                                move |this: &mut Self, _window, cx| {
+                                    this.set_sync_seed_source(Some(best_id.clone()), cx);
+                                },
+                                cx,
+                            ));
+                        for (idx, candidate) in plan.seed_candidates.iter().skip(1).enumerate() {
+                            let cid = candidate.agent_id.clone();
+                            let label = format!("Use {}", candidate.display_name);
+                            seed_row = seed_row.child(hub_button(
+                                hp,
+                                ("agents-hub-sync-seed-alt", idx),
+                                HubButtonVariant::Outline,
+                                HubButtonSize::Small,
+                                None,
+                                Some(label.into()),
+                                applying,
+                                move |this: &mut Self, _window, cx| {
+                                    this.set_sync_seed_source(Some(cid.clone()), cx);
+                                },
+                                cx,
+                            ));
+                        }
+                        body = body.child(seed_row);
+                    }
+                } else if sheet.seed_main_from.is_some() && plan.seed_candidates.len() > 1 {
+                    let selected_seed = sheet.seed_main_from.clone();
+                    let mut picker = h_flex()
+                        .w_full()
+                        .flex_wrap()
+                        .items_center()
+                        .gap(px(6.0))
+                        .text_size(px(12.0))
+                        .text_color(hsla(hp.muted))
+                        .child("Seed ~/.agents/main.md from:");
+                    for (idx, candidate) in plan.seed_candidates.iter().enumerate() {
+                        let cid = candidate.agent_id.clone();
+                        let active = selected_seed.as_deref() == Some(candidate.agent_id.as_str());
+                        picker = picker.child(hub_button(
+                            hp,
+                            ("agents-hub-sync-seed-pick", idx),
+                            if active {
+                                HubButtonVariant::Quiet
+                            } else {
+                                HubButtonVariant::Outline
+                            },
+                            HubButtonSize::Small,
+                            None,
+                            Some(
+                                format!("{} ({} B)", candidate.display_name, candidate.bytes)
+                                    .into(),
+                            ),
+                            applying,
+                            move |this: &mut Self, _window, cx| {
+                                this.set_sync_seed_source(Some(cid.clone()), cx);
+                            },
+                            cx,
+                        ));
+                    }
+                    body = body.child(picker);
+                }
+
+                let show_pointer_policy = !plan.main_md_blocked
+                    && (plan.groups.iter().any(|group| group.kind == "pointerFiles")
+                        || sheet.pointer_policy != "replace");
+                if show_pointer_policy {
+                    let selected_policy = match sheet.pointer_policy.as_str() {
+                        "prepend" => 1,
+                        "leave-alone" | "leaveAlone" => 2,
+                        _ => 0,
+                    };
+                    let items = [
+                        ModalRailItem {
+                            label: "Replace (backup first)".into(),
+                            trailing: None,
+                            dot: None,
+                        },
+                        ModalRailItem {
+                            label: "Prepend pointer".into(),
+                            trailing: None,
+                            dot: None,
+                        },
+                        ModalRailItem {
+                            label: "Leave alone".into(),
+                            trailing: None,
+                            dot: None,
+                        },
+                    ];
+                    let segmented = modal_bordered_segmented_control(
+                        hp.foreground,
+                        hp.hairline,
+                        rgba_of(hp.muted, hp.muted.a * 0.8),
+                        "agents-hub-sync-pointer-policy",
+                        &items,
+                        selected_policy,
+                        |this: &mut Self, index, _window, cx| {
+                            let next = match index {
+                                1 => "prepend",
+                                2 => "leave-alone",
+                                _ => "replace",
+                            };
+                            this.set_sync_pointer_policy(next.to_string(), cx);
+                        },
+                        cx,
+                    );
+                    body = body.child(
+                        h_flex()
+                            .w_full()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(12.0))
+                            .px(px(2.0))
+                            .child(
+                                div()
+                                    .text_size(px(12.0))
+                                    .text_color(hsla(hp.muted))
+                                    .child("Existing instruction files"),
+                            )
+                            .child(segmented),
+                    );
+                }
+
+                if !plan.groups.is_empty() {
+                    let before =
+                        "Nothing is deleted. Anything in the way of a link or pointer is moved to ";
+                    let code = plan.backup_dir.clone();
+                    let after = " first, dangling links are removed, and every other file is left alone. Switch a group off to skip it.";
+                    let text = format!("{before}{code}{after}");
+                    let runs = vec![
+                        run(before, MODAL_UI_FONT, FontWeight::NORMAL, hp.foreground),
+                        run(&code, MODAL_MONO_FONT, FontWeight::NORMAL, hp.foreground),
+                        run(after, MODAL_UI_FONT, FontWeight::NORMAL, hp.foreground),
+                    ];
+                    body = body.child(verdict(
+                        hp,
+                        VerdictTone::Neutral,
+                        div()
+                            .child(StyledText::new(text).with_runs(runs))
+                            .into_any_element(),
+                    ));
+                    for (index, group) in plan.groups.iter().enumerate() {
+                        body = body.child(self.render_plan_group(hp, index, group, &enabled, cx));
+                    }
                 }
             }
         } else {

@@ -359,7 +359,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     }
                 });
             }
-            AgentsHubModalCommand::RequestSyncPlan { scope } => {
+            AgentsHubModalCommand::RequestSyncPlan { scope, .. } => {
                 let mut plan = sync_plan(state == "syncplanempty");
                 plan["scope"] = json!(scope);
                 let plan = SyncPlan::from_json(plan);
@@ -371,7 +371,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     }
                 });
             }
-            AgentsHubModalCommand::ApplySyncPlan { scope, groups } => {
+            AgentsHubModalCommand::ApplySyncPlan { scope, groups, .. } => {
                 eprintln!("apply {scope}: {groups:?}");
                 let result = SyncApplyResult::from_json(apply_result(&scope));
                 cx.spawn(async move |cx| {

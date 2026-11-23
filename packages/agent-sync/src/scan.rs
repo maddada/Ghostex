@@ -198,6 +198,16 @@ pub enum SourceGitState {
     Committed,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MainMdSeedCandidate {
+    pub agent_id: String,
+    pub display_name: String,
+    pub path: String,
+    pub bytes: usize,
+    pub lines: usize,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceInfo {
@@ -206,6 +216,12 @@ pub struct SourceInfo {
     pub skills_dir: String,
     pub skills: Vec<SourceSkill>,
     pub main_md_exists: bool,
+    /// True when `~/.agents/main.md` exists on disk but is empty or whitespace-only.
+    pub main_md_empty: bool,
+    /// Detected agents' non-pointer instruction files that can seed `~/.agents/main.md`,
+    /// sorted richest first (most bytes, then most lines).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub main_md_seed_candidates: Vec<MainMdSeedCandidate>,
     pub md_files: Vec<String>,
     pub hooks_dir: String,
     pub hooks_dir_exists: bool,
@@ -214,9 +230,18 @@ pub struct SourceInfo {
     pub git: SourceGitState,
 }
 
+impl SourceInfo {
+    /// True only when `~/.agents/main.md` exists and has non-whitespace content.
+    pub fn main_md_ready(&self) -> bool {
+        self.main_md_exists && !self.main_md_empty
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ProblemKind {
+    DanglingPointers,
+    MissingMainMd,
     DanglingLinks,
     SourceBrokenLinks,
     StaleLockEntries,
@@ -248,6 +273,7 @@ pub struct ReportSummary {
     pub agents_attention: usize,
     pub agents_not_installed: usize,
     pub dangling_links: usize,
+    pub dangling_pointers: usize,
     pub stale_lock_entries: usize,
     pub copied_skill_folders: usize,
     pub whole_folder_links: usize,
@@ -360,11 +386,24 @@ fn scan_source(home: &Path) -> SourceInfo {
     } else {
         SourceGitState::NoCommits
     };
+    let main_md_path = root.join("main.md");
+    let main_md_exists = main_md_path.is_file();
+    let main_md_empty = main_md_exists
+        && fs::read_to_string(&main_md_path)
+            .map(|text| {
+                text.strip_prefix('\u{feff}')
+                    .unwrap_or(&text)
+                    .trim()
+                    .is_empty()
+            })
+            .unwrap_or(true);
     SourceInfo {
         path: fsx::display_path(&root, home),
         exists: root.is_dir(),
         skills_dir: fsx::display_path(&skills_dir, home),
-        main_md_exists: root.join("main.md").is_file(),
+        main_md_exists,
+        main_md_empty,
+        main_md_seed_candidates: Vec::new(),
         md_files,
         hooks_dir: fsx::display_path(&hooks_dir, home),
         hooks_dir_exists: hooks_dir.is_dir(),
@@ -746,14 +785,23 @@ fn scan_agent(home: &Path, spec: &AgentSpec, source: &SourceInfo) -> AgentReport
         return report;
     }
     report.skills = scan_skills(home, spec, source);
-    report.instructions = spec
-        .instruction_file
-        .as_ref()
-        .map(|path| InstructionReport {
+    report.instructions = spec.instruction_file.as_ref().map(|path| {
+        let raw_state = pointer::classify(path, spec.instruction_kind);
+        let state = if !source.main_md_ready()
+            && matches!(
+                raw_state,
+                InstructionState::Pointer | InstructionState::LegacyPointer
+            ) {
+            InstructionState::DanglingPointer
+        } else {
+            raw_state
+        };
+        InstructionReport {
             path: fsx::display_path(path, home),
             kind: spec.instruction_kind,
-            state: pointer::classify(path, spec.instruction_kind),
-        });
+            state,
+        }
+    });
     report.hooks = scan_hooks(home, spec, source);
     report.lock = scan_lock(home, spec, source);
     report.status = if agent_needs_attention(&report) {
@@ -770,6 +818,10 @@ fn scan_agent(home: &Path, spec: &AgentSpec, source: &SourceInfo) -> AgentReport
 /// the source, an instruction file that is a link or not a file, nothing shared to link) used to
 /// count too, which put the agent under "To fix" with a count the Sync dialog showed as "Nothing
 /// to apply". Those states still show on the agent's cards.
+///
+/// CDXC:AgentSync 2026-11-24 WHY:
+/// A pointer written while `~/.agents/main.md` is missing or empty (`DanglingPointer`) always
+/// needs attention so no agent reports as "linked" to a file that does not exist (GitHub #735).
 fn agent_needs_attention(report: &AgentReport) -> bool {
     if let Some(skills) = &report.skills {
         if skills.dir_state == SkillDirState::WholeFolderLink {
@@ -789,6 +841,7 @@ fn agent_needs_attention(report: &AgentReport) -> bool {
         if matches!(
             instructions.state,
             InstructionState::Missing
+                | InstructionState::DanglingPointer
                 | InstructionState::LegacyPointer
                 | InstructionState::OtherContent
         ) {
@@ -808,8 +861,48 @@ fn agent_needs_attention(report: &AgentReport) -> bool {
     false
 }
 
+fn collect_seed_candidates(agents: &[AgentReport]) -> Vec<MainMdSeedCandidate> {
+    let mut candidates = Vec::new();
+    for agent in agents.iter().filter(|agent| agent.detected) {
+        let Some(instructions) = &agent.instructions else {
+            continue;
+        };
+        if instructions.state != InstructionState::OtherContent {
+            continue;
+        }
+        let Some(spec) = &agent.spec else {
+            continue;
+        };
+        let Some(path) = &spec.instruction_file else {
+            continue;
+        };
+        let Ok(raw) = fs::read_to_string(path) else {
+            continue;
+        };
+        let body = pointer::seed_body(&raw, spec.instruction_kind);
+        if body.trim().is_empty() {
+            continue;
+        }
+        candidates.push(MainMdSeedCandidate {
+            agent_id: agent.id.clone(),
+            display_name: agent.display_name.clone(),
+            path: instructions.path.clone(),
+            bytes: body.len(),
+            lines: body.lines().count(),
+        });
+    }
+    candidates.sort_by(|a, b| {
+        b.bytes
+            .cmp(&a.bytes)
+            .then_with(|| b.lines.cmp(&a.lines))
+            .then_with(|| a.agent_id.cmp(&b.agent_id))
+    });
+    candidates
+}
+
 fn build_problems(source: &SourceInfo, agents: &[AgentReport]) -> Vec<Problem> {
     let mut problems = Vec::new();
+    let mut dangling_pointers = Vec::new();
     let mut dangling = Vec::new();
     let mut copies = Vec::new();
     let mut whole = Vec::new();
@@ -844,8 +937,14 @@ fn build_problems(source: &SourceInfo, agents: &[AgentReport]) -> Vec<Problem> {
             }
         }
         if let Some(instructions) = &agent.instructions {
-            if instructions.state != InstructionState::Pointer {
-                pointers.push(instructions.path.clone());
+            match instructions.state {
+                InstructionState::DanglingPointer => {
+                    dangling_pointers.push(instructions.path.clone());
+                }
+                InstructionState::Pointer => {}
+                _ => {
+                    pointers.push(instructions.path.clone());
+                }
             }
         }
     }
@@ -855,6 +954,72 @@ fn build_problems(source: &SourceInfo, agents: &[AgentReport]) -> Vec<Problem> {
         .filter(|s| s.broken)
         .map(|s| s.path.clone())
         .collect();
+    if !dangling_pointers.is_empty() {
+        let state_reason = if source.main_md_empty {
+            "is empty"
+        } else {
+            "does not exist"
+        };
+        let detail = if let Some(best) = source.main_md_seed_candidates.first() {
+            format!(
+                "Agents are told to read ~/.agents/main.md, which {state_reason}. Create ~/.agents/main.md from {} ({}, {} bytes) first (`ghostex agent-sync apply --yes --seed-main-from {}`), or restore your original files from Ghostex's backup folder.",
+                best.display_name, best.path, best.bytes, best.agent_id
+            )
+        } else {
+            format!(
+                "Agents are told to read ~/.agents/main.md, which {state_reason}. Create ~/.agents/main.md with your shared instructions, or restore your original instruction files from Ghostex's backup folder."
+            )
+        };
+        problems.push(Problem {
+            kind: ProblemKind::DanglingPointers,
+            count: dangling_pointers.len(),
+            title: format!(
+                "{} instruction pointer file{} point{} at ~/.agents/main.md, which {state_reason}",
+                dangling_pointers.len(),
+                plural(dangling_pointers.len()),
+                if dangling_pointers.len() == 1 {
+                    "s"
+                } else {
+                    ""
+                },
+            ),
+            detail,
+            items: dangling_pointers,
+            fixable: !source.main_md_seed_candidates.is_empty(),
+        });
+    } else if !source.main_md_ready() && !pointers.is_empty() {
+        let state_reason = if source.main_md_empty {
+            "is empty"
+        } else {
+            "does not exist"
+        };
+        let detail = if let Some(best) = source.main_md_seed_candidates.first() {
+            format!(
+                "Pointer files are blocked until ~/.agents/main.md has content. Create it from {} ({}, {} bytes) first: `ghostex agent-sync apply --yes --seed-main-from {}`.",
+                best.display_name, best.path, best.bytes, best.agent_id
+            )
+        } else {
+            "Pointer files are blocked until ~/.agents/main.md has content. Create ~/.agents/main.md with your shared instructions first."
+                .to_string()
+        };
+        let items = if source.main_md_seed_candidates.is_empty() {
+            vec!["~/.agents/main.md".to_string()]
+        } else {
+            source
+                .main_md_seed_candidates
+                .iter()
+                .map(|candidate| candidate.path.clone())
+                .collect()
+        };
+        problems.push(Problem {
+            kind: ProblemKind::MissingMainMd,
+            count: 1,
+            title: format!("~/.agents/main.md {state_reason}"),
+            detail,
+            items,
+            fixable: !source.main_md_seed_candidates.is_empty(),
+        });
+    }
     if !dangling.is_empty() {
         problems.push(Problem {
             kind: ProblemKind::DanglingLinks,
@@ -927,7 +1092,7 @@ fn build_problems(source: &SourceInfo, agents: &[AgentReport]) -> Vec<Problem> {
             fixable: true,
         });
     }
-    if !pointers.is_empty() {
+    if source.main_md_ready() && !pointers.is_empty() {
         problems.push(Problem {
             kind: ProblemKind::MissingPointers,
             count: pointers.len(),
@@ -976,11 +1141,12 @@ fn plural(n: usize) -> &'static str {
 
 /// Scan `home` and describe every agent's distance from `~/.agents`.
 pub fn scan(home: &Path) -> SyncReport {
-    let source = scan_source(home);
+    let mut source = scan_source(home);
     let agents: Vec<AgentReport> = agent_catalog(home)
         .iter()
         .map(|spec| scan_agent(home, spec, &source))
         .collect();
+    source.main_md_seed_candidates = collect_seed_candidates(&agents);
     let problems = build_problems(&source, &agents);
     let mut summary = ReportSummary::default();
     for agent in &agents {
@@ -995,9 +1161,21 @@ pub fn scan(home: &Path) -> SyncReport {
             }
             AgentStatus::NotInstalled => summary.agents_not_installed += 1,
         }
+        if agent.detected {
+            if let Some(instructions) = &agent.instructions {
+                if !matches!(
+                    instructions.state,
+                    InstructionState::Pointer | InstructionState::DanglingPointer
+                ) {
+                    summary.missing_pointers += 1;
+                }
+            }
+        }
     }
     for problem in &problems {
         match problem.kind {
+            ProblemKind::DanglingPointers => summary.dangling_pointers = problem.count,
+            ProblemKind::MissingMainMd => {}
             ProblemKind::DanglingLinks => summary.dangling_links += problem.count,
             ProblemKind::SourceBrokenLinks => summary.dangling_links += problem.count,
             ProblemKind::StaleLockEntries => summary.stale_lock_entries = problem.count,
