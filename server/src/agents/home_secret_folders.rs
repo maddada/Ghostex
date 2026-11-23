@@ -195,7 +195,7 @@ pub(crate) fn with_home_secret_folders_denied(
             command.to_string()
         }),
         // A Windows Codex sandboxes differently; the profile below is the macOS and Linux one.
-        Some("codex") if !cfg!(windows) => with_codex_denies(command, &folders),
+        Some("codex") if !cfg!(windows) => with_codex_denies(command, cwd, &folders),
         _ => command.to_string(),
     }
 }
@@ -324,20 +324,26 @@ fn toml_string(value: &str) -> String {
 
 /// Codex in a permission profile that denies `folders`. A bypass launch (`--yolo`) would switch
 /// the sandbox off and with it the denies, so it becomes "never ask" in a profile that may write
-/// anywhere and reach the network, minus the denied folders; any other launch keeps Codex's
-/// workspace profile with the denies added.
-fn with_codex_denies(command: &str, folders: &[String]) -> String {
+/// and reach the network, minus the denied folders; any other launch keeps Codex's workspace
+/// profile with the denies added.
+///
+/// CDXC:Chief 2026-11-23 FIX:
+/// GitHub #726: On Linux, Codex's bubblewrap sandbox protects Git metadata at each writable root,
+/// so granting `"/"="write"` made `bwrap` try to create `/.git` and fail with Permission denied.
+/// Keep `"/"="read"` on Linux and grant write access to `~`, `/tmp`, and `cwd` (when distinct and
+/// not `/`), leaving macOS (`"/"="write"`) and Windows unchanged.
+fn with_codex_denies(command: &str, cwd: Option<&str>, folders: &[String]) -> String {
     let bypass = codex_bypass(command);
-    let denies: Vec<String> = codex_paths(folders)
-        .iter()
-        .map(|folder| format!("{}=\"deny\"", toml_string(folder)))
-        .collect();
     let profile = if bypass {
         format!(
-            "{{filesystem={{\"/\"=\"write\", {}}}, network={{enabled=true}}}}",
-            denies.join(", ")
+            "{{filesystem={{{}}}, network={{enabled=true}}}}",
+            codex_bypass_filesystem(cwd, folders, cfg!(target_os = "linux"))
         )
     } else {
+        let denies: Vec<String> = codex_paths(folders)
+            .iter()
+            .map(|folder| format!("{}=\"deny\"", toml_string(folder)))
+            .collect();
         format!(
             "{{extends=\":workspace\", filesystem={{{}}}}}",
             denies.join(", ")
@@ -357,6 +363,45 @@ fn with_codex_denies(command: &str, folders: &[String]) -> String {
         quote_shell_arg(&format!("permissions.{CODEX_PROFILE}={profile}")),
         quote_shell_arg(&format!("default_permissions=\"{CODEX_PROFILE}\""))
     )
+}
+
+/// The `filesystem={...}` entries for a bypass Codex `ghostex-home` profile. Deduplicated by key
+/// (with later `deny` entries taking precedence) so the inline TOML table never carries duplicate
+/// keys.
+fn codex_bypass_filesystem(cwd: Option<&str>, folders: &[String], linux: bool) -> String {
+    let mut entries: Vec<(String, &'static str)> = Vec::new();
+    let mut set_entry = |path: String, access: &'static str| {
+        if let Some((_, existing)) = entries.iter_mut().find(|(key, _)| *key == path) {
+            *existing = access;
+        } else {
+            entries.push((path, access));
+        }
+    };
+    if linux {
+        set_entry("/".to_string(), "read");
+        set_entry("~".to_string(), "write");
+        set_entry("/tmp".to_string(), "write");
+        if let Some(cwd) = cwd.map(str::trim).filter(|cwd| !cwd.is_empty()) {
+            let normalized = cwd.trim_end_matches('/');
+            let same_as_home = crate::accounts::launch::home()
+                .ok()
+                .map(|home| home.to_string_lossy().trim_end_matches('/').to_string())
+                .is_some_and(|home| !home.is_empty() && home == normalized);
+            if !normalized.is_empty() && normalized != "/" && !same_as_home {
+                set_entry(normalized.to_string(), "write");
+            }
+        }
+    } else {
+        set_entry("/".to_string(), "write");
+    }
+    for folder in codex_paths(folders) {
+        set_entry(folder, "deny");
+    }
+    entries
+        .into_iter()
+        .map(|(path, access)| format!("{}={}", toml_string(&path), toml_string(access)))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Whether a Codex `command` runs without its sandbox (`--yolo`).
