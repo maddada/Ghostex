@@ -1117,6 +1117,24 @@ const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
     ],
     actions: &[OPEN_TERMINAL],
     quote_evidence: true,
+},
+// A signed-out Antigravity CLI opens on its sign-in menu instead of its input box ("Welcome to the
+// Antigravity CLI. You are currently not signed in.", "Select login method:", then Google OAuth and
+// Use a Google Cloud project; agy 1.5.13), also when another agent started the session. The card is
+// Claude Code's for its own login-method menu: the sign-in happens in the terminal and the browser.
+NoticeRule {
+    kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
+    severity: SessionChatTerminalNoticeSeverity::Warning,
+    title: "Finish signing in",
+    detail: "Antigravity CLI is waiting for you to sign in. Finish or cancel it in the terminal, then send your message.",
+    blocks_input: true,
+    signatures: &[NoticeSignature {
+        scope: NoticeScope::Dialog,
+        parts: &[NoticePart::Text("Select login method:")],
+        corroborators: &["Google OAuth", "Use a Google Cloud project"],
+    }],
+    actions: &[OPEN_TERMINAL],
+    quote_evidence: true,
 }];
 
 pub(super) fn notice_rules(agent: SessionChatOptionAgent) -> &'static [NoticeRule] {

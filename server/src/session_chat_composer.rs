@@ -420,6 +420,34 @@ pub fn session_chat_composer_agent_id(session: &serde_json::Value) -> Option<Str
     }
 }
 
+/// The rows of `lines` (non-blank capture lines, oldest first, as `composer_lines` prepares them)
+/// that hold the input box of an agent whose dialogs replace that box, read by the same region
+/// reader its readiness and draft use: the draft rows from the first under the top rule (a
+/// scrolled Claude box included) up to the bottom rule.
+pub(crate) fn session_chat_input_box_rows(
+    agent_id: &str,
+    lines: &[String],
+) -> Option<std::ops::Range<usize>> {
+    match agent_id {
+        "claude" | "openclaude" => input::claude_input_region(lines),
+        "antigravity" => input::antigravity_input_region(lines),
+        _ => None,
+    }
+}
+
+/// The rows of `lines` (prepared as for `session_chat_input_box_rows`) that hold the list an agent
+/// draws under its own input box for its running tasks: Antigravity's active-items list, read by
+/// the region reader that finds its input box above that list.
+pub(crate) fn session_chat_active_items_rows(
+    agent_id: &str,
+    lines: &[String],
+) -> Option<std::ops::Range<usize>> {
+    match agent_id {
+        "antigravity" => input::antigravity_active_items_rows(lines),
+        _ => None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Line preparation
 // ---------------------------------------------------------------------------
