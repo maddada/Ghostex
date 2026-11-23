@@ -23,15 +23,15 @@ use serde_json::{json, Map, Value};
 
 use crate::extras::work_cards::{owner_words, waits_line};
 
-/// One constant for the group name of items waiting on the user (Q4700 placeholder; swap in one line).
-pub const ASKS_GROUP_NAME: &str = "Asks";
-pub const ASKS_GROUP_SINGULAR: &str = "ask";
-pub const ASKS_GROUP_PLURAL: &str = "asks";
+/// One constant for the group name of items waiting on the user.
+pub const ASKS_GROUP_NAME: &str = "Pings";
+pub const ASKS_GROUP_SINGULAR: &str = "ping";
+pub const ASKS_GROUP_PLURAL: &str = "pings";
 /// Dock header label and full name for tooltips and notifications.
 pub const INBOX_NAME: &str = "Inbox";
 pub const INBOX_FULL_NAME: &str = "Session Inbox";
 
-/// Count label for the Asks group: "1 ask", "2 asks".
+/// Count label for the Pings group: "1 ping", "2 pings".
 pub fn asks_count_label(count: usize) -> String {
     if count == 1 {
         format!("1 {ASKS_GROUP_SINGULAR}")
@@ -40,7 +40,7 @@ pub fn asks_count_label(count: usize) -> String {
     }
 }
 
-/// Overflow count label for hidden rows needing the user: "1 more ask", "2 more asks".
+/// Overflow count label for hidden rows needing the user: "1 more ping", "2 more pings".
 pub fn asks_more_label(count: usize) -> String {
     if count == 1 {
         format!("1 more {ASKS_GROUP_SINGULAR}")
@@ -308,8 +308,8 @@ fn thread_row(item: &Value, group: &str, now_ms: i64) -> Value {
     let thread = item["threads"].get(0).cloned().unwrap_or(Value::Null);
     let mut title = text(item, "title").to_string();
     let mut detail = text(item, "now").to_string();
-    let thread_wait = group == "needs"
-        && crate::extras::work_cards::waiting_user_thread(item).is_some();
+    let thread_wait =
+        group == "needs" && crate::extras::work_cards::waiting_user_thread(item).is_some();
     let mut open_label = String::new();
     let mut wait_kind_str = String::new();
     if thread_wait {

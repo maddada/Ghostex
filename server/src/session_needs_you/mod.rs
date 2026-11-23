@@ -21,7 +21,7 @@ mod store;
 mod thread;
 
 /// User-visible name of the group for items awaiting user action (one constant per codebase).
-pub(crate) const ASKS_GROUP_NAME: &str = "Asks";
+pub(crate) const ASKS_GROUP_NAME: &str = "Pings";
 /// Full name of the Inbox dock in tooltips and notifications.
 pub(crate) const INBOX_FULL_NAME: &str = "Session Inbox";
 
