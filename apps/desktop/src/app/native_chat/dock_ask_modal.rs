@@ -237,9 +237,9 @@ impl NativeChatView {
     /// The row the panel shows, as the dock has it now, or `None` when it has left the dock.
     fn dock_ask_row(&self) -> Option<Value> {
         let key = self.board.dock_modal.as_deref()?;
-        // A snoozed row opens it too (the dock's Snoozed row).
+        // Done and snoozed drawer rows open it too.
         let dock = &self.snapshot["workDock"];
-        ["rows", "snoozed"]
+        ["rows", "done", "snoozed"]
             .into_iter()
             .flat_map(|list| dock[list].as_array().into_iter().flatten())
             .find(|row| row["key"].as_str() == Some(key))

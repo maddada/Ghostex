@@ -500,6 +500,8 @@ const DOCK_MOTION_KEY: &str = "work-dock:rows";
 
 /// The fold key that shows every dock row in place instead of the first `limit`.
 const DOCK_ALL_ROWS: &str = "dock-rows:all";
+/// `NativeChatView::expanded`'s key for the dock's Done drawer opened (`work_dock_done`).
+const DOCK_DONE_ROWS: &str = "dock-rows:done";
 /// `NativeChatView::expanded`'s key for the dock's Snoozed row opened (`work_dock_snoozed`).
 const DOCK_SNOOZED_ROWS: &str = "dock-rows:snoozed";
 /// `NativeChatView::expanded`'s key for the dock's Answered drawer opened (`work_dock_answered`).
@@ -668,6 +670,11 @@ impl NativeChatView {
             rows.iter()
                 .any(|row| row["key"].as_str() == Some(key.as_str()))
         });
+        // Finished work items from the newest turn, folded under the Done drawer (`work_dock_done`).
+        let done: Vec<Value> = dock["done"].as_array().cloned().unwrap_or_default();
+        let done_archive_all = dock["doneArchiveAll"]["command"]
+            .is_object()
+            .then(|| dock["doneArchiveAll"]["command"].clone());
         // The snoozed asks, forms, pages and to-dos, folded under one Snoozed row (`work_dock_snoozed`).
         let snoozed: Vec<Value> = dock["snoozed"].as_array().cloned().unwrap_or_default();
         // Recently answered asks/questions/to-dos, folded in the Answered drawer (`work_dock_answered`).
@@ -675,8 +682,11 @@ impl NativeChatView {
         let undo = dock["undoMarkAllRead"]
             .is_object()
             .then(|| dock["undoMarkAllRead"].clone());
-        let has_dock_content =
-            !rows.is_empty() || !snoozed.is_empty() || !answered.is_empty() || undo.is_some();
+        let has_dock_content = !rows.is_empty()
+            || !done.is_empty()
+            || !snoozed.is_empty()
+            || !answered.is_empty()
+            || undo.is_some();
         if !has_dock_content && !board.is_object() {
             return None;
         }
@@ -781,10 +791,8 @@ impl NativeChatView {
                     .chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.09)))
                     .tooltip(|window, cx| {
-                        gpui_component::tooltip::Tooltip::new(
-                            "Archive all pages, plain to-dos, and finished items",
-                        )
-                        .build(window, cx)
+                        gpui_component::tooltip::Tooltip::new("Archive all pages and plain to-dos")
+                            .build(window, cx)
                     })
                     .child(label)
                     .when_some(count, |btn, n| {
@@ -876,6 +884,9 @@ impl NativeChatView {
             }
             if let Some(undo_bar) = undo {
                 list = list.child(self.work_dock_undo_bar(&undo_bar, p, cx));
+            }
+            if !done.is_empty() {
+                list = list.children(self.work_dock_done(&done, done_archive_all.as_ref(), p, cx));
             }
             if !snoozed.is_empty() {
                 list = list.children(self.work_dock_snoozed(&snoozed, p, cx));
@@ -1007,6 +1018,122 @@ impl NativeChatView {
                     })),
             )
             .into_any_element()
+    }
+
+    /// The dock's Done drawer right above Snoozed: styled like Snoozed with the finished check
+    /// icon, "Done", count badge, and chevron, collapsed by default with remembered open state.
+    /// Open, finished rows follow with their per-row Archive action, and "Archive all" sits on
+    /// the expanded header.
+    fn work_dock_done(
+        &self,
+        done: &[Value],
+        archive_all: Option<&Value>,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let s = p.scale;
+        let open = self.expanded.contains(DOCK_DONE_ROWS);
+        let (done_icon, done_color) = status_look("finished", p);
+        let archive_all_cmd = archive_all.cloned();
+        let line = div()
+            .id("work-dock-done")
+            .role(gpui::Role::Button)
+            .aria_label(format!("Done, {}", done.len()))
+            .aria_expanded(open)
+            .w_full()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap(px(DOCK_GAP * s))
+            .px(px(DOCK_ROW_PAD_X * s))
+            .py(px(5.0 * s))
+            .rounded(px(8.0 * s))
+            .text_color(p.muted)
+            .chat_cursor_pointer()
+            .hover(|style| {
+                style
+                    .bg(p.foreground.opacity(0.04))
+                    .text_color(p.foreground)
+            })
+            .child(
+                svg()
+                    .path(done_icon)
+                    .flex_shrink_0()
+                    .size(px(13.0 * s))
+                    .text_color(done_color),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .child("Done")
+                    .child(crate::app::element::count_badge(
+                        done.len().to_string(),
+                        p.foreground,
+                        s,
+                    )),
+            )
+            .when_some(archive_all_cmd.filter(|_| open), |row, command| {
+                row.child(
+                    div()
+                        .id("work-dock-done-archive-all")
+                        .role(gpui::Role::Button)
+                        .aria_label(format!("Archive all, {}", done.len()))
+                        .flex_shrink_0()
+                        .px(px(8.0 * s))
+                        .py(px(1.0 * s))
+                        .rounded(px(6.0 * s))
+                        .border_1()
+                        .border_color(p.foreground.opacity(0.10))
+                        .bg(p.foreground.opacity(0.04))
+                        .text_size(px(PROSE_SIZE * 0.90 * s))
+                        .line_height(px((PROSE_LINE_HEIGHT - 4.0) * s))
+                        .text_color(p.foreground)
+                        .chat_cursor_pointer()
+                        .hover(|style| style.bg(p.foreground.opacity(0.09)))
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new("Archive all finished items")
+                                .build(window, cx)
+                        })
+                        .child("Archive all")
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.invoke(command.clone(), cx);
+                        })),
+                )
+            })
+            .child(
+                svg()
+                    .path("titlebar/chevron-down.svg")
+                    .flex_shrink_0()
+                    .size(px(12.0 * s))
+                    .text_color(p.card_muted)
+                    .when(open, |icon| {
+                        icon.with_transformation(gpui::Transformation::rotate(gpui::radians(
+                            std::f32::consts::PI,
+                        )))
+                    }),
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                if !this.expanded.remove(DOCK_DONE_ROWS) {
+                    this.expanded.insert(DOCK_DONE_ROWS.to_string());
+                }
+                cx.notify();
+            }));
+        let mut out = vec![line.into_any_element()];
+        if open {
+            out.extend(done.iter().map(|row| {
+                div()
+                    .w_full()
+                    .opacity(0.72)
+                    .child(self.dock_row(row, p, cx))
+                    .into_any_element()
+            }));
+        }
+        out
     }
 
     /// The dock's Snoozed row under the others (Q4686 A): "Snoozed (N) · back in 1h" with a clock

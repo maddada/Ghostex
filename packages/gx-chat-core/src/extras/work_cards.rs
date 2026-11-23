@@ -269,14 +269,14 @@ fn wait_targets_from_history(raw: &str, all_items: &[&Value]) -> Vec<String> {
         return vec![single.to_string()];
     }
     if is_question_tag(stripped) || is_bare_item_ref(stripped) {
-        return normalize_wait_target(stripped, all_items).into_iter().collect();
+        return normalize_wait_target(stripped, all_items)
+            .into_iter()
+            .collect();
     }
     let parts: Vec<&str> = stripped.split(", ").collect();
     let split = parts.len() > 1
         && parts.iter().any(|part| {
-            wait_event_label(part).is_some()
-                || is_question_tag(part)
-                || is_bare_item_ref(part)
+            wait_event_label(part).is_some() || is_question_tag(part) || is_bare_item_ref(part)
         });
     let mut out: Vec<String> = Vec::new();
     let iter: Vec<&str> = if split { parts } else { vec![stripped] };
@@ -355,7 +355,11 @@ fn format_wait_phrase(
             }
         })
         .collect();
-    let lead = if capitalized { "Waiting on" } else { "waiting on" };
+    let lead = if capitalized {
+        "Waiting on"
+    } else {
+        "waiting on"
+    };
     match parts.len() {
         0 => String::new(),
         1 => format!("{lead} {}", parts[0]),
@@ -1482,8 +1486,16 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         let at = at_ms(text(item, "at")).unwrap_or(0);
         later.push((at, work_row(item, &turns, now_ms, None)));
     }
+    // Finished items from the newest turn live in their own collapsed Done (N) drawer right above
+    // Snoozed rather than in the main list, with Archive all inside the expanded drawer.
+    //
+    // CDXC:Coordinators 2026-11-24 DECISION:
+    // User, after finished items sat in the main Inbox list with "4 done · Archive all (4)" in the
+    // footer: move finished items out of the main list into a collapsed "Done (N)" drawer like
+    // Snoozed, with "Archive all" inside the expanded drawer and never in the main list footer.
     let newest_turn = turns.len().checked_sub(1);
     let dismissed = &state.extras.panels.work_dock_dismissed;
+    let mut done_rows: Vec<(i64, Value)> = Vec::new();
     for item in items
         .iter()
         .filter(|item| text(item, "status") == "finished")
@@ -1508,7 +1520,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             turns[turn.unwrap_or(0)].id
         );
         if !dismissed.contains(&key) {
-            later.push((done_at, work_row(item, &turns, now_ms, Some(key))));
+            done_rows.push((done_at, work_row(item, &turns, now_ms, Some(key))));
         }
     }
     // Q4682 C: group duplicate rows sharing a Q-tag or pageId under one expandable row.
@@ -1517,6 +1529,8 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     let mut needs = bundle_same_turn_pages(needs, todo_turns, now_ms);
     needs.sort_by(|left, right| left.0.cmp(&right.0).then(right.1.cmp(&left.1)));
     later.sort_by(|left, right| right.0.cmp(&left.0));
+    done_rows.sort_by(|left, right| right.0.cmp(&left.0));
+    let done_rows: Vec<Value> = done_rows.into_iter().map(|(_, row)| row).collect();
     // The approval the agent waits on, and the one just answered, lead (`dock_approvals`).
     let mut rows: Vec<Value> = crate::extras::dock_approvals::rows(state)
         .into_iter()
@@ -1556,6 +1570,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         })
         .unwrap_or(Value::Null);
     if rows.is_empty()
+        && done_rows.is_empty()
         && snoozed_rows.is_empty()
         && answered_rows.is_empty()
         && undo_mark_all_read.is_null()
@@ -1571,11 +1586,11 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .is_some_and(|keys| rows.iter().all(|row| keys.contains(text(row, "key"))))
         && !rows.iter().any(|row| text(row, "kind") == "approval")
         && undo_mark_all_read.is_null();
-    // Q4685 A: Mark all read sweeps all non-question rows (seen-only pages including bundled pages,
-    // plain to-dos with only Done, and finished rows), with a breakdown summary and Undo.
+    // Q4685 A: Mark all read sweeps clearable non-question rows in the main list (seen-only pages
+    // including bundled pages, and plain to-dos with only Done), with a breakdown summary and Undo.
+    // Finished rows keep their own Archive all inside the expanded Done drawer (`doneArchiveAll`).
     let mut clear_page_ids: Vec<String> = Vec::new();
     let mut clear_todo_tags: Vec<String> = Vec::new();
-    let mut clear_finished_keys: Vec<String> = Vec::new();
     for row in &rows {
         if text(row, "kind") == "pageBundle" {
             for id in row["pageIds"]
@@ -1601,14 +1616,9 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             if only_done && !tag.is_empty() {
                 clear_todo_tags.push(tag.to_string());
             }
-        } else if text(row, "kind") == "finished" && row["dismiss"].is_object() {
-            let key = text(row, "key");
-            if !key.is_empty() {
-                clear_finished_keys.push(key.to_string());
-            }
         }
     }
-    let clear_total = clear_page_ids.len() + clear_todo_tags.len() + clear_finished_keys.len();
+    let clear_total = clear_page_ids.len() + clear_todo_tags.len();
     let mark_all_seen = if clear_total >= 2 {
         let mut summary_parts = Vec::new();
         if !clear_page_ids.is_empty() {
@@ -1625,9 +1635,6 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 format!("{} to-dos", clear_todo_tags.len())
             });
         }
-        if !clear_finished_keys.is_empty() {
-            summary_parts.push(format!("{} done", clear_finished_keys.len()));
-        }
         json!({
             "label": "Archive all",
             "summary": summary_parts.join(" \u{b7} "),
@@ -1636,6 +1643,26 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 "type": "markAllInboxRead",
                 "pageIds": clear_page_ids,
                 "todoTags": clear_todo_tags,
+                "finishedKeys": [],
+            },
+        })
+    } else {
+        Value::Null
+    };
+    let clear_finished_keys: Vec<String> = done_rows
+        .iter()
+        .filter(|row| row["dismiss"].is_object())
+        .map(|row| text(row, "key").to_string())
+        .filter(|key| !key.is_empty())
+        .collect();
+    let done_archive_all = if clear_finished_keys.len() >= 2 {
+        json!({
+            "label": "Archive all",
+            "count": clear_finished_keys.len(),
+            "command": {
+                "type": "markAllInboxRead",
+                "pageIds": [],
+                "todoTags": [],
                 "finishedKeys": clear_finished_keys,
             },
         })
@@ -1650,6 +1677,8 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         "more": { "type": "showCoordinatorBoardGroup", "group": "needs" },
         "markAllSeen": mark_all_seen,
         "undoMarkAllRead": undo_mark_all_read,
+        "done": done_rows,
+        "doneArchiveAll": done_archive_all,
         "snoozed": snoozed_rows,
         "answered": answered_rows,
     })

@@ -283,6 +283,8 @@ pub fn add(state: &ChatState, document: &mut Document) {
                 "more": { "type": "showCoordinatorBoardGroup", "group": "needs" },
                 "markAllSeen": null,
                 "undoMarkAllRead": null,
+                "done": [],
+                "doneArchiveAll": null,
                 "snoozed": [],
                 "answered": [],
             }),
