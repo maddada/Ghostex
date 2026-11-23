@@ -257,6 +257,14 @@ impl WorkAsk {
     pub fn is_open(&self) -> bool {
         self.settled_at.is_none()
     }
+
+    /// Whether this ask is currently snoozed until a future time.
+    pub fn is_snoozed(&self, now: DateTime<Utc>) -> bool {
+        self.snoozed_until
+            .as_deref()
+            .and_then(|until| DateTime::parse_from_rfc3339(until).ok())
+            .is_some_and(|at| at.with_timezone(&Utc) > now)
+    }
 }
 
 /// What the item waits on: another item (`W12`), an ask (`Q12`) or something outside, in words.
@@ -438,6 +446,67 @@ pub fn list_all_work_items(db: &Connection) -> HashMap<SessionKey, Vec<WorkItem>
         items.entry(key).or_default().push(item);
     }
     items
+}
+
+/// How many open, unsnoozed asks a coordinator's active work items currently hold.
+/// Snoozed asks are excluded until `snoozed_until` has passed.
+pub fn open_unsnoozed_ask_count(db: &Connection, key: &SessionKey) -> usize {
+    let now = Utc::now();
+    let Ok(mut statement) = db.prepare_cached(
+        "SELECT asksJson FROM coordinator_work_items \
+         WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 \
+         AND finishedAt IS NULL AND droppedAt IS NULL",
+    ) else {
+        return 0;
+    };
+    let Ok(rows) = statement.query_map([&key.0, &key.1], |row| row.get::<_, String>(0)) else {
+        return 0;
+    };
+    rows.flatten()
+        .map(|asks_json| {
+            serde_json::from_str::<Vec<WorkAsk>>(&asks_json)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|ask| ask.is_open() && !ask.is_snoozed(now))
+                .count()
+        })
+        .sum()
+}
+
+/// Open, unsnoozed work-item ask counts for every coordinator, in one query (for snapshots).
+/// A database without the table (minimal test fixture) reads as empty.
+pub fn open_unsnoozed_ask_counts(db: &Connection) -> HashMap<SessionKey, usize> {
+    let now = Utc::now();
+    let mut counts: HashMap<SessionKey, usize> = HashMap::new();
+    let Ok(mut statement) = db.prepare_cached(
+        "SELECT coordinatorProjectId, coordinatorSessionId, asksJson \
+         FROM coordinator_work_items \
+         WHERE finishedAt IS NULL AND droppedAt IS NULL",
+    ) else {
+        return counts;
+    };
+    let Ok(rows) = statement.query_map([], |row| {
+        Ok((
+            (
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+            ),
+            row.get::<_, String>(2)?,
+        ))
+    }) else {
+        return counts;
+    };
+    for (key, asks_json) in rows.flatten() {
+        let open = serde_json::from_str::<Vec<WorkAsk>>(&asks_json)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|ask| ask.is_open() && !ask.is_snoozed(now))
+            .count();
+        if open > 0 {
+            *counts.entry(key).or_default() += open;
+        }
+    }
+    counts
 }
 
 fn read_item(

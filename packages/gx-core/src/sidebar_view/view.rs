@@ -620,6 +620,9 @@ impl FoldedStatus {
         let waiting = row.activity == "attention" && row.thread_state.as_deref() == Some("waiting");
         self.question |= row.has_question() || waiting;
         self.attention |= !row.has_question() && row.activity == "attention" && !waiting;
+        if self.working {
+            self.attention = false;
+        }
         self.background_work |= row.shows_background_work();
     }
 

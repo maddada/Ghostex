@@ -579,7 +579,7 @@ mod tests {
             lead.nesting.folded_status,
             FoldedStatus {
                 working: true,
-                attention: true,
+                attention: false,
                 background_work: false,
                 question: true,
                 approval: false,

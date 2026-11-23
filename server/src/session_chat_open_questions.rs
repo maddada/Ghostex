@@ -190,11 +190,46 @@ fn ledgers() -> &'static Mutex<HashMap<String, Arc<Mutex<Ledger>>>> {
 }
 
 /// How many questions wait on the user in this session, as last recorded.
+///
+/// Any id currently put off For later (with an unexpired snooze or no end), removed, or opened is
+/// excluded even if the stored `sessionChatOpenQuestions` record has not been refreshed from the
+/// transcript yet, so snoozed asks never feed the pink dot until their snooze ends.
 pub(crate) fn open_question_count(session: &Value) -> usize {
-    session
+    let count = session
         .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}/count"))
         .and_then(Value::as_u64)
-        .unwrap_or(0) as usize
+        .unwrap_or(0) as usize;
+    if count == 0 {
+        return 0;
+    }
+    let Some(ids) = session
+        .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}/ids"))
+        .and_then(Value::as_array)
+    else {
+        return count;
+    };
+    if ids.is_empty() {
+        return 0;
+    }
+    let later = later_ids(session);
+    let removed = removed_ids(session);
+    let opened = opened_ids(session);
+    let remaining = ids
+        .iter()
+        .filter_map(Value::as_str)
+        .filter(|id| {
+            !later.iter().any(|skip| skip == id)
+                && !removed.iter().any(|skip| skip == id)
+                && !opened.iter().any(|skip| skip.eq_ignore_ascii_case(id))
+        })
+        .count();
+    if remaining == 0 {
+        0
+    } else if remaining == ids.len() {
+        count
+    } else {
+        remaining.min(count)
+    }
 }
 
 /// The forms and pages this session's user put off For later, as last recorded.
@@ -424,6 +459,13 @@ pub(crate) fn set_later(
                         &state, &session,
                     );
                 }
+                let _ = crate::server::schedule_presentation_session_delta(
+                    &state,
+                    &db,
+                    &repository,
+                    &project_id,
+                    &session_id,
+                );
             }
             refresh(&state, &project_id, &session_id, None);
         });
@@ -433,6 +475,14 @@ pub(crate) fn set_later(
     if known == later {
         // A snooze again on one already put off still updates its end above; tell the clients.
         if ends_at.is_some() {
+            let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+            let _ = crate::server::schedule_presentation_session_delta(
+                state,
+                &db,
+                &repository,
+                project_id,
+                session_id,
+            );
             refresh(state, project_id, session_id, None);
         }
         return Ok(());
@@ -446,6 +496,14 @@ pub(crate) fn set_later(
         ids.retain(|known| known != id);
     }
     write_later(state, &db, project_id, session_id, &ids)?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let _ = crate::server::schedule_presentation_session_delta(
+        state,
+        &db,
+        &repository,
+        project_id,
+        session_id,
+    );
     refresh(state, project_id, session_id, None);
     Ok(())
 }
@@ -1536,7 +1594,7 @@ pub(crate) fn refresh(
     let is_thread = crate::coordinators::read_thread(&db, project_id, session_id)
         .ok()
         .flatten()
-        .is_some_and(|thread| !thread.is_resolved());
+        .is_some();
     // A coordinator's stopped threads have no sweep of their own: build the index of any that has
     // none yet, so their pages are listed (`session_chat_resources::backfill_threads`).
     let is_coordinator = crate::coordinators::read_coordinator(&db, project_id, session_id)

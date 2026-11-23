@@ -481,6 +481,8 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         crate::coordinators::refresh_coordinator_panels(&db, &repository)
     {
         republish_session_chat(state, &project_id, &session_id);
+        let _ =
+            schedule_presentation_session_delta(state, &db, &repository, &project_id, &session_id);
     }
     // An ordinary session's work in short changed (coordinators/session_work.rs): its row goes
     // out again, so the extension API's listeners hear `sessionsChanged` and the Work items
@@ -2363,6 +2365,13 @@ pub(crate) fn handle_coordinator_http(
             crate::coordinators::refresh_coordinator_panels(db, repository)
         {
             republish_session_chat(state, &project_id, &session_id);
+            let _ = schedule_presentation_session_delta(
+                state,
+                db,
+                repository,
+                &project_id,
+                &session_id,
+            );
         }
     }
     Ok(output.result)
