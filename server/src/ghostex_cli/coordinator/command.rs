@@ -581,9 +581,22 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
     Ok(())
 }
 
-/// `{ agentCommand, icon }` of a launcher from `/api/readSidebarHud`, the way the desktop sends it.
+/// `{ icon }` of a launcher from `/api/readSidebarHud` for `start-thread`.
+///
+/// CDXC:Coordinators 2026-11-24 WHY:
+/// GitHub #723 (user picked honor-saved, Q4752): echoing the saved `command` into
+/// `launchSettings.agentCommand` made `guard_create_session_params` (`server/src/acp/approval.rs`)
+/// refuse `start-thread` with 403 whenever the user's saved agent command in Settings > Agents
+/// included accept-all flags (even with `--read-only`). Leaving `agentCommand` out lets gxserver
+/// resolve the user's saved command from Settings itself (including `project_with_global_agent_list`
+/// for custom agents and `--read-only` flag stripping), while any agent caller passing accept-all
+/// flags in `agentCommand` directly stays refused with 403.
 pub(super) fn launch_settings_for(rows: &[Value], agent_id: &str) -> Value {
-    crate::coordinators::launcher_launch_settings(rows, agent_id)
+    let mut settings = crate::coordinators::launcher_launch_settings(rows, agent_id);
+    if let Some(map) = settings.as_object_mut() {
+        map.remove("agentCommand");
+    }
+    settings
 }
 
 fn list(parsed: &ParsedArgs) -> CliResult<()> {
