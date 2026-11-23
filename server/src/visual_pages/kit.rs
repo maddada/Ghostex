@@ -1205,14 +1205,17 @@ function setupTabs(){
 var BOOST_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/></svg>';
 var CROWN_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6l4 6 5-4-2 10H5L3 8l5 4z"/></svg>';
 var AGENT_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 4v4M9 13v2M15 13v2"/></svg>';
-var mentionCatalog=null,mentionFetch=null,mentionFetchedAt=0,mentionMenu=null,mentionState=null,mentionDismiss=null;
-function canFetchMentions(){return !(window.ghostex&&(ghostex.exported||ghostex.answered))&&/^\/visual\/[0-9a-f]{32}$/.test(base);}
+var mentionCatalog=null,mentionFetch=null,mentionFetchedAt=0,mentionBlocked=false,mentionMenu=null,mentionState=null,mentionDismiss=null;
+function canFetchMentions(){return !mentionBlocked&&!window.__gxReadOnly&&!(window.ghostex&&(ghostex.exported||ghostex.answered))&&/^\/visual\/[0-9a-f]{32}$/.test(base);}
 function loadMentions(force){
   if(!canFetchMentions())return Promise.resolve(null);
   var fresh=mentionCatalog&&Date.now()-mentionFetchedAt<10000;
   if(!force&&fresh)return Promise.resolve(mentionCatalog);
   if(mentionFetch)return mentionFetch;
-  mentionFetch=fetch(base+"/mentions").then(function(r){return r.ok?r.json():null;}).then(function(j){
+  mentionFetch=fetch(base+"/mentions").then(function(r){
+    if(r.status===404||r.status===409){mentionBlocked=true;return null;}
+    return r.ok?r.json():null;
+  }).then(function(j){
     mentionFetch=null;
     if(j&&j.ok){mentionCatalog=j;mentionFetchedAt=Date.now();if(mentionState&&mentionState.target===activeEditable())updateMention(mentionState.target,false);}
     return mentionCatalog;
@@ -1251,14 +1254,13 @@ function filterBoosts(list,query){
 function filterSessions(list,query){
   var q=(query||"").trim().toLowerCase();
   if(!q)return(list||[]).slice();
-  var words=q.split(/\s+/).filter(Boolean),sections=[],matched=[];
+  var words=q.split(/\s+/).filter(Boolean),matched=[];
   (list||[]).forEach(function(s,idx){
-    var title=(s.title||"").toLowerCase(),hay=title+" "+(s.projectName||"").toLowerCase()+" "+(s.computer||"").toLowerCase();
-    if(!words.every(function(w){return hay.indexOf(w)>=0;}))return;
-    var sec=sections.indexOf(s.section||"");if(sec<0){sec=sections.length;sections.push(s.section||"");}
-    matched.push({sec:sec,later:title.indexOf(q)!==0?1:0,idx:idx,item:s});
+    var title=(s.title||"").toLowerCase();
+    if(!words.every(function(w){return title.indexOf(w)>=0;}))return;
+    matched.push({later:title.indexOf(q)!==0?1:0,idx:idx,item:s});
   });
-  matched.sort(function(a,b){return a.sec-b.sec||a.later-b.later||a.idx-b.idx;});
+  matched.sort(function(a,b){return a.later-b.later||a.idx-b.idx;});
   return matched.map(function(m){return m.item;});
 }
 function filterSkills(list,query){
@@ -1316,12 +1318,9 @@ function buildMentionPopup(trigger,cat){
   if(trigger.kind==="session"){
     var ss=filterSessions(cat.sessions,trigger.query);
     if(!ss.length)return null;
-    var firstSec=ss[0].section||"Agents in this project",prevS=firstSec;
-    heading=firstSec;
-    ss.forEach(function(item,i){
-      var sec=item.section||"";
-      rows.push({label:item.title,detail:item.detail||"",token:item.token,section:i>0&&sec&&sec!==prevS?sec:"",spaced:true,kind:"session",working:!!item.working,coordinator:!!item.coordinator,mainCoordinator:!!item.mainCoordinator});
-      if(sec)prevS=sec;
+    heading="Agents in this project";
+    ss.forEach(function(item){
+      rows.push({label:item.title,detail:item.detail||"",token:item.token,section:"",spaced:true,kind:"session",working:!!item.working,coordinator:!!item.coordinator,mainCoordinator:!!item.mainCoordinator});
     });
     return{kind:"session",heading:heading,rows:rows,empty:null,trigger:trigger};
   }

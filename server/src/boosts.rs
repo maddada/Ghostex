@@ -175,7 +175,8 @@ fn custom_description(prompt: &str) -> String {
 }
 
 /// Enabled Boosts formatted for Live page `*` mention menus: Ghostex's built-in Boosts followed
-/// by the user's custom Boosts, empty when Boosts are turned off in Settings.
+/// by the user's custom Boosts, empty when Boosts are turned off in Settings. Returns only the
+/// fields the picker renders and inserts.
 pub(crate) fn mention_choices(paths: &GxserverPaths) -> Vec<Value> {
     let saved = read(paths);
     if saved.off {
@@ -185,7 +186,6 @@ pub(crate) fn mention_choices(paths: &GxserverPaths) -> Vec<Value> {
         .iter()
         .map(|boost| {
             json!({
-                "id": boost.id,
                 "label": boost.label,
                 "description": boost.description,
                 "section": core::tab_label_of(boost.id),
@@ -194,7 +194,6 @@ pub(crate) fn mention_choices(paths: &GxserverPaths) -> Vec<Value> {
         })
         .chain(saved.custom.iter().map(|boost| {
             json!({
-                "id": boost.id,
                 "label": boost.label,
                 "description": custom_description(&boost.prompt),
                 "section": "Custom",
