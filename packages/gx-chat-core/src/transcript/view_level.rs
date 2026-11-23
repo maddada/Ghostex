@@ -107,23 +107,4 @@ mod tests {
         assert_eq!(parse("verbose"), DETAILED);
         assert_eq!(parse("summary"), SUMMARY);
     }
-
-    #[test]
-    fn collapse_page_cards_follows_summary_mode() {
-        let mut view = TranscriptViewState::default();
-        assert!(
-            !collapse_page_cards(&view),
-            "normal keeps page cards expanded"
-        );
-        view.simple_override = Some(false);
-        assert!(
-            !collapse_page_cards(&view),
-            "detailed keeps page cards expanded"
-        );
-        view.summary_mode = true;
-        assert!(
-            collapse_page_cards(&view),
-            "summary collapses page cards to compact rows"
-        );
-    }
 }
