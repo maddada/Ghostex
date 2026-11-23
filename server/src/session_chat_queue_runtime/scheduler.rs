@@ -217,6 +217,10 @@ fn input_box_hold_log_due(
     (waited, true)
 }
 
+/// How long `SessionChatTranscriptGate` caches a negative (`None`) lookup for an idle session
+/// whose `agentSessionPath` does not exist on disk yet.
+const TRANSCRIPT_GATE_NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(2);
+
 /// CDXC:DelayedSend 2026-09-16 WHY:
 /// Hooks and titles can look stopped before a turn finishes. Conditional delayed sends and queued prompts must both check the transcript before starting their stability window.
 #[derive(Default)]
@@ -351,9 +355,22 @@ impl SessionChatTranscriptGate {
             && self.path.is_none()
             && self
                 .negative_resolved_at
-                .is_some_and(|at| at.elapsed() < std::time::Duration::from_secs(15))
+                .is_some_and(|at| at.elapsed() < TRANSCRIPT_GATE_NEGATIVE_CACHE_TTL)
         {
-            return None;
+            let supplied_path_exists = agent_session_path
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(crate::resume_lookup::expand_home)
+                .is_some_and(|path| path.is_file());
+            let session_working = !supplied_path_exists
+                && presentation_activity(
+                    session,
+                    &Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                ) == "working";
+            if !supplied_path_exists && !session_working {
+                return None;
+            }
         }
         let path = match cached {
             Some(path) => {

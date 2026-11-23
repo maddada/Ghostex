@@ -896,7 +896,7 @@ impl Ledger {
                             }
                             let row = Arc::new(converted.clone());
                             for form in question_forms(std::slice::from_ref(&row)) {
-                                self.forms.insert(form.id.clone(), form);
+                                self.forms.entry(form.id.clone()).or_insert(form);
                             }
                             self.asking.push((converted, self.turns));
                         }

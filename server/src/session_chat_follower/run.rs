@@ -136,6 +136,7 @@ pub async fn run_session_chat_follower(
     // so unresolved Claude sessions never re-scan project folders every second.
     let mut next_transcript_resolve_at: Option<std::time::Instant> = None;
     let mut last_resolved_identity: Option<(Option<String>, Option<String>)> = None;
+    let mut last_unresolved_working = false;
     let mut reconcile_ticks: u64 = 0;
     let mut startup_option_reconcile_ticks: u64 = 0;
     // CDXC:AgentScreenDetection 2026-09-02: reconciles left in the
@@ -186,6 +187,7 @@ pub async fn run_session_chat_follower(
                 resolved = None;
                 next_transcript_resolve_at = None;
                 last_resolved_identity = None;
+                last_unresolved_working = false;
                 file_state = FollowerFileState::new();
                 transcript_prompt = SessionChatTranscriptPromptState::default();
                 emitted_starting = false;
@@ -242,7 +244,15 @@ pub async fn run_session_chat_follower(
                 identity.agent_session_id.clone(),
                 identity.agent_session_path.clone(),
             );
+            let supplied_path_exists = identity
+                .agent_session_path
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(crate::resume_lookup::expand_home)
+                .is_some_and(|path| path.is_file());
             let resolve_due = statusline_landed
+                || supplied_path_exists
                 || last_resolved_identity.as_ref() != Some(&current_identity_key)
                 || next_transcript_resolve_at.is_none_or(|due| std::time::Instant::now() >= due);
             if resolve_due {
@@ -285,6 +295,11 @@ pub async fn run_session_chat_follower(
                 subscribe's own seed probe just captured at t=0.
                 */
                 let live = read_live_state();
+                if live.working && !last_unresolved_working {
+                    next_transcript_resolve_at = None;
+                    resolve_delay = INITIAL_RESOLVE_POLL;
+                }
+                last_unresolved_working = live.working;
                 // CDXC:AgentScreenDetection 2026-09-15 WHY:
                 // A new Claude chat can stay transcriptless indefinitely. Watch its statusline here too, so first paint and idle option changes do not wait for the 30-second history-resolution cadence.
                 let statusline_changed = std::mem::take(&mut statusline_landed)
@@ -422,12 +437,22 @@ pub async fn run_session_chat_follower(
                     }
                 }
                 heartbeat.unpark();
-                resolve_delay = (resolve_delay * 2).min(MAX_RESOLVE_POLL);
+                if resolve_due {
+                    resolve_delay = (resolve_delay * 2).min(MAX_RESOLVE_POLL);
+                }
                 // A stale hook identity is the usual reason the path never
                 // appears: re-read the session's current identity each poll.
-                identity.adopt(read_live_state());
+                let next_live = read_live_state();
+                if next_live.working && !last_unresolved_working {
+                    next_transcript_resolve_at = None;
+                    resolve_delay = INITIAL_RESOLVE_POLL;
+                }
+                last_unresolved_working = next_live.working;
+                identity.adopt(next_live);
                 continue;
             }
+            resolve_delay = INITIAL_RESOLVE_POLL;
+            last_unresolved_working = false;
             want_snapshot = true;
             file_state = FollowerFileState::new();
             transcript_prompt = SessionChatTranscriptPromptState::default();
@@ -465,6 +490,7 @@ pub async fn run_session_chat_follower(
                 resolved = None;
                 next_transcript_resolve_at = None;
                 last_resolved_identity = None;
+                last_unresolved_working = false;
                 resolve_delay = INITIAL_RESOLVE_POLL;
                 epoch = stream.begin_generation();
                 emitted_starting = false;

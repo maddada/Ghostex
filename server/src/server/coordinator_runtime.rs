@@ -744,11 +744,16 @@ fn supervise(
             CDXC:Coordinators 2026-11-13 DECISION:
             Coordinator, after G2z88 was nudged again and again while idle (see CDXC:Coordinators 2026-11-13 in session_status/model.rs): "Never nudge the same session again after it answered a nudge with no new work, until something new happens (new output, a new message, its turn starts again)." A thread whose hooks still say working, but whose transcript's newest turn was started by Ghostex's stall nudge and has ended, answered the nudge and took nothing new since, so it is finished, not quiet: no second nudge and no second "no new output" report. Any new prompt (a message, a task notification) opens a new turn and makes it working again. The read is cached until the transcript changes.
             */
-            let read_due = memory
-                .activity_read_at
-                .get(&key)
-                .is_none_or(|at| now - at >= ACTIVITY_READ_EVERY_MS)
-                || !memory.turns.contains_key(&key);
+            let finish_decision_needs_fresh_read = memory.not_working_since.contains_key(&key)
+                || memory
+                    .turns
+                    .get(&key)
+                    .is_none_or(|reading| reading.answered_stall_nudge || !reading.open);
+            let read_due = finish_decision_needs_fresh_read
+                || memory
+                    .activity_read_at
+                    .get(&key)
+                    .is_none_or(|at| now - at >= ACTIVITY_READ_EVERY_MS);
             if read_due {
                 memory.activity_read_at.insert(key.clone(), now);
                 let reading = read_turn(

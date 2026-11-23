@@ -206,6 +206,7 @@ fn command_name(word: &str) -> String {
 }
 
 const MISE_WHICH_CACHE_TTL: Duration = Duration::from_secs(60);
+const MISE_WHICH_NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(15);
 
 fn mise_which_cache(
 ) -> &'static std::sync::Mutex<
@@ -225,7 +226,12 @@ fn mise_installed(binary: &str, home: &Path) -> Option<String> {
     if !cfg!(test) {
         if let Ok(cache) = mise_which_cache().lock() {
             if let Some((checked_at, cached)) = cache.get(&key) {
-                if checked_at.elapsed() < MISE_WHICH_CACHE_TTL {
+                let ttl = if cached.is_some() {
+                    MISE_WHICH_CACHE_TTL
+                } else {
+                    MISE_WHICH_NEGATIVE_CACHE_TTL
+                };
+                if checked_at.elapsed() < ttl {
                     return cached.clone();
                 }
             }

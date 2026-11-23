@@ -99,10 +99,24 @@ fn may_be_idle_compaction(transcript: Option<PathBuf>) -> Option<(PathBuf, u64)>
 }
 
 pub(super) fn session_dirs(home: &Path) -> Vec<PathBuf> {
-    let mut dirs = vec![ghostex_paths::agent_homes::claude_default_home(&home).join("sessions")];
+    let mut candidates =
+        vec![ghostex_paths::agent_homes::claude_default_home(&home).join("sessions")];
     let profiles = crate::accounts::claude_resets::swap_root(home).join("sessions");
     if let Ok(entries) = std::fs::read_dir(profiles) {
-        dirs.extend(entries.flatten().map(|entry| entry.path().join("sessions")));
+        let mut profile_dirs: Vec<PathBuf> = entries
+            .flatten()
+            .map(|entry| entry.path().join("sessions"))
+            .collect();
+        profile_dirs.sort();
+        candidates.extend(profile_dirs);
+    }
+    let mut seen = HashSet::new();
+    let mut dirs = Vec::new();
+    for dir in candidates {
+        let canonical = std::fs::canonicalize(&dir).unwrap_or_else(|_| dir.clone());
+        if seen.insert(canonical) {
+            dirs.push(dir);
+        }
     }
     dirs
 }
@@ -218,6 +232,13 @@ impl SessionRecords {
                 record: record.clone(),
             })
             .collect();
+        live.sort_by(|left, right| {
+            let left_updated = left.record["statusUpdatedAt"].as_i64().unwrap_or(i64::MIN);
+            let right_updated = right.record["statusUpdatedAt"].as_i64().unwrap_or(i64::MIN);
+            right_updated
+                .cmp(&left_updated)
+                .then_with(|| left.config_dir.cmp(&right.config_dir))
+        });
         if attach_clients {
             let made_up = self.attach.records(home, &live);
             live.extend(made_up);
@@ -341,10 +362,6 @@ impl ClaudeObserver {
             if pane_owner.get(&pane).map(|(_, _, owner)| *owner) != Some(pid) {
                 continue;
             }
-            // Process at most one record per pane per pass even if two records share a pid.
-            if !handled_panes.insert(pane.clone()) {
-                continue;
-            }
             // A terminal showing a daemon-hosted conversation: that conversation's record speaks.
             let shown = text(record, "parkedJobId")
                 .and_then(|job| jobs.get(&job).copied())
@@ -352,6 +369,10 @@ impl ClaudeObserver {
             let Some(status) = text(shown, "status") else {
                 continue;
             };
+            // Process at most one valid record per pane per pass even if two records share a pid.
+            if !handled_panes.insert(pane.clone()) {
+                continue;
+            }
             // CDXC:AgentHooks 2026-11-02 WHY:
             // Claude 2.1.316 writes `shell` while it sits at the prompt with a background shell still running ("1 shell still running"), so a turn ending that way never went `idle` and never reported its Stop. It is idle for activity; the shells stay known as running (`shells_running`, and the transcript's own launches for the roster), and the shell finishing later is no event.
             // CDXC:AgentHooks 2026-11-12 FIX:

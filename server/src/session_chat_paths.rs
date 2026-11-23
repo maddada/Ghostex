@@ -246,7 +246,7 @@ fn find_claude_chat_transcript(session_id: &str) -> Option<PathBuf> {
 const CLAUDE_EMBEDDED_ID_SCAN_FILE_LIMIT: usize = 50;
 pub(crate) const CLAUDE_EMBEDDED_ID_SCAN_HEAD_BYTES: u64 = 256 * 1024;
 const CLAUDE_EMBEDDED_ID_NEGATIVE_CACHE_TTL: std::time::Duration =
-    std::time::Duration::from_secs(15);
+    std::time::Duration::from_secs(5);
 const CLAUDE_EMBEDDED_ID_CACHE_MAX_ENTRIES: usize = 512;
 
 struct CachedEmbeddedLookup {
