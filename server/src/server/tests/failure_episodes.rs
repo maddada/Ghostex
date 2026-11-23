@@ -1035,6 +1035,7 @@ impl Run {
                         projected_compacting: None,
                         projected_fleet: None,
                         projected_monitor: None,
+                        projected_screen_approval: None,
                         model_grace_started: None,
                         retired_notice: None,
                         value: crate::session_chat_options::SessionChatTerminalDetection {

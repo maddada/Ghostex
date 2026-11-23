@@ -29,6 +29,9 @@ pub(crate) struct SessionChatOptionCacheEntry {
     pub(crate) projected_compacting: Option<bool>,
     pub(crate) projected_fleet: Option<bool>,
     pub(crate) projected_monitor: Option<bool>,
+    /// Whether the screen showed an approval when the marker was last projected
+    /// (`session_approval::screen_approval_transition`).
+    pub(crate) projected_screen_approval: Option<bool>,
     /// First capture that was settle-eligible except for its missing model —
     /// the anchor `SESSION_CHAT_OPTION_MODEL_SETTLE_GRACE` counts from. Cleared
     /// the moment a model (or a screen-owning notice) shows up.
@@ -261,6 +264,7 @@ impl SessionChatOptionDetector {
         let mut compacting_transition: Option<Option<String>> = None;
         let mut fleet_transition: Option<Option<String>> = None;
         let mut monitor_transition: Option<Option<String>> = None;
+        let mut screen_approval_transition: Option<Option<String>> = None;
         if let Ok(mut cache) = self.cache.lock() {
             let previous_compacting = cache.get(&key).and_then(|entry| entry.projected_compacting);
             let previous_fleet = cache.get(&key).and_then(|entry| entry.projected_fleet);
@@ -318,9 +322,23 @@ impl SessionChatOptionDetector {
                     );
                     None
                 }
-                None => cached_notice
-                    .map(|notice| (notice, std::time::Instant::now()))
-                    .or(recently_retired_notice),
+                // CDXC:SessionStatus 2026-11-21 WHY: a permission prompt that a whole capture no
+                // longer shows was answered; the next one with the same visible words is a new
+                // request (OMP draws two eval `commit` calls alike), and inheriting the old
+                // `detectedAt` kept it hidden behind the card closed for the first. A capture
+                // that failed keeps it as before. The reappear grace still covers every other
+                // notice, whose banners a repaint can drop for one read.
+                None => {
+                    let kept = |notice: &crate::session_chat_notice::SessionChatTerminalNotice| {
+                        !(detected.captured
+                            && notice.kind
+                                == crate::session_chat_notice::SESSION_CHAT_NOTICE_PERMISSION_PROMPT)
+                    };
+                    cached_notice
+                        .filter(|notice| kept(notice))
+                        .map(|notice| (notice, std::time::Instant::now()))
+                        .or(recently_retired_notice.filter(|(notice, _)| kept(notice)))
+                }
             };
             /*
             CDXC:AgentScreenDetection 2026-08-22: same instance-not-sample
@@ -421,6 +439,16 @@ impl SessionChatOptionDetector {
             } else {
                 previous_compacting
             };
+            // After the notice inherited its `detectedAt` above, so the marker names the instance.
+            let (detected_screen_approval, screen_approval_write) =
+                crate::session_approval::screen_approval_transition(
+                    cache
+                        .get(&key)
+                        .and_then(|entry| entry.projected_screen_approval),
+                    detected.captured,
+                    detected.notice.as_ref(),
+                );
+            screen_approval_transition = screen_approval_write;
             cache.insert(
                 key,
                 SessionChatOptionCacheEntry {
@@ -428,6 +456,7 @@ impl SessionChatOptionDetector {
                     projected_compacting: detected_compacting,
                     projected_fleet: detected_fleet,
                     projected_monitor: detected_monitor,
+                    projected_screen_approval: detected_screen_approval,
                     model_grace_started,
                     retired_notice,
                     value: detected.clone(),
@@ -460,6 +489,14 @@ impl SessionChatOptionDetector {
             self.compacting_publisher.publish_monitor(
                 project_id,
                 session_id,
+                detected_at.as_deref(),
+            );
+        }
+        if let Some(detected_at) = screen_approval_transition {
+            self.compacting_publisher.publish_marker(
+                project_id,
+                session_id,
+                crate::session_approval::SESSION_CHAT_SCREEN_APPROVAL_DETECTED_AT_KEY,
                 detected_at.as_deref(),
             );
         }

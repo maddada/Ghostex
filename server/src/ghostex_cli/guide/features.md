@@ -1542,9 +1542,13 @@ where they are while you open, change and close views.
 - A red dot on a session usually means its agent is stuck waiting for your
   approval (a permission prompt such as "Run shell command? Yes / No"). It wins
   over every other dot, hovering the session says "Waiting for your approval",
-  the notifications list names what waits, and its coordinator's crew icon
-  turns red. Answer the prompt in the session's chat or terminal and the dot
-  goes away. `ghostex sessions` lists such a session as "waiting for approval".
+  the notifications list names what waits when the agent reported the approval
+  itself, and its coordinator's crew icon turns red. An approval Ghostex only
+  reads off the agent's screen (some agents, and OMP for a tool used from an eval
+  cell, report none) shows the red dot once Ghostex has read that screen; outside
+  a coordinator's thread it adds no notification. Answer the prompt in the
+  session's chat or terminal and the dot goes away. `ghostex sessions` lists such
+  a session as "waiting for approval".
   An answer from the chat goes only to the prompt its card showed: if the agent
   moved on to another prompt before your answer arrived (or while Ghostex was
   reconnecting), the card says the prompt changed and shows the new one instead.

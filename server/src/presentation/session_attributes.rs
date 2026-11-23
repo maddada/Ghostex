@@ -281,7 +281,7 @@ pub(crate) fn turn_end_waits_on_user(session: &Value, generated_at: &str) -> boo
         + crate::session_chat_open_questions::open_question_count(session)
         + crate::session_needs_you::open_count(session)
         > 0
-        || crate::session_approval::session_awaits_approval(session, generated_at)
+        || crate::session_approval::session_awaits_reported_approval(session, generated_at)
         || crate::connectors::waiting_connector_card(session).is_some()
         || crate::agents::session_chat_prompt_setting(session).is_some()
 }

@@ -214,3 +214,35 @@ pub(crate) fn refresh_compacting_marker_from_screen(state: &AppState, session: &
         SessionChatCompactingPublisher::new(state).publish(&project_id, &session_id, None);
     }
 }
+
+/// BLOCKING (at most one screen capture, through the detector's own cache lifetime). A running
+/// session marked as showing an approval on its screen has its screen read again, and the marker
+/// follows what that whole capture shows, for the reason the compaction marker above is: an
+/// approval answered in a terminal nothing else reads would otherwise keep its red dot (the
+/// CDXC:SessionStatus 2026-11-21 WHY in session_approval.rs).
+pub(crate) fn refresh_screen_approval_marker_from_screen(state: &AppState, session: &Value) {
+    if !crate::session_approval::screen_shows_approval(session) {
+        return;
+    }
+    let field = |key: &str| session.get(key).and_then(Value::as_str).map(str::to_string);
+    let (Some(project_id), Some(session_id)) = (field("projectId"), field("sessionId")) else {
+        return;
+    };
+    let agent = crate::session_chat_composer::session_chat_composer_agent_id(session);
+    let detection = crate::session_chat_options::SessionChatOptionDetector::new(state)
+        .detect_blocking(&project_id, &session_id, agent.as_deref(), false);
+    // As above: a cache that already agreed with the screen while the stored marker did not.
+    if detection.captured
+        && !detection
+            .notice
+            .as_ref()
+            .is_some_and(crate::session_chat_notice::SessionChatTerminalNotice::is_screen_approval)
+    {
+        SessionChatCompactingPublisher::new(state).publish_marker(
+            &project_id,
+            &session_id,
+            crate::session_approval::SESSION_CHAT_SCREEN_APPROVAL_DETECTED_AT_KEY,
+            None,
+        );
+    }
+}

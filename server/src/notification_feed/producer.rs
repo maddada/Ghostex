@@ -176,7 +176,7 @@ fn record_attention_row(
         && (kind == NOTIFICATION_FEED_KIND_FINISHED
             || (kind == NOTIFICATION_FEED_KIND_NEEDS_INPUT
                 && crate::session_approval::session_has_question(session)
-                && !crate::session_approval::session_awaits_approval(
+                && !crate::session_approval::session_awaits_reported_approval(
                     session,
                     &crate::presentation::now_iso(),
                 )));
@@ -294,7 +294,8 @@ fn attention_row_alerts(
             &(project_id.to_string(), session_id.to_string()),
         );
     }
-    let awaiting_approval = crate::session_approval::session_awaits_approval(session, &now);
+    let awaiting_approval =
+        crate::session_approval::session_awaits_reported_approval(session, &now);
     crate::presentation::attention_state_alerts(
         role,
         &attention,
