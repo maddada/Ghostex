@@ -68,10 +68,10 @@ pub(crate) fn ingest_program_status_line(
     session_id: &str,
     line: ProgramStatusLine,
 ) {
-    let records_changed = match line {
+    let (records_changed, interrupt_cleared) = match line {
         ProgramStatusLine::Unsupported => {
             mark_program_status_unsupported(project_id, session_id);
-            false
+            (false, false)
         }
         ProgramStatusLine::Snapshot {
             reported,
@@ -79,6 +79,18 @@ pub(crate) fn ingest_program_status_line(
             records,
         } => store_program_status_snapshot(project_id, session_id, reported, submits, records),
     };
+    if interrupt_cleared {
+        let mut params = Map::new();
+        params.insert("projectId".to_string(), json!(project_id));
+        params.insert("sessionId".to_string(), json!(session_id));
+        params.insert("event".to_string(), json!("clearInterrupt"));
+        let _ = crate::server::dispatch_agent_http_blocking(
+            state,
+            "/api/updateAgentActivity".to_string(),
+            "program-status-clear-interrupt".to_string(),
+            params,
+        );
+    }
     apply_program_status(state, project_id, session_id, records_changed);
 }
 

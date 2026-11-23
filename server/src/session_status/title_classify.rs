@@ -514,6 +514,7 @@ pub(super) fn normalize_activity_event(value: Option<&str>) -> Option<String> {
                     | "resume"
                     | "wake"
                     | "escape"
+                    | "clearInterrupt"
                     | "agentDetected"
                     | "title"
                     | "bell"

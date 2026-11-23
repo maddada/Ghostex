@@ -22,6 +22,9 @@ impl GhostexGpuiApp {
         };
         crate::terminal_gpui_engine::register_gpui_terminal_engine_fonts(cx);
         let (sink, events) = TerminalView::event_channel();
+        let escape_endpoint = endpoint.clone();
+        let escape_project_id = session.project_id.clone();
+        let escape_session_id = session.session_id.clone();
         let model = TerminalModel::attach(
             TerminalAttachConfig {
                 base_url: endpoint.base_url,
@@ -55,13 +58,32 @@ impl GhostexGpuiApp {
         CDXC:WebGpui 2026-09-28 WHY:
         Command-click on a terminal link opens it in a new browser tab. The desktop routes `OpenUrlRequested` through its own opener; the page never subscribed, so a link click did nothing, and in Codex's fullscreen view (which captures the mouse) the click used to reach Codex, which opened the URL on the computer running the session instead of the one holding the page.
         */
-        cx.subscribe(&view, |_, _, event: &TerminalViewEvent, _| {
-            if let TerminalViewEvent::OpenUrlRequested(url) = event
-                && (url.starts_with("https://") || url.starts_with("http://"))
-                && let Some(window) = web_sys::window()
-            {
-                let _ = window.open_with_url_and_target(url, "_blank");
+        cx.subscribe(&view, move |_, _, event: &TerminalViewEvent, _| match event {
+            TerminalViewEvent::OpenUrlRequested(url) => {
+                if (url.starts_with("https://") || url.starts_with("http://"))
+                    && let Some(window) = web_sys::window()
+                {
+                    let _ = window.open_with_url_and_target(url, "_blank");
+                }
             }
+            TerminalViewEvent::EscapePressed => {
+                let endpoint = escape_endpoint.clone();
+                let project_id = escape_project_id.clone();
+                let session_id = escape_session_id.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let _ = crate::app::gx_store::web_transport::rpc_envelope(
+                        &endpoint,
+                        "/api/updateAgentActivity",
+                        serde_json::json!({
+                            "projectId": project_id,
+                            "sessionId": session_id,
+                            "event": "escape",
+                        }),
+                    )
+                    .await;
+                });
+            }
+            _ => {}
         })
         .detach();
         self.terminals.insert(session.clone(), view.clone());

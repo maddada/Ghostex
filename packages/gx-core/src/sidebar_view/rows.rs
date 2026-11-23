@@ -345,6 +345,9 @@ pub(crate) fn session_row(
         },
         title_tooltip: tooltip,
         activity: session.activity.as_str().to_string(),
+        attention_needs_input: session.attention.as_ref().is_some_and(|attention| {
+            attention.kind == Some(ghostex_gx_protocol::presentation::AttentionKind::NeedsInput)
+        }),
         has_background_work: session.background_work_detected_at.is_some(),
         // One red dot says something went wrong and needs the user, whichever it was.
         model_selection_failed: failure.is_some(),

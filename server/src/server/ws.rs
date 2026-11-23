@@ -198,7 +198,6 @@ pub(crate) async fn handle_terminal(
         return response;
     };
     let terminal_state = TerminalWsState {
-        app_state: Arc::clone(&state),
         auth_token: state.auth_token.clone(),
         device_api_tokens: state.device_api_tokens.clone(),
         owner_sessions: state.security.session_tokens.clone(),

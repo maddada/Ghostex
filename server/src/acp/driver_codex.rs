@@ -2748,6 +2748,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         s.active_turn_id = None;
                         s.clear_live_turn_output();
                     }
+                    activity.sync();
                     match proc.transport.call(
                         "turn/start",
                         Value::Object(turn_params),
@@ -2771,6 +2772,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                             s.awaiting_turn_start = false;
                             s.working = false;
+                            s.last_turn_interrupted = true;
                             drop(s);
                             activity.sync();
                             ep.ack(id, false, Value::Null, Some(&err));
@@ -2916,6 +2918,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         s.active_turn_id = None;
                         s.clear_live_turn_output();
                     }
+                    activity.sync();
                     println!("\r\n[Codex Native] Turn started...");
                     let _ = std::io::stdout().flush();
                     match proc.transport.call(
@@ -2946,6 +2949,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                             s.awaiting_turn_start = false;
                             s.working = false;
+                            s.last_turn_interrupted = true;
                             drop(s);
                             activity.sync();
                             ep.ack(id, false, Value::Null, Some(&err));

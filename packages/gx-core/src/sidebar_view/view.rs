@@ -614,10 +614,12 @@ impl FoldedStatus {
             return;
         }
         self.working |= row.activity == "working";
-        // A thread waiting on the user (a permission prompt, a bell: gxserver's `waiting`) is the
-        // pink needs-you dot; only a finished turn is the stack's blue, so the blue is exactly what
-        // opening the orchestrator clears (server/src/coordinators/seen_threads.rs).
-        let waiting = row.activity == "attention" && row.thread_state.as_deref() == Some("waiting");
+        // A row waiting on the user (a thread in gxserver's `waiting` state, or any row whose
+        // attention kind is `needsInput` such as a terminal bell or prompt) is the pink needs-you
+        // dot; only a finished turn is the stack's blue, so working threads hide blue finished
+        // dots without hiding the coordinator's own `needsInput` alert.
+        let waiting = row.activity == "attention"
+            && (row.thread_state.as_deref() == Some("waiting") || row.attention_needs_input);
         self.question |= row.has_question() || waiting;
         self.attention |= !row.has_question() && row.activity == "attention" && !waiting;
         if self.working {
@@ -822,6 +824,9 @@ pub struct SessionRow {
     /// The hover tooltip, already assembled.
     pub title_tooltip: String,
     pub activity: String,
+    /// gxserver's `attention.kind == "needsInput"`: the attention waits on the user (e.g. a
+    /// terminal bell or prompt) rather than being a finished turn.
+    pub attention_needs_input: bool,
     /// A background shell or monitor is still running after the agent's turn; drawn as a grey dot
     /// when the row is otherwise idle.
     pub has_background_work: bool,

@@ -1591,10 +1591,15 @@ pub(crate) fn refresh(
     let Ok(Some(session)) = repository.get_session(project_id, session_id) else {
         return;
     };
-    let is_thread = crate::coordinators::read_thread(&db, project_id, session_id)
+    let thread = crate::coordinators::read_thread(&db, project_id, session_id)
         .ok()
-        .flatten()
-        .is_some();
+        .flatten();
+    let is_active_thread = thread.as_ref().is_some_and(|t| !t.is_resolved());
+    let resolved_cutoff_ms = thread
+        .as_ref()
+        .filter(|t| t.is_resolved())
+        .and_then(|t| t.close_stamp())
+        .and_then(crate::session_status::parse_iso_ms);
     // A coordinator's stopped threads have no sweep of their own: build the index of any that has
     // none yet, so their pages are listed (`session_chat_resources::backfill_threads`).
     let is_coordinator = crate::coordinators::read_coordinator(&db, project_id, session_id)
@@ -1604,15 +1609,24 @@ pub(crate) fn refresh(
     if is_coordinator {
         crate::session_chat_resources::backfill_threads(state, &db, project_id, session_id);
     }
-    let (open, newly) = if is_thread {
+    let (open, newly) = if is_active_thread {
         // A running thread's questions go to its coordinator, but its pages are indexed.
         let _ = read_open(state, &db, &session, false);
         (Vec::new(), Vec::new())
     } else {
-        match read_open(state, &db, &session, turn_end.is_some()) {
+        let (mut open, mut newly) = match read_open(state, &db, &session, turn_end.is_some()) {
             Some(found) => found,
             None => return,
+        };
+        // A resolved thread's pre-resolve asks were already handed to its coordinator and must not
+        // resurrect as pink pings later, while any new questions asked after it resolved (e.g. if
+        // the user continues chatting with it directly) still count and notify.
+        if let Some(cutoff_ms) = resolved_cutoff_ms {
+            let after_resolve = |asker: &OpenAsker| asker.asked_at().is_some_and(|at| at > cutoff_ms);
+            open.retain(after_resolve);
+            newly.retain(after_resolve);
         }
+        (open, newly)
     };
     if is_coordinator {
         settle_board_items(state, &db, project_id, session_id);
@@ -1638,7 +1652,7 @@ pub(crate) fn refresh(
     // One whose page no longer waits (answered, its own Mark as read, withdrawn) is forgotten.
     let opened = opened_ids(&session);
     let still_opened = opened_still_open(&opened, &open);
-    if !is_thread && still_opened.len() != opened.len() {
+    if !is_active_thread && still_opened.len() != opened.len() {
         let _ = write_id_list(
             state,
             &db,
@@ -1657,7 +1671,7 @@ pub(crate) fn refresh(
     let later = later_ids(&session);
     let snoozed = snoozes_running(until_value);
     let (open, newly, still) = leave_out_later(open, newly, &later, &snoozed);
-    if !is_thread {
+    if !is_active_thread {
         // Prune expired snooze timestamps and clear their expired ids from LATER_KEY, even when
         // gxserver restarted after set_later spawned its in-memory timer, so connected clients get
         // a prompt-state frame as soon as the snooze ends.

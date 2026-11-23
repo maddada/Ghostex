@@ -23,7 +23,7 @@ pub(super) fn is_new_turn_start_event(event_name: Option<&str>) -> bool {
     )
 }
 
-fn is_post_tool_wind_down_event(event_name: Option<&str>) -> bool {
+pub(super) fn is_post_tool_wind_down_event(event_name: Option<&str>) -> bool {
     let Some(event_name) = event_name else {
         return false;
     };
@@ -35,6 +35,17 @@ fn is_post_tool_wind_down_event(event_name: Option<&str>) -> bool {
         compact.as_str(),
         "posttooluse" | "posttoolusefailure" | "posttoolcall" | "aftertool" | "postinvocation"
     )
+}
+
+fn is_post_tool_failure_event(event_name: Option<&str>) -> bool {
+    let Some(event_name) = event_name else {
+        return false;
+    };
+    let compact = event_name
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['_', '-', '.'], "");
+    compact == "posttoolusefailure"
 }
 
 pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityState {
@@ -66,6 +77,16 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
         // model.rs); the next working stint sets a new one.
         next.working_started_at = None;
         next.user_interrupted = None;
+        return next;
+    }
+
+    if input.event.as_deref() == Some("clearInterrupt") {
+        if previous.user_interrupted.is_none() && previous.attention_suppressed_until.is_none() {
+            return previous;
+        }
+        let mut next = previous.clone();
+        next.user_interrupted = None;
+        next.attention_suppressed_until = None;
         return next;
     }
 
@@ -279,8 +300,15 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
         let post_tool_wind_down = is_post_tool_wind_down_event(input.event_name.as_deref());
         // A cancelled tool reporting PostToolUse / PostToolUseFailure after the user interrupted
         // must neither restart an already-settled idle session nor clear `user_interrupted` or
-        // re-promote a title-demoted working claim back to explicit.
-        if previous.user_interrupted == Some(true) && post_tool_wind_down {
+        // re-promote a title-demoted working claim back to explicit during the abort window.
+        // If a non-failure PostToolUse arrives after the escape window while still working, the
+        // Escape did not abort the tool and the turn is continuing normally.
+        if previous.user_interrupted == Some(true)
+            && post_tool_wind_down
+            && (previous_activity != "working"
+                || active_attention_suppressed_until.is_some()
+                || is_post_tool_failure_event(input.event_name.as_deref()))
+        {
             if previous_activity != "working" {
                 let mut next = previous.clone();
                 next.agent_name = agent_name;
@@ -315,10 +343,15 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
                 &input.now_iso,
             );
         }
+        // Keep `user_interrupted` only across brief passive title wind-down ticks within the
+        // escape suppression window. Any explicit non-post-tool working signal (e.g. PreToolUse)
+        // or spinner titles continuing past the escape window prove the Escape did not abort the
+        // turn (e.g. it only closed a menu), so the turn's real finish must notify normally.
         let keeps_interrupted = previous.user_interrupted == Some(true)
             && previous_activity == "working"
             && !new_turn_start
-            && working_source == "title";
+            && working_source == "title"
+            && active_attention_suppressed_until.is_some();
         let next_attention_suppressed_until = if new_turn_start
             || (previous.user_interrupted == Some(true) && !keeps_interrupted)
         {

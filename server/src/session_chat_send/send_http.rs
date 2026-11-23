@@ -527,6 +527,27 @@ pub(crate) fn record_session_chat_interrupt(
     );
 }
 
+/// Clears any pending user-interrupt suppression once a new chat message has been delivered
+/// (Interrupt & Send, coordinator interrupt followed by a new prompt, or any prompt after a
+/// prior Escape), so the new turn's own completion is never swallowed.
+pub(crate) fn clear_session_chat_interrupt(
+    state: &AppState,
+    target: &SessionChatSendTarget,
+    request_id: &str,
+) {
+    crate::program_status::clear_program_status_interrupt(&target.project_id, &target.session_id);
+    let mut clear_params = Map::new();
+    clear_params.insert("projectId".to_string(), json!(target.project_id));
+    clear_params.insert("sessionId".to_string(), json!(target.session_id));
+    clear_params.insert("event".to_string(), json!("clearInterrupt"));
+    let _ = crate::server::dispatch_agent_http_blocking(
+        state,
+        "/api/updateAgentActivity".to_string(),
+        request_id.to_string(),
+        clear_params,
+    );
+}
+
 pub(crate) async fn handle_interrupt_session_chat_http(
     state: &AppState,
     endpoint_path: String,

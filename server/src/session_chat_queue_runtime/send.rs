@@ -992,6 +992,11 @@ async fn send_session_chat_message_locked(
             .await
         {
             Ok(_) => {
+                crate::session_chat_send::clear_session_chat_interrupt(
+                    state,
+                    &target,
+                    "session-chat-send-clear-interrupt",
+                );
                 crate::telemetry::prompt_sent(
                     &target.session,
                     match source {
@@ -1638,6 +1643,11 @@ async fn send_session_chat_message_locked(
             message: reason,
         });
     }
+    crate::session_chat_send::clear_session_chat_interrupt(
+        state,
+        &target,
+        "session-chat-send-clear-interrupt",
+    );
     if let Some(command) = archive_command {
         let project_id = target.project_id.clone();
         let session_id = target.session_id.clone();

@@ -1914,6 +1914,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         s.clear_live_turn_output();
                         s.native_session_id.clone()
                     };
+                    activity.sync();
                     let mut user_msg = json!({
                         "type": "user",
                         "message": {
@@ -1937,7 +1938,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             );
                         }
                         Err(err) => {
-                            state.lock().unwrap_or_else(|p| p.into_inner()).working = false;
+                            {
+                                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                s.working = false;
+                                s.last_turn_interrupted = true;
+                            }
                             activity.sync();
                             ep.ack(id, false, Value::Null, Some(&err));
                         }

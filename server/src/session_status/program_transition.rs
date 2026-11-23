@@ -12,11 +12,7 @@ pub(super) fn program_status_transition(
         "working" => ActivityState {
             activity: "working".to_string(),
             agent_name: previous.agent_name.clone(),
-            attention_suppressed_until: if previous_activity == "working" {
-                previous.attention_suppressed_until.clone()
-            } else {
-                None
-            },
+            attention_suppressed_until: None,
             has_seen_working: Some(true),
             is_acknowledged: Some(false),
             last_changed_at: Some(if previous_activity == "working" {
@@ -28,11 +24,7 @@ pub(super) fn program_status_transition(
                 input.now_iso.clone()
             }),
             last_meaningful_activity_at: previous.last_meaningful_activity_at.clone(),
-            user_interrupted: if previous_activity == "working" {
-                previous.user_interrupted
-            } else {
-                None
-            },
+            user_interrupted: None,
             working_source: Some("explicit".to_string()),
             working_started_at: Some(if previous_activity == "working" {
                 previous
