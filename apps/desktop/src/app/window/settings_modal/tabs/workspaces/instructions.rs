@@ -240,9 +240,9 @@ impl WorkspacesTab {
         } else if changed {
             "Unsaved changes".to_string()
         } else if !state.content.trim().is_empty() {
-            "Saved · applies on next start or resume".to_string()
+            "Saved on this computer · applies on next start or resume".to_string()
         } else {
-            "Empty · applies on next start or resume".to_string()
+            "Empty · stored on this computer only".to_string()
         };
 
         let display_path = shorten_home_path(&state.path);

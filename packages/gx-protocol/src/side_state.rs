@@ -155,6 +155,13 @@ pub struct SidebarWorkspace {
     /// with; empty means follow Settings > Accounts > Account for new sessions.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub claude_account_ids: Vec<String>,
+    /// The remote computer id where this workspace's instructions, Claude accounts and claude.ai
+    /// connectors live; absent means this computer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_machine_id: Option<String>,
+    /// Cached display name of `home_machine_id`, for the read-only note on other computers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_machine_name: Option<String>,
     /// `linear` or `github`: the primary tracker picked on this computer (server/src/work_mode/
     /// tracker.rs). Absent = never picked; a team's own choice is not in this document.
     #[serde(default, skip_serializing_if = "Option::is_none")]

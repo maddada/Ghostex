@@ -401,7 +401,8 @@ pub(crate) fn resolve_project_reference(
     id_of(&project).ok_or_else(|| DomainStateError::bad_request("No project id."))
 }
 
-/// Resolves `project`'s workspace id and display name when Workspaces is enabled.
+/// Resolves `project`'s workspace id and display name when Workspaces is enabled and the
+/// workspace lives on this computer (not tied to a different workspace PC).
 pub(crate) fn project_workspace_info(
     db: &rusqlite::Connection,
     project: &Value,
@@ -411,12 +412,16 @@ pub(crate) fn project_workspace_info(
     }
     let workspaces = read_sidebar_workspaces(db)?;
     let workspace_id = resolve_project_workspace_id_in(db, &workspaces, project);
+    if !workspace_is_local(&workspaces, &workspace_id) {
+        return Ok(None);
+    }
     let name = workspace_name(&workspaces, &workspace_id);
     Ok(Some((workspace_id, name)))
 }
 
 /// The Claude account(s) the workspace of `project` picked for its agents, if any. Empty while
-/// Workspaces is off: launches use the account they would without workspaces.
+/// Workspaces is off or when the workspace is tied to another computer: launches then fall back
+/// to this computer's global Accounts setting.
 pub(crate) fn project_claude_account_ids(
     db: &rusqlite::Connection,
     project: &Value,
@@ -426,6 +431,9 @@ pub(crate) fn project_claude_account_ids(
     }
     let workspaces = read_sidebar_workspaces(db)?;
     let workspace_id = resolve_project_workspace_id_in(db, &workspaces, project);
+    if !workspace_is_local(&workspaces, &workspace_id) {
+        return Ok(Vec::new());
+    }
     Ok(workspace_claude_account_ids(&workspaces, &workspace_id))
 }
 

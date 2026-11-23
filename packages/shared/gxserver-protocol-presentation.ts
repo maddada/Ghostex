@@ -787,6 +787,8 @@ export interface GxserverSidebarWorkspace {
   claudeAccountId?: string;
   claudeAccountIds?: readonly string[];
   color: string;
+  homeMachineId?: string;
+  homeMachineName?: string;
   kind: 'work' | 'personal';
   letter: string;
   name: string;

@@ -657,7 +657,7 @@ impl WorkspacesTab {
                 ))
                 .child(guide_line(
                     p,
-                    "3. CLIProxyAPI hub sessions do not carry claude.ai connectors, and claude.ai connectors only load in Claude Code (not Codex or Antigravity). Pinning direct Claude account(s) above keeps Slack and Linear available here.",
+                    "3. CLIProxyAPI hub sessions do not carry claude.ai connectors, and claude.ai connectors only load in Claude Code (not Codex or Antigravity). Workspace instructions, accounts and connector status stay on this workspace's computer (no multi-PC sync).",
                 )),
         );
 

@@ -19,6 +19,14 @@ pub(super) fn owns(state: &str) -> bool {
 pub(super) fn story_settings(state: &str, settings: &mut serde_json::Map<String, Value>) {
     if owns(state) {
         settings.insert("workspacesHidden".into(), json!(false));
+        if state == "workspaces-remote-pc" {
+            settings.insert(
+                "remoteMachines".into(),
+                json!([
+                    { "id": "pc-work", "name": "Work MacBook", "sshHost": "work-macbook.local" }
+                ]),
+            );
+        }
     }
 }
 
@@ -141,7 +149,7 @@ fn demo_workspace_instructions(params: &Value) -> Value {
 }
 
 fn team_status(state: &str) -> Value {
-    if state == "workspaces-join" {
+    if state == "workspaces-join" || state == "workspaces-remote-pc" {
         return json!({ "connections": [] });
     }
     let member = is_member(state);
@@ -236,6 +244,31 @@ pub(super) fn rpc(state: &str, path: &str, params: &Value) -> Option<Result<Valu
             "sidebarWorkspaces": {
                 "order": ["personal"],
                 "workspaces": {
+                    "personal": {
+                        "workspaceId": "personal",
+                        "name": "Personal",
+                        "letter": "P",
+                        "color": "#3f8fc7",
+                        "kind": "personal",
+                        "claudeAccountId": "claude-acct-personal-1",
+                        "claudeAccountIds": ["claude-acct-personal-1", "claude-acct-personal-2"]
+                    }
+                }
+            }
+        }),
+        "/api/readWorkspaces" if state == "workspaces-remote-pc" => json!({
+            "sidebarWorkspaces": {
+                "order": ["work", "personal"],
+                "workspaces": {
+                    "work": {
+                        "workspaceId": "work",
+                        "name": "Work",
+                        "letter": "W",
+                        "color": "#3aa675",
+                        "kind": "work",
+                        "homeMachineId": "pc-work",
+                        "homeMachineName": "Work MacBook"
+                    },
                     "personal": {
                         "workspaceId": "personal",
                         "name": "Personal",

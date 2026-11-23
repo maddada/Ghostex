@@ -151,6 +151,24 @@ pub fn workspace_name(state: &Value, workspace_id: &str) -> String {
         .unwrap_or_else(|| workspace_id.to_string())
 }
 
+/// The remote computer id where a workspace's instructions, Claude accounts and claude.ai
+/// connectors live, when the workspace is tied to another computer rather than this one.
+pub fn workspace_home_machine_id(state: &Value, workspace_id: &str) -> Option<String> {
+    bounded_text(
+        state
+            .get("workspaces")?
+            .get(workspace_id)?
+            .get("homeMachineId"),
+        MAX_ID_CHARS,
+    )
+}
+
+/// Whether `workspace_id` lives on this computer (its instructions file, Claude accounts and
+/// connector status are owned by this gxserver rather than delegated to another computer).
+pub fn workspace_is_local(state: &Value, workspace_id: &str) -> bool {
+    workspace_home_machine_id(state, workspace_id).is_none()
+}
+
 /// What a request is told when no workspace has the id or name it gave. It repeats nothing the
 /// request sent: every domain error's message goes to the request log, and a stale name can
 /// spell a credential the workspace stored.
@@ -292,6 +310,8 @@ pub(crate) fn create_workspace_in(
         "kind",
         "claudeAccountId",
         "claudeAccountIds",
+        "homeMachineId",
+        "homeMachineName",
         "tracker",
     ] {
         if let Some(value) = params.get(key) {
@@ -335,7 +355,16 @@ pub(crate) fn update_workspace_in(
     if params.contains_key("name") && bounded_text(params.get("name"), MAX_NAME_CHARS).is_none() {
         return Err(DomainStateError::bad_request("A workspace needs a name."));
     }
-    for key in ["name", "color", "letter", "icon", "kind", "tracker"] {
+    for key in [
+        "name",
+        "color",
+        "letter",
+        "icon",
+        "kind",
+        "homeMachineId",
+        "homeMachineName",
+        "tracker",
+    ] {
         match params.get(key) {
             Some(Value::Null) => {
                 workspace.remove(key);
@@ -345,6 +374,15 @@ pub(crate) fn update_workspace_in(
             }
             None => {}
         }
+    }
+    // Clearing `homeMachineId` returns the workspace to this computer and drops any cached remote
+    // computer name.
+    if params
+        .get("homeMachineId")
+        .is_some_and(|v| v.is_null() || v.as_str().is_some_and(|s| s.trim().is_empty()))
+    {
+        workspace.remove("homeMachineId");
+        workspace.remove("homeMachineName");
     }
     // `claudeAccountIds` (new multi-account clients) and `claudeAccountId` (legacy single-account
     // clients) stay in sync so older phones and desktops always see a consistent choice.
@@ -497,6 +535,14 @@ pub fn normalize_sidebar_workspaces_state(state: &Value) -> Value {
         if let Some(first_account_id) = account_ids.first() {
             workspace.insert("claudeAccountId".into(), json!(first_account_id));
             workspace.insert("claudeAccountIds".into(), json!(account_ids));
+        }
+        if let Some(home_machine_id) = bounded_text(source.get("homeMachineId"), MAX_ID_CHARS) {
+            workspace.insert("homeMachineId".into(), json!(home_machine_id));
+            if let Some(home_machine_name) =
+                bounded_text(source.get("homeMachineName"), MAX_NAME_CHARS)
+            {
+                workspace.insert("homeMachineName".into(), json!(home_machine_name));
+            }
         }
         // The primary tracker this computer picked (crate::work_mode::tracker): Linear, GitHub, or
         // a ticket command's id; absent = never picked, which resolves to Linear when a Linear key

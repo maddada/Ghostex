@@ -148,6 +148,8 @@ fn list(flags: &Flags) -> CliResult<()> {
                 "letter": workspace.get("letter"),
                 "claudeAccountId": workspace.get("claudeAccountId"),
                 "claudeAccountIds": workspace.get("claudeAccountIds"),
+                "homeMachineId": workspace.get("homeMachineId"),
+                "homeMachineName": workspace.get("homeMachineName"),
                 "default": id == default_id,
                 "projects": names,
             })
