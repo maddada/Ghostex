@@ -221,6 +221,31 @@ pub fn remove(state: &mut ChatState, id: &str) -> Vec<Effect> {
     remove_naming(state, id, None)
 }
 
+/// `questionRestore {id}`: restores a page removed by Mark all read (Undo, Q4685 A).
+pub fn restore(state: &mut ChatState, id: &str) -> Vec<Effect> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Vec::new();
+    }
+    state.questions.later.removing.remove(id);
+    state
+        .session
+        .removed_question_ids
+        .retain(|known| !known.eq_ignore_ascii_case(id));
+    let request_id = state.core.allocate_request_id();
+    state.core.request_publish();
+    vec![Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::AnswerSessionChatPrompt,
+        params: Box::new(json!({
+            "kind": "questionRestore",
+            "questionId": id,
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+        })),
+    }]
+}
+
 /// [`remove`], naming the question for the agent when it is the user's Dismiss (`dismissed`, as
 /// the agent knows it): gxserver tells the agent with the next message it gets anyway.
 fn remove_naming(state: &mut ChatState, id: &str, dismissed: Option<String>) -> Vec<Effect> {

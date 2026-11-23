@@ -10,6 +10,12 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | --- | --- | --- | --- | --- | --- | --- |
 | Scroll Chat to Bottom | `ctrl+shift+down` | `cmd+shift+down` | none |  | Scroll chat to the bottom, including while typing in the composer. | `scrollChatToBottom` |
 | Focus Chat Box | unassigned |  | none |  | Move the keyboard to the chat box of the chat session you are in. | `focusChatComposer` |
+| Focus Session Inbox | `cmd+shift+i` |  | none |  | Move the keyboard to the Session Inbox above the chat box, expanding it if folded. | `focusSessionInbox` |
+| Inbox: Next Item | `down` |  | none |  | While the Session Inbox has keyboard focus, move to the next item. | `inboxNextItem` |
+| Inbox: Previous Item | `up` |  | none |  | While the Session Inbox has keyboard focus, move to the previous item. | `inboxPreviousItem` |
+| Inbox: Open Item | `enter` |  | none |  | While the Session Inbox has keyboard focus, open the highlighted item. | `inboxOpenItem` |
+| Inbox: Mark Read / Dismiss | `e` |  | none |  | While the Session Inbox has keyboard focus, mark the highlighted item read or dismiss it. | `inboxMarkRead` |
+| Inbox: Snooze Item | `s` |  | none |  | While the Session Inbox has keyboard focus, open the Snooze menu for the highlighted item. | `inboxSnooze` |
 | Copy Last Code Block | `cmd+shift+;` |  | none |  | Copy the last code block the agent wrote in the chat session you are in. | `copyLastChatCodeBlock` |
 | Copy Last Reply | `cmd+shift+c` |  | none |  | Copy the agent's last reply in the chat session you are in. | `copyLastChatReply` |
 | Toggle Summary Mode | `ctrl+alt+s` | `cmd+alt+shift+s` | none |  | Turn Summary view on in the chat session you are in, or off again to Normal view. | `toggleChatSummaryMode` |

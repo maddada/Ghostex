@@ -540,6 +540,13 @@ pub(crate) struct CoordinatorBoardView {
     /// Each opened card's answers line width at its last paint (unscaled), by card key: what
     /// decides whether its answers fold into one dropdown (`board_card_buttons`).
     answer_rooms: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
+    /// Keyboard-focused row index in the Session Inbox (`focusSessionInbox`, arrows/Enter/E/S/Esc).
+    pub(super) inbox_focus: Option<usize>,
+    /// Focus handle for the Session Inbox keyboard triage mode.
+    pub(super) inbox_focus_handle: Option<gpui::FocusHandle>,
+    /// Which Inbox header count chip the pointer is currently over, so hovering a chip never lights
+    /// up the collapse bar behind it (Q4680).
+    pub(super) dock_count_hovered: Option<&'static str>,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only
@@ -590,20 +597,26 @@ impl gpui::Render for BoardCardDrag {
 const DROP_GROUPS: [(&str, &str); 7] = [
     ("ideas", "Backlog"),
     ("later", "To do"),
-    ("needs", "Needs you"),
+    (
+        "needs",
+        ghostex_gx_chat_core::extras::work_panel::ASKS_GROUP_NAME,
+    ),
     ("blocked", "Blocked"),
     ("hold", "On hold"),
     ("moving", "In progress"),
     ("done", "Done today"),
 ];
 
-/// A board pill's click: the card to show, and what is left to do for it.
+/// A board pill's or Inbox count chip's click: the card or group to show, and what is left to do.
 pub(crate) struct BoardFocus {
     key: String,
+    /// When set (clicking an Inbox header count chip, Q4681), highlight this group section and
+    /// scroll it into view rather than ringing a single card.
+    group: Option<String>,
     seq: u64,
     /// The board still has to open (done in the next frame, which has the window).
     open: bool,
-    /// Scroll attempts left; the card stops scrolling its list once it is in view.
+    /// Scroll attempts left; the card or group stops scrolling its list once it is in view.
     tries: std::rc::Rc<std::cell::Cell<u8>>,
 }
 
@@ -1347,7 +1360,11 @@ impl NativeChatView {
         }
         let s = p.scale;
         let key = text(row, "key");
-        let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
+        let focus = self
+            .board
+            .focus
+            .as_ref()
+            .filter(|focus| focus.group.is_none() && focus.key == key);
         let expanded = row["expanded"] == true;
         let title = text(row, "title");
         let command = row["command"].clone();
@@ -1851,7 +1868,11 @@ impl NativeChatView {
         let s = p.scale;
         let key = text(row, "key");
         let title = text(row, "title");
-        let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
+        let focus = self
+            .board
+            .focus
+            .as_ref()
+            .filter(|focus| focus.group.is_none() && focus.key == key);
         let has_menu = !board_menu_entries(row).is_empty();
         let hover_group = gpui::SharedString::from(format!("chat-board-card-hover:{key}"));
         let (dock, relayed) = self.enrich_board_dock(row);
@@ -1877,6 +1898,7 @@ impl NativeChatView {
                 .as_ref()
                 .map(|relayed| self.board_relay_buttons(relayed, CHIP_SIZE, true, p, cx)),
             reference: text(row, "reference"),
+            focused: false,
         };
         let move_to = row["moveTo"].clone();
         let menu_key = key.clone();
@@ -2681,9 +2703,17 @@ impl NativeChatView {
     /// board opens at that card. A chat seen for the first time leaves an older click alone.
     pub(super) fn adopt_board_focus(&mut self, before: &Value, cx: &mut Context<Self>) {
         let focus = &self.snapshot["coordinatorBoard"]["focus"];
-        let (Some(key), Some(seq)) = (focus["key"].as_str(), focus["seq"].as_u64()) else {
+        let Some(seq) = focus["seq"].as_u64() else {
             return;
         };
+        let key = focus["key"].as_str().unwrap_or_default();
+        let group = focus["group"]
+            .as_str()
+            .filter(|g| !g.is_empty())
+            .map(str::to_string);
+        if key.is_empty() && group.is_none() {
+            return;
+        }
         if !before["coordinatorBoard"].is_object()
             || before["coordinatorBoard"]["focus"]["seq"].as_u64() == Some(seq)
         {
@@ -2691,6 +2721,7 @@ impl NativeChatView {
         }
         self.board.focus = Some(BoardFocus {
             key: key.to_string(),
+            group,
             seq,
             open: true,
             tries: std::rc::Rc::new(std::cell::Cell::new(4)),
@@ -3133,11 +3164,26 @@ impl NativeChatView {
             let toggle = json!({"type": "toggleCoordinatorBoardGroup", "group": id});
             let drop_group = id.clone();
             let drop_fill = p_drop(p);
+            let group_focus = self
+                .board
+                .focus
+                .as_ref()
+                .filter(|focus| focus.group.as_deref() == Some(id.as_str()));
             let mut section = div()
                 .id(gpui::SharedString::from(format!("chat-board-drop:{id}")))
+                .relative()
                 .flex()
                 .flex_col()
                 .rounded(px(10.0 * s))
+                .when_some(group_focus, |section, focus| {
+                    section
+                        .border_1()
+                        .border_color(icon_color.opacity(if p.light { 0.45 } else { 0.50 }))
+                        .bg(icon_color.opacity(if p.light { 0.08 } else { 0.12 }))
+                        .px(px(4.0 * s))
+                        .py(px(2.0 * s))
+                        .child(scroll_into_view(scroll.clone(), focus.tries.clone(), s))
+                })
                 .drag_over::<BoardCardDrag>(move |style, _, _, _| style.bg(drop_fill))
                 .on_drop(cx.listener(move |this, drag: &BoardCardDrag, _, cx| {
                     this.drop_board_card(drag, &drop_group, cx);

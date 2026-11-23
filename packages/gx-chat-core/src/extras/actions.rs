@@ -219,6 +219,111 @@ pub fn handle_with_ids(
             state.core.request_publish();
             Vec::new()
         }
+        // Mark all read clears all clearable non-question rows with Undo (Q4685 A).
+        ActionKind::MarkAllInboxRead => {
+            let page_ids: Vec<String> = action
+                .param("pageIds")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect();
+            let todo_tags: Vec<String> = action
+                .param("todoTags")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect();
+            let finished_keys: Vec<String> = action
+                .param("finishedKeys")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect();
+            let count = page_ids.len() + todo_tags.len() + finished_keys.len();
+            if count == 0 {
+                return Vec::new();
+            }
+            let mut effects = Vec::new();
+            if !page_ids.is_empty() {
+                let refs: Vec<&str> = page_ids.iter().map(String::as_str).collect();
+                effects.extend(crate::questions::later::mark_seen(state, &refs));
+            }
+            for tag in &todo_tags {
+                let mut params = serde_json::Map::new();
+                params.insert("op".to_string(), json!("cancel"));
+                params.insert("key".to_string(), json!(format!("needs-you:{tag}")));
+                params.insert("item".to_string(), json!(tag));
+                params.insert("label".to_string(), json!("Dismissed"));
+                if let Some(effect) =
+                    crate::extras::coordinator_board::answer(state, &params, next_request_id())
+                {
+                    effects.push(effect);
+                }
+            }
+            for key in &finished_keys {
+                state
+                    .extras
+                    .panels
+                    .work_dock_dismissed
+                    .insert(key.clone());
+            }
+            state.extras.panels.last_mark_all_read = Some(crate::state::MarkAllReadUndo {
+                page_ids,
+                todo_tags,
+                finished_keys,
+                count,
+                expires_at_ms: context.now_millis() + 10_000,
+            });
+            state.core.request_publish();
+            effects
+        }
+        ActionKind::UndoMarkAllInboxRead => {
+            let Some(undo) = state.extras.panels.last_mark_all_read.take() else {
+                return Vec::new();
+            };
+            let mut effects = Vec::new();
+            for key in &undo.finished_keys {
+                state.extras.panels.work_dock_dismissed.remove(key);
+            }
+            for id in &undo.page_ids {
+                effects.extend(crate::questions::later::restore(state, id));
+            }
+            for tag in &undo.todo_tags {
+                let key = format!("needs-you:{tag}");
+                state.extras.panels.board_answers.remove(&key);
+                let request_id = next_request_id();
+                state.extras.panels.board_change_requests.insert(request_id);
+                effects.push(crate::effect::Effect::SendRpc {
+                    request_id,
+                    method: crate::wire::ChatRpcMethod::CoordinatorBoard,
+                    params: Box::new(json!({
+                        "projectId": state.identity.project_id,
+                        "sessionId": state.identity.session_id,
+                        "op": "restore",
+                        "item": tag,
+                    })),
+                });
+            }
+            state.core.request_publish();
+            effects
+        }
+        ActionKind::DismissMarkAllReadUndo => {
+            state.extras.panels.last_mark_all_read = None;
+            state.core.request_publish();
+            Vec::new()
+        }
         ActionKind::CoordinatorBoardAnswer => {
             crate::extras::coordinator_board::answer(state, &action.params, next_request_id())
                 .into_iter()

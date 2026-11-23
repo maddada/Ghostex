@@ -121,7 +121,7 @@ fn turn_of(turns: &[Turn], at: i64) -> Option<usize> {
 /// The status as the cards word it, and its tone (the renderers' icon and colour).
 pub fn status_label(status: &str) -> &'static str {
     match status {
-        "needs" => "Needs you",
+        "needs" => crate::extras::work_panel::ASKS_GROUP_NAME,
         "blocked" => "Blocked",
         // In progress, never Moving (`work_panel.rs` `WORK_GROUPS` holds the user's words).
         "moving" => "In progress",
@@ -743,9 +743,10 @@ fn short_item_id(item: &Value) -> String {
     }
 }
 
-/// Whether an open ask is snoozed now: gxserver's `snoozedUntil`, or a snooze sent from here. An
-/// Unsnooze sent from here (`UNSNOOZED_HELD_MS`) wins over gxserver's end until the wire agrees.
-fn snoozed(ask: &Value, key: &str, state: &ChatState, now_ms: i64) -> bool {
+/// Whether an open ask or to-do is snoozed now: gxserver's `snoozedUntil`, or a snooze sent from
+/// here. An Unsnooze sent from here (`UNSNOOZED_HELD_MS`) wins over gxserver's end until the wire
+/// agrees.
+pub(crate) fn snoozed(ask: &Value, key: &str, state: &ChatState, now_ms: i64) -> bool {
     match state.extras.panels.work_snoozed.get(key) {
         Some(until) if *until < 0 && now_ms < -*until => false,
         local => {
@@ -759,9 +760,9 @@ fn snoozed(ask: &Value, key: &str, state: &ChatState, now_ms: i64) -> bool {
 /// round trip, with room to spare.
 pub const UNSNOOZED_HELD_MS: i64 = 60_000;
 
-/// When a snoozed ask, form or page comes back, as its dock row says it: "back in 40m", "back in
-/// 5h", "back in 2d".
-fn back_in(until: i64, now_ms: i64) -> String {
+/// When a snoozed ask, to-do, form or page comes back, as its dock row says it: "back in 40m",
+/// "back in 5h", "back in 2d".
+pub(crate) fn back_in(until: i64, now_ms: i64) -> String {
     let minutes = ((until - now_ms).max(0) + 59_999) / 60_000;
     if minutes < 60 {
         format!("back in {}m", minutes.max(1))
@@ -772,8 +773,8 @@ fn back_in(until: i64, now_ms: i64) -> String {
     }
 }
 
-/// When a snoozed work ask comes back: a snooze sent from here, else gxserver's `snoozedUntil`.
-fn snooze_end(ask: &Value, key: &str, state: &ChatState) -> i64 {
+/// When a snoozed work ask or to-do comes back: a snooze sent from here, else gxserver's `snoozedUntil`.
+pub(crate) fn snooze_end(ask: &Value, key: &str, state: &ChatState) -> i64 {
     state
         .extras
         .panels
@@ -788,7 +789,7 @@ fn snooze_end(ask: &Value, key: &str, state: &ChatState) -> i64 {
 }
 
 /// Snooze for 1, 6 or 24 hours, as the dock's cards offer it (`command` per hours).
-fn snooze_choices(snooze: impl Fn(u64) -> Value) -> Value {
+pub(crate) fn snooze_choices(snooze: impl Fn(u64) -> Value) -> Value {
     Value::Array(
         [(1, "1 hour"), (6, "6 hours"), (24, "24 hours")]
             .into_iter()
@@ -920,10 +921,7 @@ pub fn dock_more_label(hidden_rows: &[Value]) -> String {
     let done = hidden_rows.len() - needs - blocked;
     let mut parts: Vec<String> = Vec::new();
     if needs > 0 {
-        parts.push(format!(
-            "{needs} more {}",
-            if needs == 1 { "needs you" } else { "need you" }
-        ));
+        parts.push(crate::extras::work_panel::asks_more_label(needs));
     }
     if blocked > 0 {
         parts.push(format!("{blocked} more blocked"));
@@ -940,26 +938,69 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     // (sinks, at, row): a row that needs him is newest first, but one older than a day sinks below
     // the newer ones, so long-lived tasks do not squat in the first rows (they stay reachable under
     // the "N more" line and in the Work panel).
-    let mut needs: Vec<(bool, i64, Value)> = question_rows(state, context, now_ms)
+    let q_rows = question_rows(state, context, now_ms);
+    // Q4683 A: collect tags and page ids of open multi-question Live pages so page-owned item asks
+    // do not spawn duplicate standalone ask rows.
+    let mut multi_page_tags: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut multi_page_ids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for (_, row) in &q_rows {
+        if row["page"] == true && row["seenOnly"] != true {
+            let tags: Vec<&str> = row["tags"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            if tags.len() >= 2 {
+                for tag in tags {
+                    multi_page_tags.insert(tag.to_ascii_uppercase());
+                }
+                let pid = text(row, "pageId").to_ascii_lowercase();
+                if !pid.is_empty() {
+                    multi_page_ids.insert(pid);
+                }
+            }
+        }
+    }
+    let mut needs: Vec<(bool, i64, Value)> = q_rows
         .into_iter()
         .map(|(at, row)| (now_ms - at > DAY_MS, at, row))
         .collect();
-    // The session's Needs you to-dos (`ghostex needs-you add`), in any agent chat. A chat with no
-    // work items has read no turns for its Show in chat, so it reads them here, only while a
-    // to-do is open.
+    // (when it comes back, row): the snoozed asks, to-dos, forms and pages, folded under the
+    // dock's Snoozed row (`snoozed`).
+    let mut snoozed_rows: Vec<(i64, Value)> = snoozed_question_rows(state, now_ms);
+    let mut answered_rows: Vec<(i64, Value)> = Vec::new();
+    // The session's to-dos (`ghostex needs-you add`), in any agent chat. A chat with no work items
+    // has read no turns for its Show in chat, so it reads them here, only while a to-do exists.
+    let own_turns;
+    let todo_turns = if turns.is_empty() && super::needs_you::has_items(state) {
+        own_turns = self::turns(state);
+        &own_turns
+    } else {
+        turns
+    };
     if super::needs_you::has_items(state) {
-        let own_turns;
-        let todo_turns = if turns.is_empty() {
-            own_turns = self::turns(state);
-            &own_turns
-        } else {
-            turns
-        };
+        let (live_todos, snoozed_todos) = super::needs_you::rows_split(
+            state,
+            context,
+            todo_turns,
+            now_ms,
+            show_in_chat,
+            reply_name,
+        );
         needs.extend(
-            super::needs_you::rows(state, context, todo_turns, now_ms, show_in_chat, reply_name)
+            live_todos
                 .into_iter()
                 .map(|(at, row)| (now_ms - at > DAY_MS, at, row)),
         );
+        snoozed_rows.extend(snoozed_todos);
+        answered_rows.extend(super::needs_you::answered_rows(
+            state,
+            todo_turns,
+            now_ms,
+            SETTLED_KEPT_MS,
+            show_in_chat,
+        ));
     }
     let work = crate::extras::work_source::work_of(state);
     let items: Vec<&Value> = work
@@ -971,15 +1012,45 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .collect();
     let answers = &state.extras.panels.board_answers;
     let mut later: Vec<(i64, Value)> = Vec::new();
-    // (when it comes back, row): the snoozed asks, forms and pages, folded under the dock's
-    // Snoozed row (`snoozed`).
-    let mut snoozed_rows: Vec<(i64, Value)> = snoozed_question_rows(state, now_ms);
     for item in &items {
         for ask in item["asks"].as_array().into_iter().flatten() {
             if ask["open"] != true {
+                // Q4684 A: recently answered asks populate the "Answered (N)" drawer.
+                if ask["withdrawn"] != true {
+                    if let Some(at) = at_ms(text(ask, "settledAt")) {
+                        if now_ms - at <= SETTLED_KEPT_MS {
+                            let key = format!(
+                                "answered:work-ask:{}:{}",
+                                text(item, "ref"),
+                                text(ask, "tag")
+                            );
+                            let outcome = match text(ask, "answered") {
+                                "" => "Answered",
+                                words => words,
+                            };
+                            let mut row = json!({
+                                "key": key,
+                                "kind": "answered",
+                                "title": text(ask, "text"),
+                                "outcome": outcome,
+                                "age": crate::transcript::message_time::age_label(now_ms, at),
+                            });
+                            row["showInChat"] = show_in_chat(turns, at, &key);
+                            answered_rows.push((at, row));
+                        }
+                    }
+                }
                 continue;
             }
-            let key = format!("work-ask:{}:{}", text(item, "ref"), text(ask, "tag"));
+            // Q4683 A: suppress item asks owned by an open multi-question Live page.
+            let ask_tag = text(ask, "tag");
+            if !ask_tag.is_empty() && multi_page_tags.contains(&ask_tag.to_ascii_uppercase()) {
+                continue;
+            }
+            if !multi_page_ids.is_empty() && ask_references_any_page(ask, &multi_page_ids) {
+                continue;
+            }
+            let key = format!("work-ask:{}:{ask_tag}", text(item, "ref"));
             // A snoozed ask waits out of the live rows until its end, under Snoozed.
             let is_snoozed = snoozed(ask, &key, state, now_ms);
             let at = at_ms(text(ask, "askedAt")).unwrap_or(now_ms);
@@ -997,7 +1068,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 .flatten()
                 .filter(|event| {
                     text(event, "kind") == "ask"
-                        && text(event, "text").split(':').next() == Some(text(ask, "tag"))
+                        && text(event, "text").split(':').next() == Some(ask_tag)
                 })
                 .filter_map(|event| at_ms(text(event, "at")))
                 .next_back()
@@ -1005,6 +1076,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             let mut row = json!({
                 "key": key,
                 "kind": "ask",
+                "tag": ask_tag,
                 "status": card["status"],
                 "title": card["title"],
                 // Its title's links (`#562`, a Markdown link) as runs the renderers draw, or null.
@@ -1025,8 +1097,8 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 // Name it when it is one, count when it is more", and "A. One line: the name is
                 // cut" when it does not fit.
                 "detail": [],
-                "waitedBy": waited_by(&items, item, text(ask, "tag")),
-                "itemPills": item_pills(&items, item, text(ask, "tag")),
+                "waitedBy": waited_by(&items, item, ask_tag),
+                "itemPills": item_pills(&items, item, ask_tag),
                 "buttons": card["buttons"],
                 "busy": card["busy"],
                 // A command to run, from a thread's `ghostex needs-you add --command`: the row's
@@ -1035,7 +1107,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 // The words sent from here as its Reply, which its Reply button shows until gxserver
                 // settles it (an answer picked from its buttons is marked on that button instead).
                 "replied": replied_words(ask, answers.get(&key).map(String::as_str)),
-                "reply": { "item": text(item, "ref"), "key": key, "tag": text(ask, "tag"), "name": reply_name(text(ask, "text")) },
+                "reply": { "item": text(item, "ref"), "key": key, "tag": ask_tag, "name": reply_name(text(ask, "text")) },
                 "mention": mention_of(item),
                 "dismiss": card["cancel"],
                 "markAnswered": card["markAnswered"],
@@ -1054,13 +1126,47 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                     "type": "unsnoozeWorkAsk",
                     "key": key,
                     "item": text(item, "ref"),
-                    "ask": text(ask, "tag"),
+                    "ask": ask_tag,
                 });
                 snoozed_rows.push((back, row));
                 continue;
             }
             needs.push((now_ms - at > DAY_MS, at, row));
         }
+    }
+    // Q4684 A: recently answered transcript forms, pages and one-click questions for "Answered (N)".
+    for asker in state.transcript_view.askers.iter() {
+        if !asker.answered || asker.obsolete {
+            continue;
+        }
+        let Some(at) = asker.at else {
+            continue;
+        };
+        if now_ms - at > SETTLED_KEPT_MS {
+            continue;
+        }
+        let title = if asker.title.is_empty() {
+            "Questions"
+        } else {
+            asker.title.as_str()
+        };
+        let key = format!("answered:questions:{}", asker.id);
+        let show = if asker.message_id.is_empty() {
+            Value::Null
+        } else {
+            json!({ "type": "showInChat", "messageId": asker.message_id, "target": asker.id })
+        };
+        answered_rows.push((
+            at,
+            json!({
+                "key": key,
+                "kind": "answered",
+                "title": title,
+                "outcome": "Answered",
+                "age": crate::transcript::message_time::age_label(now_ms, at),
+                "showInChat": show,
+            }),
+        ));
     }
     // Every Needs you line of work with no open question, with its Done and Reply.
     for item in &items {
@@ -1156,54 +1262,137 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             later.push((done_at, work_row(item, &turns, now_ms, Some(key))));
         }
     }
+    // Q4682 C: group duplicate rows sharing a Q-tag or pageId under one expandable row.
+    let needs = group_duplicate_rows(needs);
+    // Q4683 A: bundle 2+ same-turn read-only (seenOnly) pages into one collapsible row.
+    let mut needs = bundle_same_turn_pages(needs, todo_turns, now_ms);
     needs.sort_by(|left, right| left.0.cmp(&right.0).then(right.1.cmp(&left.1)));
     later.sort_by(|left, right| right.0.cmp(&left.0));
     // The approval the agent waits on, and the one just answered, lead (`dock_approvals`).
-    let rows: Vec<Value> = crate::extras::dock_approvals::rows(state)
+    let mut rows: Vec<Value> = crate::extras::dock_approvals::rows(state)
         .into_iter()
         .chain(needs.into_iter().map(|(_, _, row)| row))
         .chain(later.into_iter().map(|(_, row)| row))
         .collect();
+    // Q4684 A: mark unread vs opened rows consistently for every renderer.
+    for row in &mut rows {
+        let unread = row["needs"] == true && row["opened"] != true && row["settled"] != true;
+        row["unread"] = json!(unread);
+    }
     // Soonest back first.
     snoozed_rows.sort_by_key(|(back, _)| *back);
     let snoozed_rows: Vec<Value> = snoozed_rows.into_iter().map(|(_, row)| row).collect();
-    if rows.is_empty() && snoozed_rows.is_empty() {
+    // Newest answered first, capped at 12.
+    answered_rows.sort_by(|left, right| right.0.cmp(&left.0));
+    let mut seen_answered = std::collections::BTreeSet::new();
+    let answered_rows: Vec<Value> = answered_rows
+        .into_iter()
+        .filter(|(_, row)| seen_answered.insert(text(row, "key").to_string()))
+        .take(12)
+        .map(|(_, row)| row)
+        .collect();
+    let undo_mark_all_read = state
+        .extras
+        .panels
+        .last_mark_all_read
+        .as_ref()
+        .filter(|undo| undo.expires_at_ms > now_ms && undo.count > 0)
+        .map(|undo| {
+            json!({
+                "label": format!("Marked {} read", undo.count),
+                "undoLabel": "Undo",
+                "command": { "type": "undoMarkAllInboxRead" },
+                "dismiss": { "type": "dismissMarkAllReadUndo" },
+            })
+        })
+        .unwrap_or(Value::Null);
+    if rows.is_empty()
+        && snoozed_rows.is_empty()
+        && answered_rows.is_empty()
+        && undo_mark_all_read.is_null()
+    {
         return Value::Null;
     }
-    // Hidden by the reader: it stays hidden until shown again or a row that was not there when it
-    // was hidden arrives, since that is news he has not seen. The phone hides the whole dock with
-    // its x and its Work pill brings it back; the computer draws `hidden` as the dock collapsed to
-    // its header, whose chevron opens it again (native_chat/work_cards.rs).
-    //
-    // CDXC:Coordinators 2026-11-10 DECISION:
-    // User: "please let's allow fully collapsing the needs u row". One click hides the dock
-    // completely; the Work pill keeps its "N need you" and brings it back. On the computer the
-    // user later picked a header that collapses the dock to one bar instead (its renderer has the
-    // picks), and a collapsed dock opens by itself when something new needs him.
-    // Never collapsed over an approval the agent waits on: its card is not drawn, so the row must
-    // be (`dock_approvals`).
+    // Hidden by the reader: stays hidden until shown again or a row not present when hidden arrives.
     let hidden = state
         .extras
         .panels
         .work_dock_hidden
         .as_ref()
         .is_some_and(|keys| rows.iter().all(|row| keys.contains(text(row, "key"))))
-        && !rows.iter().any(|row| text(row, "kind") == "approval");
-    // Mark all read, once two or more pages wait only to be looked at (one has its own ⋯ Dismiss):
-    // every such page in the dock, the rows past the limit too (`questions::later::mark_seen`).
-    let unseen: Vec<&str> = rows
-        .iter()
-        .filter(|row| row["seenOnly"] == true)
-        .map(|row| text(row, "pageId"))
-        .filter(|id| !id.is_empty())
-        .collect();
-    let mark_all_seen = if unseen.len() >= 2 {
-        json!({ "label": "Mark all read", "command": { "type": "markPagesSeen", "ids": unseen } })
+        && !rows.iter().any(|row| text(row, "kind") == "approval")
+        && undo_mark_all_read.is_null();
+    // Q4685 A: Mark all read sweeps all non-question rows (seen-only pages including bundled pages,
+    // plain to-dos with only Done, and finished rows), with a breakdown summary and Undo.
+    let mut clear_page_ids: Vec<String> = Vec::new();
+    let mut clear_todo_tags: Vec<String> = Vec::new();
+    let mut clear_finished_keys: Vec<String> = Vec::new();
+    for row in &rows {
+        if text(row, "kind") == "pageBundle" {
+            for id in row["pageIds"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+            {
+                if !id.is_empty() {
+                    clear_page_ids.push(id.to_string());
+                }
+            }
+        } else if row["seenOnly"] == true {
+            let id = text(row, "pageId");
+            if !id.is_empty() {
+                clear_page_ids.push(id.to_string());
+            }
+        } else if row["needsYou"] == true {
+            let buttons = row["buttons"].as_array().map_or(&[][..], Vec::as_slice);
+            let only_done = buttons.is_empty()
+                || (buttons.len() == 1 && text(&buttons[0], "label") == "Done");
+            let tag = text(row, "tag");
+            if only_done && !tag.is_empty() {
+                clear_todo_tags.push(tag.to_string());
+            }
+        } else if text(row, "kind") == "finished" && row["dismiss"].is_object() {
+            let key = text(row, "key");
+            if !key.is_empty() {
+                clear_finished_keys.push(key.to_string());
+            }
+        }
+    }
+    let clear_total = clear_page_ids.len() + clear_todo_tags.len() + clear_finished_keys.len();
+    let mark_all_seen = if clear_total >= 2 {
+        let mut summary_parts = Vec::new();
+        if !clear_page_ids.is_empty() {
+            summary_parts.push(if clear_page_ids.len() == 1 {
+                "1 page".to_string()
+            } else {
+                format!("{} pages", clear_page_ids.len())
+            });
+        }
+        if !clear_todo_tags.is_empty() {
+            summary_parts.push(if clear_todo_tags.len() == 1 {
+                "1 to-do".to_string()
+            } else {
+                format!("{} to-dos", clear_todo_tags.len())
+            });
+        }
+        if !clear_finished_keys.is_empty() {
+            summary_parts.push(format!("{} done", clear_finished_keys.len()));
+        }
+        json!({
+            "label": format!("Mark all read ({clear_total})"),
+            "summary": summary_parts.join(" \u{b7} "),
+            "count": clear_total,
+            "command": {
+                "type": "markAllInboxRead",
+                "pageIds": clear_page_ids,
+                "todoTags": clear_todo_tags,
+                "finishedKeys": clear_finished_keys,
+            },
+        })
     } else {
         Value::Null
     };
-    // At most four rows show (three on the phone); the rest are the "N more" line (`dock_more_label`), which opens the
-    // Work panel at Needs you. The counts are the Work pill's (`coordinator_board::pill`).
     json!({
         "rows": rows,
         "hidden": hidden,
@@ -1211,18 +1400,267 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         "phoneLimit": 3,
         "more": { "type": "showCoordinatorBoardGroup", "group": "needs" },
         "markAllSeen": mark_all_seen,
-        // The snoozed asks, forms and pages: one quiet "Snoozed (N)" row under the others that
-        // opens to them, each with when it is back, Unsnooze, and its answers or Open as a live
-        // row has them. They stay out of the counts and the `hidden` check.
-        //
-        // CDXC:Coordinators 2026-11-16 DECISION:
-        // User: "please let's show snoozed stuff in the dock under a hidden area", then picked "A.
-        // A Snoozed row at the bottom" (Q3602): folded like "N more need you", each row saying
-        // when it is back with Unsnooze and its answer, the same on the phone.
-        // SEE-ALSO: server/src/coordinators/work.rs (`unsnooze`), apps/desktop/src/app/native_chat/work_cards.rs
-        // (`work_dock_snoozed`), apps/mobile/app/src/chat/native/cards/WorkCards.tsx (`dockSnoozed`).
+        "undoMarkAllRead": undo_mark_all_read,
         "snoozed": snoozed_rows,
+        "answered": answered_rows,
     })
+}
+
+/// Whether `ask` references any page id in `page_ids` (via `/p/<id>` in steps, detail or text).
+fn ask_references_any_page(ask: &Value, page_ids: &std::collections::BTreeSet<String>) -> bool {
+    let haystack = format!(
+        "{}\n{}\n{}",
+        text(ask, "steps"),
+        text(ask, "detail"),
+        text(ask, "text")
+    )
+    .to_ascii_lowercase();
+    page_ids
+        .iter()
+        .any(|id| haystack.contains(&format!("/p/{id}")))
+}
+
+/// Extracts dedupe keys (Q-tags and pageIds) for a dock row (Q4682 C).
+fn row_dedupe_keys(row: &Value) -> Vec<String> {
+    let mut keys = Vec::new();
+    let page_id = text(row, "pageId").trim().to_ascii_lowercase();
+    if !page_id.is_empty() {
+        keys.push(format!("page:{page_id}"));
+    }
+    let mut push_tag = |raw: &str| {
+        let t = raw.trim().to_ascii_uppercase();
+        if t.strip_prefix('Q')
+            .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+        {
+            let k = format!("tag:{t}");
+            if !keys.contains(&k) {
+                keys.push(k);
+            }
+        }
+    };
+    push_tag(text(row, "tag"));
+    for tag in row["tags"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        push_tag(tag);
+    }
+    for part in text(&row["reply"], "tag").split_whitespace() {
+        push_tag(part);
+    }
+    let key = text(row, "key");
+    if let Some(tag) = key.strip_prefix("needs-you:") {
+        push_tag(tag);
+    } else if let Some(rest) = key.strip_prefix("work-ask:") {
+        if let Some((_, tag)) = rest.rsplit_once(':') {
+            push_tag(tag);
+        }
+    }
+    keys
+}
+
+/// Richness rank for choosing the primary row of a duplicate group (Q4682 C):
+/// Live page > form > one-click question > work ask > session to-do.
+fn row_richness(row: &Value) -> u8 {
+    if row["page"] == true {
+        4
+    } else if text(row, "kind") == "form" {
+        3
+    } else if text(row, "kind") == "question" {
+        2
+    } else if text(row, "key").starts_with("work-ask:") {
+        1
+    } else {
+        0
+    }
+}
+
+/// Concise source label shown when expanding a grouped duplicate row (Q4682 C).
+fn duplicate_source_label(row: &Value) -> String {
+    let key = text(row, "key");
+    let tag = text(row, "tag");
+    let title = text(row, "title");
+    if key.starts_with("work-ask:") {
+        let item_name = row["chips"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|c| text(c, "kind") == "item")
+            .map(|c| text(c, "label"))
+            .unwrap_or_default();
+        match (item_name.is_empty(), tag.is_empty()) {
+            (false, false) => format!("Work ask: {item_name} ({tag})"),
+            (false, true) => format!("Work ask: {item_name}"),
+            (true, false) => format!("Work ask: {title} ({tag})"),
+            (true, true) => format!("Work ask: {title}"),
+        }
+    } else if key.starts_with("needs-you:") {
+        if tag.is_empty() {
+            format!("To-do: {title}")
+        } else {
+            format!("To-do: {title} ({tag})")
+        }
+    } else if row["page"] == true {
+        format!("Live page: {title}")
+    } else if text(row, "kind") == "form" {
+        format!("Form: {title}")
+    } else {
+        title.to_string()
+    }
+}
+
+/// Q4682 C: groups duplicate rows sharing a Q-tag or pageId under one expandable row.
+fn group_duplicate_rows(rows: Vec<(bool, i64, Value)>) -> Vec<(bool, i64, Value)> {
+    let n = rows.len();
+    if n <= 1 {
+        return rows;
+    }
+    let mut parent: Vec<usize> = (0..n).collect();
+    fn find(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        i
+    }
+    let mut first_for_key: BTreeMap<String, usize> = BTreeMap::new();
+    for (idx, (_, _, row)) in rows.iter().enumerate() {
+        for dk in row_dedupe_keys(row) {
+            if let Some(&other) = first_for_key.get(&dk) {
+                let ra = find(&mut parent, idx);
+                let rb = find(&mut parent, other);
+                if ra != rb {
+                    parent[ra] = rb;
+                }
+            } else {
+                first_for_key.insert(dk, idx);
+            }
+        }
+    }
+    let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for idx in 0..n {
+        let root = find(&mut parent, idx);
+        groups.entry(root).or_default().push(idx);
+    }
+    let mut slots: Vec<Option<(bool, i64, Value)>> = rows.into_iter().map(Some).collect();
+    let mut out = Vec::with_capacity(groups.len());
+    for (_, indices) in groups {
+        if indices.len() == 1 {
+            if let Some(entry) = slots[indices[0]].take() {
+                out.push(entry);
+            }
+            continue;
+        }
+        // Pick the richest row (tie-break by newest `at`).
+        let best_idx = *indices
+            .iter()
+            .max_by_key(|&&i| {
+                let entry = slots[i].as_ref().unwrap();
+                (row_richness(&entry.2), entry.1)
+            })
+            .unwrap();
+        let (mut sinks, mut newest_at, mut primary) = slots[best_idx].take().unwrap();
+        let mut duplicates = Vec::new();
+        for i in indices {
+            if i == best_idx {
+                continue;
+            }
+            if let Some((other_sinks, other_at, mut secondary)) = slots[i].take() {
+                sinks = sinks && other_sinks;
+                newest_at = newest_at.max(other_at);
+                secondary["sourceLabel"] = json!(duplicate_source_label(&secondary));
+                duplicates.push(secondary);
+            }
+        }
+        if !duplicates.is_empty() {
+            primary["sourcesCount"] = json!(1 + duplicates.len());
+            primary["duplicates"] = Value::Array(duplicates);
+        }
+        out.push((sinks, newest_at, primary));
+    }
+    out
+}
+
+/// Q4683 A: collapses 2+ same-turn read-only (`seenOnly`) Live pages into one expandable bundle row.
+fn bundle_same_turn_pages(
+    rows: Vec<(bool, i64, Value)>,
+    turns: &[Turn],
+    now_ms: i64,
+) -> Vec<(bool, i64, Value)> {
+    let newest_turn_idx = turns.len().checked_sub(1);
+    let mut page_groups: BTreeMap<String, Vec<(bool, i64, Value)>> = BTreeMap::new();
+    let mut kept: Vec<(bool, i64, Value)> = Vec::new();
+    for (sinks, at, row) in rows {
+        if row["page"] == true
+            && row["seenOnly"] == true
+            && !text(&row, "pageId").is_empty()
+            && !row["duplicates"].is_array()
+        {
+            let turn_key = if let Some(idx) = turn_of(turns, at) {
+                format!("turn:{idx}")
+            } else if !text(&row, "messageId").is_empty() {
+                format!("msg:{}", text(&row, "messageId"))
+            } else {
+                format!("win:{}", at / 120_000)
+            };
+            page_groups.entry(turn_key).or_default().push((sinks, at, row));
+        } else {
+            kept.push((sinks, at, row));
+        }
+    }
+    let newest_at_overall = page_groups
+        .values()
+        .flatten()
+        .map(|(_, at, _)| *at)
+        .max()
+        .unwrap_or(0);
+    for (turn_key, mut group) in page_groups {
+        if group.len() < 2 {
+            kept.extend(group);
+            continue;
+        }
+        group.sort_by(|a, b| b.1.cmp(&a.1));
+        let newest_at = group[0].1;
+        let sinks = group.iter().all(|(s, _, _)| *s);
+        let all_opened = group.iter().all(|(_, _, r)| r["opened"] == true);
+        let is_last_turn = newest_turn_idx
+            .is_some_and(|idx| turn_key == format!("turn:{idx}"))
+            || newest_at == newest_at_overall;
+        let page_ids: Vec<String> = group
+            .iter()
+            .map(|(_, _, r)| text(r, "pageId").to_string())
+            .filter(|id| !id.is_empty())
+            .collect();
+        let pages: Vec<Value> = group.into_iter().map(|(_, _, r)| r).collect();
+        let count = pages.len();
+        let title = if is_last_turn {
+            format!("{count} pages from last turn")
+        } else {
+            format!("{count} pages from earlier turn")
+        };
+        let bundle_row = json!({
+            "key": format!("dock-page-bundle:{turn_key}"),
+            "kind": "pageBundle",
+            "status": "needs",
+            "page": true,
+            "seenOnly": true,
+            "bundle": true,
+            "opened": all_opened,
+            "title": title,
+            "age": crate::transcript::message_time::age_label(now_ms, newest_at),
+            "pageIds": page_ids,
+            "bundlePages": pages,
+            "dismiss": { "type": "markPagesSeen", "ids": page_ids },
+            "dismissLabel": "Read all",
+            "buttons": [],
+            "detail": [],
+            "needs": true,
+        });
+        kept.push((sinks, newest_at, bundle_row));
+    }
+    kept
 }
 
 /// How long after an ask is settled its outcome stays in [`settled_asks`].
@@ -1603,6 +2041,8 @@ fn question_rows_of(
                 "status": "needs",
                 "title": if asker.title.is_empty() { "Questions" } else { asker.title.as_str() },
                 "age": crate::transcript::message_time::age_label(now_ms, at),
+                "messageId": asker.message_id,
+                "tags": asker.tags,
                 "dismiss": { "type": "cancelQuestion", "id": asker.id },
                 // A page that only waits to be seen asks no question: Mark as read, not Dismiss
                 // (server/src/session_chat_dismissed.rs, where the decision lives).
@@ -2392,10 +2832,26 @@ pub fn snoozes_end_at(state: &ChatState, now_ms: i64) -> Option<i64> {
         .flatten()
         .flat_map(|item| item["asks"].as_array().into_iter().flatten())
         .filter_map(|ask| at_ms(text(ask, "snoozedUntil")));
+    let todos = state
+        .session
+        .needs_you
+        .as_ref()
+        .and_then(|value| value["items"].as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|item| at_ms(text(item, "snoozedUntil")));
     let local = state.extras.panels.work_snoozed.values().copied();
     let questions = state.session.later_question_until.values().copied();
-    sent.chain(local)
+    let undo = state
+        .extras
+        .panels
+        .last_mark_all_read
+        .as_ref()
+        .map(|undo| undo.expires_at_ms);
+    sent.chain(todos)
+        .chain(local)
         .chain(questions)
+        .chain(undo)
         .filter(|until| *until > now_ms)
         .min()
 }

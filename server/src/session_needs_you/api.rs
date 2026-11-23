@@ -145,14 +145,20 @@ fn tag_floor(db: &rusqlite::Connection, project_id: &str, session_id: &str) -> u
 }
 
 fn item_json(item: &store::NeedsYouItem) -> Value {
-    json!({
+    let mut value = json!({
         "tag": item.tag,
         "title": item.title,
         "detail": item.detail,
         "command": item.command,
         "answers": item.answers,
         "askedAt": item.asked_at,
-    })
+    });
+    if store::is_snooze_active(item.snoozed_until.as_deref()) {
+        if let Some(until) = &item.snoozed_until {
+            value["snoozedUntil"] = json!(until);
+        }
+    }
+    value
 }
 
 /// `/api/sessionNeedsYou {projectId, sessionId, op}`: `add` (`title`, `detail`, `command`,
@@ -331,6 +337,39 @@ pub(crate) fn route_board_answer(
     let _lock = store::write_lock();
     let session = session_of(repository, &project_id, &session_id)?;
     let mut record = NeedsYouRecord::of(&session);
+    match op.as_str() {
+        "snooze" => {
+            let hours = params
+                .get("hours")
+                .and_then(Value::as_u64)
+                .unwrap_or(1)
+                .clamp(1, 24 * 14);
+            let until = (chrono::Utc::now() + chrono::Duration::hours(hours as i64))
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            if !record.set_snoozed(&tag, Some(until.clone())) {
+                return Err(bad(format!("{tag} is not an open to-do.")));
+            }
+            store::write(db, &project_id, &session_id, &record)?;
+            changed(state, db, repository, &project_id, &session_id, &record);
+            return Ok(Some(json!({ "item": tag, "snoozedUntil": until })));
+        }
+        "unsnooze" => {
+            if !record.set_snoozed(&tag, None) {
+                return Err(bad(format!("{tag} is not an open to-do.")));
+            }
+            store::write(db, &project_id, &session_id, &record)?;
+            changed(state, db, repository, &project_id, &session_id, &record);
+            return Ok(Some(json!({ "item": tag, "snoozedUntil": Value::Null })));
+        }
+        "restore" => {
+            if record.restore(&tag) {
+                store::write(db, &project_id, &session_id, &record)?;
+                changed(state, db, repository, &project_id, &session_id, &record);
+            }
+            return Ok(Some(json!({ "item": tag, "restored": true })));
+        }
+        _ => {}
+    }
     let (outcome, words) = match op.as_str() {
         "cancel" => ("dismissed", String::new()),
         "answer" | "reply" if !answer.is_empty() => ("answered", answer.clone()),
@@ -410,8 +449,13 @@ pub(crate) fn turn_ended(state: &AppState, project_id: &str, session_id: &str, e
     }
     remember(project_id, session_id, &record);
     let body = match newly.as_slice() {
-        [one] => format!("Needs you: {one}"),
-        [first, rest @ ..] => format!("{} things need you: {first}", rest.len() + 1),
+        [one] => format!("{}: {one}", super::INBOX_FULL_NAME),
+        [first, rest @ ..] => format!(
+            "{} {} in {}: {first}",
+            rest.len() + 1,
+            super::ASKS_GROUP_NAME.to_ascii_lowercase(),
+            super::INBOX_FULL_NAME
+        ),
         [] => return,
     };
     crate::session_chat_open_questions::notify_waiting(

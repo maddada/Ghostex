@@ -53,7 +53,7 @@ fn item_trailing(item: &Value) -> String {
     match item["state"].as_str() {
         Some("failed") if item["canUpdate"] == true => "Retry".to_string(),
         Some("failed") => "Failed".to_string(),
-        Some("needsYou") => "Needs you".to_string(),
+        Some("needsYou") => ghostex_gx_chat_core::extras::work_panel::ASKS_GROUP_NAME.to_string(),
         Some("updating") => text(item, "progress").unwrap_or("Updating…").to_string(),
         _ => text(item, "latest")
             .or(text(item, "summary"))

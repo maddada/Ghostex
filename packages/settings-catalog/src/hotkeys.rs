@@ -65,6 +65,12 @@ pub const VIEW_SCOPED_HOTKEY_IDS: &[&str] = &[
     // Files' HTML and Markdown files and the Browser only (CDXC:Docs 2026-11-14 DECISION in
     // hotkey_definitions.rs).
     "toggleAnnotate",
+    // Active only while the Session Inbox has keyboard focus.
+    "inboxNextItem",
+    "inboxPreviousItem",
+    "inboxOpenItem",
+    "inboxMarkRead",
+    "inboxSnooze",
 ];
 
 /// The settings key that holds the Terminal focused bindings, the way `hotkeys` holds the normal

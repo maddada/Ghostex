@@ -23,9 +23,35 @@ use serde_json::{json, Map, Value};
 
 use crate::extras::work_cards::{owner_words, waits_line};
 
+/// One constant for the group name of items waiting on the user (Q4700 placeholder; swap in one line).
+pub const ASKS_GROUP_NAME: &str = "Asks";
+pub const ASKS_GROUP_SINGULAR: &str = "ask";
+pub const ASKS_GROUP_PLURAL: &str = "asks";
+/// Dock header label and full name for tooltips and notifications.
+pub const INBOX_NAME: &str = "Inbox";
+pub const INBOX_FULL_NAME: &str = "Session Inbox";
+
+/// Count label for the Asks group: "1 ask", "2 asks".
+pub fn asks_count_label(count: usize) -> String {
+    if count == 1 {
+        format!("1 {ASKS_GROUP_SINGULAR}")
+    } else {
+        format!("{count} {ASKS_GROUP_PLURAL}")
+    }
+}
+
+/// Overflow count label for hidden rows needing the user: "1 more ask", "2 more asks".
+pub fn asks_more_label(count: usize) -> String {
+    if count == 1 {
+        format!("1 more {ASKS_GROUP_SINGULAR}")
+    } else {
+        format!("{count} more {ASKS_GROUP_PLURAL}")
+    }
+}
+
 /// The groups, in the order the panel lists them: the board's ids, the Work panel's titles.
 pub const WORK_GROUPS: [(&str, &str); 7] = [
-    ("needs", "Needs you"),
+    ("needs", ASKS_GROUP_NAME),
     ("blocked", "Blocked"),
     // CDXC:Coordinators 2026-11-10 DECISION:
     // User: "Please don't say Moving say In Progress. Moving isn't clear to me" (and on 2026-11-07, of

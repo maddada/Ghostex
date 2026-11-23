@@ -362,6 +362,11 @@ impl NativeChatView {
                     false,
                     p,
                 )
+                .tooltip(|window, cx| {
+                    gpui_component::tooltip::Tooltip::new("Details")
+                        .keys(super::composer::hotkey_chord(Some("inboxOpenItem")))
+                        .build(window, cx)
+                })
                 .on_click(cx.listener(move |this, _, window, cx| {
                     cx.stop_propagation();
                     if open.is_object() {
@@ -448,6 +453,11 @@ impl NativeChatView {
                 false,
                 p,
             )
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Mark as read")
+                    .keys(super::composer::hotkey_chord(Some("inboxMarkRead")))
+                    .build(window, cx)
+            })
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.close_board_card_menu(cx);

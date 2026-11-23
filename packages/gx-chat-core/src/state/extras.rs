@@ -146,6 +146,10 @@ pub struct PanelsState {
     /// The row a board pill in the chat asked the board to show (`board:B4`), and how many times
     /// one was clicked, so the renderers open the board and scroll to it once per click.
     pub board_focus: Option<(String, u64)>,
+    /// The Work panel group briefly highlighted when a count in the Inbox header was clicked (Q4681).
+    pub board_focus_group: Option<String>,
+    /// What the last "Mark all read" cleared, kept briefly so Undo can restore every item (Q4685 A).
+    pub last_mark_all_read: Option<MarkAllReadUndo>,
     /// "Don't show again" was clicked on the coordinator tips here: the pill goes before gxserver
     /// confirms (`extras::coordinator_intro`), and comes back if it refuses.
     pub intro_hidden: bool,
@@ -193,6 +197,8 @@ impl Default for PanelsState {
             page_question_counts: Default::default(),
             page_count_requests: Default::default(),
             board_focus: None,
+            board_focus_group: None,
+            last_mark_all_read: None,
             intro_hidden: false,
             intro_hide_request: None,
             autopilot_request: None,
@@ -202,6 +208,16 @@ impl Default for PanelsState {
             collab_typing_request: None,
         }
     }
+}
+
+/// Snapshot of items cleared by "Mark all read" so Undo can restore them cleanly (Q4685 A).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MarkAllReadUndo {
+    pub page_ids: Vec<String>,
+    pub todo_tags: Vec<String>,
+    pub finished_keys: Vec<String>,
+    pub count: usize,
+    pub expires_at_ms: i64,
 }
 
 /// Transcript search: what is typed, which occurrence is selected, and which rows carry a match.

@@ -20,6 +20,11 @@ mod api;
 mod store;
 mod thread;
 
+/// User-visible name of the group for items awaiting user action (one constant per codebase).
+pub(crate) const ASKS_GROUP_NAME: &str = "Asks";
+/// Full name of the Inbox dock in tooltips and notifications.
+pub(crate) const INBOX_FULL_NAME: &str = "Session Inbox";
+
 pub(crate) use api::{
     handle_needs_you_request, highest_tag, insert_needs_you, needs_you_identity,
     route_board_answer, turn_ended, SESSION_NEEDS_YOU_ENDPOINT,

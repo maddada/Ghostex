@@ -84,6 +84,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ImportPageAnswers
         | ActionKind::ExportPage
         | ActionKind::QuestionRemove
+        | ActionKind::QuestionRestore
         | ActionKind::PageStar
         | ActionKind::SnoozeQuestion
         | ActionKind::CancelQuestion
@@ -211,6 +212,9 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::JumpToWorkCard
         | ActionKind::LoadPageQuestionCounts
         | ActionKind::DismissWorkDockCard
+        | ActionKind::MarkAllInboxRead
+        | ActionKind::UndoMarkAllInboxRead
+        | ActionKind::DismissMarkAllReadUndo
         | ActionKind::SnoozeWorkAsk
         | ActionKind::SetWorkTopic
         | ActionKind::UnsnoozeWorkAsk
@@ -405,6 +409,9 @@ fn clears_error(kind: &ActionKind) -> bool {
         | ActionKind::JumpToWorkCard
         | ActionKind::LoadPageQuestionCounts
         | ActionKind::DismissWorkDockCard
+        | ActionKind::MarkAllInboxRead
+        | ActionKind::UndoMarkAllInboxRead
+        | ActionKind::DismissMarkAllReadUndo
         | ActionKind::SnoozeWorkAsk
         | ActionKind::SetWorkTopic
         | ActionKind::UnsnoozeWorkAsk

@@ -32,7 +32,7 @@ const GROUPS: [(&str, &str); 8] = [
     // The `ideas` group, shown as Backlog. User: "rename Ideas to Backlog in the board please".
     ("ideas", "Backlog"),
     ("later", "To do"),
-    ("needs", "Needs you"),
+    ("needs", crate::extras::work_panel::ASKS_GROUP_NAME),
     ("blocked", "Blocked"),
     // Waiting on something outside: the user's 2026-11-06 words on server/src/coordinators/board.rs
     // `BOARD_GROUPS`. No pill of its own: nothing in it needs the user.
@@ -1326,7 +1326,13 @@ pub fn coordinator_board_with(
         focus: panels
             .board_focus
             .as_ref()
-            .map_or(Value::Null, |(key, seq)| json!({"key": key, "seq": seq})),
+            .map_or(Value::Null, |(key, seq)| {
+                let mut value = json!({"key": key, "seq": seq});
+                if let Some(group) = &panels.board_focus_group {
+                    value["group"] = json!(group);
+                }
+                value
+            }),
         tag_options: board
             .get("tagOptions")
             .cloned()
@@ -1515,11 +1521,7 @@ pub fn project_kept(
 /// this count (the Work pill, the Work panel's header, the dock's header and its "N more" line)
 /// agrees with its number. Supersedes "need you" for any number.
 pub fn needs_you(count: usize) -> String {
-    if count == 1 {
-        "1 needs you".to_string()
-    } else {
-        format!("{count} need you")
-    }
+    crate::extras::work_panel::asks_count_label(count)
 }
 
 /// The document value, `null` when there is no board.
@@ -1680,14 +1682,13 @@ pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect>
     panels.board_expanded.insert(group);
     let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
     panels.board_focus = Some((key.to_string(), seq));
+    panels.board_focus_group = None;
     Vec::new()
 }
 
-/// `showCoordinatorBoardGroup {group}`: the board opens at `group` (the Blocked pill), unfolded
-/// and showing every row, scrolled to its first card.
+/// `showCoordinatorBoardGroup {group}`: the board opens at `group` (unfolded, no filtering) and
+/// briefly highlights that group (Q4681).
 pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effect> {
-    // The Work panel's own groups when the chat has work items (`work_panel::work_board`), as the
-    // dock's status line counts them; else gxserver's board.
     let threads = crate::extras::work_source::work_holder(state);
     let built = threads
         .and_then(|threads| threads.get("work"))
@@ -1706,8 +1707,6 @@ pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effe
                 .first()
                 .map(|row| text(row, "key").to_string())
         });
-    // Needs you also counts the chat's own open questions (`question_rows`), which the work
-    // value doesn't hold: the newest is the row it opens at, so the count is never a dead spot.
     let key = key.or_else(|| {
         (group == "needs")
             .then(|| question_rows(state, 0).into_iter().next())
@@ -1730,6 +1729,7 @@ pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effe
     panels.board_expanded.insert(group.to_string());
     let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
     panels.board_focus = Some((key, seq));
+    panels.board_focus_group = Some(group.to_string());
     Vec::new()
 }
 
@@ -1865,6 +1865,7 @@ pub fn show_item(state: &mut ChatState, item: u64) -> Vec<crate::effect::Effect>
     }
     let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
     panels.board_focus = Some((key, seq));
+    panels.board_focus_group = None;
     Vec::new()
 }
 

@@ -447,14 +447,54 @@ pub(crate) fn set_later(
 /// `answerSessionChatPrompt` with `kind: "questionRemove"`: removes a form or page without
 /// answering it (it leaves the For later list too), then brings the session's count up to date.
 /// Nothing reaches the agent. Blocking.
+/// Serializes concurrent `set_removed` / `unset_removed` calls (e.g. Mark all read / Undo / bundle
+/// Read all firing multiple page requests at once) so read-modify-write of `REMOVED_KEY` never drops
+/// sibling page IDs.
+static REMOVED_WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub(crate) fn set_removed(
     state: &AppState,
     project_id: &str,
     session_id: &str,
     id: &str,
 ) -> anyhow::Result<()> {
-    let db = open_gxserver_database(&state.paths)?;
-    if remove_without_refresh(state, &db, project_id, session_id, id)? {
+    let changed = {
+        let _guard = REMOVED_WRITE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let db = open_gxserver_database(&state.paths)?;
+        remove_without_refresh(state, &db, project_id, session_id, id)?
+    };
+    if changed {
+        refresh(state, project_id, session_id, None);
+    }
+    Ok(())
+}
+
+/// `answerSessionChatPrompt` with `kind: "questionRestore"`: undoes a removal (`set_removed`) so
+/// Mark all read Undo (Q4685 A) brings the page back cleanly across clients and restarts. Blocking.
+pub(crate) fn unset_removed(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    id: &str,
+) -> anyhow::Result<()> {
+    let changed = {
+        let _guard = REMOVED_WRITE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let db = open_gxserver_database(&state.paths)?;
+        let mut removed = read_removed_ids(&db, project_id, session_id);
+        let before = removed.len();
+        removed.retain(|known| known != id);
+        if removed.len() != before {
+            write_id_list(state, &db, project_id, session_id, REMOVED_KEY, &removed)?;
+            true
+        } else {
+            false
+        }
+    };
+    if changed {
         refresh(state, project_id, session_id, None);
     }
     Ok(())

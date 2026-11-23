@@ -460,7 +460,7 @@ async fn answer_session_chat_prompt(
     // bookkeeping: nothing reaches the agent now (session_chat_open_questions.rs, `set_later` and
     // `set_removed`). A removal that is the user's Dismiss names the question (`dismissed`), which
     // the next message the agent gets anyway tells it of (session_chat_dismissed.rs).
-    if kind == "questionForLater" || kind == "questionRemove" {
+    if kind == "questionForLater" || kind == "questionRemove" || kind == "questionRestore" {
         let Some(question_id) = params
             .get("questionId")
             .and_then(Value::as_str)
@@ -477,6 +477,7 @@ async fn answer_session_chat_prompt(
             );
         };
         let remove = kind == "questionRemove";
+        let restore = kind == "questionRestore";
         let later = params.get("later").and_then(Value::as_bool).unwrap_or(true);
         // Snooze: For later for this many hours (session_chat_open_questions.rs `LATER_UNTIL_KEY`).
         let hours = params
@@ -504,6 +505,13 @@ async fn answer_session_chat_prompt(
                     crate::session_chat_dismissed::record(&db, &project_id, &session_id, &name);
                 }
                 Ok(())
+            } else if restore {
+                crate::session_chat_open_questions::unset_removed(
+                    &worker_state,
+                    &project_id,
+                    &session_id,
+                    &question_id,
+                )
             } else {
                 crate::session_chat_open_questions::set_later(
                     &worker_state,

@@ -14889,6 +14889,48 @@
       "noTerminalBinding": true
     },
     {
+      "id": "focusSessionInbox",
+      "title": "Focus Session Inbox",
+      "description": "Move the keyboard to the Session Inbox above the chat box, expanding it if folded.",
+      "defaultKey": "cmd+shift+i",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "inboxNextItem",
+      "title": "Inbox: Next Item",
+      "description": "While the Session Inbox has keyboard focus, move to the next item.",
+      "defaultKey": "down",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "inboxPreviousItem",
+      "title": "Inbox: Previous Item",
+      "description": "While the Session Inbox has keyboard focus, move to the previous item.",
+      "defaultKey": "up",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "inboxOpenItem",
+      "title": "Inbox: Open Item",
+      "description": "While the Session Inbox has keyboard focus, open the highlighted item.",
+      "defaultKey": "enter",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "inboxMarkRead",
+      "title": "Inbox: Mark Read / Dismiss",
+      "description": "While the Session Inbox has keyboard focus, mark the highlighted item read or dismiss it.",
+      "defaultKey": "e",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "inboxSnooze",
+      "title": "Inbox: Snooze Item",
+      "description": "While the Session Inbox has keyboard focus, open the Snooze menu for the highlighted item.",
+      "defaultKey": "s",
+      "noTerminalBinding": true
+    },
+    {
       "id": "copyLastChatCodeBlock",
       "title": "Copy Last Code Block",
       "description": "Copy the last code block the agent wrote in the chat session you are in.",
