@@ -123,15 +123,16 @@ pub fn default_coordinator_launcher(rows: &[Value]) -> Option<String> {
     })
 }
 
-/// `{ icon }` of a launcher from `/api/readSidebarHud`: custom agents are resolved server-side
-/// from the owner's configured launcher list (`project_with_global_agent_list`), so callers pass
-/// `agentId` instead of copying the owner's command line into client-supplied `agentCommand`.
+/// `{ agentCommand, icon }` of a launcher from `/api/readSidebarHud`, the way the desktop sends
+/// it: custom agents are listed per machine, so a project that does not list one still launches it.
 pub fn launcher_launch_settings(rows: &[Value], agent_id: &str) -> Value {
     let mut settings = Map::new();
     if let Some(row) = rows.iter().find(|row| row_text(row, "agentId") == agent_id) {
-        let icon = row_text(row, "icon");
-        if !icon.is_empty() {
-            settings.insert("icon".to_string(), Value::String(icon.to_string()));
+        for (from, to) in [("command", "agentCommand"), ("icon", "icon")] {
+            let value = row_text(row, from);
+            if !value.is_empty() {
+                settings.insert(to.to_string(), Value::String(value.to_string()));
+            }
         }
     }
     Value::Object(settings)

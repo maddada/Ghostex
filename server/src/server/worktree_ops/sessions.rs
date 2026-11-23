@@ -85,28 +85,10 @@ pub(crate) async fn handle_worktree_session_http(
     };
     let result = match endpoint_path.as_str() {
         "/api/createWorktreeSession" => {
-            let owner_cmd = (!caller.is_user_device())
-                .then(|| {
-                    let db = open_gxserver_database(&state.paths).ok()?;
-                    let repository = DomainRepository::new(&db, &state.metadata.server_id);
-                    let project = repository.resolve_create_session_project(&params).ok();
-                    params
-                        .get("agentId")
-                        .and_then(Value::as_str)
-                        .and_then(|agent_id| {
-                            crate::agents::owner_configured_agent_command(
-                                &db,
-                                project.as_ref(),
-                                agent_id,
-                            )
-                        })
-                })
-                .flatten();
-            match crate::acp::approval::guard_create_session_params_with_owner_command(
+            match crate::acp::approval::guard_create_session_params(
                 &params,
                 caller.is_user_device(),
                 false,
-                owner_cmd.as_deref(),
             ) {
                 Ok(params) => match place_worktree_session_create(state, params) {
                     Ok(params) => create_worktree_session(state, &params).await,

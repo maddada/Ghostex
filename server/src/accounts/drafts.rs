@@ -104,12 +104,16 @@ pub(crate) fn prepare_live_switch(
 /// the same switch guard as the agent switch, so a coordinator's waiting first message is typed
 /// into the new CLI's box only once the switch is done.
 pub(crate) fn switch_in_live_provider(
+    state: &crate::server::AppState,
     repository: &DomainRepository<'_>,
     session: &Value,
     command: &str,
 ) -> Result<(), DomainStateError> {
     let project_id = session["projectId"].as_str().unwrap_or_default();
     let session_id = session["sessionId"].as_str().unwrap_or_default();
+    let (prepared_command, cleanup_paths) =
+        super::restart::prepare_in_place_launch_command(state, session, command.to_string())?;
+    let typed_command = format!(" {prepared_command}");
     let guard = agents::DraftAgentSwitch::begin(project_id, session_id)?;
     crate::session_chat_first_message::retype_after_agent_switch(
         repository.db,
@@ -123,9 +127,13 @@ pub(crate) fn switch_in_live_provider(
         project_id,
         session_id,
         "draft-account-switch",
-        agents::build_draft_agent_switch_steps(command),
+        agents::build_draft_agent_switch_steps(&typed_command),
         None,
     )?;
-    guard.finish_after(completion);
+    tokio::spawn(async move {
+        let _guard = guard;
+        let _cleanup = cleanup_paths;
+        let _ = completion.await;
+    });
     Ok(())
 }
