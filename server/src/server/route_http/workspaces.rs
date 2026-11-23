@@ -29,7 +29,7 @@ use crate::{
 use super::super::work_mode_sync::{publish_project_work_mode_change, spawn_work_mode_refresh};
 use super::*;
 
-const WORKSPACE_WRITE_REFUSED: &str = "Only your own devices can change workspaces.";
+const WORKSPACE_WRITE_REFUSED: &str = "Only the user can change workspaces: in Settings > Workspaces, on your phone, or from a terminal outside Ghostex (agent sessions and Ghostex terminal panes can't modify workspaces).";
 
 fn workspace_write_gate(
     endpoint_path: &str,
@@ -37,7 +37,10 @@ fn workspace_write_gate(
     caller: &Principal,
     body_json: &Value,
 ) -> Option<RoutedResponse> {
-    if caller.is_user_device() {
+    let allowed = caller.is_user_device()
+        && !(matches!(caller, Principal::LocalAgent)
+            && crate::audit::token_file_names_session());
+    if allowed {
         return None;
     }
     let (kind, summary) = match endpoint_path {
@@ -78,7 +81,7 @@ fn workspace_write_gate(
     }
     audit::record(
         action,
-        audit::Actor::from(caller),
+        audit::Actor::current(),
         audit::Outcome::Refused(WORKSPACE_WRITE_REFUSED.to_string()),
         None,
     );

@@ -118,67 +118,22 @@ pub(crate) fn ask_before_edits_command(command: &str, agent_id: &str) -> String 
 }
 
 /// `command` without the flags that make `agent_id` act without asking (`auto_approve_flags`),
-/// the rest kept exactly as written. Quote-aware so flag-like words inside `'...'` or `"..."`
-/// arguments (for example `-c 'developer_instructions="..."'`) are never split or stripped. A
-/// read-only coordinator thread (`coordinators::read_only_thread_command`) adds its own mode
-/// after it too.
+/// the rest kept exactly as written. A read-only coordinator thread
+/// (`coordinators::read_only_thread_command`) adds its own mode after it too.
 pub(crate) fn without_auto_approve(command: &str, agent_id: &str) -> String {
     let (single, paired) = auto_approve_flags(agent_id);
-    // Shell-quoted words with their exact byte ranges, so kept arguments stay byte-identical and
-    // tokens inside single- or double-quoted strings are never matched as standalone flags.
+    // Words with their byte ranges, so what is kept stays exactly as written (quoted paths with
+    // spaces included).
     let mut words = Vec::new();
     let mut word_start = None;
-    let mut in_single = false;
-    let mut in_double = false;
-    let mut escaped = false;
     for (index, character) in command.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        if in_single {
-            if character == '\'' {
-                in_single = false;
+        match (character.is_whitespace(), word_start) {
+            (true, Some(start)) => {
+                words.push((start, index));
+                word_start = None;
             }
-            continue;
-        }
-        if in_double {
-            match character {
-                '\\' => escaped = true,
-                '"' => in_double = false,
-                _ => {}
-            }
-            continue;
-        }
-        match character {
-            '\\' => {
-                if word_start.is_none() {
-                    word_start = Some(index);
-                }
-                escaped = true;
-            }
-            '\'' => {
-                if word_start.is_none() {
-                    word_start = Some(index);
-                }
-                in_single = true;
-            }
-            '"' => {
-                if word_start.is_none() {
-                    word_start = Some(index);
-                }
-                in_double = true;
-            }
-            ch if ch.is_whitespace() => {
-                if let Some(start) = word_start.take() {
-                    words.push((start, index));
-                }
-            }
-            _ => {
-                if word_start.is_none() {
-                    word_start = Some(index);
-                }
-            }
+            (false, None) => word_start = Some(index),
+            _ => {}
         }
     }
     if let Some(start) = word_start {

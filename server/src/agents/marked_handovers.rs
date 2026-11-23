@@ -176,7 +176,9 @@ pub(crate) fn with_launch_notes_for_workspace(
         let safe_id = crate::workspaces::safe_workspace_file_stem(&ws.workspace_id);
         let thread_note_file = paths.root_dir.join("marked-handovers").join("note.md");
         let thread_note_quoted = quote_shell_arg(&thread_note_file.to_string_lossy());
-        if family == "claude" && command.contains(&thread_note_quoted) {
+        if matches!(family.as_str(), "claude" | "droid" | "pi" | "omp")
+            && command.contains(&thread_note_quoted)
+        {
             let combined = format!("{MARKED_HANDOVERS_NOTE}\n\n{ws_note}");
             let combined_path = paths
                 .root_dir

@@ -618,8 +618,8 @@ pub fn usage() -> String {
             "Answer the offer a session gets when its linked PR is merged: remove its worktree and park it, or keep both",
         ),
         format_help_command(
-            "workspace list | create <name> [--kind work|personal] | rename <workspace> <new name> | move-project <project> <workspace> | delete <workspace>",
-            "List this computer's workspaces and their projects, create, rename or delete one, or move a project (by id, name or folder) into one; a workspace is named by id or name",
+            "workspace list | create <name> [--kind work|personal] | rename <workspace> <new name> | move-project <project> <workspace> | instructions <workspace> [--set <text> | --clear] | delete <workspace>",
+            "List this computer's workspaces and their projects, read a workspace's instructions, or change workspaces. Creating, renaming, deleting, moving projects, and setting or clearing instructions only work in Settings > Workspaces, on your phone, or from a terminal outside Ghostex (agent sessions and Ghostex terminal panes are refused); a workspace is named by id or name",
         ),
         format_help_command(
             "connectors [status] | sign-in | sign-out | refresh | connect <app> | tools | call <tool> [--args <json>]  (each takes --workspace name|id; sign-in and connect take --no-open)",

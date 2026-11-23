@@ -63,17 +63,15 @@ pub(super) fn parse_claude_accounts(result: &Value) -> Vec<ClaudeAccountInfo> {
                 account.get("userDisabled").and_then(Value::as_bool) == Some(true);
             let eligible = account.get("eligible").and_then(Value::as_bool) != Some(false);
             let status = text(account, "status");
-            let login_expired = account
-                .get("loginExpiredAt")
+            let disabled_by_error = account
+                .get("disabledReason")
                 .and_then(Value::as_str)
                 .is_some_and(|v| !v.trim().is_empty());
-            let disabled_by_error = account.get("disabled").is_some_and(|v| !v.is_null());
             let signed_in = !slot.trim().is_empty()
-                && !login_expired
                 && !disabled_by_error
                 && !matches!(
                     status.as_str(),
-                    "loginRequired" | "disabled" | "identityChanged"
+                    "loginRequired" | "disabled" | "identityChanged" | "unavailable"
                 );
             let connectors_val = account.get("claudeAiConnectors");
             let connectors = ClaudeAiConnectorsInfo {

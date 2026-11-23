@@ -118,9 +118,16 @@ fn pause_after_restart(repo: &DomainRepository<'_>, session: &Value, recovery: &
                 .and_then(|project| launch::provider(&project, session))
                 .map(|provider| provider.id().to_string())
         });
+    let prior_pool_key = recovery
+        .pointer("/accountWait/poolKey")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let mut wait = json!({ "mode": "afterRestart", "since": now });
     if let Some(provider) = prior_provider {
         wait["provider"] = json!(provider);
+    }
+    if let Some(pool_key) = prior_pool_key {
+        wait["poolKey"] = json!(pool_key);
     }
     if crate::carry_on_compaction::compact_command(session).is_some() {
         let tokens = crate::carry_on_compaction::context_tokens(repo, session);
@@ -991,17 +998,7 @@ pub(crate) fn plan_session(
     // A workspace that pins one or more Claude accounts keeps automatic usage-limit moves inside
     // that workspace's pool (never crossing into another workspace's accounts); GBot API chats
     // and Help chats stay outside workspace pools.
-    let workspace_pool: Option<Vec<String>> = if provider == Provider::Claude
-        && !crate::workspaces::session_skips_workspace_context(
-            &project,
-            session.get("runtimeSettings").and_then(Value::as_object),
-        ) {
-        crate::workspaces::project_claude_account_ids(db, &project)
-            .ok()
-            .filter(|ids| !ids.is_empty())
-    } else {
-        None
-    };
+    let workspace_pool = super::workspace_pool::session_pool(db, &project, &session, provider);
     // A session on its own login keeps waiting for its limit to reset instead of moving to an account (CDXC:AgentProviders 2026-10-09 in launch.rs).
     let target = if notice.kind == "usageLimit"
         && policy.at_limit == LimitAction::Switch
@@ -1207,9 +1204,7 @@ pub(crate) fn plan_session(
                     .filter(|a| {
                         a.provider == provider
                             && a.auto_switchable()
-                            && workspace_pool
-                                .as_deref()
-                                .is_none_or(|ids| ids.iter().any(|id| id == &a.id))
+                            && super::workspace_pool::in_pool(&a.id, workspace_pool.as_deref())
                     })
                     .map(|a| {
                         let found = snapshot
@@ -1264,7 +1259,15 @@ pub(crate) fn plan_session(
                         workspace_pool.as_deref(),
                         now,
                     );
-                    super::limit_wait::enter(state, repo, &session, &mut recovery, wait, provider);
+                    super::limit_wait::enter_in_pool(
+                        state,
+                        repo,
+                        &session,
+                        &mut recovery,
+                        wait,
+                        provider,
+                        workspace_pool.as_deref(),
+                    );
                 }
                 save(state, repo, &session, recovery)?;
                 return Ok(None);
@@ -1540,7 +1543,7 @@ pub(super) fn ranked_in_pool<'a>(
             a.provider == provider
                 && a.auto_switchable()
                 && Some(a.id.as_str()) != current
-                && allowed_ids.is_none_or(|ids| ids.iter().any(|id| id == &a.id))
+                && super::workspace_pool::in_pool(&a.id, allowed_ids)
         })
         .filter_map(|a| {
             snapshot

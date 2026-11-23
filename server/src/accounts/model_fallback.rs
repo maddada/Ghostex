@@ -143,7 +143,6 @@ pub(super) fn alternative_in_pool(
     let here = current
         .and_then(|id| registry.accounts.iter().find(|a| a.id == id))
         .filter(|a| a.provider == provider && !a.user_disabled && a.login_expired_at.is_none())
-        .filter(|a| allowed_ids.is_none_or(|ids| ids.iter().any(|id| id == &a.id)))
         .filter(|a| room(&a.id));
     // An account this session automatically left counts once a reading taken since says so,
     // the rule `switch_target` keeps.

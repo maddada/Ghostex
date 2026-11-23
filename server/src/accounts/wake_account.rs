@@ -162,13 +162,16 @@ pub(crate) fn rebind_target(
     if !unusable && !reading.is_some_and(|d| at_limit(d, &model, Utc::now())) {
         return Ok(None);
     }
-    let ranked = recovery::ranked(
+    let workspace_pool =
+        super::workspace_pool::session_pool(repository.db, project, session, provider);
+    let ranked = recovery::ranked_in_pool(
         &registry,
         &snapshot,
         provider,
         Some(current),
         &model,
         policy.priority,
+        workspace_pool.as_deref(),
     );
     let new_session_account = unusable
         .then(|| {
@@ -179,6 +182,7 @@ pub(crate) fn rebind_target(
             account.id != current
                 && !account.user_disabled
                 && account.disabled.is_none()
+                && super::workspace_pool::in_pool(&account.id, workspace_pool.as_deref())
                 && snapshot
                     .accounts
                     .iter()

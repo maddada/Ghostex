@@ -14136,9 +14136,42 @@
       "agentWritable": false
     },
     {
+      "key": "workspaceHomeMachine",
+      "title": "Workspace computer",
+      "subtitle": "Which computer owns this workspace's agent instructions, Claude accounts and claude.ai connectors (no multi-PC sync).",
+      "tab": "workspaces",
+      "tabTitle": "Workspaces",
+      "section": "workspaces",
+      "sectionTitle": "Workspaces",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "workspaceAgentInstructions",
+      "title": "Agent instructions",
+      "subtitle": "File-backed Markdown rules (up to 32 KB) Ghostex sends automatically to agents in this workspace without editing your CLAUDE.md or AGENTS.md files.",
+      "tab": "workspaces",
+      "tabTitle": "Workspaces",
+      "section": "workspaces",
+      "sectionTitle": "Workspaces",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "workspaceClaudeAccount",
-      "title": "Claude account",
-      "subtitle": "Which of your Claude accounts agents in this workspace's projects use.",
+      "title": "Claude accounts",
+      "subtitle": "Which of your Claude accounts agents in this workspace's projects use, including automatic rotation and usage-limit switches.",
+      "tab": "workspaces",
+      "tabTitle": "Workspaces",
+      "section": "workspaces",
+      "sectionTitle": "Workspaces",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "workspaceClaudeConnectors",
+      "title": "claude.ai connectors",
+      "subtitle": "Slack, Linear and other apps seen on claude.ai per Claude account, with one-click setup in that account's isolated Browser profile.",
       "tab": "workspaces",
       "tabTitle": "Workspaces",
       "section": "workspaces",

@@ -54,13 +54,15 @@ pub(crate) fn switch_at_limit(
         &state.paths.home_dir,
     )
     .map(str::to_string);
-    let Some(target) = recovery::ranked(
+    let workspace_pool = super::workspace_pool::session_pool(&db, &project, &session, provider);
+    let Some(target) = recovery::ranked_in_pool(
         &registry,
         &snapshot,
         provider,
         current.as_deref(),
         "",
         policy.priority,
+        workspace_pool.as_deref(),
     )
     .into_iter()
     .next()
@@ -127,16 +129,39 @@ pub(crate) fn provider_has_eligible_room(
     snapshot: &Snapshot,
     provider: Provider,
 ) -> bool {
-    provider_has_eligible_room_for_model(registry, snapshot, provider, None)
+    provider_has_eligible_room_for_model_in_pool(registry, snapshot, provider, None, None)
+}
+
+/// Like `provider_has_eligible_room`, scoped to `allowed_ids` when a workspace pins a Claude pool.
+pub(super) fn provider_has_eligible_room_in_pool(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    allowed_ids: Option<&[String]>,
+) -> bool {
+    provider_has_eligible_room_for_model_in_pool(registry, snapshot, provider, None, allowed_ids)
 }
 
 /// Like `provider_has_eligible_room`, scoped to `model` when known (shared windows always count;
 /// model-specific windows count only when `model` matches them).
+#[allow(dead_code)]
 pub(super) fn provider_has_eligible_room_for_model(
     registry: &Registry,
     snapshot: &Snapshot,
     provider: Provider,
     model: Option<&str>,
+) -> bool {
+    provider_has_eligible_room_for_model_in_pool(registry, snapshot, provider, model, None)
+}
+
+/// Like `provider_has_eligible_room_for_model`, additionally scoped to `allowed_ids` when a
+/// workspace pins a Claude account pool.
+pub(super) fn provider_has_eligible_room_for_model_in_pool(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    model: Option<&str>,
+    allowed_ids: Option<&[String]>,
 ) -> bool {
     // Before the first accounts discovery completes, assume room so startup does not park early.
     if snapshot.fetched_at.is_none() {
@@ -151,12 +176,19 @@ pub(super) fn provider_has_eligible_room_for_model(
                 .filter(|window| window_applies_to_model(window, model))
                 .all(|window| window.used_percent < 100.0)
     };
+    let scoped = allowed_ids.is_some_and(|ids| !ids.is_empty());
     let saved: Vec<_> = registry
         .accounts
         .iter()
-        .filter(|account| account.provider == provider)
+        .filter(|account| {
+            account.provider == provider
+                && super::workspace_pool::in_pool(&account.id, allowed_ids)
+        })
         .collect();
     if saved.is_empty() {
+        if scoped {
+            return false;
+        }
         let discovered: Vec<_> = snapshot
             .accounts
             .iter()

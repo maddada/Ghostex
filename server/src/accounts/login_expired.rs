@@ -380,15 +380,17 @@ fn replacement(
     snapshot: &Snapshot,
     session: &Value,
     current: &str,
+    allowed_ids: Option<&[String]>,
 ) -> Option<String> {
     let policy = launch::effective_policy(registry, Provider::Claude, session);
-    if let Some(best) = super::recovery::ranked(
+    if let Some(best) = super::recovery::ranked_in_pool(
         registry,
         snapshot,
         Provider::Claude,
         Some(current),
         "",
         policy.priority,
+        allowed_ids,
     )
     .first()
     {
@@ -397,7 +399,12 @@ fn replacement(
     registry
         .accounts
         .iter()
-        .filter(|a| a.provider == Provider::Claude && a.auto_switchable() && a.id != current)
+        .filter(|a| {
+            a.provider == Provider::Claude
+                && a.auto_switchable()
+                && a.id != current
+                && super::workspace_pool::in_pool(&a.id, allowed_ids)
+        })
         .filter(|a| {
             snapshot.accounts.iter().any(|found| {
                 endpoint::account_id(found) == a.id
@@ -475,7 +482,14 @@ pub(crate) fn recover(
             "reason": reason, "updatedAt": Utc::now().to_rfc3339()
         })
     };
-    let Some(target) = replacement(&registry, snapshot, &session, &current) else {
+    let workspace_pool = super::workspace_pool::session_pool(db, project, &session, provider);
+    let Some(target) = replacement(
+        &registry,
+        snapshot,
+        &session,
+        &current,
+        workspace_pool.as_deref(),
+    ) else {
         super::recovery::save(state, repo, &session, attention("This account's login expired, and no other Claude account set to Automatic is ready. Run /login, reconnect the account in Settings > Accounts, or switch this session to another account."))?;
         return Ok(true);
     };
