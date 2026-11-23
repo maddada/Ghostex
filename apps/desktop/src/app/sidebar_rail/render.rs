@@ -556,9 +556,10 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// The workspace at the rail's foot, where the sidebar's Spaces row drew it (Q4296 F, and the
-    /// rail build brief: "the workspace at the foot"): its icon, plain, one click switches to the
-    /// other workspace, a right click opens the workspace menu. Shown with two or more workspaces.
+    /// The workspace at the rail's foot, kept alongside the Spaces row's workspace tile so
+    /// switching still works while the sidebar is hidden: its icon, plain, one click switches to
+    /// the other workspace, a right click opens the workspace menu. Shown with two or more
+    /// workspaces.
     fn render_sidebar_rail_workspace(
         &self,
         appearance: &SidebarAppearance,

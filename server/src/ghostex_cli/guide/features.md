@@ -782,8 +782,10 @@ chats) from its bottom half while an expanded view has folded it away; with the
 Agents Panel on screen the whole rail slides out the sidebar. Move onto it to
 use it, and it slides away when the pointer leaves both. A quick click on an icon opens only
 that icon. Search leaves the sidebar's top row, Hermes leaves the Spaces
-row, the workspace tile leaves the Spaces row and
-Claude and Grok Bot leave the work area header. Pick Rail or Classic (the
+row and
+Claude and Grok Bot leave the work area header (the workspace tile stays at the
+start of the Spaces row, and the rail's foot also keeps its workspace icon for
+when the sidebar is hidden). Pick Rail or Classic (the
 sidebar without the rail) in Settings > Sidebar > Sidebar layout
 (`sidebarLayout`: `rail` or `classic`). New installs start on Rail. If you had
 Ghostex before the rail, the first start of 11.12.0 switches you to it and shows
@@ -1181,10 +1183,12 @@ Linear API key, Claude account and Browser sign-ins (cookies), and a window
 shows one workspace at a time. Every install starts with one workspace,
 Personal, holding all your projects and Spaces. Once you have two or more, the
 workspace tile is the first tile of the Spaces row (after your computers, if you
-have several), or, with the rail on, at the foot of the rail: the workspace's icon in white on a disc of its colour. Workspace
-icons are their own set (home, briefcase, building, people, coffee, camera and
+have several), drawn as the workspace's icon in white on a disc of its colour;
+with the rail on, its plain icon also sits at the foot of the rail so you can
+switch while the sidebar is hidden. Workspace
+icons are their own set (home, briefcase, building, user, users, coffee, camera and
 more), never a Space icon; pick each workspace's icon and colour in Settings >
-Workspaces (Personal starts as a house, a Work workspace as a briefcase). Click
+Workspaces (Personal starts as a person, a Work workspace as a briefcase). Click
 the tile to switch this window to your other workspace in one click (with more
 than two, it goes back to the one this window showed last; hover it to see where
 it goes and its hotkey). With Spaces turned off the tile still shows, in a row

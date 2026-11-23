@@ -2,7 +2,8 @@
 //! window's workspace as its icon on a disc in the workspace's colour. A click switches to the
 //! other workspace (gx-core `workspace_switch_target`) and a right click opens the workspace menu
 //! (gx-core `workspace_menu`). The mark itself is `workspace_badge`, which the menus' workspace rows draw too;
-//! the icon rail draws the same icon plain (app/sidebar_rail/render.rs).
+//! the icon rail also keeps the same icon plain at its foot (app/sidebar_rail/render.rs) so switching
+//! still works while the sidebar is hidden.
 //!
 //! CDXC:Workspaces 2026-10-10 DECISION:
 //! User picked option A of the one-click switch mockup (the switch rule is gx-core `workspace_switch_target`): "i want 1 click to switch workspaces between work and personal one in my case (but still have access to the dropdown we have now basically)".
@@ -12,6 +13,9 @@
 //!
 //! CDXC:Workspaces 2026-11-20 DECISION:
 //! User picked "F. The first tile of the Spaces row" (Q4296): "single click switches workspace; right click shows the workspace menu; each workspace gets its own ICON (not just a colour dot), and those icons must look different from the Spaces icons". The tile leaves the bottom left for the start of the Spaces row (after the computers, which switch machines; the workspace belongs to this computer), and with Spaces off it still leads that row. It is the account tiles' fill (`usage_card_fills`) with no hairline, at a Space tile's height and radius, holding the workspace's icon in white on an 18pt disc of its colour: a Space is an outline glyph in its colour on a hairline tile, and the workspace icons are a set of their own (gx-protocol `WORKSPACE_ICONS`). With a single workspace nothing is drawn (`gx_store_workspace_tile`). This supersedes the dot-and-name button at the bottom left of the same day (Q4254 A) and its later card-fill tile.
+//!
+//! CDXC:Workspaces 2026-11-23 DECISION:
+//! User: "please let's bring back the work workspace to be a toggle in the spaces row i can't keep clicking on it bottom left of the rail". The workspace tile stays at the start of the Spaces row in both Rail and Classic layouts (no longer hidden when the rail is on). The rail's foot button remains alongside it so workspace switching still works when the sidebar is collapsed.
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -67,17 +71,14 @@ pub(crate) fn workspace_color(color: &str, fallback: gpui::Hsla) -> gpui::Hsla {
 impl GhostexGpuiApp {
     /// Whether the Spaces row leads with the workspace tile now: this computer's section is shown
     /// and its daemon has two or more workspaces (gxserver publishes none while the Workspaces
-    /// feature is off).
+    /// feature is off). Shown in both Rail and Classic layouts.
     pub(super) fn native_sidebar_workspace_tile_shown(&self) -> bool {
-        // With the rail on, the workspace is at the rail's foot instead (app/sidebar_rail/).
-        !self.sidebar_rail_shown()
-            && self
-                .native_sidebar
-                .snapshot
-                .as_ref()
-                .is_some_and(|snapshot| {
-                    snapshot.selected_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
-                })
+        self.native_sidebar
+            .snapshot
+            .as_ref()
+            .is_some_and(|snapshot| {
+                snapshot.selected_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
+            })
             && self.gx_store_workspace_tile().is_some()
     }
 
@@ -104,7 +105,7 @@ impl GhostexGpuiApp {
         let tooltips = self.native_sidebar.pointer_inside
             && self.native_sidebar.menu.is_none()
             && !cx.has_active_drag();
-        let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
+        let tooltip_span = self.native_sidebar_tooltip_span(scale);
         let tooltip_delay = appearance.tooltip_delay;
         let switch_to = tile.switch_to.map(|(workspace_id, _)| workspace_id);
         let owner = super::menus::MenuOwner::default();

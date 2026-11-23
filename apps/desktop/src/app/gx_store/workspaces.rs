@@ -198,9 +198,9 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    /// The workspace switcher at the sidebar's bottom left, when this computer's daemon has more
-    /// than one workspace: with a single one there is nothing to switch to, so nothing is drawn
-    /// (CDXC:Workspaces 2026-11-20 in native_sidebar/workspace_tile.rs).
+    /// The workspace tile in the Spaces row (and at the rail's foot), when this computer's daemon
+    /// has more than one workspace: with a single one there is nothing to switch to, so nothing is
+    /// drawn (CDXC:Workspaces 2026-11-20 in native_sidebar/workspace_tile.rs).
     pub(crate) fn gx_store_workspace_tile(&self) -> Option<WorkspaceTile> {
         let state = self.gx_store_workspaces_state()?;
         if state.workspaces.len() < 2 {
