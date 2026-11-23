@@ -21,7 +21,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::extras::work_cards::{owner_words, waits_line};
+use crate::extras::work_cards::{owner_words, waits_line_in};
 
 /// One constant for the group name of items waiting on the user.
 pub const ASKS_GROUP_NAME: &str = "Pings";
@@ -96,7 +96,7 @@ fn group_of(status: &str) -> &'static str {
 /// An item's own chips after the board's: usage-limit reset pill (when paused on a limit), who
 /// has the ball, its steps, what it asks of the user (its open asks not snoozed at `now_ms`: a
 /// snoozed one waits in Later, so it is not "for you").
-fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
+fn item_chips(all_items: &[&Value], item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
     let mut chips = Vec::new();
     if !matches!(status, "finished" | "dropped") {
         if let Some(thread) = crate::extras::work_cards::usage_limit_thread(item) {
@@ -119,7 +119,7 @@ fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
         }
     }
     let owner = owner_words(item);
-    let waiting_says = status == "waiting" && !waits_line(item).is_empty();
+    let waiting_says = status == "waiting" && !waits_line_in(item, all_items).is_empty();
     // Only a thread is worth naming: "You" and "Coordinator" are what the group already says
     // (Q2167).
     if !owner.is_empty()
@@ -152,13 +152,13 @@ fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
 }
 
 /// An item's row, in the shape of a board item row.
-fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
+fn item_row(all_items: &[&Value], item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
     let reference = text(item, "ref");
     let waiting_thread = crate::extras::work_cards::waiting_user_thread(item);
     let mut title = text(item, "title").to_string();
     let mut line = text(item, "now").to_string();
     if status == "waiting" {
-        let waits = waits_line(item);
+        let waits = waits_line_in(item, all_items);
         if !waits.is_empty() {
             line = waits;
         }
@@ -193,7 +193,7 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
             line.clone()
         },
         "at": text(item, "at"),
-        "workChips": item_chips(item, status, now_ms),
+        "workChips": item_chips(all_items, item, status, now_ms),
     });
     if thread_wait {
         row["threadWait"] = json!(true);
@@ -467,7 +467,7 @@ pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
                 .flatten()
                 .any(crate::extras::work_cards::thread_wait_needs_user);
         if !only_asking {
-            push(group, item_row(item, group, status, now_ms));
+            push(group, item_row(&all_items, item, group, status, now_ms));
         }
     }
     let groups: Vec<Value> = WORK_GROUPS

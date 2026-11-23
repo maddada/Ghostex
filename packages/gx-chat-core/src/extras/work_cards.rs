@@ -134,6 +134,255 @@ pub fn status_label(status: &str) -> &'static str {
     }
 }
 
+/// Canonical plain-words label for a known wait event, handling both short event keys (`rebuild`,
+/// `release`, `ota`) and older gxserver phrasing (`"the next rebuild of Ghostex on this computer"`).
+fn wait_event_label(word: &str) -> Option<&'static str> {
+    match word.trim().to_ascii_lowercase().as_str() {
+        "release" | "next-release" | "the next release" => Some("release"),
+        "ota" | "phone-update" | "next-ota" | "the next phone update" => Some("phone update"),
+        "rebuild"
+        | "app-rebuild"
+        | "next-rebuild"
+        | "the next rebuild of ghostex on this computer" => Some("rebuild"),
+        _ => None,
+    }
+}
+
+/// Whether `word` is a bare question tag (`Q12`, `q12`).
+fn is_question_tag(word: &str) -> bool {
+    let word = word.trim();
+    let Some(digits) = word.strip_prefix(['Q', 'q']) else {
+        return false;
+    };
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Whether `word` is a bare work-item reference (`W12`, `w12`, `B12`, `b12`).
+fn is_bare_item_ref(word: &str) -> bool {
+    let word = word.trim();
+    let Some(digits) = word.strip_prefix(['W', 'w', 'B', 'b']) else {
+        return false;
+    };
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Strips a redundant leading "waiting on "/"waits on "/"waiting for "/"waits for " from free text.
+fn strip_wait_prefix(word: &str) -> &str {
+    let trimmed = word.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    for prefix in ["waiting on ", "waits on ", "waiting for ", "waits for "] {
+        if lower.starts_with(prefix) {
+            let rest = trimmed[prefix.len()..].trim();
+            if !rest.is_empty() {
+                return rest;
+            }
+        }
+    }
+    trimmed
+}
+
+/// Resolves a bare work-item reference (`W12`, `B12`) to that item's title in `all_items`.
+fn resolve_item_title<'a>(reference: &str, all_items: &[&'a Value]) -> Option<&'a str> {
+    let digits = reference.trim().strip_prefix(['W', 'w', 'B', 'b'])?;
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let canonical = format!("W{digits}");
+    all_items.iter().find_map(|other| {
+        text(other, "ref")
+            .eq_ignore_ascii_case(&canonical)
+            .then(|| text(other, "title").trim())
+            .filter(|title| !title.is_empty())
+    })
+}
+
+/// Collapses runs of whitespace into single spaces so one-line summaries and segments agree.
+fn clean_inline(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Normalizes a single wait target word or phrase into plain user-facing words, never a bare W-ID
+/// or Q-ID.
+fn normalize_wait_target(raw: &str, all_items: &[&Value]) -> Option<String> {
+    let cleaned = clean_inline(strip_wait_prefix(raw));
+    if cleaned.is_empty() {
+        return None;
+    }
+    if let Some(event) = wait_event_label(&cleaned) {
+        return Some(event.to_string());
+    }
+    if is_question_tag(&cleaned)
+        || cleaned
+            .split_whitespace()
+            .next()
+            .is_some_and(is_question_tag)
+            && cleaned.contains("(asked in the chat)")
+    {
+        return Some("your answer".to_string());
+    }
+    if is_bare_item_ref(&cleaned) {
+        return Some(
+            resolve_item_title(&cleaned, all_items)
+                .map(clean_inline)
+                .filter(|title| !title.is_empty())
+                .unwrap_or_else(|| "another item".to_string()),
+        );
+    }
+    Some(cleaned)
+}
+
+/// Plain-words target of one serialized wait entry (`item["waits"][i]`), never a bare W-ID or Q-ID.
+fn wait_target(wait: &Value, all_items: &[&Value]) -> Option<String> {
+    let on = text(wait, "on").trim();
+    let kind = text(wait, "kind");
+    let event = text(wait, "event").trim();
+    let label = text(wait, "label").trim();
+
+    if let Some(name) = wait_event_label(event).or_else(|| wait_event_label(on)) {
+        return Some(name.to_string());
+    }
+    if kind == "ask" || is_question_tag(on) {
+        return Some("your answer".to_string());
+    }
+    if kind == "item" || is_bare_item_ref(on) {
+        if !label.is_empty() && !is_bare_item_ref(label) {
+            return Some(clean_inline(label));
+        }
+        return Some(
+            resolve_item_title(on, all_items)
+                .map(clean_inline)
+                .filter(|title| !title.is_empty())
+                .unwrap_or_else(|| "another item".to_string()),
+        );
+    }
+    normalize_wait_target(if label.is_empty() { on } else { label }, all_items)
+}
+
+/// Extracts normalized wait targets from a `"wait"` history event's text (`"Waiting on rebuild"`,
+/// older `"Waits on the next rebuild of Ghostex on this computer"`, etc.).
+fn wait_targets_from_history(raw: &str, all_items: &[&Value]) -> Vec<String> {
+    let stripped = strip_wait_prefix(raw);
+    if stripped.is_empty() {
+        return Vec::new();
+    }
+    if let Some(single) = wait_event_label(stripped) {
+        return vec![single.to_string()];
+    }
+    if is_question_tag(stripped) || is_bare_item_ref(stripped) {
+        return normalize_wait_target(stripped, all_items).into_iter().collect();
+    }
+    let parts: Vec<&str> = stripped.split(", ").collect();
+    let split = parts.len() > 1
+        && parts.iter().any(|part| {
+            wait_event_label(part).is_some()
+                || is_question_tag(part)
+                || is_bare_item_ref(part)
+        });
+    let mut out: Vec<String> = Vec::new();
+    let iter: Vec<&str> = if split { parts } else { vec![stripped] };
+    for part in iter {
+        if let Some(target) = normalize_wait_target(part, all_items) {
+            if !out.iter().any(|seen| seen.eq_ignore_ascii_case(&target)) {
+                out.push(target);
+            }
+        }
+    }
+    out
+}
+
+/// Deduplicated wait targets `(target, until)` for `item`, reading structured `item["waits"]`
+/// first and optionally falling back to a `"wait"` history event's text.
+fn item_wait_targets(
+    item: &Value,
+    all_items: &[&Value],
+    only_open: bool,
+    history_text: Option<&str>,
+) -> Vec<(String, String)> {
+    let waits: Vec<&Value> = item["waits"].as_array().into_iter().flatten().collect();
+    let chosen: Vec<&Value> = if only_open {
+        waits
+            .into_iter()
+            .filter(|wait| wait["open"] == true)
+            .collect()
+    } else {
+        let open: Vec<&Value> = waits
+            .iter()
+            .copied()
+            .filter(|wait| wait["open"] == true)
+            .collect();
+        if !open.is_empty() {
+            open
+        } else {
+            waits
+        }
+    };
+    let mut out: Vec<(String, String)> = Vec::new();
+    for wait in chosen {
+        let Some(target) = wait_target(wait, all_items) else {
+            continue;
+        };
+        let until = text(wait, "until").trim().to_string();
+        if !out
+            .iter()
+            .any(|(seen, seen_until)| seen.eq_ignore_ascii_case(&target) && *seen_until == until)
+        {
+            out.push((target, until));
+        }
+    }
+    if out.is_empty() {
+        if let Some(raw) = history_text {
+            for target in wait_targets_from_history(raw, all_items) {
+                out.push((target, String::new()));
+            }
+        }
+    }
+    out
+}
+
+/// Formats wait targets as `"Waiting on <target>"` / `"waiting on <target>"`, or `""` when empty.
+fn format_wait_phrase(
+    targets: &[(String, String)],
+    capitalized: bool,
+    include_until: bool,
+) -> String {
+    let parts: Vec<String> = targets
+        .iter()
+        .map(|(target, until)| {
+            if include_until && !until.is_empty() {
+                format!("{target} (by {until})")
+            } else {
+                target.clone()
+            }
+        })
+        .collect();
+    let lead = if capitalized { "Waiting on" } else { "waiting on" };
+    match parts.len() {
+        0 => String::new(),
+        1 => format!("{lead} {}", parts[0]),
+        _ => format!(
+            "{lead} {} and {}",
+            parts[..parts.len() - 1].join(", "),
+            parts[parts.len() - 1]
+        ),
+    }
+}
+
+/// Shortens an unusually long wait target (e.g. another item's long title) for the one-line turn
+/// summary without touching short targets like `"rebuild"`, `"release"`, `"phone update"`, or
+/// `"your answer"`.
+fn short_wait_target(target: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = target.chars().collect();
+    if chars.len() <= max_chars {
+        return target.to_string();
+    }
+    let slice: String = chars[..max_chars.saturating_sub(1)].iter().collect();
+    let cut = slice
+        .rfind(' ')
+        .filter(|index| *index >= slice.len() / 2)
+        .map_or(slice.as_str(), |index| &slice[..index]);
+    format!("{}…", cut.trim_end())
+}
+
 /// Who has the ball, in words: "You", "Coordinator", a thread's title, or what it waits on.
 pub fn owner_words(item: &Value) -> String {
     let owner = &item["owner"];
@@ -141,36 +390,25 @@ pub fn owner_words(item: &Value) -> String {
     match text(owner, "kind") {
         "thread" if !label.is_empty() => format!("Thread \u{b7} {label}"),
         "thread" => "Thread".to_string(),
-        "item" | "outside" if !label.is_empty() => format!("Waits on {label}"),
+        "item" | "outside" if !label.is_empty() => match normalize_wait_target(label, &[]) {
+            Some(target) => format!("Waiting on {target}"),
+            None => "Waiting".to_string(),
+        },
         _ => label.to_string(),
     }
 }
 
-/// "Waiting on iPhone voice calls and Phone reconnect", from the item's open waits.
+/// "Waiting on rebuild", "Waiting on phone update", "Waiting on iPhone voice calls and Phone
+/// reconnect", from the item's open waits.
 pub fn waits_line(item: &Value) -> String {
-    let open: Vec<String> = item["waits"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|wait| wait["open"] == true)
-        .map(|wait| {
-            let until = text(wait, "until");
-            if until.is_empty() {
-                text(wait, "label").to_string()
-            } else {
-                format!("{} (by {until})", text(wait, "label"))
-            }
-        })
-        .collect();
-    match open.len() {
-        0 => String::new(),
-        1 => format!("Waiting on {}", open[0]),
-        _ => format!(
-            "Waiting on {} and {}",
-            open[..open.len() - 1].join(", "),
-            open[open.len() - 1]
-        ),
-    }
+    waits_line_in(item, &[])
+}
+
+/// [`waits_line`], resolving any bare work-item reference against `all_items` so a bare W-ID
+/// never leaks.
+pub(crate) fn waits_line_in(item: &Value, all_items: &[&Value]) -> String {
+    let targets = item_wait_targets(item, all_items, true, None);
+    format_wait_phrase(&targets, true, true)
 }
 
 /// Whether a thread attached to a work item genuinely requires manual user action in Needs you
@@ -702,7 +940,16 @@ pub(crate) fn item_pills(items: &[&Value], item: &Value, tag: &str) -> Value {
         })
     };
     let own_state = text(item, "status");
-    let own_words = status_label(own_state);
+    let own_words = if own_state == "waiting" {
+        let waits = waits_line_in(item, items);
+        if waits.is_empty() {
+            status_label(own_state).to_string()
+        } else {
+            waits
+        }
+    } else {
+        status_label(own_state).to_string()
+    };
     let mut pills = vec![pill(
         item,
         own_state,
@@ -2395,6 +2642,12 @@ fn dock_item_card(item: &Value, now_ms: i64, done_key: Option<String>) -> Value 
     let status = text(item, "status");
     let at = at_ms(text(item, "at")).unwrap_or(now_ms);
     let mut line = text(item, "now").to_string();
+    if status == "waiting" {
+        let waits = waits_line(item);
+        if !waits.is_empty() {
+            line = waits;
+        }
+    }
     if line.is_empty() {
         if let Some(why) = item["owner"]["why"].as_str() {
             line = why.to_string();
@@ -2434,8 +2687,22 @@ fn merged_turn(state: &ChatState, turns: &[Turn]) -> Option<usize> {
 }
 
 /// The newest finished turn's line, for the end of its "Worked for" line
-/// (`extras::working_card`): "Pairing page started · 1 ask".
+/// (`extras::working_card`): "Pairing page started · 1 ask", or
+/// "No more \"(1)\" counts in the UI waiting on rebuild".
 pub fn turn_summary(state: &ChatState) -> Option<String> {
+    turn_summary_parts(state).map(|(text, _)| text)
+}
+
+/// [`turn_summary`] with structured segments (`WorkingCardSegment`) so tight layouts truncate item
+/// titles instead of the wait reason or verb beside them.
+pub(crate) fn turn_summary_parts(
+    state: &ChatState,
+) -> Option<(
+    String,
+    Vec<crate::extras::working_card_label::WorkingCardSegment>,
+)> {
+    use crate::extras::working_card_label::WorkingCardSegment;
+
     // Asked on every document: no walk of the chat unless its line shows on a chat with work.
     let shows = state.transcript_view.worked_line.is_some()
         && !state.transcript_view.chat_look.status_in_transcript;
@@ -2444,11 +2711,12 @@ pub fn turn_summary(state: &ChatState) -> Option<String> {
     }
     let turns = turns_for_work(state);
     let newest = merged_turn(state, &turns)?;
-    let turn_id = turns.get(newest)?.id.clone();
-    let mut lines: BTreeMap<usize, TurnLine> = BTreeMap::new();
     let items = crate::extras::work_source::work_of(state)?
         .get("items")?
         .as_array()?;
+    let all_items: Vec<&Value> = items.iter().collect();
+    let mut item_parts: Vec<(String, String)> = Vec::new();
+    let mut asks: usize = 0;
     for item in items.iter().filter(|item| item["kind"] == "item") {
         let events: Vec<&Value> = item["history"]
             .as_array()
@@ -2462,39 +2730,96 @@ pub fn turn_summary(state: &ChatState) -> Option<String> {
         if events.is_empty() {
             continue;
         }
-        let summary = lines.entry(newest).or_default();
         let kinds: Vec<&str> = events.iter().map(|event| text(event, "kind")).collect();
-        summary.asks += kinds.iter().filter(|kind| **kind == "ask").count();
+        asks += kinds.iter().filter(|kind| **kind == "ask").count();
         if kinds.iter().all(|kind| *kind == "ask") {
             continue;
         }
+        let wait_history = events
+            .iter()
+            .rev()
+            .find(|event| text(event, "kind") == "wait")
+            .map(|event| text(event, "text"));
         let verb = if kinds.contains(&"done") {
-            "finished"
+            "finished".to_string()
         } else if kinds.contains(&"drop") {
-            "dropped"
+            "dropped".to_string()
+        } else if kinds.contains(&"wait")
+            && (text(item, "status") == "waiting" || !kinds.contains(&"add"))
+        {
+            let targets: Vec<(String, String)> =
+                item_wait_targets(item, &all_items, false, wait_history)
+                    .into_iter()
+                    .map(|(target, until)| (short_wait_target(&target, 36), until))
+                    .collect();
+            let phrase = format_wait_phrase(&targets, false, false);
+            if phrase.is_empty() {
+                "waiting".to_string()
+            } else {
+                phrase
+            }
         } else if kinds.contains(&"add") {
-            "started"
-        } else if kinds.contains(&"wait") {
-            "waiting"
+            "started".to_string()
         } else {
-            "updated"
+            "updated".to_string()
         };
-        summary
-            .parts
-            .push(format!("{} {verb}", text(item, "title")));
+        item_parts.push((clean_inline(text(item, "title")), verb));
     }
-    let _ = turn_id;
-    let summary = lines.remove(&newest)?;
-    let mut words: Vec<String> = summary.parts.iter().take(3).cloned().collect();
-    if summary.parts.len() > 3 {
-        words.push(format!("{} more", summary.parts.len() - 3));
+    if item_parts.is_empty() && asks == 0 {
+        return None;
     }
-    match summary.asks {
+    let mut words: Vec<String> = Vec::new();
+    let mut segments: Vec<WorkingCardSegment> = Vec::new();
+    let push_fixed = |segments: &mut Vec<WorkingCardSegment>, chunk: String| {
+        if chunk.is_empty() {
+            return;
+        }
+        match segments.last_mut() {
+            Some(last) if !last.truncate => last.text.push_str(&chunk),
+            _ => segments.push(WorkingCardSegment {
+                text: chunk,
+                truncate: false,
+            }),
+        }
+    };
+    let shown = item_parts.len().min(3);
+    for (index, (title, verb)) in item_parts.iter().take(shown).enumerate() {
+        if index > 0 {
+            push_fixed(&mut segments, " \u{b7} ".to_string());
+        }
+        if title.is_empty() {
+            words.push(verb.clone());
+            push_fixed(&mut segments, verb.clone());
+        } else {
+            words.push(format!("{title} {verb}"));
+            segments.push(WorkingCardSegment {
+                text: title.clone(),
+                truncate: true,
+            });
+            push_fixed(&mut segments, format!(" {verb}"));
+        }
+    }
+    let mut tail_parts: Vec<String> = Vec::new();
+    if item_parts.len() > 3 {
+        tail_parts.push(format!("{} more", item_parts.len() - 3));
+    }
+    match asks {
         0 => {}
-        1 => words.push("1 ask".to_string()),
-        asks => words.push(format!("{asks} asks")),
+        1 => tail_parts.push("1 ask".to_string()),
+        asks => tail_parts.push(format!("{asks} asks")),
     }
-    (!words.is_empty()).then(|| words.join(" \u{b7} "))
+    for part in tail_parts {
+        if !words.is_empty() {
+            push_fixed(&mut segments, " \u{b7} ".to_string());
+        }
+        words.push(part.clone());
+        push_fixed(&mut segments, part);
+    }
+    let has_truncatable = segments.iter().any(|segment| segment.truncate);
+    if !has_truncatable {
+        segments.clear();
+    }
+    (!words.is_empty()).then(|| (words.join(" \u{b7} "), segments))
 }
 
 /// What one turn changed, for its quiet line (`project`).
@@ -2528,7 +2853,7 @@ struct TurnChange {
 /// it (finished, dropped, a question still open, added, waiting, then any other change), and its
 /// own event's words are the line that changed. The pill is the item's state now when this turn
 /// changed it last, else the state that change left it in.
-fn turn_change(item: &Value, events: &[&Value], latest: bool) -> TurnChange {
+fn turn_change(item: &Value, all_items: &[&Value], events: &[&Value], latest: bool) -> TurnChange {
     let last_text = |kinds: &[&str]| {
         events
             .iter()
@@ -2552,16 +2877,31 @@ fn turn_change(item: &Value, events: &[&Value], latest: bool) -> TurnChange {
                 .any(|ask| text(ask, "tag") == tag && ask["open"] == true)
         })
         .map(|event| text(event, "text").to_string());
-    let (lead, detail, status) = if has("done") {
+    let wait_detail = || {
+        let raw = last_text(&["wait"]);
+        let targets = item_wait_targets(
+            item,
+            all_items,
+            false,
+            (!raw.is_empty()).then_some(raw.as_str()),
+        );
+        let phrase = format_wait_phrase(&targets, true, true);
+        if phrase.is_empty() {
+            raw
+        } else {
+            phrase
+        }
+    };
+    let (lead, mut detail, status) = if has("done") {
         ("finished", last_text(&["done"]), "finished")
     } else if has("drop") {
         ("dropped", String::new(), "dropped")
     } else if let Some(question) = open_ask {
         ("needs you", question, "needs")
+    } else if has("wait") && (text(item, "status") == "waiting" || !has("add")) {
+        ("now waiting", wait_detail(), "waiting")
     } else if has("add") {
         ("added", last_text(&["now", "step", "status"]), "")
-    } else if has("wait") {
-        ("now waiting", last_text(&["wait"]), "waiting")
     } else if has("ask") {
         ("asked you", last_text(&["ask"]), "")
     } else {
@@ -2579,6 +2919,9 @@ fn turn_change(item: &Value, events: &[&Value], latest: bool) -> TurnChange {
     } else {
         status.to_string()
     };
+    if status == "waiting" && detail.is_empty() {
+        detail = waits_line_in(item, all_items);
+    }
     TurnChange {
         lead: format!("Work item {lead}"),
         title: text(item, "title").to_string(),
@@ -2622,6 +2965,7 @@ pub fn project_with(
     let mut cards: Vec<(i64, u8, i64, Value)> = Vec::new();
     let mut open_asks = Vec::new();
     let mut lines: BTreeMap<usize, TurnLine> = BTreeMap::new();
+    let all_items: Vec<&Value> = items.iter().collect();
     for item in items.iter().filter(|item| item["kind"] == "item") {
         let reference = text(item, "ref");
         // The coordinator's changes by turn, oldest first.
@@ -2675,7 +3019,9 @@ pub fn project_with(
             summary.at = summary.at.max(last_at);
             // What the turn did to the item, for its own card (`turn_change`).
             let latest = by_turn.keys().next_back() == Some(turn_index);
-            summary.changes.push(turn_change(item, events, latest));
+            summary
+                .changes
+                .push(turn_change(item, &all_items, events, latest));
             // What the turn did to the item, in a word, unless it only asked.
             let kinds: Vec<&str> = events.iter().map(|event| text(event, "kind")).collect();
             if kinds.iter().all(|kind| *kind == "ask") {

@@ -21,6 +21,16 @@ pub struct WorkingCardLabelPart {
     pub dim: bool,
 }
 
+/// One segment of a worked turn summary line: item titles mark `truncate: true` so tight layouts
+/// cut the title instead of the wait reason or outcome beside it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkingCardSegment {
+    pub text: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub truncate: bool,
+}
+
 /// The label in runs, each file path in it shortened: its file name stays whole and its folders
 /// become one dimmed run, cut to the last folder after "…/" when there are more
 /// (`~/Documents/Screenshots/a.png` → "…/Screenshots/" dimmed, then "a.png"). A web address is not a

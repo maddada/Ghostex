@@ -76,10 +76,34 @@ const DELIVERIES_KEY: &str = "coordinatorDeliveries";
 /// (`ghostex coordinator item delivered release v11.7.1`, ghostex-release skill), per project, so
 /// another project's release clears nothing here.
 pub const WAIT_EVENTS: [(&str, &str); 3] = [
-    ("release", "the next release"),
-    ("ota", "the next phone update"),
-    ("rebuild", "the next rebuild of Ghostex on this computer"),
+    ("release", "release"),
+    ("ota", "phone update"),
+    ("rebuild", "rebuild"),
 ];
+
+/// Whether `word` is a bare work-item reference (`W12`, `w12`, `B12`, `b12`).
+fn is_bare_item_ref(word: &str) -> bool {
+    let word = word.trim();
+    let Some(digits) = word.strip_prefix(['W', 'w', 'B', 'b']) else {
+        return false;
+    };
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Strips a redundant leading "waiting on "/"waits on "/"waiting for "/"waits for " from free text.
+fn strip_wait_prefix(word: &str) -> &str {
+    let trimmed = word.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    for prefix in ["waiting on ", "waits on ", "waiting for ", "waits for "] {
+        if lower.starts_with(prefix) {
+            let rest = trimmed[prefix.len()..].trim();
+            if !rest.is_empty() {
+                return rest;
+            }
+        }
+    }
+    trimmed
+}
 
 /// The event a wait word names (`release`, `ota`, `rebuild` and a few spellings), or `None` for
 /// words.
@@ -832,17 +856,18 @@ impl<'a> WorkContext<'a> {
             out["kind"] = json!("item");
             out["label"] = json!(item.title);
             out["open"] = json!(item.finished_at.is_none() && item.dropped_at.is_none());
-        } else if let Some((_, ask)) = question_tag(&wait.on).and_then(|tag| self.ask(&tag)) {
+        } else if is_bare_item_ref(&wait.on) {
+            out["kind"] = json!("item");
+            out["label"] = json!("another item");
+        } else if let Some(tag) = question_tag(&wait.on) {
             out["kind"] = json!("ask");
-            out["label"] = json!(ask.text);
-            out["open"] = json!(ask.is_open());
-        } else if let Some(settled) =
-            question_tag(&wait.on).and_then(|tag| self.chat_tags.get(&tag))
-        {
-            // A question the chat asked (a page, a form): it clears once the user answers it.
-            out["kind"] = json!("ask");
-            out["label"] = json!(format!("{} (asked in the chat)", wait.on));
-            out["open"] = json!(!settled);
+            out["label"] = json!("your answer");
+            if let Some((_, ask)) = self.ask(&tag) {
+                out["open"] = json!(ask.is_open());
+            } else if let Some(settled) = self.chat_tags.get(&tag) {
+                // A question the chat asked (a page, a form): it clears once the user answers it.
+                out["open"] = json!(!settled);
+            }
         } else if let Some(kind) = wait_event(&wait.on) {
             out["kind"] = json!("event");
             out["event"] = json!(kind);
@@ -851,6 +876,11 @@ impl<'a> WorkContext<'a> {
                 out["open"] = json!(false);
                 out["delivered"] = json!(event.name);
                 out["deliveredAt"] = json!(event.at);
+            }
+        } else {
+            let trimmed = strip_wait_prefix(&wait.on);
+            if !trimmed.is_empty() {
+                out["label"] = json!(trimmed);
             }
         }
         if !wait.until.is_empty() {
@@ -2046,29 +2076,29 @@ pub fn handle_work_request(
             if let Some(line) = param_text(params, "text") {
                 item.now = line;
             }
-            // Named as the user reads them: another item by its title, an ask by its words.
+            // Named as the user reads them: another item by its title, an ask as "your answer",
+            // known events in plain words, never a bare W-ID.
             let others = list_work_items(db, key)?;
             let words = item
                 .waits
                 .iter()
                 .map(|wait| {
-                    let named = item_number_of(&wait.on)
-                        .filter(|_| wait.on.starts_with('W'))
-                        .and_then(|number| others.iter().find(|other| other.number == number))
-                        .map(|other| other.title.clone())
-                        .or_else(|| {
-                            others.iter().flat_map(|other| other.asks.iter()).find_map(|ask| {
-                                (!ask.tag.is_empty() && ask.tag == wait.on).then(|| ask.text.clone())
-                            })
-                        })
-                        .or_else(|| {
-                            wait_event(&wait.on).map(|kind| wait_event_words(kind).to_string())
-                        });
-                    named.unwrap_or_else(|| wait.on.clone())
+                    if let Some(kind) = wait_event(&wait.on) {
+                        wait_event_words(kind).to_string()
+                    } else if question_tag(&wait.on).is_some() {
+                        "your answer".to_string()
+                    } else if is_bare_item_ref(&wait.on) {
+                        item_number_of(&wait.on)
+                            .and_then(|number| others.iter().find(|other| other.number == number))
+                            .map(|other| other.title.clone())
+                            .unwrap_or_else(|| "another item".to_string())
+                    } else {
+                        strip_wait_prefix(&wait.on).to_string()
+                    }
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
-            item.record("wait", format!("Waits on {words}"), &now);
+            item.record("wait", format!("Waiting on {words}"), &now);
         }
         "done" => {
             if let Some(line) = param_text(params, "text") {
