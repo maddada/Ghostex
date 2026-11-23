@@ -32,6 +32,10 @@ pub(crate) struct SessionChatOptionCacheEntry {
     /// Whether the screen showed an approval when the marker was last projected
     /// (`session_approval::screen_approval_transition`).
     pub(crate) projected_screen_approval: Option<bool>,
+    /// The marker write the latest verdict still owes the database (`Some(Some(detectedAt))` sets,
+    /// `Some(None)` clears), taken by `session_chat_compacting::publish_screen_approval_marker` and
+    /// owed again when that write fails.
+    pub(crate) unpublished_screen_approval: Option<Option<String>>,
     /// First capture that was settle-eligible except for its missing model —
     /// the anchor `SESSION_CHAT_OPTION_MODEL_SETTLE_GRACE` counts from. Cleared
     /// the moment a model (or a screen-owning notice) shows up.
@@ -264,7 +268,7 @@ impl SessionChatOptionDetector {
         let mut compacting_transition: Option<Option<String>> = None;
         let mut fleet_transition: Option<Option<String>> = None;
         let mut monitor_transition: Option<Option<String>> = None;
-        let mut screen_approval_transition: Option<Option<String>> = None;
+        let mut screen_approval_owed = false;
         if let Ok(mut cache) = self.cache.lock() {
             let previous_compacting = cache.get(&key).and_then(|entry| entry.projected_compacting);
             let previous_fleet = cache.get(&key).and_then(|entry| entry.projected_fleet);
@@ -448,7 +452,14 @@ impl SessionChatOptionDetector {
                     detected.captured,
                     detected.notice.as_ref(),
                 );
-            screen_approval_transition = screen_approval_write;
+            // This capture's write replaces one still owed; without one, a write that failed stays
+            // owed and this capture retries it.
+            let unpublished_screen_approval = screen_approval_write.or_else(|| {
+                cache
+                    .get(&key)
+                    .and_then(|entry| entry.unpublished_screen_approval.clone())
+            });
+            screen_approval_owed = unpublished_screen_approval.is_some();
             cache.insert(
                 key,
                 SessionChatOptionCacheEntry {
@@ -457,6 +468,7 @@ impl SessionChatOptionDetector {
                     projected_fleet: detected_fleet,
                     projected_monitor: detected_monitor,
                     projected_screen_approval: detected_screen_approval,
+                    unpublished_screen_approval,
                     model_grace_started,
                     retired_notice,
                     value: detected.clone(),
@@ -492,12 +504,11 @@ impl SessionChatOptionDetector {
                 detected_at.as_deref(),
             );
         }
-        if let Some(detected_at) = screen_approval_transition {
-            self.compacting_publisher.publish_marker(
+        if screen_approval_owed {
+            crate::session_chat_compacting::publish_screen_approval_marker(
+                &self.app_state,
                 project_id,
                 session_id,
-                crate::session_approval::SESSION_CHAT_SCREEN_APPROVAL_DETECTED_AT_KEY,
-                detected_at.as_deref(),
             );
         }
         if let Some(notice) = detected

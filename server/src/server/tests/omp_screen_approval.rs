@@ -655,3 +655,119 @@ fn a_screen_only_approval_does_not_relabel_a_read_row() {
     let after = crate::notification_feed::read_notification_feed_endpoint(&db).expect("after");
     assert_eq!(after, before, "the bell is as it was");
 }
+
+fn stored_mark(fixture: &Fixture) -> Option<String> {
+    fixture.stored()["runtimeSettings"]
+        .get("sessionChatScreenApprovalDetectedAt")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+/// The detector's latest verdict on whether the screen shows an approval.
+fn latest_verdict(fixture: &Fixture) -> Option<bool> {
+    fixture
+        .state
+        .session_chat_option_cache
+        .lock()
+        .expect("cache")
+        .get(&crate::server::session_observer_key(
+            fixture.project_id(),
+            &fixture.session_id,
+        ))
+        .and_then(|entry| entry.projected_screen_approval)
+}
+
+/// Two readers of one session finish out of order: the one that saw approval A answered decides
+/// first and writes last, after another reader saw the next approval B (same words, its own
+/// `detectedAt`). The mark follows the latest reading, so the session still waits for the user.
+#[test]
+fn a_clear_written_after_a_newer_approval_keeps_the_mark() {
+    let fixture = Fixture::new();
+    let daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    fixture.read_screen();
+    let first = screen_notice(&fixture).expect("approval A");
+    assert!(stored_mark(&fixture).is_some(), "approval A is marked");
+
+    // The clear reader stops between its verdict and its mark write: it first clears a fleet mark,
+    // and that write's presentation delta waits for the event sequence this test holds.
+    fixture
+        .state
+        .session_chat_option_cache
+        .lock()
+        .expect("cache")
+        .get_mut(&crate::server::session_observer_key(
+            fixture.project_id(),
+            &fixture.session_id,
+        ))
+        .expect("the reading of approval A")
+        .projected_fleet = Some(true);
+    open_gxserver_database(&fixture.state.paths)
+        .expect("db")
+        .execute(
+            r#"UPDATE sessions SET runtimeSettingsJson = json_set(runtimeSettingsJson, '$.sessionChatFleetDetectedAt', '2026-11-23T10:00:00.000Z')
+            WHERE projectId = ?1 AND sessionId = ?2"#,
+            rusqlite::params![fixture.project_id(), fixture.session_id],
+        )
+        .expect("a fleet mark");
+    daemon.show(&answered_screen());
+    let held = fixture
+        .state
+        .presentation_event_sequence
+        .lock()
+        .expect("event sequence");
+    let clear_reader =
+        {
+            let state = fixture.state.clone();
+            let (project_id, session_id) =
+                (fixture.project_id().to_string(), fixture.session_id.clone());
+            std::thread::spawn(move || {
+                crate::session_chat_options::SessionChatOptionDetector::new(&state)
+                    .detect_blocking(&project_id, &session_id, Some("omp"), true);
+            })
+        };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while latest_verdict(&fixture) != Some(false) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the clear reader decides"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+
+    // Detection stamps are milliseconds; approval B comes later.
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    daemon.show(APPROVAL_SCREEN);
+    fixture.read_screen();
+    let second = screen_notice(&fixture).expect("approval B");
+    assert_ne!(second.detected_at, first.detected_at);
+    assert_eq!(latest_verdict(&fixture), Some(true));
+
+    // Now the clear reader writes.
+    drop(held);
+    clear_reader.join().expect("the clear reader");
+    assert!(stored_mark(&fixture).is_some(), "approval B is marked");
+    assert_eq!(fixture.awaiting_approval(), Some(json!(true)));
+}
+
+/// A mark write the database refused is made by the next reading, though that reading decides
+/// nothing new.
+#[test]
+fn a_refused_mark_write_is_made_by_the_next_reading() {
+    let fixture = Fixture::new();
+    let _daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    let db = open_gxserver_database(&fixture.state.paths).expect("db");
+    db.execute_batch(
+        r#"CREATE TRIGGER refuse_screen_approval_mark BEFORE UPDATE ON sessions
+        WHEN json_type(NEW.runtimeSettingsJson, '$.sessionChatScreenApprovalDetectedAt') IS NOT NULL
+        BEGIN SELECT RAISE(ABORT, 'the database refused the write'); END;"#,
+    )
+    .expect("a refusing database");
+    fixture.read_screen();
+    assert_eq!(latest_verdict(&fixture), Some(true));
+    assert_eq!(fixture.awaiting_approval(), None, "the write was refused");
+
+    db.execute_batch("DROP TRIGGER refuse_screen_approval_mark;")
+        .expect("the database takes writes again");
+    fixture.read_screen();
+    assert_eq!(fixture.awaiting_approval(), Some(json!(true)));
+}
