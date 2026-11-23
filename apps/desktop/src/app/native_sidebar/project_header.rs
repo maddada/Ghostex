@@ -167,7 +167,7 @@ impl GhostexGpuiApp {
                 )
                 // CDXC:RemoteMachines 2026-11-21 DECISION:
                 // User, of Main Hub's header: "why dont i see the machine icons here so i can click to toggle each machine pls". Main Hub's header draws the same per-computer icons as a project's (the homes are one merged entry since Q1993, so gx-core fills its chips and hides a computer's chats there, its Chief of Staff included), with the same rules: shown while another computer is in the list, clickable only when more than one computer has a Main Hub. Main Hub's title keeps no tooltip of its own; its card opens on hover.
-                .children(group.machine_names.iter().map(|chip| {
+                .children(group.machine_names.iter().filter_map(|chip| {
                     let visible =
                         !super::computer_mark::hide_computer_icon_until_hover(hud) || hovered;
                     self.project_machine_toggle(
@@ -526,7 +526,7 @@ impl GhostexGpuiApp {
         tooltip_span: super::tooltips::SidebarTooltipSpan,
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
-    ) -> AnyElement {
+    ) -> Option<AnyElement> {
         let scale = appearance.scale;
         let asset = self
             .sidebar_machine_icon_asset(&chip.machine_id)
@@ -540,7 +540,12 @@ impl GhostexGpuiApp {
                 "question" => rgb(super::status::QUESTION_COLOR),
                 _ => rgb(0x95d7f6),
             });
-        let shown = visible || dot.is_some();
+        // CDXC:RemoteMachines 2026-11-24: hidden hover-only machine icons are omitted from layout
+        // at rest so they reserve no width beside the project name and diff stats; only a hidden
+        // machine carrying a needs-you dot stays visible at rest.
+        if !visible && dot.is_none() {
+            return None;
+        }
         let tooltip = match (chip.hidden, dot.is_some()) {
             _ if !toggles => format!("On {}", chip.name),
             (true, true) => format!(
@@ -556,78 +561,79 @@ impl GhostexGpuiApp {
             "machineId": chip.machine_id,
         });
         let hover = appearance.session_hover;
-        div()
-            .id(format!(
-                "native-project-machine-{group_id}-{}",
-                chip.machine_id
-            ))
-            .relative()
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .justify_center()
-            .size(px(16.0 * scale))
-            .rounded(px(3.0 * scale))
-            .aria_label(tooltip.clone())
-            .when(!shown, |icon| icon.opacity(0.0))
-            .when(toggles, |icon| {
-                icon.cursor_pointer()
-                    .role(gpui::Role::Button)
-                    .hover(move |chip| chip.bg(hover))
-            })
-            .child(
-                div()
-                    .when(chip.hidden, |icon| icon.opacity(0.35))
-                    // The computer you're on has its dot (computer_mark.rs `with_here_dot`).
-                    .child(super::computer_mark::with_here_dot(
-                        titlebar_svg_icon(asset, 12.0 * scale, appearance.muted),
-                        12.0 * scale,
-                        scale,
-                        chip.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
-                            && crate::app::gx_chat::session_directory::mark_this_computer(),
-                        appearance.muted,
-                    )),
-            )
-            .when_some(dot, |chip, color| {
-                chip.child(
+        Some(
+            div()
+                .id(format!(
+                    "native-project-machine-{group_id}-{}",
+                    chip.machine_id
+                ))
+                .relative()
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .size(px(16.0 * scale))
+                .rounded(px(3.0 * scale))
+                .aria_label(tooltip.clone())
+                .when(toggles, |icon| {
+                    icon.cursor_pointer()
+                        .role(gpui::Role::Button)
+                        .hover(move |chip| chip.bg(hover))
+                })
+                .child(
                     div()
-                        .absolute()
-                        .top(px(0.0))
-                        .right(px(0.0))
-                        .size(px(5.0 * scale))
-                        .rounded_full()
-                        .bg(color),
+                        .when(chip.hidden, |icon| icon.opacity(0.35))
+                        // The computer you're on has its dot (computer_mark.rs `with_here_dot`).
+                        .child(super::computer_mark::with_here_dot(
+                            titlebar_svg_icon(asset, 12.0 * scale, appearance.muted),
+                            12.0 * scale,
+                            scale,
+                            chip.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
+                                && crate::app::gx_chat::session_directory::mark_this_computer(),
+                            appearance.muted,
+                        )),
                 )
-            })
-            // The header's own press starts a drag and its click folds the project; a click on
-            // the icon does neither. A label icon lets both through, like the title.
-            .when(toggles, |icon| {
-                icon.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .on_click(cx.listener(move |app, _, _, cx| {
-                        cx.stop_propagation();
-                        app.dispatch_native_sidebar_ui(command.clone(), cx);
-                    }))
-            })
-            .when(
-                self.native_sidebar.pointer_inside
-                    && self.native_sidebar.menu.is_none()
-                    && !cx.has_active_drag(),
-                |row| {
-                    row.managed_discrete_tooltip_with_placement(
-                        tooltip_span.placement(),
-                        appearance.tooltip_delay,
-                        move |window, cx| {
-                            super::tooltips::sidebar_tooltip(
-                                tooltip.clone(),
-                                tooltip_span,
-                                scale,
-                                window,
-                                cx,
-                            )
-                        },
+                .when_some(dot, |chip, color| {
+                    chip.child(
+                        div()
+                            .absolute()
+                            .top(px(0.0))
+                            .right(px(0.0))
+                            .size(px(5.0 * scale))
+                            .rounded_full()
+                            .bg(color),
                     )
-                },
-            )
-            .into_any_element()
+                })
+                // The header's own press starts a drag and its click folds the project; a click on
+                // the icon does neither. A label icon lets both through, like the title.
+                .when(toggles, |icon| {
+                    icon.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .on_click(cx.listener(move |app, _, _, cx| {
+                            cx.stop_propagation();
+                            app.dispatch_native_sidebar_ui(command.clone(), cx);
+                        }))
+                })
+                .when(
+                    self.native_sidebar.pointer_inside
+                        && self.native_sidebar.menu.is_none()
+                        && !cx.has_active_drag(),
+                    |row| {
+                        row.managed_discrete_tooltip_with_placement(
+                            tooltip_span.placement(),
+                            appearance.tooltip_delay,
+                            move |window, cx| {
+                                super::tooltips::sidebar_tooltip(
+                                    tooltip.clone(),
+                                    tooltip_span,
+                                    scale,
+                                    window,
+                                    cx,
+                                )
+                            },
+                        )
+                    },
+                )
+                .into_any_element(),
+        )
     }
 }
