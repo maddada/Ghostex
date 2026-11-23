@@ -32,11 +32,26 @@ pub(super) async fn route_sessions_http(
             |repository, db, params, _| {
                 // Only gxserver makes a box session (a box create, or reopening one from history).
                 let mut params = crate::agentbox::without_client_agentbox_record(params);
-                // Guard client-supplied `acpApprovalLevel` / `acceptAllMode` / raw launch plans.
-                params = crate::acp::approval::guard_create_session_params(
+                // Guard client-supplied `acpApprovalLevel` / `acceptAllMode` / raw launch plans;
+                // allow `agentCommand` when it matches the owner's configured launcher command.
+                let owner_cmd = (!caller.is_user_device()).then(|| {
+                    let project = repository.resolve_create_session_project(&params).ok();
+                    params
+                        .get("agentId")
+                        .and_then(Value::as_str)
+                        .and_then(|agent_id| {
+                            crate::agents::owner_configured_agent_command(
+                                db,
+                                project.as_ref(),
+                                agent_id,
+                            )
+                        })
+                }).flatten();
+                params = crate::acp::approval::guard_create_session_params_with_owner_command(
                     &params,
                     caller.is_user_device(),
                     true,
+                    owner_cmd.as_deref(),
                 )?;
                 // A session whose folder is missing never starts (the provider refuses it, and it does
                 // not expand `~`), so a new session's own `cwd` is stored as the folder it checked on
@@ -80,11 +95,26 @@ pub(super) async fn route_sessions_http(
             &body_json,
             |repository, db, params, _| {
                 // `--path <folder>` is added as a project first (gbots/project.rs).
-                let mut placed = crate::acp::approval::guard_create_session_params(
-                    params,
-                    caller.is_user_device(),
-                    false,
-                )?;
+                let owner_cmd = (!caller.is_user_device()).then(|| {
+                    let project = repository.resolve_create_session_project(params).ok();
+                    params
+                        .get("agentId")
+                        .and_then(Value::as_str)
+                        .and_then(|agent_id| {
+                            crate::agents::owner_configured_agent_command(
+                                db,
+                                project.as_ref(),
+                                agent_id,
+                            )
+                        })
+                }).flatten();
+                let mut placed =
+                    crate::acp::approval::guard_create_session_params_with_owner_command(
+                        params,
+                        caller.is_user_device(),
+                        false,
+                        owner_cmd.as_deref(),
+                    )?;
                 crate::gbots::add_create_project_path(&state, db, repository, &mut placed)?;
                 // Who the first request is from: the user's message `agents send --as-user`
                 // starts it with, labelled, or an agent's, signed (session_chat_send/sender_mark.rs).

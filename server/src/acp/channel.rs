@@ -552,7 +552,13 @@ async fn set_approval_level_locked(
                 });
             }
             Err(error) => {
-                let _ = persist_approval_level(state, project_id, session_id, previous_level).await;
+                // Only roll SQLite back on an upgrade failure. Never roll a failed downgrade back
+                // up to a stronger previous level, so a subsequent wake/restart cannot resurrect
+                // the stronger approval policy.
+                if !super::AcpApprovalLevel::may_transition_without_owner(previous_level, level) {
+                    let _ =
+                        persist_approval_level(state, project_id, session_id, previous_level).await;
+                }
                 return Err(DomainStateError {
                     code: crate::session_chat_codex_picker::UNSUPPORTED_SELECTION_CODE,
                     message: format!("ACP approval level change failed: {error}"),

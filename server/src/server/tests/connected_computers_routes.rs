@@ -1034,6 +1034,7 @@ fn a_peers_user_send_needs_the_relays_header() {
     let peer = crate::security::Principal::Peer {
         server_id: "S2b".into(),
         name: "Laptop".into(),
+        relayed_non_user_device: false,
     };
     let body = || json!({ "params": { "text": "see #M1", "userSend": true } });
     let mut headers = axum::http::HeaderMap::new();

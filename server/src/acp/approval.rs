@@ -450,7 +450,27 @@ pub fn guard_create_session_params(
     is_user_device: bool,
     strip_raw_launch_plan: bool,
 ) -> Result<Map<String, Value>, DomainStateError> {
+    guard_create_session_params_with_owner_command(
+        params,
+        is_user_device,
+        strip_raw_launch_plan,
+        None,
+    )
+}
+
+pub fn guard_create_session_params_with_owner_command(
+    params: &Map<String, Value>,
+    is_user_device: bool,
+    strip_raw_launch_plan: bool,
+    allowed_owner_command: Option<&str>,
+) -> Result<Map<String, Value>, DomainStateError> {
     let mut cleaned = params.clone();
+    let matches_owner_command = |cmd: &str| -> bool {
+        allowed_owner_command
+            .map(str::trim)
+            .filter(|owner| !owner.is_empty())
+            .is_some_and(|owner| owner == cmd.trim())
+    };
     if !is_user_device {
         if let Some(raw_level) = cleaned
             .get("runtimeSettings")
@@ -469,7 +489,7 @@ pub fn guard_create_session_params(
             }
         }
         if let Some(cmd) = cleaned.get("agentCommand").and_then(Value::as_str) {
-            if command_has_accept_all_flag(cmd) {
+            if !matches_owner_command(cmd) && command_has_accept_all_flag(cmd) {
                 return Err(DomainStateError {
                     code: "forbidden",
                     message: "Only your own devices can pass accept-all flags in an agent command."
@@ -487,7 +507,7 @@ pub fn guard_create_session_params(
                 });
             }
             if let Some(cmd) = launch.get("agentCommand").and_then(Value::as_str) {
-                if command_has_accept_all_flag(cmd) {
+                if !matches_owner_command(cmd) && command_has_accept_all_flag(cmd) {
                     return Err(DomainStateError {
                         code: "forbidden",
                         message:
@@ -534,6 +554,10 @@ pub fn guard_create_session_params(
         }
     }
     if !is_user_device {
+        // Non-user-device callers may never pass raw `accountId` (which bypasses manual-only
+        // account checks on `/api/createWorktreeSession`) or `teleportCloudSession`.
+        cleaned.remove("accountId");
+        cleaned.remove("teleportCloudSession");
         if let Some(launch) = cleaned
             .get_mut("launchSettings")
             .and_then(Value::as_object_mut)
