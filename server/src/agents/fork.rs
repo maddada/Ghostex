@@ -762,15 +762,31 @@ pub(crate) fn create_agent_fork_session_params(
         }),
     );
     // CDXC:AgentProviders 2026-11-05 WHY: a fork runs its source's account command (`cswap run 2 … -- <args>`), so switching its account starts from the agent's own command the source kept, not from that wrapper (#415). Absent rather than null, since account assignment falls back to `agentCommand` only when the key is missing.
-    if let (Some(base), Some(runtime)) = (
+    // Carry over the source session's account, CLIProxyAPI hub, and marked-handovers runtime
+    // settings so both CLI and Non-CLI forks/side chats keep the source's account across sleep/wake.
+    if let (Some(source_runtime), Some(runtime)) = (
         source_session
-            .pointer("/runtimeSettings/accountBaseCommand")
-            .and_then(Value::as_str),
+            .get("runtimeSettings")
+            .and_then(Value::as_object),
         params
             .get_mut("runtimeSettings")
             .and_then(Value::as_object_mut),
     ) {
-        runtime.insert("accountBaseCommand".to_string(), json!(base));
+        for key in [
+            "accountBaseCommand",
+            "accountId",
+            "accountSlot",
+            "accountCommand",
+            "accountProvider",
+            "accountName",
+            "accountColor",
+            crate::accounts::hub::launch::RUNTIME_KEY,
+            "markedHandovers",
+        ] {
+            if let Some(value) = source_runtime.get(key).filter(|v| !v.is_null()) {
+                runtime.insert(key.to_string(), value.clone());
+            }
+        }
     }
     if plan.get("acpFork").and_then(Value::as_bool) == Some(true) {
         if let Some(runtime) = params

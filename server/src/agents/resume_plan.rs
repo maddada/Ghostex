@@ -148,23 +148,59 @@ pub(crate) fn account_switch_resume_command(
     let command = input.agent_command.as_deref()?;
     let resume = match input.agent_id.as_deref()? {
         "claude" => {
-            let reference = get_claude_session_reference(&input)?;
-            let id = get_claude_session_id(Some(&reference))?;
-            if claude_transcript_written(&input, &id) {
-                build_claude_resume_invocation(command, &quote_shell_arg(&id))
+            if input.acp_mode {
+                let resume_ref = get_claude_session_reference(&input).filter(|exact| {
+                    get_claude_session_id(Some(exact))
+                        .is_none_or(|id| claude_transcript_written(&input, &id))
+                });
+                crate::acp::spec::build_acp_host_launch_command_with_profile(
+                    "claude",
+                    Some(command),
+                    resume_ref.as_deref(),
+                    input.acp_approval_level,
+                    &[],
+                    input.acp_model.as_deref(),
+                    input.acp_effort.as_deref(),
+                    false,
+                    input.acp_read_only,
+                    &input.acp_profile,
+                )
             } else {
-                build_claude_fresh_invocation(command, &quote_shell_arg(&id))
+                let reference = get_claude_session_reference(&input)?;
+                let id = get_claude_session_id(Some(&reference))?;
+                if claude_transcript_written(&input, &id) {
+                    build_claude_resume_invocation(command, &quote_shell_arg(&id))
+                } else {
+                    build_claude_fresh_invocation(command, &quote_shell_arg(&id))
+                }
             }
         }
         "codex" => {
-            let id = get_codex_session_reference(&input)?;
-            if !is_uuid(&id) {
-                return None;
-            }
-            if codex_rollout_written(&input, &id) {
-                build_codex_resume_invocation(command, &quote_shell_arg(&id))
+            if input.acp_mode {
+                let resume_ref = get_codex_session_reference(&input)
+                    .filter(|exact| !is_uuid(exact) || codex_rollout_written(&input, exact));
+                crate::acp::spec::build_acp_host_launch_command_with_profile(
+                    "codex",
+                    Some(command),
+                    resume_ref.as_deref(),
+                    input.acp_approval_level,
+                    &[],
+                    input.acp_model.as_deref(),
+                    input.acp_effort.as_deref(),
+                    false,
+                    input.acp_read_only,
+                    &input.acp_profile,
+                )
             } else {
-                command.to_string()
+                let id = get_codex_session_reference(&input)?;
+                if !is_uuid(&id) {
+                    return None;
+                }
+                if codex_rollout_written(&input, &id) {
+                    build_codex_resume_invocation(command, &quote_shell_arg(&id))
+                } else {
+                    command.to_string()
+                }
             }
         }
         _ => return None,

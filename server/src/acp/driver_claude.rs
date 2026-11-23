@@ -301,6 +301,7 @@ struct ClaudeState {
     usage_used_tokens: Option<u64>,
     usage_window_size: Option<u64>,
     last_event_at_ms: i64,
+    child_pid: u32,
     child_exited: bool,
 }
 
@@ -335,6 +336,7 @@ impl ClaudeState {
             usage_used_tokens: None,
             usage_window_size: Some(200_000),
             last_event_at_ms: now_ms(),
+            child_pid: 0,
             child_exited: false,
         }
     }
@@ -428,6 +430,7 @@ impl ClaudeState {
             "contextUsage": self.context_usage_json(),
             "lastEventAtMs": self.last_event_at_ms,
             "transcriptPath": transcript_path,
+            "childPid": self.child_pid,
             "childExited": self.child_exited,
         })
     }
@@ -745,6 +748,7 @@ fn spawn_and_init_claude(
     activity: &ClaudeActivityReporter,
     mode_sync_lock: &Arc<Mutex<()>>,
     child_pid: &Arc<AtomicU32>,
+    active_transport: &Arc<Mutex<Option<Arc<ClaudeTransport>>>>,
     process_gen: &Arc<AtomicU64>,
     my_gen: u64,
 ) -> Result<ClaudeProcess, String> {
@@ -803,18 +807,22 @@ fn spawn_and_init_claude(
         .spawn()
         .map_err(|err| format!("Failed to start `{prog} {}`: {err}", argv.join(" ")))?;
     child_pid.store(child.id(), Ordering::Release);
+    state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = child.id();
     let Some(stdin) = child.stdin.take() else {
         let _ = child.kill();
         child_pid.store(0, Ordering::Release);
+        state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         return Err("Claude child stdin unavailable.".to_string());
     };
     let Some(stdout) = child.stdout.take() else {
         let _ = child.kill();
         child_pid.store(0, Ordering::Release);
+        state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         return Err("Claude child stdout unavailable.".to_string());
     };
     let stderr = child.stderr.take();
     let transport = Arc::new(ClaudeTransport::new(stdin, spool_session_id));
+    *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = Some(transport.clone());
 
     if let Some(stderr) = stderr {
         let t_err = transport.clone();
@@ -1209,12 +1217,24 @@ fn spawn_and_init_claude(
             }
         }
         Err(err) => {
+            // Bump generation before stopping so the reader's `ClaudeExitGuard` does not mark
+            // `child_exited = true` and tear down `acp-host` when a retry (e.g. turn-1 fresh
+            // restart) can still recover.
+            process_gen.fetch_add(1, Ordering::AcqRel);
+            *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
             stop_claude_gracefully(&transport, &mut child, child_pid);
             return Err(format!("Claude Non-CLI initialize failed: {err}"));
         }
     }
 
-    // 2. Apply approval level cleanly (preserving `plan` mode on `--read-only`).
+    // 2. The freshly spawned Claude process always starts in `"plan"` (for `--read-only`) or
+    // `"default"`. Reset `native_mode` before syncing so a restart at `Auto` always sends
+    // `set_permission_mode: "auto"` to the new child process.
+    {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        s.native_mode = if read_only { "plan" } else { "default" }.to_string();
+    }
     if let Err(err) = apply_claude_approval_level(
         &transport,
         state,
@@ -1245,6 +1265,7 @@ fn drain_or_restart_claude_turn(
     activity: &ClaudeActivityReporter,
     mode_sync_lock: &Arc<Mutex<()>>,
     child_pid: &Arc<AtomicU32>,
+    active_transport: &Arc<Mutex<Option<Arc<ClaudeTransport>>>>,
     process_gen: &Arc<AtomicU64>,
     wait_timeout: Duration,
 ) -> Result<(), String> {
@@ -1270,10 +1291,12 @@ fn drain_or_restart_claude_turn(
     // The aborted turn's `result` did not arrive in time: deterministically restart and resume
     // Claude under a fresh generation so every future `result` maps 1:1 to a new turn.
     let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
+    *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
     stop_claude_gracefully(&proc.transport, &mut proc.child, child_pid);
     let (resume_id, model, effort, read_only, level) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.working = false;
+        s.child_pid = 0;
         s.pending_requests.clear();
         s.clear_live_turn_output();
         (
@@ -1284,7 +1307,7 @@ fn drain_or_restart_claude_turn(
             s.approval_level,
         )
     };
-    let next_proc = spawn_and_init_claude(
+    let next_proc = match spawn_and_init_claude(
         spec,
         parsed,
         cwd,
@@ -1299,9 +1322,42 @@ fn drain_or_restart_claude_turn(
         activity,
         mode_sync_lock,
         child_pid,
+        active_transport,
         process_gen,
         new_gen,
-    )?;
+    ) {
+        Ok(p) => p,
+        Err(_err) if resume_id.is_some() => {
+            // Turn 1 may have been aborted before Claude wrote a transcript to disk, causing
+            // `--resume <id>` to fail. Retry once with a fresh session.
+            let retry_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
+            {
+                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                s.native_session_id = None;
+                s.child_exited = false;
+            }
+            spawn_and_init_claude(
+                spec,
+                parsed,
+                cwd,
+                spool_session_id,
+                None,
+                false,
+                model.as_deref(),
+                effort.as_deref(),
+                read_only,
+                level,
+                state,
+                activity,
+                mode_sync_lock,
+                child_pid,
+                active_transport,
+                process_gen,
+                retry_gen,
+            )?
+        }
+        Err(err) => return Err(err),
+    };
     *proc = next_proc;
     Ok(())
 }
@@ -1342,6 +1398,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let activity = ClaudeActivityReporter::start(endpoint.clone(), state.clone());
     let shutting_down = Arc::new(AtomicBool::new(false));
     let child_pid = Arc::new(AtomicU32::new(0));
+    let active_transport: Arc<Mutex<Option<Arc<ClaudeTransport>>>> = Arc::new(Mutex::new(None));
     let process_gen = Arc::new(AtomicU64::new(1));
 
     let mut proc = match spawn_and_init_claude(
@@ -1359,6 +1416,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         &activity,
         &mode_sync_lock,
         &child_pid,
+        &active_transport,
         &process_gen,
         1,
     ) {
@@ -1372,12 +1430,17 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     #[cfg(unix)]
     {
         let pid_sig = child_pid.clone();
+        let transport_sig = active_transport.clone();
         let down_sig = shutting_down.clone();
         let ep_sig = endpoint.clone();
         thread::spawn(move || {
             while !down_sig.load(Ordering::Acquire) {
                 if super::host::termination_requested() {
                     down_sig.store(true, Ordering::Release);
+                    if let Some(t) = transport_sig.lock().unwrap_or_else(|p| p.into_inner()).take()
+                    {
+                        t.close_stdin();
+                    }
                     let pid = pid_sig.swap(0, Ordering::AcqRel);
                     if pid != 0 {
                         let cpid = pid as libc::pid_t;
@@ -1537,6 +1600,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         &activity,
                         &mode_sync_lock,
                         &child_pid,
+                        &active_transport,
                         &process_gen,
                         Duration::from_secs(5),
                     ) {
@@ -1807,6 +1871,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             &activity,
                             &mode_sync_lock,
                             &child_pid,
+                            &active_transport,
                             &process_gen,
                             Duration::from_secs(5),
                         ) {

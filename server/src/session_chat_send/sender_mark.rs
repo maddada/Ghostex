@@ -714,6 +714,7 @@ mod tests {
         let peer = Principal::Peer {
             server_id: "S2".into(),
             name: "Laptop".into(),
+            relayed_non_user_device: false,
         };
         // What the route does: `prepare`, then the handler records the send it accepts.
         let accept = |caller: &Principal, body: &mut Value| {

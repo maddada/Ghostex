@@ -792,9 +792,16 @@ pub(crate) fn create_agent_session_params_for_project(
                             .or(cmd_effort);
                         // Record any owner-configured flags/env/custom binary skipped by Non-CLI
                         // mode so logs and Chat View both surface a visible one-line notice.
+                        // For GBot chats, only inspect the owner's agent config command (never
+                        // GBot's own synthesized `launchSettings.agentCommand` approval flags).
+                        let owner_notice_command = if is_gbot_chat(Some(&runtime_settings)) {
+                            read_text_from_map(&agent_config, "command")
+                        } else {
+                            raw_owner_configured_command.clone()
+                        };
                         let ignored_owner_tokens = crate::acp::spec::ignored_owner_command_tokens(
                             fam,
-                            raw_owner_configured_command.as_deref(),
+                            owner_notice_command.as_deref(),
                         );
                         if !ignored_owner_tokens.is_empty() {
                             let joined = ignored_owner_tokens.join(" ");
@@ -1588,6 +1595,38 @@ pub(crate) fn build_session_launch_plan_for_workspace(
         }),
     );
     Value::Object(plan)
+}
+
+pub(crate) fn owner_configured_agent_command(
+    db: &Connection,
+    project: Option<&Value>,
+    agent_id: &str,
+) -> Option<String> {
+    let trimmed_id = agent_id.trim();
+    if trimmed_id.is_empty() {
+        return None;
+    }
+    if let Some(project) = project {
+        let cfg = resolve_project_agent_config(project, trimmed_id, None);
+        if let Some(cmd) = read_text_from_map(&cfg, "command") {
+            return Some(cmd);
+        }
+        if let Some(global_project) = project_with_global_agent_list(db, project) {
+            let cfg = resolve_project_agent_config(&global_project, trimmed_id, None);
+            if let Some(cmd) = read_text_from_map(&cfg, "command") {
+                return Some(cmd);
+            }
+        }
+    } else {
+        let empty = json!({});
+        if let Some(global_project) = project_with_global_agent_list(db, &empty) {
+            let cfg = resolve_project_agent_config(&global_project, trimmed_id, None);
+            if let Some(cmd) = read_text_from_map(&cfg, "command") {
+                return Some(cmd);
+            }
+        }
+    }
+    None
 }
 
 pub(crate) fn resolve_project_agent_config(

@@ -156,9 +156,29 @@ pub(crate) fn terminal_owner(zmx_name: &str) -> Result<TerminalOwner, ()> {
 ///
 /// CDXC:AgentProviders 2026-10-24 WHY:
 /// A shell holding its terminal is not yet a shell at its prompt. Until its startup files finish, zsh holds the terminal in line mode and an agent session's start command is still to run from the first prompt (zmx/zsh_startup.rs), so a resume or switch command typed then sits in the terminal's input until that start command reads it. A draft switched from Claude to Codex in its first seconds could do that, or its command could be left unrun at the prompt (GitHub #290). The shell counts as at its prompt only once its line editor has taken the terminal out of line mode (zsh, bash and fish all do); the mode is read from the terminal itself.
+fn is_acp_host_process(pid: i64, command: &str, root_pid: i64) -> bool {
+    if pid == root_pid {
+        return false;
+    }
+    let mut parts = command.split_whitespace();
+    let Some(exe) = parts.next() else {
+        return false;
+    };
+    let stem = exe.rsplit(['/', '\\']).next().unwrap_or(exe);
+    matches!(
+        stem,
+        "ghostex" | "ghostex.exe" | "gxserver" | "gxserver.exe"
+    ) && parts.next() == Some("acp-host")
+}
+
 fn observe(zmx_name: &str) -> Result<(bool, TerminalOwner), ()> {
     let tree = crate::zmx::read_zmx_session_tree(zmx_name)?.ok_or(())?;
-    if tree.agent_identity().is_some() {
+    if tree.agent_identity().is_some()
+        || tree
+            .processes
+            .iter()
+            .any(|process| is_acp_host_process(process.pid, &process.command, tree.root))
+    {
         return Ok((true, TerminalOwner::Command));
     }
     let Some(tty) = shell_owning_terminal(&tree) else {
