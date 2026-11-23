@@ -1182,36 +1182,10 @@ impl NativeChatView {
         out
     }
 
-    /// Subtle dotted underline for an Inbox header ghost chip at rest (Q4680 B): hidden while the
-    /// chip is hovered or pressed so the pill fill cleanly replaces the underline.
-    fn ghost_chip_underline(color: gpui::Hsla, scale: f32) -> AnyElement {
-        gpui::canvas(
-            |_, _, _| {},
-            move |bounds, _, window, _| {
-                let device = window.scale_factor();
-                let snap = |v: f32| (v * device).round() / device;
-                let dot = snap(1.0 * scale).max(1.0 / device);
-                let period = snap(3.0 * scale).max(2.0 / device);
-                let y = snap(f32::from(bounds.origin.y + bounds.size.height) - 1.0 * scale);
-                let end = f32::from(bounds.origin.x + bounds.size.width);
-                let mut x = snap(f32::from(bounds.origin.x));
-                while x + dot <= end {
-                    window.paint_quad(gpui::fill(
-                        gpui::Bounds::new(gpui::point(px(x), px(y)), gpui::size(px(dot), px(dot))),
-                        color,
-                    ));
-                    x += period;
-                }
-            },
-        )
-        .absolute()
-        .inset_0()
-        .into_any_element()
-    }
-
     /// The Inbox header (Q4680 B + E): `[inbox icon] Inbox · [ghost count chips]` and chevron.
-    /// Hovering a count ghost chip lights up only that chip (hiding its dotted underline) and
-    /// never lights up the collapse bar behind it.
+    /// Count chips sit clean at rest (no dotted underline); hovering a count chip lights up only
+    /// that chip (pill background, subtle border, brighter label) and never lights up the collapse
+    /// bar behind it.
     fn work_dock_header(
         &self,
         rows: &[Value],
@@ -1293,7 +1267,6 @@ impl NativeChatView {
         let chip_hover_bg = p.foreground.opacity(if p.light { 0.075 } else { 0.105 });
         let chip_active_bg = p.foreground.opacity(if p.light { 0.13 } else { 0.16 });
         let chip_hover_border = p.foreground.opacity(0.10);
-        let underline_color = p.foreground.opacity(if p.light { 0.28 } else { 0.26 });
         let marks: Vec<AnyElement> = counts
             .into_iter()
             .map(|(group, count)| {
@@ -1363,7 +1336,6 @@ impl NativeChatView {
                     )
                     .child(
                         div()
-                            .relative()
                             .flex()
                             .items_center()
                             .gap(px(4.0 * s))
@@ -1385,9 +1357,6 @@ impl NativeChatView {
                                         })
                                         .child(name_of(group, count)),
                                 )
-                            })
-                            .when(opens && !is_hovered, |wrap| {
-                                wrap.child(Self::ghost_chip_underline(underline_color, s))
                             }),
                     )
                     .when(false, |mark| mark.child(count_label))
