@@ -227,6 +227,7 @@ pub(super) struct GxserverEndpoint {
     pub(super) project_id: String,
     pub(super) session_id: String,
     pub(super) instance: String,
+    saw_working: Arc<AtomicBool>,
 }
 
 impl GxserverEndpoint {
@@ -283,6 +284,7 @@ impl GxserverEndpoint {
             project_id,
             session_id,
             instance,
+            saw_working: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -332,9 +334,18 @@ impl GxserverEndpoint {
         pending_permission: Option<&PendingPermission>,
     ) {
         let event_name = match activity {
-            "working" => "UserPromptSubmit",
-            "attention" => "PermissionRequest",
-            _ => "Stop",
+            "working" => {
+                self.saw_working.store(true, Ordering::Relaxed);
+                "UserPromptSubmit"
+            }
+            "attention" => {
+                self.saw_working.store(true, Ordering::Relaxed);
+                "PermissionRequest"
+            }
+            // Initial startup idle before any turn has run must report `SessionStart` (not `Stop`),
+            // so brand-new Non-CLI drafts are not promoted out of draft status on boot.
+            _ if self.saw_working.load(Ordering::Relaxed) => "Stop",
+            _ => "SessionStart",
         };
         let mut params = json!({
             "projectId": self.project_id,

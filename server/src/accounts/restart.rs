@@ -59,9 +59,18 @@ pub(crate) struct RestartPlan {
     background: Option<super::claude_background::BackgroundSession>,
 }
 
-/// Removes any temporary one-shot channel secret files and account-switch scripts on drop, so
-/// crashes, cancellations, early errors, and normal completions never leave stale files on disk.
+/// Removes any temporary one-shot channel secret files and account-switch scripts if a switch
+/// fails before being handed off to the shell. Once the shell command is enqueued, callers
+/// [`disarm`](Self::disarm) the guard so the script (`rm -f`) and `acp-host`
+/// (`read_and_remove_channel_secret_file`) self-unlink without racing startup; daemon startup
+/// sweep cleans up any crash leftovers.
 pub(crate) struct TempFilesGuard(pub(crate) Vec<std::path::PathBuf>);
+
+impl TempFilesGuard {
+    pub(crate) fn disarm(&mut self) {
+        self.0.clear();
+    }
+}
 
 impl Drop for TempFilesGuard {
     fn drop(&mut self) {
@@ -111,7 +120,7 @@ pub(crate) fn plan(
                     "This account switch needs an exact saved conversation and a single-line agent command.",
                 )
             })?;
-    let (resume_command, cleanup_paths) = prepare_in_place_launch_command(
+    let (resume_command, cleanup_paths) = typed_resume_command(
         state,
         session,
         super::default_login::route_around_signed_out_default(&resume_command),
@@ -171,52 +180,43 @@ pub(crate) fn plan(
 /// The longest resume command typed into the shell as it is.
 const TYPED_COMMAND_LIMIT: usize = 768;
 
-/// Prepare an in-place shell launch command for `accounts::restart` and `accounts::drafts`:
-/// - For Non-CLI (`acp-host`) sessions, writes the session's host channel secret atomically to a
-///   private (`0600` under `0700` dir) random-UUID one-shot file (`acp-secrets/`) and passes
-///   `--channel-secret-file <path>` to `ghostex acp-host` (which reads and unlinks it immediately
-///   before spawning the agent). The secret is never written into a shell script, PTY, or env.
-/// - For Non-CLI commands or commands longer than `TYPED_COMMAND_LIMIT`, writes a random-UUID
-///   wrapper script atomically (`0600` under `0700` dir) and invokes it on Unix via `/bin/sh`
-///   (not `source`) so POSIX syntax (`${GHOSTEX_CLI_EXECUTABLE:-ghostex}`) works in `zsh`, `bash`,
-///   and `fish`.
-/// - Returns `(command_to_type, TempFilesGuard)` so every temporary file is cleaned up on error,
-///   cancel, or completion.
-pub(crate) fn prepare_in_place_launch_command(
-    state: &AppState,
-    session: &Value,
+/// Prepare an in-place shell launch command for a Non-CLI (`acp-host`) session:
+/// - Writes the session's host channel secret atomically to a private (`0600` under `0700` dir
+///   inside `paths.auth_dir`, which is in `gxserver_private_paths()`) random-UUID one-shot file
+///   and appends `--channel-secret-file <path>` to `ghostex acp-host` (which reads and unlinks it
+///   immediately before spawning the agent). The secret is never written into a script, PTY, or env.
+/// - Writes a random-UUID wrapper script atomically (`0600` under `0700` `account-switch/`) that
+///   self-unlinks and invokes `exec <command>` via `/bin/sh` on Unix so POSIX syntax works in
+///   `zsh`, `bash`, and `fish`.
+/// - Returns `(command_to_type, TempFilesGuard)`. Callers must call `guard.disarm()` once the
+///   shell write sequence is enqueued so files are never deleted before `acp-host` reads them.
+pub(crate) fn prepare_non_cli_in_place_launch_command(
+    paths: &crate::paths::GxserverPaths,
+    auth_token: &str,
+    project_id: &str,
+    session_id: &str,
     command: String,
 ) -> Result<(String, TempFilesGuard), DomainStateError> {
     let trimmed = command.trim().to_string();
-    let is_acp = crate::acp::session_is_acp(session) || trimmed.contains(" acp-host ");
-    let project_id = session["projectId"].as_str().unwrap_or_default();
-    let session_id = session["sessionId"].as_str().unwrap_or_default();
     let mut guard = TempFilesGuard(Vec::new());
 
-    let effective_command = if is_acp {
-        if let Some(secret_path) = crate::acp::channel::write_one_shot_channel_secret_file(
-            &state.paths.root_dir,
-            &state.auth_token,
+    let effective_command = if let Some(secret_path) =
+        crate::acp::channel::write_one_shot_channel_secret_file(
+            &paths.auth_dir,
+            auth_token,
             project_id,
             session_id,
         )
         .map_err(super::store::error)?
-        {
-            let quoted_secret = crate::agents::quote_shell_arg(&secret_path.to_string_lossy());
-            guard.0.push(secret_path);
-            format!("{trimmed} --channel-secret-file {quoted_secret}")
-        } else {
-            trimmed
-        }
+    {
+        let quoted_secret = crate::agents::quote_shell_arg(&secret_path.to_string_lossy());
+        guard.0.push(secret_path);
+        format!("{trimmed} --channel-secret-file {quoted_secret}")
     } else {
         trimmed
     };
 
-    if !is_acp && effective_command.len() <= TYPED_COMMAND_LIMIT {
-        return Ok((effective_command, guard));
-    }
-
-    let dir = state.paths.root_dir.join("account-switch");
+    let dir = paths.root_dir.join("account-switch");
     std::fs::create_dir_all(&dir).map_err(super::store::error)?;
     #[cfg(unix)]
     {
@@ -256,6 +256,47 @@ pub(crate) fn prepare_in_place_launch_command(
         format!("/bin/sh {quoted_file}")
     };
     Ok((typed, guard))
+}
+
+/// CDXC:AgentProviders 2026-10-14 WHY:
+/// A Codex resume command carries Marked handovers inline (`-c developer_instructions=…`, Codex has no file form for it) and ran past 1 KB. Typed into the shell right after Codex exited, it arrived while the terminal was still in line mode, which keeps at most 1,024 bytes of a line on macOS: the shell got the command cut inside its quote, the agent never started and the switch failed. A command longer than `TYPED_COMMAND_LIMIT` is written to a script file in gxserver's state and the shell is given only `source '<file>'` (`. '<file>'` in PowerShell), which every shell Ghostex runs reads in full.
+fn typed_resume_command(
+    state: &AppState,
+    session: &Value,
+    command: String,
+) -> Result<(String, TempFilesGuard), DomainStateError> {
+    let is_acp = crate::acp::session_is_acp(session) || command.trim().contains(" acp-host ");
+    if is_acp {
+        let project_id = session["projectId"].as_str().unwrap_or_default();
+        let session_id = session["sessionId"].as_str().unwrap_or_default();
+        return prepare_non_cli_in_place_launch_command(
+            &state.paths,
+            &state.auth_token,
+            project_id,
+            session_id,
+            command,
+        );
+    }
+    if command.len() <= TYPED_COMMAND_LIMIT {
+        return Ok((command, TempFilesGuard(Vec::new())));
+    }
+    let dir = state.paths.root_dir.join("account-switch");
+    std::fs::create_dir_all(&dir).map_err(super::store::error)?;
+    let file = dir.join(format!(
+        "{}-{}.{}",
+        session["projectId"].as_str().unwrap_or_default(),
+        session["sessionId"].as_str().unwrap_or_default(),
+        if cfg!(windows) { "ps1" } else { "sh" }
+    ));
+    std::fs::write(&file, format!("{command}\n")).map_err(super::store::error)?;
+    Ok((
+        format!(
+            "{} {}",
+            if cfg!(windows) { "." } else { "source" },
+            crate::agents::quote_shell_arg(&file.to_string_lossy())
+        ),
+        TempFilesGuard(Vec::new()),
+    ))
 }
 
 /// Exits the CLI and resumes it on the saved account. Automatic switches continue only after the new login and its ready composer have been verified.
@@ -378,11 +419,14 @@ pub(crate) fn start(
             return Err(error);
         }
     };
-    let cleanup_paths = plan.cleanup_paths;
+    let mut cleanup_paths = plan.cleanup_paths;
+    // The shell write sequence is now running; disarm the early-error guard so the wrapper script
+    // (`rm -f`) and `acp-host` (`read_and_remove_channel_secret_file`) self-unlink without racing
+    // startup. Any leftover on failure or crash is swept on daemon startup.
+    cleanup_paths.disarm();
     let state = Arc::new(state.clone());
     let started = Instant::now();
     tokio::spawn(async move {
-        let _cleanup_guard = cleanup_paths;
         let result = completion.await.unwrap_or_else(|_| {
             Err(SessionChatSendError {
                 failure: crate::session_chat_send::SessionChatSendFailure::NotAttempted,

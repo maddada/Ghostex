@@ -111,9 +111,19 @@ pub(crate) fn switch_in_live_provider(
 ) -> Result<(), DomainStateError> {
     let project_id = session["projectId"].as_str().unwrap_or_default();
     let session_id = session["sessionId"].as_str().unwrap_or_default();
-    let (prepared_command, cleanup_paths) =
-        super::restart::prepare_in_place_launch_command(state, session, command.to_string())?;
-    let typed_command = format!(" {prepared_command}");
+    let is_acp = crate::acp::session_is_acp(session) || command.trim().contains(" acp-host ");
+    let (typed_command, mut cleanup_paths) = if is_acp {
+        let (prepared, guard_files) = super::restart::prepare_non_cli_in_place_launch_command(
+            &state.paths,
+            &state.auth_token,
+            project_id,
+            session_id,
+            command.to_string(),
+        )?;
+        (format!(" {prepared}"), guard_files)
+    } else {
+        (command.to_string(), super::restart::TempFilesGuard(Vec::new()))
+    };
     let guard = agents::DraftAgentSwitch::begin(project_id, session_id)?;
     crate::session_chat_first_message::retype_after_agent_switch(
         repository.db,
@@ -130,10 +140,9 @@ pub(crate) fn switch_in_live_provider(
         agents::build_draft_agent_switch_steps(&typed_command),
         None,
     )?;
-    tokio::spawn(async move {
-        let _guard = guard;
-        let _cleanup = cleanup_paths;
-        let _ = completion.await;
-    });
+    // Disarm the early-error guard so the script and one-shot secret file self-unlink without
+    // racing `acp-host` startup; daemon startup sweep cleans up any crash leftovers.
+    cleanup_paths.disarm();
+    guard.finish_after(completion);
     Ok(())
 }

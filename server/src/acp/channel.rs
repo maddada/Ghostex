@@ -92,13 +92,14 @@ pub(crate) fn verify_channel_secret(
 const ACP_SECRETS_DIR_NAME: &str = "acp-secrets";
 const ACCOUNT_SWITCH_DIR_NAME: &str = "account-switch";
 
-/// Atomically create a private (`0600` on Unix, under a `0700` directory) one-shot file holding
-/// the session's ACP host channel secret, with a random UUID filename so concurrent switches never
-/// collide and no TOCTOU world-readable window ever exists. `ghostex acp-host --channel-secret-file`
-/// reads and unlinks it immediately on startup; callers also remove it on error/cancel/finish, and
-/// `sweep_stale_channel_secret_files` clears any crash leftovers at daemon startup.
+/// Atomically create a private (`0600` on Unix, under a `0700` directory inside `paths.auth_dir`,
+/// which is already in `gxserver_private_paths()`) one-shot file holding the session's ACP host
+/// channel secret, with a random UUID filename so concurrent switches never collide and no TOCTOU
+/// world-readable window ever exists. `ghostex acp-host --channel-secret-file` reads and unlinks
+/// it immediately on startup, and `sweep_stale_channel_secret_files` clears any crash leftovers at
+/// daemon startup.
 pub(crate) fn write_one_shot_channel_secret_file(
-    root_dir: &std::path::Path,
+    auth_dir: &std::path::Path,
     auth_token: &str,
     project_id: &str,
     session_id: &str,
@@ -106,7 +107,7 @@ pub(crate) fn write_one_shot_channel_secret_file(
     let Some(secret) = channel_secret_for_session(auth_token, project_id, session_id) else {
         return Ok(None);
     };
-    let dir = root_dir.join(ACP_SECRETS_DIR_NAME);
+    let dir = auth_dir.join(ACP_SECRETS_DIR_NAME);
     std::fs::create_dir_all(&dir)?;
     #[cfg(unix)]
     {
@@ -141,9 +142,13 @@ pub(crate) fn read_and_remove_channel_secret_file(path: &std::path::Path) -> Opt
 }
 
 /// Remove any leftover one-shot secret files or account-switch scripts after a crash or restart.
-pub(crate) fn sweep_stale_channel_secret_files(root_dir: &std::path::Path) {
-    for subdir in [ACP_SECRETS_DIR_NAME, ACCOUNT_SWITCH_DIR_NAME] {
-        let dir = root_dir.join(subdir);
+pub(crate) fn sweep_stale_channel_secret_files(paths: &crate::paths::GxserverPaths) {
+    let dirs = [
+        paths.auth_dir.join(ACP_SECRETS_DIR_NAME),
+        paths.root_dir.join(ACP_SECRETS_DIR_NAME),
+        paths.root_dir.join(ACCOUNT_SWITCH_DIR_NAME),
+    ];
+    for dir in dirs {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };

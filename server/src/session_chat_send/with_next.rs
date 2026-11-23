@@ -172,7 +172,7 @@ impl HeldSender {
                 session_id,
                 ..
             } => Ok(Self::Session(project_id.clone(), session_id.clone())),
-            Principal::Peer { server_id, name, .. } => Ok(Self::Peer {
+            Principal::Peer { server_id, name } => Ok(Self::Peer {
                 server_id: server_id.clone(),
                 name: name.clone(),
                 session: param(body, "senderProjectId")

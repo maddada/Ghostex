@@ -372,18 +372,16 @@ pub fn guard_update_session_params(
     let stored_level = current_session
         .and_then(stored_session_approval_level)
         .unwrap_or(AcpApprovalLevel::Ask);
-    let stored_is_non_cli = stored_runtime.is_some_and(|m| {
-        m.get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
-            .and_then(Value::as_bool)
-            == Some(true)
-            || m.get(crate::acp::SESSION_ACP_ACTIVE_KEY)
-                .and_then(Value::as_bool)
-                == Some(true)
+    let stored_is_or_was_non_cli = stored_runtime.is_some_and(|m| {
+        m.contains_key(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
+            || m.contains_key(crate::acp::SESSION_ACP_ACTIVE_KEY)
+            || m.contains_key(crate::acp::SESSION_ACP_FAMILY_KEY)
+            || m.contains_key(SESSION_ACP_APPROVAL_LEVEL_KEY)
     });
 
     if cleaned.contains_key("runtimeSettings") {
         let is_object = cleaned.get("runtimeSettings").is_some_and(Value::is_object);
-        let stored_is_read_only_non_cli = stored_is_non_cli
+        let stored_is_read_only_non_cli = stored_is_or_was_non_cli
             && stored_runtime
                 .and_then(|m| m.get(crate::coordinators::READ_ONLY_THREAD_KEY))
                 .and_then(Value::as_bool)

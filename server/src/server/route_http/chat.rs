@@ -578,6 +578,18 @@ pub(super) async fn route_chat_http(
             },
         ),
         "/api/switchSessionAcpToCli" => {
+            if !caller.is_user_device() {
+                return Ok(domain_error_response(
+                    endpoint.path,
+                    request_id,
+                    DomainStateError {
+                        code: "forbidden",
+                        message:
+                            "Only your own devices can switch a session between Non-CLI and terminal mode."
+                                .to_string(),
+                    },
+                ));
+            }
             let params = match read_domain_rpc_params(&body_json) {
                 Ok(params) => params,
                 Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
@@ -606,6 +618,18 @@ pub(super) async fn route_chat_http(
             }
         }
         "/api/switchSessionCliToAcp" => {
+            if !caller.is_user_device() {
+                return Ok(domain_error_response(
+                    endpoint.path,
+                    request_id,
+                    DomainStateError {
+                        code: "forbidden",
+                        message:
+                            "Only your own devices can switch a session between Non-CLI and terminal mode."
+                                .to_string(),
+                    },
+                ));
+            }
             let params = match read_domain_rpc_params(&body_json) {
                 Ok(params) => params,
                 Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
