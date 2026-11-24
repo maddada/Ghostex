@@ -186,7 +186,10 @@ THREADS
   thread its own git worktree and branch (from --base-branch, or the default
   branch). --model and --effort apply to this thread only (Claude, Codex, Pi, OMP,
   Copilot, Grok Build, Hermes Agent, Empryo and Antigravity; Cursor takes
-  --model only, and an OpenCode, ZCode or DeepSeek Harness thread keeps its configured model).
+  --model only; an OpenCode thread's --model is provider/model, such as
+  openai/gpt-6.1-terra, and its --effort one of that model's variants, set for that
+  session only, so OpenCode's saved default stays as it is; a ZCode or DeepSeek
+  Harness thread keeps its configured model).
   --account starts a Claude or Codex thread on that saved account (its number or email, as
   `ghostex accounts` lists them) instead of the Account for new sessions rule; an account that
   needs signing in or is turned off is refused, with the accounts that would work. A

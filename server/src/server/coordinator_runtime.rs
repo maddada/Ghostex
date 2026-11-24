@@ -2110,7 +2110,7 @@ pub(crate) fn start_orchestrator_role(
     family: &str,
     params: &Map<String, Value>,
 ) -> std::result::Result<(), DomainStateError> {
-    if let Some(line) = coordinator_model_line(family, params) {
+    if let Some(line) = coordinators::coordinator_model_line(family, params) {
         queue_session_chat_prompt(state, project_id, session_id, &line, true)?;
     }
     let first_request = coordinators::coordinator_create_request(params)?
@@ -2128,28 +2128,6 @@ pub(crate) fn start_orchestrator_role(
         );
     }
     queue_session_chat_prompt(state, project_id, session_id, &first_message, true)
-}
-
-/// The `/model` line a new ZCode or OpenCode orchestrator's chosen model goes in ahead of its first
-/// message: `/model <model>` for ZCode, `/model <provider/model> [<variant>]` for OpenCode (its send
-/// path sets both through OpenCode's server, `session_chat_opencode::Client::send`).
-fn coordinator_model_line(family: &str, params: &Map<String, Value>) -> Option<String> {
-    let text = |key: &str| {
-        params
-            .get(key)
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-    };
-    let model = text("agentModel")?;
-    match family {
-        "zcode" => Some(format!("/model {model}")),
-        "opencode" => Some(match text("agentEffort") {
-            Some(effort) => format!("/model {model} {effort}"),
-            None => format!("/model {model}"),
-        }),
-        _ => None,
-    }
 }
 
 /// Queues a message in a session's chat queue and tells its viewers. A `startup_send` is a new

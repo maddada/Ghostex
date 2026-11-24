@@ -92,6 +92,8 @@ Model, unless the user asked for another (`--agent` only when the user or the ta
 - Any other agent: your own agent and model (`ghostex agents whoami` gives your Session ID;
   `ghostex read-session-chat <Session ID> --limit 1 --json` shows your `selectedOptions.model.value`
   and `selectedOptions.effort.value`), high effort for complex work, medium otherwise, never low.
+  OpenCode takes `--model <provider/model>` and `--effort <variant>` for that thread only, so pass
+  both: without them a thread starts on OpenCode's saved default, which any model pick changes.
 - When `start-thread` refuses `--model` or `--effort`, start again without that flag. Never change a
   running thread's model (it throws away its prompt cache): a follow-up that needs a stronger model
   gets a new thread.

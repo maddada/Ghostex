@@ -343,6 +343,33 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             ))
         })?;
     }
+    // An OpenCode thread's `--model`/`--effort` reach it as a `/model provider/model [variant]`
+    // line ahead of the brief, set for this session only, as a coordinator create does (GitHub
+    // #747; the create above already checked them, agents/launch_plan.rs).
+    let model_line = agent_rows
+        .first()
+        .and_then(crate::coordinators::coordinator_launcher_family)
+        .filter(|family| *family == "opencode")
+        .and_then(|family| {
+            create
+                .as_object()
+                .and_then(|create| crate::coordinators::coordinator_model_line(family, create))
+        });
+    if let Some(line) = model_line {
+        call_gxserver_rpc(
+            "/api/queueSessionChatPrompt",
+            &json!({
+                "globalRef": reference, "projectId": project_id, "sessionId": session_id,
+                "text": line, "startupSend": true,
+            }),
+            &flags,
+        )
+        .map_err(|error| {
+            CliError::Other(format!(
+                "Started thread {reference}, but its model was not set ({error}), so its task was not sent. Resolve it with ghostex coordinator resolve {reference} and start it again."
+            ))
+        })?;
+    }
     let queued = call_gxserver_rpc(
         "/api/queueSessionChatPrompt",
         &json!({

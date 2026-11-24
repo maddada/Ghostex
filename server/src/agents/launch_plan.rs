@@ -1121,7 +1121,7 @@ fn empryo_cwd(
 /// The flags live in the session's saved base command, which resume, fork and account wrapping all rebuild from.
 /// Sven extended it to Empryo on 2026-10-06 (Empryo harness spec). Empryo's terminal app ignores launch flags, so the model goes into a session folder Ghostex seeds and launches with `--session`, and the effort is typed with `/effort` once Empryo is up; neither changes Empryo's default. A resume keeps the model (it reopens that tab), but Empryo 3.9.0-beta drops a tab's effort when it resumes it (seen 2026-10-06), so the effort lasts until the session restarts (session_chat_empryo_launch_selection.rs).
 /// Antigravity CLI joined on 2026-10-13 (user: port the launch flags after checking agy still accepts `--effort`): agy 1.2.14 takes `--model <id>` and `--effort low|medium|high|max` for that CLI session only.
-/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (server/src/coordinators/playbook.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) takes a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused.
+/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (server/src/coordinators/playbook.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) takes a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused, except an OpenCode coordinator and (since 2026-11-25, GitHub #747) a coordinator's OpenCode thread, whose model arrives as a `/model` line.
 /// SEE-ALSO: server/src/ghostex_cli/actions/create.rs (create-agent), server/src/ghostex_cli/board.rs and server/src/board_start_work.rs (board start-work).
 fn apply_requested_agent_model(
     project: &Value,
@@ -1157,7 +1157,7 @@ fn apply_requested_agent_model(
         })
         .ok_or_else(|| {
             DomainStateError::bad_request(
-                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity agents; Cursor CLI takes a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's model and variant.",
+                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity agents; Cursor CLI takes a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's or its thread's model and variant.",
             )
         })?;
     if effort.is_some() {
@@ -1203,11 +1203,22 @@ fn apply_requested_agent_model(
         // OpenCode 2's terminal app has no launch model flag, so a coordinator create's model and
         // variant reach the session as a `/model provider/model [variant]` line the create flow
         // queues before the first message (`start_orchestrator_role`), which the OpenCode send
-        // path applies through OpenCode's server like the chat's model pill. A thread has no such
-        // delivery yet, so its model request stays refused rather than silently dropped.
-        if crate::coordinators::coordinator_create_request(params)?.is_none() {
+        // path applies through OpenCode's server like the chat's model pill.
+        // CDXC:Coordinators 2026-11-25 DECISION:
+        // GitHub #747: `coordinator start-thread --agent opencode --model provider/model
+        // [--effort <variant>]` was refused, so research threads started on OpenCode's saved
+        // default, which any click in a model picker changes. `start-thread` now queues the same
+        // `/model` line ahead of the brief (ghostex_cli/coordinator/threads.rs), applied with
+        // scope session, so OpenCode's saved default never changes. Other creates (create-agent,
+        // board start-work, automations) have no such delivery and stay refused.
+        let coordinator_thread = params
+            .get(super::codex_lean::COORDINATOR_THREAD_KEY)
+            .and_then(Value::as_bool)
+            == Some(true);
+        if !coordinator_thread && crate::coordinators::coordinator_create_request(params)?.is_none()
+        {
             return Err(DomainStateError::bad_request(
-                "An OpenCode thread keeps its configured model; only a coordinator's own model and variant can be set.",
+                "An OpenCode session keeps its configured model; only a coordinator's model and variant, or its thread's, can be set.",
             ));
         }
         let Some(model) = model.as_deref() else {
@@ -1888,7 +1899,7 @@ mod launch_choice_tests {
         );
         assert!(launch("opencode", Some("opencode/big-pickle"), None)
             .unwrap_err()
-            .contains("An OpenCode thread keeps its configured model"));
+            .contains("An OpenCode session keeps its configured model"));
         assert!(launch("dsh", Some("deepseek-v4"), None)
             .unwrap_err()
             .contains("Cursor CLI takes a model only"));
