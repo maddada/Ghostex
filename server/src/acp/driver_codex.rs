@@ -28,8 +28,7 @@ use super::host::{
     POLL_RETRY_DELAY,
 };
 use super::spec::{
-    build_acp_server_argv, is_allowed_connector_env_key, transcript_path_for_session,
-    AcpAgentSpec,
+    build_acp_server_argv, is_allowed_connector_env_key, transcript_path_for_session, AcpAgentSpec,
 };
 
 const CODEX_RPC_TIMEOUT: Duration = Duration::from_secs(30);
@@ -157,8 +156,12 @@ struct McpElicitationField {
 enum CodexRequestKind {
     CommandApproval,
     FileChangeApproval,
-    PermissionsApproval { permissions: Value },
-    UserInput { questions: Vec<Value> },
+    PermissionsApproval {
+        permissions: Value,
+    },
+    UserInput {
+        questions: Vec<Value>,
+    },
     McpElicitation {
         fields: Vec<McpElicitationField>,
         questions: Vec<Value>,
@@ -615,11 +618,9 @@ fn codex_turn_policies(
         .map(|p| p.to_string_lossy().to_string())
         .collect();
     match level {
-        AcpApprovalLevel::Ask if read_only => (
-            json!("untrusted"),
-            "user",
-            json!({ "type": "readOnly" }),
-        ),
+        AcpApprovalLevel::Ask if read_only => {
+            (json!("untrusted"), "user", json!({ "type": "readOnly" }))
+        }
         // In Ask, keep `workspaceWrite` + `approvalPolicy: "untrusted"` so Codex proposes file
         // edits via `apply_patch` (sending `item/fileChange/requestApproval`) and shell commands
         // via `item/commandExecution/requestApproval` for Ghostex's user approval gate, rather
@@ -776,21 +777,31 @@ fn spawn_and_init_codex(
     if need_models {
         if let Ok(list) = transport.call("model/list", json!({}), CODEX_RPC_TIMEOUT) {
             if let Some(data) = list.get("data").and_then(Value::as_array) {
+                use ghostex_gx_chat_core::menus::catalog::{
+                    is_placeholder_model_label, is_placeholder_model_value,
+                };
                 let mapped: Vec<Value> = data
                     .iter()
                     .filter_map(|m| {
                         let id = m
                             .get("model")
                             .or_else(|| m.get("id"))
-                            .and_then(Value::as_str)?;
-                        let name = m
+                            .and_then(Value::as_str)
+                            .filter(|v| !is_placeholder_model_value(v))?;
+                        let raw_name = m
                             .get("displayName")
                             .and_then(Value::as_str)
                             .unwrap_or(id);
+                        let name = if is_placeholder_model_label(raw_name) {
+                            id
+                        } else {
+                            raw_name
+                        };
                         Some(json!({
                             "modelId": id,
                             "name": name,
                             "supportedReasoningEfforts": m.get("supportedReasoningEfforts").cloned().unwrap_or(json!([])),
+                            "defaultReasoningEffort": m.get("defaultReasoningEffort").cloned().unwrap_or(Value::Null),
                         }))
                     })
                     .collect();
@@ -803,15 +814,51 @@ fn spawn_and_init_codex(
     }
 
     let (roots, model, dev_instr) = {
-        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+        use ghostex_gx_chat_core::menus::catalog::{
+            family_and_version, is_placeholder_model_value,
+        };
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        if s.current_model
+            .as_deref()
+            .is_none_or(is_placeholder_model_value)
+        {
+            let avail = s.available_models.as_array();
+            let newest_sol = avail.and_then(|models| {
+                models
+                    .iter()
+                    .filter_map(|m| {
+                        let id = m.get("modelId").and_then(Value::as_str)?;
+                        let name = m.get("name").and_then(Value::as_str).unwrap_or(id);
+                        let (fam, ver) =
+                            family_and_version(name).or_else(|| family_and_version(id))?;
+                        let words: Vec<&str> = fam.split_whitespace().collect();
+                        words.contains(&"sol").then_some((id.to_string(), ver))
+                    })
+                    .max_by(|a, b| a.1.cmp(&b.1))
+                    .map(|(id, _)| id)
+            });
+            let resolved = newest_sol
+                .or_else(|| {
+                    avail
+                        .and_then(|models| models.first())
+                        .and_then(|m| m.get("modelId"))
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .or_else(|| {
+                    crate::agent_model_catalog::preferred_default_model("codex").map(|(v, _, _)| v)
+                });
+            if let Some(chosen) = resolved {
+                s.current_model = Some(chosen);
+            }
+        }
         (
             s.writable_roots.clone(),
             s.current_model.clone(),
             s.developer_instructions.clone(),
         )
     };
-    let (init_approval, init_reviewer, _) =
-        codex_turn_policies(approval_level, read_only, &roots);
+    let (init_approval, init_reviewer, _) = codex_turn_policies(approval_level, read_only, &roots);
     let init_sandbox_mode = match approval_level {
         AcpApprovalLevel::FullAccess => "danger-full-access",
         AcpApprovalLevel::Ask if read_only => "read-only",
@@ -843,9 +890,8 @@ fn spawn_and_init_codex(
         )
     };
 
-    let thread_res = if let Some(resume_id) = resume_thread_id
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
+    let thread_res = if let Some(resume_id) =
+        resume_thread_id.map(str::trim).filter(|s| !s.is_empty())
     {
         let method = if fork_session {
             "thread/fork"
@@ -867,9 +913,7 @@ fn spawn_and_init_codex(
         }
         match transport.call(method, Value::Object(req_params), CODEX_RPC_TIMEOUT) {
             Ok(res) => Ok(res),
-            Err(err)
-                if !fork_session && err.to_ascii_lowercase().contains("no rollout found") =>
-            {
+            Err(err) if !fork_session && err.to_ascii_lowercase().contains("no rollout found") => {
                 // Thread has never persisted a turn yet: start a fresh thread under the new profile.
                 open_fresh_thread()
             }
@@ -908,17 +952,32 @@ fn spawn_and_init_codex(
             .pointer("/thread/path")
             .and_then(Value::as_str)
             .map(str::to_string);
-        if s.current_model.is_none() {
+        if s.current_model
+            .as_deref()
+            .is_none_or(ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value)
+        {
             s.current_model = thread_res
                 .get("model")
                 .and_then(Value::as_str)
+                .filter(|m| !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m))
                 .map(str::to_string);
         }
         if s.current_effort.is_none() {
             s.current_effort = thread_res
                 .get("reasoningEffort")
                 .and_then(Value::as_str)
-                .map(str::to_string);
+                .filter(|e| !e.trim().is_empty())
+                .map(str::to_string)
+                .or_else(|| {
+                    let cur = s.current_model.as_deref()?;
+                    s.available_models.as_array()?.iter().find_map(|m| {
+                        (m.get("modelId").and_then(Value::as_str) == Some(cur))
+                            .then(|| m.get("defaultReasoningEffort").and_then(Value::as_str))
+                            .flatten()
+                            .filter(|e| !e.trim().is_empty())
+                            .map(str::to_string)
+                    })
+                });
         }
         s.active_profile = profile;
         s.pending_profile_reload = false;
@@ -940,10 +999,7 @@ fn spawn_and_init_codex(
 
 /// Wait briefly if `turn/start` is still in flight so `active_turn_id` can arrive, then cancel
 /// any pending approvals, send `turn/interrupt`, and wait up to 5s for `turn/completed`.
-fn interrupt_active_codex_turn(
-    proc_opt: &Option<CodexProcess>,
-    state: &Arc<Mutex<CodexState>>,
-) {
+fn interrupt_active_codex_turn(proc_opt: &Option<CodexProcess>, state: &Arc<Mutex<CodexState>>) {
     let id_wait_until = Instant::now() + Duration::from_secs(2);
     while Instant::now() < id_wait_until {
         let s = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -1081,7 +1137,13 @@ fn apply_codex_approval_level(
         } else {
             s.read_only
         };
-        (s.approval_level, next_ro, s.deny_mode, s.active_profile, s.working)
+        (
+            s.approval_level,
+            next_ro,
+            s.deny_mode,
+            s.active_profile,
+            s.working,
+        )
     };
     let is_downgrade = approval_level_rank(desired) < approval_level_rank(prev_level);
     let next_profile = desired_codex_profile(deny_mode, desired, effective_read_only);
@@ -1128,7 +1190,10 @@ fn apply_codex_approval_level(
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.approval_level = desired;
         s.read_only = effective_read_only;
-        must_restart || proc_opt.is_none() || next_profile != s.active_profile || s.fatal_error.is_some()
+        must_restart
+            || proc_opt.is_none()
+            || next_profile != s.active_profile
+            || s.fatal_error.is_some()
     };
 
     if need_reload {
@@ -1201,9 +1266,7 @@ fn extract_codex_change_locations(changes: &Value) -> Vec<Value> {
 /// `"openai/form"`, or `"openaiForm"`), returning `(fields, questions)` while preserving exact
 /// wire values (`const` / `enum`) separate from display labels (`title` / `enumNames`) and
 /// handling `type: "array"` multi-select enums.
-fn build_mcp_elicitation_questions(
-    params: &Value,
-) -> (Vec<McpElicitationField>, Vec<Value>) {
+fn build_mcp_elicitation_questions(params: &Value) -> (Vec<McpElicitationField>, Vec<Value>) {
     let mut fields = Vec::new();
     let mut questions = Vec::new();
     let message = params
@@ -1266,10 +1329,7 @@ fn build_mcp_elicitation_questions(
                             .or_else(|| item.get("title"))
                             .and_then(Value::as_str)
                         {
-                            let label = item
-                                .get("title")
-                                .and_then(Value::as_str)
-                                .unwrap_or(wire);
+                            let label = item.get("title").and_then(Value::as_str).unwrap_or(wire);
                             options.push(json!({ "label": label }));
                             option_values.push(wire.to_string());
                         }
@@ -1295,10 +1355,7 @@ fn build_mcp_elicitation_questions(
                     .or_else(|| item.get("title"))
                     .and_then(Value::as_str)
                 {
-                    let label = item
-                        .get("title")
-                        .and_then(Value::as_str)
-                        .unwrap_or(wire);
+                    let label = item.get("title").and_then(Value::as_str).unwrap_or(wire);
                     options.push(json!({ "label": label }));
                     option_values.push(wire.to_string());
                 }
@@ -1337,16 +1394,12 @@ fn build_mcp_elicitation_response(
             .and_then(|q| q.get("options"))
             .and_then(Value::as_array);
         let wire_for_index = |i: usize| -> Option<String> {
-            field
-                .option_values
-                .get(i)
-                .cloned()
-                .or_else(|| {
-                    options
-                        .and_then(|o| o.get(i))
-                        .and_then(|o| o.get("label").and_then(Value::as_str))
-                        .map(str::to_string)
-                })
+            field.option_values.get(i).cloned().or_else(|| {
+                options
+                    .and_then(|o| o.get(i))
+                    .and_then(|o| o.get("label").and_then(Value::as_str))
+                    .map(str::to_string)
+            })
         };
         if field.field_type == "array" || field.multi_select {
             let mut vals = Vec::new();
@@ -1415,10 +1468,7 @@ fn build_mcp_elicitation_response(
 fn build_codex_user_input_answers(questions: &[Value], selections: &[Value]) -> Value {
     let mut answers = Map::new();
     for (idx, q) in questions.iter().enumerate() {
-        let q_id = q
-            .get("id")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let q_id = q.get("id").and_then(Value::as_str).unwrap_or_default();
         if q_id.is_empty() {
             continue;
         }
@@ -1543,383 +1593,368 @@ fn spawn_codex_stdout_reader(
                 if !has_method && has_id {
                     if let Some(id) = msg.get("id").and_then(Value::as_u64) {
                         if let Some(tx) = t_out
-                                .pending
+                            .pending
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .remove(&id)
+                        {
+                            let _ = tx.send(msg);
+                        }
+                    }
+                    return;
+                }
+
+                // Server-initiated request requiring a response (approvals / questions).
+                if has_method && has_id {
+                    let method = msg
+                        .get("method")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let rpc_id = msg.get("id").cloned().unwrap_or(Value::Null);
+                    let params = msg.get("params").cloned().unwrap_or(Value::Null);
+                    let allow_opts = vec![
+                        AcpPermissionOption {
+                            option_id: "accept".to_string(),
+                            name: "Allow".to_string(),
+                            kind: "allow_once".to_string(),
+                        },
+                        AcpPermissionOption {
+                            option_id: "decline".to_string(),
+                            name: "Deny".to_string(),
+                            kind: "reject_once".to_string(),
+                        },
+                    ];
+
+                    match method {
+                        "item/commandExecution/requestApproval" => {
+                            let command = params
+                                .get("command")
+                                .and_then(Value::as_str)
+                                .unwrap_or("shell command")
+                                .to_string();
+                            let tool_use_id = params
+                                .get("itemId")
+                                .and_then(Value::as_str)
+                                .map(str::to_string);
+                            let (level, roots, cwd) = {
+                                let s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                (s.approval_level, s.writable_roots.clone(), s.cwd.clone())
+                            };
+                            let synthetic = json!({
+                                "toolCall": {
+                                    "name": "Bash",
+                                    "kind": "execute",
+                                    "rawInput": { "command": command },
+                                }
+                            });
+                            let reason = match evaluate_permission(
+                                level,
+                                &synthetic,
+                                &allow_opts,
+                                &roots,
+                                &cwd,
+                            ) {
+                                PermissionDecision::AutoApprove { .. } => {
+                                    println!(
+                                        "\r\n[Codex Native] Auto-approved ({}): Bash ({})",
+                                        level.label(),
+                                        command
+                                    );
+                                    let _ = std::io::stdout().flush();
+                                    let _ = t_out.respond(rpc_id, json!({ "decision": "accept" }));
+                                    return;
+                                }
+                                PermissionDecision::AskUser { reason } => reason,
+                            };
+                            let pending = PendingCodexRequest {
+                                rpc_id,
+                                kind: CodexRequestKind::CommandApproval,
+                                tool_name: "Bash".to_string(),
+                                summary: command,
+                                tool_use_id,
+                                reason,
+                            };
+                            let was_empty = {
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                let empty = s.pending_requests.is_empty();
+                                s.pending_requests.push_back(pending);
+                                empty
+                            };
+                            if was_empty {
+                                act_out.sync();
+                            }
+                        }
+                        "item/fileChange/requestApproval" => {
+                            let tool_use_id = params
+                                .get("itemId")
+                                .and_then(Value::as_str)
+                                .map(str::to_string);
+                            // Always consult the full cached `item/started` `changes` payload
+                            // first (never letting `grantRoot` hide actual changed paths or
+                            // `kind.move_path`), falling back to `params.changes` / `params.files`
+                            // only when no cached item exists. If neither is present, fail
+                            // closed (`locations: []`, `rawInput: {}`) so `evaluate_permission`
+                            // asks the user.
+                            let (cached_changes, level, roots, cwd) = {
+                                let s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                let cached = tool_use_id
+                                    .as_deref()
+                                    .and_then(|id| s.file_change_items.get(id))
+                                    .cloned();
+                                (
+                                    cached,
+                                    s.approval_level,
+                                    s.writable_roots.clone(),
+                                    s.cwd.clone(),
+                                )
+                            };
+                            let changes_val = cached_changes
+                                .or_else(|| params.get("changes").cloned())
+                                .or_else(|| params.get("files").cloned());
+                            let locations = changes_val
+                                .as_ref()
+                                .map(extract_codex_change_locations)
+                                .unwrap_or_default();
+                            let raw_input = match changes_val {
+                                Some(c) if !c.is_null() => json!({ "changes": c }),
+                                _ => json!({}),
+                            };
+                            let summary = locations
+                                .first()
+                                .and_then(|l| l.get("path"))
+                                .and_then(Value::as_str)
+                                .or_else(|| params.get("reason").and_then(Value::as_str))
+                                .unwrap_or("file changes")
+                                .to_string();
+                            let synthetic = json!({
+                                "toolCall": {
+                                    "name": "Edit",
+                                    "kind": "edit",
+                                    "rawInput": raw_input,
+                                    "locations": locations,
+                                }
+                            });
+                            let reason = match evaluate_permission(
+                                level,
+                                &synthetic,
+                                &allow_opts,
+                                &roots,
+                                &cwd,
+                            ) {
+                                PermissionDecision::AutoApprove { .. } => {
+                                    println!(
+                                        "\r\n[Codex Native] Auto-approved ({}): Edit ({})",
+                                        level.label(),
+                                        summary
+                                    );
+                                    let _ = std::io::stdout().flush();
+                                    let _ = t_out.respond(rpc_id, json!({ "decision": "accept" }));
+                                    return;
+                                }
+                                PermissionDecision::AskUser { reason } => reason,
+                            };
+                            let pending = PendingCodexRequest {
+                                rpc_id,
+                                kind: CodexRequestKind::FileChangeApproval,
+                                tool_name: "Edit".to_string(),
+                                summary,
+                                tool_use_id,
+                                reason,
+                            };
+                            let was_empty = {
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                let empty = s.pending_requests.is_empty();
+                                s.pending_requests.push_back(pending);
+                                empty
+                            };
+                            if was_empty {
+                                act_out.sync();
+                            }
+                        }
+                        "item/permissions/requestApproval" => {
+                            let level = st_out
                                 .lock()
                                 .unwrap_or_else(|p| p.into_inner())
-                                .remove(&id)
-                            {
-                                let _ = tx.send(msg);
-                            }
-                        }
-                        return;
-                    }
-
-                    // Server-initiated request requiring a response (approvals / questions).
-                    if has_method && has_id {
-                        let method = msg
-                            .get("method")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default();
-                        let rpc_id = msg.get("id").cloned().unwrap_or(Value::Null);
-                        let params = msg.get("params").cloned().unwrap_or(Value::Null);
-                        let allow_opts = vec![
-                            AcpPermissionOption {
-                                option_id: "accept".to_string(),
-                                name: "Allow".to_string(),
-                                kind: "allow_once".to_string(),
-                            },
-                            AcpPermissionOption {
-                                option_id: "decline".to_string(),
-                                name: "Deny".to_string(),
-                                kind: "reject_once".to_string(),
-                            },
-                        ];
-
-                        match method {
-                            "item/commandExecution/requestApproval" => {
-                                let command = params
-                                    .get("command")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("shell command")
-                                    .to_string();
-                                let tool_use_id = params
-                                    .get("itemId")
-                                    .and_then(Value::as_str)
-                                    .map(str::to_string);
-                                let (level, roots, cwd) = {
-                                    let s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    (s.approval_level, s.writable_roots.clone(), s.cwd.clone())
-                                };
-                                let synthetic = json!({
-                                    "toolCall": {
-                                        "name": "Bash",
-                                        "kind": "execute",
-                                        "rawInput": { "command": command },
-                                    }
-                                });
-                                let reason = match evaluate_permission(
-                                    level,
-                                    &synthetic,
-                                    &allow_opts,
-                                    &roots,
-                                    &cwd,
-                                ) {
-                                    PermissionDecision::AutoApprove { .. } => {
-                                        println!(
-                                            "\r\n[Codex Native] Auto-approved ({}): Bash ({})",
-                                            level.label(),
-                                            command
-                                        );
-                                        let _ = std::io::stdout().flush();
-                                        let _ =
-                                            t_out.respond(rpc_id, json!({ "decision": "accept" }));
-                                        return;
-                                    }
-                                    PermissionDecision::AskUser { reason } => reason,
-                                };
-                                let pending = PendingCodexRequest {
+                                .approval_level;
+                            let permissions =
+                                params.get("permissions").cloned().unwrap_or(json!({}));
+                            if level == AcpApprovalLevel::FullAccess {
+                                // Always scope `"turn"` (never `"session"`).
+                                let _ = t_out.respond(
                                     rpc_id,
-                                    kind: CodexRequestKind::CommandApproval,
-                                    tool_name: "Bash".to_string(),
-                                    summary: command,
-                                    tool_use_id,
-                                    reason,
-                                };
-                                let was_empty = {
-                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    let empty = s.pending_requests.is_empty();
-                                    s.pending_requests.push_back(pending);
-                                    empty
-                                };
-                                if was_empty {
-                                    act_out.sync();
-                                }
-                            }
-                            "item/fileChange/requestApproval" => {
-                                let tool_use_id = params
-                                    .get("itemId")
-                                    .and_then(Value::as_str)
-                                    .map(str::to_string);
-                                // Always consult the full cached `item/started` `changes` payload
-                                // first (never letting `grantRoot` hide actual changed paths or
-                                // `kind.move_path`), falling back to `params.changes` / `params.files`
-                                // only when no cached item exists. If neither is present, fail
-                                // closed (`locations: []`, `rawInput: {}`) so `evaluate_permission`
-                                // asks the user.
-                                let (cached_changes, level, roots, cwd) = {
-                                    let s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    let cached = tool_use_id
-                                        .as_deref()
-                                        .and_then(|id| s.file_change_items.get(id))
-                                        .cloned();
-                                    (
-                                        cached,
-                                        s.approval_level,
-                                        s.writable_roots.clone(),
-                                        s.cwd.clone(),
-                                    )
-                                };
-                                let changes_val = cached_changes
-                                    .or_else(|| params.get("changes").cloned())
-                                    .or_else(|| params.get("files").cloned());
-                                let locations = changes_val
-                                    .as_ref()
-                                    .map(extract_codex_change_locations)
-                                    .unwrap_or_default();
-                                let raw_input = match changes_val {
-                                    Some(c) if !c.is_null() => json!({ "changes": c }),
-                                    _ => json!({}),
-                                };
-                                let summary = locations
-                                    .first()
-                                    .and_then(|l| l.get("path"))
-                                    .and_then(Value::as_str)
-                                    .or_else(|| params.get("reason").and_then(Value::as_str))
-                                    .unwrap_or("file changes")
-                                    .to_string();
-                                let synthetic = json!({
-                                    "toolCall": {
-                                        "name": "Edit",
-                                        "kind": "edit",
-                                        "rawInput": raw_input,
-                                        "locations": locations,
-                                    }
-                                });
-                                let reason = match evaluate_permission(
-                                    level,
-                                    &synthetic,
-                                    &allow_opts,
-                                    &roots,
-                                    &cwd,
-                                ) {
-                                    PermissionDecision::AutoApprove { .. } => {
-                                        println!(
-                                            "\r\n[Codex Native] Auto-approved ({}): Edit ({})",
-                                            level.label(),
-                                            summary
-                                        );
-                                        let _ = std::io::stdout().flush();
-                                        let _ =
-                                            t_out.respond(rpc_id, json!({ "decision": "accept" }));
-                                        return;
-                                    }
-                                    PermissionDecision::AskUser { reason } => reason,
-                                };
-                                let pending = PendingCodexRequest {
-                                    rpc_id,
-                                    kind: CodexRequestKind::FileChangeApproval,
-                                    tool_name: "Edit".to_string(),
-                                    summary,
-                                    tool_use_id,
-                                    reason,
-                                };
-                                let was_empty = {
-                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    let empty = s.pending_requests.is_empty();
-                                    s.pending_requests.push_back(pending);
-                                    empty
-                                };
-                                if was_empty {
-                                    act_out.sync();
-                                }
-                            }
-                            "item/permissions/requestApproval" => {
-                                let level = st_out
-                                    .lock()
-                                    .unwrap_or_else(|p| p.into_inner())
-                                    .approval_level;
-                                let permissions =
-                                    params.get("permissions").cloned().unwrap_or(json!({}));
-                                if level == AcpApprovalLevel::FullAccess {
-                                    // Always scope `"turn"` (never `"session"`).
-                                    let _ = t_out.respond(
-                                        rpc_id,
-                                        json!({ "permissions": permissions, "scope": "turn" }),
-                                    );
-                                    return;
-                                }
-                                let summary = params
-                                    .get("reason")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("Additional permissions requested")
-                                    .to_string();
-                                let tool_use_id = params
-                                    .get("itemId")
-                                    .and_then(Value::as_str)
-                                    .map(str::to_string);
-                                let pending = PendingCodexRequest {
-                                    rpc_id,
-                                    kind: CodexRequestKind::PermissionsApproval { permissions },
-                                    tool_name: "Permissions".to_string(),
-                                    summary,
-                                    tool_use_id,
-                                    reason: None,
-                                };
-                                let was_empty = {
-                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    let empty = s.pending_requests.is_empty();
-                                    s.pending_requests.push_back(pending);
-                                    empty
-                                };
-                                if was_empty {
-                                    act_out.sync();
-                                }
-                            }
-                            "item/tool/requestUserInput" => {
-                                let questions = params
-                                    .get("questions")
-                                    .and_then(Value::as_array)
-                                    .cloned()
-                                    .unwrap_or_default();
-                                let tool_use_id = params
-                                    .get("itemId")
-                                    .and_then(Value::as_str)
-                                    .map(str::to_string);
-                                let summary = questions
-                                    .first()
-                                    .and_then(|q| q.get("question"))
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("Question")
-                                    .to_string();
-                                let pending = PendingCodexRequest {
-                                    rpc_id,
-                                    kind: CodexRequestKind::UserInput { questions },
-                                    tool_name: "requestUserInput".to_string(),
-                                    summary,
-                                    tool_use_id,
-                                    reason: None,
-                                };
-                                let was_empty = {
-                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    let empty = s.pending_requests.is_empty();
-                                    s.pending_requests.push_back(pending);
-                                    empty
-                                };
-                                if was_empty {
-                                    act_out.sync();
-                                }
-                            }
-                            "mcpServer/elicitation/request" => {
-                                let (fields, questions) = build_mcp_elicitation_questions(&params);
-                                let server_name = params
-                                    .get("serverName")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("MCP server");
-                                let message = params
-                                    .get("message")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("Input requested");
-                                let url = params
-                                    .get("url")
-                                    .and_then(Value::as_str)
-                                    .map(str::trim)
-                                    .filter(|s| !s.is_empty());
-                                let summary = match url {
-                                    Some(u) => format!("{server_name}: {message} ({u})"),
-                                    None => format!("{server_name}: {message}"),
-                                };
-                                let tool_use_id = params
-                                    .get("elicitationId")
-                                    .or_else(|| params.get("itemId"))
-                                    .and_then(Value::as_str)
-                                    .map(str::to_string);
-                                let pending = PendingCodexRequest {
-                                    rpc_id,
-                                    kind: CodexRequestKind::McpElicitation { fields, questions },
-                                    tool_name: format!("MCP ({server_name})"),
-                                    summary,
-                                    tool_use_id,
-                                    reason: None,
-                                };
-                                let was_empty = {
-                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    let empty = s.pending_requests.is_empty();
-                                    s.pending_requests.push_back(pending);
-                                    empty
-                                };
-                                if was_empty {
-                                    act_out.sync();
-                                }
-                            }
-                            other => {
-                                t_out.respond_error(
-                                    rpc_id,
-                                    -32601,
-                                    &format!("Unsupported Codex client method: {other}"),
+                                    json!({ "permissions": permissions, "scope": "turn" }),
                                 );
+                                return;
                             }
-                        }
-                        return;
-                    }
-
-                    // Notifications from Codex app-server.
-                    let method = msg.get("method").and_then(Value::as_str).unwrap_or_default();
-                    let params = msg.get("params").unwrap_or(&Value::Null);
-                    match method {
-                        "turn/started" => {
-                            let tid = params
-                                .pointer("/turn/id")
-                                .or_else(|| params.get("turnId"))
-                                .and_then(Value::as_str);
-                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                            if let Some(tid_str) = tid {
-                                if s.ignored_turn_ids.iter().any(|id| id == tid_str) {
-                                    return;
-                                }
-                                s.active_turn_id = Some(tid_str.to_string());
-                            }
-                            s.awaiting_turn_start = false;
-                            s.working = true;
-                            drop(s);
-                            act_out.sync();
-                        }
-                        "turn/completed" => {
-                            let completed_tid = params
-                                .pointer("/turn/id")
-                                .or_else(|| params.get("turnId"))
-                                .and_then(Value::as_str);
-                            let turn_interrupted = params
-                                .pointer("/turn/status")
-                                .or_else(|| params.get("status"))
+                            let summary = params
+                                .get("reason")
                                 .and_then(Value::as_str)
-                                .is_some_and(|status| {
-                                    matches!(
-                                        status.to_ascii_lowercase().as_str(),
-                                        "interrupted" | "cancelled" | "canceled" | "aborted"
-                                    )
-                                });
-                            let (stale_turn, orphaned): (bool, Vec<PendingCodexRequest>) = {
+                                .unwrap_or("Additional permissions requested")
+                                .to_string();
+                            let tool_use_id = params
+                                .get("itemId")
+                                .and_then(Value::as_str)
+                                .map(str::to_string);
+                            let pending = PendingCodexRequest {
+                                rpc_id,
+                                kind: CodexRequestKind::PermissionsApproval { permissions },
+                                tool_name: "Permissions".to_string(),
+                                summary,
+                                tool_use_id,
+                                reason: None,
+                            };
+                            let was_empty = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                if let Some(done_id) = completed_tid {
-                                    push_capped_turn_id(
-                                        &mut s.completed_turn_ids,
-                                        done_id.to_string(),
-                                    );
-                                    if remove_turn_id(&mut s.ignored_turn_ids, done_id) {
-                                        (true, Vec::new())
-                                    } else if s
-                                        .active_turn_id
-                                        .as_deref()
-                                        .is_some_and(|active| active != done_id)
-                                    {
-                                        (true, Vec::new())
-                                    } else if s.active_turn_id.is_none() && s.awaiting_turn_start {
-                                        // An untracked old turn completed while a new `turn/start`
-                                        // RPC is in flight (before `turn/started` for the new turn
-                                        // arrived): do not clobber the new turn.
-                                        (true, Vec::new())
-                                    } else {
-                                        s.working = false;
-                                        if turn_interrupted {
-                                            s.last_turn_interrupted = true;
-                                        }
-                                        s.awaiting_turn_start = false;
-                                        s.active_turn_id = None;
-                                        s.file_change_items.clear();
-                                        s.clear_live_turn_output();
-                                        (false, s.pending_requests.drain(..).collect())
-                                    }
-                                } else if s.awaiting_turn_start {
+                                let empty = s.pending_requests.is_empty();
+                                s.pending_requests.push_back(pending);
+                                empty
+                            };
+                            if was_empty {
+                                act_out.sync();
+                            }
+                        }
+                        "item/tool/requestUserInput" => {
+                            let questions = params
+                                .get("questions")
+                                .and_then(Value::as_array)
+                                .cloned()
+                                .unwrap_or_default();
+                            let tool_use_id = params
+                                .get("itemId")
+                                .and_then(Value::as_str)
+                                .map(str::to_string);
+                            let summary = questions
+                                .first()
+                                .and_then(|q| q.get("question"))
+                                .and_then(Value::as_str)
+                                .unwrap_or("Question")
+                                .to_string();
+                            let pending = PendingCodexRequest {
+                                rpc_id,
+                                kind: CodexRequestKind::UserInput { questions },
+                                tool_name: "requestUserInput".to_string(),
+                                summary,
+                                tool_use_id,
+                                reason: None,
+                            };
+                            let was_empty = {
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                let empty = s.pending_requests.is_empty();
+                                s.pending_requests.push_back(pending);
+                                empty
+                            };
+                            if was_empty {
+                                act_out.sync();
+                            }
+                        }
+                        "mcpServer/elicitation/request" => {
+                            let (fields, questions) = build_mcp_elicitation_questions(&params);
+                            let server_name = params
+                                .get("serverName")
+                                .and_then(Value::as_str)
+                                .unwrap_or("MCP server");
+                            let message = params
+                                .get("message")
+                                .and_then(Value::as_str)
+                                .unwrap_or("Input requested");
+                            let url = params
+                                .get("url")
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty());
+                            let summary = match url {
+                                Some(u) => format!("{server_name}: {message} ({u})"),
+                                None => format!("{server_name}: {message}"),
+                            };
+                            let tool_use_id = params
+                                .get("elicitationId")
+                                .or_else(|| params.get("itemId"))
+                                .and_then(Value::as_str)
+                                .map(str::to_string);
+                            let pending = PendingCodexRequest {
+                                rpc_id,
+                                kind: CodexRequestKind::McpElicitation { fields, questions },
+                                tool_name: format!("MCP ({server_name})"),
+                                summary,
+                                tool_use_id,
+                                reason: None,
+                            };
+                            let was_empty = {
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                let empty = s.pending_requests.is_empty();
+                                s.pending_requests.push_back(pending);
+                                empty
+                            };
+                            if was_empty {
+                                act_out.sync();
+                            }
+                        }
+                        other => {
+                            t_out.respond_error(
+                                rpc_id,
+                                -32601,
+                                &format!("Unsupported Codex client method: {other}"),
+                            );
+                        }
+                    }
+                    return;
+                }
+
+                // Notifications from Codex app-server.
+                let method = msg
+                    .get("method")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let params = msg.get("params").unwrap_or(&Value::Null);
+                match method {
+                    "turn/started" => {
+                        let tid = params
+                            .pointer("/turn/id")
+                            .or_else(|| params.get("turnId"))
+                            .and_then(Value::as_str);
+                        let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                        if let Some(tid_str) = tid {
+                            if s.ignored_turn_ids.iter().any(|id| id == tid_str) {
+                                return;
+                            }
+                            s.active_turn_id = Some(tid_str.to_string());
+                        }
+                        s.awaiting_turn_start = false;
+                        s.working = true;
+                        drop(s);
+                        act_out.sync();
+                    }
+                    "turn/completed" => {
+                        let completed_tid = params
+                            .pointer("/turn/id")
+                            .or_else(|| params.get("turnId"))
+                            .and_then(Value::as_str);
+                        let turn_interrupted = params
+                            .pointer("/turn/status")
+                            .or_else(|| params.get("status"))
+                            .and_then(Value::as_str)
+                            .is_some_and(|status| {
+                                matches!(
+                                    status.to_ascii_lowercase().as_str(),
+                                    "interrupted" | "cancelled" | "canceled" | "aborted"
+                                )
+                            });
+                        let (stale_turn, orphaned): (bool, Vec<PendingCodexRequest>) = {
+                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            if let Some(done_id) = completed_tid {
+                                push_capped_turn_id(&mut s.completed_turn_ids, done_id.to_string());
+                                if remove_turn_id(&mut s.ignored_turn_ids, done_id) {
+                                    (true, Vec::new())
+                                } else if s
+                                    .active_turn_id
+                                    .as_deref()
+                                    .is_some_and(|active| active != done_id)
+                                {
+                                    (true, Vec::new())
+                                } else if s.active_turn_id.is_none() && s.awaiting_turn_start {
+                                    // An untracked old turn completed while a new `turn/start`
+                                    // RPC is in flight (before `turn/started` for the new turn
+                                    // arrived): do not clobber the new turn.
                                     (true, Vec::new())
                                 } else {
                                     s.working = false;
@@ -1932,143 +1967,141 @@ fn spawn_codex_stdout_reader(
                                     s.clear_live_turn_output();
                                     (false, s.pending_requests.drain(..).collect())
                                 }
-                            };
-                            if stale_turn {
-                                return;
-                            }
-                            for req in orphaned {
-                                match req.kind {
-                                    CodexRequestKind::CommandApproval
-                                    | CodexRequestKind::FileChangeApproval => {
-                                        let _ = t_out
-                                            .respond(req.rpc_id, json!({ "decision": "cancel" }));
-                                    }
-                                    CodexRequestKind::PermissionsApproval { .. } => {
-                                        let _ =
-                                            t_out.respond(req.rpc_id, json!({ "permissions": {} }));
-                                    }
-                                    CodexRequestKind::UserInput { .. } => {
-                                        let _ = t_out.respond(req.rpc_id, json!({ "answers": {} }));
-                                    }
-                                    CodexRequestKind::McpElicitation { .. } => {
-                                        let _ = t_out
-                                            .respond(req.rpc_id, json!({ "action": "cancel" }));
-                                    }
+                            } else if s.awaiting_turn_start {
+                                (true, Vec::new())
+                            } else {
+                                s.working = false;
+                                if turn_interrupted {
+                                    s.last_turn_interrupted = true;
                                 }
+                                s.awaiting_turn_start = false;
+                                s.active_turn_id = None;
+                                s.file_change_items.clear();
+                                s.clear_live_turn_output();
+                                (false, s.pending_requests.drain(..).collect())
                             }
-                            println!("[Codex Native] Turn finished.");
-                            let _ = std::io::stdout().flush();
-                            act_out.sync();
+                        };
+                        if stale_turn {
+                            return;
                         }
-                        "item/agentMessage/delta" => {
-                            if let Some(delta) = params.get("delta").and_then(Value::as_str) {
-                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                if s.live_stream_started_at.is_none() {
-                                    s.live_stream_started_at = Some(now_iso_rfc3339());
+                        for req in orphaned {
+                            match req.kind {
+                                CodexRequestKind::CommandApproval
+                                | CodexRequestKind::FileChangeApproval => {
+                                    let _ =
+                                        t_out.respond(req.rpc_id, json!({ "decision": "cancel" }));
                                 }
-                                append_bounded(
-                                    &mut s.live_stream_text,
-                                    delta,
-                                    LIVE_STREAM_MAX_CHARS,
-                                );
-                                s.live_tool_label = None;
-                                s.live_tool_detail = None;
-                                s.live_tool_started_at = None;
-                            }
-                        }
-                        "item/reasoning/summaryTextDelta" | "item/reasoning/textDelta" => {
-                            if let Some(delta) = params.get("delta").and_then(Value::as_str) {
-                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                if s.live_thought_started_at.is_none() {
-                                    s.live_thought_started_at = Some(now_iso_rfc3339());
+                                CodexRequestKind::PermissionsApproval { .. } => {
+                                    let _ = t_out.respond(req.rpc_id, json!({ "permissions": {} }));
                                 }
-                                append_bounded(
-                                    &mut s.live_thought_text,
-                                    delta,
-                                    LIVE_STREAM_MAX_CHARS,
-                                );
-                            }
-                        }
-                        "item/started" => {
-                            if let Some(item) = params.get("item") {
-                                let itype =
-                                    item.get("type").and_then(Value::as_str).unwrap_or_default();
-                                if matches!(
-                                    itype,
-                                    "commandExecution" | "fileChange" | "mcpToolCall"
-                                ) {
-                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    if itype == "fileChange" {
-                                        if let Some(item_id) =
-                                            item.get("id").and_then(Value::as_str)
-                                        {
-                                            if let Some(changes) = item.get("changes") {
-                                                s.file_change_items
-                                                    .insert(item_id.to_string(), changes.clone());
-                                            }
-                                        }
-                                    }
-                                    s.live_tool_label = Some(itype.to_string());
-                                    s.live_tool_detail = item
-                                        .get("command")
-                                        .or_else(|| item.get("tool"))
-                                        .and_then(Value::as_str)
-                                        .map(str::to_string);
-                                    s.live_tool_started_at = Some(now_iso_rfc3339());
+                                CodexRequestKind::UserInput { .. } => {
+                                    let _ = t_out.respond(req.rpc_id, json!({ "answers": {} }));
+                                }
+                                CodexRequestKind::McpElicitation { .. } => {
+                                    let _ =
+                                        t_out.respond(req.rpc_id, json!({ "action": "cancel" }));
                                 }
                             }
                         }
-                        "item/completed" => {
+                        println!("[Codex Native] Turn finished.");
+                        let _ = std::io::stdout().flush();
+                        act_out.sync();
+                    }
+                    "item/agentMessage/delta" => {
+                        if let Some(delta) = params.get("delta").and_then(Value::as_str) {
                             let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                            if let Some(item_id) = params
-                                .pointer("/item/id")
-                                .or_else(|| params.get("itemId"))
-                                .and_then(Value::as_str)
-                            {
-                                s.file_change_items.remove(item_id);
+                            if s.live_stream_started_at.is_none() {
+                                s.live_stream_started_at = Some(now_iso_rfc3339());
                             }
+                            append_bounded(&mut s.live_stream_text, delta, LIVE_STREAM_MAX_CHARS);
                             s.live_tool_label = None;
                             s.live_tool_detail = None;
                             s.live_tool_started_at = None;
                         }
-                        "thread/tokenUsage/updated" => {
-                            if let Some(tu) = params.get("tokenUsage") {
-                                let used = tu
-                                    .pointer("/last/totalTokens")
-                                    .or_else(|| tu.pointer("/total/totalTokens"))
-                                    .and_then(Value::as_u64);
-                                let window =
-                                    tu.get("modelContextWindow").and_then(Value::as_u64);
-                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                if let Some(u) = used.filter(|v| *v > 0) {
-                                    s.usage_used_tokens = Some(u);
-                                }
-                                if let Some(w) = window.filter(|v| *v > 0) {
-                                    s.usage_window_size = Some(w);
-                                }
-                            }
-                        }
-                        "thread/name/updated" => {
-                            if let Some(name) = params
-                                .get("threadName")
-                                .and_then(Value::as_str)
-                                .map(str::trim)
-                                .filter(|v| !v.is_empty())
-                            {
-                                st_out
-                                    .lock()
-                                    .unwrap_or_else(|p| p.into_inner())
-                                    .session_title = Some(name.to_string());
-                            }
-                        }
-                        _ => {}
                     }
-                }));
-                if res.is_err() {
-                    eprintln!("[Codex Native] Warning: recovered from panic in stdout reader.");
+                    "item/reasoning/summaryTextDelta" | "item/reasoning/textDelta" => {
+                        if let Some(delta) = params.get("delta").and_then(Value::as_str) {
+                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            if s.live_thought_started_at.is_none() {
+                                s.live_thought_started_at = Some(now_iso_rfc3339());
+                            }
+                            append_bounded(&mut s.live_thought_text, delta, LIVE_STREAM_MAX_CHARS);
+                        }
+                    }
+                    "item/started" => {
+                        if let Some(item) = params.get("item") {
+                            let itype =
+                                item.get("type").and_then(Value::as_str).unwrap_or_default();
+                            if matches!(itype, "commandExecution" | "fileChange" | "mcpToolCall") {
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                if itype == "fileChange" {
+                                    if let Some(item_id) = item.get("id").and_then(Value::as_str) {
+                                        if let Some(changes) = item.get("changes") {
+                                            s.file_change_items
+                                                .insert(item_id.to_string(), changes.clone());
+                                        }
+                                    }
+                                }
+                                s.live_tool_label = Some(itype.to_string());
+                                s.live_tool_detail = item
+                                    .get("command")
+                                    .or_else(|| item.get("tool"))
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string);
+                                s.live_tool_started_at = Some(now_iso_rfc3339());
+                            }
+                        }
+                    }
+                    "item/completed" => {
+                        let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                        if let Some(item_id) = params
+                            .pointer("/item/id")
+                            .or_else(|| params.get("itemId"))
+                            .and_then(Value::as_str)
+                        {
+                            s.file_change_items.remove(item_id);
+                        }
+                        s.live_tool_label = None;
+                        s.live_tool_detail = None;
+                        s.live_tool_started_at = None;
+                    }
+                    "thread/tokenUsage/updated" => {
+                        if let Some(tu) = params.get("tokenUsage") {
+                            let used = tu
+                                .pointer("/last/totalTokens")
+                                .or_else(|| tu.pointer("/total/totalTokens"))
+                                .and_then(Value::as_u64);
+                            let window = tu.get("modelContextWindow").and_then(Value::as_u64);
+                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            if let Some(u) = used.filter(|v| *v > 0) {
+                                s.usage_used_tokens = Some(u);
+                            }
+                            if let Some(w) = window.filter(|v| *v > 0) {
+                                s.usage_window_size = Some(w);
+                            }
+                        }
+                    }
+                    "thread/name/updated" => {
+                        if let Some(name) = params
+                            .get("threadName")
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|v| !v.is_empty())
+                        {
+                            st_out
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .session_title = Some(name.to_string());
+                        }
+                    }
+                    _ => {}
                 }
+            }));
+            if res.is_err() {
+                eprintln!("[Codex Native] Warning: recovered from panic in stdout reader.");
             }
-        });
+        }
+    });
 }
 
 pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
@@ -2126,8 +2159,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             Some(&cwd),
             parsed.profile.gbot_chat,
             parsed.profile.gbot_api_chat,
-        )
-    {
+        ) {
         let denies: Vec<String> = deny_paths
             .iter()
             .map(|p| format!("{}=\"deny\"", crate::agents::codex_toml_string(p)))
@@ -2137,7 +2169,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             ro_entries.extend(denies.iter().cloned());
             let mut ws_entries = vec!["\"/\"=\"read\"".to_string()];
             if !cwd.trim().is_empty() {
-                ws_entries.push(format!("{}=\"write\"", crate::agents::codex_toml_string(&cwd)));
+                ws_entries.push(format!(
+                    "{}=\"write\"",
+                    crate::agents::codex_toml_string(&cwd)
+                ));
             }
             ws_entries.extend(denies.iter().cloned());
             argv.push("-c".to_string());
@@ -2261,7 +2296,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             while !down_sig.load(Ordering::Acquire) {
                 if super::host::termination_requested() {
                     down_sig.store(true, Ordering::Release);
-                    if let Some(t) = transport_sig.lock().unwrap_or_else(|p| p.into_inner()).take()
+                    if let Some(t) = transport_sig
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .take()
                     {
                         t.close_stdin();
                     }
@@ -2384,7 +2422,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             &process_gen,
                             desired,
                         ) {
-                            eprintln!("[Codex Native] Warning: could not sync approval level: {err}");
+                            eprintln!(
+                                "[Codex Native] Warning: could not sync approval level: {err}"
+                            );
                         }
                     }
                 }
@@ -2440,7 +2480,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                 }
                 "approve" => {
                     let Some(proc) = proc_opt.as_ref() else {
-                        ep.ack(id, false, Value::Null, Some("Codex process is not running."));
+                        ep.ack(
+                            id,
+                            false,
+                            Value::Null,
+                            Some("Codex process is not running."),
+                        );
                         continue;
                     };
                     let decision = params
@@ -2490,7 +2535,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         CodexRequestKind::CommandApproval
                         | CodexRequestKind::FileChangeApproval => {
                             let val = if is_deny { "decline" } else { "accept" };
-                            proc.transport.respond(req.rpc_id, json!({ "decision": val }))
+                            proc.transport
+                                .respond(req.rpc_id, json!({ "decision": val }))
                         }
                         CodexRequestKind::PermissionsApproval { permissions } => {
                             if is_deny {
@@ -2522,7 +2568,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                 }
                 "answer_question" => {
                     let Some(proc) = proc_opt.as_ref() else {
-                        ep.ack(id, false, Value::Null, Some("Codex process is not running."));
+                        ep.ack(
+                            id,
+                            false,
+                            Value::Null,
+                            Some("Codex process is not running."),
+                        );
                         continue;
                     };
                     let selections = params
@@ -2685,9 +2736,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     // the turn boundary before starting the next turn.
                     let need_reload = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        proc_opt.is_none()
-                            || s.pending_profile_reload
-                            || s.fatal_error.is_some()
+                        proc_opt.is_none() || s.pending_profile_reload || s.fatal_error.is_some()
                     };
                     if need_reload {
                         if let Err(err) = restart_codex_process(
@@ -2704,7 +2753,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                     }
                     let Some(proc) = proc_opt.as_ref() else {
-                        ep.ack(id, false, Value::Null, Some("Codex process is not running."));
+                        ep.ack(
+                            id,
+                            false,
+                            Value::Null,
+                            Some("Codex process is not running."),
+                        );
                         continue;
                     };
                     let (tid, level, read_only, use_profile_sandbox, roots, model, effort) = {
@@ -2720,7 +2774,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         )
                     };
                     let Some(tid) = tid else {
-                        ep.ack(id, false, Value::Null, Some("Codex thread not initialized."));
+                        ep.ack(
+                            id,
+                            false,
+                            Value::Null,
+                            Some("Codex thread not initialized."),
+                        );
                         continue;
                     };
                     let (approval_policy, reviewer, sandbox_policy) =
@@ -2766,7 +2825,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             }
                             drop(s);
                             activity.sync();
-                            ep.ack(id, true, json!({ "accepted": true, "sessionId": tid }), None);
+                            ep.ack(
+                                id,
+                                true,
+                                json!({ "accepted": true, "sessionId": tid }),
+                                None,
+                            );
                         }
                         Err(err) => {
                             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -2854,9 +2918,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     // recovery deterministically at the turn boundary before `turn/start`.
                     let need_reload = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        proc_opt.is_none()
-                            || s.pending_profile_reload
-                            || s.fatal_error.is_some()
+                        proc_opt.is_none() || s.pending_profile_reload || s.fatal_error.is_some()
                     };
                     if need_reload {
                         if let Err(err) = restart_codex_process(
@@ -2873,7 +2935,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                     }
                     let Some(proc) = proc_opt.as_ref() else {
-                        ep.ack(id, false, Value::Null, Some("Codex process is not running."));
+                        ep.ack(
+                            id,
+                            false,
+                            Value::Null,
+                            Some("Codex process is not running."),
+                        );
                         continue;
                     };
                     cancel_all_pending_codex(&proc.transport, &state);
@@ -2890,7 +2957,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         )
                     };
                     let Some(tid) = tid else {
-                        ep.ack(id, false, Value::Null, Some("Codex thread not initialized."));
+                        ep.ack(
+                            id,
+                            false,
+                            Value::Null,
+                            Some("Codex thread not initialized."),
+                        );
                         continue;
                     };
                     let (approval_policy, reviewer, sandbox_policy) =
@@ -2961,13 +3033,15 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(true);
-                    let (is_working, has_pending, tid, turn_id) = {
+                    let (is_working, has_pending, tid, turn_id, carry_model, carry_effort) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
                         (
                             s.working,
                             !s.pending_requests.is_empty(),
                             s.thread_id.clone(),
                             s.active_turn_id.clone(),
+                            s.current_model.clone(),
+                            s.current_effort.clone(),
                         )
                     };
                     if (is_working || has_pending) && !interrupt {
@@ -3005,7 +3079,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     ep.ack(
                         id,
                         true,
-                        json!({ "switched": true, "nativeSessionId": tid }),
+                        json!({
+                            "switched": true,
+                            "nativeSessionId": tid,
+                            "model": carry_model,
+                            "effort": carry_effort,
+                        }),
                         None,
                     );
                     ep.close_channel();
@@ -3026,12 +3105,14 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
 
     if switch_to_cli_requested {
         drop(signal_guard);
-        let (tid, accept_all, read_only) = {
+        let (tid, accept_all, read_only, carry_model, carry_effort) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
             (
                 s.thread_id.clone(),
                 s.approval_level.implies_cli_accept_all(),
                 s.read_only,
+                s.current_model.clone(),
+                s.current_effort.clone(),
             )
         };
         return exec_interactive_cli(
@@ -3042,6 +3123,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             read_only,
             &parsed.profile,
             Some(&cwd),
+            carry_model.as_deref(),
+            carry_effort.as_deref(),
         );
     }
 

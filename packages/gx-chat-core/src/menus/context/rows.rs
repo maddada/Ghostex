@@ -493,7 +493,11 @@ fn value_context_tokens(input: &RowInput) -> Option<String> {
 }
 
 fn value_model(input: &RowInput) -> Option<String> {
-    input.status.model_name.clone()
+    input
+        .status
+        .model_name
+        .clone()
+        .filter(|name| !crate::menus::catalog::is_placeholder_model_label(name))
 }
 
 fn value_account_name(input: &RowInput) -> Option<String> {

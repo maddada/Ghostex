@@ -162,6 +162,7 @@ pub(crate) fn create_agent_session_params_for_project(
             &agent_id,
             &agent_config,
             &launch_settings,
+            &settings,
             params,
             configured_command,
             &mut runtime_settings,
@@ -353,14 +354,13 @@ pub(crate) fn create_agent_session_params_for_project(
                 .entry("accountBaseCommand")
                 .or_insert(json!(command));
         }
-        let workspace_account_ids = if crate::workspaces::session_skips_workspace_context(
-            project,
-            Some(&runtime_settings),
-        ) {
-            Vec::new()
-        } else {
-            crate::workspaces::project_claude_account_ids(db, project)?
-        };
+        let workspace_account_ids =
+            if crate::workspaces::session_skips_workspace_context(project, Some(&runtime_settings))
+            {
+                Vec::new()
+            } else {
+                crate::workspaces::project_claude_account_ids(db, project)?
+            };
         crate::accounts::launch::apply_new_session(
             db,
             &agent_id,
@@ -784,12 +784,44 @@ pub(crate) fn create_agent_session_params_for_project(
                                 )
                             })
                             .unwrap_or((None, None));
-                        let req_model = read_text(params, "agentModel")
-                            .or_else(|| pin_obj.and_then(|m| read_text_from_map(m, "model")))
-                            .or(cmd_model);
+                        let resolved_default =
+                            crate::agent_model_pins::resolve_launch_default(fam, Some(&settings));
+                        let non_placeholder = |value: Option<String>| {
+                            value.filter(|v| {
+                                !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(v)
+                            })
+                        };
+                        let req_model = non_placeholder(read_text(params, "agentModel"))
+                            .or_else(|| non_placeholder(cmd_model))
+                            .or_else(|| {
+                                non_placeholder(
+                                    pin_obj.and_then(|m| read_text_from_map(m, "model")),
+                                )
+                            })
+                            .or_else(|| resolved_default.as_ref().map(|p| p.model.clone()));
                         let req_effort = read_text(params, "agentEffort")
+                            .or(cmd_effort)
                             .or_else(|| pin_obj.and_then(|m| read_text_from_map(m, "effort")))
-                            .or(cmd_effort);
+                            .or_else(|| resolved_default.as_ref().and_then(|p| p.effort.clone()));
+                        if let Some(ref model) = req_model {
+                            if pin_obj
+                                .and_then(|m| read_text_from_map(m, "model"))
+                                .is_none()
+                            {
+                                let pin = crate::agent_model_pins::ModelPin {
+                                    model: model.clone(),
+                                    effort: req_effort.clone(),
+                                    ..Default::default()
+                                };
+                                runtime_settings.insert(
+                                    crate::agent_model_pins::SESSION_PIN_KEY.to_string(),
+                                    crate::agent_model_pins::session_marker(
+                                        crate::agent_model_pins::ORIGIN_DEFAULT,
+                                        Some(&pin),
+                                    ),
+                                );
+                            }
+                        }
                         // Record any owner-configured flags/env/custom binary skipped by Non-CLI
                         // mode so logs and Chat View both surface a visible one-line notice.
                         // For GBot chats, only inspect the owner's agent config command (never
@@ -822,7 +854,8 @@ pub(crate) fn create_agent_session_params_for_project(
                                 json!(joined),
                             );
                         } else {
-                            runtime_settings.remove(crate::acp::SESSION_NON_CLI_IGNORED_COMMAND_KEY);
+                            runtime_settings
+                                .remove(crate::acp::SESSION_NON_CLI_IGNORED_COMMAND_KEY);
                         }
                         // Build Ghostex's server-side structured `AcpLaunchProfile` strictly from
                         // Ghostex's own account state and settings (never parsing `agentCommand`).
@@ -847,23 +880,23 @@ pub(crate) fn create_agent_session_params_for_project(
                             developer_instructions,
                             gbot_chat: is_gbot_chat(Some(&runtime_settings)),
                             gbot_api_chat: api_chat,
-                            gbot_computer_use_off:
-                                super::gbot_computer_use(Some(&runtime_settings)) == Some(false),
+                            gbot_computer_use_off: super::gbot_computer_use(Some(
+                                &runtime_settings,
+                            )) == Some(false),
                             lean_worker: super::is_lean_worker(Some(&runtime_settings)),
                         };
-                        let acp_cmd =
-                            crate::acp::spec::build_acp_host_launch_command_with_profile(
-                                fam,
-                                base_cli_cmd.as_deref(),
-                                resume_id.as_deref(),
-                                approval_level,
-                                &[],
-                                req_model.as_deref(),
-                                req_effort.as_deref(),
-                                false,
-                                read_only_acp,
-                                &acp_profile,
-                            );
+                        let acp_cmd = crate::acp::spec::build_acp_host_launch_command_with_profile(
+                            fam,
+                            base_cli_cmd.as_deref(),
+                            resume_id.as_deref(),
+                            approval_level,
+                            &[],
+                            req_model.as_deref(),
+                            req_effort.as_deref(),
+                            false,
+                            read_only_acp,
+                            &acp_profile,
+                        );
                         runtime_settings.insert(
                             crate::acp::SESSION_NON_CLI_ACTIVE_KEY.to_string(),
                             json!(true),
@@ -1332,21 +1365,23 @@ fn launch_effort_levels(family: &str) -> Option<(&'static str, &'static [&'stati
     }
 }
 
-/// A new Claude, Codex or Cursor session starts on the model the user last chose as the agent's
-/// default (CDXC:AgentProviders 2026-10-07 in agent_model_pins.rs). A model the create names, or
-/// one the configured command already pins, is this session's own choice and is never taught to
-/// the default; with no default known, or after the agent's settings changed outside Ghostex, the
-/// session runs the agent's own default and its first report becomes the remembered one.
+/// A new session starts on its explicit per-agent Settings choice (`agentDefaultModels`), else the
+/// model the user last chose in chat (`launch_default`), else the concrete newest default from the
+/// agent's reported model list (Opus for Claude, Sol for Codex, Neon for Antigravity, etc.). A
+/// model the create names, or one the configured command already pins, stays this session's own
+/// choice.
+#[allow(clippy::too_many_arguments)]
 fn pin_remembered_agent_model(
     agent_id: &str,
     agent_config: &Map<String, Value>,
     launch_settings: &Map<String, Value>,
+    settings: &Map<String, Value>,
     params: &Map<String, Value>,
     command: Option<String>,
     runtime_settings: &mut Map<String, Value>,
 ) -> Result<Option<String>, DomainStateError> {
     use crate::agent_model_pins::{
-        launch_default, pin_family, session_marker, ModelPin, ORIGIN_DEFAULT, ORIGIN_LEARN,
+        pin_family, resolve_launch_default, session_marker, ModelPin, ORIGIN_DEFAULT, ORIGIN_LEARN,
         ORIGIN_SESSION, SESSION_PIN_KEY,
     };
     let Some(family) =
@@ -1375,7 +1410,7 @@ fn pin_remembered_agent_model(
         );
         return Ok(command);
     }
-    let pinned = launch_default(family).and_then(|pin| {
+    let pinned = resolve_launch_default(family, Some(settings)).and_then(|pin| {
         let effort = pin.effort.as_deref().filter(|_| family != "cursor");
         with_agent_model_options(&base, family, Some(&pin.model), effort)
             .ok()

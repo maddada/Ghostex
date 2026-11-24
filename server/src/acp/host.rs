@@ -288,7 +288,12 @@ impl GxserverEndpoint {
         })
     }
 
-    pub(super) fn post_json(&self, path: &str, body: Value, timeout: Duration) -> Result<Value, String> {
+    pub(super) fn post_json(
+        &self,
+        path: &str,
+        body: Value,
+        timeout: Duration,
+    ) -> Result<Value, String> {
         let url = format!("{}{path}", self.base_url);
         let agent: ureq::Agent = crate::http_agent::config()
             .http_status_as_error(false)
@@ -804,7 +809,11 @@ impl HostState {
                 "detectedAt": self.live_stream_started_at.as_deref().unwrap_or_default(),
             });
         }
-        if let Some(label) = self.live_tool_label.as_deref().filter(|s| !s.trim().is_empty()) {
+        if let Some(label) = self
+            .live_tool_label
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+        {
             return json!({
                 "kind": "tool",
                 "label": label,
@@ -989,6 +998,9 @@ impl AcpTransport {
 }
 
 fn apply_session_metadata(state: &mut HostState, result: &Value) {
+    use ghostex_gx_chat_core::menus::catalog::{
+        is_placeholder_model_label, is_placeholder_model_value,
+    };
     if let Some(sid) = result
         .get("sessionId")
         .and_then(Value::as_str)
@@ -1001,11 +1013,36 @@ fn apply_session_metadata(state: &mut HostState, result: &Value) {
             .get("currentModelId")
             .or_else(|| models.get("currentModel"))
             .and_then(Value::as_str)
+            .filter(|m| !is_placeholder_model_value(m))
         {
             state.current_model = Some(cur.to_string());
+            if state.family == "antigravity" && state.current_effort.is_none() {
+                if let Some((_, effort)) =
+                    crate::agent_model_catalog::split_antigravity_model_id(cur)
+                {
+                    state.current_effort = Some(effort);
+                }
+            }
         }
-        if let Some(avail) = models.get("availableModels") {
-            state.available_models = avail.clone();
+        if let Some(avail) = models.get("availableModels").and_then(Value::as_array) {
+            let filtered: Vec<Value> = avail
+                .iter()
+                .filter(|entry| {
+                    let id = entry
+                        .get("modelId")
+                        .or_else(|| entry.get("id"))
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let name = entry
+                        .get("name")
+                        .or_else(|| entry.get("displayName"))
+                        .and_then(Value::as_str)
+                        .unwrap_or(id);
+                    !is_placeholder_model_value(id) && !is_placeholder_model_label(name)
+                })
+                .cloned()
+                .collect();
+            state.available_models = Value::Array(filtered);
         }
     }
     if let Some(modes) = result.get("modes") {
@@ -1023,6 +1060,97 @@ fn apply_session_metadata(state: &mut HostState, result: &Value) {
     if let Some(configs) = result.get("configOptions") {
         state.config_options = configs.clone();
     }
+}
+
+/// Resolves `(model, effort)` to the exact ACP `modelId` that `session/set_model` expects.
+/// For Antigravity, `agy acp` exposes flattened `<base>-<effort>` ids (e.g. `gemini-4-neon-high`),
+/// whereas Ghostex's model picker keys rows by `<base>` (`gemini-4-neon`) + `effort` (`high`).
+fn resolve_acp_target_model_id(
+    family: &str,
+    available_models: &Value,
+    model: Option<&str>,
+    effort: Option<&str>,
+) -> Option<(String, Option<String>)> {
+    use ghostex_gx_chat_core::menus::catalog::{family_and_version, is_placeholder_model_value};
+    let avail = available_models.as_array();
+    let has_id = |candidate: &str| {
+        avail.is_some_and(|list| {
+            list.iter().any(|entry| {
+                entry
+                    .get("modelId")
+                    .or_else(|| entry.get("id"))
+                    .and_then(Value::as_str)
+                    == Some(candidate)
+            })
+        })
+    };
+    let model = model
+        .map(str::trim)
+        .filter(|m| !is_placeholder_model_value(m));
+    let effort = effort
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .map(|e| e.to_ascii_lowercase());
+
+    if let Some(model) = model {
+        if family == "antigravity" {
+            if has_id(model) {
+                let parsed_effort = crate::agent_model_catalog::split_antigravity_model_id(model)
+                    .map(|(_, e)| e)
+                    .or(effort);
+                return Some((model.to_string(), parsed_effort));
+            }
+            if let Some(ref eff) = effort {
+                let combined = format!("{model}-{eff}");
+                if has_id(&combined) {
+                    return Some((combined, Some(eff.clone())));
+                }
+            }
+            for fallback_eff in ["high", "medium", "low", "xhigh"] {
+                let combined = format!("{model}-{fallback_eff}");
+                if has_id(&combined) {
+                    return Some((combined, Some(fallback_eff.to_string())));
+                }
+            }
+        }
+        return Some((model.to_string(), effort));
+    }
+
+    // No explicit model: pick the newest Neon for Antigravity, else the first concrete model.
+    if family == "antigravity" {
+        if let Some(list) = avail {
+            let newest_neon = list
+                .iter()
+                .filter_map(|entry| {
+                    let id = entry
+                        .get("modelId")
+                        .or_else(|| entry.get("id"))
+                        .and_then(Value::as_str)?;
+                    let name = entry.get("name").and_then(Value::as_str).unwrap_or(id);
+                    let (fam, ver) = family_and_version(name).or_else(|| family_and_version(id))?;
+                    let words: Vec<&str> = fam.split_whitespace().collect();
+                    (words.contains(&"neon") && words.contains(&"gemini")).then_some((id, ver))
+                })
+                .max_by(|a, b| a.1.cmp(&b.1))
+                .map(|(id, _)| id.to_string());
+            if let Some(id) = newest_neon {
+                let parsed_effort = crate::agent_model_catalog::split_antigravity_model_id(&id)
+                    .map(|(_, e)| e)
+                    .or(effort);
+                return Some((id, parsed_effort));
+            }
+        }
+    }
+    avail
+        .and_then(|list| list.first())
+        .and_then(|entry| {
+            entry
+                .get("modelId")
+                .or_else(|| entry.get("id"))
+                .and_then(Value::as_str)
+        })
+        .filter(|id| !is_placeholder_model_value(id))
+        .map(|id| (id.to_string(), effort))
 }
 
 fn parse_permission_request(rpc_id: Value, params: &Value) -> PendingPermission {
@@ -1185,7 +1313,12 @@ impl ActivityReporter {
                     } else {
                         "idle"
                     };
-                    (act, s.native_session_id.clone(), front, s.last_turn_interrupted)
+                    (
+                        act,
+                        s.native_session_id.clone(),
+                        front,
+                        s.last_turn_interrupted,
+                    )
                 };
                 ep.report_activity(&family, act, sid.as_deref(), perm.as_ref(), interrupted);
             }
@@ -1399,6 +1532,8 @@ pub(super) fn exec_interactive_cli(
     read_only: bool,
     profile: &AcpLaunchProfile,
     cwd: Option<&str>,
+    model: Option<&str>,
+    effort: Option<&str>,
 ) -> i32 {
     let (envs, program, args) = build_cli_switch_argv_with_options(
         spec,
@@ -1408,6 +1543,8 @@ pub(super) fn exec_interactive_cli(
         read_only,
         profile,
         cwd,
+        model,
+        effort,
     );
     println!(
         "\r\nSwitching to interactive {} terminal...",
@@ -1454,7 +1591,10 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
     let Some(spec) = spec_for_family(&parsed.family) else {
-        eprintln!("Agent `{}` does not support Native mode yet.", parsed.family);
+        eprintln!(
+            "Agent `{}` does not support Native mode yet.",
+            parsed.family
+        );
         return 2;
     };
     if spec.family == "claude" {
@@ -1946,24 +2086,52 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("[Native] Warning: could not sync initial native mode: {err}");
     }
 
-    if let Some(model) = parsed.model.as_deref().filter(|m| !m.is_empty()) {
-        if let Some(sid) = native_session_id.as_deref() {
-            if transport
-                .call(
-                    "session/set_model",
-                    json!({ "sessionId": sid, "modelId": model }),
-                    ACP_RPC_TIMEOUT,
-                )
-                .is_ok()
-            {
-                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                s.current_model = Some(model.to_string());
+    {
+        let (avail, current_is_concrete) = {
+            let s = state.lock().unwrap_or_else(|p| p.into_inner());
+            let concrete = s.current_model.as_deref().is_some_and(|m| {
+                !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m)
+            });
+            (s.available_models.clone(), concrete)
+        };
+        let requested_model = parsed
+            .model
+            .as_deref()
+            .filter(|m| !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m));
+        let target = if requested_model.is_some() || !current_is_concrete {
+            resolve_acp_target_model_id(
+                spec.family,
+                &avail,
+                requested_model,
+                parsed.effort.as_deref(),
+            )
+        } else {
+            None
+        };
+        if let Some((target_id, resolved_effort)) = target {
+            if let Some(sid) = native_session_id.as_deref() {
+                if transport
+                    .call(
+                        "session/set_model",
+                        json!({ "sessionId": sid, "modelId": target_id }),
+                        ACP_RPC_TIMEOUT,
+                    )
+                    .is_ok()
+                {
+                    let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                    s.current_model = Some(target_id);
+                    if let Some(eff) = resolved_effort {
+                        s.current_effort = Some(eff);
+                    }
+                }
             }
         }
     }
     if let Some(effort) = parsed.effort.as_deref().filter(|e| !e.is_empty()) {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-        s.current_effort = Some(effort.to_string());
+        if s.current_effort.is_none() {
+            s.current_effort = Some(effort.to_string());
+        }
     }
 
     println!(
@@ -1971,9 +2139,7 @@ pub fn run(args: &[String]) -> i32 {
         spec.display_name,
         native_session_id.as_deref().unwrap_or("pending")
     );
-    println!(
-        "Use Chat View to talk with this agent, or switch to Terminal to open Terminal mode."
-    );
+    println!("Use Chat View to talk with this agent, or switch to Terminal to open Terminal mode.");
     let _ = std::io::stdout().flush();
 
     activity.sync();
@@ -2219,11 +2385,14 @@ pub fn run(args: &[String]) -> i32 {
                         .and_then(Value::as_str)
                         .unwrap_or_default()
                         .to_string();
-                    let sid = state
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .native_session_id
-                        .clone();
+                    let (sid, avail, existing_model) = {
+                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        (
+                            s.native_session_id.clone(),
+                            s.available_models.clone(),
+                            s.current_model.clone(),
+                        )
+                    };
                     let Some(sid) = sid else {
                         ep.ack(
                             id,
@@ -2233,19 +2402,41 @@ pub fn run(args: &[String]) -> i32 {
                         );
                         continue;
                     };
-                    if !model.is_empty() {
+                    let base_for_antigravity = if model.is_empty() && spec.family == "antigravity" {
+                        existing_model.as_deref().map(|cur| {
+                            crate::agent_model_catalog::split_antigravity_model_id(cur)
+                                .map(|(base, _)| base)
+                                .unwrap_or_else(|| cur.to_string())
+                        })
+                    } else {
+                        None
+                    };
+                    let effective_model = if !model.is_empty() {
+                        Some(model.as_str())
+                    } else {
+                        base_for_antigravity.as_deref()
+                    };
+                    if let Some((target_id, resolved_effort)) = effective_model.and_then(|m| {
+                        resolve_acp_target_model_id(
+                            spec.family,
+                            &avail,
+                            Some(m),
+                            (!effort.is_empty()).then_some(effort.as_str()),
+                        )
+                    }) {
                         if let Err(err) = transport.call(
                             "session/set_model",
-                            json!({ "sessionId": sid, "modelId": model }),
+                            json!({ "sessionId": sid, "modelId": target_id }),
                             ACP_RPC_TIMEOUT,
                         ) {
                             ep.ack(id, false, Value::Null, Some(&err));
                             continue;
                         }
-                        state
-                            .lock()
-                            .unwrap_or_else(|p| p.into_inner())
-                            .current_model = Some(model);
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        s.current_model = Some(target_id);
+                        if let Some(eff) = resolved_effort {
+                            s.current_effort = Some(eff);
+                        }
                     }
                     if !effort.is_empty() {
                         // Best-effort effort config option update if exposed by the agent.
@@ -2464,12 +2655,27 @@ pub fn run(args: &[String]) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(true);
-                    let (is_working, has_pending_perm, sid) = {
+                    let (is_working, has_pending_perm, sid, carry_model, carry_effort) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        let (m, e) = match s.current_model.as_deref() {
+                            Some(raw) if spec.family == "antigravity" => {
+                                if let Some((base, eff)) =
+                                    crate::agent_model_catalog::split_antigravity_model_id(raw)
+                                {
+                                    (Some(base), s.current_effort.clone().or(Some(eff)))
+                                } else {
+                                    (Some(raw.to_string()), s.current_effort.clone())
+                                }
+                            }
+                            Some(raw) => (Some(raw.to_string()), s.current_effort.clone()),
+                            None => (None, s.current_effort.clone()),
+                        };
                         (
                             s.working,
                             !s.pending_permissions.is_empty(),
                             s.native_session_id.clone(),
+                            m,
+                            e,
                         )
                     };
                     if (is_working || has_pending_perm) && !interrupt {
@@ -2507,6 +2713,8 @@ pub fn run(args: &[String]) -> i32 {
                         json!({
                             "switched": true,
                             "nativeSessionId": sid,
+                            "model": carry_model,
+                            "effort": carry_effort,
                         }),
                         None,
                     );
@@ -2528,11 +2736,26 @@ pub fn run(args: &[String]) -> i32 {
 
     if switch_to_cli_requested {
         drop(signal_guard);
-        let (sid, accept_all) = {
+        let (sid, accept_all, carry_model, carry_effort) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
+            let (m, e) = match s.current_model.as_deref() {
+                Some(raw) if spec.family == "antigravity" => {
+                    if let Some((base, eff)) =
+                        crate::agent_model_catalog::split_antigravity_model_id(raw)
+                    {
+                        (Some(base), s.current_effort.clone().or(Some(eff)))
+                    } else {
+                        (Some(raw.to_string()), s.current_effort.clone())
+                    }
+                }
+                Some(raw) => (Some(raw.to_string()), s.current_effort.clone()),
+                None => (None, s.current_effort.clone()),
+            };
             (
                 s.native_session_id.clone(),
                 s.approval_level.implies_cli_accept_all(),
+                m,
+                e,
             )
         };
         return exec_interactive_cli(
@@ -2543,6 +2766,8 @@ pub fn run(args: &[String]) -> i32 {
             parsed.read_only,
             &parsed.profile,
             Some(&cwd),
+            carry_model.as_deref(),
+            carry_effort.as_deref(),
         );
     }
 

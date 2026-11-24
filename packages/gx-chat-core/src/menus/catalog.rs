@@ -510,3 +510,192 @@ pub fn bundled_agent_model_catalog() -> Option<AgentModelCatalog> {
     const BUNDLED: &str = include_str!("../../../../agent-model-catalog.json");
     parse_agent_model_catalog(&serde_json::from_str::<Value>(BUNDLED).ok()?)
 }
+
+/// Canonical model-catalog family key for an agent id or icon (`"antigravity-cli"` -> `"antigravity"`).
+pub fn canonical_model_family(agent_id: &str) -> &str {
+    match agent_id.trim() {
+        "claude" | "claude-code" | "openclaude" => "claude",
+        "codex" | "codex-cli" => "codex",
+        "antigravity" | "antigravity-cli" | "agy" => "antigravity",
+        "cursor" | "cursor-cli" | "cursor-agent" => "cursor",
+        "grok" | "grok-build" => "grok",
+        "hermes" | "hermes-agent" => "hermes",
+        "dsh" | "dsh-tui" => "dsh",
+        other => other,
+    }
+}
+
+/// CDXC:SessionChat 2026-11-24 DECISION:
+/// User: "never ever ever show 'Default' or some crap like that in the model selector. It must
+/// mention the model." Every model selector and label treats these values as unresolved aliases
+/// that must resolve to a concrete model instead of rendering verbatim.
+pub fn is_placeholder_model_value(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized.is_empty()
+        || matches!(
+            normalized.as_str(),
+            "default" | "auto" | "recommended" | "model" | "agent default"
+        )
+        || normalized.starts_with("default (")
+        || normalized.starts_with("default ")
+}
+
+/// True when `label` is a generic placeholder ("Default", "Default (recommended)", "Auto",
+/// "Agent default", "OpenCode's default", "Model", or blank) rather than a concrete model name.
+pub fn is_placeholder_model_label(label: &str) -> bool {
+    let normalized = label.trim().to_ascii_lowercase();
+    normalized.is_empty()
+        || matches!(
+            normalized.as_str(),
+            "default" | "auto" | "recommended" | "model" | "agent default"
+        )
+        || normalized.starts_with("default (")
+        || normalized.starts_with("default ")
+        || normalized.ends_with("'s default")
+        || normalized.ends_with("\u{2019}s default")
+}
+
+/// Preferred family words for agents with an explicit default-model rule:
+/// Claude Code -> newest Opus; Codex -> newest Sol; Antigravity -> newest Neon.
+fn preferred_default_family_words(family: &str) -> Option<&'static [&'static str]> {
+    match canonical_model_family(family) {
+        "claude" => Some(&["opus"]),
+        "codex" => Some(&["gpt", "sol"]),
+        "antigravity" => Some(&["gemini", "neon"]),
+        _ => None,
+    }
+}
+
+fn newest_catalog_model_matching<'a>(
+    models: &[&'a CatalogModel],
+    words: &[&str],
+    exact: bool,
+) -> Option<&'a CatalogModel> {
+    let mut best: Option<(&'a CatalogModel, Vec<u32>)> = None;
+    for model in models {
+        if is_placeholder_model_value(&model.value) || is_placeholder_model_label(&model.label) {
+            continue;
+        }
+        let Some((family, version)) =
+            family_and_version(&model.label).or_else(|| family_and_version(&model.value))
+        else {
+            continue;
+        };
+        let family_words: Vec<&str> = family.split_whitespace().collect();
+        if !words.iter().all(|word| family_words.contains(word))
+            || (exact && family_words.len() != words.len())
+        {
+            continue;
+        }
+        if best.as_ref().is_none_or(|(_, newest)| version > *newest) {
+            best = Some((model, version));
+        }
+    }
+    best.map(|(model, _)| model)
+}
+
+fn newest_catalog_model_of<'a>(
+    models: &[&'a CatalogModel],
+    words: &[&str],
+) -> Option<&'a CatalogModel> {
+    newest_catalog_model_matching(models, words, true)
+        .or_else(|| newest_catalog_model_matching(models, words, false))
+        .or_else(|| {
+            // If only a single keyword matches (e.g. a future "Sol" or "Neon" without "GPT"/"Gemini"),
+            // pick the newest row containing the distinguishing family word.
+            words
+                .last()
+                .and_then(|tail| newest_catalog_model_matching(models, &[*tail], false))
+        })
+}
+
+/// The concrete default model for `family` from its reported model lineup:
+/// - Claude Code: newest Opus available (today Opus 5.5)
+/// - Codex: newest Sol model available (today GPT 6.2 Sol)
+/// - Antigravity: newest Neon model available (today Gemini 4 Neon)
+/// - Other agents: the lineup's non-placeholder `default: true` row, else its first non-legacy
+///   concrete row, else its first concrete row.
+pub fn preferred_default_model<'a>(
+    family: &str,
+    agent: &'a CatalogAgent,
+) -> Option<&'a CatalogModel> {
+    let all: Vec<&CatalogModel> = agent
+        .models
+        .iter()
+        .filter(|m| !is_placeholder_model_value(&m.value) && !is_placeholder_model_label(&m.label))
+        .collect();
+    if all.is_empty() {
+        return None;
+    }
+    let current: Vec<&CatalogModel> = all
+        .iter()
+        .copied()
+        .filter(|m| m.group.as_deref() != Some(LEGACY_GROUP_ID))
+        .collect();
+    let pool = if current.is_empty() { &all } else { &current };
+    preferred_default_family_words(family)
+        .and_then(|words| {
+            newest_catalog_model_of(pool, words).or_else(|| newest_catalog_model_of(&all, words))
+        })
+        .or_else(|| pool.iter().copied().find(|m| m.default))
+        .or_else(|| pool.first().copied())
+        .or_else(|| all.first().copied())
+}
+
+/// Hard-coded fallback `(value, label, default_effort)` used ONLY when an agent has no reported
+/// model list at all.
+pub fn preferred_default_model_fallback(
+    family: &str,
+) -> Option<(&'static str, &'static str, Option<&'static str>)> {
+    match canonical_model_family(family) {
+        "claude" => Some(("opus[1m]", "Opus 5.5", Some("high"))),
+        "codex" => Some(("gpt-6.2-sol", "GPT 6.2 Sol", Some("medium"))),
+        "antigravity" => Some(("gemini-4-neon", "Gemini 4 Neon", Some("high"))),
+        _ => None,
+    }
+}
+
+/// Default reasoning effort for `model` on `agent` when the user has not chosen one explicitly.
+pub fn preferred_default_effort(
+    family: &str,
+    agent: &CatalogAgent,
+    model: &CatalogModel,
+) -> Option<String> {
+    let offered = |effort: &str| model.efforts.iter().any(|candidate| candidate == effort);
+    if let Some(default_effort) = model.default_effort.as_deref().filter(|e| offered(e)) {
+        return Some(default_effort.to_string());
+    }
+    if let Some(default_effort) = agent.default_effort.as_deref().filter(|e| offered(e)) {
+        return Some(default_effort.to_string());
+    }
+    if matches!(
+        canonical_model_family(family),
+        "claude" | "codex" | "antigravity"
+    ) && offered("high")
+    {
+        return Some("high".to_string());
+    }
+    model.efforts.first().cloned()
+}
+
+/// Resolves the concrete default `(value, label, effort)` for `family` from `catalog`, falling
+/// back to [`preferred_default_model_fallback`] only when the catalog has no models for it.
+pub fn resolved_default_model(
+    catalog: &AgentModelCatalog,
+    family: &str,
+) -> Option<(String, String, Option<String>)> {
+    let canonical = canonical_model_family(family);
+    if let Some(agent) = catalog.agents.get(canonical) {
+        if let Some(model) = preferred_default_model(canonical, agent) {
+            let effort = preferred_default_effort(canonical, agent, model);
+            return Some((model.value.clone(), model.label.clone(), effort));
+        }
+    }
+    preferred_default_model_fallback(canonical).map(|(value, label, effort)| {
+        (
+            value.to_string(),
+            label.to_string(),
+            effort.map(str::to_string),
+        )
+    })
+}

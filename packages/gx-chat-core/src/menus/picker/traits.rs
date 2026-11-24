@@ -370,6 +370,7 @@ pub fn model_menu_pill_labels(
     model: Option<&str>,
     model_label: Option<&str>,
     traits: &[ModelMenuTrait],
+    catalog: &AgentModelCatalog,
 ) -> Value {
     let entry = model_menu_entry_for(entries, provider, model);
     let parts: Vec<String> = traits
@@ -388,8 +389,23 @@ pub fn model_menu_pill_labels(
         .filter(|value| !value.is_empty())
         .collect();
     let label = entry
+        .filter(|entry| {
+            !crate::menus::catalog::is_placeholder_model_value(&entry.value)
+                && !crate::menus::catalog::is_placeholder_model_label(&entry.label)
+        })
         .map(|entry| entry.label.clone())
-        .or_else(|| model_label.map(str::to_string));
+        .or_else(|| {
+            model_label
+                .filter(|label| !crate::menus::catalog::is_placeholder_model_label(label))
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            provider
+                .and_then(|provider| {
+                    crate::menus::catalog::resolved_default_model(catalog, provider)
+                })
+                .map(|(_, label, _)| label)
+        });
     let suffix = (!parts.is_empty()).then(|| parts.join(" · "));
     // The pill cuts a long name to its width, so its tooltip carries the whole of it.
     let tooltip = label.as_ref().map(|label| match &suffix {

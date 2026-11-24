@@ -530,12 +530,35 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                     })
                 }))
                 .collect();
-            let default_model = models
-                .iter()
-                .find(|model| {
-                    family == "claude" && model["value"] == DEFAULT_CLAUDE_COORDINATOR_MODEL
+            let preferred_value = crate::agent_model_catalog::preferred_default_model(family)
+                .map(|(value, _, _)| value);
+            let default_model = preferred_value
+                .as_deref()
+                .and_then(|wanted| {
+                    models
+                        .iter()
+                        .find(|model| model["value"].as_str() == Some(wanted))
                 })
-                .or_else(|| models.iter().find(|model| model["default"] == true))
+                .or_else(|| {
+                    models.iter().find(|model| {
+                        family == "claude" && model["value"] == DEFAULT_CLAUDE_COORDINATOR_MODEL
+                    })
+                })
+                .or_else(|| {
+                    models.iter().find(|model| {
+                        model["default"] == true
+                            && model["value"].as_str().is_some_and(|v| {
+                                !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(v)
+                            })
+                    })
+                })
+                .or_else(|| {
+                    models.iter().find(|model| {
+                        model["value"].as_str().is_some_and(|v| {
+                            !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(v)
+                        })
+                    })
+                })
                 .or_else(|| models.first())
                 .map(|model| model["value"].clone())
                 .unwrap_or(Value::Null);

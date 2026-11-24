@@ -123,6 +123,20 @@ impl AgentsTab {
             message["icon"] = json!(icon);
         }
         self.post(message, cx);
+        let family = ghostex_gx_chat_core::menus::catalog::canonical_model_family(
+            agent.icon.as_deref().unwrap_or(&agent.agent_id),
+        )
+        .to_string();
+        let mut defaults = self
+            .store
+            .read(cx)
+            .value("agentDefaultModels")
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        if defaults.remove(&family).is_some() {
+            self.save("agentDefaultModels", Value::Object(defaults), cx);
+        }
         cx.notify();
     }
 
@@ -175,6 +189,22 @@ impl AgentsTab {
         self.store.update(cx, |store, cx| {
             store.apply_patch(patch, "settings:control", cx)
         });
+    }
+
+    fn set_default_model(&mut self, family: &str, model: String, cx: &mut Context<Self>) {
+        let mut map = self
+            .store
+            .read(cx)
+            .value("agentDefaultModels")
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        if ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(&model) {
+            map.remove(family);
+        } else {
+            map.insert(family.to_string(), json!(model));
+        }
+        self.save("agentDefaultModels", Value::Object(map), cx);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -399,6 +429,83 @@ impl AgentsTab {
                     select,
                     cx,
                 )));
+            }
+            if let Some(catalog) = crate::app::gx_chat::current_model_catalog() {
+                let model_family = ghostex_gx_chat_core::menus::catalog::canonical_model_family(
+                    agent.icon.as_deref().unwrap_or(&agent.agent_id),
+                )
+                .to_string();
+                let catalog_agent = catalog
+                    .agents
+                    .get(&model_family)
+                    .or_else(|| catalog.agents.get(&agent.agent_id));
+                if let Some(cat_agent) = catalog_agent {
+                    let options: Vec<super::super::super::catalog::SettingOption> = cat_agent
+                        .models
+                        .iter()
+                        .filter(|m| {
+                            !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(
+                                &m.value,
+                            ) && !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_label(
+                                &m.label,
+                            )
+                        })
+                        .map(|m| super::super::super::catalog::SettingOption {
+                            label: m.label.clone(),
+                            value: m.value.clone(),
+                        })
+                        .collect();
+                    if !options.is_empty() {
+                        let explicit = self
+                            .store
+                            .read(cx)
+                            .value("agentDefaultModels")
+                            .get(&model_family)
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|v| options.iter().any(|opt| opt.value == *v))
+                            .map(str::to_string);
+                        let remembered = self
+                            .agent_model_pins
+                            .get(&model_family)
+                            .filter(|v| options.iter().any(|opt| opt.value == **v))
+                            .cloned();
+                        let fallback =
+                            ghostex_gx_chat_core::menus::catalog::preferred_default_model(
+                                &model_family,
+                                cat_agent,
+                            )
+                            .map(|m| m.value.clone())
+                            .unwrap_or_else(|| options[0].value.clone());
+                        let current_model = explicit.or(remembered).unwrap_or(fallback);
+                        let save_family = model_family.clone();
+                        let select = settings_select(
+                            self,
+                            p,
+                            SharedString::from(format!("agent-default-model-{agent_id}")),
+                            &options,
+                            &current_model,
+                            Some(SELECT_WIDTH),
+                            false,
+                            None,
+                            move |page: &mut Self, value, _window, cx| {
+                                page.set_default_model(&save_family, value, cx);
+                            },
+                            window,
+                            cx,
+                        );
+                        children.push(panel_child(setting_row(
+                            p,
+                            SharedString::from(format!("agent-default-model-row-{agent_id}")),
+                            RowSpec::new("Default model").description(
+                                "Model new chats and threads of this agent start on. Overrides the last model picked in chat.",
+                            ),
+                            None,
+                            select,
+                            cx,
+                        )));
+                    }
+                }
             }
             // Claude Code's idle compaction and prompt cache length (claude_context.rs).
             if agent.is_default && agent_id == super::claude_context::CLAUDE_AGENT_ID {

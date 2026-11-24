@@ -106,6 +106,10 @@ pub(super) async fn route_sidebar_http(
                             }
                         }
                         hud.insert("agentRoster".to_string(), roster);
+                        hud.insert(
+                            "agentModelPins".to_string(),
+                            json!(crate::agent_model_pins::default_pins()),
+                        );
                     }
                 }
                 Ok(hud)

@@ -405,59 +405,40 @@ pub fn detect_session_chat_terminal_state(
     // streaming activity directly through `ghostex acp-host` without terminal screen scraping
     // (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
     if let Some(acp_state) = crate::acp::channel::channel_state(project_id, session_id) {
-        let available_model_name = |model_id: &str| -> Option<String> {
+        let family = acp_state
+            .get("family")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+            .or(agent_id)
+            .unwrap_or("antigravity");
+        let resolved_acp = crate::agent_model_catalog::resolve_acp_model(
+            family,
+            acp_state.get("model").and_then(Value::as_str),
+            acp_state.get("effort").and_then(Value::as_str),
             acp_state
                 .get("availableModels")
                 .and_then(Value::as_array)
-                .and_then(|models| {
-                    models.iter().find_map(|entry| {
-                        let id = entry
-                            .get("modelId")
-                            .or_else(|| entry.get("id"))
-                            .and_then(Value::as_str)?;
-                        if id == model_id {
-                            entry
-                                .get("name")
-                                .or_else(|| entry.get("displayName"))
-                                .and_then(Value::as_str)
-                                .map(str::trim)
-                                .filter(|s| !s.is_empty())
-                                .map(str::to_string)
-                        } else {
-                            None
-                        }
-                    })
-                })
-        };
-        let model = acp_state
-            .get("model")
-            .and_then(Value::as_str)
-            .filter(|s| !s.is_empty())
-            .map(|value| SessionChatDetectedChoice {
-                value: value.to_string(),
-                label: available_model_name(value)
-                    .or_else(|| {
-                        crate::agent_model_catalog::catalog_model(
-                            agent_id.unwrap_or("antigravity"),
-                            value,
-                        )
-                        .and_then(|entry| {
-                            entry
-                                .get("label")
-                                .and_then(Value::as_str)
-                                .map(str::to_string)
-                        })
-                    })
-                    .unwrap_or_else(|| value.to_string()),
+                .map(Vec::as_slice),
+        );
+        let model = resolved_acp
+            .as_ref()
+            .map(|(value, label, _)| SessionChatDetectedChoice {
+                value: value.clone(),
+                label: label.clone(),
                 source: SessionChatOptionEvidence::Terminal,
             });
-        let effort = acp_state
-            .get("effort")
-            .and_then(Value::as_str)
-            .filter(|s| !s.is_empty())
+        let effort = resolved_acp
+            .as_ref()
+            .and_then(|(_, _, effort)| effort.as_deref())
+            .or_else(|| {
+                acp_state
+                    .get("effort")
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.is_empty())
+            })
             .map(|value| SessionChatDetectedChoice {
                 value: value.to_string(),
-                label: value.to_string(),
+                label: crate::agent_model_catalog::effort_display_label(value),
                 source: SessionChatOptionEvidence::Terminal,
             });
         let mode = acp_state
@@ -600,18 +581,12 @@ pub fn detect_session_chat_terminal_state(
             .ok()
             .flatten();
         let notice = acp_terminal_notice(Some(&acp_state), session_row.as_ref());
-        let child_exited = acp_state
-            .get("childExited")
-            .and_then(Value::as_bool)
-            == Some(true);
+        let child_exited = acp_state.get("childExited").and_then(Value::as_bool) == Some(true);
         let has_fatal_error = acp_state
             .get("fatalError")
             .and_then(Value::as_str)
             .is_some_and(|s| !s.trim().is_empty());
-        let is_working = acp_state
-            .get("working")
-            .and_then(Value::as_bool)
-            == Some(true);
+        let is_working = acp_state.get("working").and_then(Value::as_bool) == Some(true);
         let has_pending_permission = acp_state
             .get("pendingPermission")
             .is_some_and(|v| !v.is_null());

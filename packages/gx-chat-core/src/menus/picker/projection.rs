@@ -344,6 +344,7 @@ pub fn model_menu_projection(
             context.model_value.as_deref(),
             context.model_label.as_deref(),
             &traits,
+            catalog,
         ),
         "error": context.selection_error,
         // What a coordinator's picker says while the highlighted row, at the level it would be

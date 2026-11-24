@@ -1612,7 +1612,7 @@ fn persist_session_chat_model_resume(
 ) -> Result<(), DomainStateError> {
     let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session)
         .unwrap_or_default();
-    if !matches!(agent.as_str(), "claude" | "codex" | "cursor") || model.is_empty() {
+    if crate::agent_model_pins::pin_family(&agent).is_none() || model.is_empty() {
         return Ok(());
     }
     // CDXC:AgentProviders 2026-10-07: a pick saved as the default is what new sessions start on;
@@ -1748,6 +1748,37 @@ pub(crate) async fn select_session_chat_model(
         if model_change {
             crate::acp::channel::set_model(&target.project_id, &target.session_id, &model, &effort)
                 .await?;
+            // Remember the pick as this session's choice and (unless session-only) as the agent's
+            // default for new chats and threads, matching Terminal mode.
+            if let Err(error) =
+                persist_session_chat_model_resume(state, &target, &model, &effort, session_only)
+            {
+                log_picker(
+                    LogLevel::Warn,
+                    "sessionChatModelResumeCommandUnchanged",
+                    json!({
+                        "projectId": target.project_id,
+                        "sessionId": target.session_id,
+                        "model": model,
+                        "effort": effort,
+                    }),
+                    Some(error.message),
+                );
+            }
+            crate::agent_model_pins::record_coordinator_pick(
+                &target.session,
+                agent.as_deref().unwrap_or_default(),
+                &model,
+                &effort,
+            );
+            crate::chief::remember_hand_pick(
+                &state.paths,
+                &target.project_id,
+                &target.session_id,
+                agent.as_deref().unwrap_or_default(),
+                &model,
+                &effort,
+            );
         }
         if let Some(mode) = options.mode.as_deref().filter(|m| !m.is_empty()) {
             crate::acp::channel::set_approval_level(

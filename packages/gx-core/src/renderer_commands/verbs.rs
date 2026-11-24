@@ -499,6 +499,15 @@ pub fn settings_patch_value_allowed(key: &str, value: &Value) -> bool {
                         && matches!(mode.as_str(), Some("agent-cli" | "non-cli"))
                 })
         }
+        Value::Object(models) if key == "agentDefaultModels" => {
+            models.len() <= SETTINGS_PATCH_MAX_AGENT_OVERRIDES
+                && models.iter().all(|(family, model)| {
+                    !family.trim().is_empty()
+                        && model
+                            .as_str()
+                            .is_some_and(|value| !value.trim().is_empty() && value.len() <= 200)
+                })
+        }
         Value::Object(overrides) if key == "preferredAgentInterfaceOverrides" => {
             overrides.len() <= SETTINGS_PATCH_MAX_AGENT_OVERRIDES
                 && overrides.iter().all(|(agent_id, view)| {

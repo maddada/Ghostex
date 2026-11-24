@@ -82,6 +82,12 @@ fn pinned_family(agent: SessionChatOptionAgent) -> Option<&'static str> {
         SessionChatOptionAgent::Claude => Some("claude"),
         SessionChatOptionAgent::Codex => Some("codex"),
         SessionChatOptionAgent::Cursor => Some("cursor"),
+        SessionChatOptionAgent::Antigravity => Some("antigravity"),
+        SessionChatOptionAgent::Grok => Some("grok"),
+        SessionChatOptionAgent::Copilot => Some("copilot"),
+        SessionChatOptionAgent::Pi => Some("pi"),
+        SessionChatOptionAgent::Omp => Some("omp"),
+        SessionChatOptionAgent::Hermes => Some("hermes-agent"),
         _ => None,
     }
 }
@@ -176,6 +182,7 @@ pub(crate) fn launch_command_selection(
             }
             (
                 SessionChatOptionAgent::Claude
+                | SessionChatOptionAgent::Codex
                 | SessionChatOptionAgent::Antigravity
                 | SessionChatOptionAgent::Grok,
                 "--effort",
@@ -232,17 +239,41 @@ fn launch_choice(value: &str, label: &str) -> SessionChatDetectedChoice {
 /// The label the agent itself last showed for the value wins over both, so the pill's text does
 /// not change when the agent's own report replaces the launch value a few seconds in.
 fn launch_model_choice(family: &str, model: &str) -> Option<SessionChatDetectedChoice> {
+    use ghostex_gx_chat_core::menus::catalog::{
+        is_placeholder_model_label, is_placeholder_model_value,
+    };
+    if is_placeholder_model_value(model) {
+        return crate::agent_model_catalog::preferred_default_model(family)
+            .map(|(value, label, _)| launch_choice(&value, &label));
+    }
     let choice = if let Some(entry) = crate::agent_model_catalog::catalog_model(family, model) {
-        let label = entry.get("label").and_then(Value::as_str).unwrap_or(model);
+        let label = entry
+            .get("label")
+            .and_then(Value::as_str)
+            .filter(|l| !is_placeholder_model_label(l))
+            .unwrap_or(model);
         launch_choice(model, label)
     } else {
         match family {
             "claude" => claude_transcript_model_choice(model)
                 .map(|choice| launch_choice(&choice.value, &choice.label))?,
+            "antigravity" => {
+                if let Some((base, _)) =
+                    crate::agent_model_catalog::split_antigravity_model_id(model)
+                {
+                    let label = crate::agent_model_catalog::catalog_model("antigravity", &base)
+                        .and_then(|e| e.get("label").and_then(Value::as_str).map(str::to_string))
+                        .unwrap_or_else(|| base.clone());
+                    launch_choice(&base, &label)
+                } else {
+                    launch_choice(model, model)
+                }
+            }
             _ => launch_choice(model, model),
         }
     };
     let label = crate::agent_model_pins::remembered_model_label(family, &choice.value)
+        .filter(|label| !is_placeholder_model_label(label))
         .unwrap_or(choice.label);
     Some(launch_choice(&choice.value, &label))
 }

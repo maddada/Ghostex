@@ -4077,7 +4077,9 @@ the built-in agent it works like (or whose command it runs), with that
 computer's own command; a custom command that is no built-in agent runs only on
 this computer. Custom agents can be turned off, or deleted from their
 expanded row; built-in agents are only turned off. Expand an agent row to edit
-its name, command, permission mode and default view, duplicate it as a custom
+its name, command, permission mode, **Default model** (`agentDefaultModels`,
+which overrides the last model picked in chat for new chats and threads of that
+agent) and default view, duplicate it as a custom
 agent, install or update its CLI, see its installed version (and the newer one
 when available) and command output, or open its Install docs link. For agents
 that support Native mode (Claude Code, Codex, and Antigravity), the row also offers

@@ -465,7 +465,12 @@ impl ClaudeActivityReporter {
                     } else {
                         "idle"
                     };
-                    (act, s.native_session_id.clone(), front, s.last_turn_interrupted)
+                    (
+                        act,
+                        s.native_session_id.clone(),
+                        front,
+                        s.last_turn_interrupted,
+                    )
                 };
                 ep.report_activity("claude", act, sid.as_deref(), perm.as_ref(), interrupted);
             }
@@ -573,13 +578,10 @@ fn build_ask_user_answers(raw_input: &Value, selections: &[Value]) -> Option<Val
         let options = q.get("options").and_then(Value::as_array);
         if let Some(indices) = sel.get("indices").and_then(Value::as_array) {
             for i in indices.iter().filter_map(Value::as_u64) {
-                if let Some(label) = options
-                    .and_then(|arr| arr.get(i as usize))
-                    .and_then(|opt| {
-                        opt.as_str()
-                            .or_else(|| opt.get("label").and_then(Value::as_str))
-                    })
-                {
+                if let Some(label) = options.and_then(|arr| arr.get(i as usize)).and_then(|opt| {
+                    opt.as_str()
+                        .or_else(|| opt.get("label").and_then(Value::as_str))
+                }) {
                     chosen.push(label.to_string());
                 }
             }
@@ -775,9 +777,9 @@ fn spawn_and_init_claude(
         argv.push("--settings".to_string());
         argv.push(settings_json);
     }
-    if let Some(prompt_file) = validated_ghostex_prompt_file(
-        parsed.profile.append_system_prompt_file.as_deref(),
-    ) {
+    if let Some(prompt_file) =
+        validated_ghostex_prompt_file(parsed.profile.append_system_prompt_file.as_deref())
+    {
         argv.push("--append-system-prompt-file".to_string());
         argv.push(prompt_file);
     }
@@ -788,7 +790,10 @@ fn spawn_and_init_claude(
             argv.push("--fork-session".to_string());
         }
     }
-    if let Some(model) = model.map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(model) = model
+        .map(str::trim)
+        .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(s))
+    {
         argv.push("--model".to_string());
         argv.push(model.to_string());
     }
@@ -884,9 +889,8 @@ fn spawn_and_init_claude(
                     let msg_type = msg.get("type").and_then(Value::as_str).unwrap_or_default();
                     match msg_type {
                         "control_response" => {
-                            if let Some(req_id) = msg
-                                .pointer("/response/request_id")
-                                .and_then(Value::as_str)
+                            if let Some(req_id) =
+                                msg.pointer("/response/request_id").and_then(Value::as_str)
                             {
                                 if let Some(tx) = t_out
                                     .pending
@@ -905,8 +909,10 @@ fn spawn_and_init_claude(
                                 .unwrap_or_default()
                                 .to_string();
                             let req = msg.get("request").unwrap_or(&Value::Null);
-                            let subtype =
-                                req.get("subtype").and_then(Value::as_str).unwrap_or_default();
+                            let subtype = req
+                                .get("subtype")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default();
                             if subtype == "can_use_tool" {
                                 let tool_name = req
                                     .get("tool_name")
@@ -942,8 +948,9 @@ fn spawn_and_init_claude(
                                             kind: "reject_once".to_string(),
                                         },
                                     ];
-                                    match evaluate_permission(level, &synthetic, &opts, &roots, &cwd)
-                                    {
+                                    match evaluate_permission(
+                                        level, &synthetic, &opts, &roots, &cwd,
+                                    ) {
                                         PermissionDecision::AutoApprove { .. } => {
                                             println!(
                                                 "\r\n[Claude Native] Auto-approved ({}): {} ({})",
@@ -966,7 +973,11 @@ fn spawn_and_init_claude(
                                 }
                                 println!(
                                     "\r\n[Claude Native] Waiting for {}: {} ({})",
-                                    if is_question { "question answer" } else { "approval" },
+                                    if is_question {
+                                        "question answer"
+                                    } else {
+                                        "approval"
+                                    },
                                     tool_name,
                                     summary
                                 );
@@ -1008,9 +1019,17 @@ fn spawn_and_init_claude(
                                 if let Some(model) = msg
                                     .get("model")
                                     .and_then(Value::as_str)
-                                    .filter(|m| !m.is_empty())
+                                    .filter(|m| {
+                                        !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m)
+                                    })
                                 {
-                                    s.current_model = Some(model.to_string());
+                                    let preserved =
+                                        crate::agent_model_catalog::preserve_claude_1m_context(
+                                            s.current_model.as_deref(),
+                                            model,
+                                            s.usage_window_size,
+                                        );
+                                    s.current_model = Some(preserved);
                                 }
                                 if let Some(pm) = msg
                                     .get("permissionMode")
@@ -1057,8 +1076,7 @@ fn spawn_and_init_claude(
                                             let mut s =
                                                 st_out.lock().unwrap_or_else(|p| p.into_inner());
                                             if s.live_thought_started_at.is_none() {
-                                                s.live_thought_started_at =
-                                                    Some(now_iso_rfc3339());
+                                                s.live_thought_started_at = Some(now_iso_rfc3339());
                                             }
                                             append_bounded(
                                                 &mut s.live_thought_text,
@@ -1108,9 +1126,18 @@ fn spawn_and_init_claude(
                             if let Some(model) = msg
                                 .pointer("/message/model")
                                 .and_then(Value::as_str)
-                                .filter(|m| !m.is_empty() && *m != "<synthetic>")
+                                .filter(|m| {
+                                    *m != "<synthetic>"
+                                        && !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m)
+                                })
                             {
-                                s.current_model = Some(model.to_string());
+                                let preserved =
+                                    crate::agent_model_catalog::preserve_claude_1m_context(
+                                        s.current_model.as_deref(),
+                                        model,
+                                        s.usage_window_size,
+                                    );
+                                s.current_model = Some(preserved);
                             }
                             if let Some(usage) = msg.pointer("/message/usage") {
                                 let used = usage
@@ -1195,36 +1222,106 @@ fn spawn_and_init_claude(
     }
 
     // 1. Initialize Claude control protocol.
+    let mut resolved_default_to_apply: Option<String> = None;
     match transport.control_request(json!({ "subtype": "initialize" }), CLAUDE_CTRL_TIMEOUT) {
         Ok(init_resp) => {
+            use ghostex_gx_chat_core::menus::catalog::{
+                family_and_version, is_placeholder_model_label, is_placeholder_model_value,
+            };
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(models) = init_resp.get("models").and_then(Value::as_array) {
-                let mapped: Vec<Value> = models
-                    .iter()
-                    .filter_map(|m| {
-                        let id = m
-                            .get("resolvedModel")
-                            .or_else(|| m.get("value"))
-                            .and_then(Value::as_str)
-                            .filter(|v| !v.is_empty())?;
-                        let name = m
-                            .get("displayName")
-                            .and_then(Value::as_str)
-                            .unwrap_or(id);
-                        Some(json!({
-                            "modelId": id,
-                            "name": name,
-                            "supportedEffortLevels": m.get("supportedEffortLevels").cloned().unwrap_or(json!([])),
-                        }))
-                    })
-                    .collect();
-                if s.current_model.is_none() {
-                    if let Some(first_id) = mapped
-                        .first()
-                        .and_then(|m| m.get("modelId"))
+                // Capture what Claude's "default" alias resolves to, but never emit the
+                // "Default (recommended)" alias row itself into `availableModels`.
+                let mut default_resolved: Option<String> = None;
+                let mut mapped: Vec<Value> = Vec::new();
+                for m in models {
+                    let raw_val = m.get("value").and_then(Value::as_str).unwrap_or_default();
+                    let raw_name = m
+                        .get("displayName")
                         .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let resolved_id = m
+                        .get("resolvedModel")
+                        .and_then(Value::as_str)
+                        .filter(|v| !is_placeholder_model_value(v));
+                    if is_placeholder_model_value(raw_val) || is_placeholder_model_label(raw_name) {
+                        if default_resolved.is_none() {
+                            default_resolved = resolved_id.map(str::to_string);
+                        }
+                        continue;
+                    }
+                    let Some(id) = resolved_id
+                        .or_else(|| (!is_placeholder_model_value(raw_val)).then_some(raw_val))
+                    else {
+                        continue;
+                    };
+                    // Prefer the versioned model name from description ("Opus 5.5 · ...") or
+                    // transcript normalization over bare "Opus", and never a placeholder.
+                    let desc_name = m
+                        .get("description")
+                        .and_then(Value::as_str)
+                        .and_then(|d| d.split(" · ").next())
+                        .map(str::trim)
+                        .filter(|d| {
+                            !d.is_empty() && !is_placeholder_model_label(d) && d.len() <= 40
+                        });
+                    let parsed_name =
+                        crate::session_chat_options::claude_transcript_model_choice(id)
+                            .map(|c| c.label)
+                            .filter(|l| !is_placeholder_model_label(l));
+                    let name = parsed_name
+                        .or_else(|| desc_name.map(str::to_string))
+                        .or_else(|| {
+                            (!is_placeholder_model_label(raw_name)).then(|| raw_name.to_string())
+                        })
+                        .unwrap_or_else(|| id.to_string());
+                    if mapped
+                        .iter()
+                        .any(|existing| existing.get("modelId").and_then(Value::as_str) == Some(id))
                     {
-                        s.current_model = Some(first_id.to_string());
+                        continue;
+                    }
+                    mapped.push(json!({
+                        "modelId": id,
+                        "name": name,
+                        "supportedEffortLevels": m.get("supportedEffortLevels").cloned().unwrap_or(json!([])),
+                    }));
+                }
+                let needs_model = s
+                    .current_model
+                    .as_deref()
+                    .is_none_or(is_placeholder_model_value);
+                if needs_model {
+                    // Pick the newest Opus from the reported list; else what "default" resolved
+                    // to; else the first concrete model; else the catalog default.
+                    let newest_opus = mapped
+                        .iter()
+                        .filter_map(|entry| {
+                            let id = entry.get("modelId").and_then(Value::as_str)?;
+                            let name = entry.get("name").and_then(Value::as_str).unwrap_or(id);
+                            let (fam, ver) =
+                                family_and_version(name).or_else(|| family_and_version(id))?;
+                            let words: Vec<&str> = fam.split_whitespace().collect();
+                            words.contains(&"opus").then_some((id.to_string(), ver))
+                        })
+                        .max_by(|a, b| a.1.cmp(&b.1))
+                        .map(|(id, _)| id);
+                    let chosen = newest_opus
+                        .or(default_resolved)
+                        .or_else(|| {
+                            mapped
+                                .first()
+                                .and_then(|m| m.get("modelId"))
+                                .and_then(Value::as_str)
+                                .map(str::to_string)
+                        })
+                        .or_else(|| {
+                            crate::agent_model_catalog::preferred_default_model("claude")
+                                .map(|(v, _, _)| v)
+                        });
+                    if let Some(chosen) = chosen {
+                        s.current_model = Some(chosen.clone());
+                        resolved_default_to_apply = Some(chosen);
                     }
                 }
                 s.available_models = Value::Array(mapped);
@@ -1241,6 +1338,12 @@ fn spawn_and_init_claude(
             return Err(format!("Claude Native initialize failed: {err}"));
         }
     }
+    if let Some(chosen_model) = resolved_default_to_apply {
+        let _ = transport.control_request(
+            json!({ "subtype": "set_model", "model": chosen_model }),
+            CLAUDE_CTRL_TIMEOUT,
+        );
+    }
 
     // 2. The freshly spawned Claude process always starts in `"plan"` (for `--read-only`) or
     // `"default"`. Reset `native_mode` before syncing so a restart at `Auto` always sends
@@ -1249,13 +1352,9 @@ fn spawn_and_init_claude(
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.native_mode = if read_only { "plan" } else { "default" }.to_string();
     }
-    if let Err(err) = apply_claude_approval_level(
-        &transport,
-        state,
-        mode_sync_lock,
-        approval_level,
-        false,
-    ) {
+    if let Err(err) =
+        apply_claude_approval_level(&transport, state, mode_sync_lock, approval_level, false)
+    {
         eprintln!("[Claude Native] Warning: could not sync approval level: {err}");
     }
 
@@ -1413,7 +1512,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     )));
     let mode_sync_lock = Arc::new(Mutex::new(()));
     if !parsed.fork_session {
-        if let Some(resume_id) = parsed.resume_session_id.as_deref().filter(|s| !s.is_empty()) {
+        if let Some(resume_id) = parsed
+            .resume_session_id
+            .as_deref()
+            .filter(|s| !s.is_empty())
+        {
             state
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
@@ -1462,7 +1565,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             while !down_sig.load(Ordering::Acquire) {
                 if super::host::termination_requested() {
                     down_sig.store(true, Ordering::Release);
-                    if let Some(t) = transport_sig.lock().unwrap_or_else(|p| p.into_inner()).take()
+                    if let Some(t) = transport_sig
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .take()
                     {
                         t.close_stdin();
                     }
@@ -1794,7 +1900,10 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             ep.ack(id, false, Value::Null, Some(&err));
                             continue;
                         }
-                        state.lock().unwrap_or_else(|p| p.into_inner()).current_model = Some(model);
+                        state
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .current_model = Some(model);
                     }
                     if !effort.is_empty() {
                         if let Err(err) = proc.transport.control_request(
@@ -1953,12 +2062,21 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(true);
-                    let (is_working, has_pending, sid) = {
+                    let (is_working, has_pending, sid, carry_model, carry_effort) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        let model = s.current_model.as_deref().map(|m| {
+                            crate::agent_model_catalog::preserve_claude_1m_context(
+                                Some(m),
+                                m,
+                                s.usage_window_size,
+                            )
+                        });
                         (
                             s.working,
                             !s.pending_requests.is_empty(),
                             s.native_session_id.clone(),
+                            model,
+                            s.current_effort.clone(),
                         )
                     };
                     if (is_working || has_pending) && !interrupt {
@@ -1987,7 +2105,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     ep.ack(
                         id,
                         true,
-                        json!({ "switched": true, "nativeSessionId": sid }),
+                        json!({
+                            "switched": true,
+                            "nativeSessionId": sid,
+                            "model": carry_model,
+                            "effort": carry_effort,
+                        }),
                         None,
                     );
                     ep.close_channel();
@@ -2008,12 +2131,21 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
 
     if switch_to_cli_requested {
         drop(signal_guard);
-        let (sid, accept_all, read_only) = {
+        let (sid, accept_all, read_only, carry_model, carry_effort) = {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
+            let model = s.current_model.as_deref().map(|m| {
+                crate::agent_model_catalog::preserve_claude_1m_context(
+                    Some(m),
+                    m,
+                    s.usage_window_size,
+                )
+            });
             (
                 s.native_session_id.clone(),
                 s.approval_level.implies_cli_accept_all(),
                 s.read_only,
+                model,
+                s.current_effort.clone(),
             )
         };
         return exec_interactive_cli(
@@ -2024,6 +2156,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             read_only,
             &parsed.profile,
             Some(&cwd),
+            carry_model.as_deref(),
+            carry_effort.as_deref(),
         );
     }
 

@@ -112,6 +112,8 @@ pub(crate) struct AgentsTab {
     /// gxserver's `agentRoster`: every agent, on and off, with when it was last used. `None`
     /// until read (or from an older gxserver), when the page falls back to `hud.agents`.
     roster: Option<Vec<model::AgentButton>>,
+    /// gxserver's remembered per-agent last-used model (`agentModelPins`, family -> model id).
+    agent_model_pins: HashMap<String, String>,
     roster_seq: u64,
     /// The `hud.agents` the roster was read against; a change re-reads it.
     roster_hud_signature: Option<String>,
@@ -199,6 +201,7 @@ impl AgentsTab {
             synced_agent_ids: Vec::new(),
             editor: None,
             roster: None,
+            agent_model_pins: HashMap::new(),
             roster_seq: 0,
             roster_hud_signature: None,
             pending_enabled: HashMap::new(),
@@ -476,7 +479,10 @@ impl Render for AgentsTab {
         self.search_opens_pi = pi_messages::search_opens_pi(&search);
         let agent_list_search = search.section("agentList");
         self.search_opens_session_mode = agent_list_search.is_searching
-            && agent_list_search.visible_keys.contains("agentSessionMode");
+            && (agent_list_search.visible_keys.contains("agentSessionMode")
+                || agent_list_search
+                    .visible_keys
+                    .contains("agentDefaultModels"));
         let mut blocks: Vec<PageBlock> = Vec::new();
         if search.tab.is_searching && !search.tab.has_visible() {
             let store = self.store.clone();

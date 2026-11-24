@@ -602,7 +602,8 @@ pub(crate) fn account_wrapper_from_ghostex_account(
                 .next()
                 .unwrap_or(first)
                 .to_ascii_lowercase();
-            let matches_helper = base == expected_helper || base == format!("{expected_helper}.exe");
+            let matches_helper =
+                base == expected_helper || base == format!("{expected_helper}.exe");
             if !matches_helper || base_tokens.get(1).map(String::as_str) != Some("run") {
                 return None;
             }
@@ -865,10 +866,7 @@ pub(crate) fn build_ghostex_claude_settings_json(
     if !deny_rules.is_empty() {
         let mut perms = serde_json::Map::new();
         perms.insert("deny".to_string(), serde_json::Value::Array(deny_rules));
-        settings.insert(
-            "permissions".to_string(),
-            serde_json::Value::Object(perms),
-        );
+        settings.insert("permissions".to_string(), serde_json::Value::Object(perms));
     }
     if settings.is_empty() {
         None
@@ -909,7 +907,13 @@ pub fn build_cli_switch_argv_with_options(
     read_only: bool,
     profile: &AcpLaunchProfile,
     cwd: Option<&str>,
+    model: Option<&str>,
+    effort: Option<&str>,
 ) -> (Vec<(String, String)>, String, Vec<String>) {
+    let model = model.map(str::trim).filter(|m| {
+        !m.is_empty() && !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m)
+    });
+    let effort = effort.map(str::trim).filter(|e| !e.is_empty());
     let wrapper = profile
         .account_wrapper
         .as_ref()
@@ -945,19 +949,38 @@ pub fn build_cli_switch_argv_with_options(
     }
 
     if spec.family == "claude" {
+        if let Some(m) = model {
+            inner_args.push("--model".to_string());
+            inner_args.push(m.to_string());
+        }
+        if let Some(e) = effort {
+            inner_args.push("--effort".to_string());
+            inner_args.push(e.to_string());
+        }
         if let Some(settings_json) =
-            build_ghostex_claude_settings_json(profile, cwd, None, accept_all && !read_only)
+            build_ghostex_claude_settings_json(profile, cwd, effort, accept_all && !read_only)
         {
             inner_args.push("--settings".to_string());
             inner_args.push(settings_json);
         }
-        if let Some(path) = validated_ghostex_prompt_file(
-            profile.append_system_prompt_file.as_deref(),
-        ) {
+        if let Some(path) =
+            validated_ghostex_prompt_file(profile.append_system_prompt_file.as_deref())
+        {
             inner_args.push("--append-system-prompt-file".to_string());
             inner_args.push(path);
         }
     } else if spec.family == "codex" {
+        if let Some(m) = model {
+            inner_args.push("-m".to_string());
+            inner_args.push(m.to_string());
+        }
+        if let Some(e) = effort {
+            inner_args.push("-c".to_string());
+            inner_args.push(format!(
+                "model_reasoning_effort={}",
+                crate::agents::codex_toml_string(e)
+            ));
+        }
         for (k, v) in &profile.connector_envs {
             if is_allowed_connector_env_key(k) {
                 inner_args.push("-c".to_string());
@@ -994,6 +1017,15 @@ pub fn build_cli_switch_argv_with_options(
                 "developer_instructions={}",
                 crate::agents::codex_toml_string(instr)
             ));
+        }
+    } else if spec.family == "antigravity" {
+        if let Some(m) = model {
+            inner_args.push("--model".to_string());
+            inner_args.push(m.to_string());
+        }
+        if let Some(e) = effort {
+            inner_args.push("--effort".to_string());
+            inner_args.push(e.to_string());
         }
     }
 

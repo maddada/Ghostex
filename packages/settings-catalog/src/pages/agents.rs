@@ -1,5 +1,5 @@
 use crate::data::*;
-use crate::rows::{Page, Section, row, section};
+use crate::rows::{row, section, Page, Section};
 
 pub(crate) fn page() -> Page {
     Page {
@@ -82,6 +82,7 @@ pub(crate) fn agent_list() -> Section {
             // OMP's and Pi's row panels, and every custom agent that works like one of them (apps/desktop settings_modal/tabs/agents/pi_messages.rs).
             row("piMessagesWhileWorking", "Messages sent while it works", "What a message you send to a working OMP or Pi does. Steer hands it over at the agent's next step, as Enter does in its own terminal. After yield waits until it finishes its turn. In the row of OMP, Pi and every agent that works like them; one setting for all of them.").options(PI_MESSAGES_WHILE_WORKING_OPTIONS),
             row("agentSessionMode", "Session mode", "Choose Terminal (interactive terminal, instant switching between Chat and Terminal) or Native (structured host without terminal scraping; switching to Terminal asks first and interrupts any active turn). Applies to sessions started or resumed after you change it."),
+            row("agentDefaultModels", "Default model", "Choose the model new chats and threads of this agent start on. Overrides the last model you picked in chat."),
             row("preferredAgentInterfaceOverrides", "Default view per agent", "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting."),
         ],
     )

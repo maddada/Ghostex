@@ -24,6 +24,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // `"agent-cli"` (interactive terminal); `"non-cli"` runs supported agents through a structured
     // host inside `zmx`.
     ("agentSessionMode", J::Obj(&[])),
+    // Per-agent explicit default model map (`{ "<family>": "<modelValue>" }`). Overrides the last
+    // model picked in chat for new sessions and threads of that agent.
+    ("agentDefaultModels", J::Obj(&[])),
     // Per-agent dismissals of the chat strip's "Switch to Native" offer (Q4770), comma-separated
     // canonical families (e.g. `"claude,codex"`).
     ("nativeSwitchOfferDismissedAgents", J::Str("")),

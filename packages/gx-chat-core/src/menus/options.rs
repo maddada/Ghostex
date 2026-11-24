@@ -309,13 +309,28 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
         ));
         option_labels.mode_note = Some(crate::menus::mode_restart::PILL_SUFFIX.to_string());
     }
-    // A completed screen read without a model is an unset control, not a
-    // pending read. Keep the same settled state on every chat renderer.
-    if state.session.screen_probed {
-        if option_labels.show_model && option_labels.model.is_none() {
+    // Never show "Default", "Default (recommended)", "Auto", "Model", or blank when the agent has
+    // a concrete model list: resolve to the agent's concrete default model from the catalog.
+    let concrete_default = catalog.as_ref().and_then(|cat| {
+        crate::menus::catalog::resolved_default_model(&menus.model_catalog, &cat.model_icon)
+    });
+    let model_is_placeholder = option_labels
+        .model
+        .as_deref()
+        .is_some_and(crate::menus::catalog::is_placeholder_model_label);
+    if option_labels.show_model && (option_labels.model.is_none() || model_is_placeholder) {
+        if let Some((_, label, _)) = concrete_default {
+            option_labels.model_display = Some(crate::menus::catalog::truncate_agent_model_label(
+                &label,
+                crate::menus::catalog::AGENT_MODEL_LABEL_MAX_CHARS,
+            ));
+            option_labels.model = Some(label);
+        } else if state.session.screen_probed && option_labels.model.is_none() {
             option_labels.model = Some("Model".to_string());
             option_labels.model_display = option_labels.model.clone();
         }
+    }
+    if state.session.screen_probed {
         if option_labels.show_options && option_labels.options.is_none() {
             option_labels.options = Some("Options".to_string());
         }

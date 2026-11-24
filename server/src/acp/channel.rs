@@ -894,8 +894,12 @@ pub(crate) async fn switch_to_cli(
         .lock_owned()
         .await;
     let _active_switch = ActiveSwitchGuard::enter(project_id, session_id);
-    let (native_session_id, switched_live) = if live(project_id, session_id, "switch_to_cli")
-        .is_some()
+    let (native_session_id, switched_live, switched_model, switched_effort) = if live(
+        project_id,
+        session_id,
+        "switch_to_cli",
+    )
+    .is_some()
     {
         let reply = request(
             project_id,
@@ -914,7 +918,22 @@ pub(crate) async fn switch_to_cli(
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
             .map(str::to_string);
-        (native_id, true)
+        let model = reply
+            .get("model")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|m| {
+                !m.is_empty()
+                    && !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m)
+            })
+            .map(str::to_string);
+        let effort = reply
+            .get("effort")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|e| !e.is_empty())
+            .map(str::to_string);
+        (native_id, true, model, effort)
     } else {
         // Refuse an offline flip while `acp-host` may still be starting or reconnecting inside the
         // live PTY; only allow flipping `acpMode = false` when the session is already non-ACP or
@@ -970,15 +989,18 @@ pub(crate) async fn switch_to_cli(
                 "nativeSessionId": existing_native,
             }));
         }
-        (existing_native, false)
+        (existing_native, false, None, None)
     };
 
-    // Persist `acpMode = false` so subsequent sends, model picks, and resumes use the CLI path.
+    // Persist `acpMode = false` and carry the Native session's live model/effort over so
+    // Terminal detection, the model pill, and later resumes stay on the exact same model.
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
     let pid = project_id.to_string();
     let sid = session_id.to_string();
     let native_for_db = native_session_id.clone();
+    let model_for_db = switched_model.clone();
+    let effort_for_db = switched_effort.clone();
     let updated_session = tokio::task::spawn_blocking(move || {
         let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
             code: "internalError",
@@ -998,12 +1020,13 @@ pub(crate) async fn switch_to_cli(
             .unwrap_or_default();
         runtime_settings.insert(super::SESSION_NON_CLI_ACTIVE_KEY.to_string(), json!(false));
         runtime_settings.insert(super::SESSION_ACP_ACTIVE_KEY.to_string(), json!(false));
+        let family = runtime_settings
+            .get(super::SESSION_ACP_FAMILY_KEY)
+            .and_then(Value::as_str)
+            .map(str::to_string);
         if let Some(native_id) = native_for_db.as_deref() {
             runtime_settings.insert("agentSessionId".to_string(), json!(native_id));
-            if let Some(family) = runtime_settings
-                .get(super::SESSION_ACP_FAMILY_KEY)
-                .and_then(Value::as_str)
-            {
+            if let Some(family) = family.as_deref() {
                 if let Some(transcript) =
                     super::spec::transcript_path_for_session(family, native_id)
                 {
@@ -1011,6 +1034,44 @@ pub(crate) async fn switch_to_cli(
                         "agentSessionPath".to_string(),
                         json!(transcript.to_string_lossy().to_string()),
                     );
+                }
+            }
+        }
+        if let (Some(fam), Some(model)) = (family.as_deref(), model_for_db.as_deref()) {
+            let effort = effort_for_db.as_deref().map(str::to_string);
+            let label = crate::agent_model_catalog::resolve_acp_model(fam, Some(model), None, None)
+                .map(|(_, l, _)| l);
+            let pin = crate::agent_model_pins::ModelPin {
+                model: model.to_string(),
+                effort: effort.clone(),
+                model_label: label,
+                effort_label: effort
+                    .as_deref()
+                    .map(crate::agent_model_catalog::effort_display_label),
+            };
+            crate::agent_model_pins::record_session_choice(&pid, &sid, fam, pin);
+            let mut pin_json = Map::new();
+            pin_json.insert("origin".to_string(), json!("session"));
+            pin_json.insert("model".to_string(), json!(model));
+            if let Some(eff) = effort.as_deref() {
+                pin_json.insert("effort".to_string(), json!(eff));
+            }
+            runtime_settings.insert(
+                crate::agent_model_pins::SESSION_PIN_KEY.to_string(),
+                Value::Object(pin_json),
+            );
+            if let Some(existing_cmd) = runtime_settings
+                .get("agentCommand")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+            {
+                if let Ok(updated_cmd) = crate::agents::with_agent_model_options(
+                    &existing_cmd,
+                    fam,
+                    Some(model),
+                    effort.as_deref(),
+                ) {
+                    runtime_settings.insert("agentCommand".to_string(), json!(updated_cmd));
                 }
             }
         }
@@ -1598,6 +1659,7 @@ struct PriorSwitchFields {
     acp_mode: Option<Value>,
     acp_family: Option<Value>,
     approval_level: Option<Value>,
+    model_pin: Option<Value>,
 }
 
 /// Execute the Terminal-to-Native switch under the per-session switch lock: re-checks eligibility,
@@ -1723,6 +1785,40 @@ pub(crate) async fn execute_switch_to_acp(
         }
     }
 
+    // 2b. Snapshot the live Terminal session's model and effort right before sleeping it so a
+    //     Terminal -> Native switch carries the exact running model, effort, and Claude 1M context
+    //     over to the Native host (including changes made via `/model` inside the terminal).
+    let detected_terminal_choice: Option<(String, Option<String>, Option<u64>)> = if was_running {
+        let detector = crate::session_chat_options::SessionChatOptionDetector::new(state);
+        let pid_det = project_id.to_string();
+        let sid_det = session_id.to_string();
+        let fam_det = family.clone();
+        tokio::task::spawn_blocking(move || {
+            let detected = detector.detect_blocking(&pid_det, &sid_det, Some(&fam_det), true);
+            let selection = detected.options.as_ref().map(|opts| &opts.selection)?;
+            let model = selection
+                .model
+                .as_ref()
+                .map(|m| m.value.trim().to_string())
+                .filter(|m| {
+                    !m.is_empty()
+                        && !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(m)
+                });
+            let effort = selection
+                .effort
+                .as_ref()
+                .map(|e| e.value.trim().to_string())
+                .filter(|e| !e.is_empty());
+            let window_size = selection.context_usage.as_ref().and_then(|u| u.window_size);
+            model.map(|m| (m, effort, window_size))
+        })
+        .await
+        .ok()
+        .flatten()
+    } else {
+        None
+    };
+
     // 3. Persist Native runtimeSettings while capturing exact prior values for clean rollback.
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
@@ -1755,7 +1851,76 @@ pub(crate) async fn execute_switch_to_acp(
             approval_level: runtime_settings
                 .get(super::SESSION_ACP_APPROVAL_LEVEL_KEY)
                 .cloned(),
+            model_pin: runtime_settings
+                .get(crate::agent_model_pins::SESSION_PIN_KEY)
+                .cloned(),
         };
+        if let Some((raw_model, detected_effort, window_size)) = detected_terminal_choice {
+            let existing_pin_model = runtime_settings
+                .get(crate::agent_model_pins::SESSION_PIN_KEY)
+                .and_then(|v| v.get("model"))
+                .and_then(Value::as_str);
+            let existing_cmd_model = runtime_settings
+                .get("agentCommand")
+                .and_then(Value::as_str)
+                .and_then(|cmd| {
+                    super::spec::extract_safe_model_and_effort_from_command(&family_for_db, cmd).0
+                });
+            let existing_effort = runtime_settings
+                .get(crate::agent_model_pins::SESSION_PIN_KEY)
+                .and_then(|v| v.get("effort"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| {
+                    runtime_settings
+                        .get("agentCommand")
+                        .and_then(Value::as_str)
+                        .and_then(|cmd| {
+                            super::spec::extract_safe_model_and_effort_from_command(
+                                &family_for_db,
+                                cmd,
+                            )
+                            .1
+                        })
+                });
+            let carried_model = if family_for_db == "claude" {
+                let hint = existing_pin_model.or(existing_cmd_model.as_deref());
+                crate::agent_model_catalog::preserve_claude_1m_context(
+                    hint,
+                    &raw_model,
+                    window_size,
+                )
+            } else {
+                raw_model
+            };
+            let carried_effort = detected_effort.or(existing_effort);
+            let label = crate::agent_model_catalog::resolve_acp_model(
+                &family_for_db,
+                Some(&carried_model),
+                None,
+                None,
+            )
+            .map(|(_, l, _)| l);
+            let pin = crate::agent_model_pins::ModelPin {
+                model: carried_model.clone(),
+                effort: carried_effort.clone(),
+                model_label: label,
+                effort_label: carried_effort
+                    .as_deref()
+                    .map(crate::agent_model_catalog::effort_display_label),
+            };
+            crate::agent_model_pins::record_session_choice(&pid, &sid, &family_for_db, pin);
+            let mut pin_json = Map::new();
+            pin_json.insert("origin".to_string(), json!("session"));
+            pin_json.insert("model".to_string(), json!(carried_model));
+            if let Some(eff) = carried_effort.as_deref() {
+                pin_json.insert("effort".to_string(), json!(eff));
+            }
+            runtime_settings.insert(
+                crate::agent_model_pins::SESSION_PIN_KEY.to_string(),
+                Value::Object(pin_json),
+            );
+        }
         let force_ask = crate::coordinators::is_read_only_thread(Some(&runtime_settings))
             || crate::side_chats::parent_of(&session).is_some()
             || crate::agents::is_gbot_api_chat(Some(&runtime_settings));
@@ -1839,6 +2004,11 @@ pub(crate) async fn execute_switch_to_acp(
                             &mut rs,
                             super::SESSION_ACP_APPROVAL_LEVEL_KEY,
                             prior.approval_level,
+                        );
+                        restore(
+                            &mut rs,
+                            crate::agent_model_pins::SESSION_PIN_KEY,
+                            prior.model_pin,
                         );
                         let mut update = Map::new();
                         update.insert("projectId".to_string(), json!(pid));

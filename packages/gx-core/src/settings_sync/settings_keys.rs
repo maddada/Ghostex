@@ -52,6 +52,7 @@ const AGENT_DEFAULT_KEYS: &[&str] = &[
     "sessionTitleGenerationAgent",
     "agentAcceptAllEnabled",
     "agentSessionMode",
+    "agentDefaultModels",
     "nativeSwitchOfferDismissedAgents",
     "showQuickModelPickerInTerminal",
 ];

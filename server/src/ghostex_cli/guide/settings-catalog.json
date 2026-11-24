@@ -10961,6 +10961,18 @@
       "agentWritable": false
     },
     {
+      "key": "agentDefaultModels",
+      "title": "Default model",
+      "subtitle": "Choose the model new chats and threads of this agent start on. Overrides the last model you picked in chat.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentList",
+      "sectionTitle": "Agents",
+      "type": "json",
+      "default": {},
+      "agentWritable": false
+    },
+    {
       "key": "preferredAgentInterfaceOverrides",
       "title": "Default view per agent",
       "subtitle": "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting.",

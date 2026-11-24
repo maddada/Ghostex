@@ -686,6 +686,30 @@ pub fn option_value_label(
         .iter()
         .find(|entry| entry.value == current.value);
     let detected_label = current.label.as_deref().map(str::trim).unwrap_or("");
+    if descriptor.id == "model" {
+        use crate::menus::catalog::{is_placeholder_model_label, is_placeholder_model_value};
+        if is_placeholder_model_value(&current.value) {
+            if !is_placeholder_model_label(detected_label) {
+                return Some(sentence_case_label(detected_label));
+            }
+            return None;
+        }
+        if let Some(choice) = choice {
+            if !is_placeholder_model_label(&choice.label)
+                && (detected_label.is_empty()
+                    || is_placeholder_model_label(detected_label)
+                    || choice_names_label(choice, detected_label))
+            {
+                return Some(choice.label.clone());
+            }
+        }
+        if !detected_label.is_empty() && !is_placeholder_model_label(detected_label) {
+            return Some(sentence_case_label(detected_label));
+        }
+        return choice
+            .filter(|choice| !is_placeholder_model_label(&choice.label))
+            .map(|choice| choice.label.clone());
+    }
     if !detected_label.is_empty() {
         if let Some(choice) = choice {
             if choice_names_label(choice, detected_label) {

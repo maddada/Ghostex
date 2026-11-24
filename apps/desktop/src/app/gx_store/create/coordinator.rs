@@ -39,9 +39,20 @@ fn coordinator_family(agent: &Value) -> Option<String> {
 }
 
 /// The model and effort a new coordinator on `family` starts on, as the create sends them:
-/// Opus 5.5 at High on Claude, High where the launch takes an effort; `None` keeps the agent's own.
-fn coordinator_start_options(family: &str) -> (Option<&'static str>, Option<&'static str>) {
-    let model = (family == "claude").then_some(DEFAULT_CLAUDE_COORDINATOR_MODEL);
+/// newest Opus for Claude, newest Sol for Codex, newest Neon for Antigravity (or concrete catalog
+/// default for other agents), with High effort where the launch takes an effort.
+fn coordinator_start_options(
+    family: &str,
+    catalog: Option<&AgentModelCatalog>,
+) -> (Option<String>, Option<&'static str>) {
+    let model = catalog
+        .and_then(|cat| ghostex_gx_chat_core::menus::catalog::resolved_default_model(cat, family))
+        .map(|(value, _, _)| value)
+        .or_else(|| {
+            ghostex_gx_chat_core::menus::catalog::preferred_default_model_fallback(family)
+                .map(|(value, _, _)| value.to_string())
+        })
+        .or_else(|| (family == "claude").then(|| DEFAULT_CLAUDE_COORDINATOR_MODEL.to_string()));
     let effort = (coordinator_launch_takes_effort(family)
         && matches!(family, "claude" | "codex" | "antigravity"))
     .then_some("high");
@@ -52,13 +63,15 @@ fn coordinator_start_options(family: &str) -> (Option<&'static str>, Option<&'st
 /// coordinator model, else the agent's default in `catalog`) and its effort: only a low-end pick
 /// (gx-protocol `coordinator_model_may_degrade`) says anything.
 fn coordinator_start_warning(family: &str, catalog: Option<&AgentModelCatalog>) -> Option<String> {
-    let (start_model, effort) = coordinator_start_options(family);
+    let (start_model, effort) = coordinator_start_options(family, catalog);
     let lineup = catalog.and_then(|catalog| catalog.agents.get(family));
-    let model = lineup.and_then(|agent| match start_model {
+    let model = lineup.and_then(|agent| match start_model.as_deref() {
         Some(value) => agent.models.iter().find(|model| model.value == value),
         None => agent.models.iter().find(|model| model.default),
     });
-    let value = start_model.or(model.map(|model| model.value.as_str()));
+    let value = start_model
+        .as_deref()
+        .or(model.map(|model| model.value.as_str()));
     let label = model.map(|model| model.label.as_str());
     let effort = effort.or_else(|| {
         model
@@ -253,7 +266,8 @@ impl GhostexGpuiApp {
             let family =
                 coordinator_family_in(self.gx_store.hud.remote_sidebar_hud(&machine_id), agent_id)
                     .unwrap_or_default();
-            let (model, effort) = coordinator_start_options(&family);
+            let catalog = crate::app::gx_chat::current_model_catalog();
+            let (model, effort) = coordinator_start_options(&family, catalog.as_ref());
             let params = coordinator_params(
                 remote_agent_launch_params(
                     agent_id,
@@ -263,7 +277,7 @@ impl GhostexGpuiApp {
                     name,
                 ),
                 title_source,
-                model,
+                model.as_deref(),
                 effort,
             );
             let task = self.start_gpui_remote_sidebar_rpc(
@@ -333,11 +347,12 @@ impl GhostexGpuiApp {
             return;
         };
         let family = coordinator_family_in(hud.as_deref(), agent_id).unwrap_or_default();
-        let (model, effort) = coordinator_start_options(&family);
+        let catalog = crate::app::gx_chat::current_model_catalog();
+        let (model, effort) = coordinator_start_options(&family, catalog.as_ref());
         let params = coordinator_params(
             local_agent_launch_params(&agent, &project_id, Map::new(), account_id, name),
             title_source,
-            model,
+            model.as_deref(),
             effort,
         );
         cx.spawn(async move |this, cx| {

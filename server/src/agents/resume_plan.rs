@@ -376,7 +376,11 @@ pub(crate) fn to_agent_resume_input(
     } else {
         crate::storage::open_gxserver_database(&crate::paths::get_gxserver_paths(None))
             .ok()
-            .and_then(|db| crate::workspaces::project_workspace_info(&db, project).ok().flatten())
+            .and_then(|db| {
+                crate::workspaces::project_workspace_info(&db, project)
+                    .ok()
+                    .flatten()
+            })
             .map(|(workspace_id, workspace_name)| WorkspaceNoteContext {
                 workspace_id,
                 workspace_name,
@@ -535,12 +539,11 @@ pub(crate) fn to_agent_resume_input(
                 Some(&runtime_settings),
                 stored_account_cmd.as_deref(),
             );
-            let thread_marked_handovers =
-                runtime_settings
-                    .get("markedHandovers")
-                    .and_then(Value::as_bool)
-                    == Some(true)
-                    || super::is_lean_worker(Some(&runtime_settings));
+            let thread_marked_handovers = runtime_settings
+                .get("markedHandovers")
+                .and_then(Value::as_bool)
+                == Some(true)
+                || super::is_lean_worker(Some(&runtime_settings));
             let (append_system_prompt_file, developer_instructions) = super::acp_launch_note(
                 fam,
                 session_is_coordinator(&runtime_settings),
@@ -561,23 +564,41 @@ pub(crate) fn to_agent_resume_input(
             let pin_obj = runtime_settings
                 .get(crate::agent_model_pins::SESSION_PIN_KEY)
                 .and_then(Value::as_object);
+            let (runtime_cmd_model, runtime_cmd_effort) = runtime_command
+                .as_deref()
+                .map(|cmd| crate::acp::spec::extract_safe_model_and_effort_from_command(fam, cmd))
+                .unwrap_or((None, None));
             let (cmd_model, cmd_effort) = read_text_from_map(&agent_config, "command")
                 .as_deref()
-                .map(|cmd| {
-                    crate::acp::spec::extract_safe_model_and_effort_from_command(fam, cmd)
-                })
+                .map(|cmd| crate::acp::spec::extract_safe_model_and_effort_from_command(fam, cmd))
                 .unwrap_or((None, None));
-            let default_pin = crate::agent_model_pins::launch_default(fam);
-            let acp_model = session_pin
-                .as_ref()
-                .map(|p| p.model.clone())
-                .or_else(|| pin_obj.and_then(|m| read_text_from_map(m, "model")))
-                .or(cmd_model)
+            let default_pin = crate::agent_model_pins::resolve_launch_default(fam, Some(settings));
+            let non_placeholder = |value: Option<String>| {
+                value.filter(|v| {
+                    !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(v)
+                })
+            };
+            let pin_obj_model =
+                non_placeholder(pin_obj.and_then(|m| read_text_from_map(m, "model")));
+            let runtime_cmd_model = non_placeholder(runtime_cmd_model);
+            let raw_acp_model = non_placeholder(session_pin.as_ref().map(|p| p.model.clone()))
+                .or_else(|| pin_obj_model.clone())
+                .or_else(|| runtime_cmd_model.clone())
+                .or_else(|| non_placeholder(cmd_model))
                 .or_else(|| default_pin.as_ref().map(|p| p.model.clone()));
+            let acp_model = raw_acp_model.map(|m| {
+                if fam == "claude" {
+                    let hint = pin_obj_model.as_deref().or(runtime_cmd_model.as_deref());
+                    crate::agent_model_catalog::preserve_claude_1m_context(hint, &m, None)
+                } else {
+                    m
+                }
+            });
             let acp_effort = session_pin
                 .as_ref()
                 .and_then(|p| p.effort.clone())
                 .or_else(|| pin_obj.and_then(|m| read_text_from_map(m, "effort")))
+                .or(runtime_cmd_effort)
                 .or(cmd_effort)
                 .or_else(|| default_pin.as_ref().and_then(|p| p.effort.clone()));
             (

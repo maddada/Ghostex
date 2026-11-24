@@ -193,7 +193,11 @@ pub fn coordinator_create_params(launch: CoordinatorLaunch<'_>) -> Value {
         params["agentEffort"] = Value::String(effort);
     }
     let model = launch.model.or_else(|| {
-        (family == Some("claude")).then(|| DEFAULT_CLAUDE_COORDINATOR_MODEL.to_string())
+        family.and_then(|fam| {
+            crate::agent_model_catalog::preferred_default_model(fam)
+                .map(|(value, _, _)| value)
+                .or_else(|| (fam == "claude").then(|| DEFAULT_CLAUDE_COORDINATOR_MODEL.to_string()))
+        })
     });
     if let Some(model) = model {
         params["agentModel"] = Value::String(model);
