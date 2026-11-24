@@ -281,30 +281,14 @@ view from the strip.
   sessions keep running) and Merge All Panes, or drag it to move that session
   onto another pane's edge (a new split) or its middle (it takes that pane's
   place), and the pane it left closes. Each pane can show the raw terminal or
-  Session Chat. Cmd+Shift+O starts a new session with the active project's agent
-  (the one its agent button shows, see Sidebar),
-  in your default view (Chat or Terminal), like ChatGPT's New Chat. Cmd+N opens
-  the New Thread picker instead: type to filter the configured agents (that
-  project's agent first), Coordinator, Browser, or Terminal, press Enter to start it,
-  and press Tab on Claude or Codex to pick an account. Coordinator opens the
-  same New Coordinator dialog as the project's agent launcher. The picker's top
-  row names the project it starts in (the one you have open, or the Unified
-  filter's one project) and, when there is a choice, its computer: click it, or
-  press Cmd+N again, to pick any project on any computer from a list with your
-  recent projects first (the ones whose sessions you used last) and the rest A to
-  Z, including projects with no session yet ("No sessions"). A project on more
-  than one computer lists them as small chips under its name, the one you last
-  used for it filled; Enter or a click takes that one, Left and Right or a click
-  on a chip pick another, and a computer that isn't connected is dimmed. The same
-  repository on several computers is one row even when a computer has no origin
-  remote or spells it differently; two different repositories with the same name
-  say which is which (owner/repo, or "no remote") under the name. Cloud Box and
-  your boxes are chips there too for a project on this computer, once you've
-  connected a Cloud Box provider or made a box. The first Down highlights the
-  top project; Escape goes back. You can also just type in the search: under the
-  agents it lists "Start <agent> in" with the projects it finds, using the agent
-  you used last, and a computer's name in the search picks that computer
-  ("ghostex windows"), so a search and Enter start a session. Cmd+Shift+T opens a new
+  Session Chat. Cmd+N starts a new chat draft in the active project (or Main
+  Hub when no project is open), using your last-used agent for that project in
+  your default view (Chat or Terminal). In Chat View, the setup bar above the
+  message box lets you change the project (Option+O), computer (Option+M),
+  folder or worktree or Cloud Box (Option+W), branch or box (Option+B), agent
+  (Option+A), and model and effort (Option+P), or toggle **No project** (moves
+  the draft to Main Hub) and **Coordinator** before sending the first message.
+  Cmd+Shift+T opens a new
   terminal, Cmd+T always opens a new browser tab, Cmd+Ctrl+Shift+F forks the
   focused session, and Cmd+D splits (from a session in a sidebar folder, the new
   session joins that folder). Cmd+R renames the focused session,
@@ -318,8 +302,7 @@ view from the strip.
   input): Ctrl+Shift+C and Ctrl+Shift+V copy and paste, Ctrl+Shift+A selects
   everything, Ctrl+Shift+F finds, Ctrl+Shift+W closes the tab, Ctrl+Shift+O
   and Ctrl+Shift+E split right and down, and Ghostex's own keys there are
-  Ctrl+Shift+D for a new agent session, Ctrl+Alt+Shift+N for the New Thread
-  picker, Ctrl+Shift+L for a browser tab, Ctrl+Shift+B for the sidebar,
+  Ctrl+Shift+D for a new session, Ctrl+Shift+L for a browser tab, Ctrl+Shift+B for the sidebar,
   Ctrl+Shift+I for notifications, Ctrl+Alt+Shift+P to search sessions,
   Ctrl+Shift+Y for files, Ctrl+Alt+H for Find Prompts and Ctrl+Alt+/ for
   Hotkeys. A key you changed (or cleared) in the normal sections also applies
@@ -333,8 +316,8 @@ view from the strip.
   Windows and Linux) moves the keyboard to the sidebar's session list (Focus
   Sidebar), showing the sidebar first if it is hidden: the arrow keys move
   through the sessions and Enter opens one, and Escape or the same key gives the
-  keyboard back to where it was. While the VS Code view itself has keyboard focus, Cmd+N and
-  Cmd+Shift+O go to VS Code instead (New File, Go to Symbol).
+  keyboard back to where it was. While the VS Code view itself has keyboard focus, Cmd+N
+  goes to VS Code instead (New File).
   In the sidebar, Tab and Shift+Tab move through its buttons, headers,
   filters and session rows in the order they are drawn, and the one with the
   keyboard shows a ring: Enter or Space clicks it, Up and Down move between
@@ -353,8 +336,8 @@ view from the strip.
   sidebar until you close them. An Advanced setting on Settings > Sidebar &
   Sessions, Close empty sessions when starting a new one
   (`closeEmptySessionsOnNew`, off by default), changes that:
-  with it on, starting a new session in a project (the hotkey, the project's
-  agent button or menu, the New Thread picker, or a project's agent on the
+  with it on, starting a new session in a project (the hotkey, New session, a
+  project header's chat button or menu, or a project on the
   phone) also closes that project's other sessions that are still completely
   empty: nothing sent, no chat draft, nothing queued, and no text in the agent's
   input box. It only applies when Chat is the default view for that agent; with
@@ -362,7 +345,7 @@ view from the strip.
   session stays like any other.
   Cmd+Option+Arrow moves focus between the session panes and the Commands pane;
   it skips the view panel.
-  Hotkeys: `createAgentSession`, `openNewThreadPalette`, `createSession`,
+  Hotkeys: `createAgentSession`, `createSession`,
   `openBrowserPane`, `forkSession`, `renameActiveSession`, `sleepFocusedSession`,
   `closeFocusedSession`.
 - **VS Code**: the built-in VS Code based editor (code-server). Opens files from
@@ -849,34 +832,31 @@ of the Sessions list picks a computer, adds one or opens Manage computers. A
 computer that can't connect shows its name and the problem over the list, with
 Reconnect and Remote Settings. Add project asks which computer when you have
 several. On the phone, the pencil at the top of the Sessions list (New session,
-next to the bell, in both the Unified and the Project layout) opens the agent
-menu on the project you used last (or the one project the filter shows), with
-that project on top: tap it to pick any project on any computer, recent ones
-first, and its computer chips pick where it runs. The menu lists what that
-computer has set up: New Coordinator…, its agents (the remembered one stands
-out), Cloud Box where offered, and Terminal. Nothing starts until you pick a
-row. An agent opens in the view the phone's Settings > Chat > Default agent view
-picks: in Chat, a new chat where you can still change the agent, model,
-worktree, project or computer before you send the first message; an agent
-without chat always opens its terminal. If the project's computer isn't
-connected, the project list opens instead. A project's "+" and the "+" on a
-project in the filter open the same agent menu on that project.
+next to the bell, in both the Unified and the Project layout) immediately
+starts a one-click chat draft in the open session's project (or Main Hub when
+no session is open), using that project's remembered agent. Before you send the
+first message, the setup bar above the message box lets you change the project,
+computer, worktree, agent, or model, or toggle **No project** and
+**Coordinator** (an untouched draft is removed when you leave it). A project's
+"+" and the "+" on a project in the filter open that project's agent menu
+(New Coordinator…, its agents, Cloud Box where offered, and Terminal).
 
 On the computer, both sidebars have a wide New session button in a row of its
-own under the top row: a plus and New session, with its shortcut shown while
-you point at it or it has the keyboard. The top row holds Search, then
-Add project, the bell and the menu; on a very narrow sidebar Add project leaves
-that row and is only in the menu (Add Project is always the menu's first row).
-The button is there with several computers, while bots are showing and
-in the sidebar that slides in while the sidebar is hidden. Click it to start the
-agent you used last in the project of the session you have open, as Cmd+Shift+O
-does. The chevron pointing right at its right end opens the New Thread picker
-(the list of agents), as Cmd+N does, to
-pick another agent, a Coordinator, a Browser or a Terminal, or another project.
-The new chat's bar above its message box names its project: click the project
-to move the chat to another one before you send the first message (it starts
-again there, with what you typed). Once a message is sent the bar is gone and
-the chat stays in its project.
+own under the top row: a plus and New session, with its shortcut (Cmd+N) shown
+while you point at it or it has the keyboard. The top row holds Search, then
+Add project, the bell and the menu (☰); on a very narrow sidebar Add project
+leaves that row and is only in the menu (Add Project is always the menu's first
+row). The button is there with several computers, while bots are showing and
+in the sidebar that slides in while the sidebar is hidden. Click it (or press
+Cmd+N) to start a one-click chat draft with your last-used agent in the active
+project (or Main Hub when no project is open). Before you send the first
+message, the setup bar above the message box lets you switch the project
+(Option+O), computer (Option+M), folder or worktree or Cloud Box (Option+W),
+branch or box (Option+B), agent (Option+A), and model (Option+P), or toggle
+**No project** and **Coordinator** in place while keeping what you typed. Once
+a message is sent the setup bar is gone and the chat stays in its project. To
+open a Terminal, Coordinator, or Browser directly, use the sidebar's main menu
+(☰) or a project header's chat menu.
 
 The Unified sidebar has its own hover strip (`unifiedSessionCardHoverButtons`):
 by default Snooze, Park and Close always show on a hovered card and the chevron
@@ -886,9 +866,11 @@ other sidebar's. Group by Project (`unifiedGroupByProject`, in Settings and Sort
 Filter) puts every machine's sessions of one repository under one header, with
 that project's Working, Snoozed and Parked inside it; Drafts stay above the groups.
 Drag a header to arrange the groups; the order is saved per repository across
-machines, and a new project lands after the arranged ones, A to Z. The "+" on a
-header opens the New Thread picker on that project, on the computer you last
-used for it. A project's worktrees sit inside its header: right-click the header
+machines, and a new project lands after the arranged ones, A to Z. The
+chat-bubble split button on a hovered header starts a new chat draft in that
+project (on the computer you last used for it), and its chevron opens the
+project's chat menu (New chat, Terminal, Coordinator, Browser, Run in a Box,
+agents, and Configure). A project's worktrees sit inside its header: right-click the header
 (or use the ⋯ on the project in the filter) for Delete Worktree, which lists them,
 or right-click a session in a worktree for its own Delete Worktree. Both open the
 same Delete worktree dialog as the Project sidebar.
@@ -906,17 +888,16 @@ what you typed a chip that narrows the list by title, project, branch or machine
 The filter, open shelves and folded groups come back after a restart; search text
 does not. A project row shows an X on its right while you hover it: click once
 and it turns red, then click again to remove that project from the list on every
-machine that has it; the "+" beside it opens the New Thread picker on that
+machine that has it; the "+" beside it starts a new chat draft in that
 project without changing the filter. The project goes to Recent Projects, where Quick Access >
 Projects reopens it; its sessions keep running out of sight until then. Picking
-a project in Quick Access > Projects also filters to it. Above the filter, the
-New session button's chevron opens the New Thread picker in the filtered project
-when the filter is one project (else in the one you have open), without making
-it your open project; its top row changes the project and computer first. A
-click on the button itself starts your last agent in the project you have open. When the new session's project is one the filter hides, that
+a project in Quick Access > Projects also filters to it. Above the filter,
+clicking New session (or pressing Cmd+N) starts a new chat draft in the active
+project (or in the filtered project when the filter is one project). When the new session's project is one the filter hides, that
 project joins the filter as a chip, so you see the session and can drop the chip.
-The session starts as a draft, and the bar above its message box has a project
-chip and a computer chip to move it.
+The session starts as a draft, and the setup bar above its message box lets you
+change the project, computer, folder or worktree, branch, agent, model, No
+project, or Coordinator before you send the first message.
 
 With Spaces turned on, the Unified sidebar shows the Project sidebar's Space row
 under its header, and both sidebars share one active Space: switching Space in
@@ -993,9 +974,12 @@ Cards show the project's own icon when it has one, and right-clicking
 any card opens that session's menu, as in the Project sidebar.
 
 The sidebar lists projects and their sessions. Project headers carry the git
-branch and diff stats and, on hover, a New Terminal button, the agent launcher
-(New agent and the agent picker) and a ⋯ button.
-The agent launcher's button shows the logo of the agent that project starts.
+branch and diff stats and, on hover, a chat-bubble split button and a ⋯ button.
+Clicking the chat-bubble button starts a new chat draft in that project with
+its remembered agent. Clicking the chevron beside it opens the project's chat
+menu: **New chat** (Cmd+N), **Terminal** (Cmd+Shift+T), **Coordinator**,
+**Browser**, **Run in a Box** (when a box is ready), your configured agents
+(with account picks for Claude and Codex), and **Configure**.
 Each project remembers the agent you last picked in it, and a project with no
 pick yet starts the one you picked last anywhere. To share one pick across a
 Space, or use one pick for every project, change Settings > Agents > Remember
@@ -1232,7 +1216,7 @@ Workspaces names each workspace, sets its color, makes it Work or Personal
 (a Work workspace can share a team backend), picks its **Primary
 tracker** (Linear tickets & projects or GitHub issues & projects), and sets its
 Linear API key and the Claude account its agents use (an account you pick when you start a
-session still wins, and the agent launcher and New Thread picker mark the
+session still wins, and the project header's chat menu marks the
 workspace's account as Default); Sign out of all sites clears that workspace's Browser sign-ins, and
 Delete moves its projects and Spaces to Personal. From the command line:
 `ghostex workspace list`, `ghostex workspace create <name> [--kind work|personal]`,
@@ -1381,7 +1365,7 @@ Settings > Power & Sleep > Auto Sleep > Keep views loaded (`keepViewsLoaded`).
 Sleep on the project or its Space still releases them, it uses more memory,
 and terminals and chats keep the minutes above. VS Code still reloads when you
 switch VS Code between computers, including when you switch back.
-Starting a new agent from the sidebar launcher or New Thread picker keeps your
+Starting a new chat from New session or a project header's chat menu keeps your
 current view open, including Code, Browser, Beads, Automate, and Files. Select
 Agents when you want to open the new agent there. An agent whose CLI isn't
 installed on that computer doesn't start: a notice names it ("Codex isn't
@@ -1591,8 +1575,8 @@ where they are while you open, change and close views.
 - A new session goes straight into Drafts, below Pinned and above Sessions,
   and stays there until its first message is sent or its agent starts
   working, whether it is empty or holds unsent text. Drafts starts collapsed,
-  but it opens on its own whenever a new session lands there (New Agent
-  Session, the New Thread picker, a project's agent button, or one made
+  but it opens on its own whenever a new session lands there (New session,
+  Cmd+N, a project header's chat button or menu, or one made
   elsewhere), and a session you start in this window is selected and scrolled
   into view. If you collapse Drafts again it stays collapsed until the next new session.
   Choose Pin to move a draft into Pinned without sending or changing its
@@ -3636,7 +3620,8 @@ refreshes invalidate each other (`invalid_grant`). A login that is also a Claude
 Swap or Codex Swap account shows one sidebar meter. Add
 the management key only on the computer the hub runs on: other computers
 connected to it show its hub meters too. New Claude and Codex sessions can
-start On the hub from the New Thread picker's account list, or every new
+start On the hub from the account button beside Claude or Codex in a project
+header's chat menu, or every new
 session can: pick the hub under New sessions start on (Claude rules or Codex
 rules) and the hub balances its own accounts. `ghostex coordinator
 start-thread --account <hub name>` starts a thread on it. They run in a
@@ -3670,7 +3655,7 @@ with it. When the rule finds no account, new sessions use the current CLI login.
 A custom agent that brings its own login keeps it: when its command sets
 `CLAUDE_CONFIG_DIR` (or `CODEX_HOME` for Codex), or runs your own wrapper
 script instead of `claude` or `codex`, Ghostex runs the command as-is and picks
-no account for it. The launcher, the New Thread picker and the chat list no
+no account for it. The project header's chat menu and the chat list no
 accounts for that agent, Switch Account in the sidebar and terminal bar menus
 says "Uses its own login", and Ghostex never moves its sessions to an account,
 not even at a usage limit. Keep such a profile in `~/.claude-profiles/<name>`
@@ -4072,8 +4057,8 @@ OpenCode, Pi, Antigravity and more are built in. Gemini CLI is no longer
 supported (Google refuses its sign-in for individuals); Antigravity runs
 Google's Gemini models instead. An older Gemini CLI session stays in the
 sidebar, but Ghostex no longer resumes its conversation or tracks its activity. In Settings > Agents every agent has a
-switch: turn on the agents you use and they appear in the New session menu, the
-sidebar's Select Agent and on your phone; drag the rows to set their order.
+switch: turn on the agents you use and they appear in a new chat's agent list
+(Option+A), a project header's chat menu, and on your phone; drag the rows to set their order.
 Turning an agent off keeps its settings and its place, so turning it back on
 restores it. Agents you turned off but used before stay dimmed in the list;
 agents you never used wait under More agents, where one click turns one on.
@@ -4415,23 +4400,18 @@ task to a thread, which is an ordinary agent session it starts and briefs, so it
 stays free to talk to you while the threads work in parallel. It is Ghostex's
 version of the Projects features in Cursor and Claude Code.
 
-- **Start one**: hover a project in the sidebar, open the Select Agent menu (the
-  arrow beside its agent button) and choose **New Coordinator…**, the first
-  item of that menu; hover the (i) beside it for why it is worth it. On the
-  phone, open the same menu from the project's agent button and pick **New
-  Coordinator…** at its top (tap its (i) for the same). When the sidebar shows a
-  project that is on more than one computer (or cloned twice on one) as one
-  entry, the desktop dialog has a **Computer** field that picks where it runs:
-  it starts on the copy you picked in the New Thread picker, else the one you
-  last used, greys a computer that isn't connected, and lists that computer's
-  own agents and models. A project with one copy, or one Separate by machine
-  keeps apart, has no such field. On the phone, a project whose clones its
-  list shows as one gets a **Folder** row that picks between them. Name it and
-  press **Next**: the agent picker opens, titled **Pick the coordinator's agent**,
-  with every agent set up on that computer (any agent can run a coordinator;
-  press Tab on Claude or Codex to pick an account). Pick one and the coordinator
-  starts with its first message typed into the agent's input box but not sent,
-  so you can change the model and effort first. It starts on the model and
+- **Start one**: click **New session** (Cmd+N) and turn on the **Coordinator**
+  toggle pill in the setup bar above the message box, or choose **Coordinator**
+  in a project header's chat menu (hover the (i) beside it for why it is worth
+  it) or in the sidebar main menu (☰). The new coordinator opens straight in
+  Chat View as a draft with Coordinator mode on (no separate dialog): before
+  sending your first request, the setup bar lets you change its project
+  (Option+O), computer (Option+M), folder or worktree (Option+W), branch
+  (Option+B), agent (Option+A), and model and effort (Option+P). On the phone,
+  turn on the **Coordinator** toggle pill in a new chat draft's setup bar, or
+  open a project's agent menu and pick **New Coordinator…** at its top (tap its
+  (i) for the same; a project whose clones the phone merges gets a **Folder**
+  row to pick between them). A coordinator starts on the model and
   effort you last switched a coordinator of the same agent to (in the First
   message card's pickers, the model pill, or the agent's own model switch),
   whether you start it from the computer, a browser, the phone or
@@ -4452,21 +4432,16 @@ version of the Projects features in Cursor and Claude Code.
   another agent, `ghostex coordinator create` does the same unless you add
   `--start`, which sends the first message at once. Any agent and model can
   run a coordinator; it is the agent you talk to all day, so a strong model
-  gives the best results. When the highlighted agent would start on a low-end
-  model (Haiku, Sonnet, or a Flash, Mini, Lite or Nano tier such as DeepSeek
-  Flash), or on Opus, Fable, Astra or Sol at medium effort or below, the picker
-  says "You might get a degraded experience." under the list (on the phone, the
-  agent's row gets an (i) with that line). Claude (cloud) is not offered: a
+  gives the best results. Claude (cloud) is not offered: a
   coordinator runs on a computer with Ghostex.
   Its first message is always "Read and adhere to this skill: run `ghostex
   coordinator guide` and follow what it prints for the whole session.", the
-  same for every agent, shown locked in the dialog: that guide is the
+  same for every agent: that guide is the
   coordinator's playbook, built into the `ghostex` command. A Claude or Codex coordinator keeps its role after `/clear` or a
-  compaction: Ghostex hands it that line again before its next message. Then it opens in chat, where you write your first request. The name
-  is what its sidebar row shows, and the coordinator keeps it: unlike other
-  sessions it is not renamed from your first message (Rename in the sidebar
-  still changes it; left blank, it is named once from its first conversation).
-  A project can have several coordinators, one per stream of work. In an
+  compaction: Ghostex hands it that line again before its next message. A new
+  coordinator draft is named once from its first conversation (Rename in the
+  sidebar still changes it).
+  A project can have several coordinators, one per stream of work. In a
   coordinator's chat the effort picker offers the same Low, Medium, High and XHigh only.
   To pick from every level the agent has (Max, Ultra and the like), turn on
   **Every effort level in coordinator pickers** (an advanced setting in Settings > Chat);
@@ -6749,8 +6724,8 @@ Keep Awake rows for machines that must stay reachable.
 
 A Claude cloud session runs on Claude's own computers (Claude Code on the web)
 instead of this computer, so it keeps going when the computer sleeps, and still
-has its row in the sidebar. Pick **Claude (cloud)** (the orange cloud) in New
-Thread's agent list and choose the Claude account it runs on. It opens in Chat View
+has its row in the sidebar. Pick **Claude (cloud)** (the orange cloud) in a
+project header's chat menu (or a new chat's agent list) and choose the Claude account it runs on. It opens in Chat View
 (its terminal runs behind it): type the task in the chat box and send it, and the
 session starts on claude.ai from the project's GitHub repository on a new
 `claude/…` branch. On the computer the chat pane then shows the session's own
@@ -6761,8 +6736,8 @@ page, and **Open Terminal** in its long-press menu shows the conversation in its
 terminal. Until its task is sent you can move the session to another saved
 Claude account (the header's **Cloud** menu > **Account**, or the row's **Switch
 Account**); once it starts on claude.ai the account is final for that session:
-its usage, follow-ups and Bring to this computer all stay on it. New Thread
-highlights the account of the project's last cloud session first. The row always sits under the
+its usage, follow-ups and Bring to this computer all stay on it. The account
+menu highlights the account of the project's last cloud session first. The row always sits under the
 project of the repository's main folder, even when started from a worktree.
 
 - **The Cloud button**: while the work area shows a cloud session, the header
@@ -6831,7 +6806,7 @@ this computer, and keeps working when this computer sleeps. Ghostex never
 bills; your provider account does. Cloud Boxes is a built-in extension, on by
 default on every computer (Settings > Extensions, `cloudBoxesEnabled`); turning
 it off hides it everywhere and keeps your boxes and settings. The Cloud Box
-choice in a new chat and in New Thread shows once you've connected a provider
+choice in a new chat's setup bar shows once you've connected a provider
 (or made a box), so it stays out of the way until you use Cloud Boxes.
 
 - **Connect a provider**: Settings > Cloud Boxes > Providers. Instabox's
@@ -6844,8 +6819,8 @@ choice in a new chat and in New Thread shows once you've connected a provider
   says its limit is reached, the message names the sandbox holding the slot:
   delete a Ghostex box in Your boxes, or one made outside Ghostex at
   dashboard.instabox.sh or with `instabox rm <name>`.
-- **Start one**: in a new chat pick Cloud Box in the bar's where part (or the
-  Cloud Box chip on a project's row in New Thread's project list); the choice is
+- **Start one**: in a new chat pick Cloud Box in the setup bar's where part
+  (Option+W); the choice is
   remembered per project. The bar's last part then picks what the box starts from:
   a snapshot (★ is the project's Default), a Blank box, or a running box to
   reuse (the chat gets its own worktree there), plus the provider and size
@@ -6927,8 +6902,8 @@ choice in a new chat and in New Thread shows once you've connected a provider
   starts an agent that installs agentbox and sets up the providers you want,
   asking before anything that costs money; or Install agentbox, then Set Up for
   Docker, or Log In and Prepare for a cloud; Add Server registers your own
-  server. Pick a box under More providers in a new chat's Cloud Box pick (the bar's last part),
-  on a project's row in New Thread's project list, or Run in a Box in a project's Select Agent menu; right-click a box session for Open Box Web App,
+  server. Pick a box under More providers in a new chat's Cloud Box pick (the setup bar's last part, Option+B),
+  or choose **Run in a Box** in a project header's chat menu; right-click a box session for Open Box Web App,
   Open Box Screen, Stop Box and Destroy Box. Cloud agentbox boxes bill while
   they exist.
 
@@ -6936,7 +6911,7 @@ Related settings: `cloudBoxesEnabled` (on by default),
 `cloudBoxesMonthlyCapUsd` (0 = no cap), `cloudBoxesIdleStopMinutes` (default
 15), `cloudBoxesDeleteStoppedAfterDays` (default 7),
 `cloudBoxesPhoneStartEnabled` (default off), `agentboxDefaultLocation` (where
-agentbox New Thread runs unless you pick another place; default `local`). CLI:
+new agentbox threads run unless you pick another place; default `local`). CLI:
 `ghostex cloud providers`, `ghostex cloud list`, `ghostex cloud spend`,
 `ghostex cloud attach <box-id> <project-id> <session-id>` (a box session's
 terminal in any terminal; the ids are the box's own, from `ghostex cloud show`),

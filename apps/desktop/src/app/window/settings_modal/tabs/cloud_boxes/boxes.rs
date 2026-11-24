@@ -171,7 +171,7 @@ impl CloudBoxesTab {
                 None,
                 ICON_BOX,
                 "No boxes yet",
-                "Pick a box location under Run on when you start a new thread.",
+                "Start a new chat and pick a box under More providers in the setup bar, or choose Run in a Box in a project header's chat menu.",
                 None,
                 Vec::new(),
             )),

@@ -432,7 +432,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "official",
         section_title: "Built-in",
         title: "Cloud Boxes",
-        subtitle: "Turn Cloud Boxes on or off everywhere: the Cloud Boxes page in Settings, the Cloud Box choice of a new chat, the Run on choice of a new thread, Run in a Box in the Select Agent menu and the cloud and agentbox commands. On by default; your boxes and box settings are kept while it is off.",
+        subtitle: "Turn Cloud Boxes on or off everywhere: the Cloud Boxes page in Settings, the Cloud Box choice in a new chat's setup bar, Run in a Box in a project header's chat menu, and the cloud and agentbox commands. On by default; your boxes and box settings are kept while it is off.",
         options: &[],
         user_only: false,
     },

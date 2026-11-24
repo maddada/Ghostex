@@ -692,7 +692,7 @@ impl AccountsTab {
         blocks.push(
             div()
                 .px(px(DETAIL_INSET))
-                .child(muted(p, "Start a session On the hub from the New Thread picker (or pin it under Claude / Codex rules). Claude hub sessions share ~/.claude/CLAUDE.md, skills/, projects/, and history.jsonl."))
+                .child(muted(p, "Start a session On the hub from a project header's chat menu (or pin it under Claude / Codex rules). Claude hub sessions share ~/.claude/CLAUDE.md, skills/, projects/, and history.jsonl."))
                 .into_any_element(),
         );
         let rows = vec![

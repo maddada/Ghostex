@@ -10721,7 +10721,7 @@
     {
       "key": "agentSwitches",
       "title": "Turn agents on or off",
-      "subtitle": "Turn on the agents you use; they appear in the New session menu, the sidebar's Select Agent and on your phone. Drag to set their order. Agents you turned off but used before stay dimmed in the list; agents you never used wait under More agents. Expand an agent that is on to edit its command, permission mode and default view; a turned-off agent's row keeps only its CLI install and update, Duplicate and, for a custom agent, Delete.",
+      "subtitle": "Turn on the agents you use; they appear in a new chat's agent list, a project header's chat menu, and on your phone. Drag to set their order. Agents you turned off but used before stay dimmed in the list; agents you never used wait under More agents. Expand an agent that is on to edit its command, permission mode and default view; a turned-off agent's row keeps only its CLI install and update, Duplicate and, for a custom agent, Delete.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "agentList",
@@ -11982,7 +11982,7 @@
     {
       "key": "agentboxStartThread",
       "title": "Start a thread in an agentbox box",
-      "subtitle": "Open New Thread and pick where it runs under Run on. Boxes open in the terminal view.",
+      "subtitle": "Start a new chat and pick a box under More providers in the setup bar's Cloud Box picker, or choose Run in a Box in a project header's chat menu. Boxes open in the terminal view.",
       "tab": "cloudBoxes",
       "tabTitle": "Cloud Boxes",
       "section": "howTo",
@@ -12741,7 +12741,7 @@
     {
       "key": "cloudBoxesEnabled",
       "title": "Cloud Boxes",
-      "subtitle": "Turn Cloud Boxes on or off everywhere: the Cloud Boxes page in Settings, the Cloud Box choice of a new chat, the Run on choice of a new thread, Run in a Box in the Select Agent menu and the cloud and agentbox commands. On by default; your boxes and box settings are kept while it is off.",
+      "subtitle": "Turn Cloud Boxes on or off everywhere: the Cloud Boxes page in Settings, the Cloud Box choice in a new chat's setup bar, Run in a Box in a project header's chat menu, and the cloud and agentbox commands. On by default; your boxes and box settings are kept while it is off.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
