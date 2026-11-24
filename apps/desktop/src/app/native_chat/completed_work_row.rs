@@ -332,11 +332,9 @@ impl NativeChatView {
             parts.push(cards);
             cards_above = true;
         }
-        if let Some(files) = self.completed_files_fold(item, true, p, cx) {
-            parts.push(files);
-            cards_above = false;
-        }
-        // The log starts at the turn's left edge, under the folded cards and the files fold.
+        // The log starts at the turn's left edge, under the folded cards; the files fold sits as
+        // its first row so it shares the exact spacing and alignment of the tool and thought rows
+        // below it (`file_change_card.rs`, CDXC:SessionChat 2026-11-24).
         //
         // CDXC:SessionChat 2026-11-10 DECISION: User, of the opened turn's "Used N tools" card:
         // "why do i see a line next to the used tools card". React hung the log off a rail under
@@ -346,6 +344,9 @@ impl NativeChatView {
         // its own turn. The log has no rail or indent; the heading closes the turn.
         self.hide_file_changes = true;
         let mut log: Vec<AnyElement> = Vec::new();
+        if let Some(files) = self.completed_files_fold(item, true, p, cx) {
+            log.push(files);
+        }
         if let Some(notice) = self.deferred_work_notice(item, p, cx) {
             log.push(notice);
         }

@@ -9,7 +9,10 @@
 //! The phone draws the same card in `apps/mobile/app/src/chat/native/transcript/FileChanges.tsx`.
 
 use super::cards::SINGLE_LINE_CARD;
+use super::chat_text_look::PROSE_SIZE;
+use super::disclosure_body::{DisclosureRail, disclosure_body};
 use super::quiet_work::{QuietEdit, file_names};
+use super::tool_run::{DESCRIBED_LABEL_OPACITY, ROW_PAD_X, TILE};
 use super::{
     appearance::{ChatAppearance, ChatFilledButton as _},
     state::NativeChatView,
@@ -21,7 +24,7 @@ use ghostex_gx_chat_core::transcript::file_change_rows::{TurnFilesFold, turn_fil
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, div, px, rgb,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, div, px, rgb,
 };
 use serde_json::{Value, json};
 
@@ -193,10 +196,10 @@ impl NativeChatView {
         let quiet = p.quiet_style();
         let simple_expanded = self.is_expanded(&simple_key, awaiting || (quiet && p.work_open));
         if p.simple || quiet {
-            let motion = self.disclosure_frame(&simple_key, simple_expanded, cx);
-            rows.push(if quiet {
+            if quiet {
+                let motion = self.disclosure_frame(&simple_key, simple_expanded, cx);
                 let summary = &message["fileCard"];
-                self.quiet_edit_line(
+                rows.push(self.quiet_edit_line(
                     QuietEdit {
                         key: simple_key.clone(),
                         label: text(message, "simpleFileLabel"),
@@ -207,22 +210,24 @@ impl NativeChatView {
                     },
                     p,
                     cx,
-                )
-            } else {
-                self.disclosure(
-                    simple_key.clone(),
-                    text(message, "simpleFileLabel"),
-                    simple_expanded,
-                    None,
-                    p,
-                    cx,
-                )
-            });
-            if !simple_expanded && motion.is_none() {
+                ));
+                if !simple_expanded && motion.is_none() {
+                    return rows;
+                }
+                let card = self.file_change_card(&id, &message["fileCard"], &files, p, cx);
+                rows.push(self.disclosure_body_motion(&simple_key, motion, 8.0 * p.scale, card));
                 return rows;
             }
-            let card = self.file_change_card(&id, &message["fileCard"], &files, p, cx);
-            rows.push(self.disclosure_body_motion(&simple_key, motion, 8.0 * p.scale, card));
+            rows.push(self.files_fold_row(
+                &simple_key,
+                &id,
+                text(message, "simpleFileLabel"),
+                &message["fileCard"],
+                &files,
+                simple_expanded,
+                p,
+                cx,
+            ));
             return rows;
         }
         rows.push(self.file_change_card(&id, &message["fileCard"], &files, p, cx));
@@ -250,13 +255,20 @@ impl NativeChatView {
             return None;
         }
         let palette = Palette::of(p);
-        Some(self.file_change_diff(key, file, &detail, Some(review), &palette, p, cx))
+        Some(self.file_change_diff(key, file, &detail, Some(review), &palette, true, p, cx))
     }
 
     /// The turn's writes, folded behind "N files changed" ("Edited N files" in simple mode) right
     /// under the turn's card while that card is open; a closed card shows none (gx-chat-core
     /// `turn_files_fold`, where the user's decision is). The label and the rows are projected
     /// together in the core (`transcript/presentation.rs`), so the label counts the files drawn.
+    ///
+    /// CDXC:SessionChat 2026-11-24 DECISION: User, of the "> Edited 2 files" disclosure inside an
+    /// expanded tool-call group: "make edited files look like the other rows shown there please not
+    /// like this". The fold row wears the tool row's shape (`tool_run.rs`: 22px neutral tile with
+    /// the pencil icon, 8px inset, 5px vertical pad, prose size at 80% opacity, +/- counts and a
+    /// right-side check or error mark), and expands on a rail into file rows matching that same
+    /// style, each opening onto its diff. The phone matches in `FileChanges.tsx`.
     pub(super) fn completed_files_fold(
         &mut self,
         item: &TranscriptItem,
@@ -280,24 +292,310 @@ impl NativeChatView {
         }
         let key = format!("work-files:{id}");
         let expanded = self.is_expanded(&key, false);
-        let motion = self.disclosure_frame(&key, expanded, cx);
         let label = if p.simple {
             simple_files_label.clone()
         } else {
             files_label.clone()
         };
+        Some(self.files_fold_row(
+            &key,
+            &format!("work:{id}"),
+            label,
+            files_card,
+            files,
+            expanded,
+            p,
+            cx,
+        ))
+    }
+
+    /// The "Edited N files" fold row styled like the tool and thought rows around it, expanding on
+    /// a rail from the pencil tile's centre into per-file rows in the same style.
+    #[allow(clippy::too_many_arguments)]
+    fn files_fold_row(
+        &mut self,
+        key: &str,
+        stack_id: &str,
+        label: String,
+        summary: &Value,
+        files: &[Value],
+        expanded: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let palette = Palette::of(p);
+        let motion = self.disclosure_frame(key, expanded, cx);
+        let any_failed = files.iter().any(|file| file["failed"] == true);
+        let all_failed = !files.is_empty() && files.iter().all(|file| file["failed"] == true);
+        let added = summary["added"].as_u64().unwrap_or(0);
+        let removed = summary["removed"].as_u64().unwrap_or(0);
+        let toggle_key = key.to_string();
+        let trigger = div()
+            .id(SharedString::from(key.to_string()))
+            .role(gpui::Role::Button)
+            .aria_label(label.clone())
+            .aria_expanded(expanded)
+            .when(all_failed, |this| this.aria_description("failed"))
+            .flex()
+            .items_center()
+            .min_w_0()
+            .w_full()
+            .gap(px(8.0 * s))
+            .px(px(ROW_PAD_X * s))
+            .py(px(5.0 * s))
+            .rounded(px(8.0 * s))
+            .text_size(px(PROSE_SIZE * s))
+            .when(all_failed, |this| this.bg(p.error().opacity(0.06)))
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.foreground.opacity(0.03)))
+            .on_click(cx.listener(move |view, _, _, cx| {
+                view.toggle_marker_disclosure(toggle_key.clone(), expanded, cx);
+            }))
+            .child(
+                div()
+                    .size(px(TILE * s))
+                    .rounded(px(6.0 * s))
+                    .bg(p.foreground.opacity(0.05))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .flex_shrink_0()
+                    .child(icon("titlebar/pencil.svg", 13.0 * s, p.muted)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .font_weight(FontWeight::NORMAL)
+                    .text_size(px(PROSE_SIZE * s))
+                    .text_color(if all_failed {
+                        p.error()
+                    } else {
+                        p.prose.opacity(DESCRIBED_LABEL_OPACITY)
+                    })
+                    .child(self.find_label(key, label)),
+            )
+            .when(added + removed > 0, |this| {
+                this.child(counts(added, removed, &palette, s))
+            })
+            .child(icon(
+                if any_failed {
+                    "titlebar/x.svg"
+                } else {
+                    "titlebar/check.svg"
+                },
+                13.0 * s,
+                if any_failed { p.error() } else { p.success() },
+            ));
+
         let mut group = div()
             .flex()
             .flex_col()
             .w_full()
             .min_w_0()
-            .gap(px(8.0 * p.scale))
-            .child(self.disclosure(key.clone(), label, expanded, None, p, cx));
+            .gap(px(4.0 * s))
+            .child(trigger);
         if expanded || motion.is_some() {
-            let body = self.file_change_card(&format!("work:{id}"), files_card, files, p, cx);
-            group = group.child(self.disclosure_body_motion(&key, motion, 8.0 * p.scale, body));
+            let review_paths: Vec<String> = summary["paths"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|path| path.as_str().map(str::to_string))
+                .collect();
+            let entry_rows: Vec<AnyElement> = files
+                .iter()
+                .enumerate()
+                .map(|(index, file)| {
+                    self.file_fold_entry_row(stack_id, index, file, &review_paths, &palette, p, cx)
+                })
+                .collect();
+            let rail = disclosure_body(
+                p,
+                DisclosureRail::Marker,
+                2.0,
+                key.to_string(),
+                "Collapse edited files",
+                entry_rows,
+                cx,
+            );
+            // Align the rail directly under the middle of the 22px pencil tile, as `tool_detail_body` does.
+            let body = div()
+                .pl(px((ROW_PAD_X + TILE / 2.0 - 10.0) * s))
+                .min_w_0()
+                .child(rail)
+                .into_any_element();
+            group = group.child(self.disclosure_body_motion(key, motion, 4.0 * s, body));
         }
-        Some(group.into_any_element())
+        group.into_any_element()
+    }
+
+    /// One file row inside an expanded "Edited N files" fold, matching the tool row style and
+    /// opening onto its diff on a rail.
+    #[allow(clippy::too_many_arguments)]
+    fn file_fold_entry_row(
+        &mut self,
+        stack_id: &str,
+        index: usize,
+        file: &Value,
+        review_paths: &[String],
+        palette: &Palette,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let place = file["disclosureIndex"].as_u64().unwrap_or(index as u64);
+        let key = format!("file:{stack_id}:{place}");
+        let open = self.is_expanded(&key, p.file_previews || file["awaitingApproval"] == true);
+        let motion = self.disclosure_frame(&key, open, cx);
+        let status = file["status"].as_str().unwrap_or("edited");
+        let glyph_color = match status {
+            "new" => palette.new,
+            "deleted" => palette.deleted,
+            _ => p.muted,
+        };
+        let failed = file["failed"] == true;
+        let added = file["added"].as_u64().unwrap_or(0);
+        let removed = file["removed"].as_u64().unwrap_or(0);
+        let filename = text(file, "filename");
+        let parent = text(file, "parent");
+        let menu_path = text(file, "path");
+        let toggle_key = key.clone();
+        let header = div()
+            .id(SharedString::from(format!("file-row:{key}")))
+            .role(gpui::Role::Button)
+            .aria_label(if parent.is_empty() {
+                filename.clone()
+            } else {
+                format!("{parent}{filename}")
+            })
+            .aria_expanded(open)
+            .when(failed, |this| this.aria_description("failed"))
+            .flex()
+            .items_center()
+            .gap(px(8.0 * s))
+            .px(px(ROW_PAD_X * s))
+            .py(px(5.0 * s))
+            .min_w_0()
+            .w_full()
+            .rounded(px(8.0 * s))
+            .text_size(px(PROSE_SIZE * s))
+            .when(failed, |this| this.bg(p.error().opacity(0.06)))
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.foreground.opacity(0.03)))
+            .on_click(cx.listener(move |view, _, _, cx| {
+                view.toggle_marker_disclosure(toggle_key.clone(), open, cx);
+            }))
+            .on_mouse_down(
+                gpui::MouseButton::Right,
+                cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| {
+                    view.file_secondary_press(menu_path.clone(), event, window, cx);
+                }),
+            )
+            .child(
+                div()
+                    .size(px(TILE * s))
+                    .rounded(px(6.0 * s))
+                    .bg(p.foreground.opacity(0.05))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .flex_shrink_0()
+                    .child(icon(status_icon(status), 13.0 * s, glyph_color)),
+            )
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .whitespace_nowrap()
+                    .font_weight(FontWeight::NORMAL)
+                    .text_size(px(PROSE_SIZE * s))
+                    .text_color(if failed {
+                        p.error()
+                    } else {
+                        p.prose.opacity(DESCRIBED_LABEL_OPACITY)
+                    })
+                    .child(filename.clone()),
+            )
+            .when(!parent.is_empty(), |this| {
+                this.child(folder_label(parent, p.muted, 12.5 * s))
+            })
+            .when(failed, |this| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(12.0 * s))
+                        .text_color(p.error())
+                        .child("Failed"),
+                )
+            })
+            .child(div().flex_1())
+            .when(added + removed > 0, |this| {
+                this.child(counts(added, removed, palette, s))
+            })
+            .child(icon(
+                if failed {
+                    "titlebar/x.svg"
+                } else {
+                    "titlebar/check.svg"
+                },
+                13.0 * s,
+                if failed { p.error() } else { p.success() },
+            ));
+        let mut row = div()
+            .flex()
+            .flex_col()
+            .w_full()
+            .min_w_0()
+            .gap(px(4.0 * s))
+            .child(header);
+        if !open && motion.is_none() {
+            return row.into_any_element();
+        }
+        let detail = self.row_detail(
+            &key,
+            "file",
+            file["messageId"].as_str().unwrap_or_default(),
+            file["index"].as_u64().unwrap_or_default(),
+        );
+        if detail.is_null() {
+            return row.into_any_element();
+        }
+        let diff = self.file_change_diff(
+            &key,
+            file,
+            &detail,
+            Some(review_paths.to_vec()),
+            palette,
+            false,
+            p,
+            cx,
+        );
+        let framed = div()
+            .w_full()
+            .min_w_0()
+            .rounded(px(8.0 * s))
+            .border_1()
+            .border_color(palette.border)
+            .overflow_hidden()
+            .child(diff)
+            .into_any_element();
+        let rail = disclosure_body(
+            p,
+            DisclosureRail::ToolDetail,
+            4.0,
+            key.clone(),
+            format!("Collapse {filename}"),
+            [framed],
+            cx,
+        );
+        let body = div()
+            .pl(px((ROW_PAD_X + TILE / 2.0 - 10.0) * s))
+            .min_w_0()
+            .child(rail)
+            .into_any_element();
+        row = row.child(self.disclosure_body_motion(&key, motion, 4.0 * s, body));
+        row.into_any_element()
     }
 
     /// One card: the header, then a row per file.
@@ -528,7 +826,7 @@ impl NativeChatView {
         if detail.is_null() {
             return row.into_any_element();
         }
-        let body = self.file_change_diff(&key, file, &detail, None, palette, p, cx);
+        let body = self.file_change_diff(&key, file, &detail, None, palette, true, p, cx);
         row = row.child(self.disclosure_body_motion(&key, motion, 0.0, body));
         row.into_any_element()
     }
@@ -543,6 +841,7 @@ impl NativeChatView {
         detail: &Value,
         review: Option<Vec<String>>,
         palette: &Palette,
+        border_top: bool,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -572,8 +871,9 @@ impl NativeChatView {
             .pt(px(6.0 * s))
             .pb(px(8.0 * s))
             .bg(palette.well)
-            .border_t_1()
-            .border_color(palette.hairline)
+            .when(border_top, |this| {
+                this.border_t_1().border_color(palette.hairline)
+            })
             .font_family(MONO)
             .text_size(px(12.4 * s))
             .line_height(px(20.0 * s));
