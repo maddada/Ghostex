@@ -593,10 +593,7 @@ impl SidebarSettings {
                 "unifiedGroupByProject",
                 defaults.unified_group_by_project,
             ),
-            group_sessions_by_tags: boolean(
-                "groupSessionsByTags",
-                defaults.group_sessions_by_tags,
-            ),
+            group_sessions_by_tags: boolean("groupSessionsByTags", defaults.group_sessions_by_tags),
             unified_project_order: settings
                 .get("unifiedProjectOrder")
                 .and_then(Value::as_array)

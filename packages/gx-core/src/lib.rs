@@ -303,13 +303,13 @@ pub use crate::sidebar_view::{
     gbots_department_storage_id, gbots_section_storage_id, GbotsDepartmentView, GbotsSectionView,
 };
 pub use crate::sidebar_view::{
+    keep_status_entries, with_status_entries, without_status_entries, StatusGroup,
+};
+pub use crate::sidebar_view::{
     open_draft_headings, project_draft_rows, project_session_rows, DraftArrival, DraftArrivals,
     DraftRow, DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
 };
 pub use crate::sidebar_view::{tag_choice, tag_choices, TagChoice};
-pub use crate::sidebar_view::{
-    keep_status_entries, with_status_entries, without_status_entries, StatusGroup,
-};
 pub use crate::sidebar_view::{ChiefRowView, HomeHeaderView};
 pub use crate::sidebar_view::{FolderProblemCause, FolderProblemPath, FolderProblemView};
 pub use crate::workspace_groups::{

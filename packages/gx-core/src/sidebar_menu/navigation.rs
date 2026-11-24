@@ -132,8 +132,12 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
             .with_checked(input.settings.unified_group_by_project),
         );
         sort.push(
-            intent("Group sessions by tags", "tag", GROUP_SESSIONS_BY_TAGS_ACTION)
-                .with_checked(input.settings.group_sessions_by_tags),
+            intent(
+                "Group sessions by tags",
+                "tag",
+                GROUP_SESSIONS_BY_TAGS_ACTION,
+            )
+            .with_checked(input.settings.group_sessions_by_tags),
         );
         // CDXC:Sidebar 2026-11-14 DECISION: User: while Group sessions by tags is on there is no Moving section, since its Working group already lists those sessions, and the Moving section's setting keeps its value in Settings. Its row leaves this menu while grouping is on, because a row here always changes what is on screen (the 2026-10-31 decision above, kept).
         if !input.settings.group_sessions_by_tags {

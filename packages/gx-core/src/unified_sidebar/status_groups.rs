@@ -18,7 +18,9 @@ use crate::sidebar_view::tags::{
 };
 use crate::sidebar_view::{SessionRow, SidebarSettings, TagPresentation};
 
-use super::build::{unified_status, UnifiedFilterOption, UnifiedRow, UnifiedSettings, UnifiedStatus};
+use super::build::{
+    unified_status, UnifiedFilterOption, UnifiedRow, UnifiedSettings, UnifiedStatus,
+};
 use super::grouping::ordered_repo_keys;
 
 /// The working assumptions of which group a session stands in, kept in one place so a correction
@@ -47,7 +49,10 @@ pub const GROUPING_POLICY: GroupingPolicy = GroupingPolicy {
 
 /// The settings the list is built with: no Moving section while grouping is on (build.rs
 /// `unified_shelf`), the stored `unifiedWorkingSection` left as it is.
-pub fn unified_grouping_settings(settings: UnifiedSettings, group_by_tags: bool) -> UnifiedSettings {
+pub fn unified_grouping_settings(
+    settings: UnifiedSettings,
+    group_by_tags: bool,
+) -> UnifiedSettings {
     UnifiedSettings {
         working_section: settings.working_section && !group_by_tags,
         ..settings
@@ -116,7 +121,9 @@ pub struct UnifiedTagEntry {
 impl UnifiedTagEntry {
     fn applies(&self, card: &UnifiedRow, tree: &mut Option<StatusGroup>) -> bool {
         match &self.head {
-            UnifiedGroupHead::Status(group) => *tree.get_or_insert_with(|| tree_status_group(card)) == *group,
+            UnifiedGroupHead::Status(group) => {
+                *tree.get_or_insert_with(|| tree_status_group(card)) == *group
+            }
             UnifiedGroupHead::Tag { id, .. } => match card.session.row.effective_tag.as_deref() {
                 Some(tag) => tag == id,
                 None => id == UNTAGGED_TAG_FILTER,
@@ -150,7 +157,9 @@ pub fn unified_tag_entries(
         .filter_map(|item| {
             let head = match item.kind {
                 TagListItemKind::Separator => return None,
-                TagListItemKind::Status => UnifiedGroupHead::Status(StatusGroup::from_id(&item.id)?),
+                TagListItemKind::Status => {
+                    UnifiedGroupHead::Status(StatusGroup::from_id(&item.id)?)
+                }
                 TagListItemKind::Tag | TagListItemKind::Untagged => {
                     let id = if item.kind == TagListItemKind::Untagged {
                         UNTAGGED_TAG_FILTER.to_string()
@@ -207,7 +216,10 @@ pub fn group_unified_by_tags<'a>(
     let mut fallback = Vec::new();
     for card in cards {
         let mut tree = None;
-        match entries.iter().position(|entry| entry.applies(card, &mut tree)) {
+        match entries
+            .iter()
+            .position(|entry| entry.applies(card, &mut tree))
+        {
             Some(index) => buckets[index].push(card),
             None => fallback.push(card),
         }

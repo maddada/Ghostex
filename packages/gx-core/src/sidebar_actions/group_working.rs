@@ -188,10 +188,11 @@ pub fn group_sessions_by_tags_list(
     saved_settings: &Map<String, Value>,
 ) -> Option<(String, Value)> {
     let list = saved_settings.get("sidebarSessionTagListItems")?;
-    let default = ghostex_settings_catalog::default_value("sidebarSessionTagListItems").map(|default| {
-        use ghostex_settings_catalog::ToJson as _;
-        default.to_json().to_value()
-    });
+    let default =
+        ghostex_settings_catalog::default_value("sidebarSessionTagListItems").map(|default| {
+            use ghostex_settings_catalog::ToJson as _;
+            default.to_json().to_value()
+        });
     if default.is_some_and(|default| {
         crate::sidebar_view::without_status_entries(&default)
             == crate::sidebar_view::without_status_entries(list)
