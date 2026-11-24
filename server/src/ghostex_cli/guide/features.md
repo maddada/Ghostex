@@ -2620,9 +2620,9 @@ shows when you point at the pill closes it. Your answers reach the agent the sam
 from all three, and the picture viewer and the remembered scroll position below work in all three.
 A page that links to other pages the agent wrote beside it (a cover page and its decks) opens
 each one in place when you click it, also for an agent on another computer. A page opened
-that way answers to the agent that sent the cover: your answers and Done reach it,
+that way answers to the agent that sent the cover: your answers and Archive reach it,
 and the page waits in the list above the chat box once you opened it, until you answer it or
-mark it done. Opened from Files instead, a page no agent published stays read-only. A
+archive it. Opened from Files instead, a page no agent published stays read-only. A
 page with no questions (a report or a mockup to look at) waits for you too: it
 ends with a "Reply about this page" box and an Archive button (which switches
 to Send to agent once you type a reply), and until you
