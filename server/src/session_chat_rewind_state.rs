@@ -49,14 +49,37 @@ fn load() -> HashMap<String, SessionChatPendingRewind> {
     };
     let mut entries: HashMap<String, SessionChatPendingRewind> =
         serde_json::from_str(&text).unwrap_or_default();
-    // A transcript that grew past the cutoff has already answered the rewind; a missing one has
-    // nothing left to hide; a month-old entry belongs to a conversation nobody continued.
+    // A transcript with a message past the cutoff has already answered the rewind; a missing one
+    // has nothing left to hide; a month-old entry belongs to a conversation nobody continued.
     let oldest_ms = chrono::Utc::now().timestamp_millis() - 30 * 24 * 60 * 60 * 1000;
     entries.retain(|path, pending| {
-        pending.set_at_ms >= oldest_ms
-            && std::fs::metadata(path).is_ok_and(|metadata| metadata.len() <= pending.cutoff_offset)
+        pending.set_at_ms >= oldest_ms && !answered_past(Path::new(path), pending.cutoff_offset)
     });
     entries
+}
+
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// Claude Code writes bookkeeping rows (`last-prompt`, `cost-state`, `mode`) whenever its process exits or starts, so a Native chat that sleeps, wakes or restarts right after a rewind grows its transcript without answering the rewind. Only a message row past the cutoff answers it, the same rule the chat readers retire it by (session_chat_branch.rs); a bare length check dropped the entry and the woken Claude remembered the rewound turns.
+#[cfg(not(test))]
+fn answered_past(path: &Path, cutoff_offset: u64) -> bool {
+    use std::io::{BufRead, Seek, SeekFrom};
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return true;
+    };
+    if file.seek(SeekFrom::Start(cutoff_offset)).is_err() {
+        return true;
+    }
+    std::io::BufReader::new(file)
+        .split(b'\n')
+        .map_while(Result::ok)
+        .any(|line| {
+            serde_json::from_slice::<serde_json::Value>(&line).is_ok_and(|row| {
+                matches!(
+                    row.get("type").and_then(serde_json::Value::as_str),
+                    Some("user" | "assistant")
+                )
+            })
+        })
 }
 
 #[cfg(test)]
