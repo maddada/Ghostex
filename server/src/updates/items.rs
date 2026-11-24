@@ -896,8 +896,7 @@ fn agent_item(agent: &Value, usage: &Usage) -> Option<Value> {
     let can_run = !no_command
         && method_reason.is_none()
         && method != Some("manual")
-        && (method_command.is_some()
-            || (method.is_none() && definition.self_updater().is_some()));
+        && (method_command.is_some() || (method.is_none() && definition.self_updater().is_some()));
     let detail = match method {
         Some(method) => format!("Agent · {}", method_label(method)),
         None => "Agent".to_string(),
