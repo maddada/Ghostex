@@ -774,6 +774,38 @@ fn is_claude_no_response_placeholder(record: &Map<String, Value>) -> bool {
         )
 }
 
+/// CDXC:SessionChat 2026-11-24 WHY: Claude Code 2.1.33x writes what a slash command printed (`/context`, `/cost`, `/model`…) as a `system` row with subtype `local_command` whose `content` holds `<local-command-stdout>…`, where older versions wrote a `user` row. The decoder kept only informational system rows, so `/context` sent from the chat showed the user's bubble and nothing else, in Native and terminal Claude chats alike (found testing Native Claude on Linux). It is decoded as the user row the older format was, which the chat core already draws as the command's output note (`command_output_note` in packages/gx-chat-core/src/transcript/noise.rs).
+fn decode_claude_local_command_output(
+    record: &Map<String, Value>,
+    fallback_id: &str,
+) -> Option<SessionChatMessage> {
+    if record.get("type").and_then(Value::as_str) != Some("system")
+        || record.get("subtype").and_then(Value::as_str) != Some("local_command")
+    {
+        return None;
+    }
+    let content = extract_string(record.get("content"))?;
+    let trimmed = content.trim_start();
+    if !(trimmed.starts_with("<local-command-stdout")
+        || trimmed.starts_with("<local-command-stderr"))
+    {
+        return None;
+    }
+    Some(SessionChatMessage {
+        id: extract_string(record.get("uuid")).unwrap_or_else(|| fallback_id.to_string()),
+        role: SessionChatRole::User,
+        blocks: vec![text_block(content)],
+        timestamp: parse_timestamp(record.get("timestamp")),
+        source: SessionChatSource::Transcript,
+        turn_id: None,
+        byte_offset: None,
+        async_questions: None,
+        queued: false,
+        api_error: None,
+        custom_message: None,
+    })
+}
+
 pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<SessionChatMessage> {
     let record = parse_json_object(line)?;
     let role = record.get("type").and_then(Value::as_str)?;
@@ -782,6 +814,9 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
     }
     if role == CLAUDE_QUEUE_RECORD_TYPE {
         return decode_claude_queued_prompt(&record, fallback_id);
+    }
+    if let Some(output) = decode_claude_local_command_output(&record, fallback_id) {
+        return Some(output);
     }
     /*
     Claude Code records composer rejections as top-level informational system
