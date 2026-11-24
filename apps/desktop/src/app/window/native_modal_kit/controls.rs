@@ -131,14 +131,15 @@ pub(crate) fn modal_panel_row(
 /// `.aria_toggled(a11y_toggled(..))` and `.aria_label(<the row's visible label>)`, so a screen
 /// reader names it by that label and never by the row's element id.
 pub(crate) fn modal_switch(p: &ModalPalette, checked: bool, disabled: bool) -> AnyElement {
-    draw_switch(
+    draw_switch_accent(
         SwitchShape::REGULAR,
         SwitchOff {
             track: p.switch_off,
             edge: None,
             thumb: p.background,
         },
-        p.light,
+        p.primary,
+        p.primary_foreground,
         checked,
         disabled,
     )
@@ -206,8 +207,29 @@ pub(crate) fn draw_switch(
     checked: bool,
     disabled: bool,
 ) -> Div {
+    let on_track = switch_on_track(light);
+    draw_switch_accent(
+        shape,
+        off,
+        on_track,
+        contrast_ink_on(on_track),
+        checked,
+        disabled,
+    )
+}
+
+/// [`draw_switch`] with caller-supplied on-state track and thumb colours (e.g. `p.primary` /
+/// `p.primary_foreground` from `ModalPalette` or `SettingsPalette`).
+pub(crate) fn draw_switch_accent(
+    shape: SwitchShape,
+    off: SwitchOff,
+    on_track: Rgba,
+    on_thumb: Rgba,
+    checked: bool,
+    disabled: bool,
+) -> Div {
     let (track, edge, thumb) = if checked {
-        (switch_on_track(light), None, switch_on_thumb(light))
+        (on_track, None, on_thumb)
     } else {
         (off.track, off.edge, off.thumb)
     };
@@ -238,24 +260,16 @@ pub(crate) fn draw_switch(
         )
 }
 
-/// The track of an on switch: the app's `--primary` (#e5e5e5) in dark looks; in light ones
-/// `--primary` (#262626) lifted 25% toward white, a solid mid grey that is never near-black on glass.
+/// The track of an on switch: the active theme's accent (`theme_accent_rgba`) in both dark and
+/// light appearances, matching primary buttons and checkboxes.
 pub(crate) fn switch_on_track(light: bool) -> Rgba {
-    if light {
-        css_mix(gpui::rgb(0x262626), 0.75, gpui::rgb(0xffffff))
-    } else {
-        gpui::rgb(0xe5e5e5)
-    }
+    crate::app::helpers::theme_accent_rgba(light)
 }
 
-/// The thumb of an on switch over [`switch_on_track`]: `--primary-foreground` (#171717) in dark
-/// looks, white in light ones.
+/// The thumb of an on switch over [`switch_on_track`]: high-contrast dark (`#141518`) or white
+/// (`#ffffff`) ink chosen from the track's luminance (`contrast_ink_on`).
 pub(crate) fn switch_on_thumb(light: bool) -> Rgba {
-    if light {
-        gpui::rgb(0xffffff)
-    } else {
-        gpui::rgb(0x171717)
-    }
+    contrast_ink_on(switch_on_track(light))
 }
 
 /// The faint wash a switch row shows while the pointer is over it: the foreground at 4%, so it is

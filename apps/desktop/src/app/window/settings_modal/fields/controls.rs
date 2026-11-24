@@ -20,13 +20,14 @@ use std::rc::Rc;
 /// radius, drawn by the app-wide [`draw_switch`]. Off: the raised-hover track with a hairline
 /// edge and [`settings_switch_off`]'s thumb at the left.
 pub(crate) fn settings_switch(p: &SettingsPalette, checked: bool, disabled: bool) -> AnyElement {
-    draw_switch(
+    draw_switch_accent(
         SwitchShape {
             edge: 1.0,
             ..SwitchShape::REGULAR
         },
         settings_switch_off(p),
-        p.light,
+        p.primary,
+        p.modal.primary_foreground,
         checked,
         disabled,
     )
