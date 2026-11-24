@@ -21,7 +21,7 @@ type Continue = Box<dyn FnOnce(&mut App)>;
 
 /// The message's palette, as the app's dialogs draw it, read before the app exists.
 fn palette() -> ModalPalette {
-    use crate::app::helpers::{frosted_dialog_fill, titlebar_background, window_glass_active};
+    use crate::app::helpers::{frosted_dialog_fill, modal_surface_background, window_glass_active};
     let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
     let palette = ModalPalette::resolve(
         crate::app::helpers::CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed),
@@ -30,7 +30,8 @@ fn palette() -> ModalPalette {
             .get("sidebarTheme")
             .and_then(serde_json::Value::as_str),
     )
-    .tinted(titlebar_background().into());
+    .tinted(modal_surface_background().into())
+    .with_theme_roles();
     if !window_glass_active() {
         return palette;
     }
@@ -140,7 +141,7 @@ pub(crate) fn open(offer: GoBackOffer, continue_startup: Continue, cx: &mut App)
         is_resizable: false,
         is_minimizable: false,
         titlebar: None,
-        window_background: crate::app::helpers::window_glass_background_appearance(),
+        window_background: crate::app::helpers::modal_window_glass_background_appearance(),
         ..Default::default()
     };
     let border = palette.window_border();

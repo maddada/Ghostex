@@ -719,6 +719,18 @@ pub(crate) fn window_glass_background_appearance() -> WindowBackgroundAppearance
     }
 }
 
+/// Background appearance for floating app modal, dialog and notice windows: blurred whenever
+/// window glass is active (including when the main workspace window paints an art theme, since the
+/// modal floats above Ghostex's artwork and UI rather than painting the artwork itself), opaque
+/// when glass is off.
+pub(crate) fn modal_window_glass_background_appearance() -> WindowBackgroundAppearance {
+    if window_glass_active() {
+        WindowBackgroundAppearance::Blurred
+    } else {
+        WindowBackgroundAppearance::Opaque
+    }
+}
+
 impl GhostexGpuiApp {
     /// Puts the main window's compositing in line with the resolved glass state. Called from the
     /// root render, which is where settings saves, system appearance changes and Reduce
@@ -1002,15 +1014,14 @@ pub(crate) fn frosted_dialog_fill(color: Hsla) -> Hsla {
     frosted_menu_fill(color)
 }
 
-/// How much of the blur a frosted surface's tint covers on macOS in dark mode: 60%, darker than the
-/// popover's 45% (32% when this was set) so the backdrop shows through less, still well short of the
-/// 2026-09-30 near-solid 86% (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`). Since the same day
-/// the menus, popovers, form dialogs and tooltips take it too (CDXC:Theming 2026-10-29 on
-/// `frosted_menu_fill`; their 45% is superseded).
-pub(crate) const FROSTED_PANEL_ALPHA_DARK: f32 = 0.6;
+/// How much of the blur a frosted surface's tint covers on macOS in dark mode: 68%, clearly
+/// translucent over blurred dark/art backdrops while keeping body text legible even over bright
+/// wallpapers, well short of the near-solid 86% fill.
+pub(crate) const FROSTED_PANEL_ALPHA_DARK: f32 = 0.68;
 
-/// `FROSTED_PANEL_ALPHA_DARK` in light mode (the popover's 60% before 2026-10-29).
-pub(crate) const FROSTED_PANEL_ALPHA_LIGHT: f32 = 0.75;
+/// `FROSTED_PANEL_ALPHA_DARK` in light mode: translucent enough to let light/art backdrops softly
+/// tint the surface while keeping dark ink crisp.
+pub(crate) const FROSTED_PANEL_ALPHA_LIGHT: f32 = 0.78;
 
 /// How much of the blur a frosted surface's tint covers, the one source for the large panels, the
 /// dropdowns, the menus, the popovers, the form dialogs and the tooltips: `FROSTED_PANEL_ALPHA_DARK`

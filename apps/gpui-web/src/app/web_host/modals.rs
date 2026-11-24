@@ -57,7 +57,7 @@ const MODAL_WINDOW_CORNER_RADIUS: f32 = 12.0;
 /// (gpui_web appends each one as it opens, and removes it on close), so the frame is CSS on that
 /// element: `border-radius` clips the canvas, and a 1px spread `box-shadow` draws the rim outside
 /// it without changing the size the dialog lays out at. No drop shadow, no page-wide fill.
-fn frame_modal_canvas(border: gpui::Rgba) {
+fn frame_modal_canvas(border: gpui::Rgba, glass: bool) {
     use wasm_bindgen::JsCast as _;
     let Some(canvas) = web_sys::window()
         .and_then(|window| window.document())
@@ -85,7 +85,17 @@ fn frame_modal_canvas(border: gpui::Rgba) {
         border.a.clamp(0.0, 1.0)
     );
     let _ = style.set_property("border-radius", &format!("{MODAL_WINDOW_CORNER_RADIUS}px"));
-    let _ = style.set_property("box-shadow", &format!("0 0 0 1px {rim}"));
+    let _ = style.set_property(
+        "box-shadow",
+        &format!("0 0 0 1px {rim}, 0 20px 50px rgba(0, 0, 0, 0.42)"),
+    );
+    if glass {
+        let _ = style.set_property("backdrop-filter", "blur(20px)");
+        let _ = style.set_property("-webkit-backdrop-filter", "blur(20px)");
+    } else {
+        let _ = style.remove_property("backdrop-filter");
+        let _ = style.remove_property("-webkit-backdrop-filter");
+    }
 }
 
 impl GhostexGpuiApp {
@@ -275,7 +285,7 @@ impl GhostexGpuiApp {
             })
             .ok();
         if window.is_some() {
-            frame_modal_canvas(window_border);
+            frame_modal_canvas(window_border, palette.glass);
         }
         let view = view_slot.borrow_mut().take();
         self.native_app_modal = match (window, view) {

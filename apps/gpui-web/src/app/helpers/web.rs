@@ -221,19 +221,22 @@ pub(crate) fn list_row_tooltip(
     gpui_component::tooltip::Tooltip::new(text).build(window, cx)
 }
 
-/// A page has no window glass, so a dialog keeps its solid fill.
+/// Overlay canvases in the browser use transparent WebGL + CSS `backdrop-filter: blur(20px)`
+/// (`web_host/modals.rs`), matching the desktop's translucent glass modal fills.
 pub(crate) fn frosted_modal_fill(color: gpui::Hsla) -> gpui::Hsla {
-    color
+    let light = crate::CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed);
+    color.opacity(if light { 0.88 } else { 0.82 })
 }
 
-/// A page has no window glass, so a form dialog keeps its solid fill.
+/// Translucent glass fill for form dialogs in the browser (matches desktop `FROSTED_PANEL_ALPHA`).
 pub(crate) fn frosted_dialog_fill(color: gpui::Hsla) -> gpui::Hsla {
-    color
+    frosted_panel_fill(color)
 }
 
-/// A page has no window glass, so a large panel keeps its solid fill.
+/// Translucent glass fill for large panels in the browser (matches desktop `FROSTED_PANEL_ALPHA`).
 pub(crate) fn frosted_panel_fill(color: gpui::Hsla) -> gpui::Hsla {
-    color
+    let light = crate::CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed);
+    color.opacity(if light { 0.78 } else { 0.68 })
 }
 
 /// The desktop's blocking typed-operation call, which only its quit path still makes synchronously (a client document's last push). A page cannot block on `fetch` and has no quit path, so the answer is a refusal.

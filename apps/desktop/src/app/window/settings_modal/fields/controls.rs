@@ -286,15 +286,8 @@ fn button_colors(p: &SettingsPalette, variant: ButtonVariant) -> ButtonFills {
                 pressed: hover,
             }
         }
-        // `hover:bg-primary/80`.
-        // The kit's main button: a frosted grey in light (CDXC:AppModal 2026-11-08 in
-        // native_modal_kit/palette.rs), `hover:bg-primary/80` in dark.
-        ButtonVariant::Primary if p.modal.light => p.modal.primary_button_fills(),
-        ButtonVariant::Primary => ButtonFills {
-            rest: p.primary,
-            hover: css_fade(p.primary, 0.8),
-            pressed: css_fade(p.primary, 0.7),
-        },
+        // Shared theme-accent primary button across all modals and Settings dialogs.
+        ButtonVariant::Primary => p.modal.primary_button_fills(),
         ButtonVariant::Destructive => destructive_button_fills(p.destructive, p.light),
         // A dialog portaled out of Settings keeps the light tint in both appearances.
         ButtonVariant::DestructiveDialog => destructive_button_fills(p.destructive, true),

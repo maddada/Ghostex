@@ -261,7 +261,7 @@ impl NativeAutomateView {
             .display_for(window_bounds, cx),
             titlebar: None,
             // The dialog draws the app modals' palette, frosted under window glass.
-            window_background: crate::app::helpers::window_glass_background_appearance(),
+            window_background: crate::app::helpers::modal_window_glass_background_appearance(),
             ..Default::default()
         };
         let dialog_slot = Rc::new(RefCell::new(None));

@@ -17,8 +17,8 @@ use std::time::Duration;
 /// nested tile corners (`10px`).
 const CARD_RADIUS: f32 = 18.0;
 const TILE_RADIUS: f32 = 10.0;
-/// Matches `sidebar_titlebar_background_is_light` (`theme_colours.rs`) and mobile `isLightBackground`.
-const LIGHT_LUMINANCE_THRESHOLD: f32 = 0.54;
+/// Linearized sRGB luminance threshold matching `native_modal_kit::contrast_ink_on`.
+const WCAG_INK_CROSSOVER: f32 = 0.28;
 
 /// Resolved theme inputs for rendering the account-switch overlay.
 #[derive(Clone)]
@@ -63,14 +63,22 @@ impl Default for AccountSwitchCardHooks<'_> {
     }
 }
 
-/// Relative luminance in sRGB [0, 1], used to choose dark or light ink over an accent fill.
+/// WCAG 2.1 linearized relative luminance in [0, 1], used to choose dark or light ink over accent.
 fn relative_luminance(color: Rgba) -> f32 {
-    0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
+    let channel = |value: f32| {
+        let value = value.clamp(0.0, 1.0);
+        if value <= 0.03928 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
 }
 
-/// The card's resolved theme tokens: card surface from the theme's `card_panel` composited over
-/// the work-area base, subtle raised tiles relative to that surface, theme hairline borders,
-/// regular text hierarchy, and the theme accent for progress and step indicators.
+/// The card's resolved theme tokens: translucent glass matching the theme's composer/modal look
+/// under window glass, crisp opaque theme surface with glass off, subtle raised tiles, theme
+/// hairline borders, regular text hierarchy, and theme accent for progress and step indicators.
 struct Palette {
     backdrop: Rgba,
     surface: Hsla,
@@ -86,23 +94,23 @@ struct Palette {
 
 impl Palette {
     fn new(p: &AccountSwitchCardLook) -> Self {
-        // Match the composer / pill strip glass look: near-black translucent glass in dark mode
-        // (`composer_background`, e.g. Polar Night's `base+6%/80%`), and crisp warm-light glass in
-        // light mode (`card_panel`), falling back to a composited fill when `chatBox` is a faint
-        // wash so background chat text never crowds the card.
+        // Match the composer / modal glass look in every built-in theme: translucent glass in
+        // dark and light modes when glass is on (capping opaque preset fills so named presets
+        // like Catppuccin, Dracula, Solarized, Nord and Everforest also get glass translucency),
+        // and a clean opaque theme surface when glass is off.
         let base = p.background.alpha(1.0);
         let surface = if p.light {
             let solid = base.blend(p.card_panel);
             if p.window_glass {
-                solid.alpha(0.94)
+                solid.alpha(0.86)
             } else {
                 solid.alpha(1.0)
             }
         } else if p.window_glass {
-            if p.composer_background.a >= 0.72 {
+            if p.composer_background.a >= 0.72 && p.composer_background.a <= 0.88 {
                 p.composer_background
             } else {
-                base.blend(p.composer_background).alpha(0.84)
+                base.blend(p.composer_background).alpha(0.82)
             }
         } else {
             base.blend(p.composer_background).alpha(1.0)
@@ -111,14 +119,14 @@ impl Palette {
         let tile = if p.light {
             gpui::black().opacity(0.035)
         } else {
-            gpui::white().opacity(0.038)
+            gpui::white().opacity(0.045)
         };
         let line = if p.light && !p.window_glass {
             p.input_border
         } else {
             p.composer_border
         };
-        let accent_ink = if relative_luminance(Rgba::from(p.accent)) > LIGHT_LUMINANCE_THRESHOLD {
+        let accent_ink = if relative_luminance(Rgba::from(p.accent)) > WCAG_INK_CROSSOVER {
             gpui::rgb(0x141518).into()
         } else {
             gpui::white()

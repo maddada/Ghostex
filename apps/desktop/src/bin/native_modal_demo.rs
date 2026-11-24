@@ -54,6 +54,8 @@ mod ui_fonts;
 // DEMO-MODULES: one `#[path]` include per converted modal, plus its demo module under native_modal_demo/.
 #[path = "native_modal_demo/account_switch.rs"]
 mod account_switch_demo;
+#[path = "native_modal_demo/theme_modals_showcase.rs"]
+mod theme_modals_showcase_demo;
 #[path = "../app/native_chat/account_switch_card_view.rs"]
 mod account_switch_card_view;
 #[path = "native_modal_demo/add_project.rs"]
@@ -866,6 +868,7 @@ fn main() {
                 "session-handoff" => open_session_handoff(&demo, cx),
                 // DEMO-ARMS: one arm per converted modal.
                 "account-switch" => account_switch_demo::open(&demo, cx),
+                "theme-modals" => theme_modals_showcase_demo::open(&demo, cx),
                 "add-project" => add_project_demo::open(&demo, cx),
                 "new-thread-picker" => new_thread_picker_demo::open(&demo, cx),
                 "go-back" => go_back_demo::open(&demo, cx),

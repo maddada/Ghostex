@@ -83,16 +83,109 @@ pub(crate) mod helpers {
     /// The app's spinner rate (app/helpers/indicator_animation.rs).
     pub(crate) const INDICATOR_MAX_FPS: f32 = 30.0;
 
-    /// The app's theme roles (app/helpers/theme_roles.rs): a preview sets none, so every palette
-    /// keeps the colour it derives.
-    pub(crate) fn theme_role_rgba(_id: &str, _light: bool) -> Option<gpui::Rgba> {
-        None
+    /// The app's theme roles (app/helpers/theme_roles.rs): backed by real catalog resolution so
+    /// `native-modal-demo` can preview any built-in theme with its exact tokens.
+    struct DemoRoles {
+        dark: Vec<(&'static str, ghostex_settings_catalog::theme_roles::RoleValue)>,
+        light: Vec<(&'static str, ghostex_settings_catalog::theme_roles::RoleValue)>,
+        dark_base: u32,
+        light_base: u32,
+        dark_accent: u32,
+        light_accent: u32,
+        dark_modal_surface: u32,
+        light_modal_surface: u32,
     }
-    pub(crate) fn theme_role_or(_id: &str, _light: bool, fallback: Hsla) -> Hsla {
-        fallback
+
+    static DEMO_ROLES: std::sync::RwLock<DemoRoles> = std::sync::RwLock::new(DemoRoles {
+        dark: Vec::new(),
+        light: Vec::new(),
+        dark_base: 0x0d0d0d,
+        light_base: 0xf7f7f7,
+        dark_accent: 0x95d7f6,
+        light_accent: 0x0c74a6,
+        dark_modal_surface: 0x13161b,
+        light_modal_surface: 0xfefdf9,
+    });
+
+    pub(crate) fn apply_demo_theme_roles(settings: &serde_json::Map<String, serde_json::Value>) {
+        use ghostex_settings_catalog::theme_colours::{
+            resolved_custom_sidebar_titlebar_background_for_variant,
+            sidebar_titlebar_menu_background_for_chrome, theme_accent_for_variant,
+            work_area_background_for_variant,
+        };
+        use ghostex_settings_catalog::theme_roles::roles_for;
+        let dark_chrome = resolved_custom_sidebar_titlebar_background_for_variant(settings, false);
+        let light_chrome = resolved_custom_sidebar_titlebar_background_for_variant(settings, true);
+        let roles = DemoRoles {
+            dark: roles_for(settings, false),
+            light: roles_for(settings, true),
+            dark_base: work_area_background_for_variant(settings, false),
+            light_base: work_area_background_for_variant(settings, true),
+            dark_accent: theme_accent_for_variant(settings, false),
+            light_accent: theme_accent_for_variant(settings, true),
+            dark_modal_surface: sidebar_titlebar_menu_background_for_chrome(dark_chrome),
+            light_modal_surface: sidebar_titlebar_menu_background_for_chrome(light_chrome),
+        };
+        if let Ok(mut saved) = DEMO_ROLES.write() {
+            *saved = roles;
+        }
     }
-    pub(crate) fn theme_role_or_rgba(_id: &str, _light: bool, fallback: gpui::Rgba) -> gpui::Rgba {
-        fallback
+
+    pub(crate) fn theme_role_rgba(id: &str, light: bool) -> Option<gpui::Rgba> {
+        let roles = DEMO_ROLES.read().ok()?;
+        let (list, base) = if light {
+            (&roles.light, roles.light_base)
+        } else {
+            (&roles.dark, roles.dark_base)
+        };
+        let [r, g, b, a] = list
+            .iter()
+            .find(|(role, _)| *role == id)?
+            .1
+            .rgba_on_base(light, base);
+        Some(gpui::Rgba { r, g, b, a })
+    }
+
+    pub(crate) fn theme_role_or(id: &str, light: bool, fallback: Hsla) -> Hsla {
+        theme_role_rgba(id, light).map_or(fallback, Hsla::from)
+    }
+
+    pub(crate) fn theme_role_or_rgba(id: &str, light: bool, fallback: gpui::Rgba) -> gpui::Rgba {
+        theme_role_rgba(id, light).unwrap_or(fallback)
+    }
+
+    pub(crate) fn theme_accent_rgba(light: bool) -> gpui::Rgba {
+        if let Some(accent) = theme_role_rgba("accent", light) {
+            return gpui::Rgba { a: 1.0, ..accent };
+        }
+        let fallback = DEMO_ROLES.read().ok().map_or(
+            if light { 0x0c74a6 } else { 0x95d7f6 },
+            |roles| {
+                if light {
+                    roles.light_accent
+                } else {
+                    roles.dark_accent
+                }
+            },
+        );
+        rgb(fallback)
+    }
+
+    pub(crate) fn demo_modal_surface_rgba(light: bool) -> gpui::Rgba {
+        let base_rgb = DEMO_ROLES.read().ok().map_or(
+            if light { 0xfefdf9 } else { 0x13161b },
+            |roles| {
+                if light {
+                    roles.light_modal_surface
+                } else {
+                    roles.dark_modal_surface
+                }
+            },
+        );
+        let derived: Hsla = rgb(base_rgb).into();
+        let blended = theme_role_rgba("menu", light)
+            .map_or(derived, |menu| derived.blend(Hsla::from(menu)));
+        blended.alpha(1.0).into()
     }
 
     pub(crate) fn titlebar_active_text_color() -> Hsla {

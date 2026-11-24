@@ -253,10 +253,8 @@ impl Render for SaveMarkdownWindow {
             ))
             .bg(if glass {
                 p.menu_surface()
-            } else if p.light {
-                p.background
             } else {
-                gpui::rgb(0x191919).into()
+                p.card_background
             })
             .when(glass, |dialog| {
                 dialog.border_1().border_color(p.composer_border)
