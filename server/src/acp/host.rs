@@ -336,7 +336,7 @@ impl GxserverEndpoint {
         native_session_id: Option<&str>,
         pending_permission: Option<&PendingPermission>,
         interrupted: bool,
-    ) {
+    ) -> bool {
         self.report_activity_with_path(
             family,
             activity,
@@ -344,7 +344,7 @@ impl GxserverEndpoint {
             None,
             pending_permission,
             interrupted,
-        );
+        )
     }
 
     pub(super) fn report_activity_with_path(
@@ -355,7 +355,7 @@ impl GxserverEndpoint {
         explicit_transcript_path: Option<&str>,
         pending_permission: Option<&PendingPermission>,
         interrupted: bool,
-    ) {
+    ) -> bool {
         self.report_activity_with_error(
             family,
             activity,
@@ -364,7 +364,7 @@ impl GxserverEndpoint {
             pending_permission,
             interrupted,
             None,
-        );
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -377,7 +377,7 @@ impl GxserverEndpoint {
         pending_permission: Option<&PendingPermission>,
         interrupted: bool,
         stop_error: Option<&str>,
-    ) {
+    ) -> bool {
         let event_name = match activity {
             "working" => {
                 self.saw_working.store(true, Ordering::Relaxed);
@@ -453,7 +453,8 @@ impl GxserverEndpoint {
             "requestId": format!("acp-act-{}", now_ms()),
             "params": params,
         });
-        let _ = self.post_json("/api/ingestAgentHookEvent", body, Duration::from_secs(5));
+        self.post_json("/api/ingestAgentHookEvent", body, Duration::from_secs(5))
+            .is_ok()
     }
 
     pub(super) fn ack(&self, id: &str, ok: bool, result: Value, error: Option<&str>) {
@@ -1378,7 +1379,43 @@ impl ActivityReporter {
                         s.last_turn_interrupted,
                     )
                 };
-                ep.report_activity(&family, act, sid.as_deref(), perm.as_ref(), interrupted);
+                let mut ok =
+                    ep.report_activity(&family, act, sid.as_deref(), perm.as_ref(), interrupted);
+                for delay_ms in [500u64, 1_000, 2_000] {
+                    if ok {
+                        break;
+                    }
+                    match rx.recv_timeout(Duration::from_millis(delay_ms)) {
+                        Ok(()) => break,
+                        Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                            let (act, sid, perm, interrupted) = {
+                                let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                let front = s.pending_permissions.front().cloned();
+                                let act = if front.is_some() {
+                                    "attention"
+                                } else if s.working {
+                                    "working"
+                                } else {
+                                    "idle"
+                                };
+                                (
+                                    act,
+                                    s.native_session_id.clone(),
+                                    front,
+                                    s.last_turn_interrupted,
+                                )
+                            };
+                            ok = ep.report_activity(
+                                &family,
+                                act,
+                                sid.as_deref(),
+                                perm.as_ref(),
+                                interrupted,
+                            );
+                        }
+                    }
+                }
             }
         });
         Self { tx: Some(tx) }
@@ -2253,6 +2290,12 @@ pub fn run(args: &[String]) -> i32 {
         });
         let resp = match ep.post_json("/api/agentChatChannel", poll_body, Duration::from_secs(28)) {
             Ok(resp) => {
+                let newly_registered = resp
+                    .pointer("/result/newlyRegistered")
+                    .or_else(|| resp.get("newlyRegistered"))
+                    .and_then(Value::as_bool)
+                    == Some(true);
+                let mut had_desired_approval = false;
                 // Only pushed once by gxserver on channel open/reconnect (`newly_registered`).
                 if let Some(desired) = resp
                     .pointer("/result/desiredApprovalLevel")
@@ -2260,6 +2303,7 @@ pub fn run(args: &[String]) -> i32 {
                     .and_then(Value::as_str)
                     .and_then(AcpApprovalLevel::parse)
                 {
+                    had_desired_approval = true;
                     let current = state
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
@@ -2278,9 +2322,9 @@ pub fn run(args: &[String]) -> i32 {
                         }
                     }
                 }
-                if reconnecting {
+                if reconnecting || newly_registered || had_desired_approval {
                     reconnecting = false;
-                    // Re-sync live state after a gxserver reload.
+                    // Re-sync live state after a gxserver reload or fresh channel open.
                     activity.sync();
                 }
                 resp

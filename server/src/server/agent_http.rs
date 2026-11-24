@@ -331,6 +331,9 @@ pub(crate) fn dispatch_agent_http_blocking(
                     );
                 }
             }
+            if session_chat_state_changed {
+                crate::session_chat_queue_runtime::kick_session_chat_queue();
+            }
             if presentation_session.is_none()
                 && endpoint_path == "/api/ingestTerminalTitleEvent"
                 && result_activity(&result) == Some("working")

@@ -1053,7 +1053,12 @@ impl SessionChatQueueRuntime {
         }
         // CDXC:SessionChat 2026-09-26 WHY:
         // An agent that died mid-turn leaves its transcript ending in a tool result with no reply, which reads as Working forever. A freshly started CLI showing an empty input box cannot be mid-turn, so a startup send trusts the screen over that dead turn; checking the transcript here left a woken session's "continue" queued indefinitely.
-        if !startup_composer_ready && self.transcript_lifecycle_is_working(key, &session) {
+        // For a live Native (`acp-host`) channel, the host owns the subprocess directly and reports
+        // live turn activity, so an older interrupted turn on disk must not block queued rows.
+        if !startup_composer_ready
+            && !acp_channel_live
+            && self.transcript_lifecycle_is_working(key, &session)
+        {
             self.reset_gate(key);
             return hold(head, WaitReason::Working);
         }
@@ -1608,13 +1613,18 @@ impl SessionChatQueueRuntime {
     /// or account recovery, hooks idle (or a finished turn's attention) with no question or
     /// approval standing, and a transcript whose last turn ended.
     fn idle_by_every_signal(&self, key: &str, session: &Value, generated_at: &str) -> bool {
+        let acp_channel_live = session_text(session, "projectId")
+            .zip(session_text(session, "sessionId"))
+            .is_some_and(|(project_id, session_id)| {
+                crate::acp::channel::live(&project_id, &session_id, "send").is_some()
+            });
         session_text(session, "lifecycleState").as_deref() == Some("running")
             && crate::session_chat_compacting::session_chat_compacting_detected_at(session)
                 .is_none()
             && !account_recovery_waiting(session)
             && session_chat_queue_activity_is_deliverable(session, generated_at)
             && crate::agents::session_chat_prompt_setting(session).is_none()
-            && !self.transcript_lifecycle_is_working(key, session)
+            && (acp_channel_live || !self.transcript_lifecycle_is_working(key, session))
     }
 
     /// Drops the in-memory window for sessions whose queue has gone empty, so a
@@ -1770,7 +1780,7 @@ fn agent_idle_since(session: &Value) -> Option<DateTime<Utc>> {
         .map(|stamp| stamp.with_timezone(&Utc))
 }
 
-pub(super) fn session_chat_queue_activity_is_deliverable(
+pub(crate) fn session_chat_queue_activity_is_deliverable(
     session: &Value,
     generated_at: &str,
 ) -> bool {

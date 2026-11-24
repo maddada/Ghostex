@@ -508,7 +508,7 @@ impl ClaudeActivityReporter {
                         s.last_turn_stop_error.clone(),
                     )
                 };
-                ep.report_activity_with_error(
+                let mut ok = ep.report_activity_with_error(
                     "claude",
                     act,
                     sid.as_deref(),
@@ -517,6 +517,47 @@ impl ClaudeActivityReporter {
                     interrupted,
                     stop_error.as_deref(),
                 );
+                for delay_ms in [500u64, 1_000, 2_000] {
+                    if ok {
+                        break;
+                    }
+                    match rx.recv_timeout(Duration::from_millis(delay_ms)) {
+                        Ok(()) => break,
+                        Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                            let (act, sid, perm, interrupted, stop_error) = {
+                                let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                let front = s
+                                    .pending_requests
+                                    .front()
+                                    .map(|p| p.to_activity_permission());
+                                let act = if front.is_some() {
+                                    "attention"
+                                } else if s.working {
+                                    "working"
+                                } else {
+                                    "idle"
+                                };
+                                (
+                                    act,
+                                    s.native_session_id.clone(),
+                                    front,
+                                    s.last_turn_interrupted,
+                                    s.last_turn_stop_error.clone(),
+                                )
+                            };
+                            ok = ep.report_activity_with_error(
+                                "claude",
+                                act,
+                                sid.as_deref(),
+                                None,
+                                perm.as_ref(),
+                                interrupted,
+                                stop_error.as_deref(),
+                            );
+                        }
+                    }
+                }
             }
         });
         Self { tx: Some(tx) }
@@ -2066,12 +2107,19 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         });
         let resp = match ep.post_json("/api/agentChatChannel", poll_body, Duration::from_secs(28)) {
             Ok(resp) => {
+                let newly_registered = resp
+                    .pointer("/result/newlyRegistered")
+                    .or_else(|| resp.get("newlyRegistered"))
+                    .and_then(Value::as_bool)
+                    == Some(true);
+                let mut had_desired_approval = false;
                 if let Some(desired) = resp
                     .pointer("/result/desiredApprovalLevel")
                     .or_else(|| resp.get("desiredApprovalLevel"))
                     .and_then(Value::as_str)
                     .and_then(AcpApprovalLevel::parse)
                 {
+                    had_desired_approval = true;
                     let current = state
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
@@ -2086,7 +2134,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                     }
                 }
-                if reconnecting {
+                if reconnecting || newly_registered || had_desired_approval {
                     reconnecting = false;
                     activity.sync();
                 }

@@ -675,6 +675,142 @@ async fn reconcile_live_host_mode_inner(
     true
 }
 
+/// Reconcile stale `working`/prompt activity in SQLite against a live `acp-host` when its channel
+/// opens or reconnects (e.g. after a `gxserver` restart during which the host's `Stop` hook was
+/// missed, including older `acp-host` processes already running in `zmx`). If the host reports
+/// itself idle with no pending permission/question while SQLite still holds the queue on stale
+/// `working` or non-deliverable `attention`, settle it to `idle` and kick the queue immediately.
+pub(crate) fn reconcile_live_host_activity(
+    state: AppState,
+    project_id: String,
+    session_id: String,
+    channel_agent: String,
+) {
+    tokio::spawn(async move {
+        // Give `acp-host` a brief moment to return to its poll loop and emit any fresh
+        // `activity.sync()` first.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        if live(&project_id, &session_id, "state").is_none() {
+            return;
+        }
+        let Ok(snap) = request(
+            &project_id,
+            &session_id,
+            "state",
+            json!({}),
+            Duration::from_secs(5),
+        )
+        .await
+        else {
+            return;
+        };
+        let host_working = snap
+            .get("working")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let pending_count = snap
+            .get("pendingPermissionCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let has_pending_prompt = snap
+            .get("pendingPermission")
+            .is_some_and(|value| !value.is_null());
+        if host_working || pending_count > 0 || has_pending_prompt {
+            return;
+        }
+        let family = snap
+            .get("family")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| super::acp_family_from_channel_agent(&channel_agent));
+        let native_session_id = snap
+            .get("nativeSessionId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        let transcript_path = snap
+            .get("transcriptPath")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        let state_for_db = state.clone();
+        let pid = project_id.clone();
+        let sid = session_id.clone();
+        let reconciled = tokio::task::spawn_blocking(move || {
+            let db = open_gxserver_database(&state_for_db.paths).ok()?;
+            let repository = DomainRepository::new(&db, state_for_db.metadata.server_id.as_str());
+            let session = repository.get_session(&pid, &sid).ok().flatten()?;
+            let now_iso = crate::presentation::now_iso();
+            let current_activity = crate::presentation::presentation_activity(&session, &now_iso);
+            let has_stale_prompt = crate::agents::session_chat_prompt_setting(&session).is_some();
+            let deliverable = crate::session_chat_queue_runtime::session_chat_queue_activity_is_deliverable(
+                &session, &now_iso,
+            );
+            if current_activity != "working" && !has_stale_prompt && deliverable {
+                return None;
+            }
+            let agent_name = family
+                .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
+                .unwrap_or_else(|| "antigravity".to_string());
+            let lifecycle = crate::agents::LifecycleParams {
+                project_id: pid.clone(),
+                session_id: sid.clone(),
+            };
+            let mut params = Map::new();
+            params.insert("projectId".to_string(), json!(pid));
+            params.insert("sessionId".to_string(), json!(sid));
+            params.insert("agentName".to_string(), json!(agent_name));
+            params.insert("eventName".to_string(), json!("SessionStart"));
+            params.insert("status".to_string(), json!("idle"));
+            params.insert(
+                "timestamp".to_string(),
+                json!(chrono::Utc::now().timestamp_millis()),
+            );
+            if let Some(agent_sid) = native_session_id {
+                params.insert("agentSessionId".to_string(), json!(agent_sid));
+            }
+            if let Some(path) = transcript_path {
+                params.insert("agentSessionPath".to_string(), json!(path));
+            }
+            let result = crate::agents::ingest_agent_hook_event(
+                &repository,
+                &lifecycle,
+                &params,
+                &state_for_db.paths.home_dir,
+            )
+            .ok()?;
+            let _ = crate::server::presentation_delta::schedule_presentation_session_delta(
+                &state_for_db,
+                &db,
+                &repository,
+                &pid,
+                &sid,
+            );
+            Some((current_activity, has_stale_prompt, result))
+        })
+        .await
+        .ok()
+        .flatten();
+        if let Some((previous_activity, had_stale_prompt, _)) = reconciled {
+            crate::session_chat_queue_runtime::kick_session_chat_queue();
+            log(
+                LogLevel::Info,
+                "acp.reconciledLiveHostActivity",
+                json!({
+                    "projectId": project_id,
+                    "sessionId": session_id,
+                    "previousActivity": previous_activity,
+                    "hadStalePrompt": had_stale_prompt,
+                }),
+            );
+        }
+    });
+}
+
 struct ActiveSwitchGuard {
     key: (String, String),
 }

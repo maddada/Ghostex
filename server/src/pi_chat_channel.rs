@@ -289,10 +289,12 @@ async fn poll(
         .unwrap_or_default();
     let is_acp = agent.starts_with("acp:");
     let agent_for_reconcile = agent.clone();
+    let mut newly_registered = false;
     let mut needs_approval_sync = false;
     let (wake, immediate_commands) = {
         let mut channels = lock(&CHANNELS);
         let channel = channels.entry(channel_key.clone()).or_insert_with(|| {
+            newly_registered = true;
             needs_approval_sync = true;
             log_channel("piChatChannel.opened", &channel_key, &agent, version, pid);
             Channel {
@@ -310,6 +312,7 @@ async fn poll(
         });
         if channel.instance != instance {
             // The session's agent was restarted, or Pi replaced its runtime (/new, /resume, reload).
+            newly_registered = true;
             needs_approval_sync = true;
             log_channel("piChatChannel.reopened", &channel_key, &agent, version, pid);
             channel.pid = pid;
@@ -342,6 +345,17 @@ async fn poll(
             "channel_open",
         )
         .await;
+        if newly_registered {
+            // Reconcile stale `working`/prompt activity in SQLite against the live host's state
+            // (covering gxserver restarts where a host's Stop hook was missed, including older
+            // `acp-host` processes already running in zmx).
+            crate::acp::channel::reconcile_live_host_activity(
+                state.clone(),
+                channel_key.0.clone(),
+                channel_key.1.clone(),
+                agent_for_reconcile.clone(),
+            );
+        }
         // Kick the chat queue right away so messages or thread reports queued while this session
         // was switching to Native drain as soon as the host channel comes online.
         crate::session_chat_queue_runtime::kick_session_chat_queue();
@@ -352,17 +366,26 @@ async fn poll(
 
     if let Some(commands) = immediate_commands {
         let mut resp = json!({ "commands": commands });
+        if is_acp && newly_registered {
+            resp["newlyRegistered"] = json!(true);
+        }
         if let Some(level) = initial_approval_level {
             resp["desiredApprovalLevel"] = json!(level.as_str());
         }
         return Ok(resp);
     }
-    if let Some(level) = initial_approval_level {
-        return Ok(json!({
+    if initial_approval_level.is_some() || (is_acp && newly_registered) {
+        let mut resp = json!({
             "commands": [],
             "holdMs": 0,
-            "desiredApprovalLevel": level.as_str(),
-        }));
+        });
+        if is_acp && newly_registered {
+            resp["newlyRegistered"] = json!(true);
+        }
+        if let Some(level) = initial_approval_level {
+            resp["desiredApprovalLevel"] = json!(level.as_str());
+        }
+        return Ok(resp);
     }
 
     let wake = wake.expect("wake present when no immediate commands");
