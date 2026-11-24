@@ -824,14 +824,30 @@ async fn send_session_chat_message_locked(
         ghostex_gx_chat_core::session::appended_notes::with_system_notes(&expanded, &riders)
     };
     let text = expanded.as_str();
-    // Serialize with any in-flight Terminal <-> Native switch on this session so a send never
-    // races a sleep/wake cycle or lands on a stale transport (`acp::channel::session_switch_lock`).
-    let _switch_guard = crate::acp::channel::session_switch_lock(project_id, session_id)
-        .lock_owned()
-        .await;
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("sessionId".to_string(), json!(session_id));
+    // Serialize with any in-flight Terminal <-> Native switch on this session so a send never
+    // races a sleep/wake cycle or lands on a stale transport (`acp::channel::session_switch_lock`).
+    // Bound the wait well under the 15s CLI send budget (`ghostex_cli/rpc.rs`) so a slow switch
+    // queues the message cleanly instead of timing out the caller.
+    let switch_lock = crate::acp::channel::session_switch_lock(project_id, session_id);
+    let _switch_guard = match tokio::time::timeout(Duration::from_secs(5), switch_lock.lock_owned())
+        .await
+    {
+        Ok(guard) => guard,
+        Err(_) => {
+            if let Ok(target) =
+                resolve_session_chat_send_target(state, &params, "sendSessionChatMessage")
+            {
+                return hold_for_restarted_agent(state, &target, source, text, image_paths);
+            }
+            return Err(DomainStateError {
+                code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
+                message: "This chat is switching between Terminal and Native mode; the message will be sent as soon as it is ready.".to_string(),
+            });
+        }
+    };
     let target = resolve_session_chat_send_target(state, &params, "sendSessionChatMessage")?;
     let draft_before_send = if source == SessionChatMessageSource::Composer {
         open_gxserver_database(&state.paths).ok().and_then(|db| {

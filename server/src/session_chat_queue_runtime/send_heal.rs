@@ -740,7 +740,15 @@ pub(crate) async fn cycle_session_explained(
                 {
                     let reason = blocked_reason
                         .map(|r| format!("restore blocked: {r}"))
-                        .or_else(|| lifecycle.map(|l| format!("session remained {l} after wake")));
+                        .or_else(|| {
+                            lifecycle
+                                .filter(|l| *l != "running")
+                                .map(|l| format!("session remained {l} after wake"))
+                        })
+                        .or_else(|| {
+                            provider_missing
+                                .then(|| "session provider remained missing after wake".to_string())
+                        });
                     return Err(CycleFailure {
                         step: "the session could not be started again",
                         reason,
@@ -813,21 +821,32 @@ pub(crate) async fn can_start_on_its_conversation(state: &AppState, session: &Va
     if has_conversation_to_resume(session).await {
         return true;
     }
-    let Some(project_id) = session.get("projectId").and_then(Value::as_str) else {
+    let Some(project_id) = session
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    else {
         return false;
     };
-    let Ok(db) = open_gxserver_database(&state.paths) else {
-        return false;
-    };
-    let settings = crate::agents::read_agent_settings(&db)
-        .unwrap_or_else(|_| crate::agents::normalize_agent_settings(None));
-    let project = DomainRepository::new(&db, state.metadata.server_id.as_str())
-        .get_project(project_id)
-        .ok()
-        .flatten();
-    project.is_some_and(|project| {
-        crate::agents::agent_conversation_written(&project, session, &settings) == Some(false)
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let session = session.clone();
+    tokio::task::spawn_blocking(move || {
+        let Ok(db) = open_gxserver_database(&paths) else {
+            return false;
+        };
+        let settings = crate::agents::read_agent_settings(&db)
+            .unwrap_or_else(|_| crate::agents::normalize_agent_settings(None));
+        let project = DomainRepository::new(&db, server_id.as_str())
+            .get_project(&project_id)
+            .ok()
+            .flatten();
+        project.is_some_and(|project| {
+            crate::agents::agent_conversation_written(&project, &session, &settings) == Some(false)
+        })
     })
+    .await
+    .unwrap_or(false)
 }
 
 /// CDXC:SessionChat 2026-10-10 WHY:
@@ -836,14 +855,21 @@ pub(crate) async fn work_a_restart_would_end(
     state: &AppState,
     target: &crate::session_chat_send::SessionChatSendTarget,
 ) -> Option<&'static str> {
-    let coordinating = open_gxserver_database(&state.paths).ok().is_some_and(|db| {
-        crate::coordinators::read_coordinator(&db, &target.project_id, &target.session_id)
-            .ok()
-            .flatten()
-            .is_some()
-            || crate::coordinators::list_threads_for(&db, &target.project_id, &target.session_id)
-                .is_ok_and(|threads| threads.iter().any(|thread| !thread.is_resolved()))
-    });
+    let paths = state.paths.clone();
+    let project_id = target.project_id.clone();
+    let session_id = target.session_id.clone();
+    let coordinating = tokio::task::spawn_blocking(move || {
+        open_gxserver_database(&paths).ok().is_some_and(|db| {
+            crate::coordinators::read_coordinator(&db, &project_id, &session_id)
+                .ok()
+                .flatten()
+                .is_some()
+                || crate::coordinators::list_threads_for(&db, &project_id, &session_id)
+                    .is_ok_and(|threads| threads.iter().any(|thread| !thread.is_resolved()))
+        })
+    })
+    .await
+    .unwrap_or(true);
     if coordinating {
         return Some("the agent coordinates threads, and a restart would end its background work");
     }
@@ -865,10 +891,17 @@ pub(crate) async fn background_work_a_restart_would_end(
     state: &AppState,
     target: &crate::session_chat_send::SessionChatSendTarget,
 ) -> Option<&'static str> {
-    let has_active_threads = open_gxserver_database(&state.paths).ok().is_some_and(|db| {
-        crate::coordinators::list_threads_for(&db, &target.project_id, &target.session_id)
-            .is_ok_and(|threads| threads.iter().any(|thread| !thread.is_resolved()))
-    });
+    let paths = state.paths.clone();
+    let project_id = target.project_id.clone();
+    let session_id = target.session_id.clone();
+    let has_active_threads = tokio::task::spawn_blocking(move || {
+        open_gxserver_database(&paths).ok().is_some_and(|db| {
+            crate::coordinators::list_threads_for(&db, &project_id, &session_id)
+                .is_ok_and(|threads| threads.iter().any(|thread| !thread.is_resolved()))
+        })
+    })
+    .await
+    .unwrap_or(true);
     if has_active_threads {
         return Some("the coordinator has active threads a restart would disrupt");
     }

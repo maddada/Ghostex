@@ -132,6 +132,33 @@ pub(super) async fn send_session_chat_message_attempt(
                 },
             );
         }
+        // Serialize raw key sends (Escape / Shift+Tab) with any in-flight Terminal <-> Native
+        // switch and re-read `target` under the lock so `session_is_acp` never races a mode flip.
+        let switch_lock =
+            crate::acp::channel::session_switch_lock(&target.project_id, &target.session_id);
+        let _switch_guard = match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            switch_lock.lock_owned(),
+        )
+        .await
+        {
+            Ok(guard) => guard,
+            Err(_) => {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "dependencyUnavailable",
+                        message: "This chat is switching between Terminal and Native mode. Try again in a moment.".to_string(),
+                    },
+                );
+            }
+        };
+        let target =
+            match resolve_session_chat_send_target(state, &params, "sendSessionChatMessage") {
+                Ok(fresh) => fresh,
+                Err(error) => return domain_error_response(endpoint_path, request_id, error),
+            };
         // An ACP session does not run an interactive TUI in its PTY, so raw keystrokes cannot be
         // typed into zmx; route supported keys through the structured ACP channel instead.
         if crate::acp::session_is_acp(&target.session) {

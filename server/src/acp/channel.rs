@@ -553,6 +553,10 @@ pub(crate) fn session_switch_lock(
     let mut map = SESSION_SWITCH_LOCKS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    // Drop locks nobody holds or waits on so the map stays bounded across the daemon's lifetime.
+    if map.len() > 256 {
+        map.retain(|_, lock| Arc::strong_count(lock) > 1);
+    }
     map.entry((project_id.to_string(), session_id.to_string()))
         .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
         .clone()
@@ -1041,22 +1045,34 @@ pub(crate) async fn check_session_safe_to_switch_now(
     if crate::session_chat_queue_runtime::agent_is_busy(session).await {
         return SwitchSafety::Busy("the agent is busy");
     }
-    let has_pending_queue = open_gxserver_database(&state.paths).is_ok_and(|db| {
-        crate::session_chat_queue::session_has_pending_session_chat_queue(
-            &db, project_id, session_id,
-        )
-    });
+    let state_for_db = state.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    let (has_pending_queue, send_target) = tokio::task::spawn_blocking(move || {
+        let has_pending = open_gxserver_database(&state_for_db.paths).is_ok_and(|db| {
+            crate::session_chat_queue::session_has_pending_session_chat_queue(&db, &pid, &sid)
+        });
+        let target = if has_pending {
+            None
+        } else {
+            let mut params = Map::new();
+            params.insert("projectId".to_string(), json!(pid));
+            params.insert("sessionId".to_string(), json!(sid));
+            crate::session_chat_send::resolve_session_chat_send_target(
+                &state_for_db,
+                &params,
+                "switchSessionCliToAcp",
+            )
+            .ok()
+        };
+        (has_pending, target)
+    })
+    .await
+    .unwrap_or((true, None));
     if has_pending_queue {
         return SwitchSafety::Busy("the chat has queued messages waiting to send");
     }
-    let mut params = Map::new();
-    params.insert("projectId".to_string(), json!(project_id));
-    params.insert("sessionId".to_string(), json!(session_id));
-    if let Ok(target) = crate::session_chat_send::resolve_session_chat_send_target(
-        state,
-        &params,
-        "switchSessionCliToAcp",
-    ) {
+    if let Some(target) = send_target {
         if let Some(reason) =
             crate::session_chat_queue_runtime::background_work_a_restart_would_end(state, &target)
                 .await
@@ -1444,9 +1460,19 @@ pub(crate) async fn execute_switch_to_acp(
     caller_is_user_device: bool,
     origin: SwitchOrigin,
 ) -> Result<Value, DomainStateError> {
-    let _switch_guard = session_switch_lock(project_id, session_id)
-        .lock_owned()
-        .await;
+    let lock = session_switch_lock(project_id, session_id);
+    // Bulk and queued switches must never stall behind a long-running Terminal send (e.g.
+    // WaitOutBusyAgent or account switch): fail fast with `sessionBusy` so bulk moves on to
+    // unrelated idle sessions and queued switches re-queue cleanly.
+    let _switch_guard = match origin {
+        SwitchOrigin::Bulk | SwitchOrigin::Queued => {
+            lock.try_lock_owned().map_err(|_| DomainStateError {
+                code: "sessionBusy",
+                message: "Cannot switch right now: a message or switch is in progress.".to_string(),
+            })?
+        }
+        SwitchOrigin::Single => lock.lock_owned().await,
+    };
 
     // 1. Read fresh session state under the lock and validate structural eligibility.
     let paths = state.paths.clone();
@@ -1622,6 +1648,7 @@ pub(crate) async fn execute_switch_to_acp(
         .await
         {
             let wake_failed = failure.step == "the session could not be started again";
+            let prior_after_wake = prior.clone();
             let paths = state.paths.clone();
             let server_id = state.metadata.server_id.clone();
             let pid = project_id.to_string();
@@ -1644,8 +1671,9 @@ pub(crate) async fn execute_switch_to_acp(
                                 }
                             };
                         // If we are about to re-wake as Terminal while global `agentSessionMode`
-                        // may already be `"non-cli"`, pin `nonCliMode = false` ONLY if we need the
-                        // rollback wake to stay in Terminal, then restore the exact prior field.
+                        // may already be `"non-cli"`, pin `nonCliMode = false` for the rollback
+                        // wake, then restore the exact prior fields once wake returns so the
+                        // session is not permanently pinned as explicit Terminal.
                         if wake_failed {
                             rs.insert(super::SESSION_NON_CLI_ACTIVE_KEY.to_string(), json!(false));
                             rs.insert(super::SESSION_ACP_ACTIVE_KEY.to_string(), json!(false));
@@ -1673,6 +1701,46 @@ pub(crate) async fn execute_switch_to_acp(
                 let rewoke = crate::session_chat_queue_runtime::wake_session_best_effort(
                     state, project_id, session_id,
                 )
+                .await;
+                let paths = state.paths.clone();
+                let server_id = state.metadata.server_id.clone();
+                let pid = project_id.to_string();
+                let sid = session_id.to_string();
+                let _ = tokio::task::spawn_blocking(move || {
+                    if let Ok(db) = open_gxserver_database(&paths) {
+                        let repo = DomainRepository::new(&db, server_id.as_str());
+                        if let Ok(Some(session)) = repo.get_session(&pid, &sid) {
+                            let mut rs = session
+                                .get("runtimeSettings")
+                                .and_then(Value::as_object)
+                                .cloned()
+                                .unwrap_or_default();
+                            let restore =
+                                |map: &mut Map<String, Value>, key: &str, prev: Option<Value>| {
+                                    if let Some(value) = prev {
+                                        map.insert(key.to_string(), value);
+                                    } else {
+                                        map.remove(key);
+                                    }
+                                };
+                            restore(
+                                &mut rs,
+                                super::SESSION_NON_CLI_ACTIVE_KEY,
+                                prior_after_wake.non_cli,
+                            );
+                            restore(
+                                &mut rs,
+                                super::SESSION_ACP_ACTIVE_KEY,
+                                prior_after_wake.acp_mode,
+                            );
+                            let mut update = Map::new();
+                            update.insert("projectId".to_string(), json!(pid));
+                            update.insert("sessionId".to_string(), json!(sid));
+                            update.insert("runtimeSettings".to_string(), Value::Object(rs));
+                            let _ = repo.update_session(&update);
+                        }
+                    }
+                })
                 .await;
                 log(
                     LogLevel::Warn,
