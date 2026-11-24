@@ -4975,7 +4975,7 @@ itself ("what's stuck?", "how do I pair my phone?").
   ghost with a clipboard instead of the usual welcome. New to Ghostex, you get
   **First steps** (add your first project, sign in to Claude or Codex, start
   your first agent, put Ghostex on your phone), each ticked off by itself once
-  it is done, a white **Ask me anything about Ghostex** button and a few
+  it is done, an **Ask me anything about Ghostex** card and a few
   questions to start with. Once you have a project and have started an agent it
   says **Hi again!** with how many agents are working right now and how many
   need you (the same counts the sidebar shows), and
