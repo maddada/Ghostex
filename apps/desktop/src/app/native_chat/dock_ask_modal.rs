@@ -91,6 +91,76 @@ fn fitted_height(natural: f32, main_height: f32) -> f32 {
     natural.clamp(PANEL_MIN_HEIGHT, most)
 }
 
+/// Rough upfront height for `row` at `width` (scaled px), so the window opens already close to (or
+/// at) its fitted height and vertically centred before the first prepaint measures it exactly.
+fn estimated_panel_height(row: &Value, width: f32, scale: f32, main_height: f32) -> f32 {
+    let wrapped_lines = |content: &str, char_width: f32, col_width: f32| -> f32 {
+        let col = col_width.max(120.0);
+        content
+            .split('\n')
+            .map(|line| {
+                let count = line.chars().count();
+                if count == 0 {
+                    0.6
+                } else {
+                    (count as f32 * char_width / col).ceil().max(1.0)
+                }
+            })
+            .sum::<f32>()
+    };
+    let unscaled_width = (width / scale).max(320.0);
+    let title_line = PROSE_LINE_HEIGHT + 3.0;
+    let title_col = unscaled_width - 2.0 * PANEL_PAD_X - 24.0;
+    let title_lines = wrapped_lines(&text(row, "title"), 7.8, title_col).max(1.0);
+    let head = TOP_BAND_HEIGHT + (title_lines * title_line + 10.0) * scale;
+
+    let body_col = unscaled_width - 2.0 * PANEL_PAD_X - TEXT_LEAD;
+    let mut body_unscaled = 0.0;
+    let has_chips = row["waitedBy"].is_array()
+        || row["chips"]
+            .as_array()
+            .is_some_and(|chips| chips.iter().any(|chip| chip["kind"] != "thread"));
+    if has_chips {
+        body_unscaled += 22.0;
+    }
+    let detail_body = text(row, "body");
+    if !detail_body.is_empty() {
+        if has_chips {
+            body_unscaled += OPENED_ROW_GAP;
+        }
+        body_unscaled += wrapped_lines(&detail_body, 6.8, body_col) * PROSE_LINE_HEIGHT;
+    }
+    for line in row["detail"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|line| !line.is_empty())
+    {
+        body_unscaled += 2.0 + wrapped_lines(line, 6.8, body_col) * PROSE_LINE_HEIGHT;
+    }
+    let text_height = if body_unscaled > 0.0 {
+        (body_unscaled + 16.0) * scale
+    } else {
+        0.0
+    };
+
+    let has_answers = row["buttons"].as_array().is_some_and(|b| !b.is_empty());
+    let has_action = !has_answers && row["needs"] == true;
+    let has_reply = row["reply"].is_object();
+    let has_pills = row["itemPills"].as_array().is_some_and(|p| !p.is_empty());
+    let has_threads = !row["waitedBy"].is_array()
+        && row["chips"]
+            .as_array()
+            .is_some_and(|chips| chips.iter().any(|chip| chip["kind"] == "thread"));
+    let foot = if has_answers || has_action || has_reply || has_pills || has_threads {
+        (24.0 + 30.0 + 1.0) * scale
+    } else {
+        0.0
+    };
+    fitted_height(head + text_height + foot, main_height)
+}
+
 /// The toast an ask settled while its panel was open shows (`sync_dock_ask_modal`), from how
 /// the core says it went (`workAsksSettled`): its level and title.
 fn settled_toast(how: &str) -> Option<(&'static str, &'static str)> {
@@ -105,67 +175,140 @@ fn settled_toast(how: &str) -> Option<(&'static str, &'static str)> {
 struct DockAskPanel {
     chat: Entity<NativeChatView>,
     focus: FocusHandle,
-    /// The natural heights measured at the last paint: band and title, the text, the foot.
+    /// The natural heights measured at the last prepaint: band and title, the text, the foot.
     measured: Rc<Cell<(f32, f32, f32)>>,
+    /// Held transparent until first layout fits the window to its measured height, then shown
+    /// atomically at its final size so the reader never sees a size flash.
+    hold: crate::app::window::popup_frame::PopupHoldState,
     /// The height the panel last fitted itself to; once the reader resizes it, it stops fitting.
-    fitted: Option<f32>,
+    fitted: Rc<Cell<Option<f32>>>,
+    /// Target height of an in-flight resize, preventing duplicate resize triggers while waiting for
+    /// the platform resize callback (e.g. `ResizeObserver` on `gpui-web`).
+    resizing_to: Rc<Cell<Option<f32>>>,
+    /// Number of initial fit resizes issued while held; caps retries if the OS clamps the height.
+    fit_attempts: Rc<Cell<u8>>,
+    /// The Windows DWM border colour applied when the panel reveals.
+    border: gpui::Rgba,
     /// The main window's height when the panel opened, which caps how tall it fits itself.
     main_height: f32,
     _chat: Subscription,
 }
 
 impl DockAskPanel {
-    /// Fits the window to its ask's height about its centre, until the reader resizes it.
-    fn fit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (head, text, foot) = self.measured.get();
-        if head <= 0.0 {
-            return;
-        }
-        let height = f32::from(window.bounds().size.height);
-        if self
-            .fitted
-            .is_some_and(|fitted| (fitted - height).abs() > 1.0)
-        {
-            // The reader resized it: their height stands.
-            return;
-        }
+    /// Trailing prepaint hook that runs after all three measured sections have laid out: resizes
+    /// the window if needed, and reveals a held panel once its window matches its measured height.
+    fn fit_tracker(&self) -> AnyElement {
+        let measured = self.measured.clone();
+        let hold = self.hold.clone();
+        let fitted = self.fitted.clone();
+        let resizing_to = self.resizing_to.clone();
+        let fit_attempts = self.fit_attempts.clone();
+        let border = self.border;
         let main_height = self.main_height;
-        let want = fitted_height(head + text + foot, main_height);
-        self.fitted = Some(want);
-        if (want - height).abs() <= 1.0 {
-            return;
-        }
-        let width = window.bounds().size.width;
-        // Moved outside the update, as the page window's settle is: AppKit reports the new frame
-        // synchronously, and GPUI drops that report while the app is borrowed.
-        #[cfg(all(target_os = "macos", not(ghostex_web)))]
-        {
-            let Ok(native) = crate::app::helpers::cef_parent_native_view(window) else {
-                return;
-            };
-            let native = native as usize;
-            let frame = crate::app::window::visual_page_modal::frame::shared_frame(window);
-            // About the centre it opened at, over the chat.
-            let to = gpui::Bounds::new(
-                gpui::point(frame.origin.x, frame.center().y - px(want / 2.0)),
-                gpui::size(width, px(want)),
-            );
-            let scale = window.scale_factor();
-            cx.spawn_in(window, async move |_, _| {
-                crate::app::ghostex_capture::platform::set_window_frame(native, to, scale);
-            })
-            .detach();
-        }
-        #[cfg(not(all(target_os = "macos", not(ghostex_web))))]
-        window.resize(gpui::size(width, px(want)));
+        gpui::canvas(
+            move |_, window, cx| {
+                let (head, text, foot) = measured.get();
+                if head <= 0.0 {
+                    return;
+                }
+                let current = f32::from(window.bounds().size.height);
+                let current_hold = hold.get();
+                if current_hold == crate::app::window::popup_frame::PopupHold::Shown
+                    && fitted.get().is_some_and(|f| (f - current).abs() > 1.0)
+                    && resizing_to.get().is_none()
+                {
+                    // The reader resized it: their height stands.
+                    return;
+                }
+                let want = fitted_height(head + text + foot, main_height);
+                let is_held = current_hold == crate::app::window::popup_frame::PopupHold::Held;
+                if (want - current).abs() > 1.0 && (!is_held || fit_attempts.get() < 2) {
+                    if resizing_to.get().is_some_and(|t| (t - want).abs() <= 0.5) {
+                        return;
+                    }
+                    resizing_to.set(Some(want));
+                    fitted.set(Some(want));
+                    if is_held {
+                        fit_attempts.set(fit_attempts.get().saturating_add(1));
+                    }
+                    let width = window.bounds().size.width;
+                    // Moved outside the update, as the page window's settle is: AppKit reports the
+                    // new frame synchronously, and GPUI drops that report while the app is borrowed.
+                    #[cfg(all(target_os = "macos", not(ghostex_web)))]
+                    {
+                        let Ok(native) = crate::app::helpers::cef_parent_native_view(window) else {
+                            return;
+                        };
+                        let native = native as usize;
+                        let frame =
+                            crate::app::window::visual_page_modal::frame::shared_frame(window);
+                        // About the centre it opened at, over the chat.
+                        let to = gpui::Bounds::new(
+                            gpui::point(frame.origin.x, frame.center().y - px(want / 2.0)),
+                            gpui::size(width, px(want)),
+                        );
+                        let scale = window.scale_factor();
+                        let handle = window.window_handle();
+                        let resizing_done = resizing_to.clone();
+                        cx.spawn(async move |cx| {
+                            crate::app::ghostex_capture::platform::set_window_frame(
+                                native, to, scale,
+                            );
+                            let _ = handle.update(cx, |_, window, _| {
+                                // AppKit applied the frame synchronously; if the display clamped
+                                // the height, clear the in-flight target and refresh so the next
+                                // prepaint can still reveal instead of waiting forever.
+                                if (f32::from(window.bounds().size.height) - want).abs() > 1.0 {
+                                    resizing_done.set(None);
+                                }
+                                window.refresh();
+                            });
+                        })
+                        .detach();
+                    }
+                    #[cfg(not(all(target_os = "macos", not(ghostex_web))))]
+                    {
+                        let _ = cx;
+                        window.on_next_frame(move |window, _| {
+                            window.resize(gpui::size(width, px(want)));
+                        });
+                    }
+                    return;
+                }
+                resizing_to.set(None);
+                fitted.set(Some(current));
+                if is_held {
+                    hold.set(crate::app::window::popup_frame::PopupHold::Revealing);
+                    let hold = hold.clone();
+                    let handle = window.window_handle();
+                    cx.defer(move |cx| {
+                        hold.set(crate::app::window::popup_frame::PopupHold::Shown);
+                        let _ = handle.update(cx, |_, window, _| {
+                            window.refresh();
+                            window.on_next_frame(move |window, _| {
+                                crate::app::window::popup_frame::reveal_held_panel_window(
+                                    window, border,
+                                );
+                            });
+                        });
+                    });
+                }
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .inset_0()
+        .into_any_element()
     }
 }
 
 impl Render for DockAskPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let held = self.hold.get() == crate::app::window::popup_frame::PopupHold::Held;
         #[cfg(all(target_os = "macos", not(ghostex_web)))]
-        crate::app::helpers::apply_frosted_menu_blur(window);
-        self.fit(window, cx);
+        if !held {
+            crate::app::helpers::apply_frosted_menu_blur(window);
+        }
         let measured = self.measured.clone();
         let content = self.chat.update(cx, |chat, cx| {
             let glass = crate::app::helpers::window_glass_active_for(chat.main_window);
@@ -219,9 +362,14 @@ impl Render for DockAskPanel {
             .flex_col()
             .overflow_hidden()
             .font_family(font)
-            .bg(glass_fill.unwrap_or_else(|| {
-                gpui::rgb(if light { PAGE_TOP_LIGHT } else { PAGE_TOP_DARK }).into()
-            }))
+            .bg(if held {
+                gpui::transparent_black()
+            } else {
+                glass_fill.unwrap_or_else(|| {
+                    gpui::rgb(if light { PAGE_TOP_LIGHT } else { PAGE_TOP_DARK }).into()
+                })
+            })
+            .when(held, |panel| panel.opacity(0.0))
             .on_key_down(move |event: &gpui::KeyDownEvent, _, cx| {
                 if event.keystroke.key == "escape" && !event.is_held {
                     chat.update(cx, |chat, cx| chat.close_dock_ask_modal(cx));
@@ -229,6 +377,7 @@ impl Render for DockAskPanel {
                 }
             })
             .child(content)
+            .child(self.fit_tracker())
             .into_any_element()
     }
 }
@@ -300,6 +449,7 @@ impl NativeChatView {
         self.board.dock_modal_opening = true;
         let pane = self.bounds.get();
         let scale = ChatAppearance::current(&self.snapshot).scale;
+        let initial_row = self.dock_ask_row();
         let parent_native_view = self.child_window_parent(cx);
         let chat = cx.entity();
         #[cfg(target_os = "linux")]
@@ -314,12 +464,17 @@ impl NativeChatView {
                 } else {
                     content
                 };
+                let main_height = f32::from(content.size.height);
                 let width = px(PANEL_WIDTH * scale).min(area.size.width - px(32.0));
-                let height = px(PANEL_OPEN_HEIGHT * scale).min(area.size.height - px(32.0));
+                let open_height = initial_row
+                    .as_ref()
+                    .map(|row| estimated_panel_height(row, f32::from(width), scale, main_height))
+                    .unwrap_or(PANEL_OPEN_HEIGHT * scale);
+                let height = px(open_height).min(area.size.height - px(32.0));
                 (
                     gpui::Bounds::centered_at(area.center(), gpui::size(width, height)),
                     crate::app::window::popup_frame::PopupOwner::of(window, cx),
-                    f32::from(content.size.height),
+                    main_height,
                 )
             }) else {
                 chat.update(cx, |this, _| this.board.dock_modal_opening = false);
@@ -342,26 +497,24 @@ impl NativeChatView {
                     window_min_size: Some(gpui::size(px(360.0), px(PANEL_MIN_HEIGHT))),
                     is_minimizable: false,
                     titlebar: None,
-                    // The page window's own: blurred under window glass, opaque without.
-                    window_background: if crate::app::helpers::window_glass_active() {
-                        gpui::WindowBackgroundAppearance::Blurred
-                    } else {
-                        gpui::WindowBackgroundAppearance::Opaque
-                    },
+                    // Opened transparent (no blur/opaque fill, no macOS shadow/rim) while the
+                    // first prepaint measures and settles its height; `reveal_held_panel_window`
+                    // turns on glass/opaque and shadow atomically on the first visible frame.
+                    window_background: gpui::WindowBackgroundAppearance::Transparent,
                     ..Default::default()
                 },
                 {
                     let chat = chat.clone();
                     move |window, cx| {
-                        // Windows draws this border around the window: 16% ink over the
-                        // page's colour, as the app modals' `window_border`.
+                        // Windows draws this border around the window once revealed: 16% ink over
+                        // the page's colour, as the app modals' `window_border`.
                         let border =
                             gpui::rgb(if crate::app::helpers::chrome_uses_light_appearance() {
                                 0xcacaca
                             } else {
                                 0x3a3a3a
                             });
-                        crate::app::window::popup_frame::frame_app_modal_window(window, border);
+                        crate::app::window::popup_frame::hide_held_panel_window(window);
                         crate::app::window::attach_gpui_app_modal_window_to_main_window(
                             window,
                             parent_native_view,
@@ -374,6 +527,30 @@ impl NativeChatView {
                             );
                         }
                         window.activate_window();
+                        let hold: crate::app::window::popup_frame::PopupHoldState =
+                            Default::default();
+                        let fallback_hold = hold.clone();
+                        let handle = window.window_handle();
+                        cx.spawn(async move |cx| {
+                            cx.background_executor()
+                                .timer(std::time::Duration::from_millis(180))
+                                .await;
+                            if fallback_hold.get()
+                                == crate::app::window::popup_frame::PopupHold::Held
+                            {
+                                fallback_hold
+                                    .set(crate::app::window::popup_frame::PopupHold::Shown);
+                                let _ = handle.update(cx, |_, window, _| {
+                                    window.refresh();
+                                    window.on_next_frame(move |window, _| {
+                                        crate::app::window::popup_frame::reveal_held_panel_window(
+                                            window, border,
+                                        );
+                                    });
+                                });
+                            }
+                        })
+                        .detach();
                         let view = cx.new(|cx| {
                             let observed = cx.observe(&chat, |_, _, cx| cx.notify());
                             let focus = cx.focus_handle();
@@ -382,7 +559,11 @@ impl NativeChatView {
                                 chat,
                                 focus,
                                 measured: Rc::new(Cell::new((0.0, 0.0, 0.0))),
-                                fitted: None,
+                                hold,
+                                fitted: Rc::new(Cell::new(None)),
+                                resizing_to: Rc::new(Cell::new(None)),
+                                fit_attempts: Rc::new(Cell::new(0)),
+                                border,
                                 main_height,
                                 _chat: observed,
                             }

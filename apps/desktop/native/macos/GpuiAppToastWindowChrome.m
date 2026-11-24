@@ -274,6 +274,42 @@ int GhostexGpuiFadeOutPopupWindow(void *nativeView, double seconds) {
   }
 }
 
+// Keeps a bordered floating panel (DockAskPanel) visually invisible while it measures and fits
+// itself on its first frame: drops its shadow and sets alphaValue to 0.001 (above 0.0 so AppKit
+// still reports NSWindowOcclusionStateVisible and GPUI keeps drawing it; 0.001 * 255 rounds to 0
+// in 8-bit colour so neither the macOS window rim nor any pixel shows). Never touches the main
+// window.
+void GhostexGpuiHideHeldPanelWindow(void *nativeView) {
+  @autoreleasepool {
+    if (nativeView == NULL) {
+      return;
+    }
+    NSWindow *window = ((__bridge NSView *)nativeView).window;
+    if (window == nil || window == NSApp.mainWindow || window.isMainWindow) {
+      return;
+    }
+    window.hasShadow = NO;
+    window.alphaValue = 0.001;
+  }
+}
+
+// Restores a held floating panel's shadow and full alpha once it has been sized to its content,
+// called on the same frame tick that paints its content opaque.
+void GhostexGpuiRevealHeldPanelWindow(void *nativeView) {
+  @autoreleasepool {
+    if (nativeView == NULL) {
+      return;
+    }
+    NSWindow *window = ((__bridge NSView *)nativeView).window;
+    if (window == nil || window == NSApp.mainWindow || window.isMainWindow) {
+      return;
+    }
+    window.hasShadow = YES;
+    [window invalidateShadow];
+    window.alphaValue = 1.0;
+  }
+}
+
 void GhostexGpuiPrepareTitlebarPopupWindow(void *nativeView) {
   @autoreleasepool {
     if (nativeView == NULL) {

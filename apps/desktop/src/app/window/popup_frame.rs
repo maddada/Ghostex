@@ -141,6 +141,53 @@ pub(crate) fn reveal_popup_window(window: &mut Window, reduce_motion: bool) {
     fade_in_popup_window(window, reduce_motion);
 }
 
+/// Hides a held floating panel window (one with a system rim and shadow, such as `DockAskPanel`)
+/// while it measures and fits itself on its first frame: no shadow and near-zero alpha on macOS so
+/// AppKit still reports the window visible and GPUI lays it out, with nothing drawn on screen.
+pub(crate) fn hide_held_panel_window(window: &Window) {
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
+    {
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        unsafe extern "C" {
+            fn GhostexGpuiHideHeldPanelWindow(native_view: *mut std::ffi::c_void);
+        }
+        if let Ok(handle) = HasWindowHandle::window_handle(window)
+            && let RawWindowHandle::AppKit(handle) = handle.as_raw()
+        {
+            unsafe { GhostexGpuiHideHeldPanelWindow(handle.ns_view.as_ptr()) };
+        }
+    }
+    #[cfg(not(all(target_os = "macos", not(ghostex_web))))]
+    let _ = window;
+}
+
+/// Reveals a held floating panel window once it has fitted itself: restores its window background
+/// (blur under glass, opaque without), its Windows DWM border, and its macOS shadow and full alpha.
+pub(crate) fn reveal_held_panel_window(window: &mut Window, border: gpui::Rgba) {
+    let background = if crate::app::helpers::window_glass_active() {
+        gpui::WindowBackgroundAppearance::Blurred
+    } else {
+        gpui::WindowBackgroundAppearance::Opaque
+    };
+    window.set_background_appearance(background);
+    frame_app_modal_window(window, border);
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
+    {
+        crate::app::helpers::apply_frosted_menu_blur(window);
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        unsafe extern "C" {
+            fn GhostexGpuiRevealHeldPanelWindow(native_view: *mut std::ffi::c_void);
+        }
+        if let Ok(handle) = HasWindowHandle::window_handle(window)
+            && let RawWindowHandle::AppKit(handle) = handle.as_raw()
+        {
+            unsafe { GhostexGpuiRevealHeldPanelWindow(handle.ns_view.as_ptr()) };
+        }
+    }
+    #[cfg(not(all(target_os = "macos", not(ghostex_web))))]
+    let _ = border;
+}
+
 /// See `popup_open_frame`: elsewhere the frame's opacity is the fade.
 #[cfg(not(all(target_os = "macos", not(ghostex_web))))]
 pub(crate) fn fade_in_popup_window(_window: &Window, _reduce_motion: bool) {}
