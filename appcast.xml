@@ -8,6 +8,87 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>12.0.0</title>
+            <pubDate>Tue, 24 Nov 2026 08:39:09 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v12.0.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>120000</sparkle:version>
+            <sparkle:shortVersionString>12.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 12.0.0
+
+## 12.0.0 - 2026-11-24
+
+**Ghostex 12.0 is the Native Chat update.** Chats with Claude Code, Codex and Antigravity now run Native: steadier, smoother streaming, faster, and they recover on their own. New chat users start on Native, more agents are moving to Native, and Terminal-based mode is now legacy.
+
+### 💬 Native chat
+- **Native is the new way to chat with Claude Code, Codex and Antigravity.** Ghostex talks to the agent directly instead of reading a terminal, so replies stream smoothly, nothing gets lost in screen scraping, and chats use less CPU.
+- **Messages you send while the agent is working go in right away.** The agent keeps going with its current reply, approvals stay open, and your messages are answered in order. A message you queue on purpose says "Delivers when the current reply ends."
+- **Native chats heal themselves.** If an agent's host stops mid-reply, Ghostex notices within seconds, clears "working" and picks the same chat back up, and the old agent is always stopped first so only one agent ever writes to a chat.
+- **Messaging a sleeping or finished thread wakes it** and delivers the message, with no reload.
+- **An expired Claude sign-in retries once with your refreshed login,** then shows a Sign in again / Switch account card instead of a raw error.
+- **Codex in Native:** /compact works, model picks it doesn't support are refused, errors show as cards, account switches work, and the / list only offers commands that work.
+- **Antigravity in Native** keeps pictures on your messages, shows its own / commands and gets the blue finished dot when a reply ends. Stopping it shows "Agent was interrupted" and leaves the chat ready, like Claude and Codex.
+- **Claude's /context, /model and /effort output shows in the chat again,** in Native and Terminal-based chats.
+- **Switch any chat to Native** from the pill above the chat box, or switch all your chats at once from the Native announcement. Coordinators switch between turns, and Switch to Terminal-based lives in More actions.
+- **New chat users start on Native.** Terminal-based mode is marked legacy with a small dot in Settings > Agents, and it will go away in a future release.
+
+### 🤖 Models
+- **The model picker always names the real model,** like Opus 5.5, GPT 6.2 Sol or Gemini 4 Neon, never "Default". With no pick, a chat starts on the newest Opus, Sol or Neon, and the model you pick becomes the default for new chats.
+- **Effort shows as dimmed text next to the model name,** the same in Native and Terminal-based chats.
+- **Settings > Agents has a Default model for each agent,** and switching between Native and Terminal-based keeps the model, effort and 1M context.
+
+### 🔗 Share links
+- **Share a Live page or a localhost port with anyone through a link.** Turn it on in Settings > Sharing. Links expire after 24 hours by default, can have a passcode, and only reach that one page or port.
+- **People you share a Live page with can answer it.** They type their name once, their answers come back to your chat as "Answered by" them, and you can open each person's answers on the page.
+
+### 📥 Inbox and notifications
+- **The Inbox is redesigned** with Pings, a Snoozed drawer and one Recent drawer for everything handled or done, with clearer icons.
+- **Live pages without questions get Done, or Send to agent once you type a comment.**
+- **The bell clears its number when you open it,** and rows stay highlighted until you close the popup or mark them read.
+- **Errors show above the Inbox,** and the Boosts tip sits inside the chat box.
+
+### 🎨 Look and feel
+- **Modals are frosted glass that match your theme,** in every built-in theme, with calm neutral buttons instead of accent colors.
+- **The default theme's blue is lighter,** and the "Ask me anything" card on Main Hub matches the cards around it.
+- **Live page cards in chat are crisp and see-through,** and fold into compact rows in Summary mode.
+- **Status dots overlap when there are several,** and sit at the right of section headers.
+- **"Edited N files" in a chat looks like the rows around it,** with a diff for each file.
+- **The chat box hint is one line,** and counts read correctly everywhere ("2 need you", "Every minute").
+
+### 🧭 Main Hub and coordinators
+- **Main Hub is always on.** You can collapse it, and Autopilot's supervisor now lives inside it instead of showing as separate projects.
+- **Session details load section by section,** so the Overview opens right away.
+- **Clicking a ping opens it at its final size,** and wait reasons name what a thread waits on in plain words.
+
+### 🧩 Extensions and accounts
+- **VS Code, Beads and Automate are now opt-in,** and Boosts and Find are easier to discover.
+- **CLIProxyAPI hubs have an Add account button** for Claude and Codex that works for hubs on other computers too, plus an Accounts card and setup guide.
+- **Workspaces can carry their own agent instructions and Claude connectors.**
+
+### 🪟 Windows, Linux and macOS
+- **Windows: six PowerShell and launch problems are fixed,** and Entra ID accounts pair with the phone.
+- **Windows: Claude Code and Codex installed with npm start again with PowerShell 7** in threads, Ghostex Help and restored sessions, in Native and Terminal-based chats, instead of failing with "Invalid JSON provided to --settings".
+- **Windows: the extra thin line between the sidebar and the chat is gone** at scaled displays like 175%.
+- **Linux uses the system font for chat text,** which fixes Chinese, Japanese and Korean characters, thanks to @bet4it.
+- **macOS: removing the menu bar icon sticks** across launches and updates.
+- **macOS: Finder's Open With lists Ghostex once,** instead of once for every version you've installed.
+- **Linux: dragging a window by its top band works on Hyprland,** and chats no longer flicker on NVIDIA under XWayland.
+
+### 🩹 Fixes and polish
+- **Antigravity's sign-in menu shows the Finish signing in card,** and text that only looks like a login menu is no longer mistaken for one, thanks to @cagatay-io.
+- **An approval on a session's screen reads as needing you,** and closing one approval card no longer hides the next, thanks to @cagatay-io.
+- **The phone's terminal keyboard help matches how it works now,** thanks to @cagatay-io.
+- **Interrupted turns are never marked as finished,** and finished or closed threads no longer put a red dot on their coordinator.
+- **Typing /compact no longer leaves a Saved draft on your other devices.**
+- **Background CPU and memory use is lower** while Ghostex watches your chats.
+- **The phone app no longer crashes on an info hint,** and phone screen tracking is fixed.
+
+If anything goes wrong after updating, you can go back to the version you have now in Settings › Updates, or download any older version from [GitHub](https://github.com/maddada/Ghostex/releases).
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v12.0.0/ghostex-12.0.0-arm64.dmg" length="72861125" type="application/octet-stream" sparkle:edSignature="76PpvVb4g/ysm5f3Uz3kODef3kXmYgexiAnIEqxL4tX7OKs/9p955+f3rvv7q0JKS2ixPiJSv5Lhs2UnlBTiCg=="/>
+        </item>
+        <item>
             <title>11.15.0</title>
             <pubDate>Sun, 22 Nov 2026 19:23:42 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.15.0</sparkle:fullReleaseNotesLink>
@@ -398,90 +479,6 @@ If anything goes wrong after updating, you can go back to the version you have n
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.11.1/ghostex-11.11.1-arm64.dmg" length="66135300" type="application/octet-stream" sparkle:edSignature="v6qWGqCip7IIarQa3xl71lstUOZ4JgsmcVIohkBbtgl89d89fHygHyrht1uvbXTsP8Cvo5zrZaI3PMVI2jKmDA=="/>
         </item>
         <item>
-            <title>11.11.0</title>
-            <pubDate>Thu, 19 Nov 2026 03:08:19 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.11.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>111100</sparkle:version>
-            <sparkle:shortVersionString>11.11.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 11.11.0
-
-## 11.11.0 - 2026-11-19
-
-**Ghostex 11.11.0 is out.** Work items and a Work button for any session, two computers' servers linked with no desktop app, Grok Bot driving your agents, your own update-check times, a focused Interface settings group, and a big round of speed fixes for Windows with many agents.
-
-### 📋 Work items
-
-- **Any session can keep its own work items,** not only coordinators: while Work items is on, a session's to-dos, waits and finished work fill its Work panel, dock rows and cards under a Topic you can rewrite with a click ([#670](https://github.com/maddada/Ghostex/issues/670)).
-- **A Work button in the header** opens the Work panel beside the chat, with a count of what waits on you. It shares the spot with Session details, one at a time.
-- **Needs you cards look like their dock rows:** the title wraps over as many lines as it needs with the answers under it, and a click on a card opens what it points to. A page opens at once.
-- **`ghostex agents send --with-next` holds a note for the other session's next message,** so a note that needs nothing now never starts a turn by itself ([#670](https://github.com/maddada/Ghostex/issues/670)).
-- **The Thread brief extension is now Work items (0.3.0):** turn it on in Settings > Extensions for the Work button and a Work list of every session with work items. Your old briefs move into work items once, the objective becoming the Topic, and an extension's skill is in place only while the extension is on.
-- **The floating ask panel's text can be selected and copied** with Cmd+C, Edit > Copy or a right-click Copy, and a web address in a to-do's title is a link again.
-
-### 🧭 Coordinators
-
-- **A new coordinator starts on the model and effort you last used for a coordinator with that agent,** so you pick it once; Opus 5.5 High is only the very first default, thanks to @sebastianarena ([#658](https://github.com/maddada/Ghostex/pull/658)).
-- **A low-end model asks you to confirm** on the first-message card before Start, on the computer and the phone.
-- **Grok Bot can drive your agents:** `ghostex grokbot connect` links a Ghostex bot in xAI's Grok Bot, so you can ask what your agents are doing and hand out work from its chat, and your agents send you notes through it. Help > Grok Bot has the steps.
-
-### 🌐 Remote computers
-
-- **Link two computers' servers with no desktop app:** `ghostex computers add <code>` pairs two gxserver computers so their agents can work across them, with each owner approving on the app or a phone ([#674](https://github.com/maddada/Ghostex/issues/674)).
-- **Paired computers in Settings > Remote** lists a computer's server links with an Agent access switch and Remove, which ends the link both ways. A connected computer's Edit dialog and the phone have the same ([#674](https://github.com/maddada/Ghostex/issues/674)).
-- **A remote session's merged-PR Clean up and Keep chips answer on its own computer,** and the where pill offers Open folder only for a session on this computer.
-
-### 🪟 Windows
-
-- **Many agents no longer bog Windows down:** far fewer wmx.exe processes (about 20 a minute instead of 47 with six agents), session lists keep working when Windows' session list stops answering, and Git reads, paste checks, status line refreshes and the server's database share the work instead of piling up ([#666](https://github.com/maddada/Ghostex/issues/666)).
-- **Fixed a crash when a window closed while other work was queued,** and a Windows crash report now names the panic that started it ([#675](https://github.com/maddada/Ghostex/issues/675)).
-- **Restored agent terminals no longer start Windows PowerShell 5.1,** and a restored agent whose exact resume fails runs its saved fallback ([#666](https://github.com/maddada/Ghostex/issues/666)).
-- **An inline page's ⋯ menu shows over its page window.**
-- **A cua-driver update refreshes the skill your WSL agents read.**
-
-### 💬 Chat
-
-- **A Codex model or effort pick waits for Codex's turn to end,** so the message behind it is never typed into the running turn, and a pick that meets a busy agent backs off instead of retrying over and over ([#666](https://github.com/maddada/Ghostex/issues/666)).
-- **Claude rewinds work again on Claude Code 2.1.326 and later,** instead of timing out at the confirmation step.
-- **An idle coordinator no longer keeps gxserver busy re-reading its transcript** ([#668](https://github.com/maddada/Ghostex/issues/668)), and renaming or closing a session rebuilds only the chat history that names it.
-- **`ghostex` commands find their session from a sandboxed Codex,** so Needs you and private secret cards work there, and saving an automation refuses a model its agent doesn't have ([#669](https://github.com/maddada/Ghostex/issues/669)).
-- **A question tag pill opens its page at once,** like the page card's Open.
-
-### ⚙️ Settings
-
-- **Choose how often Ghostex checks for updates:** a Checking for updates fold on Settings > Updates sets Ghostex, Agents, Tools and Extensions to every 15 minutes, 30 minutes, hour (the default) or day, or Only on Check now. Agents you turned off are never probed ([#673](https://github.com/maddada/Ghostex/issues/673)).
-- **Interface is four focused pages** under a new Interface group in the Settings sidebar: Themes, Text & Fonts, Size & Zoom, and Window & Layout. Every setting keeps its value.
-- **A theme colour row you haven't set shows the colour it paints now,** ready to adjust from there.
-- **Read live status from Claude Code and Cursor** is a switch under Settings > Agents > Advanced, on by default, and Use agent hooks moves there too. Claude's status row stays clean, and outside Ghostex the helper only runs your own status line.
-- **Floating Capture is an experimental extension:** turn it on in Settings > Extensions > Experimental. If you had the floating button on, it stays on.
-- **Ghostex never overwrites an agent's config it can't read,** keeps its links and file permissions, and Uninstall all carries on past one it can't change.
-
-### 📂 Sidebar
-
-- **A sessions group's menu has Ungroup,** which removes the group and keeps its sessions open, and a new group opens its name for renaming.
-- **Close Group, Remove GBot, Remove Department and Destroy Box ask in Ghostex's own dialog.**
-
-### 📱 On the phone
-
-- **The Work sheet shows its Topic,** and a tap rewrites it.
-- **Paired computers** in a computer's settings, with each server link's Agent access switch and Remove ([#674](https://github.com/maddada/Ghostex/issues/674)).
-
-### 🩹 Fixes and polish
-
-- **Linux: the picture, wallpaper, Live or video behind the glass draws again** on X11 and Wayland ([#667](https://github.com/maddada/Ghostex/issues/667)).
-- **Linux: quitting Ghostex with a web page open no longer leaves a "process crashed" notice** from its graphics helper.
-- **Live glass shows its default animation** (Aurora in dark mode, Drift in light) when you never picked a style, instead of nothing.
-- **Files: Cmd+click or Option+click on a link in a Markdown table cell opens it,** and a plain click still edits the cell ([#671](https://github.com/maddada/Ghostex/issues/671)).
-- **Settings and the window stay responsive while Ghostex checks for updates,** and windows redraw only when what the Updates status shows changed.
-- **macOS: writes into ignored folders no longer make Ghostex re-read a project's Git state** ([#666](https://github.com/maddada/Ghostex/issues/666)).
-- **The dictation waveform follows how loudly you speak,** on the computer and the phone.
-
-If anything goes wrong after updating, you can go back to the version you have now in Settings › Updates, or download any older version from [GitHub](https://github.com/maddada/Ghostex/releases).
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.11.0/ghostex-11.11.0-arm64.dmg" length="66463616" type="application/octet-stream" sparkle:edSignature="3y/d5LzkB69X2sY2xAu4dSEQkeCF6JZGXFT20WyZBFX8xJu/A3DjVIf/Wv7BepfjOLROicqhT7TEp9XrPdfpBQ=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -493,6 +490,6 @@ If anything goes wrong after updating, you can go back to the version you have n
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 4oaitljaDA6lyTnt1c7cw6ADo6E0rsMUVNyy+dF4LvmA/hzQR7B9wCjdudkDopFos33CeJzL3hlDrORhL4x3DQ==
-length: 55521
+edSignature: r6ehFpIRywdqKPjkOD8+x+F1pAkfuGAzbDrgJMtKFzxAJOuFlnmBkAPdmKMAMP/sqAX2/crU5wvut7I1+RbECQ==
+length: 54629
 -->
