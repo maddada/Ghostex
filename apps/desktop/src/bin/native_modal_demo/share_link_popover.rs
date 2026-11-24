@@ -40,8 +40,8 @@ impl ShareLinkPopoverDemo {
     fn render_card(&self, active: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.palette;
         let green = rgb(0x34d399);
-        let fill = rgba(0x28282cee);
-        let border = rgba(0xffffff22);
+        let fill = hsla(p.surface);
+        let border = hsla(p.hairline);
         let header = h_flex()
             .w_full()
             .items_center()
@@ -344,7 +344,11 @@ impl Render for ShareLinkPopoverDemo {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .size_full()
-            .bg(rgb(0x131313))
+            .bg(if self.palette.light {
+                rgb(0xe5e6ea)
+            } else {
+                rgb(0x131313)
+            })
             .flex()
             .items_center()
             .justify_center()

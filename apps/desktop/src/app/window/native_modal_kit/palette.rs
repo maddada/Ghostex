@@ -386,11 +386,6 @@ impl ModalPalette {
         rgba_of(self.foreground, 0.12)
     }
 
-    /// `color-mix(in srgb, var(--primary) 88%, white)`.
-    pub(crate) fn primary_hover(&self) -> Rgba {
-        css_mix(self.primary, 0.88, rgb(0xffffff))
-    }
-
     /// The main button's fill (Save, Create, Rename, Switch to Native, Connect): a neutral wash
     /// one step brighter/stronger than [`neutral_button_fills`] (Cancel) with normal foreground
     /// text, never the theme accent or a harsh white/black slab.
