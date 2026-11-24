@@ -2315,11 +2315,15 @@ impl NativeChatView {
         };
         let right_row = row.clone();
         let line = head.child(age_menu);
-        // A question's first description line shows quietly under its title in both the Inbox and
-        // the Work panel, cut at one line, while the quiet Details button opens the full text
-        // (CDXC:Coordinators 2026-11-24, Layout C).
+        // CDXC:Coordinators 2026-11-25 DECISION:
+        // User, of Inbox rows above the composer drawing a second, dimmer preview line under the
+        // title: "sir showing 2 lines here is NOT A THING. please only show the title line for all
+        // these work items in inbox!!!!" Supersedes the 2026-11-20 and 2026-11-24 Inbox preview
+        // line: Inbox rows (`in_dock`) show only the title line with their buttons and time, while
+        // the full detail text stays reachable through Details / the row modal. Work panel Needs
+        // you cards (`!in_dock`) keep their one-line preview under the title.
         let preview = text(row, "preview");
-        let preview = (!preview.is_empty()).then(|| {
+        let preview = (!in_dock && !preview.is_empty()).then(|| {
             div()
                 .min_w_0()
                 .pl(px(DOCK_LEAD * s))

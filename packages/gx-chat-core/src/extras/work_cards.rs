@@ -2384,6 +2384,13 @@ fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>)
 /// question would lose its one click to Details. A description of one short line
 /// ([`SHORT_DESCRIPTION`] characters at most) is not Details: it shows under the title as the
 /// row's second line, and the answers stay on the row. A longer one shows Details, as Q4232 chose.
+///
+/// CDXC:Coordinators 2026-11-25 DECISION:
+/// User, of Inbox rows above the composer drawing a second, dimmer preview line under the title:
+/// "sir showing 2 lines here is NOT A THING. please only show the title line for all these work
+/// items in inbox!!!!" `preview` stays on the shared dock row model because Work panel Needs you
+/// cards (`coordinator_board.rs` `BoardRow::dock`) read it, while Inbox renderers on desktop, web
+/// and phone (`dock_row_look` with `in_dock`, phone `DockRow`) no longer draw `preview`.
 pub(crate) const SHORT_DESCRIPTION: usize = 90;
 
 pub(crate) fn details_fields(detail: &str) -> (bool, String) {
