@@ -456,6 +456,30 @@ pub fn clear_thread_observed_working(
     Ok(())
 }
 
+/// Forgets that the thread was seen working when no turn ended since its last report (GitHub #748,
+/// CDXC in notification_feed/body.rs), only while that report (`reported_at`) is still its newest:
+/// a report recorded meanwhile is never undone.
+pub fn clear_thread_observed_working_since_report(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    reported_at: Option<&str>,
+) -> Result<(), DomainStateError> {
+    let Some(reported_at) = reported_at else {
+        return Ok(());
+    };
+    db.execute(
+        r#"
+        UPDATE coordinator_threads
+        SET observedWorking = 0, updatedAt = ?4
+        WHERE projectId = ?1 AND sessionId = ?2 AND observedWorking = 1 AND reportedAt = ?3
+        "#,
+        params![project_id, session_id, reported_at, now_iso()],
+    )
+    .map_err(sql_error)?;
+    Ok(())
+}
+
 /// Records a delivered report: the finished turn (clears `observedWorking` and keeps the start of
 /// the report) or the question that was relayed (its key, so it is relayed once).
 pub fn record_thread_report(

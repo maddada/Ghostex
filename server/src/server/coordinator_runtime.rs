@@ -1306,24 +1306,58 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
         let thread_ref = report.sender.global_ref.clone();
         let (body, finished_text) = match &report.kind {
             ReportKind::Finished { cut_off } => {
+                use crate::notification_feed::body::{finished_turn_reply, FinishedTurnReply};
                 let session = report.session.clone();
-                let reported_at = report.thread.reported_at.clone();
-                let message = tokio::task::spawn_blocking(move || {
+                let reported_ms = report.thread.reported_at.as_deref().and_then(parse_iso_ms_opt);
+                // A reply we already forwarded is not this turn's report.
+                let reply = tokio::task::spawn_blocking(move || {
                     session
                         .as_ref()
-                        .and_then(crate::notification_feed::body::last_assistant_message)
-                        .filter(|(_, timestamp)| {
-                            // A reply we already forwarded is not this turn's report.
-                            match (timestamp, reported_at.as_deref().and_then(parse_iso_ms_opt)) {
-                                (Some(timestamp), Some(reported)) => *timestamp > reported,
-                                _ => true,
-                            }
-                        })
-                        .map(|(text, _)| text)
+                        .map(|session| finished_turn_reply(session, reported_ms))
                 })
                 .await
                 .ok()
                 .flatten();
+                // GitHub #748 (CDXC in notification_feed/body.rs): no turn ended since the last
+                // report, so there is nothing to report; the mark that queued it is cleared, only
+                // while no report was recorded meanwhile, so the next tick does not queue it again.
+                if !*cut_off && matches!(reply, Some(FinishedTurnReply::AlreadyReported)) {
+                    let (settle_state, thread) = (state.clone(), report.thread.clone());
+                    let _ = tokio::task::spawn_blocking(move || {
+                        if let Ok(db) = open_gxserver_database(&settle_state.paths) {
+                            let _ = coordinators::clear_thread_observed_working_since_report(
+                                &db,
+                                &thread.project_id,
+                                &thread.session_id,
+                                thread.reported_at.as_deref(),
+                            );
+                        }
+                    })
+                    .await;
+                    let _ = state.logger.log_routine(
+                        crate::logging::DiagnosticLogScenario::ServerLifecycle,
+                        GxserverLogInput {
+                            level: LogLevel::Info,
+                            event: "coordinatorReportAlreadyDelivered".to_string(),
+                            server_id: Some(state.metadata.server_id.clone()),
+                            request_id: None,
+                            client: None,
+                            duration_ms: None,
+                            error: None,
+                            details: Some(json!({
+                                "coordinatorProjectId": coordinator.0,
+                                "coordinatorSessionId": coordinator.1,
+                                "threadSessionId": report.thread.session_id,
+                                "reportedAt": report.thread.reported_at,
+                            })),
+                        },
+                    );
+                    continue;
+                }
+                let message = match reply {
+                    Some(FinishedTurnReply::New(text)) => Some(text),
+                    _ => None,
+                };
                 let body = report_body(
                     &if *cut_off {
                         ThreadReport::CutOff {
