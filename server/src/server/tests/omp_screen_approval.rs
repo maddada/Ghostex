@@ -855,17 +855,19 @@ fn a_failed_capture_while_a_reading_is_dropped_does_not_keep_the_mark() {
     assert_eq!(fixture.awaiting_approval(), None);
 }
 
-/// A reading is dropped while another reader's whole capture sees an approval and commits it in
-/// between. That newer reading wins: its mark is written after the drop's clear, so the session
+/// A reading is dropped while another reader's whole capture sees an approval and commits it after
+/// the removal. That newer reading wins: the drop holds off mark writes from before it removes the
+/// reading until its clear is written, so the capture's mark lands after the clear and the session
 /// waits for the user.
 #[test]
 fn an_approval_read_while_a_reading_is_dropped_keeps_its_mark() {
     let fixture = Fixture::new();
-    let _daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    let daemon = ScreenDaemon::serve(&fixture.zmx_name, &answered_screen());
+    fixture.read_screen();
+    assert_eq!(latest_verdict(&fixture), Some(false), "a reading to drop");
 
     // Dropping the reading stops at its fleet mark's clear: the clear is written, and its
-    // presentation delta waits for the event sequence this test holds. No approval is marked
-    // yet, so the capture below has a mark to write, which also waits for the event sequence.
+    // presentation delta waits for the event sequence this test holds.
     open_gxserver_database(&fixture.state.paths)
         .expect("db")
         .execute(
@@ -874,10 +876,16 @@ fn an_approval_read_while_a_reading_is_dropped_keeps_its_mark() {
             rusqlite::params![fixture.project_id(), fixture.session_id],
         )
         .expect("a fleet mark");
-    let fleet_marked = || {
-        fixture.stored()["runtimeSettings"]
-            .get("sessionChatFleetDetectedAt")
-            .is_some()
+    let reading_present = || {
+        fixture
+            .state
+            .session_chat_option_cache
+            .lock()
+            .expect("cache")
+            .contains_key(&crate::server::session_observer_key(
+                fixture.project_id(),
+                &fixture.session_id,
+            ))
     };
     let wait_for = |what: &str, done: &dyn Fn() -> bool| {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
@@ -891,6 +899,14 @@ fn an_approval_read_while_a_reading_is_dropped_keeps_its_mark() {
         .presentation_event_sequence
         .lock()
         .expect("event sequence");
+
+    // At the removal: the drop waits for the cache this test holds, and mark writes are already
+    // held off.
+    let cache = fixture
+        .state
+        .session_chat_option_cache
+        .lock()
+        .expect("cache");
     let forget = {
         let state = fixture.state.clone();
         let (project_id, session_id) =
@@ -903,9 +919,16 @@ fn an_approval_read_while_a_reading_is_dropped_keeps_its_mark() {
             );
         })
     };
-    wait_for("the drop reaches its fleet clear", &|| !fleet_marked());
+    wait_for(
+        "the drop holds off mark writes before it removes the reading",
+        &crate::session_chat_compacting::screen_approval_marker_writes_held,
+    );
+    drop(cache);
+    wait_for("the reading is dropped", &|| !reading_present());
 
-    // The approval is still on screen, so the other reader's whole capture sees it.
+    // After the removal the approval is on screen, so the other reader's whole capture sees it and
+    // goes to write its mark while the drop is stopped at its fleet clear.
+    daemon.show(APPROVAL_SCREEN);
     let approval_reader =
         {
             let state = fixture.state.clone();
@@ -919,6 +942,15 @@ fn an_approval_read_while_a_reading_is_dropped_keeps_its_mark() {
     wait_for("the capture commits the approval", &|| {
         latest_verdict(&fixture) == Some(true)
     });
+    assert!(
+        crate::session_chat_compacting::screen_approval_marker_writes_held(),
+        "the drop still holds off mark writes"
+    );
+    assert_eq!(
+        stored_mark(&fixture),
+        None,
+        "the capture's mark waits for the drop's clear"
+    );
 
     drop(held);
     forget.join().expect("dropping the reading");
@@ -928,4 +960,61 @@ fn an_approval_read_while_a_reading_is_dropped_keeps_its_mark() {
         "the newer reading's approval is marked"
     );
     assert_eq!(fixture.awaiting_approval(), Some(json!(true)));
+}
+
+/// Drops the reading of a marked approval while the screen cannot be read (an agent switch or a
+/// restart) and the database refuses the drop's clear, then lets the database take writes again.
+fn refuse_the_clear_of_a_dropped_reading(fixture: &Fixture) {
+    let daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    fixture.read_screen();
+    assert!(stored_mark(fixture).is_some(), "the approval is marked");
+    drop(daemon);
+    let db = open_gxserver_database(&fixture.state.paths).expect("db");
+    db.execute_batch(
+        r#"CREATE TRIGGER refuse_screen_approval_clear BEFORE UPDATE ON sessions
+        WHEN json_type(OLD.runtimeSettingsJson, '$.sessionChatScreenApprovalDetectedAt') IS NOT NULL
+         AND json_type(NEW.runtimeSettingsJson, '$.sessionChatScreenApprovalDetectedAt') IS NULL
+        BEGIN SELECT RAISE(ABORT, 'the database refused the clear'); END;"#,
+    )
+    .expect("a database refusing the clear");
+    crate::session_chat_options::forget_session_chat_options(
+        &fixture.state,
+        fixture.project_id(),
+        &fixture.session_id,
+    );
+    assert_eq!(latest_verdict(fixture), None, "the reading was dropped");
+    assert_eq!(
+        fixture.awaiting_approval(),
+        Some(json!(true)),
+        "the database refused the clear"
+    );
+    db.execute_batch("DROP TRIGGER refuse_screen_approval_clear;")
+        .expect("the database takes writes again");
+}
+
+/// A drop's clear the database refused is made by the next capture of the session, though that
+/// capture fails and leaves no verdict.
+#[test]
+fn a_refused_clear_of_a_dropped_reading_is_made_by_the_next_failed_capture() {
+    let fixture = Fixture::new();
+    refuse_the_clear_of_a_dropped_reading(&fixture);
+    fixture.read_screen();
+    assert_eq!(
+        latest_verdict(&fixture),
+        None,
+        "the screen could not be read"
+    );
+    assert_eq!(stored_mark(&fixture), None, "the owed clear is made");
+    assert_eq!(fixture.awaiting_approval(), None);
+}
+
+/// A drop's clear the database refused is made by the stall sweep's refresh of the session, with
+/// no other reading in between.
+#[test]
+fn a_refused_clear_of_a_dropped_reading_is_made_by_the_sweep() {
+    let fixture = Fixture::new();
+    refuse_the_clear_of_a_dropped_reading(&fixture);
+    crate::server::session_stall_runtime::tick(&fixture.state, &Mutex::new(HashMap::new()));
+    assert_eq!(stored_mark(&fixture), None, "the owed clear is made");
+    assert_eq!(fixture.awaiting_approval(), None);
 }
