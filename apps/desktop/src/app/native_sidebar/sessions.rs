@@ -118,7 +118,11 @@ impl GhostexGpuiApp {
         // tree (plus one level for an unfolded other-computer row under Main Hub's lead row).
         let indent = 5.0
             + (super::threads::thread_depth(session)
-                + if machine_fold_child.is_some() { 1.0 } else { 0.0 })
+                + if machine_fold_child.is_some() {
+                    1.0
+                } else {
+                    0.0
+                })
                 * super::threads::THREAD_INDENT;
         let hovered = self.native_sidebar.hovered_session.as_deref() == Some(&session_id);
         // CDXC:Sessions 2026-10-28 DECISION: User: "if i disable all buttons for the session card in the sidebar please let the sidebar sessions not change when i hover over one of them". `hovered` alone still draws the row's hover fill; everything hover swaps (time, badges, status dots, icon, dimming, the button strip) follows `buttons_shown`, which is false when the strip has no button.

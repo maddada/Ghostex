@@ -205,42 +205,42 @@ impl GhostexGpuiApp {
                             section.collapsed,
                         );
                         let append_home_new_chat = group.is_home && section.id == "sessions";
-                        let body = self
-                            .native_sidebar
-                            .disclosures
-                            .present(&key, section.collapsed)
-                            .then(|| {
-                                let sessions = group
-                                    .sessions
-                                    .iter()
-                                    .map(|session| (session.session_id.as_str(), session))
-                                    .collect::<std::collections::HashMap<_, _>>();
-                                let rows = self.render_native_session_rows(
-                                    group,
-                                    ids.iter()
-                                        .filter_map(|id| {
-                                            sessions
-                                                .get(id.as_str())
-                                                .map(|session| (*session).clone())
-                                        })
-                                        .collect(),
-                                    appearance,
-                                    cx,
-                                );
-                                let section_content = if append_home_new_chat {
-                                    v_flex()
-                                        .w_full()
-                                        .flex_shrink_0()
-                                        .child(rows)
-                                        .child(self.render_native_home_new_chat_row(
-                                            group, appearance, cx,
-                                        ))
-                                        .into_any_element()
-                                } else {
-                                    rows
-                                };
-                                self.render_native_disclosure(key, section_content, cx)
-                            });
+                        let body =
+                            self.native_sidebar
+                                .disclosures
+                                .present(&key, section.collapsed)
+                                .then(|| {
+                                    let sessions = group
+                                        .sessions
+                                        .iter()
+                                        .map(|session| (session.session_id.as_str(), session))
+                                        .collect::<std::collections::HashMap<_, _>>();
+                                    let rows = self.render_native_session_rows(
+                                        group,
+                                        ids.iter()
+                                            .filter_map(|id| {
+                                                sessions
+                                                    .get(id.as_str())
+                                                    .map(|session| (*session).clone())
+                                            })
+                                            .collect(),
+                                        appearance,
+                                        cx,
+                                    );
+                                    let section_content = if append_home_new_chat {
+                                        v_flex()
+                                            .w_full()
+                                            .flex_shrink_0()
+                                            .child(rows)
+                                            .child(self.render_native_home_new_chat_row(
+                                                group, appearance, cx,
+                                            ))
+                                            .into_any_element()
+                                    } else {
+                                        rows
+                                    };
+                                    self.render_native_disclosure(key, section_content, cx)
+                                });
                         // The gap of the 2026-11-21 spacing (sections.rs).
                         let gap_above = if index > 0 && !hide_lone_sessions_heading {
                             super::sections::SECTION_GAP_ABOVE
@@ -272,7 +272,8 @@ impl GhostexGpuiApp {
                     .when(group.is_home && !has_sessions_section, |column| {
                         column
                             .when(!group.sections.is_empty(), |column| {
-                                column.child(div().h(px(super::sections::SECTION_GAP_ABOVE * scale)))
+                                column
+                                    .child(div().h(px(super::sections::SECTION_GAP_ABOVE * scale)))
                             })
                             .child(self.render_native_home_new_chat_row(group, appearance, cx))
                     });
