@@ -921,8 +921,10 @@ session goes back to Working whenever its agent starts again. Drafts and Pinned 
 them, also with Group by Project on; there is no Moving section while grouping
 is on, and the Moving section setting keeps its value for when you turn grouping
 off. With Group by Project on, each group lists its sessions under their
-projects' headings (with the "+" for a new session there); the headings don't
-fold or drag, so arrange projects with grouping off. Move a status entry or a tag
+projects' headings; a hovered heading has the same chat-bubble split button as
+a project header for a new chat there and its chevron for the project's chat
+menu (on the phone, a "+" for a new session there, as on its project headers).
+The headings don't fold or drag, so arrange projects with grouping off. Move a status entry or a tag
 in Session Tags (on a computer, or on the phone) to change the order: the first
 enabled entry that applies to a session sets its group, so moving Bug above the
 status entries makes a Bug group first. A session no enabled entry applies to

@@ -88,7 +88,6 @@ impl GhostexGpuiApp {
             label: group.label.clone(),
             scale,
         };
-        let new_key = key.clone();
         let menu_key = key.clone();
         // The menu hangs below the header, as a Project sidebar header's does.
         let owner = crate::app::native_sidebar::menus::MenuOwner::default();
@@ -186,92 +185,15 @@ impl GhostexGpuiApp {
                 }))
             })
             .when(hovered, |row| {
-                let chevron_key = new_key.clone();
-                let header_owner = owner.clone();
-                let chevron_owner = crate::app::native_sidebar::menus::MenuOwner::default();
-                let trigger_id = format!("unified-project:{key}:launcher");
-                row.child(
-                    h_flex()
-                        .flex_shrink_0()
-                        .child(
-                            div()
-                                .id(format!("native-unified-group-new-{key}"))
-                                .role(gpui::Role::Button)
-                                .aria_label(format!("New chat in {}", group.label))
-                                .h(px(22.0 * scale))
-                                .w(px(24.0 * scale))
-                                .flex_shrink_0()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded_l(px(4.0 * scale))
-                                .cursor_pointer()
-                                .hover(|button| button.bg(appearance.hover))
-                                .child(
-                                    gpui::svg()
-                                        .path("titlebar/message.svg")
-                                        .size(px(14.0 * scale))
-                                        .text_color(appearance.muted),
-                                )
-                                .on_click(cx.listener(
-                                    move |app, event: &gpui::ClickEvent, window, cx| {
-                                        cx.stop_propagation();
-                                        app.unified_group_new_session(
-                                            &new_key, event, scale, window, cx,
-                                        );
-                                    },
-                                )),
-                        )
-                        .child(
-                            div()
-                                .on_prepaint(crate::app::native_sidebar::menus::record_menu_owner(
-                                    &chevron_owner,
-                                ))
-                                .id(format!("native-unified-group-new-menu-{key}"))
-                                .role(gpui::Role::Button)
-                                .aria_label(format!("More new session options in {}", group.label))
-                                .h(px(22.0 * scale))
-                                .w(px(17.0 * scale))
-                                .flex_shrink_0()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded_r(px(4.0 * scale))
-                                .cursor_pointer()
-                                .hover(|button| button.bg(appearance.hover))
-                                .child(
-                                    gpui::svg()
-                                        .path("titlebar/chevron-down.svg")
-                                        .size(px(14.0 * scale))
-                                        .text_color(appearance.muted),
-                                )
-                                .on_click(cx.listener(
-                                    move |app, event: &gpui::ClickEvent, window, cx| {
-                                        cx.stop_propagation();
-                                        let Some(children) = app
-                                            .gx_store_unified_project_launcher_menu(&chevron_key)
-                                        else {
-                                            return;
-                                        };
-                                        Self::show_native_sidebar_menu_hung(
-                                            &children,
-                                            header_owner.get(),
-                                            chevron_owner.get(),
-                                            Some((
-                                                trigger_id.clone(),
-                                                crate::app::native_sidebar::menus::press_position(
-                                                    event,
-                                                ),
-                                            )),
-                                            event.position(),
-                                            scale,
-                                            window,
-                                            cx,
-                                        );
-                                    },
-                                )),
-                        ),
-                )
+                row.child(self.render_native_unified_project_new_control(
+                    &key,
+                    &group.label,
+                    "native-unified-group",
+                    &key,
+                    &owner,
+                    appearance,
+                    cx,
+                ))
             })
             .child(
                 div()
@@ -404,6 +326,109 @@ impl GhostexGpuiApp {
             .get(repo_key)?
             .clone();
         self.gx_store_unified_project_menu(&group_id)
+    }
+
+    /// A project heading's new-session control: a chat button that starts a new chat in the
+    /// project (`unified_group_new_session`) and a chevron that opens the project's chat menu
+    /// (`gx_store_unified_project_launcher_menu`), hung below the heading (`heading_owner`).
+    /// The project header above and the project headings inside the status groups both draw it.
+    /// `repo_key` names the project the actions run on; `instance_key` names this heading among the
+    /// ones on screen (one project has a heading in each status group it has sessions in), so the
+    /// element ids (`{id_prefix}-new-{instance_key}`, `{id_prefix}-new-menu-{instance_key}`) and the
+    /// menu's trigger (`unified-project:{instance_key}:launcher`) never repeat.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn render_native_unified_project_new_control(
+        &self,
+        repo_key: &str,
+        project_label: &str,
+        id_prefix: &str,
+        instance_key: &str,
+        heading_owner: &crate::app::native_sidebar::menus::MenuOwner,
+        appearance: &SidebarAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Div {
+        let scale = appearance.scale;
+        let new_key = repo_key.to_string();
+        let chevron_key = repo_key.to_string();
+        let header_owner = heading_owner.clone();
+        let chevron_owner = crate::app::native_sidebar::menus::MenuOwner::default();
+        let trigger_id = format!("unified-project:{instance_key}:launcher");
+        h_flex()
+            .flex_shrink_0()
+            .child(
+                div()
+                    .id(format!("{id_prefix}-new-{instance_key}"))
+                    .role(gpui::Role::Button)
+                    .aria_label(format!("New chat in {project_label}"))
+                    .h(px(22.0 * scale))
+                    .w(px(24.0 * scale))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded_l(px(4.0 * scale))
+                    .cursor_pointer()
+                    .hover(|button| button.bg(appearance.hover))
+                    .child(
+                        gpui::svg()
+                            .path("titlebar/message.svg")
+                            .size(px(14.0 * scale))
+                            .text_color(appearance.muted),
+                    )
+                    .on_click(
+                        cx.listener(move |app, event: &gpui::ClickEvent, window, cx| {
+                            cx.stop_propagation();
+                            app.unified_group_new_session(&new_key, event, scale, window, cx);
+                        }),
+                    ),
+            )
+            .child(
+                div()
+                    .on_prepaint(crate::app::native_sidebar::menus::record_menu_owner(
+                        &chevron_owner,
+                    ))
+                    .id(format!("{id_prefix}-new-menu-{instance_key}"))
+                    .role(gpui::Role::Button)
+                    .aria_label(format!("More new session options in {project_label}"))
+                    .h(px(22.0 * scale))
+                    .w(px(17.0 * scale))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded_r(px(4.0 * scale))
+                    .cursor_pointer()
+                    .hover(|button| button.bg(appearance.hover))
+                    .child(
+                        gpui::svg()
+                            .path("titlebar/chevron-down.svg")
+                            .size(px(14.0 * scale))
+                            .text_color(appearance.muted),
+                    )
+                    .on_click(
+                        cx.listener(move |app, event: &gpui::ClickEvent, window, cx| {
+                            cx.stop_propagation();
+                            let Some(children) =
+                                app.gx_store_unified_project_launcher_menu(&chevron_key)
+                            else {
+                                return;
+                            };
+                            Self::show_native_sidebar_menu_hung(
+                                &children,
+                                header_owner.get(),
+                                chevron_owner.get(),
+                                Some((
+                                    trigger_id.clone(),
+                                    crate::app::native_sidebar::menus::press_position(event),
+                                )),
+                                event.position(),
+                                scale,
+                                window,
+                                cx,
+                            );
+                        }),
+                    ),
+            )
     }
 
     /// The "+" on a header: the New thread picker on that project, on the machine it starts on.

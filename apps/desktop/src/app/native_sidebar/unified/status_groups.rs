@@ -128,9 +128,12 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// A project's heading inside a group: its tile, name, "+" and count, under the group's
-    /// header and weaker than it. It neither folds nor drags (the project order is arranged while
-    /// grouping is off); its right-click menu is the project header's.
+    /// A project's heading inside a group: its tile, name, new-session control and count, under the
+    /// group's header and weaker than it. It neither folds nor drags (the project order is arranged
+    /// while grouping is off); its right-click menu is the project header's.
+    ///
+    /// CDXC:Sidebar 2026-11-24 DECISION:
+    /// User, after the project header's "+" became a chat split button with a menu: a project heading inside a status group takes the same control as the project headers outside the groups (`render_native_unified_project_new_control` in groups.rs), acting on that project, so the two kinds of heading in one list do not differ. It supersedes the heading's own "+". The control shows while the heading is hovered, as the "+" did.
     fn render_native_unified_status_project(
         &self,
         project: &UnifiedStatusProjectView,
@@ -142,7 +145,6 @@ impl GhostexGpuiApp {
         let scale = appearance.scale;
         let key = format!("{group_key}|{}", project.repo_key);
         let hover_group = format!("native-unified-status-project-{key}");
-        let new_key = project.repo_key.clone();
         let menu_key = project.repo_key.clone();
         let owner = crate::app::native_sidebar::menus::MenuOwner::default();
         let record_owner = crate::app::native_sidebar::menus::record_menu_owner(&owner);
@@ -176,31 +178,17 @@ impl GhostexGpuiApp {
                     .child(project.label.clone()),
             )
             .child(
-                div()
-                    .id(format!("native-unified-status-project-new-{key}"))
-                    .role(gpui::Role::Button)
-                    .aria_label(format!("New session in {}", project.label))
-                    .size(px(22.0 * scale))
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(4.0 * scale))
-                    .invisible()
-                    .group_hover(hover_group, |button| button.visible())
-                    .hover(|button| button.bg(appearance.hover))
-                    .child(
-                        gpui::svg()
-                            .path("titlebar/plus.svg")
-                            .size(px(14.0 * scale))
-                            .text_color(appearance.chrome_icon),
-                    )
-                    .on_click(
-                        cx.listener(move |app, event: &gpui::ClickEvent, window, cx| {
-                            cx.stop_propagation();
-                            app.unified_group_new_session(&new_key, event, scale, window, cx);
-                        }),
-                    ),
+                self.render_native_unified_project_new_control(
+                    &project.repo_key,
+                    &project.label,
+                    "native-unified-status-project",
+                    &key,
+                    &owner,
+                    appearance,
+                    cx,
+                )
+                .invisible()
+                .group_hover(hover_group, |control| control.visible()),
             )
             .child(
                 div()
