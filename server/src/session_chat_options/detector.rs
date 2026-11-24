@@ -459,7 +459,10 @@ impl SessionChatOptionDetector {
                     .get(&key)
                     .and_then(|entry| entry.unpublished_screen_approval.clone())
             });
-            screen_approval_owed = unpublished_screen_approval.is_some();
+            // The first reading since the session's reading was dropped also asks: a clear the drop
+            // could not write is owed outside the cache.
+            screen_approval_owed =
+                unpublished_screen_approval.is_some() || !cache.contains_key(&key);
             cache.insert(
                 key,
                 SessionChatOptionCacheEntry {
