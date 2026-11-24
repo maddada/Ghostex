@@ -883,34 +883,21 @@ pub(crate) async fn work_a_restart_would_end(
     None
 }
 
-/// Like [`work_a_restart_would_end`], but allows an idle coordinator that has no active
-/// (unresolved) threads and no running background shells/monitors to be switched to Native mode.
-/// Any coordinator with an unresolved thread, or any session with live background shells/monitors
-/// on screen or in its transcript, is refused.
+/// Like [`work_a_restart_would_end`], but does not block coordinators with active threads from
+/// switching to Native mode. A coordinator's threads run in their own sessions and their reports
+/// queue through `sendSessionChatMessage`, so switching a coordinator between turns never disrupts
+/// its threads. Only live in-process background shells/monitors on screen or in the transcript
+/// defer the switch.
 pub(crate) async fn background_work_a_restart_would_end(
-    state: &AppState,
+    _state: &AppState,
     target: &crate::session_chat_send::SessionChatSendTarget,
 ) -> Option<&'static str> {
-    let paths = state.paths.clone();
-    let project_id = target.project_id.clone();
-    let session_id = target.session_id.clone();
-    let has_active_threads = tokio::task::spawn_blocking(move || {
-        open_gxserver_database(&paths).ok().is_some_and(|db| {
-            crate::coordinators::list_threads_for(&db, &project_id, &session_id)
-                .is_ok_and(|threads| threads.iter().any(|thread| !thread.is_resolved()))
-        })
-    })
-    .await
-    .unwrap_or(true);
-    if has_active_threads {
-        return Some("the coordinator has active threads a restart would disrupt");
-    }
     let screen = crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
     if screen.as_deref().is_some_and(shows_claude_background_tasks) {
-        return Some("the agent has background tasks a restart would end");
+        return Some("background tasks are still running");
     }
     if !transcript_background_jobs(&target.session).await.is_empty() {
-        return Some("the agent's transcript shows background jobs still running");
+        return Some("background jobs are still running");
     }
     None
 }

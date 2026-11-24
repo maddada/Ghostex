@@ -331,6 +331,9 @@ async fn poll(
     // Push the persisted ACP approval level ONCE on channel open/reconnect or when an earlier
     // live `"mode"` command timed out (`pending_approval_sync`). Normal polls never reconcile.
     let initial_approval_level = if is_acp && needs_approval_sync {
+        // Kick the chat queue right away so messages or thread reports queued while this session
+        // was switching to Native drain as soon as the host channel comes online.
+        crate::session_chat_queue_runtime::kick_session_chat_queue();
         read_persisted_acp_approval_level(state, &channel_key.0, &channel_key.1).await
     } else {
         None

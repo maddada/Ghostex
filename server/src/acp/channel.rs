@@ -5,7 +5,7 @@
 //! `acp-host` stays alive inside `zmx`, reconnects automatically, and resumes answering
 //! commands without dropping the agent turn or pending approval requests.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -546,6 +546,44 @@ static SESSION_SWITCH_LOCKS: LazyLock<
     Mutex<HashMap<(String, String), Arc<tokio::sync::Mutex<()>>>>,
 > = LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// Sessions currently executing a Terminal <-> Native transition (`execute_switch_to_acp` or
+/// `switch_to_cli`). Read by the chat queue scheduler so it holds queued sends (such as coordinator
+/// thread reports) without racing a duplicate wake against the switch cycle.
+static ACTIVE_SWITCHES: LazyLock<Mutex<HashSet<(String, String)>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+pub(crate) fn is_switching(project_id: &str, session_id: &str) -> bool {
+    ACTIVE_SWITCHES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .contains(&(project_id.to_string(), session_id.to_string()))
+}
+
+struct ActiveSwitchGuard {
+    key: (String, String),
+}
+
+impl ActiveSwitchGuard {
+    fn enter(project_id: &str, session_id: &str) -> Self {
+        let key = (project_id.to_string(), session_id.to_string());
+        ACTIVE_SWITCHES
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(key.clone());
+        Self { key }
+    }
+}
+
+impl Drop for ActiveSwitchGuard {
+    fn drop(&mut self) {
+        ACTIVE_SWITCHES
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&self.key);
+        crate::session_chat_queue_runtime::kick_session_chat_queue();
+    }
+}
+
 pub(crate) fn session_switch_lock(
     project_id: &str,
     session_id: &str,
@@ -745,6 +783,7 @@ pub(crate) async fn switch_to_cli(
     let _switch_guard = session_switch_lock(project_id, session_id)
         .lock_owned()
         .await;
+    let _active_switch = ActiveSwitchGuard::enter(project_id, session_id);
     let (native_session_id, switched_live) = if live(project_id, session_id, "switch_to_cli")
         .is_some()
     {
@@ -935,14 +974,14 @@ pub(crate) enum SwitchSafety {
 /// these, so flipping `nonCliMode` would leave them unusable).
 fn session_ineligible_reason(session: &Value) -> Option<&'static str> {
     if crate::agentbox::is_agentbox_session(session) {
-        return Some("Switching to Native mode is not available for sessions that run in a box.");
+        return Some("Native mode is not available for chats running in a box.");
     }
     if session
         .pointer("/runtimeSettings/externalSession")
         .and_then(Value::as_bool)
         == Some(true)
     {
-        return Some("Switching to Native mode is not available for externally attached sessions.");
+        return Some("Native mode is not available for externally attached chats.");
     }
     if session
         .pointer("/runtimeSettings/claudeCloud")
@@ -955,7 +994,7 @@ fn session_ineligible_reason(session: &Value) -> Option<&'static str> {
             .and_then(Value::as_str)
             .is_some_and(crate::claude_cloud::is_cloud_session_id)
     {
-        return Some("Switching to Native mode is not available for cloud or teleported sessions.");
+        return Some("Native mode is not available for cloud or teleported chats.");
     }
     None
 }
@@ -981,13 +1020,12 @@ pub(crate) fn session_native_switch_family(session: &Value) -> Result<String, Do
         .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(session))
         .ok_or_else(|| DomainStateError {
             code: "invalidParams",
-            message: "This session does not belong to an agent that supports Native mode."
-                .to_string(),
+            message: "This agent does not support Native mode.".to_string(),
         })?;
     if !super::supports_acp(&family) {
         return Err(DomainStateError {
             code: "invalidParams",
-            message: format!("Agent `{family}` does not support Native mode."),
+            message: format!("Native mode is not supported for {family}."),
         });
     }
     Ok(family)
@@ -1016,9 +1054,10 @@ pub(crate) fn session_explicitly_terminal(session: &Value) -> bool {
 ///
 /// Busy = working OR attention mid-turn (connector card, approval, question, or any non-turnComplete
 /// attention) OR `agent_is_busy` (hooks, compacting, pending question, transcript gate) OR pending
-/// chat queue rows OR live background work (`background_work_a_restart_would_end`: background
-/// shells/monitors or a coordinator with active unresolved threads). Also requires
-/// `can_start_on_its_conversation` so cycling never discards an unwritten or uncaptured history.
+/// chat queue rows OR live in-process background shells/monitors (`background_work_a_restart_would_end`).
+/// A coordinator's active threads run in their own sessions and their reports queue, so they never
+/// block switching a coordinator between turns. Also requires `can_start_on_its_conversation` so
+/// cycling never discards an unwritten or uncaptured history.
 pub(crate) async fn check_session_safe_to_switch_now(
     state: &AppState,
     project_id: &str,
@@ -1031,7 +1070,7 @@ pub(crate) async fn check_session_safe_to_switch_now(
     let now = crate::presentation::now_iso();
     let activity = crate::presentation::presentation_activity(session, &now);
     if activity == "working" {
-        return SwitchSafety::Busy("the agent is currently working");
+        return SwitchSafety::Busy("the agent is currently replying");
     }
     if activity == "attention" {
         let waiting_connector = crate::connectors::waiting_connector_card(session).is_some();
@@ -1039,11 +1078,11 @@ pub(crate) async fn check_session_safe_to_switch_now(
             session.pointer("/runtimeSettings/agentActivity"),
         );
         if waiting_connector || !turn_complete {
-            return SwitchSafety::Busy("the agent is waiting on an approval or prompt");
+            return SwitchSafety::Busy("the agent is waiting for your approval or answer");
         }
     }
     if crate::session_chat_queue_runtime::agent_is_busy(session).await {
-        return SwitchSafety::Busy("the agent is busy");
+        return SwitchSafety::Busy("the agent is currently replying");
     }
     let state_for_db = state.clone();
     let pid = project_id.to_string();
@@ -1070,7 +1109,7 @@ pub(crate) async fn check_session_safe_to_switch_now(
     .await
     .unwrap_or((true, None));
     if has_pending_queue {
-        return SwitchSafety::Busy("the chat has queued messages waiting to send");
+        return SwitchSafety::Busy("queued messages are waiting to send");
     }
     if let Some(target) = send_target {
         if let Some(reason) =
@@ -1082,7 +1121,7 @@ pub(crate) async fn check_session_safe_to_switch_now(
     }
     if !crate::session_chat_queue_runtime::can_start_on_its_conversation(state, session).await {
         return SwitchSafety::CannotResume(
-            "this chat does not have a resumable conversation yet; send a message first",
+            "Send a message first so this chat has history to continue in Native mode.",
         );
     }
     SwitchSafety::Safe
@@ -1148,7 +1187,7 @@ pub(crate) async fn switch_to_acp(
     }
 
     match check_session_safe_to_switch_now(state, project_id, session_id, &session).await {
-        SwitchSafety::Busy(_) => {
+        SwitchSafety::Busy(reason) => {
             super::pending_switch::queue(project_id, session_id, caller_is_user_device);
             super::pending_switch::broadcast_state(state, project_id, session_id).await;
             log(
@@ -1158,6 +1197,7 @@ pub(crate) async fn switch_to_acp(
                     "projectId": project_id,
                     "sessionId": session_id,
                     "family": family,
+                    "reason": reason,
                 }),
             );
             return Ok(json!({
@@ -1165,6 +1205,7 @@ pub(crate) async fn switch_to_acp(
                 "queued": true,
                 "restarted": false,
                 "family": family,
+                "reason": reason,
             }));
         }
         SwitchSafety::CannotResume(reason) => {
@@ -1193,6 +1234,7 @@ pub(crate) async fn switch_to_acp(
                 "queued": true,
                 "restarted": false,
                 "family": family,
+                "reason": error.message,
             }))
         }
         Err(error) => Err(error),
@@ -1473,6 +1515,7 @@ pub(crate) async fn execute_switch_to_acp(
         }
         SwitchOrigin::Single => lock.lock_owned().await,
     };
+    let _active_switch = ActiveSwitchGuard::enter(project_id, session_id);
 
     // 1. Read fresh session state under the lock and validate structural eligibility.
     let paths = state.paths.clone();

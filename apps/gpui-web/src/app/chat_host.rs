@@ -487,16 +487,41 @@ impl GhostexGpuiApp {
                                 params,
                             )
                             .await;
-                            if let Err(err) = res {
-                                let _ = this.update(cx, |this, cx| {
+                            let _ = this.update(cx, |this, cx| match res {
+                                Ok(value) => {
+                                    if value.get("queued").and_then(Value::as_bool) == Some(true) {
+                                        this.dispatch_gpui_app_modal_toast(
+                                            "info",
+                                            "Switch to Native",
+                                            "Switches to Native when this reply ends.",
+                                            cx,
+                                        );
+                                    } else if value.get("switched").and_then(Value::as_bool)
+                                        != Some(true)
+                                    {
+                                        let reason = value
+                                            .get("reason")
+                                            .and_then(Value::as_str)
+                                            .unwrap_or(
+                                                "This chat could not switch to Native right now.",
+                                            );
+                                        this.dispatch_gpui_app_modal_toast(
+                                            "warning",
+                                            "Could not switch to Native",
+                                            reason,
+                                            cx,
+                                        );
+                                    }
+                                }
+                                Err(err) => {
                                     this.dispatch_gpui_app_modal_toast(
                                         "warning",
                                         "Could not switch to Native",
                                         &err.message,
                                         cx,
                                     );
-                                });
-                            }
+                                }
+                            });
                         })
                         .detach();
                     }),

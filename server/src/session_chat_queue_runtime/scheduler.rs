@@ -736,6 +736,15 @@ impl SessionChatQueueRuntime {
             self.reset_gate(key);
             return Assessment::Delivering;
         }
+        // Hold queued messages (including coordinator thread reports) while a Terminal <-> Native
+        // switch is cycling the provider so the scheduler never races a duplicate wake against it.
+        if crate::acp::channel::is_switching(project_id, session_id) {
+            self.reset_gate(key);
+            let snapshot = read_session_chat_queue_snapshot_with(db, project_id, session_id);
+            return snapshot
+                .deliverable_head()
+                .map_or(Assessment::Skip, |head| hold(head, WaitReason::Starting));
+        }
         let Ok(Some(session)) = repository.get_session(project_id, session_id) else {
             self.reset_gate(key);
             return Assessment::Skip;

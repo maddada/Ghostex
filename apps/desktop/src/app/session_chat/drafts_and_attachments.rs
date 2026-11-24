@@ -464,12 +464,41 @@ impl GhostexGpuiApp {
                 )
             })
         } else {
+            self.dispatch_gpui_workspace_action_toast(
+                "error",
+                "Could not switch to Native",
+                "This chat is not connected right now.",
+                cx,
+            );
             return;
         };
         cx.spawn(async move |this, cx| {
             let result = request.await;
-            let _ = this.update(cx, |this, cx| {
-                if let Err(error) = result {
+            let _ = this.update(cx, |this, cx| match result {
+                Ok(value) => {
+                    if value.get("queued").and_then(serde_json::Value::as_bool) == Some(true) {
+                        this.dispatch_gpui_workspace_action_toast(
+                            "info",
+                            "Switch to Native",
+                            "Switches to Native when this reply ends.",
+                            cx,
+                        );
+                    } else if value.get("switched").and_then(serde_json::Value::as_bool)
+                        != Some(true)
+                    {
+                        let reason = value
+                            .get("reason")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("This chat could not switch to Native right now.");
+                        this.dispatch_gpui_workspace_action_toast(
+                            "warning",
+                            "Could not switch to Native",
+                            reason,
+                            cx,
+                        );
+                    }
+                }
+                Err(error) => {
                     this.dispatch_gpui_workspace_action_toast(
                         "error",
                         "Could not switch to Native",

@@ -103,8 +103,8 @@ pub fn project(state: &ChatState) -> Option<NativeSwitchOffer> {
     };
 
     let queued = state.session.switch_to_native_queued;
-    let show_chip = !state.session.is_coordinator_thread
-        && (queued || (chat_first && !dismissed && !native_default));
+    let show_chip = queued
+        || (!state.session.is_coordinator_thread && chat_first && !dismissed && !native_default);
 
     Some(NativeSwitchOffer {
         family: family.to_string(),

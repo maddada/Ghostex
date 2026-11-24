@@ -49,11 +49,9 @@ impl NativeChatView {
         let (icon_path, label, tooltip_text, aria_label) = if queued {
             (
                 "titlebar/clock.svg",
-                "Switching when done…".to_string(),
-                format!(
-                    "Will reopen {agent_name} in Native mode as soon as this reply finishes. Click × to cancel."
-                ),
-                format!("Switching {agent_name} to Native when reply finishes"),
+                "Switches to Native when this reply ends".to_string(),
+                "Switches to Native when this reply ends. Click × to cancel.".to_string(),
+                format!("Switches {agent_name} to Native when this reply ends"),
             )
         } else {
             (
