@@ -35,7 +35,11 @@ impl NativeChatView {
     /// User: the Catch me up button sits in the composer itself, at its top right. It shares the field's row (beside the field's first line) instead of overlapping it, and stays out of the one-line collapsed and the maximized composer.
     /// The core's `button` says when it shows (an empty chat box, CDXC:CatchMeUp 2026-10-12 in
     /// gx-chat-core); here it fades in, and fades out before it leaves the row.
-    pub(super) fn with_catch_up_button(
+    ///
+    /// CDXC:Boosts 2026-11-24 DECISION:
+    /// The one-time Boost hint chip (`boosts.rs` `boost_hint_chip`) shares this top-right slot
+    /// inside the composer beside the field's first line.
+    pub(super) fn with_composer_top_right(
         &self,
         editor: Stateful<Div>,
         shown: bool,
@@ -60,83 +64,89 @@ impl NativeChatView {
             *fade
         });
         let fading = fade.changed_at.is_some_and(|at| at.elapsed() < BUTTON_FADE);
-        if !shown || !(visible || fading) {
+        let show_catch_up = shown && (visible || fading);
+        let boost_chip = shown.then(|| self.boost_hint_chip(p, cx)).flatten();
+        if !show_catch_up && boost_chip.is_none() {
             return editor.into_any_element();
         }
-        if !visible {
-            // The fade-out's last frame leaves the button at zero opacity; one more frame drops it.
-            window.request_animation_frame();
-        }
         let s = p.scale;
-        let open = catch_up["open"] == true;
-        let loading = catch_up["loading"] == true;
-        let button = div()
-            .id("catch-me-up")
-            .role(gpui::Role::Button)
-            .aria_label("Catch Me Up")
-            .aria_expanded(open)
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .gap(px(5.0 * s))
-            .px(px(8.0 * s))
-            .h(px(24.0 * s))
-            .rounded_full()
-            .border_1()
-            .chat_filled(
-                {
-                    // Filled like every chat text button (CDXC:AppModal 2026-10-14); open, it
-                    // rests at the pressed step.
-                    let mut fills = p.neutral_button_fills();
-                    if open {
-                        fills.rest = fills.pressed;
-                    }
-                    fills
-                },
-                true,
-            )
-            .text_size(px(12.0 * s))
-            .text_color(if open { p.control_primary } else { p.primary })
-            .chat_cursor_pointer()
-            .child(
-                svg()
-                    .path("titlebar/sparkles.svg")
-                    .size(px(13.0 * s))
-                    .text_color(if open { p.control_primary } else { p.primary }),
-            )
-            .child(if loading {
-                "Catching up…"
+        let catch_up_button = show_catch_up.then(|| {
+            if !visible {
+                // The fade-out's last frame leaves the button at zero opacity; one more frame drops it.
+                window.request_animation_frame();
+            }
+            let open = catch_up["open"] == true;
+            let loading = catch_up["loading"] == true;
+            let button = div()
+                .id("catch-me-up")
+                .role(gpui::Role::Button)
+                .aria_label("Catch Me Up")
+                .aria_expanded(open)
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .gap(px(5.0 * s))
+                .px(px(8.0 * s))
+                .h(px(24.0 * s))
+                .rounded_full()
+                .border_1()
+                .chat_filled(
+                    {
+                        // Filled like every chat text button (CDXC:AppModal 2026-10-14); open, it
+                        // rests at the pressed step.
+                        let mut fills = p.neutral_button_fills();
+                        if open {
+                            fills.rest = fills.pressed;
+                        }
+                        fills
+                    },
+                    true,
+                )
+                .text_size(px(12.0 * s))
+                .text_color(if open { p.control_primary } else { p.primary })
+                .chat_cursor_pointer()
+                .child(
+                    svg()
+                        .path("titlebar/sparkles.svg")
+                        .size(px(13.0 * s))
+                        .text_color(if open { p.control_primary } else { p.primary }),
+                )
+                .child(if loading {
+                    "Catching up…"
+                } else {
+                    "Catch Me Up"
+                })
+                .tooltip(|window, cx| {
+                    gpui_component::tooltip::Tooltip::new(
+                        "Summarize where this session stands, from its recent messages",
+                    )
+                    .build(window, cx)
+                })
+                // A button fading out is on its way out and takes no clicks.
+                .when(visible, |this| {
+                    this.on_click(
+                        cx.listener(|this, _, _, cx| this.invoke(json!({"type":"catchUp"}), cx)),
+                    )
+                });
+            if !fading {
+                button.into_any_element()
             } else {
-                "Catch Me Up"
-            })
-            .tooltip(|window, cx| {
-                gpui_component::tooltip::Tooltip::new(
-                    "Summarize where this session stands, from its recent messages",
-                )
-                .build(window, cx)
-            })
-            // A button fading out is on its way out and takes no clicks.
-            .when(visible, |this| {
-                this.on_click(
-                    cx.listener(|this, _, _, cx| this.invoke(json!({"type":"catchUp"}), cx)),
-                )
-            });
-        let button = if !fading {
-            button.into_any_element()
-        } else {
-            let id = format!(
-                "catch-me-up-{}-{}",
-                if visible { "in" } else { "out" },
-                fade.generation
-            );
-            button
-                .with_animation(
-                    gpui::ElementId::Name(id.into()),
-                    Animation::new(BUTTON_FADE).with_easing(gpui::ease_out_quint()),
-                    move |button, delta| button.opacity(if visible { delta } else { 1.0 - delta }),
-                )
-                .into_any_element()
-        };
+                let id = format!(
+                    "catch-me-up-{}-{}",
+                    if visible { "in" } else { "out" },
+                    fade.generation
+                );
+                button
+                    .with_animation(
+                        gpui::ElementId::Name(id.into()),
+                        Animation::new(BUTTON_FADE).with_easing(gpui::ease_out_quint()),
+                        move |button, delta| {
+                            button.opacity(if visible { delta } else { 1.0 - delta })
+                        },
+                    )
+                    .into_any_element()
+            }
+        });
         div()
             .flex()
             .items_start()
@@ -144,7 +154,15 @@ impl NativeChatView {
             .w_full()
             .min_w_0()
             .child(editor.flex_1().min_w_0())
-            .child(button)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .flex_shrink_0()
+                    .gap(px(6.0 * s))
+                    .children(catch_up_button)
+                    .children(boost_chip),
+            )
             .into_any_element()
     }
 

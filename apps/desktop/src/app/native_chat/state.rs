@@ -323,8 +323,6 @@ pub(crate) struct NativeChatView {
     pub(super) boost_preview: Option<String>,
     /// Where the Boost menu's list is scrolled; its section chips scroll it (boosts.rs).
     pub(super) boost_scroll: gpui::ScrollHandle,
-    /// The callout's Show me asked for the Boost menu, which opens on the next frame (boosts.rs).
-    pub(super) boost_menu_requested: bool,
     /// Where the strip's Boost pill was painted, which its menu lines up with (boosts.rs).
     pub(super) boost_pill_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     /// Top edge of any bar or card stacked above the chat box (`composer.rs`), so floating
@@ -729,7 +727,6 @@ impl NativeChatView {
             note_subscription: None,
             boost_preview: None,
             boost_scroll: gpui::ScrollHandle::new(),
-            boost_menu_requested: false,
             boost_pill_bounds: Default::default(),
             composer_above_top: Default::default(),
             form_inputs: Default::default(),
@@ -1250,12 +1247,6 @@ impl NativeChatView {
             self.adopt_board_focus(&before, cx);
             self.prune_kept_replies(&before, cx);
             self.sync_dock_ask_modal(cx);
-            if !super::boosts::boost_hint_visible(&self.snapshot["boosts"]["hint"]) {
-                self.hide_frosted_overlay(
-                    super::frosted_overlay_window::FrostedOverlay::BoostHint,
-                    cx,
-                );
-            }
             drop_off_main_thread(before, cx);
             if ring_moved {
                 cx.emit(NativeChatEvent::SessionDetailsRing);

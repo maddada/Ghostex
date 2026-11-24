@@ -125,9 +125,6 @@ impl NativeChatView {
         };
         self.close_maximized(cx);
         self.pending_send = true;
-        // Once the first message is sent, drop the new-chat Boost callout at once without
-        // recording it as dismissed forever.
-        self.hide_frosted_overlay(super::frosted_overlay_window::FrostedOverlay::BoostHint, cx);
         let mut submission = json!({"type":mode,"text":self.draft,"interrupt":interrupt,
             "sendRequestId":send_request_id,
             "draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision.max(1)}});
@@ -454,40 +451,21 @@ impl NativeChatView {
         // when it draws (indicator_overlay.rs).
         self.reset_working_lifts();
         self.wake_when_worked_line_ends(cx);
-        // A coordinator's dock (work_cards.rs), built first: with a dock the status rides on its
-        // header bar (`work_dock_header`) and has no bar of its own.
+        // Error and issue banners sit above the Inbox dock (and temporarily collapse it to its
+        // header bar while shown), ordered consistently: send/operation refusals first, then
+        // error/warning/wait terminal notices (usage limits, agent errors, terminal issues).
+        // Interactive dialogs, pickers and approvals stay below the dock in `waiting`.
         //
-        // CDXC:Coordinators 2026-11-11 DECISION:
-        // User, picking on the chat box bars page: "A. The status joins the dock's quiet line",
-        // always on that bar while the chat has a dock; a chat with no dock keeps its own bar.
-        let dock = if maximized {
-            None
-        } else {
-            self.render_work_dock(p, window.viewport_size().height.as_f32(), cx)
-        };
-        let working_card = if maximized
-            || dock.is_some()
-            || self.snapshot["workingCard"]["inTranscript"] == true
-        {
-            None
-        } else {
-            self.render_working_card(p, cx)
-        };
-        // The session's computer being offline is a row of the dock (gx-chat-core
-        // extras/dock_stack.rs), the one bar above the box.
-        let card_above_box = working_card.is_some();
-        // The last transcript row's own gap is the space above the card (working_card.rs).
-        footer = footer.when(card_above_box, |this| this.pt_0());
-        // The working card joins the stack under the dock (below), so it can sit between the dock
-        // and the box.
-        let mut working_card = working_card;
-        // What stacks between the card and the box.
-        let mut waiting: Vec<AnyElement> = Vec::new();
+        // CDXC:SessionChat 2026-11-24 DECISION:
+        // Error banners stack above the coordinator Inbox dock rather than below it, and collapse
+        // the dock to its header bar while shown (still expandable; restores its previous state
+        // when the error clears).
+        let mut errors: Vec<AnyElement> = Vec::new();
         // A draft saved elsewhere is offered by the Saved draft pill in the box's pill strip
         // (saved_draft_pill.rs), which replaced the notice row here (CDXC:Drafts 2026-11-04).
         // A `composerNotReady` refusal gets its own card instead of the plain error line.
         if let Some(card) = self.render_composer_not_ready(p, cx) {
-            waiting.push(super::suggestions::stack_member(card, &stack_top).into_any_element());
+            errors.push(super::suggestions::stack_member(card, &stack_top).into_any_element());
         } else if let Some(error) = self.snapshot["operationError"].as_str() {
             // An answer only the terminal can take (gxserver's `ANSWER_IN_TERMINAL`) offers the way
             // there; a call Ghostex didn't answer offers Retry. Both sit in the opened card.
@@ -511,7 +489,7 @@ impl NativeChatView {
                     self.snapshot["operationErrorCode"].as_str(),
                 ),
             };
-            waiting.push(
+            errors.push(
                 div()
                     .w_full()
                     .child(self.error_card("chat-operation-error", &card, actions, p, cx))
@@ -522,11 +500,60 @@ impl NativeChatView {
         // An approval waiting on the agent is a row of the dock instead (gx-chat-core
         // extras/dock_approvals.rs); its card stays out of the stack.
         let approval_in_dock = self.approval_in_dock();
-        if approval_in_dock != "notice"
-            && let Some(notice) = self.render_notice(p, window, cx)
-        {
-            waiting.push(notice.into_any_element());
+        let notice_is_error =
+            ghostex_gx_chat_core::questions::notice_tone::is_error_terminal_notice(
+                &self.snapshot["terminalNotice"],
+            );
+        let rendered_notice = if approval_in_dock != "notice" {
+            self.render_notice(p, window, cx)
+        } else {
+            None
+        };
+        // What stacks between the dock/working card and the box.
+        let mut waiting: Vec<AnyElement> = Vec::new();
+        if let Some(notice) = rendered_notice {
+            if notice_is_error {
+                errors
+                    .push(super::suggestions::stack_member(notice, &stack_top).into_any_element());
+            } else {
+                waiting.push(notice.into_any_element());
+            }
         }
+        let has_error_banner = !maximized && !errors.is_empty();
+        // A coordinator's dock (work_cards.rs), built after errors so it knows whether an error
+        // banner is shown above it: with a dock the status rides on its header bar
+        // (`work_dock_header`) and has no bar of its own.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, picking on the chat box bars page: "A. The status joins the dock's quiet line",
+        // always on that bar while the chat has a dock; a chat with no dock keeps its own bar.
+        let dock = if maximized {
+            None
+        } else {
+            self.render_work_dock(
+                p,
+                window.viewport_size().height.as_f32(),
+                has_error_banner,
+                cx,
+            )
+        };
+        let working_card = if maximized
+            || dock.is_some()
+            || self.snapshot["workingCard"]["inTranscript"] == true
+        {
+            None
+        } else {
+            self.render_working_card(p, cx)
+        };
+        // The session's computer being offline is a row of the dock (gx-chat-core
+        // extras/dock_stack.rs), the one bar above the box.
+        let card_above_box = working_card.is_some();
+        // The last transcript row's own gap is the space above the card (working_card.rs), when
+        // the working card is the top element in the stack.
+        footer = footer.when(card_above_box && errors.is_empty(), |this| this.pt_0());
+        // The working card joins the stack under the dock (below), so it can sit between the dock
+        // and the box.
+        let mut working_card = working_card;
         if let Some(requests) = self.render_secret_requests(p, window, cx) {
             waiting.push(requests);
         }
@@ -538,10 +565,6 @@ impl NativeChatView {
             .flatten()
         {
             if self.snapshot["prompt"]["kind"] == "question" {
-                self.hide_frosted_overlay(
-                    super::frosted_overlay_window::FrostedOverlay::BoostHint,
-                    cx,
-                );
                 // The question replaces the box and the dock, so the status keeps its own bar.
                 let working_card = match working_card {
                     None if dock.is_some()
@@ -555,6 +578,7 @@ impl NativeChatView {
                     .composer_row()
                     .child(
                         footer
+                            .children(errors)
                             .children(working_card)
                             .children(waiting)
                             .child(prompt),
@@ -566,25 +590,28 @@ impl NativeChatView {
         if let Some(note) = self.render_note(p, window, cx) {
             waiting.push(note.into_any_element());
         }
-        // The callout's Show me asked for the Boost menu (boosts.rs).
-        self.open_requested_boost_menu(window, cx);
         if let Some(card) = self.render_catch_up(p, window, cx) {
             waiting.push(card.into_any_element());
         }
         if let Some(card) = self.render_compact_prompt(p, cx) {
             waiting.push(card);
         }
-        // A coordinator's dock (work_cards.rs) sits above the working card, which says how long
-        // the turn took and what it changed, so the order over the box is the transcript, the
-        // dock, that card, then the box. With no dock (none, stepped aside for a long message, or
-        // the Work panel docked beside the chat) the card stays where it always was.
+        // Error banners sit at the top of the stack, above the coordinator's dock (work_cards.rs),
+        // which sits above the working card, so the order over the box is: transcript, errors,
+        // dock, working card, interactive cards, then the box. With no dock (none, stepped aside
+        // for a long message, or the Work panel docked beside the chat) the working card stays
+        // below any errors.
         //
         // CDXC:Coordinators 2026-11-10 DECISION:
         // User, of the "Worked for 34s · ... updated" bar above the dock: "please i beg you. move
         // this bar which shows how long we worked for etc to be below the work items cards
         // please". The gaps stay the stack's own.
         let dock_shown = dock.is_some();
-        footer = footer.children(dock).children(working_card.take());
+        let has_errors = !errors.is_empty();
+        footer = footer
+            .children(errors)
+            .children(dock)
+            .children(working_card.take());
         self.sync_files_links_menu(window, cx);
         self.sync_resource_modal_menu(window, cx);
         if maximized && let Some(suggestions) = self.inline_suggestions(window, cx) {
@@ -698,7 +725,7 @@ impl NativeChatView {
             .children(attachment_previews)
             .children(self.render_queue(p, cx))
             .child(
-                self.with_catch_up_button(
+                self.with_composer_top_right(
                     div()
                         .id("composer-editor")
                         .role(gpui::Role::Group)
@@ -823,14 +850,19 @@ impl NativeChatView {
             0.0
         } else if card_above_box {
             super::working_card::WORKING_CARD_GAP - 8.0
-        } else if dock_shown {
+        } else if dock_shown || has_errors {
             0.0
         } else {
             8.0
         };
-        let has_above_box = !maximized && (dock_shown || card_above_box || !waiting.is_empty());
+        let has_above_box =
+            !maximized && (has_errors || dock_shown || card_above_box || !waiting.is_empty());
         let above_top = self.composer_above_top.clone();
-        let above_top_offset = if card_above_box { 0.0 } else { 8.0 * s };
+        let above_top_offset = if card_above_box && !has_errors {
+            0.0
+        } else {
+            8.0 * s
+        };
         let above_box_measure = gpui::canvas(
             move |bounds, _, _| {
                 above_top.set(has_above_box.then_some(bounds.top()));
@@ -846,7 +878,6 @@ impl NativeChatView {
         // The chat's pills ride in a strip along the box's top edge, inside its border
         // (pills_strip.rs); what the box holds under it is unchanged.
         let pills_strip = if maximized || self.collab_guest() {
-            self.hide_frosted_overlay(super::frosted_overlay_window::FrostedOverlay::BoostHint, cx);
             self.set_where_pill_shows_project(false, cx);
             None
         } else {
@@ -921,6 +952,11 @@ impl NativeChatView {
         );
         if self.status_line_shown() && !self.collab_guest() {
             footer = footer.child(self.render_context_status(p, cx));
+        }
+        // A dock or card disclosure started during this composer render (e.g., expanding the
+        // Inbox dock locally while an error banner is shown) needs the next animation frame.
+        if self.disclosure_motion.borrow().running() {
+            window.request_animation_frame();
         }
         self.composer_row()
             .when(maximized, |this| this.h_full().min_h_0())

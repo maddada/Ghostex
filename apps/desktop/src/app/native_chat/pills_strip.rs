@@ -634,9 +634,6 @@ impl NativeChatView {
             })
             .detach();
         }
-        if !shown || !self.boost_pill_shown() {
-            self.hide_frosted_overlay(super::frosted_overlay_window::FrostedOverlay::BoostHint, cx);
-        }
         if !shown && animating.is_none() {
             return None;
         }

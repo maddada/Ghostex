@@ -189,6 +189,9 @@ impl NativeChatView {
         if dock["hidden"] == true {
             self.invoke(serde_json::json!({"type": "showWorkDock"}), cx);
         }
+        if self.board.dock_error_active {
+            self.board.dock_peek_over_error = true;
+        }
         let handle = self
             .board
             .inbox_focus_handle

@@ -44,8 +44,13 @@
 //! and Schedule it (one Boost for "check back later" and "make it a routine"). Inbox it! means the
 //! agent does not answer in the chat: the ask and its result go together on one Needs you card
 //! (`ghostex needs-you add`, which works in every session), for any ask, a question too.
+//! CDXC:Boosts 2026-11-24 DECISION:
+//! The first-time Boost hint (`hint`) sits inside the chat box at its top-right corner as a small
+//! dismissible chip with an x: clicking x dismisses it (`dismissBoostHint`), and clicking the chip
+//! opens Boosts and dismisses it. Supersedes the 2026-11-20 floating callout bubble above the
+//! Boost pill.
 //! SEE-ALSO: server/src/boosts.rs (the prompts, the user's Boosts, `/api/boosts`, the block under
-//! the message), apps/desktop/src/app/native_chat/boosts.rs (pill, menu, preview, callout, Try a
+//! the message), apps/desktop/src/app/native_chat/boosts.rs (pill, menu, preview, hint chip, Try a
 //! Boost), apps/desktop/src/app/window/settings_modal/tabs/boosts.rs (Settings > Boosts),
 //! composer/trigger.rs and composer/suggestions.rs (`*`), composer/reference_pills.rs
 //! (`ReferenceKind::Boost`), transcript/markdown_links.rs (the pill in a sent message), the

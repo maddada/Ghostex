@@ -560,6 +560,12 @@ pub(crate) struct CoordinatorBoardView {
     /// Which Inbox header count chip the pointer is currently over, so hovering a chip never lights
     /// up the collapse bar behind it (Q4680).
     pub(super) dock_count_hovered: Option<&'static str>,
+    /// Whether an error banner is currently shown above the Inbox dock (collapses the dock to its
+    /// header until the error clears or the user expands it).
+    pub(super) dock_error_active: bool,
+    /// The user explicitly expanded the Inbox dock while an error banner is shown above it; resets
+    /// when the error goes away so the dock restores its pre-error state.
+    pub(super) dock_peek_over_error: bool,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only

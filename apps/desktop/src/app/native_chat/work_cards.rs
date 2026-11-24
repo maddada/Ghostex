@@ -676,12 +676,17 @@ impl NativeChatView {
     }
 
     pub(super) fn render_work_dock(
-        &self,
+        &mut self,
         p: &ChatAppearance,
         window_height: f32,
+        error_shown: bool,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         self.board.dock_top.set(None);
+        if !error_shown {
+            self.board.dock_peek_over_error = false;
+        }
+        self.board.dock_error_active = error_shown;
         let dock = &self.snapshot["workDock"];
         let board = &self.snapshot["coordinatorBoard"];
         let rows: Vec<Value> = dock["rows"].as_array().cloned().unwrap_or_default();
@@ -726,9 +731,12 @@ impl NativeChatView {
         }
         let s = p.scale;
         // The core's `hidden` (hideWorkDock) is the collapsed bar here; it opens by itself when a
-        // row that was not there when it collapsed arrives.
+        // row that was not there when it collapsed arrives. While an error banner sits above the
+        // dock, fold to the header row until the error clears or the user expands it manually.
         let collapsible = has_dock_content;
-        let open = collapsible && dock["hidden"] != true;
+        let hidden_in_core = dock["hidden"] == true;
+        let open =
+            collapsible && !hidden_in_core && (!error_shown || self.board.dock_peek_over_error);
         // Collapsing or opening, the rows ease their height and fade as the chat's other folds do
         // (disclosure_motion.rs, its timing and the reduced motion setting), the chevron turning
         // with them; the bar and the chat box under the dock follow its height.
@@ -738,7 +746,16 @@ impl NativeChatView {
         // collapsed".
         let motion = self.disclosure_frame(DOCK_MOTION_KEY, open, cx);
         let turned = motion.map_or(if open { 1.0 } else { 0.0 }, |frame| frame.log);
-        let header = self.work_dock_header(&rows, collapsible, open, turned, p, cx);
+        let header = self.work_dock_header(
+            &rows,
+            collapsible,
+            open,
+            hidden_in_core,
+            error_shown,
+            turned,
+            p,
+            cx,
+        );
         let mut surface = div()
             .relative()
             .w_full()
@@ -1390,11 +1407,14 @@ impl NativeChatView {
     /// Count chips sit clean at rest (no dotted underline); hovering a count chip lights up only
     /// that chip (pill background, subtle border, brighter label) and never lights up the collapse
     /// bar behind it.
+    #[allow(clippy::too_many_arguments)]
     fn work_dock_header(
         &self,
         rows: &[Value],
         collapsible: bool,
         open: bool,
+        hidden_in_core: bool,
+        error_shown: bool,
         turned: f32,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
@@ -1684,8 +1704,18 @@ impl NativeChatView {
                         ),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
-                    let kind = if open { "hideWorkDock" } else { "showWorkDock" };
-                    this.invoke(json!({ "type": kind }), cx);
+                    if open {
+                        this.board.dock_peek_over_error = false;
+                        this.invoke(json!({ "type": "hideWorkDock" }), cx);
+                        return;
+                    }
+                    if error_shown {
+                        this.board.dock_peek_over_error = true;
+                    }
+                    if hidden_in_core {
+                        this.invoke(json!({ "type": "showWorkDock" }), cx);
+                    }
+                    cx.notify();
                 }));
         }
         head.into_any_element()
