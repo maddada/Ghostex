@@ -180,6 +180,12 @@ pub(crate) struct GpuiVisualPageModalWindow {
     _flush_draft: [Subscription; 2],
 }
 
+/// Which side of the floating window's top band holds its controls, as the page's
+/// `data-gx-controls` attribute (`server/src/visual_pages/kit.rs`).
+pub(super) fn controls_side_attr(on_left: bool) -> &'static str {
+    if on_left { "left" } else { "right" }
+}
+
 impl GpuiVisualPageModalWindow {
     /// `web_runtime_ready`: the web runtime is up, so the page is created on the window's next
     /// frame; otherwise the app creates it once the runtime it is starting is up
@@ -202,9 +208,11 @@ impl GpuiVisualPageModalWindow {
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
         let theme = if palette.light { "light" } else { "dark" };
+        let controls = controls_side_attr(super::round_close_button::close_buttons_on_left());
         let page_url = format!(
-            "{}#gx-theme={theme}&gx-floating=1",
-            url.split('#').next().unwrap_or(&url)
+            "{}#gx-theme={theme}&gx-floating=1&gx-controls={controls}&gx-controls-inset={}",
+            url.split('#').next().unwrap_or(&url),
+            CONTROL_INSET,
         );
         // Creating the page's browser holds the app until Chromium has made it, so it waits for
         // the frame after the window's first one: the window is on screen first.

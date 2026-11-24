@@ -147,8 +147,8 @@ pub(super) const THEME_STYLE: &str = concat!(
 /// system's from its first paint (a theme the desktop's page window already set before this script
 /// keeps a reloaded page, whose address no longer has the fragment, on the app's theme; a page
 /// opened from a bare link takes the system's; either way
-/// `data-gx-theme` is always set, the one attribute `THEME_STYLE` keys every colour on), and `gx-floating=1` when the page is in the floating window, which
-/// `PAGE_API` closes once answers are sent. It then drops that fragment so the page's own hash
+/// `data-gx-theme` is always set, the one attribute `THEME_STYLE` keys every colour on), `gx-floating=1` when the page is in the floating window, which
+/// `PAGE_API` closes once answers are sent, and `gx-controls=left|right` + `gx-controls-inset=<px>` so floating chrome inside the page (such as the outside-responder pill) aligns with the window's own control buttons. It then drops that fragment so the page's own hash
 /// routing never sees it. A web link the reader clicks opens in a new window, which the floating
 /// window and the browser both send to the reader's browser, so the page itself is never navigated
 /// away. The exception is a link written relative to the page's file that names another HTML file
@@ -156,17 +156,19 @@ pub(super) const THEME_STYLE: &str = concat!(
 /// its `/link` route (linked.rs), carrying its theme, its floating mark and its reader flags along.
 pub(super) const PAGE_BOOTSTRAP: &str = concat!(
     "<script>(function(){var d=document.documentElement;",
-    "try{var h=location.hash,m=/[#&]gx-theme=(light|dark)/.exec(h);",
+    "try{var h=location.hash,m=/[#&]gx-theme=(light|dark)/.exec(h),c=/[#&]gx-controls=(left|right)/.exec(h),ci=/[#&]gx-controls-inset=(\\d+(?:\\.\\d+)?)/.exec(h);",
     "d.setAttribute(\"data-gx-theme\",m?m[1]:d.getAttribute(\"data-gx-theme\")||(matchMedia(\"(prefers-color-scheme: light)\").matches?\"light\":\"dark\"));",
     "if(/[#&]gx-floating=1/.test(h))d.setAttribute(\"data-gx-floating\",\"\");",
+    "if(c)d.setAttribute(\"data-gx-controls\",c[1]);",
+    "if(ci)d.style.setProperty(\"--gx-controls-inset\",ci[1]+\"px\");",
     "if(/[#&]gx-/.test(h))history.replaceState(history.state,\"\",location.pathname+location.search);}catch(e){}",
     "document.addEventListener(\"click\",function(e){var t=e.target,l=t&&t.closest?t.closest(\"a[href]\"):null,u;",
     "if(!l)return;var r=(l.getAttribute(\"href\")||\"\").trim();",
     "if(/^\\/visual\\/[0-9a-f]{32}$/.test(location.pathname)&&/^https?:$/.test(location.protocol)",
     "&&!/^([a-z][a-z0-9+.-]*:|[\\/\\\\#?])/i.test(r)&&/\\.html?$/i.test(r.split(/[?#]/)[0])){",
-    "e.preventDefault();var q=location.search.slice(1).split(\"&\").filter(function(s){return s===\"gx-page-script=1\"||s===\"gx-readonly=1\";});",
+    "e.preventDefault();var q=location.search.slice(1).split(\"&\").filter(function(s){return s===\"gx-page-script=1\"||s===\"gx-readonly=1\";}),cs=d.getAttribute(\"data-gx-controls\"),cv=parseFloat(d.style.getPropertyValue(\"--gx-controls-inset\"));",
     "q.unshift(\"href=\"+encodeURIComponent(r));",
-    "location.href=location.pathname+\"/link?\"+q.join(\"&\")+\"#gx-theme=\"+(d.getAttribute(\"data-gx-theme\")||\"dark\")+(d.hasAttribute(\"data-gx-floating\")?\"&gx-floating=1\":\"\");return;}",
+    "location.href=location.pathname+\"/link?\"+q.join(\"&\")+\"#gx-theme=\"+(d.getAttribute(\"data-gx-theme\")||\"dark\")+(d.hasAttribute(\"data-gx-floating\")?\"&gx-floating=1\":\"\")+(cs===\"left\"||cs===\"right\"?\"&gx-controls=\"+cs:\"\")+(isFinite(cv)&&cv>=0?\"&gx-controls-inset=\"+cv:\"\");return;}",
     "try{u=new URL(r,document.baseURI);}catch(x){return;}",
     "if(!/^https?:$/.test(u.protocol)||u.href.split(\"#\")[0]===location.href.split(\"#\")[0])return;",
     "l.setAttribute(\"target\",\"_blank\");l.setAttribute(\"rel\",\"noopener\");},true);})();</script>",
