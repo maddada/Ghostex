@@ -97,8 +97,9 @@ pub fn local_thread_of(thread_ref: &str, server_id: &str) -> Option<(String, Str
         .then(|| (project.to_string(), session.to_string()))
 }
 
-/// BLOCKING (a transcript tail read). Why `report` no longer holds for the thread as it is now,
-/// `None` while it still does.
+/// BLOCKING (a transcript tail read and, for a stall report, the subagent look of
+/// subagent_output.rs). Why `report` no longer holds for the thread as it is now, `None` while it
+/// still does.
 pub fn quiet_report_stale_reason(
     report: &QuietReport,
     thread: Option<&ThreadRecord>,
@@ -129,6 +130,6 @@ pub fn quiet_report_stale_reason(
             ThreadState::Done => "the thread was marked done",
         });
     }
-    super::stall::moved_since(session, report.since)
+    super::stall::moved_since(session, report.kind, report.since)
         .then_some("the thread moved on after the time the report names")
 }

@@ -3,18 +3,26 @@
 //! writes count as its output.
 //!
 //! CDXC:Coordinators 2026-11-24 WHY:
-//! The user kept getting the phone's "Not moving: it may be stuck" and a red dot for OMP sessions that were only waiting on their subagent while it worked: the quiet clock counted only the lead's own transcript and screen. A subagent's write to its own transcript now restarts its lead's clock exactly as a row of the lead's own does. That a subagent exists, is marked running or is counted on the screen does not count, so a subagent that is itself stuck lets its lead turn red one round after its last write.
+//! The user kept getting the phone's "Not moving: it may be stuck" and a red dot for OMP sessions that were only waiting on their subagent while it worked: the quiet clock counted only the lead's own transcript and screen. A subagent's write to its own transcript now counts as its lead's output wherever gxserver judges a lead on this computer: the watch's look and its rebuild after a restart (`StallWatch::resumed`) restart the quiet clock with it, a stall report is dropped right before it is sent (`stall_last_row`) and again before a queued one is delivered (`moved_since`, stale_report.rs) when a subagent wrote after the quiet time it names. Idle reports keep their own check. That a subagent exists, is marked running or is counted on the screen does not count, so a subagent that is itself stuck lets its lead turn red one round after its last write. A coordinator's thread on another computer is judged by the lead's own output only (coordinator_remote_runtime.rs): this computer records no subagent output for it.
 //! Covered are the agents whose subagents write a transcript file of their own that gxserver can locate: OMP (`<lead>/<name>.jsonl`, a child's own subagents under `<lead>/<name>/`, session_chat_omp_fleet.rs), Claude (`<lead>/subagents/agent-<id>.jsonl` with the launch metadata that sets a subagent apart from Claude's internal prompt-suggestion transcripts, and workflow agents under `subagents/workflows/<run>/`, session_chat_claude_fleet.rs) and Codex (the rollouts of the open spawn graph in its state database, session_chat_codex_fleet.rs). OpenCode and Hermes keep their subagents' output in their own databases, and the transcript gxserver reads for them is a copy it writes itself, so their leads keep the lead-only clock.
-//! Only file times are read (and the small launch metadata of a newly written Claude transcript), at most `SCAN_LIMIT` entries per look, and only once the lead itself has gone quiet.
+//! The harness is decided from the session's settings before anything else, so every other agent costs no file, query or RPC here, and the lead transcript is the one its caller already resolved, never resolved again. Only file times are read (and the small launch metadata of a newly written Claude transcript), at most `SCAN_LIMIT` entries per look, and only once the lead itself has gone quiet. Codex's spawn-graph walk itself stops after `SCAN_LIMIT` descendants (a `LIMIT` inside the recursive query), so a large graph costs no more than that; the fleet roster still reads the whole graph.
 
 use std::fs::{File, Metadata};
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::UNIX_EPOCH;
 
 use serde_json::Value;
 
 use crate::session_chat::SessionChatTranscriptAgent;
+
+/// The agents whose subagents write a transcript file of their own that gxserver can locate.
+#[derive(Clone, Copy)]
+enum Harness {
+    Omp,
+    Claude,
+    Codex,
+}
 
 /// Directory entries (or Codex child rollouts) one look examines at most, nested folders included.
 const SCAN_LIMIT: usize = 256;
@@ -23,53 +31,53 @@ const OMP_NESTING: usize = 8;
 /// The most of a Claude subagent's launch metadata read to tell it from an internal transcript.
 const CLAUDE_META_MAX_BYTES: u64 = 64 * 1024;
 
-/// BLOCKING (transcript path resolution, file stats and, per look, at most one query of Codex's
-/// state database). The newest write after `after` (ms) to a transcript of one of the session's
-/// subagents; `path` caches the lead's transcript as the watch resolved it.
+/// BLOCKING (file stats and, per look, at most one bounded query of Codex's state database). The
+/// newest write after `after` (ms) to a transcript of one of the session's subagents; `lead` is
+/// the lead's transcript as its caller resolved it. `None` without a file touched for an agent
+/// whose subagents gxserver cannot locate.
 pub(super) fn newest_subagent_write(
     session: &Value,
-    path: &mut Option<PathBuf>,
+    lead: Option<&Path>,
     after: i64,
 ) -> Option<i64> {
-    let agent = super::delivery::resolve_thread_transcript(session, path)?;
-    newest_write_of(session, agent, path.as_deref()?, after)
+    newest_write_of(session, harness_of(session)?, lead?, after)
 }
 
-/// `newest_subagent_write` for the lead transcript `lead` that `agent` writes.
-fn newest_write_of(
-    session: &Value,
-    agent: SessionChatTranscriptAgent,
-    lead: &Path,
-    after: i64,
-) -> Option<i64> {
+/// The covered harness the session runs, from its settings alone (no file, query or RPC).
+fn harness_of(session: &Value) -> Option<Harness> {
+    let agent = crate::session_chat_follower::session_chat_display_agent_for_session(session)?;
+    if agent == "omp" {
+        return Some(Harness::Omp);
+    }
+    match crate::session_chat::resolve_session_chat_transcript_agent(Some(&agent))? {
+        SessionChatTranscriptAgent::Claude => Some(Harness::Claude),
+        SessionChatTranscriptAgent::Codex => Some(Harness::Codex),
+        _ => None,
+    }
+}
+
+/// `newest_subagent_write` for the lead transcript `lead` that `harness` writes.
+fn newest_write_of(session: &Value, harness: Harness, lead: &Path, after: i64) -> Option<i64> {
     let mut budget = SCAN_LIMIT;
-    let newest = match agent {
-        SessionChatTranscriptAgent::Pi
-            if crate::session_chat_follower::session_chat_display_agent_for_session(session)
-                .as_deref()
-                == Some("omp") =>
-        {
-            omp_newest(
-                &crate::session_chat_omp_fleet::lead_folder(lead)?,
-                OMP_NESTING,
-                &mut budget,
-            )
-        }
-        SessionChatTranscriptAgent::Claude => claude_newest(
+    let newest = match harness {
+        Harness::Omp => omp_newest(
+            &crate::session_chat_omp_fleet::lead_folder(lead)?,
+            OMP_NESTING,
+            &mut budget,
+        ),
+        Harness::Claude => claude_newest(
             &lead.with_extension("").join("subagents"),
             after,
             &mut budget,
         ),
-        SessionChatTranscriptAgent::Codex => {
-            crate::session_chat_codex_fleet::open_child_rollouts(session, lead)
+        Harness::Codex => {
+            crate::session_chat_codex_fleet::open_child_rollouts(session, lead, SCAN_LIMIT)
                 .ok()?
                 .iter()
-                .take(budget)
                 .filter_map(|rollout| std::fs::metadata(rollout).ok())
                 .filter_map(|metadata| modified_ms(&metadata))
                 .max()
         }
-        _ => None,
     };
     newest.filter(|written| *written > after)
 }
@@ -242,16 +250,26 @@ mod tests {
         write_at(&folder.join("Worker.md"), "done", T0 + 8 * MIN);
         write_at(&folder.join("__advisor.jsonl"), "{}\n", T0 + 9 * MIN);
         write_at(&folder.join("Worker.bak.jsonl"), "{}\n", T0 + 9 * MIN);
-        let session = json!({ "launchSettings": { "icon": "omp" } });
-        let agent = SessionChatTranscriptAgent::Pi;
+        let session = json!({
+            "launchSettings": { "icon": "omp" },
+            "runtimeSettings": { "agentSessionPath": lead },
+        });
         assert_eq!(
-            newest_write_of(&session, agent, &lead, T0),
+            newest_subagent_write(&session, Some(&lead), T0),
             Some(T0 + 7 * MIN)
         );
-        assert_eq!(newest_write_of(&session, agent, &lead, T0 + 7 * MIN), None);
-        // A plain Pi session keeps no subagents beside its transcript.
-        let pi = json!({ "launchSettings": { "icon": "pi" } });
-        assert_eq!(newest_write_of(&pi, agent, &lead, T0), None);
+        assert_eq!(
+            newest_subagent_write(&session, Some(&lead), T0 + 7 * MIN),
+            None
+        );
+        // The look reads the lead transcript its caller resolved and never resolves one itself.
+        assert_eq!(newest_subagent_write(&session, None, T0), None);
+        // A plain Pi session keeps no subagents beside its transcript, and OpenCode's subagents
+        // write no file gxserver can locate.
+        for agent in ["pi", "opencode"] {
+            let other = json!({ "launchSettings": { "icon": agent } });
+            assert_eq!(newest_subagent_write(&other, Some(&lead), T0), None);
+        }
     }
 
     #[test]
@@ -272,10 +290,9 @@ mod tests {
             "{}\n",
             T0 + 9 * MIN,
         );
-        let session = json!({});
-        let agent = SessionChatTranscriptAgent::Claude;
+        let session = json!({ "launchSettings": { "icon": "claude" } });
         assert_eq!(
-            newest_write_of(&session, agent, &lead, T0),
+            newest_subagent_write(&session, Some(&lead), T0),
             Some(T0 + 3 * MIN)
         );
         write_at(
@@ -284,10 +301,13 @@ mod tests {
             T0 + 6 * MIN,
         );
         assert_eq!(
-            newest_write_of(&session, agent, &lead, T0),
+            newest_subagent_write(&session, Some(&lead), T0),
             Some(T0 + 6 * MIN)
         );
-        assert_eq!(newest_write_of(&session, agent, &lead, T0 + 6 * MIN), None);
+        assert_eq!(
+            newest_subagent_write(&session, Some(&lead), T0 + 6 * MIN),
+            None
+        );
     }
 
     #[test]
@@ -331,11 +351,11 @@ mod tests {
         let session = json!({
             "projectId": "p-codex-subagents",
             "sessionId": "s-codex-subagents",
+            "launchSettings": { "icon": "codex" },
             "runtimeSettings": { "agentSessionId": "lead" },
         });
-        let agent = SessionChatTranscriptAgent::Codex;
         assert_eq!(
-            newest_write_of(&session, agent, &lead, T0),
+            newest_subagent_write(&session, Some(&lead), T0),
             Some(T0 + 4 * MIN)
         );
     }

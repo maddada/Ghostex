@@ -1,7 +1,9 @@
 //! A working OMP lead that waits on its subagents is "not moving" only while they are quiet too:
 //! a subagent's transcript write counts as its lead's output in the stall watch, a subagent that
 //! stopped writing does not hold its lead off, a watch rebuilt after a gxserver restart starts at
-//! the newest subagent write, and a lead quiet with its subagents still gets its bell row and push.
+//! the newest subagent write, a lead quiet with its subagents still gets its bell row and push,
+//! and a stall report a subagent's later write outdated is dropped, right before it is sent and
+//! when it waited in its coordinator's queue.
 //! Synthetic OMP transcripts (`<lead>.jsonl`, children in `<lead>/<name>.jsonl`) with set file
 //! times; the clock the watch is given is the same one.
 
@@ -324,4 +326,73 @@ fn a_watch_rebuilt_after_a_restart_starts_at_the_newest_subagent_write() {
         .observe(&session, T0 + 13 * MIN)
         .expect("due a round after the newest subagent write");
     assert_eq!((due.quiet_since, due.round), (T0 + 5 * MIN, 1));
+}
+
+/// A working OMP lead that was due a stall report at minute 8 (quiet since `T0`), as the
+/// coordinator supervisor and the queue check read it.
+fn due_thread(lead: &Lead) -> (Value, crate::coordinators::StallDue) {
+    let mut session = omp_session(lead);
+    session["lifecycleState"] = json!("running");
+    let mut watch = StallWatch::new(T0);
+    assert!(watch.observe(&session, T0).is_none());
+    let due = watch
+        .observe(&session, T0 + 8 * MIN)
+        .expect("due after a round of quiet");
+    assert_eq!(due.quiet_since, T0);
+    (session, due)
+}
+
+#[test]
+fn a_stall_report_is_dropped_before_it_is_sent_when_a_subagent_wrote_since() {
+    let lead = omp_lead();
+    let (session, due) = due_thread(&lead);
+    let check =
+        || crate::coordinators::stall_last_row(&session, due.transcript_seen, due.quiet_since);
+    assert!(check().is_some(), "the report holds while all are quiet");
+    // The subagent writes a second after the report was worded, before it goes out.
+    subagent_writes(&lead, "Worker", T0 + 8 * MIN + 1_000);
+    assert_eq!(check(), None, "a subagent's write drops the report");
+}
+
+#[test]
+fn a_queued_stall_report_is_dropped_when_a_subagent_wrote_since() {
+    use crate::coordinators::{
+        quiet_report_stale_reason, QuietReport, QuietReportKind, ThreadRecord,
+    };
+
+    let lead = omp_lead();
+    let (session, due) = due_thread(&lead);
+    let thread = ThreadRecord {
+        project_id: "p-stall-subagent".into(),
+        session_id: "s-stall-subagent".into(),
+        coordinator_project_id: "p-stall-subagent".into(),
+        coordinator_session_id: "coordinator".into(),
+        task: "task".into(),
+        resolved_at: None,
+        last_resolved_at: None,
+        observed_working: true,
+        reported_at: None,
+        reported_prompt_key: None,
+        last_report: None,
+        pending_message: None,
+        pending_message_at: None,
+        pending_message_send_id: None,
+        closed_with_coordinator_at: None,
+        created_at: iso(T0),
+        updated_at: iso(T0),
+    };
+    let report = QuietReport {
+        kind: QuietReportKind::Stalled,
+        thread_ref: "S:p-stall-subagent:s-stall-subagent".into(),
+        since: due.quiet_since,
+    };
+    // The report waits in the coordinator's queue and is checked 20 minutes on.
+    let check =
+        || quiet_report_stale_reason(&report, Some(&thread), Some(&session), &iso(T0 + 20 * MIN));
+    assert_eq!(check(), None, "the report holds while all are quiet");
+    subagent_writes(&lead, "Worker", T0 + 9 * MIN);
+    assert_eq!(
+        check(),
+        Some("the thread moved on after the time the report names")
+    );
 }

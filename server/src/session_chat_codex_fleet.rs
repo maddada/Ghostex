@@ -51,9 +51,11 @@ fn crash_subject(session: &Value) -> String {
 
 /// BLOCKING (one query of the Codex state database beside `rollout`). The conversation
 /// `root_id`'s open, unarchived descendants in Codex's spawn graph: id, rollout path and source.
+/// `walk_limit` stops the graph walk itself after that many descendants (`None` walks it all).
 fn open_descendants(
     rollout: &Path,
     root_id: &str,
+    walk_limit: Option<usize>,
 ) -> anyhow::Result<Vec<(String, String, String)>> {
     let home = rollout
         .ancestors()
@@ -62,15 +64,22 @@ fn open_descendants(
         .ok_or_else(|| anyhow::anyhow!("Codex rollout is outside its sessions directory"))?;
     let db = ghostex_find::agent_store::open_agent_store(&home.join("state_5.sqlite"))?;
     db.busy_timeout(std::time::Duration::from_millis(100))?;
+    // `?2` bounds the walk itself, not only what it returns (a limit on the outer select would
+    // still walk and sort the whole graph): the walk stops after that many descendants, and the
+    // lead and each descendant it takes hand it at most that many children, so a lead or child
+    // with thousands of open spawn edges is not read in full either. The children are picked by
+    // row id, one lookup each, whatever indexes Codex's table has. A negative limit is none.
     let mut query = db.prepare(
         "WITH RECURSIVE descendants(id) AS (
-             SELECT child_thread_id FROM thread_spawn_edges WHERE parent_thread_id = ?1 AND status = 'open'
+             SELECT child_thread_id FROM (SELECT child_thread_id FROM thread_spawn_edges WHERE parent_thread_id = ?1 AND status = 'open' LIMIT ?2)
              UNION
-             SELECT edge.child_thread_id FROM thread_spawn_edges edge JOIN descendants ON edge.parent_thread_id = descendants.id WHERE edge.status = 'open'
+             SELECT edge.child_thread_id FROM descendants JOIN thread_spawn_edges edge ON edge.rowid IN (SELECT rowid FROM thread_spawn_edges WHERE parent_thread_id = descendants.id AND status = 'open' LIMIT ?2)
+             LIMIT ?2
          ) SELECT threads.id, threads.rollout_path, threads.source FROM descendants JOIN threads ON threads.id = descendants.id WHERE threads.archived = 0 ORDER BY threads.id"
     )?;
+    let walk_limit = walk_limit.map_or(-1, |limit| i64::try_from(limit).unwrap_or(i64::MAX));
     let children = query
-        .query_map([root_id], |row| {
+        .query_map(rusqlite::params![root_id, walk_limit], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -103,7 +112,7 @@ pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<Session
         anyhow::bail!("Reading this Codex session's subagents crashed gxserver before and is skipped on this build");
     };
     let rollout = Path::new(rollout);
-    let children = open_descendants(rollout, root_id)?;
+    let children = open_descendants(rollout, root_id, None)?;
     let now = chrono::Utc::now().timestamp_millis();
     let process_started = session
         .pointer("/runtimeSettings/sessionChatCodexStartedAt")
@@ -165,8 +174,13 @@ pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<Session
 
 /// BLOCKING (one query of Codex's state database). The rollout files of the session's open
 /// subagents, whose file times the stall watch counts as the lead's output
-/// (coordinators/subagent_output.rs); `rollout` is the lead's own.
-pub(crate) fn open_child_rollouts(session: &Value, rollout: &Path) -> anyhow::Result<Vec<PathBuf>> {
+/// (coordinators/subagent_output.rs); `rollout` is the lead's own. The spawn-graph walk stops
+/// after `walk_limit` descendants.
+pub(crate) fn open_child_rollouts(
+    session: &Value,
+    rollout: &Path,
+    walk_limit: usize,
+) -> anyhow::Result<Vec<PathBuf>> {
     let Some(root_id) = session
         .pointer("/runtimeSettings/agentSessionId")
         .and_then(Value::as_str)
@@ -176,7 +190,7 @@ pub(crate) fn open_child_rollouts(session: &Value, rollout: &Path) -> anyhow::Re
     let Some(_step) = crate::crash_report::step(&crash_subject(session), "codexFleetRead") else {
         anyhow::bail!("Reading this Codex session's subagents crashed gxserver before and is skipped on this build");
     };
-    Ok(open_descendants(rollout, root_id)?
+    Ok(open_descendants(rollout, root_id, Some(walk_limit))?
         .into_iter()
         .map(|(_, path, _)| PathBuf::from(path))
         .collect())

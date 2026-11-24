@@ -151,9 +151,9 @@ impl StallWatch {
             return watch;
         };
         // A lead that waited on its subagents through the restart: their newest write is its
-        // output too (subagent_output.rs).
+        // output too (subagent_output.rs), read beside the transcript resolved above.
         let output_at =
-            super::subagent_output::newest_subagent_write(session, &mut watch.path, written)
+            super::subagent_output::newest_subagent_write(session, watch.path.as_deref(), written)
                 .unwrap_or(written);
         // Never before the session turned working (its stored activity's last change): a turn
         // that just began, its prompt not in the transcript yet, is no old stretch of quiet.
@@ -249,11 +249,13 @@ impl StallWatch {
             return;
         }
         // A lead waiting on its subagents writes nothing itself; their transcript writes are its
-        // output (subagent_output.rs).
+        // output (subagent_output.rs), read beside the transcript this look resolved.
         let quiet_since = self.quiet_since();
-        if let Some(written) =
-            super::subagent_output::newest_subagent_write(session, &mut self.path, quiet_since)
-        {
+        if let Some(written) = super::subagent_output::newest_subagent_write(
+            session,
+            self.path.as_deref(),
+            quiet_since,
+        ) {
             self.count_output(Some(written));
         }
         // Non-CLI (ACP / SDK) sessions have a static host log in their zmx PTY; read the host's
@@ -612,11 +614,12 @@ fn is_duration(word: &str) -> bool {
     true
 }
 
-/// BLOCKING (a transcript tail read). Read again right before a stall report goes out, from the
-/// session as it is now: `None` when the report no longer holds and is dropped (the transcript
-/// moved since the report was worded, it has a row newer than the quiet time the report names,
-/// or the agent was launched, resumed or reloaded since then), else the last row worth naming,
-/// when there is one. Ghostex's own nudge is no sign of life.
+/// BLOCKING (a transcript tail read and the subagent look of subagent_output.rs). Read again right
+/// before a stall report goes out, from the session as it is now: `None` when the report no longer
+/// holds and is dropped (the transcript moved since the report was worded, it has a row newer than
+/// the quiet time the report names, one of its subagents wrote after that time, or the agent was
+/// launched, resumed or reloaded since then), else the last row worth naming, when there is one.
+/// Ghostex's own nudge is no sign of life.
 pub fn stall_last_row(
     session: &Value,
     transcript_seen: Option<i64>,
@@ -630,19 +633,30 @@ pub fn stall_last_row(
         return None;
     }
     let messages = transcript_tail(session, &mut path);
-    if moved_after(&messages, quiet_since) {
+    if moved_after(&messages, quiet_since)
+        || super::subagent_output::newest_subagent_write(session, path.as_deref(), quiet_since)
+            .is_some()
+    {
         return None;
     }
     Some(messages.iter().rev().find_map(describe_row))
 }
 
-/// BLOCKING. Whether the thread did anything after `since` (ms): its agent was launched, resumed
-/// or reloaded since, or its transcript has a row of its own (not Ghostex's nudge) newer than it.
-/// A late "not moving" or "idle" report names a quiet time that no longer holds then
-/// (stale_report.rs).
-pub(super) fn moved_since(session: &Value, since: i64) -> bool {
-    agent_launched_at(session).is_some_and(|launched| launched > since)
-        || moved_after(&transcript_tail(session, &mut None), since)
+/// BLOCKING (a transcript tail read and, for a stall report, the subagent look of
+/// subagent_output.rs). Whether the thread did anything after `since` (ms): its agent was
+/// launched, resumed or reloaded since, or its transcript has a row of its own (not Ghostex's
+/// nudge) newer than it, or, for a stall report (`kind`), one of its subagents wrote after it, as
+/// the watch counts it. A late "not moving" or "idle" report names a quiet time that no longer
+/// holds then (stale_report.rs).
+pub(super) fn moved_since(session: &Value, kind: super::QuietReportKind, since: i64) -> bool {
+    if agent_launched_at(session).is_some_and(|launched| launched > since) {
+        return true;
+    }
+    let mut path = None;
+    moved_after(&transcript_tail(session, &mut path), since)
+        || (kind == super::QuietReportKind::Stalled
+            && super::subagent_output::newest_subagent_write(session, path.as_deref(), since)
+                .is_some())
 }
 
 fn moved_after(messages: &[SessionChatMessage], since: i64) -> bool {

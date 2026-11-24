@@ -1579,8 +1579,11 @@ where they are while you open, change and close views.
   a notification and plays its own not-moving sound (silent when Agent finished
   sound is Off), and the dot clears as soon as the session shows output again.
   A long build or test whose output is still coming does not count, and neither
-  does an OMP, Claude or Codex session waiting on its subagents while one of them
-  still shows new output (a subagent that has stopped too lets the dot come). A
+  does an OMP, Claude or Codex session on this computer waiting on its subagents
+  while one of them still writes new chat rows that this computer records (a
+  subagent that has stopped too, or whose progress only shows on its screen, lets
+  the dot come); a coordinator's thread on another computer is judged by its own
+  output only. A
   coordinator's thread is nudged first ("Still working?") and its coordinator is
   told so it can heal it, so a thread gets the dot only 8 minutes after that
   nudge; its board card shows a red "Not moving" chip too. While this computer
