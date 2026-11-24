@@ -29,6 +29,15 @@ use serde_json::{Value, json};
 /// A status's glyph and colour, the board's (coordinator_board.rs `group_look`), so a card reads as
 /// its row in the Work panel does.
 pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gpui::Hsla) {
+    if status == "approved" {
+        return ("titlebar/shield-check.svg", gpui::rgb(0x2fa865).into());
+    }
+    if status == "denied" {
+        return (
+            "titlebar/shield-x.svg",
+            gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
+        );
+    }
     let group = match status {
         "waiting" => "hold",
         "finished" => "done",
@@ -143,7 +152,7 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
     if !snooze.is_empty() {
         rows.push(json!({
             "label": "Snooze",
-            "iconPath": "titlebar/clock.svg",
+            "iconPath": "modals/settings/moon.svg",
             "hotkeyAction": "inboxSnooze",
             "children": snooze,
         }));
@@ -290,6 +299,16 @@ pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::
             "titlebar/shield-alert.svg",
             gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
         );
+    }
+    if kind == "approvalSettled" {
+        return if status == "denied" || status == "dropped" {
+            (
+                "titlebar/shield-x.svg",
+                gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
+            )
+        } else {
+            ("titlebar/shield-check.svg", gpui::rgb(0x2fa865).into())
+        };
     }
     if kind == "pageBundle" {
         return (
@@ -961,10 +980,10 @@ impl NativeChatView {
             .gap(px(8.0 * s))
             .child(
                 svg()
-                    .path("titlebar/circle-check-filled.svg")
+                    .path("titlebar/archive.svg")
                     .flex_shrink_0()
                     .size(px(13.0 * s))
-                    .text_color(gpui::rgb(0x2fa865)),
+                    .text_color(p.muted),
             )
             .child(
                 div()
@@ -1176,7 +1195,7 @@ impl NativeChatView {
             })
             .child(
                 svg()
-                    .path("titlebar/clock.svg")
+                    .path("modals/settings/moon.svg")
                     .flex_shrink_0()
                     .size(px(13.0 * s))
                     .text_color(p.card_muted),
@@ -1268,7 +1287,7 @@ impl NativeChatView {
             })
             .child(
                 svg()
-                    .path("titlebar/circle-check-filled.svg")
+                    .path("titlebar/message-circle-check.svg")
                     .flex_shrink_0()
                     .size(px(13.0 * s))
                     .text_color(green),
@@ -1339,7 +1358,7 @@ impl NativeChatView {
                         })
                         .child(
                             svg()
-                                .path("titlebar/circle-check-filled.svg")
+                                .path("titlebar/message-circle-check.svg")
                                 .flex_shrink_0()
                                 .size(px(12.0 * s))
                                 .text_color(green.opacity(0.85)),
@@ -1352,21 +1371,26 @@ impl NativeChatView {
                                 .text_color(p.card_muted)
                                 .child(title),
                         )
-                        .when(!outcome.is_empty(), |el| {
-                            el.child(
-                                div()
-                                    .flex_shrink_0()
-                                    .max_w(px(180.0 * s))
-                                    .truncate()
-                                    .px(px(6.0 * s))
-                                    .py(px(1.0 * s))
-                                    .rounded(px(5.0 * s))
-                                    .bg(p.foreground.opacity(0.05))
-                                    .text_size(px(PROSE_SIZE * 0.88 * s))
-                                    .text_color(p.muted)
-                                    .child(outcome),
-                            )
-                        })
+                        .when(
+                            !outcome.is_empty()
+                                && !outcome.eq_ignore_ascii_case("answered")
+                                && !outcome.eq_ignore_ascii_case("done"),
+                            |el| {
+                                el.child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .max_w(px(180.0 * s))
+                                        .truncate()
+                                        .px(px(6.0 * s))
+                                        .py(px(1.0 * s))
+                                        .rounded(px(5.0 * s))
+                                        .bg(p.foreground.opacity(0.05))
+                                        .text_size(px(PROSE_SIZE * 0.88 * s))
+                                        .text_color(p.muted)
+                                        .child(outcome),
+                                )
+                            },
+                        )
                         .when(!age.is_empty(), |el| {
                             el.child(div().flex_shrink_0().text_color(p.muted).child(age))
                         })

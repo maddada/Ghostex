@@ -141,9 +141,9 @@ pub fn phase_label(kind: &str) -> &'static str {
 /// reported.
 fn row_stats(row: &Value, status: &str) -> Vec<RowStat> {
     let work = &row["turnWork"];
-    let (kind, label) = match status {
+    let phase = match status {
         "working" if row["stalled"] == true || row["stuck"] == true => {
-            ("stalled".to_string(), text(row, "detail"))
+            Some(("stalled".to_string(), text(row, "detail")))
         }
         "working" => {
             let phase = match text(work, "phase") {
@@ -151,7 +151,7 @@ fn row_stats(row: &Value, status: &str) -> Vec<RowStat> {
                 phase => phase,
             };
             let label = phase_label(&phase).to_string();
-            (phase, label)
+            Some((phase, label))
         }
         "paused" => {
             let kind = "usageLimit".to_string();
@@ -160,32 +160,37 @@ fn row_stats(row: &Value, status: &str) -> Vec<RowStat> {
             } else {
                 phase_label("usageLimit").to_string()
             };
-            (kind, label)
+            Some((kind, label))
         }
-        "approval" => ("approval".to_string(), phase_label("approval").to_string()),
+        "approval" => Some(("approval".to_string(), phase_label("approval").to_string())),
         "question" => {
             let wait_kind = text(row, "waitKind");
             if wait_kind == "signIn" {
-                ("signIn".to_string(), phase_label("signIn").to_string())
+                Some(("signIn".to_string(), phase_label("signIn").to_string()))
             } else if wait_kind == "usageLimit" {
-                (
+                Some((
                     "usageLimit".to_string(),
                     phase_label("usageLimit").to_string(),
-                )
+                ))
             } else {
-                ("question".to_string(), phase_label("question").to_string())
+                Some(("question".to_string(), phase_label("question").to_string()))
             }
         }
         _ if row["untested"] == true => {
-            ("untested".to_string(), phase_label("untested").to_string())
+            Some(("untested".to_string(), phase_label("untested").to_string()))
         }
-        _ if !text(row, "lastReport").is_empty() => (
+        _ if !text(row, "lastReport").is_empty() => Some((
             "delivered".to_string(),
             phase_label("delivered").to_string(),
-        ),
-        _ => ("finished".to_string(), phase_label("finished").to_string()),
+        )),
+        // Under the Finished fold, omit the redundant "Finished" stat when no richer status
+        // (Delivered / Untested) applies (Q4784 A).
+        _ => None,
     };
-    let mut stats = vec![RowStat { kind, label }];
+    let mut stats = match phase {
+        Some((kind, label)) => vec![RowStat { kind, label }],
+        None => Vec::new(),
+    };
     let count = |key: &str| work[key].as_u64().unwrap_or(0) as usize;
     stats.extend(
         crate::transcript::work_summary::counted_work_stats(count("toolCalls"), count("files"))
@@ -608,8 +613,7 @@ fn parse_rows(rows: Option<&Value>) -> Vec<(String, CoordinatorThreadRow)> {
             let waiting = !working
                 && (needs_approval
                     || (wait_needs_user && (state == "waiting" || wait_kind == "usageLimit")));
-            let paused_on_limit =
-                !working && !waiting && wait_kind == "usageLimit";
+            let paused_on_limit = !working && !waiting && wait_kind == "usageLimit";
             let mut parsed = CoordinatorThreadRow {
                 // A thread on another computer keeps that computer in its key: ids are only
                 // unique within one gxserver.

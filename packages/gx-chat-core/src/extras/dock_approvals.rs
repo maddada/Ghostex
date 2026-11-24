@@ -333,7 +333,7 @@ fn settled_row(key: &str, line: &Value) -> Value {
     json!({
         "key": key,
         "kind": "approvalSettled",
-        "status": if denied { "dropped" } else { "finished" },
+        "status": if denied { "denied" } else { "approved" },
         "title": match text(line, "command") {
             "" => text(line, "text").to_string(),
             command => format!("{} \u{b7} {command}", text(line, "text")),

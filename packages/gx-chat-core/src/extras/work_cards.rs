@@ -415,6 +415,56 @@ pub(crate) fn waits_line_in(item: &Value, all_items: &[&Value]) -> String {
     format_wait_phrase(&targets, true, true)
 }
 
+/// Capitalizes the first Unicode scalar of `text` without altering the rest.
+fn capitalize_first(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+    }
+}
+
+/// Strips a redundant leading "Waiting on "/"Waiting for " prefix and capitalizes the target,
+/// for rows already sitting under the Work panel's "Waiting" group header (Q4784 A).
+pub(crate) fn strip_waiting_prefix_cap(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.eq_ignore_ascii_case("waiting") {
+        return String::new();
+    }
+    let stripped = strip_wait_prefix(trimmed);
+    if stripped.len() == trimmed.len() {
+        trimmed.to_string()
+    } else {
+        capitalize_first(stripped)
+    }
+}
+
+/// Wait targets without the "Waiting on " prefix (e.g. `"Rebuild"`, `"Phone update"`), for rows
+/// under the Work panel's "Waiting" group header (Q4784 A).
+pub(crate) fn waits_targets_line_in(item: &Value, all_items: &[&Value]) -> String {
+    let targets = item_wait_targets(item, all_items, true, None);
+    let parts: Vec<String> = targets
+        .iter()
+        .map(|(target, until)| {
+            if !until.is_empty() {
+                format!("{target} (by {until})")
+            } else {
+                target.clone()
+            }
+        })
+        .collect();
+    let joined = match parts.len() {
+        0 => return String::new(),
+        1 => parts[0].clone(),
+        _ => format!(
+            "{} and {}",
+            parts[..parts.len() - 1].join(", "),
+            parts[parts.len() - 1]
+        ),
+    };
+    capitalize_first(&joined)
+}
+
 /// Whether a thread attached to a work item genuinely requires manual user action in Needs you
 /// (approval, folder trust, sign-in, or an exhausted account pool with no auto-resume).
 /// Calm / auto-recovering usage limits, exited agents, and coordinator-handled questions stay out
@@ -1277,8 +1327,16 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                                 text(item, "ref"),
                                 text(ask, "tag")
                             );
-                            let outcome = match text(ask, "answered") {
-                                "" => "Answered",
+                            // Q4784 A: omit generic "Answered"/"Done" outcome pills under the
+                            // Answered drawer; keep only specific choices that differ from header.
+                            let outcome = match text(ask, "answered").trim() {
+                                "" => "",
+                                words
+                                    if words.eq_ignore_ascii_case("answered")
+                                        || words.eq_ignore_ascii_case("done") =>
+                                {
+                                    ""
+                                }
                                 words => words,
                             };
                             let mut row = json!({
@@ -1415,7 +1473,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 "key": key,
                 "kind": "answered",
                 "title": title,
-                "outcome": "Answered",
+                "outcome": "",
                 "age": crate::transcript::message_time::age_label(now_ms, at),
                 "showInChat": show,
             }),
@@ -3149,7 +3207,16 @@ pub fn project_with(
             line["title"] = json!(change.title);
             line["detail"] = json!(change.detail);
             line["status"] = json!(change.status);
-            line["statusLabel"] = json!(if change.status.is_empty() {
+            // Q4784 A: drop the status pill when the card lead already states the same status;
+            // keep it when the item's live status moved on from the lead.
+            let lead_repeats_status = matches!(
+                (change.lead.as_str(), change.status.as_str()),
+                ("Work item finished", "finished")
+                    | ("Work item dropped", "dropped")
+                    | ("Work item needs you", "needs")
+                    | ("Work item now waiting", "waiting")
+            );
+            line["statusLabel"] = json!(if change.status.is_empty() || lead_repeats_status {
                 ""
             } else {
                 status_label(&change.status)

@@ -750,7 +750,7 @@ impl NativeChatView {
                 .map(|choice| {
                     json!({
                         "label": choice["label"].as_str().unwrap_or_default(),
-                        "iconPath": "titlebar/clock.svg",
+                        "iconPath": "modals/settings/moon.svg",
                         "command": choice["command"],
                     })
                 })

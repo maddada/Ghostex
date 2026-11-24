@@ -147,13 +147,18 @@ pub(super) fn group_look(group: &str) -> (&'static str, Option<u32>) {
             "titlebar/circle-minus-filled.svg",
             Some(crate::app::native_sidebar::status::APPROVAL_COLOR),
         ),
-        // On hold: a pause in a calm blue-grey, never the red of Blocked.
+        // On hold / Waiting: a pause in a calm blue-grey, never the red of Blocked (Q4781 C).
         "hold" => ("titlebar/player-pause.svg", Some(HOLD_COLOR)),
         "moving" => (
             "titlebar/circle-half.svg",
             Some(crate::app::native_sidebar::status::WORKING_COLOR),
         ),
-        "done" => ("titlebar/circle-check-filled.svg", Some(GOOD_COLOR)),
+        // Finished / Done: outline green circle-check (Q4775 B).
+        "done" => ("titlebar/circle-check.svg", Some(GOOD_COLOR)),
+        // Idle / Later / Removed: distinct muted icons (Q4782 A).
+        "idle" => ("titlebar/circle-dashed.svg", None),
+        "later" => ("titlebar/calendar-clock.svg", None),
+        "removed" => ("titlebar/circle-off.svg", None),
         // Backlog.
         "ideas" => ("titlebar/archive.svg", None),
         _ => ("titlebar/circle-dashed.svg", None),
@@ -303,7 +308,7 @@ fn board_menu_entries(row: &Value) -> Vec<Value> {
         .as_array()
         .is_some_and(|choices| !choices.is_empty())
     {
-        extra.push(json!({"label": "Snooze", "icon": "clock", "submenu": "snooze"}));
+        extra.push(json!({"label": "Snooze", "icon": "moon", "submenu": "snooze"}));
     }
     // After Open and Mention in chat, before Tags, Mark done and Drop.
     let at = entries
@@ -2593,6 +2598,7 @@ impl NativeChatView {
                 let label = text(&entry, "label");
                 let icon = match text(&entry, "icon").as_str() {
                     "agent" => format!("agent-icons/{agent_icon}.svg"),
+                    "moon" => "modals/settings/moon.svg".to_string(),
                     icon => format!("titlebar/{icon}.svg"),
                 };
                 let tags = text(&entry, "submenu") == "tags";

@@ -202,8 +202,14 @@ pub fn answered_rows(
             }
             let tag = text(item, "tag");
             let key = format!("answered:needs-you:{tag}");
-            let outcome = match text(item, "answer") {
-                "" => "Done",
+            let outcome = match text(item, "answer").trim() {
+                "" => "",
+                answer
+                    if answer.eq_ignore_ascii_case("answered")
+                        || answer.eq_ignore_ascii_case("done") =>
+                {
+                    ""
+                }
                 answer => answer,
             };
             let mut row = json!({

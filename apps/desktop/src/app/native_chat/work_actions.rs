@@ -924,7 +924,7 @@ impl NativeChatView {
             row = row.child(
                 self.work_icon_button(
                     format!("work-snooze:{key}"),
-                    "titlebar/clock.svg",
+                    "modals/settings/moon.svg",
                     "Snooze",
                     false,
                     p,

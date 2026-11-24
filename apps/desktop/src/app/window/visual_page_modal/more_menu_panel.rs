@@ -37,7 +37,7 @@ pub(crate) fn menu_rows(snooze: bool, star: Option<bool>) -> Vec<MenuRow> {
     if snooze {
         rows.push(MenuRow {
             label: "Snooze",
-            icon: Some("titlebar/clock.svg"),
+            icon: Some("modals/settings/moon.svg"),
             submenu: true,
         });
     }

@@ -158,9 +158,11 @@ fn item_row(all_items: &[&Value], item: &Value, group: &str, status: &str, now_m
     let mut title = text(item, "title").to_string();
     let mut line = text(item, "now").to_string();
     if status == "waiting" {
-        let waits = waits_line_in(item, all_items);
+        let waits = crate::extras::work_cards::waits_targets_line_in(item, all_items);
         if !waits.is_empty() {
             line = waits;
+        } else if !line.is_empty() {
+            line = crate::extras::work_cards::strip_waiting_prefix_cap(&line);
         }
     }
     let thread_wait = status == "needs" && waiting_thread.is_some();
@@ -181,12 +183,14 @@ fn item_row(all_items: &[&Value], item: &Value, group: &str, status: &str, now_m
         "group": group,
         "title": title,
         "detail": line,
-        // A row with nothing to say yet says who has it, never the board's "No links yet".
+        // A row with nothing to say yet says who has it, never repeating its group header
+        // (Q4784 A: no "Finished" under Finished today, no "Nobody is on it" under Not being
+        // worked on, no "Waiting on " prefix under Waiting).
         "note": if line.is_empty() {
             match status {
                 "later" => "Nobody is on it yet".to_string(),
-                "idle" => "Nobody is on it".to_string(),
-                "finished" => "Finished".to_string(),
+                "idle" | "finished" => String::new(),
+                "waiting" => crate::extras::work_cards::strip_waiting_prefix_cap(&owner_words(item)),
                 _ => owner_words(item),
             }
         } else {
@@ -266,9 +270,6 @@ fn ask_row(items: &[&Value], item: &Value, ask: &Value, now_ms: i64) -> Value {
         _ => json!([{ "label": "Done", "recommended": false }]),
     };
     let mut detail = text(item, "title").to_string();
-    if holds {
-        detail.push_str(" \u{b7} Holds it up");
-    }
     let steps = text(ask, "steps");
     // Snoozed: under Later, quietly saying until when (work.rs `snooze`).
     let snoozed = if snoozed_at(ask, now_ms) {
