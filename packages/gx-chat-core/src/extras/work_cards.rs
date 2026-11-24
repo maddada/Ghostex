@@ -1405,6 +1405,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 // its answers on the row (`details_fields`).
                 "details": details_fields(text(ask, "detail")).0,
                 "preview": details_fields(text(ask, "detail")).1,
+                "hasDetail": has_detail(text(ask, "detail")),
                 "age": card["age"],
                 // The line under it names only its own item (`chips`); whether it holds that item
                 // up is the row's mark. Other items that wait on its answer follow (`waitedBy`).
@@ -2391,7 +2392,21 @@ fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>)
 /// items in inbox!!!!" `preview` stays on the shared dock row model because Work panel Needs you
 /// cards (`coordinator_board.rs` `BoardRow::dock`) read it, while Inbox renderers on desktop, web
 /// and phone (`dock_row_look` with `in_dock`, phone `DockRow`) no longer draw `preview`.
+///
+/// CDXC:Coordinators 2026-11-25 DECISION:
+/// Follows the user's "please only show the title line for all these work items in inbox" above:
+/// with the second line gone, an Inbox row whose short detail (this constant or fewer characters)
+/// is not Details would show that detail nowhere. So every row with any detail carries
+/// `hasDetail`, and Inbox renderers (desktop and web `dock_row_look` with `in_dock`, phone
+/// `DockRow`) give it the Details button beside its answers, as a long detail's row has. `details`
+/// keeps its meaning, so Work panel Needs you cards, which still draw the preview line under the
+/// title, do not gain a button.
 pub(crate) const SHORT_DESCRIPTION: usize = 90;
+
+/// Whether the item has any detail to read (`hasDetail` on its dock row), of any length.
+pub(crate) fn has_detail(detail: &str) -> bool {
+    !detail.trim().is_empty()
+}
 
 pub(crate) fn details_fields(detail: &str) -> (bool, String) {
     let detail = detail.trim();
@@ -2545,6 +2560,7 @@ fn question_rows_of(
                     let (details, preview) = details_fields(description);
                     row["details"] = json!(details);
                     row["preview"] = json!(preview);
+                    row["hasDetail"] = json!(true);
                 }
             } else {
                 row["kind"] = json!("form");

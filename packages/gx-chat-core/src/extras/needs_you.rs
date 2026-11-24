@@ -130,6 +130,7 @@ pub fn rows_split(
             // (`work_cards::details_fields`); its command strip stays on the row and in the panel.
             "details": super::work_cards::details_fields(text(item, "detail")).0,
             "preview": super::work_cards::details_fields(text(item, "detail")).1,
+            "hasDetail": super::work_cards::has_detail(text(item, "detail")),
             "command": command,
             "runCommand": if runnable {
                 super::needs_you_command::run_action(&key, tag, "")

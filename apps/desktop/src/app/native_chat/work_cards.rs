@@ -1977,7 +1977,16 @@ impl NativeChatView {
         // Keep the answer buttons visible on the folded row and show a quiet neutral "Details"
         // button beside them to open the full floating panel. Live pages and forms (`row["open"]`)
         // still use their direct icon action when they have no inline answers.
-        let has_details_button = row["details"] == true
+        //
+        // CDXC:Coordinators 2026-11-25 DECISION:
+        // User's "please only show the title line for all these work items in inbox" removed the
+        // Inbox row's second line, which was the only place a short detail (`details` false,
+        // gx-chat-core `details_fields`) showed. So an Inbox row (`look.age` is `None`) with any
+        // detail (`hasDetail`) gets Details too, its answers staying beside it. A Work panel
+        // Needs you card still draws that short detail as its preview line, so it keeps its
+        // buttons.
+        let has_details_button = (row["details"] == true
+            || (look.age.is_none() && row["hasDetail"] == true))
             && !row["open"].is_object()
             && !settled
             && look.buttons.is_none();
