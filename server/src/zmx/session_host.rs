@@ -15,7 +15,10 @@
 //! is on another volume than the data folder, or not on APFS), or macOS won't run zmx from it
 //! (`SessionHostPlan::runs`), daemons run from the app as before.
 //! Sessions started by a build without this keep running from the app the update deletes.
-//! `.noindex` keeps Spotlight, and through it Launch Services, from listing the copies as apps.
+//! `.noindex` keeps Spotlight out, but LaunchServices still registers cloned bundles when they run
+//! and lists every past version in Finder's Open With menu (GitHub #738), so each copy is
+//! unregistered with `lsregister -u` (off-thread, best effort) after creation, after launch, at
+//! gxserver startup, and before an unused copy is deleted.
 //! SEE-ALSO: `remove_leftover_releases` in server/src/setup.rs (the same rule for the release
 //! folders of a Ghostex server installed without the app), `macos_zmx_bundle_identifier` in
 //! launch.rs (still finds GhostexSessions.app inside the clone).
@@ -30,11 +33,20 @@ pub(crate) fn session_daemon_zmx(zmx: GxserverResolvedTool) -> GxserverResolvedT
         return zmx;
     };
     match plan.ensure() {
-        Ok(executable) if plan.runs(&executable) => GxserverResolvedTool {
-            executable_path: executable.to_string_lossy().into_owned(),
-            ..zmx
-        },
-        Ok(_) => zmx,
+        Ok((executable, created)) => {
+            let runs = plan.runs(&executable);
+            if created {
+                macos::unregister_bundle_async(plan.host_app());
+            }
+            if runs {
+                GxserverResolvedTool {
+                    executable_path: executable.to_string_lossy().into_owned(),
+                    ..zmx
+                }
+            } else {
+                zmx
+            }
+        }
         Err(error) => {
             eprintln!(
                 "[gxserver] session daemons run from {} because its copy could not be made: {error}",
@@ -50,12 +62,24 @@ pub(crate) fn session_daemon_zmx(zmx: GxserverResolvedTool) -> GxserverResolvedT
     zmx
 }
 
-/// Removes the app copies no running program uses any more, except the current one. Runs at gxserver start.
+/// Unregisters the session-host app copy containing `zmx_executable` from LaunchServices off-thread.
+#[cfg(target_os = "macos")]
+pub(crate) fn unregister_session_host_for_zmx(zmx_executable: &std::path::Path) {
+    if let Some(app_bundle) = macos::session_host_app_for_zmx(&macos::hosts_root(), zmx_executable)
+    {
+        macos::unregister_bundle_async(app_bundle);
+    }
+}
+
+/// Removes the app copies no running program uses any more (unregistering each from LaunchServices
+/// first), and unregisters all remaining copies so stale Open With entries are cleaned up.
+/// Runs off-thread at gxserver start.
 #[cfg(target_os = "macos")]
 pub(crate) fn remove_unused_session_hosts() {
     let _ = std::thread::Builder::new()
         .name("session-host-cleanup".to_string())
         .spawn(|| {
+            let root = macos::hosts_root();
             let current = crate::toolchain::require_bundled_zmx()
                 .ok()
                 .and_then(|zmx| {
@@ -63,10 +87,11 @@ pub(crate) fn remove_unused_session_hosts() {
                 })
                 .map(|plan| plan.key);
             macos::remove_unused(
-                &macos::hosts_root(),
+                &root,
                 current.as_deref(),
                 &crate::setup::running_executable_paths(),
-            )
+            );
+            macos::unregister_existing(&root);
         });
 }
 
@@ -155,22 +180,26 @@ mod macos {
             self.root.join(&self.key)
         }
 
-        fn host_zmx(&self) -> PathBuf {
+        pub(super) fn host_app(&self) -> PathBuf {
             let app_name = self.app.file_name().unwrap_or_default();
-            self.host_dir().join(app_name).join(&self.relative_zmx)
+            self.host_dir().join(app_name)
         }
 
-        /// The cloned zmx, cloning the app first when this zmx has no copy yet.
-        pub(super) fn ensure(&self) -> io::Result<PathBuf> {
+        fn host_zmx(&self) -> PathBuf {
+            self.host_app().join(&self.relative_zmx)
+        }
+
+        /// The cloned zmx (and whether this call created the clone), cloning the app first when this zmx has no copy yet.
+        pub(super) fn ensure(&self) -> io::Result<(PathBuf, bool)> {
             let host_zmx = self.host_zmx();
             if host_zmx.is_file() {
-                return Ok(host_zmx);
+                return Ok((host_zmx, false));
             }
             let _guard = CLONE_LOCK
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             if host_zmx.is_file() {
-                return Ok(host_zmx);
+                return Ok((host_zmx, false));
             }
             fs::create_dir_all(&self.root)?;
             let partial = self
@@ -193,12 +222,18 @@ mod macos {
                     format!("{} is missing from the copy", self.relative_zmx.display()),
                 ));
             }
-            remove_unused(
-                &self.root,
-                Some(&self.key),
-                &crate::setup::running_executable_paths(),
-            );
-            Ok(host_zmx)
+            let root = self.root.clone();
+            let key = self.key.clone();
+            let _ = thread::Builder::new()
+                .name("session-host-cleanup".to_string())
+                .spawn(move || {
+                    remove_unused(
+                        &root,
+                        Some(&key),
+                        &crate::setup::running_executable_paths(),
+                    );
+                });
+            Ok((host_zmx, true))
         }
 
         /// CDXC:Zmx 2026-11-14 WHY: macOS can refuse to run zmx from the clone while it runs the same bytes from the app: on 2026-11-14 a source build signed with an Apple Development certificate (not notarized) ran from /Applications, but from the clone the kernel logged "ASP: Security policy would not allow process" and the process waited in dyld forever, so every new session's launchd job hung, never registered, and the app showed "Couldn't open this terminal". Only running it tells, so the clone's `zmx version` must finish once per installed zmx before daemons run from it; one that macOS holds is killed and daemons run from the app as before this clone existed.
@@ -256,7 +291,100 @@ mod macos {
         }
     }
 
+    const LSREGISTER: &str = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+
+    /// Returns `<root>/<key>/<App>.app` when `zmx_executable` sits inside a session-host copy.
+    pub(super) fn session_host_app_for_zmx(root: &Path, zmx_executable: &Path) -> Option<PathBuf> {
+        let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+        let canonical_zmx =
+            fs::canonicalize(zmx_executable).unwrap_or_else(|_| zmx_executable.to_path_buf());
+        let relative = canonical_zmx.strip_prefix(&canonical_root).ok()?;
+        let mut components = relative.components();
+        let key = components.next()?;
+        let app = components.next()?;
+        let app_path = canonical_root.join(key).join(app);
+        (app_path.extension().is_some_and(|ext| ext == "app") && app_path.is_dir())
+            .then_some(app_path)
+    }
+
+    /// Best-effort `lsregister -u` so macOS stops offering a session-host copy in Finder's Open
+    /// With menu (GitHub #738). Does not edit Info.plist (preserves the code signature) and does
+    /// not affect running processes.
+    pub(super) fn unregister_bundle(app_path: &Path) {
+        match Command::new(LSREGISTER)
+            .arg("-u")
+            .arg(app_path)
+            .stdin(Stdio::null())
+            .output()
+        {
+            Ok(output) if output.status.success() => {}
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                // -10814 (kLSApplicationNotFoundErr): bundle is already absent from LaunchServices.
+                if stderr.contains("-10814") || stdout.contains("-10814") {
+                    return;
+                }
+                let detail = if !stderr.trim().is_empty() {
+                    stderr.trim()
+                } else {
+                    stdout.trim()
+                };
+                eprintln!(
+                    "[gxserver] lsregister -u {} failed ({}): {}",
+                    app_path.display(),
+                    output.status,
+                    detail
+                );
+            }
+            Err(error) => {
+                eprintln!(
+                    "[gxserver] failed to run lsregister -u {}: {error}",
+                    app_path.display()
+                );
+            }
+        }
+    }
+
+    /// Spawns a background thread to unregister `app_path` from LaunchServices without blocking.
+    pub(super) fn unregister_bundle_async(app_path: PathBuf) {
+        let _ = thread::Builder::new()
+            .name("session-host-lsregister".to_string())
+            .spawn(move || unregister_bundle(&app_path));
+    }
+
+    /// Unregisters every `.app` bundle directly inside a session-host entry directory.
+    fn unregister_host_dir_bundles(host_dir: &Path) {
+        let Ok(entries) = fs::read_dir(host_dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "app") {
+                unregister_bundle(&path);
+            }
+        }
+    }
+
+    /// Unregisters every existing session-host app copy under `root` (skipping in-progress partial
+    /// clones). Called once at gxserver startup so stale Open With entries from earlier versions
+    /// are cleaned up.
+    pub(super) fn unregister_existing(root: &Path) {
+        let Ok(entries) = fs::read_dir(root) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            let path = fs::canonicalize(entry.path()).unwrap_or_else(|_| entry.path());
+            unregister_host_dir_bundles(&path);
+        }
+    }
+
     /// Removes every copy but `current` that no running program was started from, and partial copies left by an ended gxserver.
+    /// Unregisters each copy from LaunchServices before deleting it, because `lsregister -u` cannot remove an entry once the bundle is gone.
     pub(super) fn remove_unused(root: &Path, current: Option<&str>, running: &[PathBuf]) {
         let Ok(entries) = fs::read_dir(root) else {
             return;
@@ -275,6 +403,7 @@ mod macos {
             if running.iter().any(|exe| exe.starts_with(&path)) {
                 continue;
             }
+            unregister_host_dir_bundles(&path);
             let _ = fs::remove_dir_all(&path);
         }
     }

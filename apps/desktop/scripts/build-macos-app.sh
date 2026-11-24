@@ -1686,3 +1686,20 @@ printf 'Built %s for %s (%s)\n' "$APP_PATH" "$GHOSTEX_MACOS_ARCH" "$RUST_TARGET_
 if [[ "$RUN_APP" == "1" ]]; then
 	open -n "$APP_PATH"
 fi
+
+# CDXC:Build 2026-11-24 WHY: staging bundles under build/macos.noindex/ carry the installed app's
+# document claims; `.noindex` keeps Spotlight out, but LaunchServices can still register them and
+# duplicate Ghostex in Finder's Open With menu (GitHub #738). Unregister them best-effort after
+# packaging (and after `open -n`, which registers on launch); `open` and `cargo xtask start` still
+# launch normally afterwards.
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+if [[ -x "$LSREGISTER" ]]; then
+	shopt -s nullglob
+	for staged_app in "$APP_BUILD_DIR"/Ghostex*.app; do
+		"$LSREGISTER" -u "$staged_app" >/dev/null 2>&1 || true
+	done
+	shopt -u nullglob
+	if [[ -d "$APP_PATH" && "$(basename "$APP_PATH")" != Ghostex*.app ]]; then
+		"$LSREGISTER" -u "$APP_PATH" >/dev/null 2>&1 || true
+	fi
+fi
