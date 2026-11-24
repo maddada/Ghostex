@@ -167,8 +167,14 @@ enum Assessment {
     },
 }
 
-/// A queued thread report is checked for staleness once it has waited this long: the coordinator
-/// runtime checked it right before sending it.
+enum StaleReportCheck {
+    NotDue,
+    CheckedStillHolds,
+    Stale(String),
+}
+
+/// A queued thread report is checked periodically for staleness while it waits once it has waited
+/// this long; "not moving" reports are also checked once more right before delivery.
 const STALE_REPORT_CHECK_AFTER_MS: i64 = 60_000;
 /// How often a waiting thread report is checked again (each check may read a transcript tail).
 const STALE_REPORT_CHECK_EVERY_MS: i64 = 30_000;
@@ -618,7 +624,29 @@ impl SessionChatQueueRuntime {
                         now,
                         &generated_at,
                     ) {
-                        ready.push(delivery);
+                        let head =
+                            read_session_chat_queue_snapshot_with(&db, &project_id, &session_id)
+                                .queue
+                                .into_iter()
+                                .find(|prompt| prompt.id == delivery.prompt_id);
+                        if let Some(reason) = head.as_ref().and_then(|head| {
+                            self.stale_stall_report_at_delivery(
+                                &db,
+                                &repository,
+                                head,
+                                &generated_at,
+                            )
+                        }) {
+                            let noted = self.note_wait(&key, None, now, || {
+                                (self.composer_reader)(&project_id, &session_id).screen_tail
+                            });
+                            if noted.changed {
+                                to_publish.push((project_id.clone(), session_id.clone()));
+                            }
+                            stale.push((project_id, session_id, delivery.prompt_id, reason));
+                        } else {
+                            ready.push(delivery);
+                        }
                     }
                 }
             }
@@ -705,16 +733,6 @@ impl SessionChatQueueRuntime {
         now: DateTime<Utc>,
         generated_at: &str,
     ) -> Assessment {
-        let deliver = |head: &crate::session_chat_queue::SessionChatQueuedPrompt| {
-            Assessment::Deliver(ReadyDelivery {
-                project_id: project_id.to_string(),
-                session_id: session_id.to_string(),
-                prompt_id: head.id.clone(),
-                startup_send: head.startup_send,
-                model_selection: None,
-                input_box_reload: false,
-            })
-        };
         let reload = |head: &crate::session_chat_queue::SessionChatQueuedPrompt| {
             Assessment::Deliver(ReadyDelivery {
                 project_id: project_id.to_string(),
@@ -848,12 +866,36 @@ impl SessionChatQueueRuntime {
             self.reset_gate(key);
             return Assessment::Skip;
         };
-        if let Some(reason) = self.stale_report(db, repository, key, head, now) {
-            return Assessment::DropStale {
+        let stale_checked = match self.stale_report(db, repository, key, head, now, generated_at) {
+            StaleReportCheck::Stale(reason) => {
+                return Assessment::DropStale {
+                    prompt_id: head.id.clone(),
+                    reason,
+                };
+            }
+            StaleReportCheck::CheckedStillHolds => true,
+            StaleReportCheck::NotDue => false,
+        };
+        let deliver = |head: &crate::session_chat_queue::SessionChatQueuedPrompt| {
+            if !stale_checked {
+                if let Some(reason) =
+                    self.stale_stall_report_at_delivery(db, repository, head, generated_at)
+                {
+                    return Assessment::DropStale {
+                        prompt_id: head.id.clone(),
+                        reason,
+                    };
+                }
+            }
+            Assessment::Deliver(ReadyDelivery {
+                project_id: project_id.to_string(),
+                session_id: session_id.to_string(),
                 prompt_id: head.id.clone(),
-                reason,
-            };
-        }
+                startup_send: head.startup_send,
+                model_selection: None,
+                input_box_reload: false,
+            })
+        };
         // CDXC:SessionChat 2026-09-25 WHY:
         // A send held for a session that was asleep or still starting (session_chat_send_wake.rs) waits exactly like a new chat's first message: nobody may be viewing the session, so the scheduler refreshes the screen itself and delivers the moment the input box appears. Waiting for the cached reading made a woken session take 40 seconds.
         let draft = crate::agents::session_is_draft(&session);
@@ -1374,10 +1416,13 @@ impl SessionChatQueueRuntime {
         key: &str,
         head: &crate::session_chat_queue::SessionChatQueuedPrompt,
         now: DateTime<Utc>,
-    ) -> Option<String> {
-        let created = chrono::DateTime::parse_from_rfc3339(&head.created_at).ok()?;
+        generated_at: &str,
+    ) -> StaleReportCheck {
+        let Ok(created) = chrono::DateTime::parse_from_rfc3339(&head.created_at) else {
+            return StaleReportCheck::NotDue;
+        };
         if now.signed_duration_since(created).num_milliseconds() < STALE_REPORT_CHECK_AFTER_MS {
-            return None;
+            return StaleReportCheck::NotDue;
         }
         let due = self.gates.lock().ok().is_some_and(|mut gates| {
             let check = &mut gates.entry(key.to_string()).or_default().stale_report_check;
@@ -1393,9 +1438,47 @@ impl SessionChatQueueRuntime {
             due
         });
         if !due {
+            return StaleReportCheck::NotDue;
+        }
+        let Some(report) = crate::coordinators::parse_quiet_report(&head.text) else {
+            return StaleReportCheck::CheckedStillHolds;
+        };
+        match self.quiet_report_stale_reason(db, repository, head, &report, generated_at) {
+            Some(reason) => StaleReportCheck::Stale(reason),
+            None => StaleReportCheck::CheckedStillHolds,
+        }
+    }
+
+    /// CDXC:Coordinators 2026-11-24 WHY:
+    /// The periodic `stale_report` check runs only after `STALE_REPORT_CHECK_AFTER_MS` and at most every `STALE_REPORT_CHECK_EVERY_MS` so held rows do not read transcripts every second.
+    /// That left two windows where a queued "not moving" report still went out after its local thread (or one of its subagents) had already moved: a report delivered within its first minute (common right after a round-1 nudge wakes the thread), and a write that landed in the seconds since the last periodic check.
+    /// Re-checking right before returning `Assessment::Deliver` (and before a watchdog escalation) closes both windows at one check per delivery, with no cost for non-reports; idle reports keep their periodic check only, and threads on other computers cannot be read here.
+    /// SEE-ALSO: server/src/coordinators/stale_report.rs, server/src/coordinators/subagent_output.rs.
+    fn stale_stall_report_at_delivery(
+        &self,
+        db: &rusqlite::Connection,
+        repository: &DomainRepository<'_>,
+        head: &crate::session_chat_queue::SessionChatQueuedPrompt,
+        generated_at: &str,
+    ) -> Option<String> {
+        let report = crate::coordinators::parse_quiet_report(&head.text)?;
+        if report.kind != crate::coordinators::QuietReportKind::Stalled {
             return None;
         }
-        let report = crate::coordinators::parse_quiet_report(&head.text)?;
+        self.quiet_report_stale_reason(db, repository, head, &report, generated_at)
+    }
+
+    /// Blocking: reads the local thread's transcript (and, for a stall report, its subagents'
+    /// transcripts via `subagent_output.rs`) and formats the drop reason when `report` no longer
+    /// holds.
+    fn quiet_report_stale_reason(
+        &self,
+        db: &rusqlite::Connection,
+        repository: &DomainRepository<'_>,
+        head: &crate::session_chat_queue::SessionChatQueuedPrompt,
+        report: &crate::coordinators::QuietReport,
+        generated_at: &str,
+    ) -> Option<String> {
         let (project_id, session_id) =
             crate::coordinators::local_thread_of(&report.thread_ref, &self.server_id)?;
         let thread = crate::coordinators::read_thread(db, &project_id, &session_id)
@@ -1406,10 +1489,10 @@ impl SessionChatQueueRuntime {
             .ok()
             .flatten();
         let why = crate::coordinators::quiet_report_stale_reason(
-            &report,
+            report,
             thread.as_ref(),
             session.as_ref(),
-            &crate::presentation::now_iso(),
+            generated_at,
         )?;
         Some(format!(
             "Dropped a queued {} report about thread {} that waited since {}: {why}.",
