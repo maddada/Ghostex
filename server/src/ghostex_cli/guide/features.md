@@ -3611,13 +3611,24 @@ Settings > Accounts. Their ⋯ menu holds Sign in again, Turn off and Remove….
 it on in Settings > Extensions > Built-in; nothing about it shows while it is
 off): Add account > CLIProxyAPI hub adds a CLIProxyAPI you run yourself, with its
 address, one of its client keys (`api-keys` in its config) and, optionally, its
-management key and a name. Ghostex never installs or runs CLIProxyAPI, never
-copies your Claude Swap or Codex Swap logins into it, and never changes its
-accounts. Both keys stay sealed on the computer and are never synced. With the
-management key, the hub's accounts show under it with read-only usage bars
-(sign accounts in or out on the hub itself), and each one gets a usage meter at
-the bottom of the sidebar (Show usage in the sidebar in its pane turns it off);
-a login that is also a Claude Swap or Codex Swap account shows one meter. Add
+management key and a name. Ghostex stays hands-off: it never installs, starts or
+reconfigures CLIProxyAPI, and never copies your Claude Swap or Codex Swap logins
+into it. Both keys stay sealed on the computer and are never synced. With the
+management key, the hub's accounts show under it with usage bars, each one gets
+a usage meter at the bottom of the sidebar (Show usage in the sidebar in its
+pane turns it off), and **Add account** on the hub's pane lets you sign a Claude
+or Codex account into the hub directly from your browser: Ghostex on this
+computer briefly listens on `127.0.0.1:54545` (`/callback`, Claude) or
+`127.0.0.1:1455` (`/auth/callback`, Codex) for a single callback with a 5-minute
+timeout, validates the OAuth state, forwards the code and state to the hub's
+management API (`/v8/management/oauth/callback` or `/v0/management/oauth-callback`),
+shows a confirmation tab once the hub saves the login, and refreshes the hub's
+account list. Because the OAuth callback returns to localhost on the computer
+running your browser, Add account is available only on that computer (not when
+viewing a remote machine). Avoid signing the same account into both a hub and
+Claude Swap, Codex Swap, or another direct CLI login at the same time: token
+refreshes invalidate each other (`invalid_grant`). A login that is also a Claude
+Swap or Codex Swap account shows one sidebar meter. Add
 the management key only on the computer the hub runs on: other computers
 connected to it show its hub meters too. New Claude and Codex sessions can
 start On the hub from the New Thread picker's account list, or every new

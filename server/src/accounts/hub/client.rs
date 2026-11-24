@@ -1,10 +1,23 @@
 //! Calls to a CLIProxyAPI hub: the client key check when a hub is added, and the v8 management
 //! API (with v0 fallback for older hubs) that lists the hub's Claude and Codex accounts
-//! (`/v8/management/credentials`), reads each one's usage through the hub
-//! (`/v0/management/api-call`, which sends the request with that account's token in place of
-//! `$TOKEN$`, so no token ever reaches Ghostex), runs browser OAuth sign-ins for Claude and Codex
-//! (`/v8/management/oauth/...`), toggles or removes credentials, resets cooldowns, and reads or
-//! enables session affinity (`/v8/management/config`) for prompt caching.
+//! (`/v8/management/credentials` / `/v0/management/auth-files`), reads each one's usage through
+//! the hub (`/v0/management/api-call`, which sends the request with that account's token in place
+//! of `$TOKEN$`, so no token ever reaches Ghostex), runs browser OAuth sign-ins for Claude and
+//! Codex (`/v8/management/oauth/...` with `/v0/management/...` fallback), toggles or removes
+//! credentials, resets cooldowns, and reads or enables session affinity (`/v8/management/config`)
+//! for prompt caching.
+//!
+//! CDXC:AgentProviders 2026-11-18 WHY:
+//! Ghostex stays hands-off with CLIProxyAPI: it never installs, starts or reconfigures CLIProxyAPI
+//! itself, never downloads or copies Claude Swap or Codex Swap logins into a hub, and never
+//! redeems a Codex reset credit through it.
+//!
+//! CDXC:AgentProviders 2026-11-24 DECISION:
+//! Amended for user-triggered OAuth sign-in from Settings > Accounts: Ghostex on this computer
+//! briefly listens on 127.0.0.1:54545 (Claude /callback) or 127.0.0.1:1455 (Codex /auth/callback),
+//! asks the hub's management API for the OAuth URL without starting a listener on the hub, catches
+//! the single redirect, validates state, forwards the code and state to the hub's oauth-callback
+//! endpoint, and polls status until the hub finishes saving the account.
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -285,32 +298,53 @@ fn validate_oauth_auth_url(raw: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
-/// Starts a v8 browser OAuth sign-in on the hub for `claude` or `codex` only.
+fn management_v0_post(url: &str, key: &str, path: &str, body: Value) -> Result<Answer, String> {
+    answer(
+        agent()
+            .post(format!("{url}/v0/management/{path}"))
+            .header("Authorization", format!("Bearer {key}"))
+            .send_json(body),
+    )
+}
+
+fn management_v0_delete(url: &str, key: &str, path: &str) -> Result<Answer, String> {
+    answer(
+        agent()
+            .delete(format!("{url}/v0/management/{path}"))
+            .header("Authorization", format!("Bearer {key}"))
+            .call(),
+    )
+}
+
+/// Starts a browser OAuth sign-in on the hub for `claude` or `codex` without asking the hub to
+/// bind a callback port (`is_webui` is omitted so Ghostex owns the 127.0.0.1 callback listener).
+/// Tries `/v8/management/oauth/auth-url` and falls back to `/v0/management/anthropic-auth-url` or
+/// `/v0/management/codex-auth-url` for older hubs.
 pub(crate) fn oauth_start(
     url: &str,
     key: &str,
     provider: &str,
     local_callback: bool,
 ) -> Result<OAuthStart, String> {
-    if !matches!(provider, "claude" | "codex") {
-        return Err(
-            "Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string(),
-        );
-    }
-    let path = if local_callback {
-        format!("oauth/auth-url?provider={provider}&is_webui=true")
-    } else {
-        format!("oauth/auth-url?provider={provider}")
+    let v0_path = match provider {
+        "claude" => "anthropic-auth-url",
+        "codex" => "codex-auth-url",
+        _ => {
+            return Err(
+                "Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string(),
+            );
+        }
     };
-    let mut effective_local = local_callback;
-    let mut response = management_v8_get(url, key, &path)?;
-    // If the hub could not bind its local callback port (e.g. port busy), retry without is_webui
-    // so the user can still complete sign-in by pasting the redirect URL.
-    if local_callback && response.status >= 500 {
-        effective_local = false;
-        response = management_v8_get(url, key, &format!("oauth/auth-url?provider={provider}"))?;
+    let response = management_v8_get(url, key, &format!("oauth/auth-url?provider={provider}"))?;
+    let body = if is_missing_v8_route(&response) {
+        management_get(url, key, v0_path)?
+    } else {
+        management_answer(response)?
+    };
+    if body.get("status").and_then(Value::as_str) == Some("error") {
+        return Err(hub_error(&body)
+            .unwrap_or_else(|| "The hub refused to start the sign-in.".to_string()));
     }
-    let body = management_answer(response)?;
     let raw_auth_url = body
         .get("url")
         .and_then(Value::as_str)
@@ -327,10 +361,17 @@ pub(crate) fn oauth_start(
         })
         .ok_or_else(|| "The hub did not return an OAuth state.".to_string())?
         .to_string();
+    if let Ok(parsed) = url::Url::parse(&auth_url) {
+        if let Some((_, url_state)) = parsed.query_pairs().find(|(k, _)| k == "state") {
+            if url_state.as_ref() != state {
+                return Err("The hub returned a mismatched OAuth state.".to_string());
+            }
+        }
+    }
     Ok(OAuthStart {
         url: auth_url,
         state,
-        local_callback: effective_local,
+        local_callback,
     })
 }
 
@@ -340,14 +381,16 @@ pub(crate) struct OAuthStatus {
     pub error: Option<String>,
 }
 
-/// Polls a pending v8 OAuth login session (`GET /v8/management/oauth/status?state=...`).
+/// Polls a pending OAuth login session (`GET /v8/management/oauth/status?state=...`, falling back
+/// to `GET /v0/management/get-auth-status?state=...`).
 pub(crate) fn oauth_status(url: &str, key: &str, state: &str) -> Result<OAuthStatus, String> {
-    let response = management_v8_get(
-        url,
-        key,
-        &format!("oauth/status?state={}", encode_query(state)),
-    )?;
-    let body = management_answer(response)?;
+    let encoded = encode_query(state);
+    let response = management_v8_get(url, key, &format!("oauth/status?state={encoded}"))?;
+    let body = if is_missing_v8_route(&response) {
+        management_get(url, key, &format!("get-auth-status?state={encoded}"))?
+    } else {
+        management_answer(response)?
+    };
     let status = body
         .get("status")
         .and_then(Value::as_str)
@@ -361,7 +404,59 @@ pub(crate) fn oauth_status(url: &str, key: &str, state: &str) -> Result<OAuthSta
     Ok(OAuthStatus { status, error })
 }
 
-/// Submits a pasted redirect URL or authorization code to `POST /v8/management/oauth/callback`.
+fn send_oauth_callback(
+    url: &str,
+    key: &str,
+    provider: &str,
+    v8_body: Value,
+) -> Result<(), String> {
+    let response = management_v8_post(url, Some(key), "oauth/callback", v8_body.clone())?;
+    let body = if is_missing_v8_route(&response) {
+        let mut v0_body = v8_body;
+        if provider == "claude" {
+            if let Some(obj) = v0_body.as_object_mut() {
+                obj.insert("provider".into(), json!("anthropic"));
+            }
+        }
+        management_answer(management_v0_post(url, key, "oauth-callback", v0_body)?)?
+    } else {
+        management_answer(response)?
+    };
+    if body.get("status").and_then(Value::as_str) == Some("error") {
+        return Err(hub_error(&body)
+            .unwrap_or_else(|| "The hub rejected the sign-in callback.".to_string()));
+    }
+    Ok(())
+}
+
+/// Forwards an authorization code captured by Ghostex's local loopback callback listener to the
+/// hub (`/v8/management/oauth/callback` with `/v0/management/oauth-callback` fallback).
+pub(crate) fn oauth_callback_code(
+    url: &str,
+    key: &str,
+    provider: &str,
+    state: &str,
+    code: &str,
+) -> Result<(), String> {
+    if !matches!(provider, "claude" | "codex") {
+        return Err(
+            "Only Claude and Codex accounts can be added to a CLIProxyAPI hub.".to_string(),
+        );
+    }
+    send_oauth_callback(
+        url,
+        key,
+        provider,
+        json!({
+            "provider": provider,
+            "state": state,
+            "code": code,
+        }),
+    )
+}
+
+/// Submits a pasted redirect URL or authorization code to `POST /v8/management/oauth/callback`
+/// (falling back to `POST /v0/management/oauth-callback`).
 pub(crate) fn oauth_callback(
     url: &str,
     key: &str,
@@ -459,18 +554,22 @@ pub(crate) fn oauth_callback(
             "code": trimmed,
         })
     };
-    let response = management_v8_post(url, Some(key), "oauth/callback", body)?;
-    management_answer(response)?;
-    Ok(())
+    send_oauth_callback(url, key, provider, body)
 }
 
-/// Cancels a pending v8 OAuth login session (`DELETE /v8/management/oauth/session?state=...`).
+/// Cancels a pending OAuth login session (`DELETE /v8/management/oauth/session?state=...`,
+/// falling back to `DELETE /v0/management/oauth-session?state=...`).
 pub(crate) fn oauth_cancel(url: &str, key: &str, state: &str) -> Result<(), String> {
-    let response = management_v8_delete(
-        url,
-        key,
-        &format!("oauth/session?state={}", encode_query(state)),
-    )?;
+    let encoded = encode_query(state);
+    let response = management_v8_delete(url, key, &format!("oauth/session?state={encoded}"))?;
+    if is_missing_v8_route(&response) {
+        let fallback = management_v0_delete(url, key, &format!("oauth-session?state={encoded}"))?;
+        if fallback.status == 404 {
+            return Ok(());
+        }
+        management_answer(fallback)?;
+        return Ok(());
+    }
     if response.status == 404 {
         return Ok(());
     }

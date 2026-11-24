@@ -59,6 +59,8 @@ pub(crate) struct HubDraft {
     pub(crate) label: String,
     /// The Remove confirmation is open.
     pub(crate) remove: bool,
+    /// The inline Add account (Claude / Codex) picker is open.
+    pub(crate) pick_add_account: bool,
 }
 
 impl HubDraft {
@@ -765,68 +767,181 @@ impl AccountsTab {
         let oauth_busy = self.hub_oauth.as_ref().is_some_and(|flow| {
             flow.hub_id == hub_id && matches!(flow.status.as_str(), "starting" | "waiting")
         });
+        let local_block_reason = self.hub_add_account_unavailable_reason(cx);
+        let picker_open = self.hub_draft(&hub_id).pick_add_account && !oauth_busy;
 
-        let claude_hub_id = hub_id.clone();
-        let add_claude = settings_sized_button(
-            p,
-            SharedString::from(format!("accounts-hub-{hub_id}-oauth-claude")),
-            "Add Claude",
-            Some("modals/settings/plus.svg"),
-            None,
-            SizedButtonVariant::Primary,
-            SizedButtonSize::Sm,
-            busy || oauth_busy,
-            None,
-            move |page: &mut Self, _window, cx| {
-                page.start_hub_oauth(claude_hub_id.clone(), "claude", cx)
-            },
-            cx,
-        );
-        let codex_hub_id = hub_id.clone();
-        let add_codex = settings_sized_button(
-            p,
-            SharedString::from(format!("accounts-hub-{hub_id}-oauth-codex")),
-            "Add Codex",
-            Some("modals/settings/plus.svg"),
-            None,
-            SizedButtonVariant::Outline,
-            SizedButtonSize::Sm,
-            busy || oauth_busy,
-            None,
-            move |page: &mut Self, _window, cx| {
-                page.start_hub_oauth(codex_hub_id.clone(), "codex", cx)
-            },
-            cx,
-        );
+        let mut header_row = h_flex()
+            .w_full()
+            .px(px(12.0))
+            .py(px(10.0))
+            .gap(px(8.0))
+            .items_center()
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(2.0))
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(hsla(p.foreground))
+                            .child("Accounts on this hub"),
+                    )
+                    .child(muted(p, summary)),
+            );
 
-        let mut rows: Vec<AnyElement> = vec![
-            h_flex()
-                .w_full()
-                .px(px(12.0))
-                .py(px(10.0))
-                .gap(px(8.0))
-                .items_center()
-                .child(
-                    v_flex()
-                        .flex_1()
-                        .min_w_0()
-                        .gap(px(2.0))
-                        .child(
-                            div()
-                                .text_size(px(13.0))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(hsla(p.foreground))
-                                .child("Accounts on this hub"),
-                        )
-                        .child(muted(p, summary)),
-                )
-                .child(add_claude)
-                .child(add_codex)
-                .into_any_element(),
-        ];
+        if local_block_reason.is_none() {
+            let toggle_hub_id = hub_id.clone();
+            header_row = header_row.child(settings_sized_button(
+                p,
+                SharedString::from(format!("accounts-hub-{hub_id}-add-account")),
+                "Add account",
+                Some("modals/settings/plus.svg"),
+                None,
+                if picker_open {
+                    SizedButtonVariant::Outline
+                } else {
+                    SizedButtonVariant::Primary
+                },
+                SizedButtonSize::Sm,
+                busy || oauth_busy,
+                None,
+                move |page: &mut Self, _window, cx| {
+                    page.update_hub_draft(&toggle_hub_id, cx, |draft| {
+                        draft.pick_add_account = !draft.pick_add_account;
+                    });
+                },
+                cx,
+            ));
+        }
+
+        let mut rows: Vec<AnyElement> = vec![header_row.into_any_element()];
+
+        if let Some(reason) = local_block_reason {
+            rows.push(
+                div()
+                    .w_full()
+                    .px(px(12.0))
+                    .py(px(9.0))
+                    .border_t_1()
+                    .border_color(hsla(p.hairline))
+                    .bg(hsla(p.foreground_alpha(0.02)))
+                    .child(muted(p, reason))
+                    .into_any_element(),
+            );
+        } else if picker_open {
+            let claude_hub_id = hub_id.clone();
+            let codex_hub_id = hub_id.clone();
+            let cancel_hub_id = hub_id.clone();
+            rows.push(
+                v_flex()
+                    .w_full()
+                    .px(px(12.0))
+                    .py(px(10.0))
+                    .gap(px(8.0))
+                    .border_t_1()
+                    .border_color(hsla(p.hairline))
+                    .bg(hsla(p.foreground_alpha(0.03)))
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(hsla(p.foreground))
+                            .child("Choose a provider to sign in to this hub"),
+                    )
+                    .child(
+                        h_flex()
+                            .gap(px(8.0))
+                            .flex_wrap()
+                            .child(settings_sized_button(
+                                p,
+                                SharedString::from(format!("accounts-hub-{hub_id}-oauth-claude")),
+                                "Claude",
+                                Some("modals/settings/plus.svg"),
+                                None,
+                                SizedButtonVariant::Primary,
+                                SizedButtonSize::Sm,
+                                busy || oauth_busy,
+                                None,
+                                move |page: &mut Self, _window, cx| {
+                                    page.update_hub_draft(&claude_hub_id, cx, |draft| {
+                                        draft.pick_add_account = false;
+                                    });
+                                    page.start_hub_oauth(claude_hub_id.clone(), "claude", cx);
+                                },
+                                cx,
+                            ))
+                            .child(settings_sized_button(
+                                p,
+                                SharedString::from(format!("accounts-hub-{hub_id}-oauth-codex")),
+                                "Codex",
+                                Some("modals/settings/plus.svg"),
+                                None,
+                                SizedButtonVariant::Outline,
+                                SizedButtonSize::Sm,
+                                busy || oauth_busy,
+                                None,
+                                move |page: &mut Self, _window, cx| {
+                                    page.update_hub_draft(&codex_hub_id, cx, |draft| {
+                                        draft.pick_add_account = false;
+                                    });
+                                    page.start_hub_oauth(codex_hub_id.clone(), "codex", cx);
+                                },
+                                cx,
+                            ))
+                            .child(settings_sized_button(
+                                p,
+                                SharedString::from(format!(
+                                    "accounts-hub-{hub_id}-add-account-cancel"
+                                )),
+                                "Cancel",
+                                None,
+                                None,
+                                SizedButtonVariant::Ghost,
+                                SizedButtonSize::Sm,
+                                false,
+                                None,
+                                move |page: &mut Self, _window, cx| {
+                                    page.update_hub_draft(&cancel_hub_id, cx, |draft| {
+                                        draft.pick_add_account = false;
+                                    });
+                                },
+                                cx,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .p(px(10.0))
+                            .rounded(px(MODAL_RADIUS_CONTROL))
+                            .border_1()
+                            .border_color(hsla(modal_rgba(0xfbbf24, 0.3)))
+                            .bg(hsla(modal_rgba(0xfbbf24, 0.05)))
+                            .child(muted(
+                                p,
+                                "Don't also use the same account directly in Claude Swap, Codex Swap, or another CLI login at the same time. Refreshing a token in one invalidates the other (invalid_grant).",
+                            )),
+                    )
+                    .into_any_element(),
+            );
+        }
 
         if let Some(oauth_card) = self.render_hub_oauth_card(p, &hub_id, window, cx) {
             rows.push(oauth_card);
+        } else if local_block_reason.is_none() && !picker_open {
+            rows.push(
+                div()
+                    .w_full()
+                    .px(px(12.0))
+                    .py(px(8.0))
+                    .border_t_1()
+                    .border_color(hsla(p.hairline))
+                    .child(muted(
+                        p,
+                        "Avoid using the same account both on this hub and directly in Claude Swap, Codex Swap, or another CLI login at the same time (refresh tokens invalidate each other: invalid_grant).",
+                    ))
+                    .into_any_element(),
+            );
         }
 
         for account in accounts {
@@ -994,6 +1109,33 @@ impl AccountsTab {
                 cx,
             ))
             .into_any_element()
+    }
+
+    /// Why Add account on a hub is unavailable here, or `None` when the browser runs on the same
+    /// computer as gxserver (where Ghostex can catch the localhost OAuth callback).
+    fn hub_add_account_unavailable_reason(&self, cx: &gpui::App) -> Option<&'static str> {
+        if self.shown_machine_name(cx).is_some() {
+            return Some(
+                "Sign an account into a hub from Ghostex on this computer (switch the Machine picker above back to This computer). OAuth sign-in returns to localhost on the computer running your browser.",
+            );
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let is_loopback = web_sys::window()
+                .and_then(|w| w.location().hostname().ok())
+                .is_some_and(|host| {
+                    matches!(
+                        host.to_ascii_lowercase().as_str(),
+                        "localhost" | "127.0.0.1" | "::1" | "[::1]"
+                    )
+                });
+            if !is_loopback {
+                return Some(
+                    "Open Ghostex on the same computer as gxserver (localhost) to sign an account into a hub. OAuth sign-in returns to localhost on the browser's computer.",
+                );
+            }
+        }
+        None
     }
 
     fn start_hub_oauth(&mut self, hub_id: String, provider: &'static str, cx: &mut Context<Self>) {
@@ -1271,10 +1413,13 @@ impl AccountsTab {
         ];
 
         if status == "waiting" {
+            let port = if provider == "claude" { 54545 } else { 1455 };
             let note = if is_local {
-                "Finish signing in in the browser window that opened. If the redirect page does not close automatically, copy the full URL from your browser address bar and paste it below."
+                format!(
+                    "Finish signing in to {label} in your browser. Ghostex is listening on 127.0.0.1:{port} for up to 5 minutes and will forward the sign-in to the hub automatically."
+                )
             } else {
-                "Finish signing in in your browser. When the browser redirects to localhost and shows an error page, copy the full URL from your browser address bar and paste it below so Ghostex can send it to your remote hub."
+                "Finish signing in in your browser. When the browser redirects to localhost and shows an error page, copy the full URL from your browser address bar and paste it below so Ghostex can send it to your remote hub.".to_string()
             };
             parts.push(muted(p, note));
 
@@ -1338,75 +1483,105 @@ impl AccountsTab {
                     .into_any_element(),
             );
 
-            let input_id = SharedString::from(format!("accounts-hub-oauth-input-{hub_id}"));
-            let input_state = FieldStates::text_state(
-                self,
-                &input_id,
-                &input_val,
-                Some("Paste redirect URL (http://localhost:...) or code"),
-                |page: &mut Self, text, _window, cx| {
-                    if let Some(flow) = page.hub_oauth.as_mut() {
-                        flow.input = text.chars().take(2048).collect();
-                        cx.notify();
-                    }
-                },
-                window,
-                cx,
-            );
-            let submit_btn = settings_sized_button(
-                p,
-                "accounts-hub-oauth-submit",
-                if submitting {
-                    "Sending…"
-                } else {
-                    "Submit callback"
-                },
-                None,
-                None,
-                SizedButtonVariant::Primary,
-                SizedButtonSize::Sm,
-                submitting || input_val.trim().is_empty(),
-                None,
-                |page: &mut Self, _window, cx| page.submit_hub_oauth_callback(cx),
-                cx,
-            );
-            parts.push(
-                h_flex()
-                    .w_full()
-                    .gap(px(8.0))
-                    .items_center()
-                    .child(div().flex_1().min_w_0().child(settings_text_input(
-                        p,
-                        &input_state,
-                        None,
-                        false,
-                        window,
-                        cx,
-                    )))
-                    .child(submit_btn)
-                    .into_any_element(),
-            );
+            if !is_local {
+                let input_id = SharedString::from(format!("accounts-hub-oauth-input-{hub_id}"));
+                let input_state = FieldStates::text_state(
+                    self,
+                    &input_id,
+                    &input_val,
+                    Some("Paste redirect URL (http://localhost:...) or code"),
+                    |page: &mut Self, text, _window, cx| {
+                        if let Some(flow) = page.hub_oauth.as_mut() {
+                            flow.input = text.chars().take(2048).collect();
+                            cx.notify();
+                        }
+                    },
+                    window,
+                    cx,
+                );
+                let submit_btn = settings_sized_button(
+                    p,
+                    "accounts-hub-oauth-submit",
+                    if submitting {
+                        "Sending…"
+                    } else {
+                        "Submit callback"
+                    },
+                    None,
+                    None,
+                    SizedButtonVariant::Primary,
+                    SizedButtonSize::Sm,
+                    submitting || input_val.trim().is_empty(),
+                    None,
+                    |page: &mut Self, _window, cx| page.submit_hub_oauth_callback(cx),
+                    cx,
+                );
+                parts.push(
+                    h_flex()
+                        .w_full()
+                        .gap(px(8.0))
+                        .items_center()
+                        .child(div().flex_1().min_w_0().child(settings_text_input(
+                            p,
+                            &input_state,
+                            None,
+                            false,
+                            window,
+                            cx,
+                        )))
+                        .child(submit_btn)
+                        .into_any_element(),
+                );
+            }
         } else if status == "ok" || status == "error" {
             if let Some(err) = error.clone() {
-                parts.push(muted(p, err));
+                parts.push(
+                    div()
+                        .text_size(px(12.5))
+                        .line_height(px(18.0))
+                        .text_color(hsla(p.destructive))
+                        .child(err)
+                        .into_any_element(),
+                );
+            } else if status == "ok" {
+                parts.push(muted(
+                    p,
+                    "Signed in and forwarded to the hub. Its account list has been refreshed.",
+                ));
             }
-            parts.push(
-                h_flex()
-                    .child(settings_sized_button(
-                        p,
-                        "accounts-hub-oauth-close",
-                        if status == "ok" { "Done" } else { "Close" },
-                        None,
-                        None,
-                        SizedButtonVariant::Outline,
-                        SizedButtonSize::Sm,
-                        false,
-                        None,
-                        |page: &mut Self, _window, cx| page.cancel_hub_oauth(cx),
-                        cx,
-                    ))
-                    .into_any_element(),
-            );
+            let mut end_actions: Vec<AnyElement> = Vec::new();
+            if status == "error" {
+                let retry_hub_id = hub_id.to_string();
+                end_actions.push(settings_sized_button(
+                    p,
+                    "accounts-hub-oauth-retry",
+                    "Try again",
+                    None,
+                    None,
+                    SizedButtonVariant::Primary,
+                    SizedButtonSize::Sm,
+                    false,
+                    None,
+                    move |page: &mut Self, _window, cx| {
+                        page.start_hub_oauth(retry_hub_id.clone(), provider, cx)
+                    },
+                    cx,
+                ));
+            }
+            end_actions.push(settings_sized_button(
+                p,
+                "accounts-hub-oauth-close",
+                if status == "ok" { "Done" } else { "Close" },
+                None,
+                None,
+                SizedButtonVariant::Outline,
+                SizedButtonSize::Sm,
+                false,
+                None,
+                |page: &mut Self, _window, cx| page.cancel_hub_oauth(cx),
+                cx,
+            ));
+            parts.push(h_flex().gap(px(8.0)).children(end_actions).into_any_element());
         }
 
         if status == "waiting" {

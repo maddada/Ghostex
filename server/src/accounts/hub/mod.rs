@@ -6,12 +6,16 @@
 //!
 //! CDXC:AgentProviders 2026-11-18 DECISION:
 //! User picked option B on the CLIProxyAPI page ("A, plus the hub's accounts"): the hub is a launch target and its accounts show with read-only meters, "and make the ui for it not show unless user picks to enable cliproxyapi in extensions (build in extension)". While the extension is off gxserver answers no hubs, refuses hub edits and hub launches, so no client can show any of it. Ghostex only points at a hub the user runs: it never installs or starts CLIProxyAPI, never copies Claude Swap or Codex Swap logins into it, never changes the hub's accounts and never redeems a Codex reset through it.
+//!
+//! CDXC:AgentProviders 2026-11-24 DECISION:
+//! Amended to allow one sign-in flow (`signin.rs`): when the user clicks Add account for a configured hub in Settings > Accounts, Ghostex on the browser's computer briefly listens on `127.0.0.1:54545` (Claude `/callback`) or `127.0.0.1:1455` (Codex `/auth/callback`), asks the hub's management API for the OAuth URL, catches the single callback, forwards code and state to `/v0/management/oauth-callback`, and refreshes the hub's account list. Ghostex still never installs, starts or reconfigures CLIProxyAPI, never copies Claude Swap or Codex Swap logins into it, never downloads/deletes/edits hub credentials, and never redeems a Codex reset through it.
 //! SEE-ALSO: packages/settings-catalog/src/data/official_extensions.rs (`cliProxyApi`), server/src/accounts/endpoint.rs (`cliproxyHubs`), server/src/agents/launch_plan.rs (On the hub), server/src/accounts/recovery.rs (the wait), apps/desktop/src/app/window/settings_modal/tabs/accounts/hubs.rs.
 
 mod client;
 pub(crate) mod cooldown;
 pub(crate) mod launch;
 pub(crate) mod sidebar;
+mod signin;
 mod store;
 mod usage_reads;
 
@@ -451,13 +455,6 @@ fn check_management_key(url: &str, key: &str) -> Result<(), DomainStateError> {
         .map_err(DomainStateError::bad_request)
 }
 
-fn is_local_hub(url: &str) -> bool {
-    url::Url::parse(url)
-        .ok()
-        .and_then(|parsed| parsed.host_str().map(str::to_ascii_lowercase))
-        .is_some_and(|host| matches!(host.as_str(), "127.0.0.1" | "localhost" | "::1" | "[::1]"))
-}
-
 fn managed_hub(
     paths: &GxserverPaths,
     hub_id: &str,
@@ -605,15 +602,19 @@ pub(crate) fn handle(
                 .ok_or_else(|| DomainStateError::bad_request("provider is required"))?
                 .to_ascii_lowercase();
             let (hub, key) = managed_hub(paths, hub_id)?;
-            // Only bind local callback ports when the caller's browser runs on this same computer
-            // and the hub itself is local; remote Settings passes `localCallback: false`.
+            // When the caller's browser runs on this computer (`localCallback: true`), Ghostex
+            // itself binds 127.0.0.1:54545 (Claude) or 127.0.0.1:1455 (Codex), catches the single
+            // callback, validates state and forwards it to the hub (local or remote over Tailscale).
             let caller_local = params
                 .get("localCallback")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
-            let is_local = caller_local && is_local_hub(&hub.url);
-            let started = client::oauth_start(&hub.url, &key, &provider, is_local)
-                .map_err(DomainStateError::bad_request)?;
+            let started = if caller_local {
+                signin::start_local_relay(paths, &hub, &key, &provider)?
+            } else {
+                client::oauth_start(&hub.url, &key, &provider, false)
+                    .map_err(DomainStateError::bad_request)?
+            };
             return Ok(Handled::Answer(json!({
                 "status": "ok",
                 "hubId": hub.id,
@@ -629,10 +630,28 @@ pub(crate) fn handle(
             let state = text_param(params, "state")
                 .ok_or_else(|| DomainStateError::bad_request("state is required"))?;
             let (hub, key) = managed_hub(paths, hub_id)?;
+            match signin::relay_outcome(state) {
+                Some(signin::RelayOutcome::Complete) => {
+                    return Ok(Handled::Answer(json!({
+                        "status": "ok",
+                        "error": Value::Null,
+                    })));
+                }
+                Some(signin::RelayOutcome::Failed(error)) => {
+                    return Ok(Handled::Answer(json!({
+                        "status": "error",
+                        "error": error,
+                    })));
+                }
+                Some(signin::RelayOutcome::Waiting) | None => {}
+            }
             let status = client::oauth_status(&hub.url, &key, state)
                 .map_err(DomainStateError::bad_request)?;
             if status.status == "ok" {
-                refresh(paths, &hub);
+                signin::cancel_relay(state);
+                refresh_after_sign_in(paths, &hub);
+            } else if status.status == "error" {
+                signin::cancel_relay(state);
             }
             return Ok(Handled::Answer(json!({
                 "status": status.status,
@@ -650,6 +669,7 @@ pub(crate) fn handle(
             let input = text_param(params, "input")
                 .ok_or_else(|| DomainStateError::bad_request("Paste the redirect URL or code."))?;
             let (hub, key) = managed_hub(paths, hub_id)?;
+            signin::cancel_relay(state);
             client::oauth_callback(&hub.url, &key, &provider, state, input)
                 .map_err(DomainStateError::bad_request)?;
             return Ok(Handled::Answer(json!({ "status": "ok" })));
@@ -660,6 +680,7 @@ pub(crate) fn handle(
             let state = text_param(params, "state")
                 .ok_or_else(|| DomainStateError::bad_request("state is required"))?;
             let (hub, key) = managed_hub(paths, hub_id)?;
+            signin::cancel_relay(state);
             client::oauth_cancel(&hub.url, &key, state).map_err(DomainStateError::bad_request)?;
             return Ok(Handled::Answer(json!({ "status": "ok" })));
         }
@@ -906,6 +927,48 @@ pub(crate) enum Handled {
     Changed,
     /// A hub moved to another address and so to another id.
     Moved { from: String, to: String },
+}
+
+/// Immediately reads `hub`'s updated account list after a sign-in completes (keeping existing
+/// accounts' cached usage so meters don't blink), then refreshes usage in the background.
+pub(super) fn refresh_after_sign_in(paths: &GxserverPaths, hub: &store::Hub) {
+    if hub.management_key.is_empty() {
+        return;
+    }
+    if let Ok(key) = store::open_key(paths, &hub.management_key) {
+        if let Ok(files) = client::auth_files(&hub.url, &key) {
+            let now = Utc::now();
+            let previous = reading(&hub.id);
+            let mut accounts: Vec<AccountReading> = files
+                .iter()
+                .filter_map(|file| account_from_file(file, now))
+                .collect();
+            if let Some(prev) = &previous {
+                for account in &mut accounts {
+                    if let Some(old) = prev
+                        .accounts
+                        .iter()
+                        .find(|a| a.auth_index == account.auth_index)
+                    {
+                        account.usage = old.usage.clone();
+                        account.usage_error = old.usage_error.clone();
+                    }
+                }
+            }
+            readings().lock().unwrap_or_else(|e| e.into_inner()).insert(
+                hub.id.clone(),
+                Reading {
+                    error: None,
+                    accounts,
+                    updated_at: Some(Utc::now().to_rfc3339()),
+                    fetched_at: Instant::now(),
+                    session_affinity: previous.as_ref().and_then(|p| p.session_affinity),
+                    routing_strategy: previous.and_then(|p| p.routing_strategy),
+                },
+            );
+        }
+    }
+    refresh_soon(paths, hub);
 }
 
 /// Reads `hub` again in the background, keeping its last reading meanwhile.
