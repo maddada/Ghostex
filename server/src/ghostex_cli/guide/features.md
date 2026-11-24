@@ -1578,7 +1578,9 @@ where they are while you open, change and close views.
   it may be stuck on a hung command. Hovering it says "Not moving", Ghostex adds
   a notification and plays its own not-moving sound (silent when Agent finished
   sound is Off), and the dot clears as soon as the session shows output again.
-  A long build or test whose output is still coming does not count. A
+  A long build or test whose output is still coming does not count, and neither
+  does an OMP, Claude or Codex session waiting on its subagents while one of them
+  still shows new output (a subagent that has stopped too lets the dot come). A
   coordinator's thread is nudged first ("Still working?") and its coordinator is
   told so it can heal it, so a thread gets the dot only 8 minutes after that
   nudge; its board card shows a red "Not moving" chip too. While this computer

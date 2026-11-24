@@ -1,4 +1,5 @@
-//! A working agent session that has gone quiet: no new transcript row and no change on its screen
+//! A working agent session that has gone quiet: no new transcript row (its own, or one of its
+//! subagents', see subagent_output.rs) and no change on its screen
 //! for a long stretch. One `StallWatch` per working session keeps its output clock. The coordinator
 //! supervisor (server/coordinator_runtime.rs) owns its threads' watches: at 8 minutes it nudges the
 //! thread and reports to its coordinator, it reports again every 8 minutes until the thread moves,
@@ -97,7 +98,8 @@ pub struct StallWatch {
     /// The newest transcript write seen (file time or newest row, whichever is later).
     transcript_seen: Option<i64>,
     screen: Option<u64>,
-    /// The last output counted: a transcript write or a screen change outside a nudge's grace.
+    /// The last output counted: a transcript write (the session's own or a subagent's) or a screen
+    /// change outside a nudge's grace.
     last_output_at: Option<i64>,
     checked_at: Option<i64>,
     /// The quiet stretch last reported, by when it began, and how many rounds of it were.
@@ -138,8 +140,9 @@ impl StallWatch {
     CDXC:Coordinators 2026-11-11 FIX:
     GitHub #554 ("Stall and idle clocks reset when gxserver restarts"): a watch lives only in memory, so after a restart a thread that had shown no output for an hour started a fresh 8-minute wait from the restart. A watch made for a session already working now starts its quiet clock at the transcript's last write (never before the agent's last launch or the moment the session turned working), the same evidence the watch would have counted itself, and holds any report until it has looked at the screen twice, so a screen that kept moving through the restart still counts. The idle clock needs no fix: it starts at the thread's last report, which is stored (`idle_wait_report`).
     */
-    /// BLOCKING (a file stat and a short transcript tail read). A watch for a session first seen
-    /// now, already working: its quiet clock starts at the transcript's last write when there is
+    /// BLOCKING (file stats, a short transcript tail read and the subagent look of
+    /// subagent_output.rs). A watch for a session first seen now, already working: its quiet clock
+    /// starts at the transcript's last write (or its subagents' newest, when later) when there is
     /// one, so a gxserver restart does not restart a stretch of quiet.
     pub fn resumed(session: &Value, now: i64) -> Self {
         let mut watch = Self::new(now);
@@ -147,6 +150,11 @@ impl StallWatch {
         let Some(written) = transcript_at.filter(|written| *written < now) else {
             return watch;
         };
+        // A lead that waited on its subagents through the restart: their newest write is its
+        // output too (subagent_output.rs).
+        let output_at =
+            super::subagent_output::newest_subagent_write(session, &mut watch.path, written)
+                .unwrap_or(written);
         // Never before the session turned working (its stored activity's last change): a turn
         // that just began, its prompt not in the transcript yet, is no old stretch of quiet.
         let working_since = session
@@ -155,7 +163,7 @@ impl StallWatch {
             .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
             .map(|at| at.timestamp_millis())
             .unwrap_or(now);
-        let start = written
+        let start = output_at
             .max(agent_launched_at(session).unwrap_or(0))
             .max(working_since)
             .min(now);
@@ -239,6 +247,14 @@ impl StallWatch {
         }
         if now - self.quiet_since() < test_scaled(SCREEN_SAMPLE_AFTER_MS) {
             return;
+        }
+        // A lead waiting on its subagents writes nothing itself; their transcript writes are its
+        // output (subagent_output.rs).
+        let quiet_since = self.quiet_since();
+        if let Some(written) =
+            super::subagent_output::newest_subagent_write(session, &mut self.path, quiet_since)
+        {
+            self.count_output(Some(written));
         }
         // Non-CLI (ACP / SDK) sessions have a static host log in their zmx PTY; read the host's
         // live protocol event clock (`lastEventAtMs`) instead of fingerprinting PTY text.

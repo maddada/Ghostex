@@ -34,25 +34,9 @@ fn live_rollout_paths(
     Ok((paths, process.started_at))
 }
 
-/// `Err` is unreadable evidence, so callers show the last roster as unavailable, with no running animation.
-pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<SessionChatAgentFleet>> {
-    if session.get("lifecycleState").and_then(Value::as_str) != Some("running") {
-        return Ok(None);
-    }
-    let Some(root_id) = session
-        .pointer("/runtimeSettings/agentSessionId")
-        .and_then(Value::as_str)
-    else {
-        return Ok(None);
-    };
-    let Some(rollout) = session
-        .pointer("/runtimeSettings/agentSessionPath")
-        .and_then(Value::as_str)
-    else {
-        return Ok(None);
-    };
-    // Reads Codex's own SQLite database while Codex writes it, for one session at a time.
-    let subject = format!(
+/// The session a Codex state database read is recorded under (`crash_report::step`).
+fn crash_subject(session: &Value) -> String {
+    format!(
         "{}/{}",
         session
             .get("projectId")
@@ -62,11 +46,15 @@ pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<Session
             .get("sessionId")
             .and_then(Value::as_str)
             .unwrap_or_default()
-    );
-    let Some(_step) = crate::crash_report::step(&subject, "codexFleetRead") else {
-        anyhow::bail!("Reading this Codex session's subagents crashed gxserver before and is skipped on this build");
-    };
-    let rollout = Path::new(rollout);
+    )
+}
+
+/// BLOCKING (one query of the Codex state database beside `rollout`). The conversation
+/// `root_id`'s open, unarchived descendants in Codex's spawn graph: id, rollout path and source.
+fn open_descendants(
+    rollout: &Path,
+    root_id: &str,
+) -> anyhow::Result<Vec<(String, String, String)>> {
     let home = rollout
         .ancestors()
         .find(|path| path.file_name().is_some_and(|name| name == "sessions"))
@@ -90,6 +78,32 @@ pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<Session
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
+    Ok(children)
+}
+
+/// `Err` is unreadable evidence, so callers show the last roster as unavailable, with no running animation.
+pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<SessionChatAgentFleet>> {
+    if session.get("lifecycleState").and_then(Value::as_str) != Some("running") {
+        return Ok(None);
+    }
+    let Some(root_id) = session
+        .pointer("/runtimeSettings/agentSessionId")
+        .and_then(Value::as_str)
+    else {
+        return Ok(None);
+    };
+    let Some(rollout) = session
+        .pointer("/runtimeSettings/agentSessionPath")
+        .and_then(Value::as_str)
+    else {
+        return Ok(None);
+    };
+    // Reads Codex's own SQLite database while Codex writes it, for one session at a time.
+    let Some(_step) = crate::crash_report::step(&crash_subject(session), "codexFleetRead") else {
+        anyhow::bail!("Reading this Codex session's subagents crashed gxserver before and is skipped on this build");
+    };
+    let rollout = Path::new(rollout);
+    let children = open_descendants(rollout, root_id)?;
     let now = chrono::Utc::now().timestamp_millis();
     let process_started = session
         .pointer("/runtimeSettings/sessionChatCodexStartedAt")
@@ -147,4 +161,23 @@ pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<Session
         });
     }
     Ok((!agents.is_empty()).then(|| SessionChatAgentFleet::new(agents)))
+}
+
+/// BLOCKING (one query of Codex's state database). The rollout files of the session's open
+/// subagents, whose file times the stall watch counts as the lead's output
+/// (coordinators/subagent_output.rs); `rollout` is the lead's own.
+pub(crate) fn open_child_rollouts(session: &Value, rollout: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    let Some(root_id) = session
+        .pointer("/runtimeSettings/agentSessionId")
+        .and_then(Value::as_str)
+    else {
+        return Ok(Vec::new());
+    };
+    let Some(_step) = crate::crash_report::step(&crash_subject(session), "codexFleetRead") else {
+        anyhow::bail!("Reading this Codex session's subagents crashed gxserver before and is skipped on this build");
+    };
+    Ok(open_descendants(rollout, root_id)?
+        .into_iter()
+        .map(|(_, path, _)| PathBuf::from(path))
+        .collect())
 }

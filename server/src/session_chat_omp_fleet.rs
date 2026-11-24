@@ -62,16 +62,20 @@ pub(crate) fn lead_folder(transcript: &Path) -> Option<PathBuf> {
     Some(lead.to_path_buf())
 }
 
-/// The transcript of the child named `id` in `folder`, under the rule the roster lists children
-/// by: a regular `<id>.jsonl` file whose name is not hidden, an advisor's or a backup. `None` for
-/// any other name, so a name that is not a row (a path, `..`) opens nothing.
-pub(crate) fn child_transcript(folder: &Path, id: &str) -> io::Result<Option<PathBuf>> {
-    if id.is_empty()
+/// Whether `id` names a child under the rule the roster lists children by: not hidden, an
+/// advisor's or a backup, and no path, so a name that is not a row (a path, `..`) opens nothing.
+pub(crate) fn is_child_name(id: &str) -> bool {
+    !(id.is_empty()
         || id.starts_with('.')
         || id.starts_with("__advisor")
         || id.contains(".bak")
-        || id.contains(['/', '\\', '\0'])
-    {
+        || id.contains(['/', '\\', '\0']))
+}
+
+/// The transcript of the child named `id` in `folder`: a regular `<id>.jsonl` file whose name is
+/// a child's (`is_child_name`). `None` for any other name.
+pub(crate) fn child_transcript(folder: &Path, id: &str) -> io::Result<Option<PathBuf>> {
+    if !is_child_name(id) {
         return Ok(None);
     }
     let path = folder.join(format!("{id}.jsonl"));
