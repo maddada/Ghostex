@@ -223,6 +223,12 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
     let receipt = receipt(&result);
     let compacted = compacted_first_note(&result);
     let queued_reason = result["queuedReason"].as_str();
+    if queued_reason == Some("modelChangeFailed") {
+        return Err(CliError::Other(
+            "Message was held behind a failed model change on the recipient. Pick a model again on that session to clear it and retry."
+                .into(),
+        ));
+    }
     let (status, note) = if args.delivery == Delivery::Queue {
         (
             "queued",

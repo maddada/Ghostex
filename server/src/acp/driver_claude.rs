@@ -297,6 +297,7 @@ struct ClaudeState {
     turn_saw_api_error: Option<(Option<String>, String)>,
     pending_auth_retry: Option<Value>,
     approval_level: AcpApprovalLevel,
+    explicit_approval_level: bool,
     read_only: bool,
     native_mode: String,
     cwd: PathBuf,
@@ -325,13 +326,18 @@ struct ClaudeState {
 
 impl ClaudeState {
     fn new(
-        approval_level: AcpApprovalLevel,
+        explicit_approval_level: Option<AcpApprovalLevel>,
         read_only: bool,
         cwd: PathBuf,
         writable_roots: Vec<PathBuf>,
         initial_model: Option<String>,
         initial_effort: Option<String>,
     ) -> Self {
+        let approval_level = if read_only {
+            AcpApprovalLevel::Ask
+        } else {
+            explicit_approval_level.unwrap_or(AcpApprovalLevel::Ask)
+        };
         Self {
             native_session_id: None,
             working: false,
@@ -347,6 +353,7 @@ impl ClaudeState {
             turn_saw_api_error: None,
             pending_auth_retry: None,
             approval_level,
+            explicit_approval_level: explicit_approval_level.is_some() || read_only,
             read_only,
             native_mode: if read_only { "plan" } else { "default" }.to_string(),
             cwd,
@@ -759,6 +766,26 @@ fn build_claude_user_content(
     Ok(content)
 }
 
+/// Map Claude Code's reported native `permissionMode` / `current_permission_mode` to Ghostex's
+/// chat mode picker approval level.
+fn claude_native_mode_to_approval_level(native_mode: &str) -> AcpApprovalLevel {
+    match native_mode.trim().to_ascii_lowercase().as_str() {
+        "auto" => AcpApprovalLevel::Auto,
+        "acceptedits" | "accept-edits" | "auto-edits" | "accept_edits" => {
+            AcpApprovalLevel::AutoEdits
+        }
+        "bypasspermissions" | "bypass" | "full-access" | "yolo" => AcpApprovalLevel::FullAccess,
+        _ => AcpApprovalLevel::Ask,
+    }
+}
+
+fn claude_native_mode_is_elevated(native_mode: &str) -> bool {
+    matches!(
+        native_mode.trim().to_ascii_lowercase().as_str(),
+        "auto" | "acceptedits" | "accept-edits" | "bypasspermissions" | "bypass"
+    )
+}
+
 fn apply_claude_approval_level(
     transport: &ClaudeTransport,
     state: &Mutex<ClaudeState>,
@@ -790,6 +817,7 @@ fn apply_claude_approval_level(
     if current_native == desired_native {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.approval_level = target_level;
+        s.explicit_approval_level = true;
         s.read_only = effective_read_only;
         return Ok(());
     }
@@ -803,18 +831,22 @@ fn apply_claude_approval_level(
         Ok(_) => {
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
             s.approval_level = target_level;
+            s.explicit_approval_level = true;
             s.read_only = effective_read_only;
             s.native_mode = desired_native.to_string();
             Ok(())
         }
         Err(err) => {
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-            if current_native == "auto" && desired_native != "auto" {
-                return Err(format!("Could not leave Claude's automatic mode: {err}"));
+            if claude_native_mode_is_elevated(&current_native) && desired_native != current_native {
+                return Err(format!(
+                    "Could not leave Claude's {current_native} mode: {err}"
+                ));
             }
             // Entering native Auto failed (e.g. account/model doesn't support Auto): stay safely
             // on `"default"` (Ask-equivalent) while recording the requested level.
             s.approval_level = target_level;
+            s.explicit_approval_level = true;
             s.read_only = effective_read_only;
             Ok(())
         }
@@ -881,7 +913,7 @@ fn spawn_and_init_claude(
     model: Option<&str>,
     effort: Option<&str>,
     read_only: bool,
-    approval_level: AcpApprovalLevel,
+    explicit_approval_level: Option<AcpApprovalLevel>,
     state: &Arc<Mutex<ClaudeState>>,
     activity: &ClaudeActivityReporter,
     mode_sync_lock: &Arc<Mutex<()>>,
@@ -895,13 +927,21 @@ fn spawn_and_init_claude(
     else {
         return Err("Invalid Claude Native command.".to_string());
     };
+    let explicit_approval_level = if read_only {
+        Some(AcpApprovalLevel::Ask)
+    } else {
+        explicit_approval_level
+    };
+    // Only pass `--permission-mode` when Ghostex is enforcing `--read-only` (`plan`) or an
+    // explicit approval level (`default`, then synced to `auto` if requested). Under Keep default
+    // (`explicit_approval_level == None`), omit `--permission-mode` so Claude resolves its own
+    // `permissions.defaultMode` across ~/.claude/settings.json, project, local, and managed files.
     if read_only {
-        // `--read-only` threads start Claude in its native `plan` mode, matching CLI `--read-only`.
-        for idx in 0..argv.len() {
-            if argv[idx] == "--permission-mode" && idx + 1 < argv.len() {
-                argv[idx + 1] = "plan".to_string();
-            }
-        }
+        argv.push("--permission-mode".to_string());
+        argv.push("plan".to_string());
+    } else if explicit_approval_level.is_some() {
+        argv.push("--permission-mode".to_string());
+        argv.push("default".to_string());
     }
     // Synthesize Ghostex's own `--settings` JSON strictly from server-generated fields (never
     // from untrusted command strings, never containing hooks, command helpers, or allow rules).
@@ -1174,6 +1214,9 @@ fn spawn_and_init_claude(
                                     .filter(|m| !m.is_empty())
                                 {
                                     s.native_mode = pm.to_string();
+                                    if !s.explicit_approval_level {
+                                        s.approval_level = claude_native_mode_to_approval_level(pm);
+                                    }
                                 }
                             } else if subtype == Some("status") {
                                 let status = msg.get("status").and_then(Value::as_str);
@@ -1529,11 +1572,20 @@ fn spawn_and_init_claude(
 
     // 1. Initialize Claude control protocol.
     let mut resolved_default_to_apply: Option<String> = None;
-    match transport.control_request(json!({ "subtype": "initialize" }), CLAUDE_CTRL_TIMEOUT) {
+    let init_permission_mode: Option<String> = match transport
+        .control_request(json!({ "subtype": "initialize" }), CLAUDE_CTRL_TIMEOUT)
+    {
         Ok(init_resp) => {
             use ghostex_gx_chat_core::menus::catalog::{
                 family_and_version, is_placeholder_model_label, is_placeholder_model_value,
             };
+            let reported_mode = init_resp
+                .get("current_permission_mode")
+                .or_else(|| init_resp.get("permissionMode"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|m| !m.is_empty())
+                .map(str::to_string);
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(models) = init_resp.get("models").and_then(Value::as_array) {
                 // Capture what Claude's "default" alias resolves to, but never emit the
@@ -1644,6 +1696,7 @@ fn spawn_and_init_claude(
                 }
                 s.available_models = Value::Array(mapped);
             }
+            reported_mode
         }
         Err(err) => {
             // Bump generation before stopping so the reader's `ClaudeExitGuard` does not mark
@@ -1655,7 +1708,7 @@ fn spawn_and_init_claude(
             stop_claude_gracefully(&transport, &mut child, &mut lifetime, child_pid);
             return Err(format!("Claude Native initialize failed: {err}"));
         }
-    }
+    };
     if let Some(chosen_model) = resolved_default_to_apply {
         let _ = transport.control_request(
             json!({ "subtype": "set_model", "model": chosen_model }),
@@ -1663,17 +1716,27 @@ fn spawn_and_init_claude(
         );
     }
 
-    // 2. The freshly spawned Claude process always starts in `"plan"` (for `--read-only`) or
-    // `"default"`. Reset `native_mode` before syncing so a restart at `Auto` always sends
-    // `set_permission_mode: "auto"` to the new child process.
-    {
+    // 2. Sync approval level. When Ghostex enforces an explicit level (or `--read-only`), Claude
+    // started in `"plan"` or `"default"` and we apply `target_level` (e.g. `set_permission_mode:
+    // "auto"`). Under Keep default (`explicit_approval_level == None`), Claude resolved its own
+    // `permissions.defaultMode` and reported it in `initialize.current_permission_mode`; keep it
+    // untouched and mirror it into `approval_level` so the chat mode picker matches reality.
+    if let Some(target_level) = explicit_approval_level {
+        {
+            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            s.native_mode = init_permission_mode
+                .unwrap_or_else(|| if read_only { "plan" } else { "default" }.to_string());
+        }
+        if let Err(err) =
+            apply_claude_approval_level(&transport, state, mode_sync_lock, target_level, false)
+        {
+            eprintln!("[Claude Native] Warning: could not sync approval level: {err}");
+        }
+    } else {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-        s.native_mode = if read_only { "plan" } else { "default" }.to_string();
-    }
-    if let Err(err) =
-        apply_claude_approval_level(&transport, state, mode_sync_lock, approval_level, false)
-    {
-        eprintln!("[Claude Native] Warning: could not sync approval level: {err}");
+        let reported = init_permission_mode.unwrap_or_else(|| "default".to_string());
+        s.approval_level = claude_native_mode_to_approval_level(&reported);
+        s.native_mode = reported;
     }
 
     Ok(ClaudeProcess {
@@ -1751,7 +1814,7 @@ fn drain_or_restart_claude_turn(
             s.current_model.clone(),
             s.current_effort.clone(),
             s.read_only,
-            s.approval_level,
+            s.explicit_approval_level.then_some(s.approval_level),
         )
     };
     let next_proc = match spawn_and_init_claude(
@@ -1979,7 +2042,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     s.current_model.clone(),
                     s.current_effort.clone(),
                     s.read_only,
-                    s.approval_level,
+                    s.explicit_approval_level.then_some(s.approval_level),
                 )
             };
             match spawn_and_init_claude(
@@ -2081,7 +2144,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     s.current_model.clone(),
                     s.current_effort.clone(),
                     s.read_only,
-                    s.approval_level,
+                    s.explicit_approval_level.then_some(s.approval_level),
                 )
             };
             match spawn_and_init_claude(
@@ -2158,11 +2221,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     .and_then(AcpApprovalLevel::parse)
                 {
                     had_desired_approval = true;
-                    let current = state
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .approval_level;
-                    if desired != current {
+                    let (current, explicit) = {
+                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        (s.approval_level, s.explicit_approval_level)
+                    };
+                    if desired != current || !explicit {
                         let _ = apply_claude_approval_level(
                             &proc.transport,
                             &state,

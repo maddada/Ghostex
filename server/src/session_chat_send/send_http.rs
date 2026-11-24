@@ -412,21 +412,61 @@ pub(super) async fn send_session_chat_message_attempt(
     // (2026-09-27 decision in session_chat_model_selection_alert.rs): it waits behind the change in
     // the queue, which applies the change first. A sleeping session keeps the wake path, which
     // queues behind it too.
-    if crate::presentation::effective_lifecycle_state(&target.session) == "running"
-        && crate::session_chat_model_selection::has_pending_selection(
+    if crate::presentation::effective_lifecycle_state(&target.session) == "running" {
+        if let Some(pending) = crate::session_chat_model_selection::read_pending_for_state(
             state,
             &target.project_id,
             &target.session_id,
-        )
-    {
-        return crate::session_chat_send_wake::queue_startup_send(
-            state,
-            endpoint_path,
-            request_id,
-            &params,
-            &target,
-            &text,
-        );
+        ) {
+            if pending.state == "failed" {
+                if pending.model.is_empty() {
+                    // An options/mode-only failure should never block sending messages.
+                    crate::session_chat_model_selection::clear_failed_selection(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                    );
+                } else if draft_version.is_none() {
+                    // Non-composer sends (such as `ghostex agents send`) must fail loudly instead
+                    // of returning ok/pending while held behind a failed model change.
+                    let reason = pending
+                        .error_message
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or("The previous model change failed.");
+                    return domain_error_response(
+                        endpoint_path,
+                        request_id,
+                        DomainStateError {
+                            code: "modelChangeFailed",
+                            message: format!(
+                                "Message not sent: the queued model change before it failed ({reason}). Pick a model again to clear it and continue."
+                            ),
+                        },
+                    );
+                } else {
+                    return crate::session_chat_send_wake::queue_startup_send_with_reason(
+                        state,
+                        endpoint_path,
+                        request_id,
+                        &params,
+                        &target,
+                        &text,
+                        Some("modelChangeFailed"),
+                    );
+                }
+            } else {
+                return crate::session_chat_send_wake::queue_startup_send(
+                    state,
+                    endpoint_path,
+                    request_id,
+                    &params,
+                    &target,
+                    &text,
+                );
+            }
+        }
     }
     /*
     CDXC:SessionChat 2026-11-07 WHY: GitHub #479 follow-up: a message sent while Claude's

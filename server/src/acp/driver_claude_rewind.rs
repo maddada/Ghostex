@@ -102,7 +102,7 @@ pub(super) fn rewind_claude(
                 s.current_model.clone(),
                 s.current_effort.clone(),
                 s.read_only,
-                s.approval_level,
+                s.explicit_approval_level.then_some(s.approval_level),
             )
         };
         *proc = spawn_and_init_claude(

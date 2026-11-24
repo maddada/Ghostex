@@ -275,7 +275,7 @@ pub(crate) const CLAUDE_CONVERSATIONS_SET_ASIDE_AT: &str = "claudeConversationsS
 
 #[derive(Clone)]
 pub(crate) struct AgentResumeInput {
-    acp_approval_level: crate::acp::AcpApprovalLevel,
+    acp_approval_level: Option<crate::acp::AcpApprovalLevel>,
     acp_effort: Option<String>,
     acp_mode: bool,
     acp_model: Option<String>,
@@ -507,14 +507,18 @@ pub(crate) fn to_agent_resume_input(
         || crate::side_chats::parent_of(session).is_some()
         || crate::agents::is_gbot_api_chat(Some(&runtime_settings));
     let acp_approval_level = if force_ask {
-        crate::acp::AcpApprovalLevel::Ask
+        Some(crate::acp::AcpApprovalLevel::Ask)
     } else {
-        crate::acp::approval::resolve_starting_level(
+        crate::acp::approval::resolve_explicit_starting_level(
             &runtime_settings,
             &agent_config,
             &launch_settings,
             settings,
         )
+        .or_else(|| {
+            (agent_id.as_deref() == Some("claude") && super::mode_picker_off::mode_picker_off())
+                .then_some(crate::acp::AcpApprovalLevel::Auto)
+        })
     };
     let acp_mode = crate::acp::channel::session_is_switch_eligible(session)
         && match runtime_settings

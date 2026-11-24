@@ -704,6 +704,25 @@ pub(crate) fn reconcile_live_host_activity(
         else {
             return;
         };
+        let detected_family = snap
+            .get("family")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| super::acp_family_from_channel_agent(&channel_agent));
+        if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+            cache.remove(&crate::server::session_observer_key(
+                &project_id,
+                &session_id,
+            ));
+        }
+        crate::session_chat_options::schedule_session_chat_option_redetect(
+            &state,
+            &project_id,
+            &session_id,
+            detected_family.as_deref(),
+        );
         let host_working = snap.get("working").and_then(Value::as_bool).unwrap_or(true);
         let pending_count = snap
             .get("pendingPermissionCount")

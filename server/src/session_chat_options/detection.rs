@@ -823,8 +823,7 @@ pub fn detect_session_chat_terminal_state(
         .flatten()
     {
         if crate::acp::session_is_acp(&session) {
-            let level =
-                crate::acp::approval::stored_session_approval_level(&session).unwrap_or_default();
+            let stored_level = crate::acp::approval::stored_session_approval_level(&session);
             let family = acp_family_for_session(agent_id, Some(&session));
             let (launch_model, launch_effort) = acp_session_launch_model_and_effort(
                 repository,
@@ -858,7 +857,7 @@ pub fn detect_session_chat_terminal_state(
             let selection = SessionChatDetectedSelection {
                 model,
                 effort,
-                mode: Some(SessionChatDetectedChoice {
+                mode: stored_level.map(|level| SessionChatDetectedChoice {
                     value: level.as_str().to_string(),
                     label: level.label().to_string(),
                     source: SessionChatOptionEvidence::Launch,

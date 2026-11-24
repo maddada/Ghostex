@@ -1491,48 +1491,47 @@ pub(crate) async fn handle_select_session_chat_model_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     let is_user_device = caller.is_user_device();
-    // Enforce user-device gating before either deferred enqueue or immediate execution so an
-    // agent (`Principal::Session`) cannot queue or apply an ACP approval level raise.
-    // Looks up the session directly from SQLite and propagates errors (never fails open).
-    if !is_user_device {
-        if let Some(raw_mode) = params
-            .get("options")
-            .and_then(Value::as_object)
-            .and_then(|opts| opts.get("mode"))
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        {
-            let project_id = read_trimmed(&params, "projectId");
-            let session_id = read_trimmed(&params, "sessionId");
-            if project_id.is_empty() || session_id.is_empty() {
-                return domain_error_response(
-                    endpoint_path,
-                    request_id,
-                    invalid_params("selectSessionChatModel requires projectId and sessionId."),
-                );
-            }
-            let session = match crate::storage::open_gxserver_database(&state.paths)
-                .map_err(|error| DomainStateError {
-                    code: "internalError",
-                    message: format!("SQLite gxserver state error: {error}"),
-                })
-                .and_then(|db| {
-                    let repository = crate::domain::DomainRepository::new(
-                        &db,
-                        state.metadata.server_id.as_str(),
-                    );
-                    repository
-                        .get_session(&project_id, &session_id)?
-                        .ok_or_else(|| DomainStateError {
-                            code: "notFound",
-                            message: "The session no longer exists.".to_string(),
-                        })
-                }) {
-                Ok(session) => session,
+    let defer = params.get("defer").and_then(Value::as_bool) == Some(true);
+    let project_id = read_trimmed(&params, "projectId");
+    let session_id = read_trimmed(&params, "sessionId");
+    // Validate options and enforce user-device gating BEFORE either deferred enqueue or immediate
+    // execution so an agent (`Principal::Session`) cannot queue or apply an ACP approval level
+    // raise via either `--mode` or `--permissions`, and invalid options fail right away instead of
+    // exiting 0 "queued" and failing silently later.
+    if !project_id.is_empty() && !session_id.is_empty() {
+        let session = match crate::storage::open_gxserver_database(&state.paths)
+            .map_err(|error| DomainStateError {
+                code: "internalError",
+                message: format!("SQLite gxserver state error: {error}"),
+            })
+            .and_then(|db| {
+                let repository =
+                    crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+                repository
+                    .get_session(&project_id, &session_id)?
+                    .ok_or_else(|| DomainStateError {
+                        code: "notFound",
+                        message: "The session no longer exists.".to_string(),
+                    })
+            }) {
+            Ok(session) => session,
+            Err(error) => return domain_error_response(endpoint_path, request_id, error),
+        };
+        let is_acp = crate::acp::session_is_acp(&session);
+        let provider = crate::session_chat_follower::session_chat_agent_for_session(&session)
+            .unwrap_or_default();
+        let parsed_options =
+            match crate::session_chat_model_selection::read_options(&provider, is_acp, &params) {
+                Ok(opts) => opts,
                 Err(error) => return domain_error_response(endpoint_path, request_id, error),
             };
-            if crate::acp::session_is_acp(&session) {
+        if !is_user_device && is_acp {
+            if let Some(raw_mode) = parsed_options
+                .mode
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
                 let level = match crate::acp::AcpApprovalLevel::parse(raw_mode) {
                     Some(level) => level,
                     None => {
@@ -1557,10 +1556,22 @@ pub(crate) async fn handle_select_session_chat_model_http(
             }
         }
     }
-    let result = if params.get("defer").and_then(Value::as_bool) == Some(true) {
+    let result = if defer {
         crate::session_chat_model_selection::enqueue_for_caller(state, &params, is_user_device)
     } else {
-        select_session_chat_model(state, &params, is_user_device).await
+        let immediate = select_session_chat_model(state, &params, is_user_device).await;
+        if immediate.is_ok() && !project_id.is_empty() && !session_id.is_empty() {
+            // A successful non-deferred pick also clears any earlier failed deferred pick so the
+            // session's queue is not left blocked behind it.
+            if crate::session_chat_model_selection::clear_failed_selection(
+                state,
+                &project_id,
+                &session_id,
+            ) {
+                crate::session_chat_queue_runtime::kick_session_chat_queue();
+            }
+        }
+        immediate
     };
     if let Err(error) = &result {
         // A pick the queue is not carrying (`ghostex select-session-chat-model`): the queued ones

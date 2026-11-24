@@ -11,7 +11,7 @@ use crate::agents::helpers::default_agent_icon_to_id;
 const MODE_PICKER_KEY: &str = "chatComposerModePicker";
 
 /// Whether this computer's chat box hides the mode picker.
-fn mode_picker_off() -> bool {
+pub(crate) fn mode_picker_off() -> bool {
     let paths = crate::paths::get_gxserver_paths(None);
     crate::shared_settings_file::read_shared_settings(&paths)
         .and_then(|settings| settings.get(MODE_PICKER_KEY).cloned())

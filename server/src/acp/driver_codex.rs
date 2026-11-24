@@ -368,6 +368,7 @@ struct CodexState {
     compacting: bool,
     compacting_started_at: Option<String>,
     approval_level: AcpApprovalLevel,
+    use_cli_default: bool,
     read_only: bool,
     deny_mode: CodexDenyMode,
     active_profile: Option<&'static str>,
@@ -404,6 +405,7 @@ impl CodexState {
     #[allow(clippy::too_many_arguments)]
     fn new(
         approval_level: AcpApprovalLevel,
+        use_cli_default: bool,
         read_only: bool,
         deny_mode: CodexDenyMode,
         active_profile: Option<&'static str>,
@@ -427,6 +429,7 @@ impl CodexState {
             compacting: false,
             compacting_started_at: None,
             approval_level,
+            use_cli_default,
             read_only,
             deny_mode,
             active_profile,
@@ -762,6 +765,40 @@ fn codex_turn_policies(
     }
 }
 
+/// Map the effective `(approvalPolicy, approvalsReviewer, sandbox)` that Codex `thread/start` or
+/// `thread/resume` reported back from `~/.codex/config.toml` to Ghostex's approval level.
+fn codex_thread_policy_to_approval_level(
+    approval_policy: Option<&Value>,
+    reviewer: Option<&str>,
+    sandbox: Option<&Value>,
+) -> AcpApprovalLevel {
+    let sandbox_type = sandbox.and_then(|s| s.get("type")).and_then(Value::as_str);
+    let is_never = match approval_policy {
+        Some(Value::String(s)) => s.trim().eq_ignore_ascii_case("never"),
+        Some(Value::Object(map)) => {
+            map.get("granular")
+                .and_then(Value::as_object)
+                .is_some_and(|g| {
+                    g.get("sandbox_approval").and_then(Value::as_bool) == Some(false)
+                        && g.get("rules").and_then(Value::as_bool) == Some(false)
+                        && g.get("request_permissions").and_then(Value::as_bool) == Some(false)
+                })
+        }
+        _ => false,
+    };
+    let is_auto_reviewer = matches!(
+        reviewer.map(str::trim),
+        Some("auto_review" | "guardian_subagent")
+    );
+    if is_never && sandbox_type == Some("dangerFullAccess") {
+        AcpApprovalLevel::FullAccess
+    } else if is_auto_reviewer || is_never {
+        AcpApprovalLevel::Auto
+    } else {
+        AcpApprovalLevel::Ask
+    }
+}
+
 fn approval_level_rank(level: AcpApprovalLevel) -> u8 {
     match level {
         AcpApprovalLevel::Ask => 0,
@@ -781,6 +818,7 @@ fn spawn_and_init_codex(
     resume_thread_id: Option<&str>,
     fork_session: bool,
     approval_level: AcpApprovalLevel,
+    use_cli_default: bool,
     read_only: bool,
     profile: Option<&'static str>,
     state: &Arc<Mutex<CodexState>>,
@@ -962,6 +1000,26 @@ fn spawn_and_init_codex(
             s.developer_instructions.clone(),
         )
     };
+    let keep_cli_default = use_cli_default && !read_only;
+    let effective_profile = if keep_cli_default && profile == Some("ghostex-ws") {
+        // When home-folder secret denies are active under Keep default, mirror the user's own
+        // configured `sandbox_mode` (`danger-full-access` -> `ghostex-full`, else `ghostex-ws`).
+        let cfg_sandbox = transport
+            .call("config/read", json!({}), CODEX_RPC_TIMEOUT)
+            .ok()
+            .and_then(|res| {
+                res.pointer("/config/sandbox_mode")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            });
+        if cfg_sandbox.as_deref() == Some("danger-full-access") {
+            Some("ghostex-full")
+        } else {
+            profile
+        }
+    } else {
+        profile
+    };
     let (init_approval, init_reviewer, _) = codex_turn_policies(approval_level, read_only, &roots);
     let init_sandbox_mode = match approval_level {
         AcpApprovalLevel::FullAccess => "danger-full-access",
@@ -974,11 +1032,13 @@ fn spawn_and_init_codex(
     let open_fresh_thread = || -> Result<Value, String> {
         let mut start_params = Map::new();
         start_params.insert("cwd".to_string(), json!(cfg.cwd));
-        start_params.insert("approvalPolicy".to_string(), init_approval.clone());
-        start_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
-        if let Some(prof) = profile {
+        if !keep_cli_default {
+            start_params.insert("approvalPolicy".to_string(), init_approval.clone());
+            start_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
+        }
+        if let Some(prof) = effective_profile {
             start_params.insert("config".to_string(), json!({ "default_permissions": prof }));
-        } else {
+        } else if !keep_cli_default {
             start_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
         }
         if let Some(m) = model.as_deref().filter(|s| !s.is_empty()) {
@@ -1005,11 +1065,13 @@ fn spawn_and_init_codex(
         let mut req_params = Map::new();
         req_params.insert("threadId".to_string(), json!(resume_id));
         req_params.insert("cwd".to_string(), json!(cfg.cwd));
-        req_params.insert("approvalPolicy".to_string(), init_approval.clone());
-        req_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
-        if let Some(prof) = profile {
+        if !keep_cli_default {
+            req_params.insert("approvalPolicy".to_string(), init_approval.clone());
+            req_params.insert("approvalsReviewer".to_string(), json!(init_reviewer));
+        }
+        if let Some(prof) = effective_profile {
             req_params.insert("config".to_string(), json!({ "default_permissions": prof }));
-        } else {
+        } else if !keep_cli_default {
             req_params.insert("sandbox".to_string(), json!(init_sandbox_mode));
         }
         if let Some(instr) = dev_instr.as_deref().filter(|s| !s.is_empty()) {
@@ -1092,7 +1154,14 @@ fn spawn_and_init_codex(
                     .and_then(|(_, _, effort)| effort)
                 });
         }
-        s.active_profile = profile;
+        if keep_cli_default {
+            s.approval_level = codex_thread_policy_to_approval_level(
+                thread_res.get("approvalPolicy"),
+                thread_res.get("approvalsReviewer").and_then(Value::as_str),
+                thread_res.get("sandbox"),
+            );
+        }
+        s.active_profile = effective_profile;
         s.pending_profile_reload = false;
         s.fatal_error = None;
         s.child_exited = false;
@@ -1183,7 +1252,7 @@ fn restart_codex_process(
         cancel_all_pending_codex(&old.transport, state);
         stop_codex_gracefully(&old.transport, &mut old.child, &mut old.lifetime, child_pid);
     }
-    let (resume_id, level, read_only, next_profile) = {
+    let (resume_id, level, use_cli_default, read_only, next_profile) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.working = false;
         s.compacting = false;
@@ -1197,13 +1266,20 @@ fn restart_codex_process(
         s.pending_requests.clear();
         s.clear_live_turn_output();
         let prof = desired_codex_profile(s.deny_mode, s.approval_level, s.read_only);
-        (s.thread_id.clone(), s.approval_level, s.read_only, prof)
+        (
+            s.thread_id.clone(),
+            s.approval_level,
+            s.use_cli_default,
+            s.read_only,
+            prof,
+        )
     };
     match spawn_and_init_codex(
         cfg,
         resume_id.as_deref(),
         false,
         level,
+        use_cli_default,
         read_only,
         next_profile,
         state,
@@ -1251,7 +1327,14 @@ fn apply_codex_approval_level(
     process_gen: &Arc<AtomicU64>,
     desired: AcpApprovalLevel,
 ) -> Result<(), String> {
-    let (prev_level, effective_read_only, deny_mode, prev_profile, is_working) = {
+    let (
+        prev_level,
+        prev_use_cli_default,
+        effective_read_only,
+        deny_mode,
+        prev_profile,
+        is_working,
+    ) = {
         let s = state.lock().unwrap_or_else(|p| p.into_inner());
         let next_ro = if desired != AcpApprovalLevel::Ask {
             false
@@ -1260,13 +1343,15 @@ fn apply_codex_approval_level(
         };
         (
             s.approval_level,
+            s.use_cli_default,
             next_ro,
             s.deny_mode,
             s.active_profile,
             s.working,
         )
     };
-    let is_downgrade = approval_level_rank(desired) < approval_level_rank(prev_level);
+    let is_downgrade = approval_level_rank(desired) < approval_level_rank(prev_level)
+        || (prev_use_cli_default && desired == AcpApprovalLevel::Ask);
     let next_profile = desired_codex_profile(deny_mode, desired, effective_read_only);
 
     if is_working && !is_downgrade {
@@ -1274,6 +1359,7 @@ fn apply_codex_approval_level(
         // the next turn boundary.
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.approval_level = desired;
+        s.use_cli_default = false;
         s.read_only = effective_read_only;
         if next_profile != prev_profile {
             s.pending_profile_reload = true;
@@ -1310,6 +1396,7 @@ fn apply_codex_approval_level(
     let need_reload = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.approval_level = desired;
+        s.use_cli_default = false;
         s.read_only = effective_read_only;
         must_restart
             || proc_opt.is_none()
@@ -2359,6 +2446,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         }
     }
 
+    let use_cli_default = parsed.approval_level.is_none() && !parsed.read_only;
+    let initial_approval_level = if parsed.read_only {
+        AcpApprovalLevel::Ask
+    } else {
+        parsed.approval_level.unwrap_or(AcpApprovalLevel::Ask)
+    };
     let (deny_mode, init_profile) = if let Some((is_api, deny_paths)) =
         crate::agents::codex_deny_paths_for_session(
             Some(&cwd),
@@ -2415,7 +2508,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             ));
             CodexDenyMode::HomeOrGbot
         };
-        let prof = desired_codex_profile(mode, parsed.approval_level, parsed.read_only);
+        let prof = desired_codex_profile(mode, initial_approval_level, parsed.read_only);
         (mode, prof)
     } else {
         (CodexDenyMode::None, None)
@@ -2458,7 +2551,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     };
 
     let state = Arc::new(Mutex::new(CodexState::new(
-        parsed.approval_level,
+        initial_approval_level,
+        use_cli_default,
         parsed.read_only,
         deny_mode,
         init_profile,
@@ -2478,7 +2572,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         &spawn_cfg,
         parsed.resume_session_id.as_deref(),
         parsed.fork_session,
-        parsed.approval_level,
+        initial_approval_level,
+        use_cli_default,
         parsed.read_only,
         init_profile,
         &state,
@@ -2640,11 +2735,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     .and_then(AcpApprovalLevel::parse)
                 {
                     had_desired_approval = true;
-                    let current = state
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .approval_level;
-                    if desired != current {
+                    let (current, is_cli_default) = {
+                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        (s.approval_level, s.use_cli_default)
+                    };
+                    if desired != current || is_cli_default {
                         if let Err(err) = apply_codex_approval_level(
                             &mut proc_opt,
                             &spawn_cfg,
@@ -3012,11 +3107,21 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                         continue;
                     };
-                    let (tid, level, read_only, use_profile_sandbox, roots, model, effort) = {
+                    let (
+                        tid,
+                        level,
+                        use_cli_default,
+                        read_only,
+                        use_profile_sandbox,
+                        roots,
+                        model,
+                        effort,
+                    ) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
                         (
                             s.thread_id.clone(),
                             s.approval_level,
+                            s.use_cli_default,
                             s.read_only,
                             s.deny_mode != CodexDenyMode::None,
                             s.writable_roots.clone(),
@@ -3077,16 +3182,18 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                         continue;
                     }
-                    let (approval_policy, reviewer, sandbox_policy) =
-                        codex_turn_policies(level, read_only, &roots);
                     let mut turn_params = Map::new();
                     turn_params.insert("threadId".to_string(), json!(tid));
                     turn_params.insert("input".to_string(), Value::Array(input));
                     turn_params.insert("cwd".to_string(), json!(cwd));
-                    turn_params.insert("approvalPolicy".to_string(), approval_policy);
-                    turn_params.insert("approvalsReviewer".to_string(), json!(reviewer));
-                    if !use_profile_sandbox {
-                        turn_params.insert("sandboxPolicy".to_string(), sandbox_policy);
+                    if !(use_cli_default && !read_only) {
+                        let (approval_policy, reviewer, sandbox_policy) =
+                            codex_turn_policies(level, read_only, &roots);
+                        turn_params.insert("approvalPolicy".to_string(), approval_policy);
+                        turn_params.insert("approvalsReviewer".to_string(), json!(reviewer));
+                        if !use_profile_sandbox {
+                            turn_params.insert("sandboxPolicy".to_string(), sandbox_policy);
+                        }
                     }
                     if let Some(m) = model.as_deref().filter(|v| !v.is_empty()) {
                         turn_params.insert("model".to_string(), json!(m));
@@ -3362,11 +3469,21 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         continue;
                     };
                     cancel_all_pending_codex(&proc.transport, &state);
-                    let (tid, level, read_only, use_profile_sandbox, roots, model, effort) = {
+                    let (
+                        tid,
+                        level,
+                        use_cli_default,
+                        read_only,
+                        use_profile_sandbox,
+                        roots,
+                        model,
+                        effort,
+                    ) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
                         (
                             s.thread_id.clone(),
                             s.approval_level,
+                            s.use_cli_default,
                             s.read_only,
                             s.deny_mode != CodexDenyMode::None,
                             s.writable_roots.clone(),
@@ -3427,16 +3544,18 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         }
                         continue;
                     }
-                    let (approval_policy, reviewer, sandbox_policy) =
-                        codex_turn_policies(level, read_only, &roots);
                     let mut turn_params = Map::new();
                     turn_params.insert("threadId".to_string(), json!(tid));
                     turn_params.insert("input".to_string(), Value::Array(input));
                     turn_params.insert("cwd".to_string(), json!(cwd));
-                    turn_params.insert("approvalPolicy".to_string(), approval_policy);
-                    turn_params.insert("approvalsReviewer".to_string(), json!(reviewer));
-                    if !use_profile_sandbox {
-                        turn_params.insert("sandboxPolicy".to_string(), sandbox_policy);
+                    if !(use_cli_default && !read_only) {
+                        let (approval_policy, reviewer, sandbox_policy) =
+                            codex_turn_policies(level, read_only, &roots);
+                        turn_params.insert("approvalPolicy".to_string(), approval_policy);
+                        turn_params.insert("approvalsReviewer".to_string(), json!(reviewer));
+                        if !use_profile_sandbox {
+                            turn_params.insert("sandboxPolicy".to_string(), sandbox_policy);
+                        }
                     }
                     if let Some(m) = model.as_deref().filter(|v| !v.is_empty()) {
                         turn_params.insert("model".to_string(), json!(m));

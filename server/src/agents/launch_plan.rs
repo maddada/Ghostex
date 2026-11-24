@@ -734,46 +734,51 @@ pub(crate) fn create_agent_session_params_for_project(
                         let resume_id = read_text_from_map(&runtime_settings, "agentSessionId");
                         let read_only_acp = read_only_family.is_some();
                         let api_chat = is_gbot_api_chat(Some(&runtime_settings));
-                        let approval_level = if read_only_acp || api_chat {
-                            crate::acp::AcpApprovalLevel::Ask
-                        } else if let Some(bot_id) = runtime_settings
-                            .get("gbot")
-                            .and_then(|g| g.get("botId"))
-                            .and_then(Value::as_str)
-                            .filter(|s| !s.trim().is_empty())
-                        {
-                            // Local GBot chat: read the configured approval directly from
-                            // Ghostex's server-side GBot DB record (never from client params).
-                            match crate::gbots::read_bot(db, bot_id).ok().flatten() {
-                                Some(bot) => match bot.approval.as_str() {
+                        let approval_level: Option<crate::acp::AcpApprovalLevel> =
+                            if read_only_acp || api_chat {
+                                Some(crate::acp::AcpApprovalLevel::Ask)
+                            } else if let Some(bot_id) = runtime_settings
+                                .get("gbot")
+                                .and_then(|g| g.get("botId"))
+                                .and_then(Value::as_str)
+                                .filter(|s| !s.trim().is_empty())
+                            {
+                                // Local GBot chat: read the configured approval directly from
+                                // Ghostex's server-side GBot DB record (never from client params).
+                                Some(match crate::gbots::read_bot(db, bot_id).ok().flatten() {
+                                    Some(bot) => match bot.approval.as_str() {
+                                        "edits" => crate::acp::AcpApprovalLevel::AutoEdits,
+                                        "auto" => crate::acp::AcpApprovalLevel::Auto,
+                                        "full" => crate::acp::AcpApprovalLevel::FullAccess,
+                                        _ => crate::acp::AcpApprovalLevel::Ask,
+                                    },
+                                    None => crate::acp::AcpApprovalLevel::Ask,
+                                })
+                            } else if let Some(remote_approval) = runtime_settings
+                                .get("gbotHome")
+                                .and_then(|g| g.get("approval"))
+                                .and_then(Value::as_str)
+                            {
+                                // Remote GBot chat opened by a paired computer (`Principal::Peer`;
+                                // `guard_create_session_params` strips `gbotHome` for non-user devices).
+                                Some(match remote_approval {
                                     "edits" => crate::acp::AcpApprovalLevel::AutoEdits,
                                     "auto" => crate::acp::AcpApprovalLevel::Auto,
                                     "full" => crate::acp::AcpApprovalLevel::FullAccess,
                                     _ => crate::acp::AcpApprovalLevel::Ask,
-                                },
-                                None => crate::acp::AcpApprovalLevel::Ask,
-                            }
-                        } else if let Some(remote_approval) = runtime_settings
-                            .get("gbotHome")
-                            .and_then(|g| g.get("approval"))
-                            .and_then(Value::as_str)
-                        {
-                            // Remote GBot chat opened by a paired computer (`Principal::Peer`;
-                            // `guard_create_session_params` strips `gbotHome` for non-user devices).
-                            match remote_approval {
-                                "edits" => crate::acp::AcpApprovalLevel::AutoEdits,
-                                "auto" => crate::acp::AcpApprovalLevel::Auto,
-                                "full" => crate::acp::AcpApprovalLevel::FullAccess,
-                                _ => crate::acp::AcpApprovalLevel::Ask,
-                            }
-                        } else {
-                            crate::acp::approval::resolve_starting_level(
-                                &runtime_settings,
-                                &agent_config,
-                                &launch_settings,
-                                &settings,
-                            )
-                        };
+                                })
+                            } else {
+                                crate::acp::approval::resolve_explicit_starting_level(
+                                    &runtime_settings,
+                                    &agent_config,
+                                    &launch_settings,
+                                    &settings,
+                                )
+                                .or_else(|| {
+                                    (fam == "claude" && super::mode_picker_off::mode_picker_off())
+                                        .then_some(crate::acp::AcpApprovalLevel::Auto)
+                                })
+                            };
                         let pin_obj = runtime_settings
                             .get(crate::agent_model_pins::SESSION_PIN_KEY)
                             .and_then(Value::as_object);
@@ -906,10 +911,14 @@ pub(crate) fn create_agent_session_params_for_project(
                             .insert(crate::acp::SESSION_ACP_ACTIVE_KEY.to_string(), json!(true));
                         runtime_settings
                             .insert(crate::acp::SESSION_ACP_FAMILY_KEY.to_string(), json!(fam));
-                        runtime_settings.insert(
-                            crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
-                            json!(approval_level.as_str()),
-                        );
+                        if let Some(level) = approval_level {
+                            runtime_settings.insert(
+                                crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+                                json!(level.as_str()),
+                            );
+                        } else {
+                            runtime_settings.remove(crate::acp::SESSION_ACP_APPROVAL_LEVEL_KEY);
+                        }
                         plan.insert(
                             "startupText".to_string(),
                             Value::String(as_atuin_ignored_shell_input(&acp_cmd)),

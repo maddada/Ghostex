@@ -39,8 +39,9 @@ const CLAUDE_SPEC: AcpAgentSpec = AcpAgentSpec {
     family: "claude",
     display_name: "Claude Code",
     // Native bidirectional stream-json control protocol with stdio permission routing.
-    // Always starts in `--permission-mode default` so Ghostex's four live approval levels are
-    // authoritative and `AskUserQuestion` / `ExitPlanMode` always prompt interactively.
+    // `--permission-mode` is added by `driver_claude.rs` only when Ghostex enforces an explicit
+    // approval level or `--read-only`; omitting it under Keep default lets Claude resolve its own
+    // `permissions.defaultMode` across user, project, local, and managed settings.
     acp_argv: &[
         "claude",
         "--output-format",
@@ -50,8 +51,6 @@ const CLAUDE_SPEC: AcpAgentSpec = AcpAgentSpec {
         "stream-json",
         "--permission-prompt-tool=stdio",
         "--include-partial-messages",
-        "--permission-mode",
-        "default",
     ],
     default_cli_bin: "claude",
     cli_resume_flag: "--resume",
@@ -187,7 +186,7 @@ pub fn build_acp_host_launch_command_with_profile(
     family: &str,
     _cli_command: Option<&str>,
     resume_session_id: Option<&str>,
-    approval_level: super::AcpApprovalLevel,
+    approval_level: Option<super::AcpApprovalLevel>,
     writable_roots: &[String],
     model: Option<&str>,
     effort: Option<&str>,
@@ -213,7 +212,7 @@ pub fn build_acp_host_launch_command_with_profile(
 fn build_acp_host_launch_command_for_platform(
     family: &str,
     resume_session_id: Option<&str>,
-    approval_level: super::AcpApprovalLevel,
+    approval_level: Option<super::AcpApprovalLevel>,
     writable_roots: &[String],
     model: Option<&str>,
     effort: Option<&str>,
@@ -248,8 +247,10 @@ fn build_acp_host_launch_command_for_platform(
     if read_only {
         parts.push("--read-only".to_string());
     }
-    parts.push("--approval-level".to_string());
-    parts.push(quote_acp_launch_arg(approval_level.as_str(), windows));
+    if let Some(level) = approval_level {
+        parts.push("--approval-level".to_string());
+        parts.push(quote_acp_launch_arg(level.as_str(), windows));
+    }
     for root in writable_roots
         .iter()
         .map(String::as_str)

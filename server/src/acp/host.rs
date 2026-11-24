@@ -85,7 +85,7 @@ pub(super) struct HostArgs {
     pub(super) resume_session_id: Option<String>,
     pub(super) fork_session: bool,
     pub(super) read_only: bool,
-    pub(super) approval_level: AcpApprovalLevel,
+    pub(super) approval_level: Option<AcpApprovalLevel>,
     pub(super) writable_roots: Vec<PathBuf>,
     pub(super) model: Option<String>,
     pub(super) effort: Option<String>,
@@ -99,7 +99,7 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
     let mut resume_session_id = None;
     let mut fork_session = false;
     let mut read_only = false;
-    let mut approval_level = AcpApprovalLevel::Ask;
+    let mut approval_level: Option<AcpApprovalLevel> = None;
     let mut writable_roots = Vec::new();
     let mut model = None;
     let mut effort = None;
@@ -124,12 +124,14 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
             }
             "--fork-session" => fork_session = true,
             "--read-only" => read_only = true,
-            "--accept-all" => approval_level = AcpApprovalLevel::FullAccess,
+            "--accept-all" => approval_level = Some(AcpApprovalLevel::FullAccess),
             "--approval-level" => {
                 i += 1;
                 let raw = args.get(i).map(String::as_str).unwrap_or_default();
-                approval_level = AcpApprovalLevel::parse(raw)
-                    .ok_or_else(|| format!("Unknown --approval-level value: {raw}"))?;
+                approval_level = Some(
+                    AcpApprovalLevel::parse(raw)
+                        .ok_or_else(|| format!("Unknown --approval-level value: {raw}"))?,
+                );
             }
             "--writable-root" => {
                 i += 1;
@@ -1765,9 +1767,12 @@ pub fn run(args: &[String]) -> i32 {
     let stderr = child.stderr.take();
 
     let transport = Arc::new(AcpTransport::new(stdin, &spool_session_id));
+    let initial_explicit_level = parsed
+        .approval_level
+        .or_else(|| parsed.read_only.then_some(AcpApprovalLevel::Ask));
     let state = Arc::new(Mutex::new(HostState::new(
         spec.family,
-        parsed.approval_level,
+        initial_explicit_level.unwrap_or(AcpApprovalLevel::Ask),
         cwd_path.clone(),
         writable_roots,
     )));
@@ -2163,13 +2168,24 @@ pub fn run(args: &[String]) -> i32 {
         s.native_session_id.clone()
     };
 
-    if let Err(err) = apply_approval_level_and_sync_native_mode(
-        &transport,
-        &state,
-        &mode_sync_lock,
-        parsed.approval_level,
-    ) {
-        eprintln!("[Native] Warning: could not sync initial native mode: {err}");
+    if let Some(target_level) = initial_explicit_level {
+        if let Err(err) = apply_approval_level_and_sync_native_mode(
+            &transport,
+            &state,
+            &mode_sync_lock,
+            target_level,
+        ) {
+            eprintln!("[Native] Warning: could not sync initial native mode: {err}");
+        }
+    } else {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        let detected = s
+            .current_mode
+            .as_deref()
+            .and_then(AcpApprovalLevel::parse)
+            .unwrap_or(AcpApprovalLevel::Ask);
+        s.approval_level = detected;
+        s.native_auto_active = detected == AcpApprovalLevel::Auto;
     }
 
     {

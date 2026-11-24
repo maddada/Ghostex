@@ -313,8 +313,7 @@ fn at_message_plan(plan: &mut Value) -> Result<String, DomainStateError> {
         let level = plan
             .get("acpApprovalLevel")
             .and_then(Value::as_str)
-            .and_then(crate::acp::AcpApprovalLevel::parse)
-            .unwrap_or(crate::acp::AcpApprovalLevel::Ask);
+            .and_then(crate::acp::AcpApprovalLevel::parse);
         let read_only = plan
             .get("acpReadOnly")
             .and_then(Value::as_bool)
@@ -327,7 +326,7 @@ fn at_message_plan(plan: &mut Value) -> Result<String, DomainStateError> {
             Some(command),
             Some(&fork_id),
             if read_only || profile.gbot_api_chat {
-                crate::acp::AcpApprovalLevel::Ask
+                Some(crate::acp::AcpApprovalLevel::Ask)
             } else {
                 level
             },
@@ -390,7 +389,7 @@ fn side_chat_plan(plan: &mut Value) {
                 &fam,
                 cli_cmd.as_deref(),
                 reference.as_deref(),
-                crate::acp::AcpApprovalLevel::Ask,
+                Some(crate::acp::AcpApprovalLevel::Ask),
                 &[],
                 acp_model.as_deref(),
                 acp_effort.as_deref(),
@@ -437,13 +436,12 @@ pub(crate) fn build_agent_fork_plan(
         session.get("runtimeSettings").and_then(Value::as_object),
     );
     let source_acp_level = if source_read_only {
-        crate::acp::AcpApprovalLevel::Ask
+        Some(crate::acp::AcpApprovalLevel::Ask)
     } else {
         session
             .pointer("/runtimeSettings/acpApprovalLevel")
             .and_then(Value::as_str)
             .and_then(crate::acp::AcpApprovalLevel::parse)
-            .unwrap_or(crate::acp::AcpApprovalLevel::Ask)
     };
     let source_runtime = session.get("runtimeSettings").and_then(Value::as_object);
     let source_is_coordinator = source_runtime.is_some_and(session_is_coordinator);
@@ -612,10 +610,9 @@ pub(crate) fn build_agent_fork_plan(
         plan.insert("acpFork".to_string(), json!(true));
         plan.insert("acpFamily".to_string(), json!(fam));
         plan.insert("acpReadOnly".to_string(), json!(source_read_only));
-        plan.insert(
-            "acpApprovalLevel".to_string(),
-            json!(source_acp_level.as_str()),
-        );
+        if let Some(level) = source_acp_level {
+            plan.insert("acpApprovalLevel".to_string(), json!(level.as_str()));
+        }
         insert_optional_string(&mut plan, "acpForkReference", acp_fork_reference);
         insert_optional_string(
             &mut plan,

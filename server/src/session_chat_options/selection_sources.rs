@@ -1007,15 +1007,14 @@ pub(crate) fn detect_session_chat_stored_options(
         .ok()
         .flatten()
         .filter(crate::acp::session_is_acp);
-    let acp_mode_choice = acp_session.as_ref().map(|session| {
-        let level =
-            crate::acp::approval::stored_session_approval_level(session).unwrap_or_default();
-        SessionChatDetectedChoice {
+    let acp_mode_choice = acp_session
+        .as_ref()
+        .and_then(crate::acp::approval::stored_session_approval_level)
+        .map(|level| SessionChatDetectedChoice {
             value: level.as_str().to_string(),
             label: level.label().to_string(),
             source: SessionChatOptionEvidence::Launch,
-        }
-    });
+        });
     let agent = session_chat_option_agent(agent_id);
     let mut selection = if let Some(agent) = agent {
         let (transcript, statusline, _, _) = read_session_chat_stored_selections(

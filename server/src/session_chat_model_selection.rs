@@ -195,11 +195,58 @@ pub fn read_pending(
     ).optional().ok().flatten()
 }
 
+/// Read the session's pending or failed model selection, if any.
+pub(crate) fn read_pending_for_state(
+    state: &AppState,
+    project: &str,
+    session: &str,
+) -> Option<PendingModelSelection> {
+    let db = open_gxserver_database(&state.paths).ok()?;
+    read_pending(&db, project, session)
+}
+
 /// Whether a model or option change is waiting, applying or failed for this session; a new chat
 /// message then waits behind it.
 pub(crate) fn has_pending_selection(state: &AppState, project: &str, session: &str) -> bool {
-    open_gxserver_database(&state.paths)
-        .is_ok_and(|db| read_pending(&db, project, session).is_some())
+    read_pending_for_state(state, project, session).is_some()
+}
+
+/// Delete a `state = 'failed'` pending selection row (leaving any active `queued`/`applying` row
+/// untouched), clear its failure alert, and broadcast updated queue state. Returns `true` when a
+/// failed row was cleared.
+pub(crate) fn clear_failed_selection(state: &AppState, project: &str, session: &str) -> bool {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return false;
+    };
+    let cleared = rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate)
+        .ok()
+        .and_then(|tx| {
+            let existing = read_pending(&tx, project, session)?;
+            if existing.state != "failed" {
+                return None;
+            }
+            let count = tx
+                .execute(
+                    "DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3 AND state = 'failed'",
+                    params![project, session, existing.id],
+                )
+                .ok()?;
+            if count == 0 {
+                return None;
+            }
+            let _ = crate::session_chat_queue::bump_queue_version(&tx, project, session);
+            tx.commit().ok()?;
+            Some(existing.id)
+        });
+    let Some(selection_id) = cleared else {
+        return false;
+    };
+    forget_busy_run(&selection_id);
+    crate::session_chat_model_selection_alert::clear_model_selection_failure(
+        state, project, session,
+    );
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(state, project, session);
+    true
 }
 
 /// The published catalog can grow without rebuilding gxserver; the terminal is the authority on availability.
@@ -355,6 +402,17 @@ fn enqueue_selection(
     let is_acp = crate::acp::session_is_acp(&session);
     let incoming_options = read_options(&provider, is_acp, params)?;
     let scope = read_scope(&provider, params)?;
+    if params
+        .get("scope")
+        .and_then(Value::as_str)
+        .is_some_and(|s| s.trim() == SCOPE_SESSION)
+        && model.is_empty()
+    {
+        return Err(DomainStateError {
+            code: "invalidParams",
+            message: "A session-only change needs the model to apply in this session.".into(),
+        });
+    }
     if !model.is_empty() || incoming_options.is_empty() {
         validate_selection(&provider, model, effort)?;
     } else if (!is_acp
@@ -368,6 +426,11 @@ fn enqueue_selection(
             code: "invalidParams",
             message: "An effort change requires its model.".into(),
         });
+    }
+    if let Some(refusal) = foreign_model_refusal(&provider, model) {
+        return Err(crate::session_chat_codex_picker::unsupported_selection(
+            refusal,
+        ));
     }
     // Merge under the write lock so independent controls cannot overwrite each other's pending choice.
     let transaction =
@@ -953,13 +1016,22 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                 forget_busy_run(&pending.id);
             }
             let refused_mode = result.as_ref().err().is_some_and(mode_was_refused);
+            // A forbidden pick (e.g. non-owner approval raise) or an options-only final failure
+            // (no model change requested) must never stay in `state = 'failed'` blocking later
+            // messages in the queue.
+            let drop_failed_without_hold = refused_mode
+                || result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|error| error.code == "forbidden")
+                || (final_failure && pending.model.is_empty());
             if let Ok(db) = open_gxserver_database(&state.paths) {
                 if let Ok(tx) = rusqlite::Transaction::new_unchecked(
                     &db,
                     rusqlite::TransactionBehavior::Immediate,
                 ) {
                     let updated = match &result {
-                        Err(_) if refused_mode => tx.execute(
+                        Err(_) if drop_failed_without_hold => tx.execute(
                             "DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
                             params![project, session, pending.id],
                         ),
@@ -1001,13 +1073,15 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                 ),
                 // The refusal is remembered, so the mode menu greys it and says why; nothing is left
                 // to raise or hold (the 2026-10-31 DECISION on `note_model_selection_failure`).
-                Err(error) if refused_mode => {
-                    crate::session_chat_mode_availability::remember_refusal(
-                        &state,
-                        &project,
-                        &session,
-                        &error.message,
-                    );
+                Err(error) if drop_failed_without_hold => {
+                    if refused_mode {
+                        crate::session_chat_mode_availability::remember_refusal(
+                            &state,
+                            &project,
+                            &session,
+                            &error.message,
+                        );
+                    }
                     crate::session_chat_send_diagnostics::record_send_recovery(
                         &state,
                         "sessionChatModeRefused",
@@ -1019,6 +1093,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     crate::session_chat_model_selection_alert::clear_model_selection_failure(
                         &state, &project, &session,
                     );
+                    crate::session_chat_queue_runtime::kick_session_chat_queue();
                 }
                 Err(error) => {
                     crate::session_chat_model_selection_alert::note_model_selection_failure(

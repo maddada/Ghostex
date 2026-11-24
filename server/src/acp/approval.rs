@@ -554,21 +554,24 @@ pub fn stored_session_approval_level(session: &Value) -> Option<AcpApprovalLevel
         .and_then(AcpApprovalLevel::parse)
 }
 
-/// Resolve the starting approval level for an ACP session:
+/// Resolve an explicit starting approval level for an ACP session when Ghostex overrides the
+/// agent CLI's own default:
 /// 1. Remembered per-session level (`runtimeSettings.acpApprovalLevel`), when present.
-/// 2. Per-agent / per-project / per-launch `acceptAllMode` (`"enabled"` -> `FullAccess`,
-///    `"disabled"` -> `Ask`, `"inherit"` or absent -> global `agentAcceptAllEnabled`).
-/// 3. Default stays `Ask`.
-pub fn resolve_starting_level(
+/// 2. Per-launch / per-agent / global `acceptAllMode` when it enables skip-permissions
+///    (`"enabled"` / `"acceptAll"`, or inherited `agentAcceptAllEnabled: true`) -> `Some(FullAccess)`.
+/// 3. Keep default (`acceptAllMode: "disabled"`, or `"inherit"` / absent with
+///    `agentAcceptAllEnabled: false`) -> `None`, so `acp-host` keeps the agent CLI's own default
+///    approval mode (e.g. Claude's `permissions.defaultMode` or Codex's `config.toml`).
+pub fn resolve_explicit_starting_level(
     runtime_settings: &Map<String, Value>,
     agent_config: &Map<String, Value>,
     launch_settings: &Map<String, Value>,
     global_settings: &Map<String, Value>,
-) -> AcpApprovalLevel {
+) -> Option<AcpApprovalLevel> {
     if let Some(remembered) = read_trimmed_str(runtime_settings, SESSION_ACP_APPROVAL_LEVEL_KEY)
         .and_then(AcpApprovalLevel::parse)
     {
-        return remembered;
+        return Some(remembered);
     }
     let explicit_override = |val: Option<&str>| match val {
         Some("enabled" | "acceptAll") => Some(true),
@@ -586,7 +589,24 @@ pub fn resolve_starting_level(
                     .and_then(Value::as_bool)
                     .unwrap_or(false)
             });
-    AcpApprovalLevel::from_accept_all_default(accept_all_effective)
+    accept_all_effective.then_some(AcpApprovalLevel::FullAccess)
+}
+
+/// Resolve a concrete starting approval level for an ACP session, falling back to `Ask` when
+/// Ghostex keeps the CLI default.
+pub fn resolve_starting_level(
+    runtime_settings: &Map<String, Value>,
+    agent_config: &Map<String, Value>,
+    launch_settings: &Map<String, Value>,
+    global_settings: &Map<String, Value>,
+) -> AcpApprovalLevel {
+    resolve_explicit_starting_level(
+        runtime_settings,
+        agent_config,
+        launch_settings,
+        global_settings,
+    )
+    .unwrap_or(AcpApprovalLevel::Ask)
 }
 
 /// True when an ACP native mode id represents an automatic, edit-auto-approving, or bypass/yolo
