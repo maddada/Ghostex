@@ -782,6 +782,56 @@ pub(crate) const CODEX_NATIVE: &[SlashCommand] = &[
     },
 ];
 
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// A Native Antigravity chat talks to `agy acp`, which runs the built-in commands it advertises over ACP (`available_commands_update`, agy 1.5.15; the rest of that list is its skills, which the `/` list shows from the skills source). The generic list offered `/clear`, `/exit`, `/help` and `/model`, none of which `agy acp` has: they reached the model as plain text, so `/help` got a made-up answer (found testing Native Antigravity on Linux). Descriptions are agy's own.
+pub(crate) const ANTIGRAVITY_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "boost",
+        description: "Invoke the Boost multi-agent orchestrator for complex tasks",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "browser",
+        description: "Invoke a browser agent for web tasks",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "compact",
+        description: "Compact the conversation now to free up the context window",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "goal",
+        description: "Run until the specified goal is completely finished",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "grill-me",
+        description: "Interview me to align on a plan",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "learn",
+        description: "Capture reusable skills or rules from recent work",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "plan",
+        description: "Plan carefully before executing a task",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "schedule",
+        description: "Run an instruction on a schedule or as a one-time timer",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "teamwork",
+        description: "Invoke a team of agents to tackle large projects",
+        insert_text: None,
+    },
+];
+
 /// CDXC:SessionChat 2026-10-17 WHY:
 /// Grok Build 1.0.62's own built-in commands (its `slash/commands/` registry, checked against the live `/` menu); skills and workflows reach the chat through the `$` picker. The earlier list named commands Grok never had (`/editor`, `/init`, `/models`, `/status`) or renamed (`/mcp` is `/mcps`).
 pub(crate) const GROK: &[SlashCommand] = &[

@@ -6,7 +6,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::composer::slash_catalogs::{
-    CLAUDE_CODE, CODEX, CODEX_NATIVE, COPILOT, CURSOR, FALLBACK, GROK, HERMES, OMP, PI,
+    ANTIGRAVITY_NATIVE, CLAUDE_CODE, CODEX, CODEX_NATIVE, COPILOT, CURSOR, FALLBACK, GROK, HERMES,
+    OMP, PI,
 };
 
 /// One offered `/` command.
@@ -38,11 +39,12 @@ pub fn slash_heading_for_agent(agent: Option<&str>) -> &'static str {
     }
 }
 
-/// The catalog for a chat: a Native Codex chat has its own short one (`CODEX_NATIVE`), every
-/// other chat the agent's.
+/// The catalog for a chat: a Native Codex or Antigravity chat has its own (`CODEX_NATIVE`,
+/// `ANTIGRAVITY_NATIVE`), every other chat the agent's.
 pub fn slash_commands_for_session(agent: Option<&str>, non_cli: bool) -> &'static [SlashCommand] {
     match agent {
         Some("codex") if non_cli => CODEX_NATIVE,
+        Some("antigravity") if non_cli => ANTIGRAVITY_NATIVE,
         _ => slash_commands_for_agent(agent),
     }
 }
