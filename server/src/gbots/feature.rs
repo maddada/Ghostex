@@ -1,10 +1,6 @@
-//! Whether GBots are on: the GBots switch (`gbotsEnabled`, Settings > Extensions, off by default)
-//! and Main Hub (`mainHubHidden`, the Chief of Staff extension) both on. Read fresh from the
-//! settings file for every `/api/gbots` call, so turning either off refuses the next command
-//! without a restart; the sweep (sweep.rs) keeps the cached answer presentations read.
-//!
-//! CDXC:GBots 2026-11-08 DECISION:
-//! User (P1): "the GBots switch in Settings > Extensions turns them on or off and needs Main Hub." GBots live under Chief of Staff in Main Hub, so with Main Hub off they are off whatever their own switch says, and every `ghostex gbots` verb says which switch to turn on.
+//! Whether GBots are on: the GBots switch (`gbotsEnabled`, Settings > Extensions, off by default).
+//! Read fresh from the settings file for every `/api/gbots` call, so turning it off refuses the
+//! next command without a restart; the sweep (sweep.rs) keeps the cached answer presentations read.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -13,7 +9,7 @@ use serde_json::Value;
 
 use crate::paths::GxserverPaths;
 
-/// Whether the GBots switch itself is on in `settings` (Main Hub aside).
+/// Whether the GBots switch itself is on in `settings`.
 fn switch_on_in(settings: Option<&Value>) -> bool {
     built_in_extensions::on_with(GBOTS, |key| {
         settings
@@ -25,19 +21,15 @@ fn switch_on_in(settings: Option<&Value>) -> bool {
 /// Whether GBots are on, read fresh from this gxserver's settings file.
 pub(crate) fn gbots_on(paths: &GxserverPaths) -> bool {
     let settings = crate::shared_settings_file::read_shared_settings(paths);
-    crate::chief::chief_on(paths) && switch_on_in(settings.as_ref())
+    switch_on_in(settings.as_ref())
 }
 
 /// What a caller is told while GBots are off: it names Settings, and this computer, since the
 /// caller may be another computer's app (CDXC:Extensions 2026-11-21 in the settings catalog's
 /// built_in_extensions.rs).
-pub(crate) fn gbots_off_message(paths: &GxserverPaths) -> String {
+pub(crate) fn gbots_off_message(_paths: &GxserverPaths) -> String {
     let computer = crate::connected_computers::this_computer_name();
-    if crate::chief::chief_on(paths) {
-        built_in_extensions::turned_off_on_message(GBOTS, &computer)
-    } else {
-        format!("GBots need Main Hub, which is turned off on {computer}. Turn on Main Hub, then GBots, in Settings > Extensions; from another computer, pick {computer} at the top of that page first.")
-    }
+    built_in_extensions::turned_off_on_message(GBOTS, &computer)
 }
 
 /// GBots as gxserver last published them: 0 not read yet, 1 off, 2 on (sweep.rs keeps it).

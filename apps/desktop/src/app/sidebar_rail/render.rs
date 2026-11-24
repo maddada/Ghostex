@@ -205,10 +205,7 @@ impl GhostexGpuiApp {
                 .snapshot
                 .as_ref()
                 .is_some_and(|snapshot| {
-                    crate::app::native_sidebar::chief_row_view::chief_row_shown(
-                        snapshot.chief_enabled,
-                        snapshot.bots_mode,
-                    )
+                    crate::app::native_sidebar::chief_row_view::chief_row_shown(snapshot.bots_mode)
                 })
     }
 

@@ -566,7 +566,7 @@ impl Render for AgentsTab {
         {
             blocks.push(PageBlock::section(HOOKS_ANCHOR, section));
         }
-        // The Main Hub beta extension's card, last on the page (home_secret_folders.rs).
+        // The Main Hub home folder card, last on the page (home_secret_folders.rs).
         if should_show_section(&search.section("homeFolder"), None)
             && let Some(section) = self.render_home_folder(&p, &search, window, cx)
         {

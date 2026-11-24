@@ -50,8 +50,8 @@ const HELP_TAIL: &str = "
   Icons are Ghostex icon names (robot, search, pencil, …). Only you and Ghostex AI add, change
   and remove GBots and departments; adding a GBot from a terminal asks for your approval first.
   Ghostex AI and a department's lead hand a GBot work, and a lead changes its own members'
-  instructions; any other GBot or coordinator may only ask it a question. Turn on Main Hub and
-  GBots in Settings > Extensions. Add --computer <name> to run a command on another computer.
+  instructions; any other GBot or coordinator may only ask it a question. Turn on GBots in
+  Settings > Extensions. Add --computer <name> to run a command on another computer.
 ";
 
 fn help() -> String {

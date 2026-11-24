@@ -24,8 +24,7 @@ impl GhostexGpuiApp {
         match key {
             "search" | "findPrompts" => state.available = true,
             "mainHub" => {
-                state.available = crate::app::native_sidebar::chief::chief_on()
-                    && snapshot.is_some_and(|snapshot| snapshot.chief_enabled);
+                state.available = true;
             }
             "hermes" => {
                 state.available = snapshot.is_some_and(|snapshot| snapshot.bots_enabled);

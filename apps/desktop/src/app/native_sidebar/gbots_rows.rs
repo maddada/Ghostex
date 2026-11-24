@@ -110,13 +110,13 @@ pub(crate) fn opened_by_chief_tag(
     )
 }
 
-/// Whether GBots are on in this computer's settings: Main Hub and the GBots switch both on
-/// (server/src/gbots/feature.rs reads the same two).
+/// Whether GBots are on in this computer's settings (server/src/gbots/feature.rs reads the same
+/// switch).
 pub(crate) fn gbots_on() -> bool {
     use ghostex_settings_catalog::built_in_extensions::{GBOTS, on_with};
     let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
     let settings = settings.object();
-    super::chief::chief_on() && on_with(GBOTS, |key| settings.get(key).and_then(Value::as_bool))
+    on_with(GBOTS, |key| settings.get(key).and_then(Value::as_bool))
 }
 
 /// What a folded GBots heading shows of the bots under it.

@@ -33,8 +33,7 @@ impl GhostexGpuiApp {
             "mainHub" => {
                 let chief = snapshot
                     .and_then(|snapshot| snapshot.chiefs.iter().find(|chief| chief.is_local));
-                state.available = crate::app::native_sidebar::chief::chief_on()
-                    && snapshot.is_some_and(|snapshot| snapshot.chief_enabled);
+                state.available = true;
                 state.showing = chief.is_some_and(|chief| chief.is_focused) && !self.claude_on();
                 if let Some(chief) = chief {
                     if chief.awaiting_approval || chief.has_question {

@@ -670,7 +670,6 @@ impl GhostexGpuiApp {
             collections: Vec::new(),
             order: Vec::new(),
             more_menu: Value::Null,
-            chief_enabled: false,
             chiefs: Vec::new(),
             home_headers: Vec::new(),
             machines_with_home: Vec::new(),

@@ -701,7 +701,6 @@ pub(super) async fn route_sessions_http(
                             chief_project == project_id && chief_session == session_id
                         },
                     );
-                    let chief_on = crate::chief::chief_on(&state.paths);
                     crate::agents::standing_role::handle_standing_role_endpoint(
                         &caller,
                         db,
@@ -710,7 +709,6 @@ pub(super) async fn route_sessions_http(
                         params,
                         is_api_chat,
                         is_chief,
-                        chief_on,
                     )
                 },
             )

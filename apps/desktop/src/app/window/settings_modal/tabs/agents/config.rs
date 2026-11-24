@@ -387,14 +387,6 @@ impl AgentsTab {
     ) -> Option<Div> {
         let section = search.section("homeFolder");
         let values = self.store.read(cx).values();
-        // The card belongs to the Main Hub beta extension: off, nothing of it shows.
-        let main_hub_on = ghostex_settings_catalog::built_in_extensions::on_with(
-            ghostex_settings_catalog::built_in_extensions::CHIEF,
-            |key| values.value(key).as_bool(),
-        );
-        if !main_hub_on {
-            return None;
-        }
         let mut rows: Vec<AnyElement> = Vec::new();
         // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): only matters with Spaces on.
         let spaces_on =

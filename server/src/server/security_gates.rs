@@ -88,17 +88,6 @@ pub(crate) fn gate(
     if owner_secret_refused(caller, endpoint_path, &params) {
         return Some(forbidden(endpoint_path, request_id, OWNER_SECRETS_MESSAGE));
     }
-    if chief_turned_off_for(state, caller, endpoint_path, &params) {
-        return Some(routed_json(
-            Some(endpoint_path.to_string()),
-            StatusCode::CONFLICT,
-            rpc_error(
-                "turnedOff",
-                crate::chief::chief_off_message(),
-                Some(request_id.to_string()),
-            ),
-        ));
-    }
     if let Some(message) = coordinator_refusal(caller, endpoint_path, &params) {
         return Some(forbidden(endpoint_path, request_id, message));
     }
@@ -241,28 +230,6 @@ fn relayed_card_refusal(
         }
         _ => None,
     }
-}
-
-/// Whether this call messages Chief's session while Chief is off (chief/feature.rs). The settings
-/// file is read only when the target is Chief's session.
-fn chief_turned_off_for(
-    state: &AppState,
-    caller: &Principal,
-    endpoint_path: &str,
-    params: &Map<String, Value>,
-) -> bool {
-    let target = text(params, "projectId").zip(text(params, "sessionId"));
-    let chief = crate::chief::chief_key(&state.paths);
-    let targets_chief = matches!((target, &chief), (Some((project, session)), Some((chief_project, chief_session)))
-        if project == chief_project && session == chief_session);
-    targets_chief
-        && crate::chief::refuses_message(
-            caller.is_owner_device(),
-            endpoint_path,
-            target,
-            chief.as_ref(),
-            crate::chief::chief_on(&state.paths),
-        )
 }
 
 /// The security-log entry for what went through without an approval (Chief steering another

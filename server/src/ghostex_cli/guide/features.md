@@ -4933,23 +4933,16 @@ note list in one call, as the editors save), and `ghostex coordinator guide` (th
 coordinator's own playbook, ending with your playbook overrides). `ghostex coordinator --help` lists every flag. `ghostex orchestrator …`
 is an alias that runs the same commands.
 
-## Main Hub and Ask Ghostex AI (on by default)
+## Main Hub and Ask Ghostex AI
 
-Main Hub is on by default, and **Ask Ghostex AI** in it (called Chief of Staff
-before) is where to start in Ghostex. You can turn it off in **Settings > Extensions > Main Hub**; only you
-can turn it back on, not an agent. A computer that had it off only because it
-used to be off by default is turned on once with this version; if you had
-turned it off yourself (or Ghostex AI was already opened there, or you
-changed one of its settings), it stays off. While it is off,
-your home folder's project (if you have one) is an ordinary project and nothing
-here applies, except one thing: the chats you start with **Ask Ghostex AI** (the
-sidebar menu row) show under a **Main Hub** row at the top of the sidebar, only
-while you have one, with just those chats and no Ghostex AI. They run in
-Ghostex's settings folder, never in your home folder.
+Main Hub is always on, and **Ask Ghostex AI** in it (called Chief of Staff
+before) is where to start in Ghostex. If you want it out of the way, collapse
+its header in the sidebar; Ghostex remembers whether it is collapsed.
 
-Turned on, the project at your home folder (`~`, `C:\Users\<name>` on
-Windows) becomes **Main Hub**, with the Ghostex flower on its header: the home
-for chats that don't belong to a project. If you already had a project there, it
+The project at your home folder (`~`, `C:\Users\<name>` on
+Windows) is **Main Hub**, with the Ghostex flower on its header: the home
+for chats that don't belong to a project, along with Ask Ghostex AI, GBots
+(when enabled), and Autopilot's supervisor sessions. If you already had a project there, it
 becomes Main Hub as it is, with its sessions, history and settings. Rest the
 pointer on its header and a card beside the sidebar says what it is.
 
@@ -5027,22 +5020,12 @@ itself ("what's stuck?", "how do I pair my phone?").
   Main Hub, each computer's Ghostex AI pinned at the top and other
   computers' chats marked with their computer's name.
 - **Ask Ghostex AI's chats** (when Ghostex AI isn't running to take the
-  question) are listed in Main Hub too, so turning Main Hub on or off never
-  moves them out of it.
-- **Turning it off again** hides Main Hub and Ghostex AI, puts Ghostex
-  AI's agent to sleep and takes away its control over your other agents; its
-  chat and memory are kept for when you turn it back on.
-- **Each computer has its own switch**: Main Hub, GBots and CLIProxyAPI are
-  turned on per computer, so turning them on here leaves a connected computer
-  as it was. For a computer you reach through Settings > Remote (a server
-  without the desktop app, too), open **Settings > Extensions** here, pick that
-  computer at the top, and turn them on there. The message that says Main Hub
-  is turned off names the computer it means.
+  question) are listed in Main Hub too. They run in Ghostex's settings folder,
+  never in your home folder.
 
 `ghostex chief status`, `ghostex chief guide`, `ghostex chief new-chat`,
 `ghostex chief set-agent <agent-id>`, `ghostex chief send [--computer <name>]
-"<text>"` (they say Main Hub is turned off while it is). Settings:
-`mainHubHidden`, `chiefShowOnAllSpaces`, `chiefConfirmNewChat`,
+"<text>"`. Settings: `chiefShowOnAllSpaces`, `chiefConfirmNewChat`,
 `homeSecretFolders`.
 
 ## Autopilot (keep sessions going while you are away)
@@ -5375,8 +5358,8 @@ has a name, a role, standing instructions, an icon and a colour, and a memory
 it keeps in every chat; its chats run on your own Claude Code or Codex. Turn
 them on in Settings > Extensions, on the Experimental tab (for a connected
 computer, pick it at the top of that page first): they are off by
-default, need Main Hub on, and turning them on asks for your approval (Touch
-ID), so an agent can only ask. While GBots or Main Hub are off, nothing of
+default, and turning them on asks for your approval (Touch
+ID), so an agent can only ask. While GBots are off, nothing of
 GBots shows, on your computer or the phone: no GBots group in Main Hub, no GBot
 menu items, cards or Settings rows beyond the switch. Their chats sleep and
 every `ghostex gbots` command stops; the bots and their memory stay for when
@@ -7875,13 +7858,11 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Built-in holds whole parts of Ghostex you can switch off to keep the app
   simple: Actions (off by default), Open In (on by default), Spaces (off by
   default), Cloud Boxes (on by default), Workspaces (off by default; it brings workspaces and the team's
-  Slack flow), the Session details panel (beta, on by default) and Main Hub
-  with Ghostex AI (on by default). Turning one off removes it everywhere at once (its header button,
+  Slack flow), and the Session details panel (beta, on by default). Turning one off removes it everywhere at once (its header button,
   Settings pages and rows, hotkeys, Quick Access rows and menus) and turning it
   back on restores everything you had set up. Settings: `actionsHidden`,
   `openInTitlebarButtonHidden`, `sidebarSpacesEnabled`, `cloudBoxesEnabled`,
-  `workspacesHidden`, `sessionDetailsPanelHidden`, `mainHubHidden` (Main Hub,
-  on by default); Experimental: `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
+  `workspacesHidden`, `sessionDetailsPanelHidden`; Experimental: `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
   `keepAwakeEnabled`, `allAutomationsEnabled`, `terminalShadersEnabled`, `fasterRendering`,
   `chatToolCallLines`, `securityLogsEnabled`.
   **Sidebar extensions** (such as Workbench) put their own content in the

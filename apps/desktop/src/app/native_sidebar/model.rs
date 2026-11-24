@@ -34,10 +34,6 @@ pub(crate) struct NativeSidebarSnapshot {
     pub(crate) collections: Vec<NativeSidebarCollection>,
     pub(crate) order: Vec<NativeSidebarOrderItem>,
     pub(crate) more_menu: Value,
-    /// The Chief built-in extension is on (`mainHubHidden`, Main Hub), so its row is drawn under the Spaces
-    /// bar (native_sidebar/chief.rs).
-    #[serde(default)]
-    pub(crate) chief_enabled: bool,
     /// Each computer's Chief: the selected machine's, or with computers combined this computer's
     /// first (gx-core `SidebarView::chiefs`).
     #[serde(default)]

@@ -175,10 +175,7 @@ pub(crate) fn with_home_secret_folders_denied(
     if cfg!(test) || command.trim().is_empty() {
         return command.to_string();
     }
-    // Part of the Main Hub beta extension: off, launches at the home folder are as before. A GBot
-    // chat is held to the list whatever Main Hub is: on a computer a GBot was given, Main Hub may be
-    // off (the security review of M12, finding 2).
-    let at_home = cwd.is_some_and(crate::chief::is_home_folder) && crate::chief::chief_shown();
+    let at_home = cwd.is_some_and(crate::chief::is_home_folder);
     let gbot_at_full = gbot_chat && family == Some("codex") && codex_bypass(command);
     if !at_home && !gbot_at_full {
         return command.to_string();
@@ -433,7 +430,7 @@ fn codex_read_only(command: &str) -> bool {
 }
 
 /// Server-side Claude `permissions.deny` rules for a Non-CLI session, computed directly from
-/// Ghostex's own settings (`homeSecretFolders`, `chief_shown()`, and `gxserver_private_paths()`
+/// Ghostex's own settings (`homeSecretFolders` and `gxserver_private_paths()`
 /// for GBot API chats) instead of scraping any user/agent command string.
 pub(crate) fn claude_deny_rules_for_session(cwd: Option<&str>, gbot_api_chat: bool) -> Vec<Value> {
     if cfg!(test) {
@@ -448,7 +445,7 @@ pub(crate) fn claude_deny_rules_for_session(cwd: Option<&str>, gbot_api_chat: bo
         }
         return claude_rules(&folders);
     }
-    let at_home = cwd.is_some_and(crate::chief::is_home_folder) && crate::chief::chief_shown();
+    let at_home = cwd.is_some_and(crate::chief::is_home_folder);
     if !at_home {
         return Vec::new();
     }
@@ -479,7 +476,7 @@ pub(crate) fn codex_deny_paths_for_session(
         }
         return Some((true, codex_paths(&folders)));
     }
-    let at_home = cwd.is_some_and(crate::chief::is_home_folder) && crate::chief::chief_shown();
+    let at_home = cwd.is_some_and(crate::chief::is_home_folder);
     if !at_home && !gbot_chat {
         return None;
     }

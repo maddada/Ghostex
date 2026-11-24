@@ -95,8 +95,6 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
         .and_then(Value::as_array)
         .map(|list| {
             list.iter()
-                // Chief of Staff's chats while Main Hub is off (server/src/chief/presentation.rs).
-                .filter(|session| session.get("mainHubHidden") != Some(&Value::Bool(true)))
                 .filter(|session| match &active_project_ids {
                     None => true,
                     Some(ids) => session
@@ -107,12 +105,6 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                 .collect()
         })
         .unwrap_or_default();
-    // The projects holding a listed session: Ask Ghostex AI's is drawn as Main Hub only then.
-    let projects_with_sessions: std::collections::HashSet<String> = sessions
-        .iter()
-        .filter_map(|session| session.get("projectId").and_then(Value::as_str))
-        .map(str::to_string)
-        .collect();
     /*
      * CDXC:Sessions 2026-07-12-00:00:
      * Mobile rows must render in the same order as the GPUI sidebar: pre-sort
@@ -292,14 +284,8 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                         insert_present(&mut project_map, "name", project.get("name"));
                         insert_present(&mut project_map, "path", project.get("path"));
                         insert_present(&mut project_map, "projectId", project.get("projectId"));
-                        // The project whose header is Main Hub's row (server/src/chief/home.rs `presents_as_home`); Ask Ghostex AI's only while it holds a chat, as on the computer (CDXC:Chief 2026-11-19).
-                        let holds_a_session = project
-                            .get("projectId")
-                            .and_then(Value::as_str)
-                            .is_some_and(|id| projects_with_sessions.contains(id));
-                        if crate::chief::presents_as_home(project)
-                            && (crate::chief::chief_shown() || holds_a_session)
-                        {
+                        // The project whose header is Main Hub's row (server/src/chief/home.rs `presents_as_home`).
+                        if crate::chief::presents_as_home(project) {
                             project_map.insert("isHome".to_string(), json!(true));
                         }
                         // A GBot's project: its look while GBots are on, and always the mark that keeps it out of the projects list (server/src/gbots/presentation.rs).

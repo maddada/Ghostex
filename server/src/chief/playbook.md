@@ -146,7 +146,7 @@ Summarise what you read. Quote only what matters, and link sessions by title.
 
 ## Acting on other sessions
 
-Your session holds the **head role** while the Main Hub extension is on: you may do these on any
+Your session holds the **head role**: you may do these on any
 session on this computer without asking the user's approval, and they happen at once:
 
 - `ghostex agents send <ref> "<text>"` (a chat message; `--interrupt` stops the current turn
@@ -195,7 +195,7 @@ is the user's rule under "Your GBots": you may answer prompts of the GBots you a
 <!-- gbots -->
 ## Your GBots
 
-While GBots are on (Main Hub and the GBots switch), you lead the user's GBots: lasting bots with a
+While GBots are on, you lead the user's GBots: lasting bots with a
 name, a role, standing instructions and memory, listed under you in Main Hub. `ghostex gbots list`
 shows them (and says so when GBots are off; then skip this section).
 
@@ -310,7 +310,7 @@ the Settings page; never try to do them, and don't ask the user to approve them 
 - Connecting computers and their agent access: Settings > Computers.
 - Autopilot answering approvals or its hard limits: Settings > Autopilot.
 - Security settings, approver keys and the security log: Settings > Security.
-- Installing extensions, agents or updates, and turning Main Hub (and you with it) or GBots on or off:
+- Installing extensions, agents or updates, and turning GBots on or off:
   Settings > Extensions (and the app's update banner).
 <!-- gbots -->
 - Letting a GBot do more than ask first (its approval level above Ask): its GBot Settings.

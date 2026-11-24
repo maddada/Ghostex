@@ -12492,7 +12492,7 @@
     {
       "key": "gbots",
       "title": "GBots",
-      "subtitle": "Your own team of bots under Ghostex AI in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.",
+      "subtitle": "Your own team of bots under Ghostex AI in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -12691,7 +12691,7 @@
     {
       "key": "gbotsEnabled",
       "title": "GBots",
-      "subtitle": "Turn GBots on or off: your own team of bots under Ghostex AI in Main Hub, running on your Claude Code or Codex. Needs Main Hub. Off by default.",
+      "subtitle": "Turn GBots on or off: your own team of bots under Ghostex AI in Main Hub, running on your Claude Code or Codex. Off by default.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -12965,18 +12965,6 @@
       "type": "boolean",
       "default": false,
       "agentWritable": true
-    },
-    {
-      "key": "mainHubHidden",
-      "title": "Turn off Main Hub",
-      "subtitle": "Main Hub is on by default: your home folder's project becomes the home for chats that don't belong to a project, with Ghostex AI, an agent that can see and steer your other agents and help you set up Ghostex, pinned at the top, here and in the phone app. Off, the home folder is an ordinary project and Ghostex AI's agent stops; its chat and memory are kept for when you turn it back on. Only you can change this, not an agent.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "official",
-      "sectionTitle": "Built-in",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": false
     },
     {
       "key": "store",

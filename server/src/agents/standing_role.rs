@@ -345,7 +345,6 @@ fn authorize_caller(
     target: &SessionKey,
     is_api_chat: bool,
     is_chief: bool,
-    chief_on: bool,
 ) -> Result<(), DomainStateError> {
     let mutates = matches!(op, "set" | "clear");
     match caller {
@@ -361,12 +360,6 @@ fn authorize_caller(
                 return Err(forbidden(
                     "Only you, from Ghostex on your computer or phone, can read or change a GBot API chat's standing role.",
                 ));
-            }
-            if is_chief && !chief_on {
-                return Err(DomainStateError {
-                    code: "turnedOff",
-                    message: crate::chief::chief_off_message(),
-                });
             }
             if !mutates || is_self {
                 return Ok(());
@@ -394,12 +387,6 @@ fn authorize_caller(
                 return Err(forbidden(
                     "Another computer cannot read or change a GBot API chat's standing role.",
                 ));
-            }
-            if is_chief && !chief_on {
-                return Err(DomainStateError {
-                    code: "turnedOff",
-                    message: crate::chief::chief_off_message(),
-                });
             }
             if mutates {
                 let is_coordinator =
@@ -430,7 +417,6 @@ pub fn handle_standing_role_endpoint(
     params: &Map<String, Value>,
     is_api_chat: bool,
     is_chief: bool,
-    chief_on: bool,
 ) -> Result<Value, DomainStateError> {
     let op = param_text(params, "op").unwrap_or_default();
     if !matches!(op.as_str(), "set" | "show" | "clear") {
@@ -447,7 +433,7 @@ pub fn handle_standing_role_endpoint(
         ));
     };
     let key = (project_id.clone(), session_id.clone());
-    authorize_caller(caller, db, &op, &key, is_api_chat, is_chief, chief_on)?;
+    authorize_caller(caller, db, &op, &key, is_api_chat, is_chief)?;
     let session = repository
         .get_session(&project_id, &session_id)?
         .ok_or_else(|| DomainStateError::not_found("That session no longer exists."))?;

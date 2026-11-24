@@ -430,7 +430,6 @@ pub(super) fn snapshot_from_view(
             })
             .collect(),
         more_menu,
-        chief_enabled: crate::app::native_sidebar::chief::chief_on(),
         chiefs: view
             .chiefs
             .iter()

@@ -226,8 +226,6 @@ pub(crate) enum GpuiAppToastAction {
     /// Undo on a settings sync note: this computer's value of a synced setting comes back on every
     /// computer (`id` is the note's, server/src/settings_sync/).
     UndoSyncedChange { id: String },
-    /// Undo on "Chief turned off": turns the Chief extension back on (native_sidebar/chief.rs).
-    UndoChiefDisable,
     /// Set to 100% on the one-time Linux note that Ghostex now follows the desktop's display
     /// scale: Interface scale back to 100% (app/display_scale_offer.rs).
     #[cfg_attr(not(all(target_os = "linux", not(ghostex_web))), allow(dead_code))]
@@ -266,7 +264,7 @@ impl GpuiAppToastAction {
             Self::OpenViewSettings => "Open Settings",
             Self::OpenAgentSettings => "Install or pick another agent",
             Self::OpenUpdateDownloadPage => "Open download page",
-            Self::UndoSyncedChange { .. } | Self::UndoChiefDisable => "Undo",
+            Self::UndoSyncedChange { .. } => "Undo",
             Self::ResetInterfaceScale => "Set to 100%",
             Self::RepairSpaceo => "Repair",
             Self::SecurityApproval { deny: false, .. } => "Approve",

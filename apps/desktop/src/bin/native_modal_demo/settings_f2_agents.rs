@@ -80,8 +80,7 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
     match state {
         "agents-hooks" => message["initialAgentsSection"] = json!("agentHooks"),
         "agents-search" => message["initialSearchQuery"] = json!("approval"),
-        // The Home folder card (on with `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS='{"mainHubHidden":false}'`),
-        // its folders row folded, or opened by a search that finds it.
+        // The Home folder card, its folders row folded, or opened by a search that finds it.
         "agents-home" => message["initialSection"] = json!("homeFolder"),
         "agents-home-open" => message["initialSearchQuery"] = json!("can't read"),
         "agents-no-match" => message["initialSearchQuery"] = json!("tailscale"),

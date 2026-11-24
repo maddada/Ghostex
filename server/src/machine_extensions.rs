@@ -1,5 +1,5 @@
 //! `POST /api/machineExtensions`: the built-in extension switches of the computer this gxserver
-//! runs on that gxserver itself obeys (Main Hub, GBots, CLIProxyAPI:
+//! runs on that gxserver itself obeys (GBots, CLIProxyAPI:
 //! `built_in_extensions::COMPUTER_SWITCHES`), as Settings > Extensions shows them with this
 //! computer picked on another computer's app.
 //!
@@ -52,15 +52,11 @@ pub(crate) fn status_from(settings: Option<&Value>, computer: &str, platform: Pl
         .iter()
         .filter(|id| built_in_extensions::available_on(id, platform))
         .map(|id| {
-            let mut entry = json!({
+            json!({
                 "id": id,
                 "title": built_in_extensions::title(id),
                 "on": built_in_extensions::enabled_with(id, read),
-            });
-            if *id == built_in_extensions::GBOTS {
-                entry["requires"] = json!(built_in_extensions::CHIEF);
-            }
-            entry
+            })
         })
         .collect();
     json!({
@@ -80,6 +76,11 @@ fn status(state: &AppState) -> Value {
 
 /// The settings patch that turns switch `id` on or off, or why it can't be changed here.
 pub(crate) fn switch_patch(id: &str, on: bool) -> Result<Map<String, Value>, DomainStateError> {
+    if id == "chief" {
+        return Err(DomainStateError::bad_request(
+            "Main Hub is always on and cannot be turned off.",
+        ));
+    }
     let id = built_in_extensions::COMPUTER_SWITCHES
         .iter()
         .copied()
@@ -98,14 +99,13 @@ pub(crate) fn switch_patch(id: &str, on: bool) -> Result<Map<String, Value>, Dom
     Ok(patch)
 }
 
-/// The security log's id for turning Main Hub or GBots on through this route: Main Hub gives
-/// Chief of Staff control of every agent here, so it reaches the bell and the phones however it was
-/// done (audit/notify.rs `OPENING_ACTIONS`), and a token-file misuse is seen.
+/// The security log's id for turning GBots on through this route (keeps its historic name for
+/// audit/notify.rs `OPENING_ACTIONS`).
 pub(crate) const AGENT_POWERS_ON_ACTION: &str = "machineExtensions.mainHubOrGBotsOn";
 
 fn audit(id: &str, on: bool, outcome: crate::audit::Outcome) {
     let title = built_in_extensions::title(id);
-    let kind = if on && matches!(id, built_in_extensions::CHIEF | built_in_extensions::GBOTS) {
+    let kind = if on && id == built_in_extensions::GBOTS {
         AGENT_POWERS_ON_ACTION
     } else {
         "settings.machineExtension"

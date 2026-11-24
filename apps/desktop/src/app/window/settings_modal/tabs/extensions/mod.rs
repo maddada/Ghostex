@@ -597,9 +597,9 @@ impl Render for ExtensionsTab {
                 |shown| {
                     match shown {
                     Some(name) => format!(
-                        "Showing what Ghostex on {name} runs itself: Main Hub, GBots and CLIProxyAPI. Turning one on here turns it on there."
+                        "Showing what Ghostex on {name} runs itself: GBots and CLIProxyAPI. Turning one on here turns it on there."
                     ),
-                    None => "Pick a connected remote machine to turn on Main Hub, GBots or CLIProxyAPI there.".to_string(),
+                    None => "Pick a connected remote machine to turn on GBots or CLIProxyAPI there.".to_string(),
                 }
                 },
                 window,

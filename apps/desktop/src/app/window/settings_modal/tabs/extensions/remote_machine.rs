@@ -1,5 +1,5 @@
 //! The Extensions page with a remote machine picked (../machine_picker.rs): that computer's own
-//! built-in switches (Main Hub, GBots, CLIProxyAPI) from its gxserver's `/api/machineExtensions`,
+//! built-in switches (GBots, CLIProxyAPI) from its gxserver's `/api/machineExtensions`,
 //! as the same cards the Built-in tab draws, each flipped through that gxserver. The rest of the
 //! page (views, the Store, Your views) belongs to this computer's app and is not shown meanwhile.
 //!

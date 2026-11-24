@@ -143,19 +143,18 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Bot automations")),
     ]),
     // CDXC:GBots 2026-11-08 DECISION:
-    // User: native GBots show "under Chief of Staff in Main Hub"; the GBots switch stays and turns them on or off, and needs Main Hub on (`requiresExtension: chief`). Off by default under a key that enables (`gbotsEnabled`). Supersedes the 2026-11-06 entry, which put the previous GBots in the Bots space.
-    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make sure ux makes sense after fix"): while Main Hub is off the GBots card is hidden, not greyed with "Turn on Main Hub first"; Main Hub's card stands in for it on its tab and in a search, and says it unlocks GBots (settings_modal/tabs/extensions/sections.rs). The same goes for Bot automations under Bots.
+    // User: native GBots show "under Chief of Staff in Main Hub"; the GBots switch stays and turns them on or off. Off by default under a key that enables (`gbotsEnabled`). Supersedes the 2026-11-06 entry, which put the previous GBots in the Bots space.
+    // CDXC:Chief 2026-11-24 DECISION: Main Hub is always on (cannot be turned off), so GBots no longer has `requiresExtension: chief`.
     J::Obj(&[
         ("appWide", J::Bool(true)),
-        ("description", J::Str("Your own team of bots under Ghostex AI in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.")),
+        ("description", J::Str("Your own team of bots under Ghostex AI in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex.")),
         ("category", J::Str("experimental")),
         ("id", J::Str("gbots")),
         ("placement", J::Str("feature")),
-        ("requiresExtension", J::Str("chief")),
         ("settingsKey", J::Str("gbotsEnabled")),
         ("settingsKeyEnables", J::Bool(true)),
         ("title", J::Str("GBots")),
-        // CDXC:GBots 2026-11-09 DECISION: User: "pls fully hide gbots if disabled in experimental under extensions". Its one row on another page leaves Settings and its search while GBots are off; Main Hub's entry lists it too, since GBots need Main Hub.
+        // CDXC:GBots 2026-11-09 DECISION: User: "pls fully hide gbots if disabled in experimental under extensions". Its one row on another page leaves Settings and its search while GBots are off.
         ("settingKeys", J::Arr(&[J::Str("gbotsChiefAddsOnItsOwn")])),
     ]),
     J::Obj(&[
@@ -292,21 +291,8 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsPages", J::Arr(&[J::Str("voiceAgent")])),
         ("hotkeys", J::Arr(&[J::Str("toggleVoiceAgent"), J::Str("voiceCallAboutSession"), J::Str("holdToTalk")])),
     ]),
-    // CDXC:Chief 2026-11-08 DECISION:
-    // User: "please disable chief of staff for now and make it an extension so ppl aren't confused by it until i finish working on it (call it beta in settings pls)", then "i mean the Main Hub thingy". One whole-feature entry, Main Hub, with a Beta badge, off by default (`mainHubHidden`, default true, user-only so no agent can switch it): off, the home project is an ordinary project (gxserver publishes no `isHome` or `isChief`, and hides Chief of Staff's chats), Chief of Staff's agent sleeps and loses its head role, the home folder's secret-folder list is not applied, and nothing says Main Hub or Chief of Staff; on, all of it comes back with its chat and memory. Supersedes Chief's own entry (Q1734-Q1750, on by default).
-    // CDXC:Chief 2026-11-21 DECISION:
-    // User: "let's please make the main hub project and the chief of staff always enabled for everyone who installs ghostex ... chief of staff is basically the entry point to ghostex". Supersedes the off-by-default part of the decision above: Main Hub is on by default and listed with the features, not the experiments; everything it does while off stays as above, the user can still turn it off here, and only the user can turn it on. Existing computers: server/src/chief/default_on.rs.
-    // SEE-ALSO: server/src/chief/ (the session, the head role, `chief_on`), packages/settings-catalog/src/data/defaults.rs (`mainHubHidden`), packages/settings-catalog/src/help/supplemental.rs.
-    J::Obj(&[
-        ("description", J::Str("The home for chats that don't belong to a project, with Ghostex AI, an agent that can see and steer all your other agents, pinned at the top. Ghostex AI is where to start: it helps you add projects, set up and theme Ghostex, and connect your phone.")),
-        ("category", J::Str("features")),
-        ("id", J::Str("chief")),
-        ("placement", J::Str("feature")),
-        ("settingsKey", J::Str("mainHubHidden")),
-        ("appWide", J::Bool(true)),
-        ("title", J::Str("Main Hub")),
-        ("settingKeys", J::Arr(&[J::Str("chiefShowOnAllSpaces"), J::Str("chiefConfirmNewChat"), J::Str("homeSecretFolders"), J::Str("gbotsChiefAddsOnItsOwn")])),
-    ]),
+    // CDXC:Chief 2026-11-24 DECISION:
+    // User: "disable turning off main hub please make it always on thingy ppl can just keep it collapsed". Main Hub (with Ask Ghostex AI, GBots when enabled, and Autopilot supervisor sessions) is no longer a built-in extension switch and cannot be turned off; `mainHubHidden` is retired and ignored. Supersedes the 2026-11-08 and 2026-11-21 Main Hub extension entries.
     // CDXC:VoiceMode 2026-10-21 DECISION:
     // User: Read aloud ships as a Ghostex extension, disabled by default (2026-10-20), and (Q23) as a built-in extension, not a Store extension: a Store extension cannot reach the chat composer, a message's actions or the phone. A whole-feature entry like Workspaces, with a new key (`readAloudHidden`, default on = hidden) because the settings file stores every default; off hides the reply action, the ⋯ menu rows, the Voice and Speed rows and the two hotkeys, and keeps their saved values. No `platforms` list: the switch also governs the phone and Ghostex in a browser that talk to this computer, so it exists on Linux too, where the desktop draws no controls (Q25; `readAloudUnavailable` says why).
     // SEE-ALSO: packages/gx-chat-core/src/read_aloud/ (the rules), server/src/ghostex_cli/sessions/mobile_summary.rs (`builtInFeatures`, how the phone learns the switch), docs/2026-10-20/voice-mode/read-aloud-client-contract.md.

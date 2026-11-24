@@ -196,10 +196,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("debuggingHidden", J::Bool(false)),
     // CDXC:VoiceMode 2026-10-25 DECISION: the voice agent is a built-in extension, on by default (official_extensions.rs).
     ("voiceAgentHidden", J::Bool(false)),
-    // CDXC:Chief 2026-11-08 DECISION: Chief is a built-in extension, on by default (official_extensions.rs).
-    // CDXC:Chief 2026-11-08 DECISION: User: "please disable chief of staff for now and make it an extension so ppl aren't confused by it until i finish working on it (call it beta in settings pls)", "i mean the Main Hub thingy". Main Hub (with Chief of Staff) is off by default under a new key: the settings file stores every default, so a new key is what turns it off once for every install that never chose, while anyone who turns it on after this release keeps it. Supersedes `chiefHidden` (on by default), which nothing reads any more.
-    // CDXC:Chief 2026-11-21 DECISION: User: "let's please make the main hub project and the chief of staff always enabled for everyone who installs ghostex". On by default again; a computer whose file holds the old default is turned on once by gxserver unless the user turned it off (server/src/chief/default_on.rs). Supersedes the 2026-11-08 off-by-default decision above.
-    ("mainHubHidden", J::Bool(false)),
+    // CDXC:Chief 2026-11-24 DECISION: User: "disable turning off main hub please make it always on thingy ppl can just keep it collapsed". Main Hub is always on and cannot be turned off; `mainHubHidden` is retired and ignored (supersedes the 2026-11-08 and 2026-11-21 Main Hub switch decisions).
     // CDXC:Chief 2026-11-08 DECISION: User (Q1910): New Chat asks first, with a Don't ask again box that turns this off.
     ("chiefConfirmNewChat", J::Bool(true)),
     // CDXC:Chief 2026-11-08 DECISION: User: the home row "should remain top of the space that it's a part of ... not show on top of all spaces like we have now (make this a setting, default off, 'Show on all spaces')".
