@@ -88,19 +88,14 @@ impl NativeChatView {
                 .pr(px(5.0 * s))
                 .rounded_full()
                 .border(px(s))
-                .border_color(p.foreground.opacity(0.16))
-                .bg(p.foreground.opacity(0.08))
+                .border_color(p.foreground.opacity(0.1))
                 .text_size(px(12.5 * s))
                 .line_height(px(19.0 * s))
                 .font_weight(FontWeight::MEDIUM)
                 .whitespace_nowrap()
                 .text_color(p.foreground)
                 .chat_cursor_pointer()
-                .hover(|style| {
-                    style
-                        .bg(p.foreground.opacity(0.13))
-                        .border_color(p.foreground.opacity(0.24))
-                })
+                .hover(|style| style.bg(p.foreground.opacity(0.06)))
                 .tooltip(move |window, cx| {
                     gpui_component::tooltip::Tooltip::new(tooltip_text.clone()).build(window, cx)
                 })
