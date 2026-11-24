@@ -44,10 +44,10 @@ fn rewind_projection(request: &RewindRequest) -> Value {
     json!({
         "messageId": request.message_id,
         "preview": prompt_preview(&request.prompt),
-        "description": if request.native || request.agent == "opencode" {
+        // Codex 0.172 keeps the same conversation in Terminal too (its Escape-Escape rewind
+        // continues the thread in a new rollout file), so it shares the Native wording.
+        "description": if request.native || matches!(request.agent.as_str(), "opencode" | "codex") {
             "Rewind the conversation to this point and put this message back in the composer for editing. Files stay as they are."
-        } else if request.agent == "codex" {
-            "Codex continues in a new conversation from this point and puts this message back in the composer for editing."
         } else {
             "We only rewind using \"Restore conversation\" in the Chat View currently. Switch to Terminal View and use /rewind to resume using another option."
         },

@@ -2877,8 +2877,8 @@ Send and choose Interrupt & Send; on the phone, hold Send and choose Interrupt &
 (the same menu has Compact & Send). It is offered while the agent is working; Claude Code stops its turn and
 takes the message the way its own Ctrl+Enter does, and other agents are stopped as
 with Escape before the message is sent. While the agent is idle, Ctrl+Enter just sends.
-Codex rewind continues in a new conversation before the selected prompt and
-returns that prompt for editing. If the chat cannot reconnect after the rewind,
+Codex rewind goes back to before the selected prompt in the same conversation,
+leaves files as they are, and returns that prompt for editing. If the chat cannot reconnect after the rewind,
 choose Retry synchronization in the dialog to reconnect without rewinding again
 (`ghostex rewind-session-chat <session> --message-id <message-id>` retries the same pending target).
 Sending in a new chat shows your message immediately in the conversation while
