@@ -80,7 +80,7 @@ impl GpuiOnboardingWindow {
         out.push(
             sub(s, 46.0, 260.0, 650.0, 16.0, false)
                 .child(
-                    "Every agent opens straight into Native Chat. Pick a starter prompt or type your own, and queue follow-ups while your agent works.",
+                    "Every agent opens straight into Native Chat. Type your first prompt, and queue follow-ups while your agent works.",
                 )
                 .into_any_element(),
         );
@@ -220,7 +220,7 @@ impl GpuiOnboardingWindow {
         out
     }
 
-    /// Right-column animated preview of a Native Chat session with starter prompts and Prompt Queue.
+    /// Right-column animated preview of a Native Chat session with Prompt Queue.
     fn render_first_chat_preview(
         &self,
         s: S,
@@ -309,31 +309,6 @@ impl GpuiOnboardingWindow {
                 )
         });
 
-        let starter_row = div()
-            .mx(s.px(20.0))
-            .mb(s.px(12.0))
-            .flex()
-            .flex_wrap()
-            .gap(s.px(8.0))
-            .children(
-                [
-                    "Summarize this codebase",
-                    "Review recent changes",
-                    "Find and fix a bug",
-                ]
-                .into_iter()
-                .map(|chip| {
-                    sans(s, 12.0, 500.0, hex(0xc9d0dc))
-                        .py(s.px(6.0))
-                        .px(s.px(11.0))
-                        .rounded(s.px(999.0))
-                        .border_1()
-                        .border_color(white(0.09))
-                        .bg(white(0.03))
-                        .child(chip)
-                }),
-            );
-
         let composer_hint = format!("Message {agent_name}…");
 
         glass(s)
@@ -370,7 +345,6 @@ impl GpuiOnboardingWindow {
             )
             .child(transcript)
             .children(queued_banner)
-            .child(starter_row)
             .child(
                 message_input(s)
                     .mx(s.px(20.0))
