@@ -254,10 +254,8 @@ pub(crate) async fn wait_for_account_ready(
                         .get("childExited")
                         .and_then(serde_json::Value::as_bool)
                         == Some(true);
-                    let working = acp_snap
-                        .get("working")
-                        .and_then(serde_json::Value::as_bool)
-                        == Some(true);
+                    let working =
+                        acp_snap.get("working").and_then(serde_json::Value::as_bool) == Some(true);
                     if !exited && !working && !cancelled() {
                         return Ok(());
                     }
@@ -271,9 +269,8 @@ pub(crate) async fn wait_for_account_ready(
                     );
                 }
                 None => {
-                    reason =
-                        "Could not verify the new Native agent process's account login."
-                            .to_string();
+                    reason = "Could not verify the new Native agent process's account login."
+                        .to_string();
                 }
             }
             if Instant::now() >= deadline {

@@ -288,7 +288,14 @@ impl SharingTab {
             .w(px(CONTROL_LANE_WIDTH))
             .max_w_full()
             .flex()
-            .child(settings_text_input(p, &relay_input, None, false, window, cx))
+            .child(settings_text_input(
+                p,
+                &relay_input,
+                None,
+                false,
+                window,
+                cx,
+            ))
             .into_any_element();
         let rows = vec![
             setting_row(

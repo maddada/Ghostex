@@ -751,9 +751,7 @@ mod unix_impl {
 
 #[cfg(target_os = "macos")]
 mod macos_watcher {
-    use super::unix_impl::{
-        proc_info, process_start_id, terminate_verified_group, ProcessStartId,
-    };
+    use super::unix_impl::{proc_info, process_start_id, terminate_verified_group, ProcessStartId};
     use super::*;
     use std::os::unix::process::CommandExt;
     use std::process::Stdio;
@@ -805,16 +803,7 @@ mod macos_watcher {
             data: 0,
             udata: std::ptr::null_mut(),
         };
-        let rc = unsafe {
-            libc::kevent(
-                kq,
-                &change,
-                1,
-                std::ptr::null_mut(),
-                0,
-                std::ptr::null(),
-            )
-        };
+        let rc = unsafe { libc::kevent(kq, &change, 1, std::ptr::null_mut(), 0, std::ptr::null()) };
         if rc == 0 {
             Ok(())
         } else {
@@ -915,8 +904,8 @@ mod macos_watcher {
         }
         // If `child_pid` already exited (or was recycled) before registration, exit unless host
         // also died.
-        let child_matches = proc_info(child_pid)
-            .is_some_and(|info| !info.zombie && info.start == child_start);
+        let child_matches =
+            proc_info(child_pid).is_some_and(|info| !info.zombie && info.start == child_start);
         if !child_matches {
             unsafe {
                 libc::close(kq);
@@ -930,16 +919,8 @@ mod macos_watcher {
         // Block in kernel with 0% CPU until either `host_pid` or `child_pid` exits.
         let mut event: libc::kevent = unsafe { std::mem::zeroed() };
         loop {
-            let n = unsafe {
-                libc::kevent(
-                    kq,
-                    std::ptr::null(),
-                    0,
-                    &mut event,
-                    1,
-                    std::ptr::null(),
-                )
-            };
+            let n =
+                unsafe { libc::kevent(kq, std::ptr::null(), 0, &mut event, 1, std::ptr::null()) };
             if n < 0 {
                 if std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
                     continue;

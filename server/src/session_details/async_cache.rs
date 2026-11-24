@@ -133,10 +133,8 @@ where
                 }
             }
             let entry = entries.entry(key.clone()).or_default();
-            let is_fresh = !force_stale
-                && entry
-                    .fetched_at
-                    .is_some_and(|at| at.elapsed() < fresh_for);
+            let is_fresh =
+                !force_stale && entry.fetched_at.is_some_and(|at| at.elapsed() < fresh_for);
             if is_fresh {
                 if let Some(value) = entry.value.clone() {
                     return SectionLoad::Ready(value);
@@ -188,10 +186,8 @@ where
                 }
             }
             let entry = entries.entry(key.clone()).or_default();
-            let is_fresh = !force_stale
-                && entry
-                    .fetched_at
-                    .is_some_and(|at| at.elapsed() < fresh_for);
+            let is_fresh =
+                !force_stale && entry.fetched_at.is_some_and(|at| at.elapsed() < fresh_for);
             if is_fresh {
                 if let Some(value) = entry.value.clone() {
                     return Some(value);

@@ -1258,13 +1258,12 @@ fn state_value(
             row["workspace"] = json!(super::codex_identity::codex_account_part(&found.identity));
         }
         if include_claude_connectors && found.provider == Provider::Claude {
-            row["claudeAiConnectors"] = json!(
-                super::claude_connectors::read_account_claude_ai_connectors(
+            row["claudeAiConnectors"] =
+                json!(super::claude_connectors::read_account_claude_ai_connectors(
                     home,
                     &found.selector,
                     &found.identity,
-                )
-            );
+                ));
         }
         rows.push(row);
     }
@@ -1283,13 +1282,12 @@ fn state_value(
                 }
             }
             if include_claude_connectors && saved.provider == Provider::Claude {
-                row["claudeAiConnectors"] = json!(
-                    super::claude_connectors::read_account_claude_ai_connectors(
+                row["claudeAiConnectors"] =
+                    json!(super::claude_connectors::read_account_claude_ai_connectors(
                         home,
                         &saved.selector,
                         &saved.identity,
-                    )
-                );
+                    ));
             }
             rows.push(row);
         }

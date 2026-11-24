@@ -59,9 +59,13 @@ pub(super) fn workspace_group(
     let pid = project_id.to_string();
     let sid = session_id.to_string();
     workspace_cache()
-        .get_or_wait(key, WORKSPACE_FRESH_FOR, false, WORKSPACE_SYNC_WAIT, move || {
-            read_workspace_group(&state_owned, &pid, &sid)
-        })
+        .get_or_wait(
+            key,
+            WORKSPACE_FRESH_FOR,
+            false,
+            WORKSPACE_SYNC_WAIT,
+            move || read_workspace_group(&state_owned, &pid, &sid),
+        )
         .flatten()
 }
 

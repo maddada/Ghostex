@@ -1635,7 +1635,9 @@ impl NativeChatView {
                                         p,
                                         cx,
                                     ))
-                                } else if !text(row, "count").is_empty() || !text(row, "answeredBy").is_empty() {
+                                } else if !text(row, "count").is_empty()
+                                    || !text(row, "answeredBy").is_empty()
+                                {
                                     // Its count follows the page's draft while the card is drawn.
                                     if let Some(page_id) = key.strip_prefix("question:") {
                                         self.refresh_page_counts(page_id, cx);
@@ -1645,7 +1647,9 @@ impl NativeChatView {
                                     let open_page = row["open"].clone();
                                     let chip_key = key.clone();
                                     let answered_by_chip = (!answered_by.is_empty()).then(|| {
-                                        let green: gpui::Hsla = gpui::rgb(if p.light { 0x168049 } else { 0x34d399 }).into();
+                                        let green: gpui::Hsla =
+                                            gpui::rgb(if p.light { 0x168049 } else { 0x34d399 })
+                                                .into();
                                         let has_open = open_page.is_object();
                                         div()
                                             .id(gpui::SharedString::from(format!(

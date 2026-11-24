@@ -148,8 +148,7 @@ impl NotificationFeedsHost {
                     .get("kind")
                     .and_then(Value::as_str)
                     .unwrap_or_default();
-                let awaiting_approval =
-                    object.get("awaitingApproval") == Some(&Value::Bool(true));
+                let awaiting_approval = object.get("awaitingApproval") == Some(&Value::Bool(true));
                 if !awaiting_approval && pending_read.is_some_and(|ids| ids.contains(id)) {
                     if object.get("read") != Some(&Value::Bool(true)) {
                         object.insert("read".into(), Value::Bool(true));
@@ -208,7 +207,9 @@ impl GhostexGpuiApp {
         id: String,
         kind: &str,
     ) {
-        self.gx_store.notifications.mark_item_seen(machine, id, kind);
+        self.gx_store
+            .notifications
+            .mark_item_seen(machine, id, kind);
     }
 
     pub(super) fn gx_store_notification_feed_route(
@@ -354,12 +355,14 @@ impl GhostexGpuiApp {
         let feeds: Vec<MachineNotificationFeed<'_>> = machines
             .iter()
             .zip(overlaid.iter())
-            .map(|((machine, name, online), message)| MachineNotificationFeed {
-                machine,
-                machine_name: name,
-                online: *online,
-                message: message.as_deref(),
-            })
+            .map(
+                |((machine, name, online), message)| MachineNotificationFeed {
+                    machine,
+                    machine_name: name,
+                    online: *online,
+                    message: message.as_deref(),
+                },
+            )
             .collect();
         let merged = merged_notification_feed_message(&feeds);
         self.receive_notification_feed_state_message(&merged, cx);

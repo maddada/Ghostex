@@ -2171,7 +2171,9 @@ impl NativeChatView {
             let open_page = row["open"].clone();
             let has_open = open_page.is_object();
             div()
-                .id(gpui::SharedString::from(format!("dock-row-answered-by:{key}")))
+                .id(gpui::SharedString::from(format!(
+                    "dock-row-answered-by:{key}"
+                )))
                 .flex_shrink_0()
                 .px(px(7.0 * s))
                 .py(px(1.5 * s))

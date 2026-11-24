@@ -7,8 +7,8 @@ snapshotted in dark and light themes without launching Ghostex.
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, Div, ElementId, FontWeight, Hsla,
-    InteractiveElement as _, IntoElement, ParentElement as _, Rgba, StatefulInteractiveElement as _,
-    Styled as _, div, px, relative, rgba, svg,
+    InteractiveElement as _, IntoElement, ParentElement as _, Rgba,
+    StatefulInteractiveElement as _, Styled as _, div, px, relative, rgba, svg,
 };
 use serde_json::Value;
 use std::time::Duration;

@@ -123,14 +123,13 @@ pub(crate) fn plan(
             })?;
     let routed_resume_command =
         super::default_login::route_around_signed_out_default(&resume_command);
-    let launched_acp = crate::acp::acp_family_from_launch_command(&routed_resume_command).map(
-        |family| {
+    let launched_acp =
+        crate::acp::acp_family_from_launch_command(&routed_resume_command).map(|family| {
             (
                 family,
                 crate::acp::acp_approval_level_from_launch_command(&routed_resume_command),
             )
-        },
-    );
+        });
     let (resume_command, cleanup_paths) =
         typed_resume_command(state, session, routed_resume_command)?;
     let zmx_name = crate::zmx::provider_zmx_session_name(session)?;
@@ -255,7 +254,8 @@ pub(crate) fn prepare_non_cli_in_place_launch_command(
         }
         use std::io::Write as _;
         let mut f = opts.open(&file).map_err(super::store::error)?;
-        f.write_all(script.as_bytes()).map_err(super::store::error)?;
+        f.write_all(script.as_bytes())
+            .map_err(super::store::error)?;
         f.flush().map_err(super::store::error)?;
     }
     guard.0.push(file);

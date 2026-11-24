@@ -201,8 +201,12 @@ fn memory_bytes_from_table(processes: &[Process], zmx_name: &str) -> Option<u64>
 /// or `None` while the first `ps` snapshot runs in the background.
 #[cfg(unix)]
 pub(super) fn read_session_memory_bytes_progressive(zmx_name: &str) -> Option<u64> {
-    match process_table_cache().get_or_start((), PROCESS_TABLE_FRESH_FOR, false, fetch_process_table)
-    {
+    match process_table_cache().get_or_start(
+        (),
+        PROCESS_TABLE_FRESH_FOR,
+        false,
+        fetch_process_table,
+    ) {
         SectionLoad::Ready(processes) => memory_bytes_from_table(&processes, zmx_name),
         SectionLoad::Pending => None,
     }

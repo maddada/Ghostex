@@ -443,7 +443,7 @@ fn drop_held_for_closed_target(
     close_actor: Option<&crate::session_chat_queue_undelivered::CloseActor>,
 ) -> (Vec<DroppedHeldNote>, Vec<RemoteNotice>) {
     use ghostex_gx_chat_core::transcript::delivery_notice::{
-        DELIVERY_NOTICE_PREVIEW_MAX_CHARS, format_delivery_notice, short_first_line,
+        format_delivery_notice, short_first_line, DELIVERY_NOTICE_PREVIEW_MAX_CHARS,
     };
 
     let held = {
@@ -541,9 +541,9 @@ fn drop_held_for_closed_target(
         } else if let Some((remote_server, sender)) = remote_sender {
             let remote_ref =
                 crate::ids::create_global_session_ref(&remote_server, &sender.0, &sender.1);
-            if close_actor.is_some_and(|actor| {
-                actor.closed_by_ref.as_deref() == Some(remote_ref.as_str())
-            }) {
+            if close_actor
+                .is_some_and(|actor| actor.closed_by_ref.as_deref() == Some(remote_ref.as_str()))
+            {
                 continue;
             }
             let group = remote_groups

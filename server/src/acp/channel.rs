@@ -704,10 +704,7 @@ pub(crate) fn reconcile_live_host_activity(
         else {
             return;
         };
-        let host_working = snap
-            .get("working")
-            .and_then(Value::as_bool)
-            .unwrap_or(true);
+        let host_working = snap.get("working").and_then(Value::as_bool).unwrap_or(true);
         let pending_count = snap
             .get("pendingPermissionCount")
             .and_then(Value::as_u64)
@@ -747,9 +744,10 @@ pub(crate) fn reconcile_live_host_activity(
             let now_iso = crate::presentation::now_iso();
             let current_activity = crate::presentation::presentation_activity(&session, &now_iso);
             let has_stale_prompt = crate::agents::session_chat_prompt_setting(&session).is_some();
-            let deliverable = crate::session_chat_queue_runtime::session_chat_queue_activity_is_deliverable(
-                &session, &now_iso,
-            );
+            let deliverable =
+                crate::session_chat_queue_runtime::session_chat_queue_activity_is_deliverable(
+                    &session, &now_iso,
+                );
             if current_activity != "working" && !has_stale_prompt && deliverable {
                 return None;
             }

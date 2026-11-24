@@ -609,7 +609,10 @@ impl RemoteSitesPanel {
                     resource_square_button(format!("share-blocked-{key}"))
                         .opacity(0.45)
                         .cursor_default()
-                        .child(site_icon("titlebar/lock.svg", 12.0).text_color(chrome_ink().opacity(0.65)))
+                        .child(
+                            site_icon("titlebar/lock.svg", 12.0)
+                                .text_color(chrome_ink().opacity(0.65)),
+                        )
                         .tooltip(move |window, cx| {
                             Tooltip::new(format!("Protected port: {reason}")).build(window, cx)
                         }),

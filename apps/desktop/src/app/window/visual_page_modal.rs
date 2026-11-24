@@ -472,10 +472,7 @@ impl GpuiVisualPageModalWindow {
                                 cx.notify();
                             }
                             (this.host)(
-                                VisualPageModalCommand::PictureStalePage {
-                                    url: page,
-                                    remote,
-                                },
+                                VisualPageModalCommand::PictureStalePage { url: page, remote },
                                 cx,
                             );
                         });

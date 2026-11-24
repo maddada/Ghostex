@@ -7,8 +7,8 @@
 //! gently highlights missing Slack or Linear, and opens `claude.ai/settings/connectors` in that
 //! account's isolated Ghostex Browser profile.
 
+use super::super::super::super::native_modal_kit::{PressExt as _, a11y_toggled, hsla};
 use super::super::super::fields::{settings_checkbox, settings_icon, tooltip_text};
-use super::super::super::super::native_modal_kit::{a11y_toggled, hsla, PressExt as _};
 use super::*;
 use gpui::{FontWeight, rgba};
 use gpui_component::v_flex;
@@ -59,8 +59,7 @@ pub(super) fn parse_claude_accounts(result: &Value) -> Vec<ClaudeAccountInfo> {
                 .map(|value| value.trim().to_string())
                 .find(|value| !value.is_empty())
                 .unwrap_or_else(|| format!("Account {slot}"));
-            let user_disabled =
-                account.get("userDisabled").and_then(Value::as_bool) == Some(true);
+            let user_disabled = account.get("userDisabled").and_then(Value::as_bool) == Some(true);
             let eligible = account.get("eligible").and_then(Value::as_bool) != Some(false);
             let status = text(account, "status");
             let disabled_by_error = account
@@ -526,7 +525,8 @@ impl WorkspacesTab {
 
         // One card per account in this workspace.
         for account in shown_accounts {
-            let display_name = super::super::accounts::widgets::account_text(&account.label, hide_emails);
+            let display_name =
+                super::super::accounts::widgets::account_text(&account.label, hide_emails);
             let connectors = &account.connectors;
             let missing_slack = !connectors.detected || !connectors.slack;
             let missing_linear = !connectors.detected || !connectors.linear;

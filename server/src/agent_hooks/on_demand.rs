@@ -208,8 +208,7 @@ fn command_name(word: &str) -> String {
 const MISE_WHICH_CACHE_TTL: Duration = Duration::from_secs(60);
 const MISE_WHICH_NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(15);
 
-fn mise_which_cache(
-) -> &'static std::sync::Mutex<
+fn mise_which_cache() -> &'static std::sync::Mutex<
     std::collections::HashMap<(String, PathBuf), (std::time::Instant, Option<String>)>,
 > {
     static CACHE: std::sync::OnceLock<

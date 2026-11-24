@@ -69,7 +69,9 @@ pub fn migrate_default_theme_accent_once() {
             None => "no settings file, new default theme accent",
         },
         Err(error) => {
-            eprintln!("Ghostex could not read its settings to update the default theme accent: {error}");
+            eprintln!(
+                "Ghostex could not read its settings to update the default theme accent: {error}"
+            );
             return;
         }
     };

@@ -539,12 +539,10 @@ fn queued_messages_summary(session: &Value, flags: &Flags) -> Option<(usize, Opt
     if pending.is_empty() {
         return None;
     }
-    let wait_reason = pending
-        .iter()
-        .find_map(|row| {
-            let reason = agents::text(row, "waitReason").trim();
-            (!reason.is_empty()).then(|| reason.to_string())
-        });
+    let wait_reason = pending.iter().find_map(|row| {
+        let reason = agents::text(row, "waitReason").trim();
+        (!reason.is_empty()).then(|| reason.to_string())
+    });
     Some((pending.len(), wait_reason))
 }
 

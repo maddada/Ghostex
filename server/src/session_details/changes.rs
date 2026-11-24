@@ -9,12 +9,12 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::session_git_status::{
-    PullRequestState, SessionGitStatusProber, SessionPullRequest, SystemSessionGitStatusProber,
     cached_gh_cli_available, cached_session_git_status, parse_git_numstat, resolve_default_branch,
-    run_git_probe_command,
+    run_git_probe_command, PullRequestState, SessionGitStatusProber, SessionPullRequest,
+    SystemSessionGitStatusProber,
 };
 
 use super::async_cache::{AsyncSectionCache, SectionLoad};
@@ -265,7 +265,10 @@ fn seed_from_sidebar_cache(cwd: &str) {
 /// Non-blocking pull request lookup: never holds up git diff numbers on `gh auth status` or
 /// `gh pr view`. When a PR lookup finishes in the background it bumps the revision so the panel's
 /// button updates to "View PR #N" automatically.
-fn read_pull_request_nonblocking(cwd: &str, snapshot: &GitChangesSnapshot) -> Option<SessionPullRequest> {
+fn read_pull_request_nonblocking(
+    cwd: &str,
+    snapshot: &GitChangesSnapshot,
+) -> Option<SessionPullRequest> {
     if snapshot.on_default {
         return None;
     }
@@ -308,7 +311,9 @@ pub(super) fn read_changes_progressive(cwd: &str) -> SectionLoad<Option<Value>> 
     match git_cache().get_or_start(cwd.to_string(), GIT_FRESH_FOR, dirty, move || {
         probe_git_fast(&cwd_owned)
     }) {
-        SectionLoad::Ready(Some(snapshot)) => SectionLoad::Ready(Some(format_changes(cwd, &snapshot))),
+        SectionLoad::Ready(Some(snapshot)) => {
+            SectionLoad::Ready(Some(format_changes(cwd, &snapshot)))
+        }
         SectionLoad::Ready(None) => SectionLoad::Ready(None),
         SectionLoad::Pending => SectionLoad::Pending,
     }

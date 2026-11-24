@@ -172,7 +172,8 @@ fn read_details(
                 .as_deref()
                 .and_then(super::memory::read_session_memory_bytes)
         });
-        let changes_handle = scope.spawn(|| folder.as_deref().and_then(super::changes::read_changes));
+        let changes_handle =
+            scope.spawn(|| folder.as_deref().and_then(super::changes::read_changes));
         let body_handle = scope.spawn(|| -> Result<Value, DomainStateError> {
             let mut extra = json!({});
             if !claude {
@@ -207,9 +208,9 @@ fn read_details(
         (
             mem_handle.join().ok().flatten(),
             changes_handle.join().ok().flatten(),
-            body_handle
-                .join()
-                .unwrap_or_else(|_| Err(failure("internalError", "session details worker panicked"))),
+            body_handle.join().unwrap_or_else(|_| {
+                Err(failure("internalError", "session details worker panicked"))
+            }),
         )
     });
     if is_local_active {

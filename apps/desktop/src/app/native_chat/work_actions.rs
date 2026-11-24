@@ -681,9 +681,9 @@ impl NativeChatView {
                     )))
                     .role(gpui::Role::Button)
                     .aria_label(format!(
-            "{CHOOSE_ANSWER}, {}",
-            ghostex_gx_protocol::plural(rows.len(), "answer", "answers")
-        ))
+                        "{CHOOSE_ANSWER}, {}",
+                        ghostex_gx_protocol::plural(rows.len(), "answer", "answers")
+                    ))
                     .h(px(24.0 * s))
                     .px(px(8.0 * s))
                     .flex_shrink_0()

@@ -484,19 +484,19 @@ pub(crate) fn apply_new_session(
     // applies when a session starts in one of the workspace's projects, unless the user picked an
     // account for that session. A picked account (`accountId`) wins, then the workspace's account
     // pool (ranked by the provider's rule when several are chosen), then the provider's rule.
-    let workspace_account = if provider == Provider::Claude && !workspace_claude_account_ids.is_empty()
-    {
-        super::default_account::quick_launch_account_from_pool(
-            &registry,
-            &snapshot,
-            provider,
-            &model,
-            workspace_claude_account_ids,
-        )
-        .map(|account| account.id.clone())
-    } else {
-        None
-    };
+    let workspace_account =
+        if provider == Provider::Claude && !workspace_claude_account_ids.is_empty() {
+            super::default_account::quick_launch_account_from_pool(
+                &registry,
+                &snapshot,
+                provider,
+                &model,
+                workspace_claude_account_ids,
+            )
+            .map(|account| account.id.clone())
+        } else {
+            None
+        };
     let id = runtime
         .get("accountId")
         .and_then(Value::as_str)

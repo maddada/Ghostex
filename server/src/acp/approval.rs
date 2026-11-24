@@ -577,14 +577,15 @@ pub fn resolve_starting_level(
     };
     // Explicit per-launch `acceptAllMode` (`"enabled"` / `"disabled"`) takes precedence over
     // per-agent config, which in turn takes precedence over global `agentAcceptAllEnabled`.
-    let accept_all_effective = explicit_override(read_trimmed_str(launch_settings, "acceptAllMode"))
-        .or_else(|| explicit_override(read_trimmed_str(agent_config, "acceptAllMode")))
-        .unwrap_or_else(|| {
-            global_settings
-                .get("agentAcceptAllEnabled")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        });
+    let accept_all_effective =
+        explicit_override(read_trimmed_str(launch_settings, "acceptAllMode"))
+            .or_else(|| explicit_override(read_trimmed_str(agent_config, "acceptAllMode")))
+            .unwrap_or_else(|| {
+                global_settings
+                    .get("agentAcceptAllEnabled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+            });
     AcpApprovalLevel::from_accept_all_default(accept_all_effective)
 }
 

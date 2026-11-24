@@ -1581,7 +1581,12 @@ impl AccountsTab {
                 |page: &mut Self, _window, cx| page.cancel_hub_oauth(cx),
                 cx,
             ));
-            parts.push(h_flex().gap(px(8.0)).children(end_actions).into_any_element());
+            parts.push(
+                h_flex()
+                    .gap(px(8.0))
+                    .children(end_actions)
+                    .into_any_element(),
+            );
         }
 
         if status == "waiting" {

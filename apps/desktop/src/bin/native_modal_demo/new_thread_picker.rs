@@ -127,12 +127,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             agent(light, "hermes", "Hermes Agent", Some("hermes-agent")),
             agent(light, "pi", "Pi Agent", Some("pi")),
             agent(light, "omp", "OMP", Some("omp")),
-            agent(
-                light,
-                "antigravity",
-                "Antigravity",
-                Some("antigravity-cli"),
-            ),
+            agent(light, "antigravity", "Antigravity", Some("antigravity-cli")),
             agent(light, "zcode", "ZCode", Some("zcode")),
         ]
     };

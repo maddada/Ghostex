@@ -183,7 +183,12 @@ pub(super) async fn store_themed_picture(
     let response = gx_rpc(remote, "/api/storeVisualPageThumbnail", payload)
         .await
         .ok()?;
-    Some(response.get("theme").and_then(serde_json::Value::as_str).is_some())
+    Some(
+        response
+            .get("theme")
+            .and_then(serde_json::Value::as_str)
+            .is_some(),
+    )
 }
 
 /// Captures crisp Retina (1600×1000) dark and light card thumbnails from a hidden browser surface,
@@ -395,15 +400,23 @@ fn encode_picture(base64: &str, preserve_alpha: bool) -> Option<Vec<u8>> {
         );
         if preserve_alpha {
             let full = decoded.to_rgba8();
-            let picture =
-                image::imageops::resize(&full, width, height, image::imageops::FilterType::Lanczos3);
+            let picture = image::imageops::resize(
+                &full,
+                width,
+                height,
+                image::imageops::FilterType::Lanczos3,
+            );
             encoder
                 .write_image(&picture, width, height, image::ExtendedColorType::Rgba8)
                 .ok()?;
         } else {
             let full = decoded.to_rgb8();
-            let picture =
-                image::imageops::resize(&full, width, height, image::imageops::FilterType::Lanczos3);
+            let picture = image::imageops::resize(
+                &full,
+                width,
+                height,
+                image::imageops::FilterType::Lanczos3,
+            );
             encoder
                 .write_image(&picture, width, height, image::ExtendedColorType::Rgb8)
                 .ok()?;

@@ -227,11 +227,7 @@ mod macos {
             let _ = thread::Builder::new()
                 .name("session-host-cleanup".to_string())
                 .spawn(move || {
-                    remove_unused(
-                        &root,
-                        Some(&key),
-                        &crate::setup::running_executable_paths(),
-                    );
+                    remove_unused(&root, Some(&key), &crate::setup::running_executable_paths());
                 });
             Ok((host_zmx, true))
         }

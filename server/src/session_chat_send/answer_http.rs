@@ -664,9 +664,7 @@ async fn answer_session_chat_prompt(
         };
         if crate::acp::session_is_acp(&target.session) {
             if let Some(text) = answer_text {
-                if let Err(error) =
-                    crate::acp::channel::steer(&state.paths, &target, &text).await
-                {
+                if let Err(error) = crate::acp::channel::steer(&state.paths, &target, &text).await {
                     return domain_error_response(endpoint_path, request_id, error);
                 }
             }
@@ -1136,10 +1134,11 @@ async fn answer_session_chat_prompt(
                     Err(err) if err.code == "noPendingQuestion" => {
                         // Turn-ending question tools (e.g. Antigravity's `ask_question` over ACP)
                         // finish the turn and expect the user's selection as the next prompt.
-                        let stored_prompt = crate::agents::session_chat_prompt_setting(&target.session)
-                            .as_deref()
-                            .and_then(crate::session_chat::parse_stored_session_chat_prompt)
-                            .or_else(|| transcript_pending_question_prompt(&target.session));
+                        let stored_prompt =
+                            crate::agents::session_chat_prompt_setting(&target.session)
+                                .as_deref()
+                                .and_then(crate::session_chat::parse_stored_session_chat_prompt)
+                                .or_else(|| transcript_pending_question_prompt(&target.session));
                         if let Some(crate::session_chat::SessionChatInteractivePrompt::Question {
                             questions,
                             ..

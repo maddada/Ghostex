@@ -5,8 +5,8 @@
 //! `/api/readWorkspaceInstructions` and `/api/writeWorkspaceInstructions`. Never edits the user's
 //! own global or repository CLAUDE.md / AGENTS.md files.
 
+use super::super::super::super::native_modal_kit::{MODAL_MONO_FONT, hsla};
 use super::super::super::fields::{settings_textarea, tooltip_text};
-use super::super::super::super::native_modal_kit::{hsla, MODAL_MONO_FONT};
 use super::*;
 use gpui_component::v_flex;
 
@@ -47,10 +47,7 @@ impl WorkspacesTab {
                             let truncated =
                                 entry.get("truncated").and_then(Value::as_bool) == Some(true);
                             let input_id = instructions_input_id(workspace_id);
-                            let state = page
-                                .instructions
-                                .entry(workspace_id.clone())
-                                .or_default();
+                            let state = page.instructions.entry(workspace_id.clone()).or_default();
                             let prev_saved = state.content.clone();
                             state.content = content.clone();
                             state.path = path;
@@ -152,8 +149,7 @@ impl WorkspacesTab {
                         Ok(entry) => {
                             let saved = text(&entry, "content");
                             let path = text(&entry, "path");
-                            let exists =
-                                entry.get("exists").and_then(Value::as_bool) == Some(true);
+                            let exists = entry.get("exists").and_then(Value::as_bool) == Some(true);
                             state.content = saved;
                             state.path = path;
                             state.exists = exists;
@@ -164,12 +160,7 @@ impl WorkspacesTab {
                             page.fields.textareas.remove(&input_id);
                         }
                         Err(error) => {
-                            page.toast(
-                                "error",
-                                "Couldn't save workspace instructions",
-                                &error,
-                                cx,
-                            );
+                            page.toast("error", "Couldn't save workspace instructions", &error, cx);
                         }
                     }
                     cx.notify();
@@ -320,7 +311,9 @@ impl WorkspacesTab {
                                 ButtonVariant::Outline,
                                 !can_open_file,
                                 (!can_open_file).then(|| {
-                                    SharedString::from("Save instructions first to create the file.")
+                                    SharedString::from(
+                                        "Save instructions first to create the file.",
+                                    )
                                 }),
                                 move |page: &mut Self, _window, cx| {
                                     if !open_path.is_empty() {
@@ -358,11 +351,7 @@ impl WorkspacesTab {
                     .child(
                         div()
                             .text_size(px(11.5))
-                            .text_color(hsla(if too_long {
-                                p.destructive
-                            } else {
-                                p.muted
-                            }))
+                            .text_color(hsla(if too_long { p.destructive } else { p.muted }))
                             .child(status_label),
                     ),
             )

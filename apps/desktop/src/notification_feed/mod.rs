@@ -319,7 +319,12 @@ impl GpuiNotificationFeedItem {
             seen: value
                 .get("seen")
                 .and_then(serde_json::Value::as_bool)
-                .unwrap_or_else(|| value.get("read").and_then(serde_json::Value::as_bool).unwrap_or(false)),
+                .unwrap_or_else(|| {
+                    value
+                        .get("read")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false)
+                }),
             awaiting_approval: value
                 .get("awaitingApproval")
                 .and_then(serde_json::Value::as_bool)

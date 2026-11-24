@@ -1347,9 +1347,9 @@ impl ReplyPopover {
         let trigger_start = popup["triggerStart"].as_u64().unwrap_or(0) as usize;
         if kind == "boost" && self.last_boosts_refresh != Some(trigger_start) {
             self.last_boosts_refresh = Some(trigger_start);
-            let _ = self
-                .chat
-                .update(cx, |chat, cx| chat.invoke(json!({"type": "refreshBoosts"}), cx));
+            let _ = self.chat.update(cx, |chat, cx| {
+                chat.invoke(json!({"type": "refreshBoosts"}), cx)
+            });
         }
         if self
             .dismissed_trigger
@@ -1401,7 +1401,12 @@ impl ReplyPopover {
     }
 
     fn desired_window_height(&self) -> f32 {
-        let base = HEIGHT + if !self.error.is_empty() { ERROR_LINE } else { 0.0 };
+        let base = HEIGHT
+            + if !self.error.is_empty() {
+                ERROR_LINE
+            } else {
+                0.0
+            };
         let menu = self
             .mention_menu
             .as_ref()
@@ -1425,8 +1430,7 @@ impl ReplyPopover {
             target,
             scale,
         );
-        let frame_in_parent =
-            Bounds::new(next.origin - self.placement.content_origin, next.size);
+        let frame_in_parent = Bounds::new(next.origin - self.placement.content_origin, next.size);
         let moved = super::child_window::move_child_window(
             window.window_handle(),
             self.placement.parent_view,
@@ -1575,7 +1579,10 @@ impl ReplyPopover {
             .overflow_y_scroll()
             .track_scroll(&menu.scroll)
             .py(px(MENTION_PADDING * s))
-            .child(heading_row("reply-mention-heading".into(), menu.heading.clone()));
+            .child(heading_row(
+                "reply-mention-heading".into(),
+                menu.heading.clone(),
+            ));
         if let Some(status) = &menu.status {
             list = list.child(
                 div()
@@ -1691,7 +1698,10 @@ impl ReplyPopover {
                         .flex()
                         .flex_col()
                         .w_full()
-                        .child(heading_row(("reply-mention-section", index).into(), section))
+                        .child(heading_row(
+                            ("reply-mention-section", index).into(),
+                            section,
+                        ))
                         .child(option),
                 ),
                 None => list.child(option),

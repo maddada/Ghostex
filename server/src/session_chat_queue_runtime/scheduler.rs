@@ -863,8 +863,7 @@ impl SessionChatQueueRuntime {
         // first queued prompt starts the box (agents/draft_run_location.rs).
         let pending_box = crate::agentbox::pending_session_agentbox(&session).is_some();
         let awaiting_startup = (draft || head.startup_send) && !pending_box;
-        let acp_channel_live =
-            crate::acp::channel::live(project_id, session_id, "send").is_some();
+        let acp_channel_live = crate::acp::channel::live(project_id, session_id, "send").is_some();
         let acp_mid_turn_ready =
             crate::acp::channel::live(project_id, session_id, "mid_turn_send").is_some();
         let acp_session = crate::acp::session_is_acp(&session) || acp_channel_live;

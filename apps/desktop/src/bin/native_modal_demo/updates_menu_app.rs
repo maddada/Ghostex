@@ -86,8 +86,14 @@ pub(crate) mod helpers {
     /// The app's theme roles (app/helpers/theme_roles.rs): backed by real catalog resolution so
     /// `native-modal-demo` can preview any built-in theme with its exact tokens.
     struct DemoRoles {
-        dark: Vec<(&'static str, ghostex_settings_catalog::theme_roles::RoleValue)>,
-        light: Vec<(&'static str, ghostex_settings_catalog::theme_roles::RoleValue)>,
+        dark: Vec<(
+            &'static str,
+            ghostex_settings_catalog::theme_roles::RoleValue,
+        )>,
+        light: Vec<(
+            &'static str,
+            ghostex_settings_catalog::theme_roles::RoleValue,
+        )>,
         dark_base: u32,
         light_base: u32,
         dark_accent: u32,
@@ -158,33 +164,35 @@ pub(crate) mod helpers {
         if let Some(accent) = theme_role_rgba("accent", light) {
             return gpui::Rgba { a: 1.0, ..accent };
         }
-        let fallback = DEMO_ROLES.read().ok().map_or(
-            if light { 0x0c74a6 } else { 0x95d7f6 },
-            |roles| {
-                if light {
-                    roles.light_accent
-                } else {
-                    roles.dark_accent
-                }
-            },
-        );
+        let fallback =
+            DEMO_ROLES
+                .read()
+                .ok()
+                .map_or(if light { 0x0c74a6 } else { 0x95d7f6 }, |roles| {
+                    if light {
+                        roles.light_accent
+                    } else {
+                        roles.dark_accent
+                    }
+                });
         rgb(fallback)
     }
 
     pub(crate) fn demo_modal_surface_rgba(light: bool) -> gpui::Rgba {
-        let base_rgb = DEMO_ROLES.read().ok().map_or(
-            if light { 0xfefdf9 } else { 0x13161b },
-            |roles| {
-                if light {
-                    roles.light_modal_surface
-                } else {
-                    roles.dark_modal_surface
-                }
-            },
-        );
+        let base_rgb =
+            DEMO_ROLES
+                .read()
+                .ok()
+                .map_or(if light { 0xfefdf9 } else { 0x13161b }, |roles| {
+                    if light {
+                        roles.light_modal_surface
+                    } else {
+                        roles.dark_modal_surface
+                    }
+                });
         let derived: Hsla = rgb(base_rgb).into();
-        let blended = theme_role_rgba("menu", light)
-            .map_or(derived, |menu| derived.blend(Hsla::from(menu)));
+        let blended =
+            theme_role_rgba("menu", light).map_or(derived, |menu| derived.blend(Hsla::from(menu)));
         blended.alpha(1.0).into()
     }
 

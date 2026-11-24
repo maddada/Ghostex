@@ -376,7 +376,10 @@ pub(crate) fn mark_all_notifications_seen(db: &Connection) -> DomainResult<usize
 /// Marks the rows that were shown in the bell panel read when the panel closes, without
 /// acknowledging their sessions (sidebar session dots clear when a session is opened or explicitly
 /// marked read). Active approval rows stay unread in `read_notification_feed_state` until answered.
-pub(crate) fn mark_notifications_shown_read(db: &Connection, ids: &[String]) -> DomainResult<usize> {
+pub(crate) fn mark_notifications_shown_read(
+    db: &Connection,
+    ids: &[String],
+) -> DomainResult<usize> {
     let now = now_iso();
     let mut changed = 0usize;
     for id in ids {

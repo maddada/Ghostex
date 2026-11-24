@@ -110,22 +110,22 @@ impl GhostexGpuiApp {
         };
         #[cfg(not(ghostex_web))]
         if source == "settings:control" {
-            let effective_native =
-                |obj: &serde_json::Map<String, serde_json::Value>, family: &str| match obj
-                    .get("agentSessionMode")
-                    .and_then(serde_json::Value::as_object)
-                    .and_then(|map| map.get(family))
-                    .and_then(serde_json::Value::as_str)
-                {
-                    Some(v) => v.eq_ignore_ascii_case("non-cli"),
-                    None => {
-                        obj.get("agentAcpMode")
-                            .and_then(serde_json::Value::as_object)
-                            .and_then(|map| map.get(family))
-                            .and_then(serde_json::Value::as_bool)
-                            == Some(true)
-                    }
-                };
+            let effective_native = |obj: &serde_json::Map<String, serde_json::Value>,
+                                    family: &str| match obj
+                .get("agentSessionMode")
+                .and_then(serde_json::Value::as_object)
+                .and_then(|map| map.get(family))
+                .and_then(serde_json::Value::as_str)
+            {
+                Some(v) => v.eq_ignore_ascii_case("non-cli"),
+                None => {
+                    obj.get("agentAcpMode")
+                        .and_then(serde_json::Value::as_object)
+                        .and_then(|map| map.get(family))
+                        .and_then(serde_json::Value::as_bool)
+                        == Some(true)
+                }
+            };
             for family in ghostex_settings_catalog::NATIVE_MODE_FAMILIES {
                 let prev = effective_native(&previous_settings_object, family);
                 let next = effective_native(write_result.snapshot.object(), family);

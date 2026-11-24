@@ -2,8 +2,8 @@
 //! verification (`GHOSTEX_NATIVE_MODAL_DEMO=share-link-popover`).
 
 use gpui::{
-    App, AppContext as _, Context, FontWeight, IntoElement, ParentElement as _, Render, Styled as _,
-    Window, div, prelude::FluentBuilder as _, px, rgb, rgba, svg,
+    App, AppContext as _, Context, FontWeight, IntoElement, ParentElement as _, Render,
+    Styled as _, Window, div, prelude::FluentBuilder as _, px, rgb, rgba, svg,
 };
 use gpui_component::{h_flex, v_flex};
 
@@ -93,7 +93,11 @@ impl ShareLinkPopoverDemo {
                                             .text_size(px(14.0))
                                             .font_weight(FontWeight::SEMIBOLD)
                                             .text_color(hsla(p.foreground))
-                                            .child(if active { "Shared link" } else { "Share link" }),
+                                            .child(if active {
+                                                "Shared link"
+                                            } else {
+                                                "Share link"
+                                            }),
                                     )
                                     .child(if active {
                                         h_flex()
@@ -196,7 +200,9 @@ impl ShareLinkPopoverDemo {
                                                 .font_family(MODAL_MONO_FONT)
                                                 .text_size(px(12.0))
                                                 .text_color(hsla(p.foreground))
-                                                .child("https://5b10d844.4ero2wvq7hxb.opentunnel.xyz"),
+                                                .child(
+                                                    "https://5b10d844.4ero2wvq7hxb.opentunnel.xyz",
+                                                ),
                                         ),
                                 )
                                 .child(
@@ -483,7 +489,8 @@ fn build_real_inbox_rows() -> Vec<InboxPingRow> {
         rows.iter().map(|r| &r.answered_by).collect::<Vec<_>>()
     );
     assert!(
-        rows.iter().any(|r| r.answered_by == "Answered by Alex, Sam"),
+        rows.iter()
+            .any(|r| r.answered_by == "Answered by Alex, Sam"),
         "gx-chat-core work_cards::dock must emit 'Answered by Alex, Sam', got: {:?}",
         rows.iter().map(|r| &r.answered_by).collect::<Vec<_>>()
     );
@@ -566,12 +573,9 @@ impl Render for ShareInboxPingDemo {
                                             .child("Shared"),
                                     ),
                             )
-                            .child(
-                                div()
-                                    .text_size(px(12.0))
-                                    .text_color(hsla(p.muted))
-                                    .child("Live page · 2 questions open · Anyone with the link can answer"),
-                            ),
+                            .child(div().text_size(px(12.0)).text_color(hsla(p.muted)).child(
+                                "Live page · 2 questions open · Anyone with the link can answer",
+                            )),
                     ),
             )
             .child(
@@ -749,12 +753,9 @@ impl Render for ShareInboxPingDemo {
                                     .child(format!("{} open", self.rows.len())),
                             ),
                     )
-                    .child(
-                        div()
-                            .text_size(px(12.0))
-                            .text_color(hsla(p.muted))
-                            .child("Outside answers arrive labeled · you can still answer or override"),
-                    ),
+                    .child(div().text_size(px(12.0)).text_color(hsla(p.muted)).child(
+                        "Outside answers arrive labeled · you can still answer or override",
+                    )),
             )
             .child(dock_rows);
 
@@ -896,9 +897,18 @@ fn build_real_transcript_card() -> TranscriptCardData {
     TranscriptCardData {
         quiet_text: qa.text.clone(),
         quiet_count: qa.count.clone(),
-        head_label: projected["headLabel"].as_str().unwrap_or_default().to_string(),
-        note_label: projected["noteLabel"].as_str().unwrap_or_default().to_string(),
-        summary: projected["summary"].as_str().unwrap_or_default().to_string(),
+        head_label: projected["headLabel"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
+        note_label: projected["noteLabel"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
+        summary: projected["summary"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
         rows,
     }
 }
@@ -981,21 +991,24 @@ impl Render for ShareTranscriptCardDemo {
                             .text_color(hsla(p.muted))
                             .child(row.label.clone()),
                     )
-                    .child(h_flex().flex_wrap().gap(px(5.0)).children(
-                        row.picks.iter().map(|pick| {
-                            div()
-                                .px(px(9.0))
-                                .py(px(2.0))
-                                .rounded_full()
-                                .bg(pill_bg)
-                                .border_1()
-                                .border_color(pill_border)
-                                .text_size(px(12.5))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(hsla(p.foreground))
-                                .child(pick.clone())
-                        }),
-                    ))
+                    .child(
+                        h_flex()
+                            .flex_wrap()
+                            .gap(px(5.0))
+                            .children(row.picks.iter().map(|pick| {
+                                div()
+                                    .px(px(9.0))
+                                    .py(px(2.0))
+                                    .rounded_full()
+                                    .bg(pill_bg)
+                                    .border_1()
+                                    .border_color(pill_border)
+                                    .text_size(px(12.5))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(hsla(p.foreground))
+                                    .child(pick.clone())
+                            })),
+                    )
                     .when(!row.note.is_empty(), |el| {
                         el.child(
                             div()

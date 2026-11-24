@@ -352,13 +352,12 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
             && !new_turn_start
             && working_source == "title"
             && active_attention_suppressed_until.is_some();
-        let next_attention_suppressed_until = if new_turn_start
-            || (previous.user_interrupted == Some(true) && !keeps_interrupted)
-        {
-            None
-        } else {
-            active_attention_suppressed_until
-        };
+        let next_attention_suppressed_until =
+            if new_turn_start || (previous.user_interrupted == Some(true) && !keeps_interrupted) {
+                None
+            } else {
+                active_attention_suppressed_until
+            };
         return ActivityState {
             activity: "working".to_string(),
             agent_name,

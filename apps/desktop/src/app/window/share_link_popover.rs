@@ -20,10 +20,10 @@ use std::{
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    App, AppContext as _, ClipboardItem, Context, FocusHandle, Focusable,
-    FontWeight, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowKind, WindowOptions, div, px, size, svg,
+    App, AppContext as _, ClipboardItem, Context, FocusHandle, Focusable, FontWeight,
+    InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, WindowBackgroundAppearance, WindowBounds,
+    WindowKind, WindowOptions, div, px, size, svg,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Value, json};
@@ -447,9 +447,7 @@ impl ShareLinkPopoverWindow {
         self.copied = Some(which);
         cx.notify();
         cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(Duration::from_secs(2))
-                .await;
+            cx.background_executor().timer(Duration::from_secs(2)).await;
             let _ = this.update(cx, |this, cx| {
                 if this.copied == Some(which) {
                     this.copied = None;
@@ -578,12 +576,7 @@ impl Render for ShareLinkPopoverWindow {
                                                 .text_size(px(11.0))
                                                 .font_weight(FontWeight::SEMIBOLD)
                                                 .text_color(green)
-                                                .child(
-                                                    div()
-                                                        .size(px(6.0))
-                                                        .rounded_full()
-                                                        .bg(green),
-                                                )
+                                                .child(div().size(px(6.0)).rounded_full().bg(green))
                                                 .child("Live"),
                                         )
                                     }),
@@ -853,22 +846,20 @@ impl Render for ShareLinkPopoverWindow {
             }
 
             let stop_id = share_id;
-            body = body.child(
-                div().pt(px(2.0)).child(modal_action_button(
-                    &p,
-                    "share-popover-stop",
-                    if self.busy {
-                        "Stopping…"
-                    } else {
-                        "Stop sharing"
-                    },
-                    None,
-                    ModalButtonTone::Danger,
-                    self.busy,
-                    move |this, _window, cx| this.stop_share(stop_id.clone(), cx),
-                    cx,
-                )),
-            );
+            body = body.child(div().pt(px(2.0)).child(modal_action_button(
+                &p,
+                "share-popover-stop",
+                if self.busy {
+                    "Stopping…"
+                } else {
+                    "Stop sharing"
+                },
+                None,
+                ModalButtonTone::Danger,
+                self.busy,
+                move |this, _window, cx| this.stop_share(stop_id.clone(), cx),
+                cx,
+            )));
         } else {
             let passcode_on = self.passcode_on;
             let busy = self.busy;
@@ -966,15 +957,13 @@ impl Render for ShareLinkPopoverWindow {
             .child(body);
 
         let fit_listener = self.fit.listener(0.0);
-        div()
-            .size_full()
-            .child(
-                div()
-                    .w(px(POPOVER_WIDTH))
-                    .on_children_prepainted(move |bounds, window, cx| {
-                        fit_listener(bounds, window, cx);
-                    })
-                    .child(card),
-            )
+        div().size_full().child(
+            div()
+                .w(px(POPOVER_WIDTH))
+                .on_children_prepainted(move |bounds, window, cx| {
+                    fit_listener(bounds, window, cx);
+                })
+                .child(card),
+        )
     }
 }

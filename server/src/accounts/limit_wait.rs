@@ -623,14 +623,11 @@ pub(crate) fn acknowledge(
             .pointer("/runtimeSettings/accountRecovery/accountWait")
             .and_then(wait_pool_key)
             .or_else(|| {
-                repo.get_project(pid)
-                    .ok()
-                    .flatten()
-                    .and_then(|project| {
-                        let p = launch::provider(&project, &session)?;
-                        let pool = super::workspace_pool::session_pool(repo.db, &project, &session, p);
-                        Some(super::workspace_pool::pool_key(p, pool.as_deref()))
-                    })
+                repo.get_project(pid).ok().flatten().and_then(|project| {
+                    let p = launch::provider(&project, &session)?;
+                    let pool = super::workspace_pool::session_pool(repo.db, &project, &session, p);
+                    Some(super::workspace_pool::pool_key(p, pool.as_deref()))
+                })
             });
         let same_pool = session_pool_key.as_deref() == Some(clicked_pool_key.as_str());
         if same_clicked || same_pool {

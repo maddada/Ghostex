@@ -24,9 +24,8 @@ mod tracker;
 use super::super::catalog::SettingOption;
 use super::super::fields::notice::{greyed_out, is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
-    ButtonVariant, FieldStates, RowSpec, SettingsPage, setting_row, settings_button,
-    settings_icon, settings_section, settings_segmented, settings_select, settings_text_input,
-    static_note,
+    ButtonVariant, FieldStates, RowSpec, SettingsPage, setting_row, settings_button, settings_icon,
+    settings_section, settings_segmented, settings_select, settings_text_input, static_note,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};

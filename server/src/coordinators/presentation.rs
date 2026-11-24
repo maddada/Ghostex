@@ -129,10 +129,7 @@ pub fn insert_coordinator_presentation_payload(
         );
         if is_coordinator {
             super::remote_threads::insert_coordinator_remote_threads(session, db, &key);
-            add_coordinator_unsnoozed_asks(
-                session,
-                unsnoozed_asks.get(&key).copied().unwrap_or(0),
-            );
+            add_coordinator_unsnoozed_asks(session, unsnoozed_asks.get(&key).copied().unwrap_or(0));
             set_session_coordinator_turn_needs_you(session, db, &key);
         }
     }

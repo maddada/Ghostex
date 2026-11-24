@@ -239,9 +239,7 @@ pub(super) async fn route_agents_http(
                     ..
                 } = &caller
                 {
-                    if let Some(params) = body_json
-                        .get_mut("params")
-                        .and_then(Value::as_object_mut)
+                    if let Some(params) = body_json.get_mut("params").and_then(Value::as_object_mut)
                     {
                         params.insert(
                             crate::session_close_log::CLOSED_BY_PARAM.to_string(),

@@ -3,7 +3,7 @@ use std::{
     path::Path,
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::{
     constants::GXSERVER_PROTOCOL_VERSION,

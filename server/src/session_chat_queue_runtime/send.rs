@@ -1019,7 +1019,8 @@ async fn send_session_chat_message_locked(
     // (`session/prompt`) without typing into a terminal (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
     // If a live authenticated `acp-host` channel is open while stored `nonCliMode` is out of sync,
     // reconcile the stored mode and deliver over the Native channel instead of waiting on a CLI box.
-    let live_acp_channel = crate::acp::channel::live(&target.project_id, &target.session_id, "send");
+    let live_acp_channel =
+        crate::acp::channel::live(&target.project_id, &target.session_id, "send");
     if crate::acp::session_is_acp(&target.session) || live_acp_channel.is_some() {
         if !crate::acp::session_is_acp(&target.session) {
             if let Some(channel) = live_acp_channel.as_ref() {
@@ -1722,10 +1723,7 @@ async fn send_session_chat_message_locked(
                 message: error.message,
             });
         }
-        crate::telemetry::reliability_error_for_session(
-            "prompt_delivery_failed",
-            &target.session,
-        );
+        crate::telemetry::reliability_error_for_session("prompt_delivery_failed", &target.session);
         let reason = crate::session_chat_send_failure::send_failure_reason(
             &error.message,
             heal_gave_up.as_deref(),

@@ -1365,10 +1365,7 @@ async fn answer_prompt(
         PendingPrompt::Choice { options, title, .. } => {
             let Some(index) = single_option else {
                 return Err(if options.len() == 1 {
-                    format!(
-                        "Pick the 1 option of \"{}\" by number.",
-                        short(&title, 120)
-                    )
+                    format!("Pick the 1 option of \"{}\" by number.", short(&title, 120))
                 } else {
                     format!(
                         "Pick one of the {} options of \"{}\" by number.",

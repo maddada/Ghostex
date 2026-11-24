@@ -201,7 +201,11 @@ impl GpuiAgentsHubModalWindow {
                             format!(
                                 "{} {}",
                                 grouped(plan.summary.links),
-                                ghostex_gx_protocol::plural_word(plan.summary.links, "link", "links")
+                                ghostex_gx_protocol::plural_word(
+                                    plan.summary.links,
+                                    "link",
+                                    "links"
+                                )
                             ),
                         ))
                         .child(pill(
@@ -229,7 +233,11 @@ impl GpuiAgentsHubModalWindow {
                         .child(pill(
                             hp,
                             PillTone::Err,
-                            ghostex_gx_protocol::plural(plan.summary.unlinks, "removal", "removals"),
+                            ghostex_gx_protocol::plural(
+                                plan.summary.unlinks,
+                                "removal",
+                                "removals",
+                            ),
                         )),
                 )
             });

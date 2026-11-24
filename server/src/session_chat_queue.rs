@@ -871,7 +871,13 @@ impl ClaimedDelivery {
                     }
                 };
                 let snapshot = read_snapshot(db, project_id, session_id)?;
-                Ok((held, held_for_prompt, held_for_busy, error_message, snapshot))
+                Ok((
+                    held,
+                    held_for_prompt,
+                    held_for_busy,
+                    error_message,
+                    snapshot,
+                ))
             })?;
         if outcome.is_ok() {
             crate::session_chat_queue_attachments::mark_delivered(paths, prompt_id);
@@ -2031,9 +2037,10 @@ pub(crate) fn purge_stale_failed_prompts_in(
         )
         .map_err(sql_error)?;
     let ids: Vec<String> = stmt
-        .query_map(params![project_id, session_id, closed_reason, before_iso], |row| {
-            row.get::<_, String>(0)
-        })
+        .query_map(
+            params![project_id, session_id, closed_reason, before_iso],
+            |row| row.get::<_, String>(0),
+        )
         .map_err(sql_error)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(sql_error)?;

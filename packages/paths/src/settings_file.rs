@@ -137,7 +137,11 @@ fn repair(path: &Path) -> io::Result<SettingsRead> {
     };
     write_durably(path, &backup_bytes)?;
     let byte_word = if bytes.len() == 1 { "byte" } else { "bytes" };
-    let setting_word = if object.len() == 1 { "setting" } else { "settings" };
+    let setting_word = if object.len() == 1 {
+        "setting"
+    } else {
+        "settings"
+    };
     let problems = vec![format!(
         "{} was damaged ({} {byte_word}); kept it as {} and restored {} ({} {setting_word}).",
         file_name(path),

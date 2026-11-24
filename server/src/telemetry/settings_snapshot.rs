@@ -36,7 +36,7 @@ use std::{
     sync::OnceLock,
 };
 
-use ghostex_settings_catalog::{J, Platform, availability};
+use ghostex_settings_catalog::{availability, Platform, J};
 use serde_json::Value;
 
 use super::{

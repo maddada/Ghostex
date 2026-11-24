@@ -894,7 +894,9 @@ async fn deliver(
     };
     if let (true, Ok(mut memory)) = (sent && !undelivered_ids.is_empty(), memory.lock()) {
         for row_id in &undelivered_ids {
-            memory.undelivered_reported.insert((key.clone(), row_id.clone()));
+            memory
+                .undelivered_reported
+                .insert((key.clone(), row_id.clone()));
         }
     }
     if sent {

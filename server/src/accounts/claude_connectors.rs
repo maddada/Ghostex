@@ -129,7 +129,10 @@ fn read_file_connectors_memoized(path: &Path) -> Option<(Option<String>, Option<
     let parsed = parse_claude_json_connectors(path);
     if let Some((ref identity, ref entries)) = parsed {
         if let Ok(mut guard) = memo.lock() {
-            guard.insert(path.to_path_buf(), (stamp, identity.clone(), entries.clone()));
+            guard.insert(
+                path.to_path_buf(),
+                (stamp, identity.clone(), entries.clone()),
+            );
         }
     }
     parsed

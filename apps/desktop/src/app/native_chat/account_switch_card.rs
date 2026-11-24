@@ -88,6 +88,8 @@ impl NativeChatView {
             animate_sweep: Some(&animate_sweep),
             animate_entrance: true,
         };
-        Some(render_account_switch_overlay(card, pane_width, &look, hooks))
+        Some(render_account_switch_overlay(
+            card, pane_width, &look, hooks,
+        ))
     }
 }

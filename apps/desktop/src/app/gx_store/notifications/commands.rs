@@ -215,12 +215,7 @@ impl GhostexGpuiApp {
         }
     }
 
-    fn mark_cached_notification_row_read(
-        &mut self,
-        machine: &MachineId,
-        id: &str,
-        read: bool,
-    ) {
+    fn mark_cached_notification_row_read(&mut self, machine: &MachineId, id: &str, read: bool) {
         if let Some(item) = self
             .notification_feed_state
             .items
@@ -319,7 +314,11 @@ impl GhostexGpuiApp {
                         if this.gx_store.notifications.epoch(&machine) == started_epoch {
                             this.gx_store_store_notification_feed(machine, message, cx);
                         }
-                    } else if !this.gx_store.notifications.has_in_flight_mark_read(&machine) {
+                    } else if !this
+                        .gx_store
+                        .notifications
+                        .has_in_flight_mark_read(&machine)
+                    {
                         this.gx_store_publish_notification_feeds(cx);
                     }
                 });

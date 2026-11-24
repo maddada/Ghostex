@@ -53,10 +53,16 @@ pub(crate) fn theme_accent_rgba(light: bool) -> Rgba {
     if let Some(accent) = theme_role_rgba("accent", light) {
         return Rgba { a: 1.0, ..accent };
     }
-    let fallback = ROLES.read().ok().map_or(
-        if light { 0x0c74a6 } else { 0x95d7f6 },
-        |roles| if light { roles.light_accent } else { roles.dark_accent },
-    );
+    let fallback = ROLES
+        .read()
+        .ok()
+        .map_or(if light { 0x0c74a6 } else { 0x95d7f6 }, |roles| {
+            if light {
+                roles.light_accent
+            } else {
+                roles.dark_accent
+            }
+        });
     rgb(fallback)
 }
 

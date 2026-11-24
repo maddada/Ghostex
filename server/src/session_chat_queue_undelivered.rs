@@ -372,8 +372,8 @@ pub(crate) fn notify_senders_of_undelivered_agent_messages(
     close_actor: Option<&CloseActor>,
 ) -> Vec<(String, String)> {
     use ghostex_gx_chat_core::transcript::delivery_notice::{
-        DELIVERY_NOTICE_PREVIEW_MAX_CHARS, format_delivery_notice, parse_delivery_notice,
-        short_delivery_reason, short_first_line,
+        format_delivery_notice, parse_delivery_notice, short_delivery_reason, short_first_line,
+        DELIVERY_NOTICE_PREVIEW_MAX_CHARS,
     };
 
     if prompts.is_empty() {
@@ -412,8 +412,7 @@ pub(crate) fn notify_senders_of_undelivered_agent_messages(
                 preview: short_first_line(body, DELIVERY_NOTICE_PREVIEW_MAX_CHARS),
             });
         batch.count += 1;
-        if !prompt.prompt_id.is_empty()
-            && !batch.prompt_ids.iter().any(|id| id == prompt.prompt_id)
+        if !prompt.prompt_id.is_empty() && !batch.prompt_ids.iter().any(|id| id == prompt.prompt_id)
         {
             batch.prompt_ids.push(prompt.prompt_id.to_string());
         }
@@ -429,7 +428,10 @@ pub(crate) fn notify_senders_of_undelivered_agent_messages(
         return Vec::new();
     };
     let repository = DomainRepository::new(&db, server_id);
-    let recipient = repository.get_session(project_id, session_id).ok().flatten();
+    let recipient = repository
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten();
     let title = recipient
         .as_ref()
         .and_then(|session| session.get("title"))
@@ -517,7 +519,10 @@ pub(crate) fn notify_senders_of_undelivered_agent_messages(
             let merged_count = if merged_ids.is_empty() {
                 existing.count + fresh_count
             } else {
-                existing.count.saturating_add(added_ids).max(merged_ids.len())
+                existing
+                    .count
+                    .saturating_add(added_ids)
+                    .max(merged_ids.len())
             };
             let merged_preview = if !existing.preview.is_empty() {
                 existing.preview

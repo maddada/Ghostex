@@ -166,9 +166,8 @@ pub(super) fn read_agent_details(
 
     // Legacy (non-progressive) callers: run skills and agent-specific probes in parallel.
     let (skills, extra) = std::thread::scope(|scope| {
-        let skills_handle = scope.spawn(|| {
-            super::picker_skills::picker_skills(&state.paths, agent, folder_path)
-        });
+        let skills_handle =
+            scope.spawn(|| super::picker_skills::picker_skills(&state.paths, agent, folder_path));
         let extra_handle = scope.spawn(|| {
             let mut extra = serde_json::json!({});
             match agent {

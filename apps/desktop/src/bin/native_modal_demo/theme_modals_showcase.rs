@@ -54,7 +54,10 @@ fn find_art_path(id: &str) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-fn settings_map_for_theme(theme_id: &str, light: bool) -> (String, Map<String, Value>, Option<PathBuf>) {
+fn settings_map_for_theme(
+    theme_id: &str,
+    light: bool,
+) -> (String, Map<String, Value>, Option<PathBuf>) {
     let gallery = theme_gallery(Platform::current());
     let mut settings = Map::new();
     let mut name = if light {
@@ -147,7 +150,11 @@ fn settings_map_for_theme(theme_id: &str, light: bool) -> (String, Map<String, V
     (name, settings, art_path)
 }
 
-fn build_account_look(settings: &Map<String, Value>, light: bool, glass: bool) -> AccountSwitchCardLook {
+fn build_account_look(
+    settings: &Map<String, Value>,
+    light: bool,
+    glass: bool,
+) -> AccountSwitchCardLook {
     let background_rgb = work_area_background_for_variant(settings, light);
     let background: Hsla = rgb(background_rgb).into();
     let toward = |target: f32, amount: f32| -> Hsla {
@@ -408,7 +415,12 @@ fn backdrop_layer(bundle: &ThemeBundle) -> AnyElement {
                         .object_fit(ObjectFit::Cover),
                 )
                 .child(div().absolute().inset_0().bg(dim_wash))
-                .child(div().absolute().inset_0().bg(bundle.work_area.opacity(0.42)));
+                .child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .bg(bundle.work_area.opacity(0.42)),
+                );
         } else {
             // Subtle themed atmospheric glow for presets without cached artwork.
             layer = layer
@@ -420,7 +432,11 @@ fn backdrop_layer(bundle: &ThemeBundle) -> AnyElement {
                         .w(px(300.0))
                         .h(px(220.0))
                         .rounded_full()
-                        .bg(hsla(bundle.modal.primary).opacity(if bundle.light { 0.28 } else { 0.24 })),
+                        .bg(hsla(bundle.modal.primary).opacity(if bundle.light {
+                            0.28
+                        } else {
+                            0.24
+                        })),
                 )
                 .child(
                     div()
@@ -430,7 +446,11 @@ fn backdrop_layer(bundle: &ThemeBundle) -> AnyElement {
                         .w(px(320.0))
                         .h(px(240.0))
                         .rounded_full()
-                        .bg(hsla(bundle.modal.success).opacity(if bundle.light { 0.22 } else { 0.18 })),
+                        .bg(hsla(bundle.modal.success).opacity(if bundle.light {
+                            0.22
+                        } else {
+                            0.18
+                        })),
                 );
         }
     }
@@ -699,7 +719,11 @@ fn render_settings_modal(s: &SettingsPalette, compact: bool) -> AnyElement {
             SwitchOff {
                 track: s.raised_hover,
                 edge: Some(s.hairline),
-                thumb: if s.light { s.modal.solid_surface } else { s.muted },
+                thumb: if s.light {
+                    s.modal.solid_surface
+                } else {
+                    s.muted
+                },
             },
             s.light,
             checked,
@@ -917,41 +941,42 @@ fn render_compact_account_card(look: &AccountSwitchCardLook) -> AnyElement {
                     .child(pct),
             )
     };
-    let row = |role: &'static str, acct: &'static str, pcts: [(&'static str, &'static str, bool); 3]| {
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(4.0))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(5.0))
-                    .child(
-                        div()
-                            .w(px(24.0))
-                            .text_size(px(8.5))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(look.muted)
-                            .child(role),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(9.0))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(look.foreground)
-                            .child(acct),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .gap(px(4.0))
-                    .child(usage(pcts[0].0, pcts[0].1, pcts[0].2))
-                    .child(usage(pcts[1].0, pcts[1].1, pcts[1].2))
-                    .child(usage(pcts[2].0, pcts[2].1, pcts[2].2)),
-            )
-    };
+    let row =
+        |role: &'static str, acct: &'static str, pcts: [(&'static str, &'static str, bool); 3]| {
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(4.0))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(5.0))
+                        .child(
+                            div()
+                                .w(px(24.0))
+                                .text_size(px(8.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(look.muted)
+                                .child(role),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(9.0))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(look.foreground)
+                                .child(acct),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .gap(px(4.0))
+                        .child(usage(pcts[0].0, pcts[0].1, pcts[0].2))
+                        .child(usage(pcts[1].0, pcts[1].1, pcts[1].2))
+                        .child(usage(pcts[2].0, pcts[2].1, pcts[2].2)),
+                )
+        };
     div()
         .w_full()
         .rounded(px(12.0))
@@ -985,12 +1010,20 @@ fn render_compact_account_card(look: &AccountSwitchCardLook) -> AnyElement {
         .child(row(
             "From",
             "y•••a – SP",
-            [("5h", "2%", false), ("7d", "3%", false), ("Fable", "0%", false)],
+            [
+                ("5h", "2%", false),
+                ("7d", "3%", false),
+                ("Fable", "0%", false),
+            ],
         ))
         .child(row(
             "To",
             "x•••0 – 70",
-            [("5h", "–", true), ("7d", "4%", false), ("Fable", "0%", false)],
+            [
+                ("5h", "–", true),
+                ("7d", "4%", false),
+                ("Fable", "0%", false),
+            ],
         ))
         .child(
             div()
@@ -1030,12 +1063,13 @@ fn render_compact_account_card(look: &AccountSwitchCardLook) -> AnyElement {
                                 ),
                         )
                         .child(
-                            div()
-                                .w_full()
-                                .h(px(2.0))
-                                .rounded(px(2.0))
-                                .bg(track)
-                                .child(div().w(gpui::relative(0.45)).h_full().rounded(px(2.0)).bg(look.accent)),
+                            div().w_full().h(px(2.0)).rounded(px(2.0)).bg(track).child(
+                                div()
+                                    .w(gpui::relative(0.45))
+                                    .h_full()
+                                    .rounded(px(2.0))
+                                    .bg(look.accent),
+                            ),
                         ),
                 )
                 .child(
@@ -1287,24 +1321,57 @@ fn render_theme_grid_cell(bundle: &ThemeBundle) -> AnyElement {
                     div()
                         .flex()
                         .gap(px(8.0))
-                        .child(div().flex_1().min_w_0().child(render_confirm_modal(&bundle.modal, true)))
-                        .child(div().flex_1().min_w_0().child(render_rename_modal(&bundle.modal, true))),
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(render_confirm_modal(&bundle.modal, true)),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(render_rename_modal(&bundle.modal, true)),
+                        ),
                 )
                 .child(
                     div()
                         .flex()
                         .gap(px(8.0))
                         .items_center()
-                        .child(div().flex_1().min_w_0().child(render_settings_modal(&bundle.settings, true)))
-                        .child(div().flex_1().min_w_0().child(render_compact_account_card(&bundle.account))),
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(render_settings_modal(&bundle.settings, true)),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(render_compact_account_card(&bundle.account)),
+                        ),
                 ),
         )
         .into_any_element()
 }
 
-fn render_theme_grid(title: &str, bundles: &[ThemeBundle], cols: usize, light_canvas: bool) -> AnyElement {
-    let canvas_bg = if light_canvas { rgb(0xe7e8ec) } else { rgb(0x0b0d11) };
-    let title_color = if light_canvas { rgb(0x1f2328) } else { rgb(0xe6e8ec) };
+fn render_theme_grid(
+    title: &str,
+    bundles: &[ThemeBundle],
+    cols: usize,
+    light_canvas: bool,
+) -> AnyElement {
+    let canvas_bg = if light_canvas {
+        rgb(0xe7e8ec)
+    } else {
+        rgb(0x0b0d11)
+    };
+    let title_color = if light_canvas {
+        rgb(0x1f2328)
+    } else {
+        rgb(0xe6e8ec)
+    };
     let mut rows = div().flex().flex_col().gap(px(14.0)).w_full();
     for chunk in bundles.chunks(cols) {
         let mut row = div().flex().gap(px(14.0)).w_full();

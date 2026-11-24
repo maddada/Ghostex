@@ -111,8 +111,12 @@ pub(crate) fn switch_in_live_provider(
 ) -> Result<(), DomainStateError> {
     let project_id = session["projectId"].as_str().unwrap_or_default();
     let session_id = session["sessionId"].as_str().unwrap_or_default();
-    let launched_acp = crate::acp::acp_family_from_launch_command(command)
-        .map(|family| (family, crate::acp::acp_approval_level_from_launch_command(command)));
+    let launched_acp = crate::acp::acp_family_from_launch_command(command).map(|family| {
+        (
+            family,
+            crate::acp::acp_approval_level_from_launch_command(command),
+        )
+    });
     let is_acp = crate::acp::session_is_acp(session) || launched_acp.is_some();
     let (typed_command, mut cleanup_paths) = if is_acp {
         let (prepared, guard_files) = super::restart::prepare_non_cli_in_place_launch_command(
@@ -124,7 +128,10 @@ pub(crate) fn switch_in_live_provider(
         )?;
         (format!(" {prepared}"), guard_files)
     } else {
-        (command.to_string(), super::restart::TempFilesGuard(Vec::new()))
+        (
+            command.to_string(),
+            super::restart::TempFilesGuard(Vec::new()),
+        )
     };
     let guard = agents::DraftAgentSwitch::begin(project_id, session_id)?;
     crate::session_chat_first_message::retype_after_agent_switch(

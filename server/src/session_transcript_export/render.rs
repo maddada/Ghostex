@@ -132,7 +132,8 @@ impl RenderedParts {
             out.push_str(&self.preamble);
         } else if skip_turns > 0 && start == start_from_skip {
             let turns_word = if start == 1 { "turn was" } else { "turns were" };
-            let kept_words = ghostex_gx_protocol::plural(kept, "new turn follows", "new turns follow");
+            let kept_words =
+                ghostex_gx_protocol::plural(kept, "new turn follows", "new turns follow");
             out.push_str(&format!(
                 "## ⏪ Delta handover\n\nThe first {start} {turns_word} already sent in an earlier handover. Only the {kept_words}:\n\n"
             ));

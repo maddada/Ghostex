@@ -319,10 +319,10 @@ impl GhostexGpuiApp {
                         .and_then(|ext| ext.to_str())
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("md"));
                     let allowed = is_md
-                        && std::fs::canonicalize(&base_dir).ok().zip(
-                            std::fs::canonicalize(&candidate).ok(),
-                        )
-                        .is_some_and(|(base, target)| target.starts_with(&base));
+                        && std::fs::canonicalize(&base_dir)
+                            .ok()
+                            .zip(std::fs::canonicalize(&candidate).ok())
+                            .is_some_and(|(base, target)| target.starts_with(&base));
                     if !allowed {
                         self.dispatch_gpui_app_modal_toast(
                             "warning",

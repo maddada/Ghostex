@@ -613,22 +613,18 @@ pub(super) fn set_resolved(parsed: &ParsedArgs, resolved: bool) -> CliResult<()>
     {
         resolve_params[crate::session_close_log::CLOSED_BY_PARAM] = json!(caller);
     }
-    let result = call_gxserver_rpc(
-        "/api/resolveCoordinatorThread",
-        &resolve_params,
-        &flags,
-    )
-    .map_err(|error| match (resolved, &error) {
-        (true, CliError::Rpc { response, .. })
-            if response.get("error").and_then(Value::as_str) == Some("sessionNotClosed") =>
-        {
-            CliError::Other(format!(
-                "{error} Close it with ghostex agents close {global_ref}."
-            ))
-        }
-        (true, _) => error,
-        (false, _) => CliError::Other(format!("Could not reopen {global_ref}: {error}")),
-    })?;
+    let result = call_gxserver_rpc("/api/resolveCoordinatorThread", &resolve_params, &flags)
+        .map_err(|error| match (resolved, &error) {
+            (true, CliError::Rpc { response, .. })
+                if response.get("error").and_then(Value::as_str) == Some("sessionNotClosed") =>
+            {
+                CliError::Other(format!(
+                    "{error} Close it with ghostex agents close {global_ref}."
+                ))
+            }
+            (true, _) => error,
+            (false, _) => CliError::Other(format!("Could not reopen {global_ref}: {error}")),
+        })?;
     let resumed = result["sessionResumed"].as_bool() == Some(true);
     if parsed.flags.truthy("json") {
         print_json(&result);

@@ -181,8 +181,7 @@ pub(super) fn provider_has_eligible_room_for_model_in_pool(
         .accounts
         .iter()
         .filter(|account| {
-            account.provider == provider
-                && super::workspace_pool::in_pool(&account.id, allowed_ids)
+            account.provider == provider && super::workspace_pool::in_pool(&account.id, allowed_ids)
         })
         .collect();
     if saved.is_empty() {

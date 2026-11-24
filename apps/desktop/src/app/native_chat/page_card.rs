@@ -609,11 +609,7 @@ impl NativeChatView {
                         .left_0()
                         .w_full()
                         .aspect_ratio(v.thumbnail_width / v.thumbnail_height)
-                        .child(
-                            img(picture)
-                                .size_full()
-                                .object_fit(gpui::ObjectFit::Fill),
-                        ),
+                        .child(img(picture).size_full().object_fit(gpui::ObjectFit::Fill)),
                 ),
                 // No picture yet: a page icon and the file name.
                 None => this
@@ -1182,9 +1178,7 @@ fn share_link_button(
         .font_weight(FontWeight::MEDIUM)
         .chat_cursor_pointer()
         .hover(move |style| style.bg(hover_fill))
-        .tooltip(move |window, cx| {
-            gpui_component::tooltip::Tooltip::new(tip).build(window, cx)
-        })
+        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tip).build(window, cx))
         .child(
             svg()
                 .path("titlebar/link.svg")

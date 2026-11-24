@@ -14,14 +14,14 @@ use crate::{
     notification_feed::{
         broadcast_notification_feed_changed,
         store::{
-            NOTIFICATION_FEED_KIND_CUSTOM, NewNotificationFeedRow, insert_notification_feed_row,
-            notification_agent_icon,
+            insert_notification_feed_row, notification_agent_icon, NewNotificationFeedRow,
+            NOTIFICATION_FEED_KIND_CUSTOM,
         },
     },
     server::AppState,
 };
 use chrono::{DateTime, Utc};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// What Settings > Accounts and `ghostex accounts` say about a marked account.
 pub(crate) const NOTICE: &str =

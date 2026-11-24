@@ -511,10 +511,7 @@ pub fn open_unsnoozed_ask_counts(db: &Connection) -> HashMap<SessionKey, usize> 
     };
     let Ok(rows) = statement.query_map([], |row| {
         Ok((
-            (
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-            ),
+            (row.get::<_, String>(0)?, row.get::<_, String>(1)?),
             row.get::<_, String>(2)?,
         ))
     }) else {

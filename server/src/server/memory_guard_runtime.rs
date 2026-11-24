@@ -236,7 +236,8 @@ fn plan(state: &AppState) -> Option<Plan> {
     }
     let (should_log, hold_over, settled) = {
         let mut book = book();
-        let critical_first_sight = level == PressureLevel::Critical && book.critical_since.is_none();
+        let critical_first_sight =
+            level == PressureLevel::Critical && book.critical_since.is_none();
         let warning_due = !book.warned
             && book
                 .last_warned

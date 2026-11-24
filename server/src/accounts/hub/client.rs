@@ -342,8 +342,9 @@ pub(crate) fn oauth_start(
         management_answer(response)?
     };
     if body.get("status").and_then(Value::as_str) == Some("error") {
-        return Err(hub_error(&body)
-            .unwrap_or_else(|| "The hub refused to start the sign-in.".to_string()));
+        return Err(
+            hub_error(&body).unwrap_or_else(|| "The hub refused to start the sign-in.".to_string())
+        );
     }
     let raw_auth_url = body
         .get("url")
@@ -404,12 +405,7 @@ pub(crate) fn oauth_status(url: &str, key: &str, state: &str) -> Result<OAuthSta
     Ok(OAuthStatus { status, error })
 }
 
-fn send_oauth_callback(
-    url: &str,
-    key: &str,
-    provider: &str,
-    v8_body: Value,
-) -> Result<(), String> {
+fn send_oauth_callback(url: &str, key: &str, provider: &str, v8_body: Value) -> Result<(), String> {
     let response = management_v8_post(url, Some(key), "oauth/callback", v8_body.clone())?;
     let body = if is_missing_v8_route(&response) {
         let mut v0_body = v8_body;

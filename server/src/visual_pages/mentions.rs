@@ -57,14 +57,14 @@ pub(crate) async fn read(state: Arc<AppState>, path: String) -> RoutedResponse {
     };
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
-    let payload = tokio::task::spawn_blocking(move || build_mentions(&paths, &server_id, &id)).await;
+    let payload =
+        tokio::task::spawn_blocking(move || build_mentions(&paths, &server_id, &id)).await;
     match payload {
         Ok(MentionsResult::Ready(value)) => reply(StatusCode::OK, value),
         Ok(MentionsResult::NotFound) => no_such_page(),
-        Ok(MentionsResult::Unavailable(error)) => reply(
-            StatusCode::CONFLICT,
-            json!({"ok": false, "error": error}),
-        ),
+        Ok(MentionsResult::Unavailable(error)) => {
+            reply(StatusCode::CONFLICT, json!({"ok": false, "error": error}))
+        }
         Err(_) => reply(
             StatusCode::INTERNAL_SERVER_ERROR,
             json!({"ok": false, "error": "Mentions could not be loaded."}),
@@ -142,8 +142,7 @@ fn build_mentions(
                 .unwrap_or_else(|| field(&session, "agentId"));
             let agent_name = read_runtime_text(&session, "agentName").unwrap_or_default();
             let coordinator = coordinators.contains(&(project_id.clone(), session_id.clone()));
-            let main_coordinator =
-                coordinator && mains.get(&project_id) == Some(&session_id);
+            let main_coordinator = coordinator && mains.get(&project_id) == Some(&session_id);
             let active_at = {
                 let last = field(&session, "lastActiveAt");
                 if last.is_empty() {

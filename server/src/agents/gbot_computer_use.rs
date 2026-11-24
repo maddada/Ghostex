@@ -47,7 +47,11 @@ pub(crate) fn codex_disabled_screen_servers(
     }
     let home = codex_home
         .map(std::path::Path::to_path_buf)
-        .or_else(|| std::env::var("CODEX_HOME").ok().map(std::path::PathBuf::from))
+        .or_else(|| {
+            std::env::var("CODEX_HOME")
+                .ok()
+                .map(std::path::PathBuf::from)
+        })
         .unwrap_or_else(|| ghostex_paths::user_home_dir().join(".codex"));
     let Ok(text) = std::fs::read_to_string(home.join("config.toml")) else {
         return Vec::new();

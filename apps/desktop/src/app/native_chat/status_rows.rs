@@ -312,57 +312,63 @@ impl NativeChatView {
         // `tone_tile`, tone_card.rs).
         let detail_tone = p.card_muted;
         let hint = SharedString::from(match preview {
-            Some(first_line) if !first_line.is_empty() => format!("{label}\nFirst line: {first_line}"),
+            Some(first_line) if !first_line.is_empty() => {
+                format!("{label}\nFirst line: {first_line}")
+            }
             _ => label.clone(),
         });
         let retried = self.retried_delivery_notices.contains(message_id);
-        let trailing: Option<AnyElement> = if let Some((target_project, target_session, prompt_ids)) =
-            retry_target
-        {
-            if retried {
+        let trailing: Option<AnyElement> =
+            if let Some((target_project, target_session, prompt_ids)) = retry_target {
+                if retried {
+                    Some(
+                        card.pill(None, Some("Retried".to_string()), detail_tone, p)
+                            .into_any_element(),
+                    )
+                } else {
+                    let notice_id = message_id.to_string();
+                    Some(
+                        div()
+                            .id(SharedString::from(format!("delivery-retry:{message_id}")))
+                            .role(gpui::Role::Button)
+                            .aria_label("Retry")
+                            .flex_shrink_0()
+                            .px(px(8.0 * s))
+                            .py(px(3.0 * s))
+                            .rounded(px(6.0 * s))
+                            .text_size(px(12.0 * s))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(p.primary)
+                            .bg(p.primary.opacity(if p.light { 0.12 } else { 0.16 }))
+                            .hover(|style| {
+                                style.bg(p.primary.opacity(if p.light { 0.2 } else { 0.26 }))
+                            })
+                            .chat_cursor_pointer()
+                            .child("Retry")
+                            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+                                cx.stop_propagation();
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.retry_delivery_notice(
+                                    notice_id.clone(),
+                                    target_project.clone(),
+                                    target_session.clone(),
+                                    prompt_ids.clone(),
+                                    cx,
+                                );
+                            }))
+                            .into_any_element(),
+                    )
+                }
+            } else if !detail.is_empty() {
                 Some(
-                    card.pill(None, Some("Retried".to_string()), detail_tone, p)
+                    card.pill(None, Some(detail), detail_tone, p)
                         .into_any_element(),
                 )
             } else {
-                let notice_id = message_id.to_string();
-                Some(
-                    div()
-                        .id(SharedString::from(format!("delivery-retry:{message_id}")))
-                        .role(gpui::Role::Button)
-                        .aria_label("Retry")
-                        .flex_shrink_0()
-                        .px(px(8.0 * s))
-                        .py(px(3.0 * s))
-                        .rounded(px(6.0 * s))
-                        .text_size(px(12.0 * s))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(p.primary)
-                        .bg(p.primary.opacity(if p.light { 0.12 } else { 0.16 }))
-                        .hover(|style| style.bg(p.primary.opacity(if p.light { 0.2 } else { 0.26 })))
-                        .chat_cursor_pointer()
-                        .child("Retry")
-                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
-                            cx.stop_propagation();
-                        })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            cx.stop_propagation();
-                            this.retry_delivery_notice(
-                                notice_id.clone(),
-                                target_project.clone(),
-                                target_session.clone(),
-                                prompt_ids.clone(),
-                                cx,
-                            );
-                        }))
-                        .into_any_element(),
-                )
-            }
-        } else if !detail.is_empty() {
-            Some(card.pill(None, Some(detail), detail_tone, p).into_any_element())
-        } else {
-            None
-        };
+                None
+            };
         card.shell(div(), p)
             .id(SharedString::from(id))
             .role(gpui::Role::Status)

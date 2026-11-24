@@ -263,7 +263,10 @@ fn acp_profile_from_plan(plan: &Value, fam: &str) -> crate::acp::spec::AcpLaunch
             arr.iter()
                 .filter_map(|pair| {
                     let a = pair.as_array()?;
-                    Some((a.first()?.as_str()?.to_string(), a.get(1)?.as_str()?.to_string()))
+                    Some((
+                        a.first()?.as_str()?.to_string(),
+                        a.get(1)?.as_str()?.to_string(),
+                    ))
                 })
                 .collect()
         })
@@ -284,9 +287,7 @@ fn acp_profile_from_plan(plan: &Value, fam: &str) -> crate::acp::spec::AcpLaunch
         developer_instructions,
         gbot_chat: plan.get("acpGbotChat").and_then(Value::as_bool) == Some(true),
         gbot_api_chat: plan.get("acpGbotApiChat").and_then(Value::as_bool) == Some(true),
-        gbot_computer_use_off: plan
-            .get("acpGbotComputerUseOff")
-            .and_then(Value::as_bool)
+        gbot_computer_use_off: plan.get("acpGbotComputerUseOff").and_then(Value::as_bool)
             == Some(true),
         lean_worker: plan.get("acpLeanWorker").and_then(Value::as_bool) == Some(true),
     }
@@ -358,7 +359,11 @@ fn side_chat_plan(plan: &mut Value) {
         .unwrap_or_default()
         .to_string();
     if plan.get("acpFork").and_then(Value::as_bool) == Some(true) {
-        if let Some(fam) = plan.get("acpFamily").and_then(Value::as_str).map(str::to_string) {
+        if let Some(fam) = plan
+            .get("acpFamily")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+        {
             let cli_cmd = plan
                 .get("runtimeCommand")
                 .or_else(|| plan.get("baseCommand"))
@@ -372,8 +377,14 @@ fn side_chat_plan(plan: &mut Value) {
                 .get("acpReadOnly")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            let acp_model = plan.get("acpModel").and_then(Value::as_str).map(str::to_string);
-            let acp_effort = plan.get("acpEffort").and_then(Value::as_str).map(str::to_string);
+            let acp_model = plan
+                .get("acpModel")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let acp_effort = plan
+                .get("acpEffort")
+                .and_then(Value::as_str)
+                .map(str::to_string);
             let profile = acp_profile_from_plan(plan, &fam);
             let command = crate::acp::spec::build_acp_host_launch_command_with_profile(
                 &fam,
@@ -451,11 +462,17 @@ pub(crate) fn build_agent_fork_plan(
     } else {
         crate::storage::open_gxserver_database(&crate::paths::get_gxserver_paths(None))
             .ok()
-            .and_then(|db| crate::workspaces::project_workspace_info(&db, project).ok().flatten())
-            .map(|(workspace_id, workspace_name)| super::WorkspaceNoteContext {
-                workspace_id,
-                workspace_name,
+            .and_then(|db| {
+                crate::workspaces::project_workspace_info(&db, project)
+                    .ok()
+                    .flatten()
             })
+            .map(
+                |(workspace_id, workspace_name)| super::WorkspaceNoteContext {
+                    workspace_id,
+                    workspace_name,
+                },
+            )
     };
     let build_fork_profile = |fam: &str| -> crate::acp::spec::AcpLaunchProfile {
         let source_account_cmd =

@@ -508,15 +508,17 @@ pub(crate) fn retire_held_messages_of_closed_session_with_actor(
         return;
     };
     let held_prompts: Vec<(String, String)> =
-        crate::session_chat_queue::read_session_chat_queue_snapshot_with(&db, project_id, session_id)
-            .queue
-            .into_iter()
-            .filter(|prompt| {
-                prompt.startup_send
-                    && prompt.state == crate::session_chat_queue::SESSION_CHAT_QUEUE_STATE_QUEUED
-            })
-            .map(|prompt| (prompt.id, prompt.text))
-            .collect();
+        crate::session_chat_queue::read_session_chat_queue_snapshot_with(
+            &db, project_id, session_id,
+        )
+        .queue
+        .into_iter()
+        .filter(|prompt| {
+            prompt.startup_send
+                && prompt.state == crate::session_chat_queue::SESSION_CHAT_QUEUE_STATE_QUEUED
+        })
+        .map(|prompt| (prompt.id, prompt.text))
+        .collect();
     drop(db);
     let held: Vec<String> = held_prompts.iter().map(|(id, _)| id.clone()).collect();
     // When a coordinator resolves/closes a finished thread, drop retired held rows and any old

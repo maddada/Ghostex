@@ -20,9 +20,9 @@ use crate::{
         assign_machine_workspace_in, assign_remote_project_workspace_in, create_workspace_in,
         delete_workspace_in, delete_workspace_instructions_file, find_workspace_id,
         move_project_to_workspace, read_sidebar_workspaces, read_workspace_instructions_file,
-        reapply_workspace_defaults, resolve_project_reference, update_workspace_in,
-        workspace_name, write_sidebar_workspaces, write_workspace_instructions_file,
-        DEFAULT_WORKSPACE_ID, MAX_WORKSPACE_INSTRUCTIONS_BYTES,
+        reapply_workspace_defaults, resolve_project_reference, update_workspace_in, workspace_name,
+        write_sidebar_workspaces, write_workspace_instructions_file, DEFAULT_WORKSPACE_ID,
+        MAX_WORKSPACE_INSTRUCTIONS_BYTES,
     },
 };
 
@@ -38,8 +38,7 @@ fn workspace_write_gate(
     body_json: &Value,
 ) -> Option<RoutedResponse> {
     let allowed = caller.is_user_device()
-        && !(matches!(caller, Principal::LocalAgent)
-            && crate::audit::token_file_names_session());
+        && !(matches!(caller, Principal::LocalAgent) && crate::audit::token_file_names_session());
     if allowed {
         return None;
     }
@@ -65,16 +64,14 @@ fn workspace_write_gate(
         ),
         _ => ("workspace.write", "Refused changing a workspace"),
     };
-    let target = read_domain_rpc_params(body_json)
-        .ok()
-        .and_then(|params| {
-            params
-                .get("workspaceId")
-                .or_else(|| params.get("name"))
-                .or_else(|| params.get("projectId"))
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        });
+    let target = read_domain_rpc_params(body_json).ok().and_then(|params| {
+        params
+            .get("workspaceId")
+            .or_else(|| params.get("name"))
+            .or_else(|| params.get("projectId"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
     let mut action = audit::Action::new(kind, summary);
     if let Some(target) = target {
         action = action.target(target);
@@ -359,11 +356,8 @@ pub(super) async fn route_workspaces_http(
                         .get("content")
                         .and_then(Value::as_str)
                         .unwrap_or_default();
-                    let (saved, path, exists) = write_workspace_instructions_file(
-                        &state.paths,
-                        &workspace_id,
-                        content,
-                    )?;
+                    let (saved, path, exists) =
+                        write_workspace_instructions_file(&state.paths, &workspace_id, content)?;
                     Ok(json!({
                         "workspaceId": workspace_id,
                         "name": workspace_name(&workspaces, &workspace_id),

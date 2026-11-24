@@ -52,12 +52,10 @@ mod session_handoff_modal;
 #[path = "../ui_fonts.rs"]
 mod ui_fonts;
 // DEMO-MODULES: one `#[path]` include per converted modal, plus its demo module under native_modal_demo/.
-#[path = "native_modal_demo/account_switch.rs"]
-mod account_switch_demo;
-#[path = "native_modal_demo/theme_modals_showcase.rs"]
-mod theme_modals_showcase_demo;
 #[path = "../app/native_chat/account_switch_card_view.rs"]
 mod account_switch_card_view;
+#[path = "native_modal_demo/account_switch.rs"]
+mod account_switch_demo;
 #[path = "native_modal_demo/add_project.rs"]
 mod add_project_demo;
 #[path = "../app/window/add_project_modal/mod.rs"]
@@ -118,6 +116,10 @@ mod header_more_demo;
 mod missing_project_folder_demo;
 #[path = "../app/window/missing_project_folder_modal.rs"]
 mod missing_project_folder_modal;
+#[path = "native_modal_demo/native_mode_intro.rs"]
+mod native_mode_intro_demo;
+#[path = "../app/window/native_mode_intro_modal.rs"]
+mod native_mode_intro_modal;
 #[path = "native_modal_demo/new_bot.rs"]
 mod new_bot_demo;
 #[path = "../app/window/new_bot_modal.rs"]
@@ -160,10 +162,6 @@ mod popup_dismissal;
 mod rail_intro_demo;
 #[path = "../app/window/rail_intro_modal.rs"]
 mod rail_intro_modal;
-#[path = "native_modal_demo/native_mode_intro.rs"]
-mod native_mode_intro_demo;
-#[path = "../app/window/native_mode_intro_modal.rs"]
-mod native_mode_intro_modal;
 #[path = "native_modal_demo/remote_gxserver_install.rs"]
 mod remote_gxserver_install_demo;
 #[path = "../app/window/remote_gxserver_install_modal.rs"]
@@ -190,11 +188,13 @@ mod session_note_modal;
 mod settings_demo;
 #[path = "../app/window/settings_modal/mod.rs"]
 mod settings_modal;
+#[path = "native_modal_demo/theme_modals_showcase.rs"]
+mod theme_modals_showcase_demo;
 // The chat header's Share popover (Ghostex Collab), drawn from the app's own view.
-#[path = "native_modal_demo/share_popover.rs"]
-mod share_popover_demo;
 #[path = "native_modal_demo/share_link_popover.rs"]
 mod share_link_popover_demo;
+#[path = "native_modal_demo/share_popover.rs"]
+mod share_popover_demo;
 #[path = "../app/window/share_popover_view.rs"]
 mod share_popover_view;
 // The work area header's jobs button and popover, drawn from the app's own view.

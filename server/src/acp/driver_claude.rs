@@ -1176,7 +1176,8 @@ fn spawn_and_init_claude(
                                     // Track that follow-up turn so its `result` is not ignored and live
                                     // activity stays `working` until it finishes.
                                     let started = {
-                                        let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                        let mut s =
+                                            st_out.lock().unwrap_or_else(|p| p.into_inner());
                                         s.compacting = false;
                                         s.compacting_started_at = None;
                                         if !s.working {
@@ -1724,7 +1725,12 @@ fn drain_or_restart_claude_turn(
     // Claude under a fresh generation so every future `result` maps 1:1 to a new turn.
     let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
     *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
-    stop_claude_gracefully(&proc.transport, &mut proc.child, &mut proc.lifetime, child_pid);
+    stop_claude_gracefully(
+        &proc.transport,
+        &mut proc.child,
+        &mut proc.lifetime,
+        child_pid,
+    );
     let (resume_id, model, effort, read_only, level) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.working = false;
@@ -1946,7 +1952,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         if let Some(mut retry_user_msg) = retry_msg {
             let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
             *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
-            stop_claude_gracefully(&proc.transport, &mut proc.child, &mut proc.lifetime, &child_pid);
+            stop_claude_gracefully(
+                &proc.transport,
+                &mut proc.child,
+                &mut proc.lifetime,
+                &child_pid,
+            );
             let (resume_id, model, effort, read_only, level) = {
                 let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                 s.child_pid = 0;
@@ -2040,7 +2051,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             thread::sleep(Duration::from_millis(500));
             let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
             *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
-            stop_claude_gracefully(&proc.transport, &mut proc.child, &mut proc.lifetime, &child_pid);
+            stop_claude_gracefully(
+                &proc.transport,
+                &mut proc.child,
+                &mut proc.lifetime,
+                &child_pid,
+            );
             let (resume_id, model, effort, read_only, level) = {
                 let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                 s.working = false;
@@ -2613,7 +2629,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     }
                     shutting_down.store(true, Ordering::Release);
                     process_gen.fetch_add(1, Ordering::AcqRel);
-                    stop_claude_gracefully(&proc.transport, &mut proc.child, &mut proc.lifetime, &child_pid);
+                    stop_claude_gracefully(
+                        &proc.transport,
+                        &mut proc.child,
+                        &mut proc.lifetime,
+                        &child_pid,
+                    );
                     ep.ack(
                         id,
                         true,
@@ -2675,7 +2696,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
 
     shutting_down.store(true, Ordering::Release);
     process_gen.fetch_add(1, Ordering::AcqRel);
-    stop_claude_gracefully(&proc.transport, &mut proc.child, &mut proc.lifetime, &child_pid);
+    stop_claude_gracefully(
+        &proc.transport,
+        &mut proc.child,
+        &mut proc.lifetime,
+        &child_pid,
+    );
     if let Some(ep) = endpoint.as_ref() {
         ep.close_channel();
     }

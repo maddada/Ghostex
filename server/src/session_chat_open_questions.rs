@@ -1622,7 +1622,8 @@ pub(crate) fn refresh(
         // resurrect as pink pings later, while any new questions asked after it resolved (e.g. if
         // the user continues chatting with it directly) still count and notify.
         if let Some(cutoff_ms) = resolved_cutoff_ms {
-            let after_resolve = |asker: &OpenAsker| asker.asked_at().is_some_and(|at| at > cutoff_ms);
+            let after_resolve =
+                |asker: &OpenAsker| asker.asked_at().is_some_and(|at| at > cutoff_ms);
             open.retain(after_resolve);
             newly.retain(after_resolve);
         }
