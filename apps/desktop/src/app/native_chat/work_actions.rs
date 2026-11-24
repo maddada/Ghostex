@@ -348,6 +348,60 @@ impl NativeChatView {
         })
     }
 
+    /// Quiet neutral "Details" button beside a folded row's answer buttons, opening the full
+    /// floating details panel (`open_dock_ask_modal`).
+    ///
+    /// CDXC:Coordinators 2026-11-24 DECISION:
+    /// User (ask-details-page, Q1 C "Answers on row + button to open details", Q2 "Details"):
+    /// keep answer buttons visible on the folded row and put a quiet neutral "Details" button
+    /// beside them to open the full details panel, rather than hiding answers behind an icon.
+    pub(super) fn dock_details_button(
+        &self,
+        key: &str,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let (button_height, button_radius) = super::tone_card::button_metrics();
+        let shown = key.to_string();
+        let rest = p.foreground.opacity(if p.light { 0.04 } else { 0.05 });
+        let hover = p.foreground.opacity(if p.light { 0.09 } else { 0.10 });
+        let active = p.foreground.opacity(if p.light { 0.13 } else { 0.15 });
+        let border = p.foreground.opacity(if p.light { 0.14 } else { 0.12 });
+        let hover_text = p.foreground;
+        div()
+            .id(gpui::SharedString::from(format!("work-row-details:{key}")))
+            .role(gpui::Role::Button)
+            .aria_label("Details")
+            .h(px(button_height * s))
+            .px(px(11.0 * s))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(button_radius * s))
+            .border_1()
+            .border_color(border)
+            .bg(rest)
+            .text_size(px(PROSE_SIZE * s))
+            .font_weight(gpui::FontWeight::NORMAL)
+            .text_color(p.card_muted)
+            .chat_cursor_pointer()
+            .hover(move |style| style.bg(hover).text_color(hover_text))
+            .active(move |style| style.bg(active).text_color(hover_text))
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Details")
+                    .keys(super::composer::hotkey_chord(Some("inboxOpenItem")))
+                    .build(window, cx)
+            })
+            .child("Details")
+            .on_click(cx.listener(move |this, _, window, cx| {
+                cx.stop_propagation();
+                this.open_dock_ask_modal(&shown, window, cx);
+            }))
+            .into_any_element()
+    }
+
     /// A dock row's (or a Work panel Needs you card's) one action in its answers' place, as an
     /// icon button: Details for anything that opens something (a question with details, which
     /// opens its panel; a form or page, which opens itself), one icon for all of them, or Reply

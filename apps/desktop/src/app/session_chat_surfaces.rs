@@ -707,6 +707,68 @@ impl GhostexGpuiApp {
         });
     }
 
+    /// Opens the first open ask's details floating panel for `sidebar_session_id` after a
+    /// notification click: immediately if its chat view is already visible, else as soon as
+    /// `reconcile_agents_chat_surfaces` mounts or shows it.
+    pub(crate) fn request_open_notification_ask_details(
+        &mut self,
+        sidebar_session_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let trimmed = sidebar_session_id.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        self.pending_notification_ask_session =
+            Some((trimmed.to_string(), web_time::Instant::now()));
+        let visible = self.native_chat_visible_sessions.clone();
+        self.flush_pending_notification_ask_details(&visible, cx);
+    }
+
+    fn flush_pending_notification_ask_details(
+        &mut self,
+        visible_session_ids: &HashSet<TerminalSessionId>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some((target_id, at)) = self.pending_notification_ask_session.as_ref() else {
+            return;
+        };
+        if at.elapsed().as_secs() > 8 {
+            self.pending_notification_ask_session = None;
+            return;
+        }
+        let target_id = target_id.clone();
+        let matched = visible_session_ids.iter().copied().find(|shell_id| {
+            self.workspace_terminal_key_for_shell_session(*shell_id)
+                .is_some_and(|key| {
+                    let sidebar_id = match key {
+                        GpuiWorkspaceTerminalSessionKey::Local(local) => {
+                            gpui_combined_presentation_session_id(
+                                &local.project_id,
+                                &local.session_id,
+                            )
+                        }
+                        GpuiWorkspaceTerminalSessionKey::Remote(remote) => {
+                            gpui_remote_scoped_session_id(
+                                &remote.remote_machine_id,
+                                &remote.project_id,
+                                &remote.session_id,
+                            )
+                        }
+                    };
+                    sidebar_id == target_id
+                })
+        });
+        let Some(shell_id) = matched else {
+            return;
+        };
+        let Some(view) = self.native_chat_views.get(&shell_id).cloned() else {
+            return;
+        };
+        self.pending_notification_ask_session = None;
+        view.update(cx, |view, cx| view.request_open_first_ask_details(cx));
+    }
+
     pub(crate) fn reconcile_agents_chat_surfaces(&mut self, cx: &mut gpui::Context<Self>) {
         // Drop chat state for sessions that no longer exist in the shell.
         let live_session_ids = self
@@ -755,6 +817,7 @@ impl GhostexGpuiApp {
         for session_id in &visible_session_ids {
             self.ensure_native_chat(*session_id, cx);
         }
+        self.flush_pending_notification_ask_details(&visible_session_ids, cx);
         // CDXC:SessionChat 2026-09-24 WHY:
         // A parked chat view keeps applying state without repainting (notify_if_shown), so its cached paint is from whenever it was last visible. Without a notify when it becomes visible again, a session switch's first frame was that stale paint and the follow-tail reposition landed frames later: the flicker of switching between chats.
         for session_id in visible_session_ids.difference(&self.native_chat_visible_sessions) {

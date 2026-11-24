@@ -361,6 +361,7 @@ impl GhostexGpuiApp {
                 untouched_agent_chats: Vec::new(),
                 agents_chat_reconcile_scheduled: false,
                 native_chat_views: HashMap::new(),
+                pending_notification_ask_session: None,
                 session_details: Default::default(),
                 header_pins: Default::default(),
                 background_jobs: Default::default(),

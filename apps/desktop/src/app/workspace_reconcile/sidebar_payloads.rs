@@ -141,6 +141,7 @@ impl GhostexGpuiApp {
                 crate::app::gx_store::RowFocusOptions::default(),
                 cx,
             );
+            app.request_open_notification_ask_details(&session.to_sidebar_session_id(), cx);
         });
     }
 

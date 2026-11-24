@@ -42,6 +42,8 @@ struct OpenTarget {
     account_id: Option<String>,
     /// Set on security rows: open Settings > Security, not a session.
     security: bool,
+    /// Needs-input / question notification: also open the question's details panel on desktop.
+    needs_input: bool,
 }
 
 impl OpenTarget {
@@ -65,6 +67,7 @@ impl OpenTarget {
                 .to_string(),
             account_id: item["accountId"].as_str().map(str::to_string),
             security: item["securityEntry"].is_u64(),
+            needs_input: item["kind"].as_str() == Some("needsInput"),
         })
     }
 
@@ -77,6 +80,8 @@ impl OpenTarget {
             session_id: session_id.to_string(),
             account_id: item.account_id.clone(),
             security: item.security_entry.is_some(),
+            needs_input: item.kind
+                == crate::notification_feed::GpuiNotificationFeedKind::NeedsInput,
         }
     }
 }
@@ -534,6 +539,9 @@ impl GhostexGpuiApp {
                 },
                 cx,
             );
+            if target.needs_input {
+                self.request_open_notification_ask_details(&session.to_sidebar_session_id(), cx);
+            }
             return;
         }
         let Some(route) = self.gx_store_notification_feed_route(&target.machine) else {
@@ -578,6 +586,7 @@ impl GhostexGpuiApp {
             return;
         }
         let session = self.resolve_notification_open_session(&target);
+        let needs_input = target.needs_input;
         let machine = target.machine;
         cx.spawn(async move |this, cx| {
             let marked = update_notification_feed(route, mark_read).await;
@@ -588,6 +597,12 @@ impl GhostexGpuiApp {
                 // CDXC:Notifications 2026-10-18 DECISION:
                 // User: "when i click on a notification from another machine please switch the sidebar to show that other machine". The switch, the focus and the reveal are one shared step (gx_store/activation_focus.rs) that an OS banner's click takes too (issue #401: the banner used to focus only).
                 this.gx_store_show_session_on_its_machine(&session, RowFocusOptions::default(), cx);
+                if needs_input {
+                    this.request_open_notification_ask_details(
+                        &session.to_sidebar_session_id(),
+                        cx,
+                    );
+                }
             });
         })
         .detach();

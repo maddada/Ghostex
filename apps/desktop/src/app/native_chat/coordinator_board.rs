@@ -536,6 +536,9 @@ pub(crate) struct CoordinatorBoardView {
     /// The panel's window once open, and while it opens.
     pub(super) dock_modal_window: Option<gpui::AnyWindowHandle>,
     pub(super) dock_modal_opening: bool,
+    /// Pending open of the first open ask's details panel after clicking a notification for this
+    /// session (dock_ask_modal.rs `request_open_first_ask_details`).
+    pub(super) pending_open_ask_details: Option<web_time::Instant>,
     /// Whether the panel's last left press began on one of its controls that close it
     /// (dock_ask_modal.rs `closes_panel`): a drag that only ends on one selected text, and
     /// leaves the panel open.

@@ -1973,9 +1973,15 @@ impl NativeChatView {
         // The answers, the look every place shares (work_actions.rs); a row with none shows what
         // it asks for in their place (Open or Reply).
         let answers: Vec<Value> = row["buttons"].as_array().cloned().unwrap_or_default();
-        // A question with details shows Details in its answers' place: they wait in its panel,
-        // under what the reader needs to read first.
-        let action = if row["details"] == true || (answers.is_empty() && row["needs"] == true) {
+        // CDXC:Coordinators 2026-11-24 DECISION (ask-details-page, Layout C + "Details"):
+        // Keep the answer buttons visible on the folded row and show a quiet neutral "Details"
+        // button beside them to open the full floating panel. Live pages and forms (`row["open"]`)
+        // still use their direct icon action when they have no inline answers.
+        let has_details_button = row["details"] == true
+            && !row["open"].is_object()
+            && !settled
+            && look.buttons.is_none();
+        let action = if answers.is_empty() && row["needs"] == true && !has_details_button {
             dock_row_action(row)
         } else {
             None
@@ -1987,6 +1993,7 @@ impl NativeChatView {
         // CDXC:Coordinators 2026-11-12 DECISION:
         // User, of a form's row with only Open: "i can't reply to this or mention it :> pls fix".
         let reply_answer = ((!answers.is_empty()
+            || has_details_button
             || matches!(action, Some("Open" | "Answer" | "Details")))
             && row["reply"].is_object())
         .then(|| Self::reply_answer(&row["reply"], &text(row, "replied"), busy));
@@ -2009,7 +2016,7 @@ impl NativeChatView {
         } else {
             row_width - DOCK_LEAD - age_width - row_width / 2.0
         };
-        // Details (and Reply) are icon buttons, as wide as they are tall.
+        // Open and Reply are icon buttons, as wide as they are tall.
         let icon_width = Self::tone_button_height();
         let widths: Vec<f32> = match &action {
             Some(_) => vec![icon_width],
@@ -2029,6 +2036,13 @@ impl NativeChatView {
         // Reply always shows: it is the one answer that takes anything, so a row keeps it one
         // click away.
         let reply_width = reply_answer.as_ref().map_or(0.0, |_| icon_width + 6.0);
+        // Quiet "Details" button beside the answers when the question has longer details.
+        let details_width = if has_details_button {
+            dock_button_width("Details", false, false, p, cx) + 6.0
+        } else {
+            0.0
+        };
+        let reply_width = reply_width + details_width;
         // Jump to context before Reply, on a row whose asking message is in another chat (gx-chat-core
         // `work_cards::context_of`).
         let context_button = if look.buttons.is_some() || settled {
@@ -2075,6 +2089,9 @@ impl NativeChatView {
             None if fold => vec![self.answers_dropdown(&key, &answers, busy, p, cx)],
             None => self.work_answer_buttons(&key, &answers, busy, p, cx),
         });
+        if has_details_button {
+            buttons.push(self.dock_details_button(&key, p, cx));
+        }
         // Reply is always the rightmost button, whatever stands before it (answers, Details, Jump
         // to context), so it never shifts between rows.
         //
@@ -2298,12 +2315,11 @@ impl NativeChatView {
         };
         let right_row = row.clone();
         let line = head.child(age_menu);
-        // Wrapped (a Work panel card), a question with details shows their first line under its
-        // title, cut at one line, so the card says what Details holds (gx-chat-core
-        // `details_fields`). A short description that is not Details is the row's second line
-        // everywhere, its answers still on the row (`details_fields`' 2026-11-20 decision).
+        // A question's first description line shows quietly under its title in both the Inbox and
+        // the Work panel, cut at one line, while the quiet Details button opens the full text
+        // (CDXC:Coordinators 2026-11-24, Layout C).
         let preview = text(row, "preview");
-        let preview = ((wrap || row["details"] != true) && !preview.is_empty()).then(|| {
+        let preview = (!preview.is_empty()).then(|| {
             div()
                 .min_w_0()
                 .pl(px(DOCK_LEAD * s))

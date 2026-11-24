@@ -59,6 +59,12 @@ static VISUAL: LazyLock<Visual> = LazyLock::new(|| {
     .expect("shared notice tone table")
 });
 
+/// Shared button `(height, radius)` from `notice-tone.json`, for compact work-row buttons
+/// that share the same visual height and rounding as `tone_button`.
+pub(super) fn button_metrics() -> (f32, f32) {
+    (VISUAL.shell.button_height, VISUAL.shell.button_radius)
+}
+
 fn hex(color: &str) -> Option<Hsla> {
     u32::from_str_radix(color.trim_start_matches('#'), 16)
         .ok()

@@ -395,6 +395,36 @@ impl NativeChatView {
             .cloned()
     }
 
+    /// First open ask row in `workDock.rows` that carries details to show when a notification
+    /// opens this session (`request_open_first_ask_details`).
+    fn first_ask_details_key(&self) -> Option<String> {
+        self.snapshot["workDock"]["rows"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|row| {
+                matches!(row["kind"].as_str(), Some("ask" | "question"))
+                    && (row["details"] == true || !text(row, "body").trim().is_empty())
+                    && row["settled"] != true
+            })
+            .and_then(|row| row["key"].as_str().map(str::to_string))
+    }
+
+    /// Opens the first open ask's details panel right away when its dock row is already loaded,
+    /// or arms a short-lived pending request so it opens as soon as the session's snapshot arrives
+    /// (called when clicking a desktop notification for a session that needs input).
+    pub(crate) fn request_open_first_ask_details(&mut self, cx: &mut Context<Self>) {
+        if self.board.dock_modal.is_some() {
+            return;
+        }
+        if let Some(key) = self.first_ask_details_key() {
+            self.board.pending_open_ask_details = None;
+            self.open_dock_ask_modal_cx(&key, cx);
+        } else {
+            self.board.pending_open_ask_details = Some(web_time::Instant::now());
+        }
+    }
+
     /// Closes the panel once its ask has left the dock or a Reply sent from it was taken, as soon
     /// as the chat's snapshot says so (`NativeChatView::apply_output`), whether or not the panel's
     /// own window draws again. An ask the coordinator, the phone or another computer settled while
@@ -402,6 +432,14 @@ impl NativeChatView {
     /// "Withdrawn". A row that left for another reason (snoozed elsewhere, a refresh) closes it
     /// quietly.
     pub(super) fn sync_dock_ask_modal(&mut self, cx: &mut Context<Self>) {
+        if let Some(at) = self.board.pending_open_ask_details {
+            if at.elapsed().as_secs() > 8 || self.board.dock_modal.is_some() {
+                self.board.pending_open_ask_details = None;
+            } else if let Some(key) = self.first_ask_details_key() {
+                self.board.pending_open_ask_details = None;
+                self.open_dock_ask_modal_cx(&key, cx);
+            }
+        }
         let Some(key) = self.board.dock_modal.clone() else {
             return;
         };
@@ -430,6 +468,10 @@ impl NativeChatView {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.open_dock_ask_modal_cx(key, cx);
+    }
+
+    pub(super) fn open_dock_ask_modal_cx(&mut self, key: &str, cx: &mut Context<Self>) {
         self.board.dock_modal = Some(key.to_owned());
         self.board.dock_modal_replied = self
             .dock_ask_row()

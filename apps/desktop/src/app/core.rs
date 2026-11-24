@@ -589,6 +589,9 @@ pub struct GhostexGpuiApp {
     pub(crate) agents_chat_reconcile_scheduled: bool,
     pub(crate) native_chat_views:
         HashMap<TerminalSessionId, Entity<super::native_chat::state::NativeChatView>>,
+    /// Session whose first open ask details panel should open once its chat view is visible after
+    /// clicking a notification (`session_chat_surfaces.rs`).
+    pub(crate) pending_notification_ask_session: Option<(String, web_time::Instant)>,
     /// The header's Session details button (session_chat/session_details.rs).
     pub(crate) session_details: super::session_chat::session_details::SessionDetailsSwitch,
     /// The header's ⋯ menu for this window (render/workarea_header/header_pins.rs).
