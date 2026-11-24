@@ -21,6 +21,7 @@ USAGE
   ghostex coordinator link <session-ref> [--task <text>] [--coordinator <ref>]
   ghostex coordinator unlink <thread-ref> [--coordinator <ref>] [--json]
   ghostex coordinator rename-self "<title>" [--json]
+  ghostex coordinator note "<commit> <one line>" [--json]
   ghostex coordinator next-tag [--json] [--coordinator <ref>]
   ghostex coordinator rename <thread-ref> "<title>" [--coordinator <ref>] [--json]
   ghostex coordinator resolve <thread-ref> [--keep-open] [--json]

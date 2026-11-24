@@ -864,6 +864,16 @@ pub(super) async fn route_sessions_http(
             )
             .await
         }
+        "/api/sendCoordinatorThreadNote" => {
+            coordinator_runtime::handle_send_coordinator_thread_note_http(
+                &state,
+                &caller,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/acknowledgeCoordinatorThreads" => {
             let params = match read_domain_rpc_params(&body_json) {
                 Ok(params) => params,

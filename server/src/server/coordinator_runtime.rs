@@ -2383,6 +2383,172 @@ pub(crate) fn handle_coordinator_http(
     Ok(output.result)
 }
 
+/// `/api/sendCoordinatorThreadNote`: a thread sends its coordinator a short one-line note right
+/// after a push (`ghostex coordinator note "<commit> <one line>"`), recording it on the thread row
+/// (for `coordinator status`) and waking/delivering it to the coordinator immediately while
+/// keeping `agents send` and raw writes refused (`coordinators/thread_messages.rs`).
+pub(crate) async fn handle_send_coordinator_thread_note_http(
+    state: &Arc<AppState>,
+    caller: &crate::security::Principal,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let fail = |error: DomainStateError| {
+        domain_error_response(endpoint_path.clone(), request_id.clone(), error)
+    };
+    let params = match crate::domain::read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return fail(error),
+    };
+    let param = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    let (project_id, session_id) = match caller {
+        crate::security::Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } => {
+            if let Some(given_project) = param("projectId") {
+                if given_project != *project_id {
+                    return fail(DomainStateError {
+                        code: "forbidden",
+                        message: "A session can only send coordinator notes for itself.".into(),
+                    });
+                }
+            }
+            if let Some(given_session) = param("sessionId") {
+                if given_session != *session_id {
+                    return fail(DomainStateError {
+                        code: "forbidden",
+                        message: "A session can only send coordinator notes for itself.".into(),
+                    });
+                }
+            }
+            (project_id.clone(), session_id.clone())
+        }
+        _ => match (param("projectId"), param("sessionId")) {
+            (Some(project_id), Some(session_id)) => (project_id, session_id),
+            _ => {
+                return fail(DomainStateError::bad_request(
+                    "Sending a coordinator note needs projectId and sessionId.",
+                ))
+            }
+        },
+    };
+    let note = param("note")
+        .map(|text| text.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|text| !text.is_empty());
+    let Some(note) = note else {
+        return fail(DomainStateError::bad_request(
+            "Give a short one-line note (e.g. \"<commit> <what landed>\").",
+        ));
+    };
+    if note.chars().count() > coordinators::COORDINATOR_THREAD_NOTE_MAX_CHARS {
+        return fail(DomainStateError::bad_request(format!(
+            "Keep the note to one line under {} characters.",
+            coordinators::COORDINATOR_THREAD_NOTE_MAX_CHARS
+        )));
+    }
+
+    let db_state = state.clone();
+    let db_project = project_id.clone();
+    let db_session = session_id.clone();
+    let db_note = note.clone();
+    let prepared = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&db_state.paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, db_state.metadata.server_id.as_str());
+        let thread =
+            coordinators::read_thread(&db, &db_project, &db_session)?.ok_or_else(|| {
+                DomainStateError::not_found(
+                "This session is not a coordinator's thread, so `coordinator note` does not apply.",
+            )
+            })?;
+        if thread.is_resolved() {
+            return Err(DomainStateError::bad_request(
+                "This thread is already marked done, so its note was not sent.",
+            ));
+        }
+        let session = repository
+            .get_session(&thread.project_id, &thread.session_id)?
+            .ok_or_else(|| DomainStateError::not_found("The thread's session no longer exists."))?;
+        let coordinator_key = thread.coordinator_key();
+        if repository
+            .get_session(&coordinator_key.0, &coordinator_key.1)?
+            .is_none()
+        {
+            return Err(DomainStateError::not_found(
+                "The coordinator session no longer exists.",
+            ));
+        }
+        let project = repository.get_project(&thread.project_id).ok().flatten();
+        let names = agent_names(&repository);
+        let sender = session_sender(&db_state, project.as_ref(), &session, &thread.key(), &names);
+        let recorded_at = coordinators::record_thread_note(
+            &db,
+            &thread.project_id,
+            &thread.session_id,
+            &db_note,
+        )?;
+        let coordinator_ref = crate::ids::create_global_session_ref(
+            db_state.metadata.server_id.as_str(),
+            &coordinator_key.0,
+            &coordinator_key.1,
+        );
+        Ok::<_, DomainStateError>((coordinator_key, sender, recorded_at, coordinator_ref))
+    })
+    .await;
+
+    let (coordinator_key, sender, recorded_at, coordinator_ref) = match prepared {
+        Ok(Ok(prepared)) => prepared,
+        Ok(Err(error)) => return fail(error),
+        Err(error) => {
+            return fail(DomainStateError {
+                code: "internalError",
+                message: format!("Coordinator note task failed: {error}"),
+            })
+        }
+    };
+
+    let body_text = coordinators::note_report_body(&note);
+    let message = agent_message(&sender, &body_text);
+    let send_request_id = Uuid::new_v4().to_string();
+    if let Err(error) =
+        send_to_coordinator(state, &coordinator_key, &message, &send_request_id).await
+    {
+        return fail(DomainStateError {
+            code: "deliveryFailed",
+            message: format!(
+                "Recorded the note, but could not deliver it to the coordinator: {}",
+                error.trim()
+            ),
+        });
+    }
+
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(
+            request_id,
+            json!({
+                "ok": true,
+                "note": note,
+                "recordedAt": recorded_at,
+                "coordinatorRef": coordinator_ref,
+            }),
+        ),
+    )
+}
+
 #[cfg(test)]
 mod skill_only_start_tests {
     use super::prepare_coordinator_create_params;

@@ -716,3 +716,36 @@ pub(super) fn rename_self(parsed: &ParsedArgs) -> CliResult<()> {
     }
     Ok(())
 }
+
+/// `note` is a thread sending its coordinator a short push/progress note right after a push
+/// (`server/src/server/coordinator_runtime.rs` `/api/sendCoordinatorThreadNote`).
+pub(super) fn send_note(parsed: &ParsedArgs) -> CliResult<()> {
+    let note = parsed.rest.join(" ");
+    let note = note.trim();
+    if note.is_empty() {
+        return Err(CliError::Other(
+            "Usage: ghostex coordinator note \"<commit> <one line>\" [--json]".into(),
+        ));
+    }
+    let caller = agents::caller()?;
+    let global_ref = agents::text(&caller, "globalRef").to_string();
+    let flags = agents::inventory_flags(&server_flags(&parsed.flags), &global_ref)?;
+    let result = call_gxserver_rpc(
+        "/api/sendCoordinatorThreadNote",
+        &json!({
+            "projectId": caller["projectId"],
+            "sessionId": caller["sessionId"],
+            "note": note,
+        }),
+        &flags,
+    )?;
+    if parsed.flags.truthy("json") {
+        print_json(&result);
+    } else {
+        println!(
+            "Sent note to coordinator: {}",
+            agents::text(&result, "note")
+        );
+    }
+    Ok(())
+}

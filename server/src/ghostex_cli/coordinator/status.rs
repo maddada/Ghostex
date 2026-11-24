@@ -78,6 +78,20 @@ fn headline(text: &str, max: usize) -> String {
     crate::coordinators::report_headline(text, max)
 }
 
+/// The thread's latest `ghostex coordinator note` text when it is newer than its last final report.
+fn push_note_since_report(thread: &Value) -> Option<&str> {
+    let note = agents::text(thread, "lastNote");
+    if note.is_empty() {
+        return None;
+    }
+    let note_at = agents::text(thread, "lastNoteAt");
+    let reported_at = agents::text(thread, "reportedAt");
+    if !reported_at.is_empty() && !note_at.is_empty() && note_at <= reported_at {
+        return None;
+    }
+    Some(note)
+}
+
 /// One live thread on one line: state, short ref, title and what to know about it now.
 fn thread_line(thread: &Value) -> String {
     let state = agents::text(thread, "state");
@@ -97,6 +111,9 @@ fn thread_line(thread: &Value) -> String {
             }
             if !clock.is_empty() {
                 line.push_str(&format!("  ({})", clock.join(", ")));
+            }
+            if let Some(note) = push_note_since_report(thread) {
+                line.push_str(&format!("  pushed: {}", headline(note, 70)));
             }
             if thread["stalled"] == true {
                 line.push_str(if thread["stuck"] == true {
@@ -664,6 +681,13 @@ pub(super) fn thread_brief(parsed: &ParsedArgs, reference: Option<&str>) -> CliR
     let waiting_for = agents::text(&thread, "waitingFor");
     if !waiting_for.is_empty() {
         println!("Waiting for you: {}", headline(waiting_for, 240));
+    }
+    let last_note = agents::text(&thread, "lastNote");
+    if !last_note.is_empty() {
+        let when = age(agents::text(&thread, "lastNoteAt"))
+            .map(|ago| format!(" ({ago} ago)"))
+            .unwrap_or_default();
+        println!("Last push{when}: {}", headline(last_note, 160));
     }
     if report.is_empty() {
         println!("Task: {}", headline(agents::text(&thread, "task"), 200));

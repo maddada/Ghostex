@@ -59,7 +59,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             }
             println!("\nFull reference: ghostex coordinator --help --all.");
         } else {
-            println!("ghostex coordinator: manage a coordinator and its threads.\n  create | promote | make-main | options | list | status | start-thread\n  link | unlink | rename | rename-self | resolve | reopen\n  item | board | remember | forget | set-goal | set-instructions\n  guide | playbook | set-playbook | next-tag\n  <verb> --help shows its usage; --help --all shows the full reference.");
+            println!("ghostex coordinator: manage a coordinator and its threads.\n  create | promote | make-main | options | list | status | start-thread\n  link | unlink | rename | rename-self | note | resolve | reopen\n  item | board | remember | forget | set-goal | set-instructions\n  guide | playbook | set-playbook | next-tag\n  <verb> --help shows its usage; --help --all shows the full reference.");
         }
         return Ok(());
     }
@@ -80,6 +80,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "unlink" => threads::unlink(&parsed),
         "rename" => threads::rename(&parsed),
         "rename-self" => threads::rename_self(&parsed),
+        "note" => threads::send_note(&parsed),
         "resolve" | "reopen" => threads::set_resolved(&parsed, command == "resolve"),
         "sleep-inactive-threads" => sleep_threads::sleep_inactive_threads(&parsed),
         "acknowledge-threads" => acknowledge_threads::acknowledge_threads(&parsed),
@@ -967,6 +968,13 @@ pub(super) fn print_status(view: &Value, all: bool) {
             let waiting_for = agents::text(thread, "waitingFor");
             if !waiting_for.is_empty() {
                 println!("      waiting for: {}", first_line(waiting_for, 160));
+            }
+            let last_note = agents::text(thread, "lastNote");
+            if !last_note.is_empty() {
+                let ago = time_ago(agents::text(thread, "lastNoteAt"))
+                    .map(|ago| format!(" ({ago})"))
+                    .unwrap_or_default();
+                println!("      last push{ago}: {}", first_line(last_note, 160));
             }
             let report = agents::text(thread, "lastReport");
             if !report.is_empty() && state != "waiting" {

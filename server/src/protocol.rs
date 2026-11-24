@@ -610,6 +610,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/unlinkCoordinatorThread"
         | "/api/setCoordinatorThreadResolved"
         | "/api/renameCoordinatorThread"
+        | "/api/sendCoordinatorThreadNote"
         | "/api/coordinatorThreadTitleReminder"
         | "/api/checkAgentSessionWrite"
         // The coordinator's board (coordinators/board.rs): its items carry ids and bounded text.

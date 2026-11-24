@@ -792,6 +792,12 @@ pub fn thread_view(
         "resolvedAt": thread.resolved_at,
         "lastReport": thread.last_report,
     });
+    if let Some(note) = thread.last_note.as_deref().filter(|note| !note.is_empty()) {
+        view["lastNote"] = json!(note);
+    }
+    if let Some(at) = thread.last_note_at.as_deref().filter(|at| !at.is_empty()) {
+        view["lastNoteAt"] = json!(at);
+    }
     if let Some(session) = session.as_ref() {
         view["title"] = json!(session_title_of(session));
         view["agentId"] = session.get("agentId").cloned().unwrap_or(Value::Null);

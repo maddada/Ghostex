@@ -37,10 +37,15 @@ quoted heredoc, `--body-file - <<'EOF'`, never inside double quotes: the shell r
 command there before ghostex starts, and your turn and the user's messages wait on it.
 
 - **Answer it yourself:** a quick question, a status check, a read-only lookup of a few commands.
-- **Reuse a thread** for a follow-up in its area: `ghostex agents send <thread ref> "<message>"`. It
-  keeps its context; a message to a resolved thread reopens it under you.
+- **Reuse a thread** for an idle or finished thread's follow-up in its area:
+  `ghostex agents send <thread ref> "<message>"`. It keeps its context; a message to a resolved
+  thread reopens it under you. When that thread is busy, start a new thread instead of queueing
+  behind its current work, unless the new request truly depends on that unfinished work.
 - **Start a thread** for everything else that takes real work (code, debugging, reviews, research,
   builds, test runs), one per unrelated task.
+- **Split big jobs into parallel threads:** when a job has steps that touch different parts of the
+  app, give each step its own thread at the same time instead of handing them to one thread in a
+  row.
 - **Ask first** when a request is large or ambiguous: propose the split in two or three lines, unless
   the user said to just go.
 - **Another project:** ask its main coordinator instead of starting a thread in its folder:
@@ -114,12 +119,19 @@ End your turn. Never poll, sleep or run `wait-for-text` to watch a thread: Ghost
 `Ghostex thread report:` when something happens.
 
 - `finished its turn` or `waiting for an answer`: see "When a report arrives".
+- `Ghostex thread note:` (sent by a thread with `ghostex coordinator note` right after a push): that
+  commit already landed while the thread keeps working. Pass the news on to the user without
+  replying to the thread; `ghostex coordinator status` also shows each thread's latest push.
 - `still working, but no new output` (quiet 8 minutes; repeats every 8 minutes) or
   `idle for 10 minutes, though…` (it ended its turn owing work: a background job finished, it stopped
   mid-task, or its turn was cut off): Ghostex nudged it. Heal it.
 - `it stopped before its turn ended`: put to sleep mid-turn, so not finished.
 - `restarted after its session stopped unexpectedly`: Ghostex told it to carry on. Do nothing unless
   a later report says it could not keep it running; then reload it once.
+
+Before telling the user that work is still running, check what actually landed: run
+`ghostex coordinator status` (for each thread's latest push) and `git log origin/main` (or the
+thread's branch) so you never report a commit that already landed as still in progress.
 
 Healing is your job; Ghostex never interrupts or reloads a thread itself:
 

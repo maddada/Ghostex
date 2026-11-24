@@ -15,6 +15,8 @@ pub const COORDINATOR_INSTRUCTIONS_MAX_CHARS: usize = 16_000;
 pub const COORDINATOR_GOAL_MAX_CHARS: usize = 400;
 /// The start of a thread's last report kept for the Threads panel and `coordinator status`.
 pub const COORDINATOR_THREAD_REPORT_EXCERPT_MAX_CHARS: usize = 600;
+/// A thread's push/progress note (`ghostex coordinator note`) stays a short one-liner.
+pub const COORDINATOR_THREAD_NOTE_MAX_CHARS: usize = 600;
 
 pub type SessionKey = (String, String);
 
@@ -65,6 +67,10 @@ pub struct ThreadRecord {
     pub reported_at: Option<String>,
     pub reported_prompt_key: Option<String>,
     pub last_report: Option<String>,
+    /// The latest push/progress note sent with `ghostex coordinator note`.
+    pub last_note: Option<String>,
+    /// When `last_note` was recorded.
+    pub last_note_at: Option<String>,
     /// The start of a message its coordinator handed it that its transcript does not show yet.
     pub pending_message: Option<String>,
     /// When that message was sent.
@@ -175,6 +181,8 @@ pub(super) fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
         reported_at: row.get("reportedAt")?,
         reported_prompt_key: row.get("reportedPromptKey")?,
         last_report: row.get("lastReport")?,
+        last_note: row.get("lastNote")?,
+        last_note_at: row.get("lastNoteAt")?,
         pending_message: row.get("pendingMessage")?,
         pending_message_at: row.get("pendingMessageAt")?,
         pending_message_send_id: row.get("pendingMessageSendId")?,
@@ -186,7 +194,7 @@ pub(super) fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
 
 const COORDINATOR_COLUMNS: &str =
     "projectId, sessionId, goal, instructions, memoryJson, createdAt, updatedAt";
-pub(super) const THREAD_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, resolvedAt, lastResolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, pendingMessage, pendingMessageAt, pendingMessageSendId, closedWithCoordinatorAt, createdAt, updatedAt";
+pub(super) const THREAD_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, resolvedAt, lastResolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, lastNote, lastNoteAt, pendingMessage, pendingMessageAt, pendingMessageSendId, closedWithCoordinatorAt, createdAt, updatedAt";
 
 pub fn read_coordinator(
     db: &Connection,
@@ -487,6 +495,31 @@ pub fn record_thread_report(
         }
     }
     Ok(())
+}
+
+/// Records the latest push/progress note a thread sent with `ghostex coordinator note`, returning
+/// its RFC 3339 timestamp.
+pub fn record_thread_note(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    note: &str,
+) -> Result<String, DomainStateError> {
+    let timestamp = now_iso();
+    let excerpt: String = note
+        .chars()
+        .take(COORDINATOR_THREAD_NOTE_MAX_CHARS)
+        .collect();
+    db.execute(
+        r#"
+        UPDATE coordinator_threads
+        SET lastNote = ?3, lastNoteAt = ?4, updatedAt = ?4
+        WHERE projectId = ?1 AND sessionId = ?2
+        "#,
+        params![project_id, session_id, excerpt, timestamp],
+    )
+    .map_err(sql_error)?;
+    Ok(timestamp)
 }
 
 /// Watches a message handed to the thread until its transcript records it; a newer message

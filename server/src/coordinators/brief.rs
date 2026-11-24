@@ -185,7 +185,8 @@ pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
     );
     brief.push_str(
         "\n\nWhen you are done:\n\
-- End your turn with a final report: what you did, where (files, branch, pull request), how you verified it, and anything left or blocked. Ghostex forwards your final message to the coordinator automatically. Your final message is the only way to report: never message or type into the coordinator's session yourself (`ghostex agents send`, `send-session-chat-message`, `send-text` and the like), not even for a progress update or a patch that is ready; Ghostex refuses it.\n\
+- End your turn with a final report: what you did, where (files, branch, pull request), how you verified it, and anything left or blocked. Ghostex forwards your final message to the coordinator automatically. Never use `ghostex agents send`, `send-session-chat-message`, `send-text` or the like on your coordinator (Ghostex refuses them).\n\
+- Right after every push, send a short note with `ghostex coordinator note \"<commit> <one line on what landed>\"`, then keep going and still end your turn with the full report.\n\
 - When a message gives you several tasks, finish them all and then end your turn with one report on all of them, unless it asks you to report after each one; then end your turn after the first with its report, and wait for the coordinator to tell you to go on.\n\
 - If you need a decision you cannot make, ask it plainly in your final message and stop. The coordinator answers in this chat. Give each question a title that names its subject (never \"it\" or \"this\" alone) and a line on what it is about and why: the user reads it in the coordinator's Needs you list, not in your report.\n\
 - The user talks only to the coordinator. Never ask the user directly or publish a page for them (`ghostex show`): put questions, mockups and the path of any page file in your final report, and the coordinator shows them to the user and sends you the answers. Link what each question is about (a PR, issue, file, page or commit: a Markdown link with the full URL, or a file path link) so the user can check it.\n\
@@ -287,6 +288,15 @@ pub enum StallNudge<'a> {
     Failed(&'a str),
     /// A later report: the nudge went out with the first one.
     Earlier,
+}
+
+/// The body of a push/progress note sent via `ghostex coordinator note`; any foreign sender-block
+/// opener inside the note is broken so only gxserver's sender block names the thread.
+pub fn note_report_body(note: &str) -> String {
+    format!(
+        "Ghostex thread note: {}",
+        without_foreign_agent_blocks(note).trim()
+    )
 }
 
 /// The body of one report; the sender header names the thread.
@@ -544,6 +554,7 @@ mod tests {
         assert!(brief.contains("Standing instructions:\nBranch from main."));
         assert!(brief.contains("You work in your own git worktree."));
         assert!(brief.contains("ghostex coordinator rename-self"));
+        assert!(brief.contains("ghostex coordinator note"));
         assert!(brief.contains("When you are done:"));
         assert!(brief.contains("Your final report is a handover"));
         assert!(!brief.contains("Notes to keep in mind"));
