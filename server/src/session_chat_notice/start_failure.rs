@@ -149,8 +149,19 @@ pub const SESSION_CHAT_NOTICE_ACTION_INSTALL_AGENT: &str = "installAgentCli";
 pub fn missing_start_command(error_lines: &str) -> Option<String> {
     let name = |text: &str| -> Option<String> {
         let text = text.trim().trim_matches(['\'', '"', '`']);
-        let name = text.rsplit(['/', '\\']).next().unwrap_or(text);
-        (!name.is_empty() && !name.contains(char::is_whitespace)).then(|| name.to_string())
+        let basename = text.rsplit(['/', '\\']).next().unwrap_or(text);
+        let stripped = [".exe", ".cmd", ".bat", ".ps1"]
+            .iter()
+            .find_map(|ext| {
+                basename
+                    .len()
+                    .checked_sub(ext.len())
+                    .filter(|&cut| basename[cut..].eq_ignore_ascii_case(ext))
+                    .map(|cut| &basename[..cut])
+            })
+            .unwrap_or(basename);
+        (!stripped.is_empty() && !stripped.contains(char::is_whitespace))
+            .then(|| stripped.to_string())
     };
     error_lines.lines().rev().find_map(|line| {
         let line = line.trim();
@@ -170,12 +181,34 @@ pub fn missing_start_command(error_lines: &str) -> Option<String> {
             // `bash: dsh-tui: command not found`, `sh: 1: dsh-tui: command not found`
             return name(rest.rsplit(": ").next()?);
         }
-        let start = line.find("The term '")? + "The term '".len();
-        let end = start + line[start..].find('\'')?;
-        line[end..]
-            .contains("is not recognized")
-            .then(|| name(&line[start..end]))
-            .flatten()
+        if let Some(start) = line.find("The term '") {
+            let start = start + "The term '".len();
+            if let Some(rel_end) = line[start..].find('\'') {
+                let end = start + rel_end;
+                if line[end..].contains("is not recognized") {
+                    return name(&line[start..end]);
+                }
+            }
+        }
+        // cmd.exe: `'claude' is not recognized as an internal or external command,`
+        if let Some(rest) = line.strip_prefix('\'') {
+            if let Some(end) = rest.find('\'') {
+                if rest[end + 1..].contains("is not recognized") {
+                    return name(&rest[..end]);
+                }
+            }
+        }
+        // PowerShell locale-independent CategoryInfo:
+        // `+ CategoryInfo : ObjectNotFound: (claude:String) [], CommandNotFoundException`
+        if line.contains("CommandNotFoundException") {
+            if let Some(start) = line.find("ObjectNotFound: (") {
+                let rest = &line[start + "ObjectNotFound: (".len()..];
+                if let Some(end) = rest.find(":String)") {
+                    return name(&rest[..end]);
+                }
+            }
+        }
+        None
     })
 }
 
@@ -261,6 +294,43 @@ fn start_failure_error_lines(screen_text: &str) -> Option<String> {
         }
         let cells = row.chars().count();
         continues = (width >= WRAPPED_ROW_MIN_WIDTH && cells + 1 >= width).then_some(cells < width);
+    }
+    // Windows PowerShell 5.1 prints a 5-line footer (`At line:1 char:1`, `+ <cmd>`, `+ ~~~`,
+    // `+ CategoryInfo ...`, `+ FullyQualifiedErrorId ...`) below every error message. Keeping only
+    // the last 4 lines dropped the actual error message above it; strip the location, source-echo,
+    // and FullyQualifiedErrorId boilerplate while keeping the real message and `+ CategoryInfo`
+    // (whose `ObjectNotFound: (<cmd>:String) [], CommandNotFoundException` stays English on
+    // localized Windows installs).
+    if lines
+        .last()
+        .is_some_and(|line| line.trim_start().starts_with("+ FullyQualifiedErrorId"))
+    {
+        let mut end = lines.len() - 1;
+        let category_info = end
+            .checked_sub(1)
+            .filter(|&index| lines[index].trim_start().starts_with("+ CategoryInfo"))
+            .map(|index| {
+                end = index;
+                lines[index].clone()
+            });
+        let mut dropped_source = false;
+        while end > 1 && lines[end - 1].trim_start().starts_with("+ ") {
+            end -= 1;
+            dropped_source = true;
+        }
+        if dropped_source
+            && end > 1
+            && lines[end - 1].contains(':')
+            && lines[end - 1].chars().any(|ch| ch.is_ascii_digit())
+        {
+            end -= 1;
+        }
+        if end > 0 {
+            lines.truncate(end);
+            if let Some(info) = category_info {
+                lines.push(info);
+            }
+        }
     }
     let shown: Vec<String> = lines[lines.len().saturating_sub(START_FAILURE_ERROR_LINES)..]
         .iter()
@@ -455,7 +525,9 @@ mod tests {
         .expect("a failed start");
         assert_eq!(
             notice.error_lines.as_deref(),
-            Some("PS C:\\Users\\me> cswap run 3 --share-history -- claude\n--share-history is not supported on Windows yet")
+            Some(
+                "PS C:\\Users\\me> cswap run 3 --share-history -- claude\n--share-history is not supported on Windows yet"
+            )
         );
     }
 }

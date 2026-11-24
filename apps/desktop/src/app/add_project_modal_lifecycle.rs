@@ -143,6 +143,15 @@ impl GhostexGpuiApp {
                 let params = params.as_object().unwrap_or(&empty);
                 let added_on =
                     (operation == GpuiAddProjectDialogOperation::Add).then(|| machine_id.clone());
+                let adding_first_project = operation == GpuiAddProjectDialogOperation::Add
+                    && self
+                        .gx_store_launch_hud()
+                        .and_then(|hud| {
+                            hud.get("projectSettingsProjects")
+                                .and_then(serde_json::Value::as_array)
+                                .map(Vec::is_empty)
+                        })
+                        .unwrap_or(false);
                 self.run_gpui_add_project_dialog_operation(
                     operation,
                     Some(machine_id.as_str()),
@@ -150,6 +159,9 @@ impl GhostexGpuiApp {
                     move |app, result, cx| {
                         if let (Some(machine_id), Ok(answer)) = (&added_on, &result) {
                             app.git_export_note_added_project(machine_id, answer);
+                            if adding_first_project {
+                                record_gpui_onboarding_step_telemetry("project_added");
+                            }
                         }
                         app.update_native_app_modal(
                             kind,

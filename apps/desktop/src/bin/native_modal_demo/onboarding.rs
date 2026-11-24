@@ -753,6 +753,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     });
                 });
             }
+            OnboardingCommand::TelemetryStep(step) => eprintln!("onboardingStep {step}"),
         }
     });
     let config = OnboardingConfig {

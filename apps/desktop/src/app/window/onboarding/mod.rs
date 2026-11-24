@@ -8,9 +8,9 @@
 //! 2. Preferences (inline Experience preset, Agent approvals, optional phone pairing, Appearance/Theme + Native Chat preview)
 //! 3. Start chatting (open or add a project and preview Native Chat + Prompt Queueing)
 //!
-//! Telemetry hook note (once `server/src/telemetry/` + `helpers/telemetry.rs` add `onboarding.step`):
-//! wire `started` in `new()`, `cli_detected` in `receive_agent_hook_status()`, `completed` in
-//! `finish()`, and `skipped` in `leave()`.
+//! Telemetry (`onboarding.step`): emits `started` in `new()`, `cli_detected` once in
+//! `receive_agent_hook_status()` after a completed scan finds an installed CLI, `completed` in
+//! `finish()`, and `skipped` in `leave()` through `OnboardingCommand::TelemetryStep`.
 //! SEE-ALSO: apps/desktop/src/app/onboarding_modal_lifecycle.rs (open, first-run gating, host commands), apps/desktop/src/bin/native_modal_demo/onboarding.rs (standalone preview), apps/desktop/src/assets/onboarding.rs (icons and pictures).
 mod agent_cli;
 mod agents;
@@ -145,6 +145,8 @@ pub(crate) enum OnboardingCommand {
         agent_id: String,
         request: AgentCliRequest,
     },
+    /// Zero-PII onboarding funnel milestone (`onboarding.step`).
+    TelemetryStep(&'static str),
 }
 
 pub(crate) type OnboardingHost = Rc<dyn Fn(OnboardingCommand, &mut App)>;
@@ -247,6 +249,8 @@ pub(crate) struct GpuiOnboardingWindow {
     /// Bumped with every new detection payload, the way React sees a new `agents` array.
     agents_revision: u64,
     agents_loading: bool,
+    /// Latches `onboarding.step` (`cli_detected`) to at most once per onboarding window open.
+    cli_detected_reported: bool,
     hook_status: Option<Value>,
     cli_status: Option<Value>,
     computer_use_install_requested: bool,
@@ -325,6 +329,7 @@ impl GpuiOnboardingWindow {
             agents: Vec::new(),
             agents_revision: 0,
             agents_loading: false,
+            cli_detected_reported: false,
             hook_status: None,
             cli_status: None,
             computer_use_install_requested: false,
@@ -395,6 +400,7 @@ impl GpuiOnboardingWindow {
         }
         // The page only exposes a rescan, so detection and the CLI status are asked for on open.
         this.agents_loading = true;
+        this.send(OnboardingCommand::TelemetryStep("started"), cx);
         this.send(OnboardingCommand::RescanAgents, cx);
         this.send(OnboardingCommand::RequestCliStatus, cx);
         this.mount_panel(now, cx);
@@ -510,6 +516,7 @@ impl GpuiOnboardingWindow {
             add_computer: self.flow.computer_queued,
             open_theme_editor: self.flow.theme_editor_queued,
         };
+        self.send(OnboardingCommand::TelemetryStep("completed"), cx);
         self.send(OnboardingCommand::Finish(target, after), cx);
     }
 
@@ -548,6 +555,7 @@ impl GpuiOnboardingWindow {
             return;
         }
         self.closed = true;
+        self.send(OnboardingCommand::TelemetryStep("skipped"), cx);
         self.send(OnboardingCommand::Leave, cx);
     }
 
@@ -635,6 +643,10 @@ impl GpuiOnboardingWindow {
         self.agents_revision += 1;
         if complete {
             self.agents_loading = false;
+            if !self.cli_detected_reported && self.agents.iter().any(|agent| agent.installed) {
+                self.cli_detected_reported = true;
+                self.send(OnboardingCommand::TelemetryStep("cli_detected"), cx);
+            }
         }
         self.after_agents_changed(previous_loading, cx);
         cx.notify();

@@ -9,7 +9,7 @@ use std::{
 #[cfg(unix)]
 use super::ipc_frame::{parse_zmx_ipc_header, zmx_ipc_header, ZMX_IPC_HEADER_BYTES};
 
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(windows)))]
 use crate::toolchain::require_bundled_zmx;
 
 #[cfg(not(unix))]
@@ -19,8 +19,8 @@ use super::*;
 pub(crate) struct ZmxHistoryCapture {
     pub text: String,
     /// The capture lost its tail (the live screen), so screen-state readers
-    /// must not draw conclusions from it. Unix retains the tail; the Windows
-    /// subprocess path can still lose it at the stdout byte cap.
+    /// must not draw conclusions from it. Unix and native Windows wmx both
+    /// retain the live tail.
     pub truncated: bool,
 }
 
@@ -55,9 +55,8 @@ pub(super) const ZMX_IPC_HISTORY_FORMAT_PLAIN: u8 = 0;
 /// Matches the 5s poll `zmx history` uses before it gives up on the daemon.
 #[cfg(unix)]
 pub(super) const ZMX_SCREEN_CAPTURE_TIMEOUT: Duration = Duration::from_millis(5_000);
-/// Maximum retained text on both bounded and legacy captures. Old daemons
-/// still send full history; retain its tail without unbounded memory growth.
-#[cfg(unix)]
+/// Maximum retained text on bounded and legacy captures. Oversized captures
+/// retain their newest tail (the live screen) without unbounded memory growth.
 const ZMX_SCREEN_CAPTURE_TAIL_BYTES: usize = 256 * 1024;
 
 /// Directory the zmx daemon binds its session sockets in, resolved exactly as
@@ -320,7 +319,6 @@ pub(super) fn read_zmx_screen_capture_reply(
 
 /// Decodes a retained tail into text, starting at the first clean line
 /// boundary so a reader never sees half of a dropped line.
-#[cfg(unix)]
 fn zmx_screen_capture_tail_text(tail: Vec<u8>, payload_len: usize) -> String {
     let clipped = tail.len() < payload_len;
     let mut text = String::from_utf8_lossy(&tail).into_owned();
@@ -332,14 +330,6 @@ fn zmx_screen_capture_tail_text(tail: Vec<u8>, payload_len: usize) -> String {
     text
 }
 
-/*
-CDXC:AppShots 2026-08-22:
-On Windows every zmx daemon lives inside WSL, so its session socket sits in the
-WSL filesystem namespace and a Windows process has no AF_UNIX path that reaches
-it.
-Windows runs scoped `zmx history` through the existing WSL command wrapper, reverting to History only for an explicitly unsupported daemon.
-That path keeps the head at the stdout byte cap, so an oversized capture still reports `truncated` and screen-state readers decline to classify it.
-*/
 #[cfg(not(unix))]
 pub(crate) fn read_zmx_session_screen_capture(zmx_name: &str) -> Result<ZmxHistoryCapture, String> {
     read_zmx_session_screen_capture_format(zmx_name, false, ZMX_SCREEN_CAPTURE_SCROLLBACK_ROWS)
@@ -360,8 +350,37 @@ pub(crate) fn read_zmx_session_grid_capture(zmx_name: &str) -> Result<ZmxHistory
 
 /// CDXC:AgentScreenDetection 2026-09-22 SEE-ALSO:
 /// Every reader of this text strips all CSI sequences, so the provider must answer with physical rows: one line per grid row, real spaces, and SGR the only escapes. A serializer that replays the grid with cursor motion instead (`ESC[6;1H`, `ESC[3C`) merges rows and deletes spaces, which erases the `rule / marker / rule` composer sandwich and makes every chat send fail its verified clear with the input box on screen.
+/// CDXC:AgentScreenDetection 2026-11-24 WHY:
+/// Styled (`--vt`) Windows captures routed through `wmx_client::answer` truncated from the head at
+/// 256 KiB and returned `truncated: true`, discarding the live screen at the bottom during long
+/// ANSI-colored turns and causing screen-state readers (composer readiness, paste verification,
+/// notice detection) to bail out. Read raw bytes from `wmx_client::read_screen_capture` and retain
+/// the newest 256 KiB tail at a clean newline, matching Unix.
 /// SEE-ALSO: .dependencies/wmx/src/history.rs (`styled_row`, `plain_rows`), .dependencies/zmx/src/terminal.zig (`serializeTerminalRange`), server/src/session_chat_options/screen_text.rs (`strip_ansi_sgr`).
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn read_zmx_session_screen_capture_format(
+    zmx_name: &str,
+    vt: bool,
+    scrollback_rows: u32,
+) -> Result<ZmxHistoryCapture, String> {
+    let mut bytes = super::wmx_client::read_screen_capture(
+        &super::scripts_windows::session_directory(),
+        zmx_name,
+        vt,
+        scrollback_rows,
+    )?;
+    let payload_len = bytes.len();
+    if payload_len > ZMX_SCREEN_CAPTURE_TAIL_BYTES {
+        let drop_to = payload_len - ZMX_SCREEN_CAPTURE_TAIL_BYTES;
+        bytes.drain(..drop_to);
+    }
+    Ok(ZmxHistoryCapture {
+        text: zmx_screen_capture_tail_text(bytes, payload_len),
+        truncated: false,
+    })
+}
+
+#[cfg(all(not(unix), not(windows)))]
 fn read_zmx_session_screen_capture_format(
     zmx_name: &str,
     vt: bool,

@@ -56,16 +56,18 @@ pub(crate) fn run_zmx_start_command(
 ) -> ZmxEndpointResult<ZmxStartOutcome> {
     /*
     CDXC:Zmx 2026-09-01:
-    This platform's start is a plain detached `zmx run`, so a zero exit means
-    the command was accepted, NOT that the session is registered. Report no
-    observation; the caller keeps its authoritative probe.
+    Linux's start is a plain detached `zmx run`, so a zero exit means the
+    command was accepted, NOT that the session is registered. Windows's
+    `wmx start-encoded` waits until its own loopback `ping` succeeds
+    (`START_READY_TIMEOUT` in .dependencies/wmx/src/client.rs), so exit 0
+    already observed the session alive.
     */
     let options = ZmxCommandOptions {
         timeout_ms: Some(ZMX_START_COMMAND_TIMEOUT_MS),
         ..ZmxCommandOptions::default()
     };
     run_zmx_interaction_command(script, options).map(|result| ZmxStartOutcome {
-        observed_alive: false,
+        observed_alive: cfg!(windows),
         result,
     })
 }

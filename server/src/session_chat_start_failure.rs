@@ -4,8 +4,8 @@
 use std::{
     collections::HashMap,
     sync::{
-        LazyLock, Mutex,
         atomic::{AtomicU64, Ordering},
+        LazyLock, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -14,7 +14,7 @@ use serde_json::Value;
 
 use crate::domain::DomainRepository;
 use crate::server::read_runtime_text;
-use crate::session_chat_notice::{SessionChatTerminalNotice, agent_start_failure_notice};
+use crate::session_chat_notice::{agent_start_failure_notice, SessionChatTerminalNotice};
 
 /// How long a session must keep showing a failed start before the card appears. A zsh with
 /// Powerlevel10k draws its cached instant prompt while `.zshrc` loads, before the agent's process
@@ -419,13 +419,21 @@ fn with_missing_agent_command(notice: SessionChatTerminalNotice) -> SessionChatT
     let agent_name = crate::agents::default_agent_session_title_name(&definition.agent_id)
         .unwrap_or(definition.binary.as_str());
     let home = crate::resume_lookup::home_dir();
-    // A session planned before Ghostex ran mise-installed agents through mise: Try again now does.
-    if crate::agent_cli::launch_path::with_reachable_program(&command) != command {
+    // A session planned before Ghostex resolved an off-PATH agent (via mise or an official
+    // install folder): Try again starts it through that path now.
+    let reachable = crate::agent_cli::launch_path::with_reachable_program(&command);
+    if reachable != command {
         let mut notice = notice;
         notice.title = format!("{agent_name} is ready to start again");
-        notice.detail = Some(format!(
-            "{agent_name} was installed with mise, which this terminal hadn't set up. Try again starts it through mise."
-        ));
+        notice.detail = Some(if reachable.contains("mise") {
+            format!(
+                "{agent_name} was installed with mise, which this terminal hadn't set up. Try again starts it through mise."
+            )
+        } else {
+            format!(
+                "{agent_name} is installed outside this terminal's PATH. Try again starts it directly."
+            )
+        });
         return notice;
     }
     let installed_at = crate::agent_cli::process::resolve_agent(

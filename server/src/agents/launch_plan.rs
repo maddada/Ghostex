@@ -150,6 +150,7 @@ pub(crate) fn create_agent_session_params_for_project(
         if let Some(family) = family.as_deref() {
             let home_dir = super::agent_probe_home();
             if super::launch_cli_missing(family, configured_command.as_deref(), &home_dir) {
+                crate::telemetry::reliability_error("cli_not_found", Some(family));
                 let name = read_text_from_map(&agent_config, "name")
                     .or_else(|| crate::sidebar_hud::default_agent_name(family).map(str::to_string))
                     .unwrap_or_else(|| family.to_string());
@@ -1755,25 +1756,18 @@ fn native_cli_command(command: &str) -> String {
     if cfg!(test) {
         return command.to_string();
     }
-    let trimmed = command.trim_start();
-    let binary = trimmed.split_whitespace().next().unwrap_or_default();
-    if crate::agent_cli::catalog::CATALOG
-        .iter()
-        .any(|agent| agent.binary == binary)
-    {
-        if let Some(path) = crate::platform::live_path::find(binary, &[]) {
-            if let Some(extension @ ("cmd" | "bat")) =
-                path.extension().and_then(|extension| extension.to_str())
-            {
-                return format!(
-                    "{}{binary}.{extension}{}",
-                    &command[..command.len() - trimmed.len()],
-                    &trimmed[binary.len()..]
-                );
-            }
+    crate::agent_cli::launch_path::rewrite_program(command, |binary| {
+        if !crate::agent_cli::catalog::CATALOG
+            .iter()
+            .any(|agent| agent.binary == binary)
+        {
+            return None;
         }
-    }
-    command.to_string()
+        let path = crate::platform::live_path::find(binary, &[])?;
+        let extension = path.extension().and_then(|extension| extension.to_str())?;
+        (extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat"))
+            .then(|| format!("{binary}.{extension}"))
+    })
 }
 
 /// Validate supplied launch options before an empty or non-string value can be mistaken for an omitted option.

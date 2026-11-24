@@ -82,21 +82,7 @@ pub(super) fn answer(
                 Some(value) => value.parse::<u32>().ok()?,
                 None => 10_000,
             };
-            ask("history", json!({"vt": vt, "scrollback": scrollback})).and_then(|reply| {
-                if vt {
-                    let output = reply["output"]
-                        .as_str()
-                        .ok_or_else(|| Failure::Message("Missing terminal snapshot".into()))?;
-                    STANDARD
-                        .decode(output)
-                        .map_err(|error| Failure::Message(error.to_string()))
-                } else {
-                    reply["text"]
-                        .as_str()
-                        .map(|text| text.as_bytes().to_vec())
-                        .ok_or_else(|| Failure::Message("Missing terminal text".into()))
-                }
-            })
+            fetch_history(directory, name, vt, scrollback, timeout)
         }
         "grid" => ask("grid", Value::Null).map(|reply| format!("{reply}\n").into_bytes()),
         "exists" => ask("ping", Value::Null).map(|_| Vec::new()),
@@ -126,6 +112,57 @@ pub(super) fn answer(
         _ => return None,
     };
     Some(command_result(outcome, options, timeout))
+}
+
+/// Reads one session's raw history bytes directly from its wmx host without head truncation, so
+/// `screen_capture.rs` can keep the newest 256 KiB tail the way Unix captures do.
+pub(super) fn read_screen_capture(
+    session_directory: &str,
+    name: &str,
+    vt: bool,
+    scrollback: u32,
+) -> Result<Vec<u8>, String> {
+    let timeout = Duration::from_millis(ZMX_LIFECYCLE_COMMAND_TIMEOUT_MS);
+    fetch_history(Path::new(session_directory), name, vt, scrollback, timeout).map_err(|failure| {
+        match failure {
+            Failure::Message(message) => message,
+            Failure::TimedOut => format!(
+                "zmx lifecycle command timed out after {}ms",
+                timeout.as_millis()
+            ),
+        }
+    })
+}
+
+fn fetch_history(
+    directory: &Path,
+    name: &str,
+    vt: bool,
+    scrollback: u32,
+    timeout: Duration,
+) -> Result<Vec<u8>, Failure> {
+    request(
+        directory,
+        name,
+        "history",
+        json!({"vt": vt, "scrollback": scrollback}),
+        timeout,
+    )
+    .and_then(|reply| {
+        if vt {
+            let output = reply["output"]
+                .as_str()
+                .ok_or_else(|| Failure::Message("Missing terminal snapshot".into()))?;
+            STANDARD
+                .decode(output)
+                .map_err(|error| Failure::Message(error.to_string()))
+        } else {
+            reply["text"]
+                .as_str()
+                .map(|text| text.as_bytes().to_vec())
+                .ok_or_else(|| Failure::Message("Missing terminal text".into()))
+        }
+    })
 }
 
 /// Shapes an answer the way `run_zsh_script_blocking` shapes a finished wmx command: trimmed output, exit 124 on a timeout, and the head of an oversized stdout with exit 125.

@@ -2,10 +2,15 @@ use super::*;
 
 /// CDXC:PlatformSupport 2026-09-14 WHY:
 /// PowerShell 5.1 cannot execute the POSIX assignment and conditional chains used to validate saved agent conversations before resuming them.
+/// CDXC:PlatformSupport 2026-11-24 WHY:
+/// `Write-Error` is a cmdlet, not a native executable, so quoting its message with `quote_shell_arg`
+/// (which emits `powershell_native_arg` for strings containing `"`) mangled quotes on PowerShell 5.1.
+/// Use `powershell_single_quote` for the cmdlet argument, capture `$LASTEXITCODE` before trimming
+/// `$ghostexResumeId`, and keep `Write-Error` so `$?` still goes false for the restore fallback.
 fn lookup(lookup_command: String, resume_command: String, failure: String) -> String {
     format!(
-        "$ghostexResumeId = {lookup_command}; if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($ghostexResumeId)) {{ {resume_command} }} else {{ Write-Error {} }}",
-        quote_shell_arg(&failure)
+        "$ghostexResumeId = {lookup_command}; $ghostexLookupExit = $LASTEXITCODE; $ghostexResumeId = \"$ghostexResumeId\".Trim(); if ($ghostexLookupExit -eq 0 -and -not [string]::IsNullOrWhiteSpace($ghostexResumeId)) {{ {resume_command} }} else {{ Write-Error {} }}",
+        crate::platform::shell::powershell_single_quote(&failure)
     )
 }
 

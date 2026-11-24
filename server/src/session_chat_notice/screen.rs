@@ -340,6 +340,11 @@ impl NoticeScreen {
             .and_then(|line| line.strip_suffix('>'))
         {
             let path = path.trim();
+            let provider = r"Microsoft.PowerShell.Core\FileSystem::";
+            let path = path
+                .get(..provider.len())
+                .filter(|prefix| prefix.eq_ignore_ascii_case(provider))
+                .map_or(path, |_| &path[provider.len()..]);
             if path.starts_with("\\\\")
                 || (path.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
                     && path.as_bytes().get(1) == Some(&b':')

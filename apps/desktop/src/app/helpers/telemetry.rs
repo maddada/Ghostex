@@ -269,7 +269,6 @@ pub(crate) fn record_gpui_rail_intro_answered_telemetry(layout: &'static str) {
 }
 
 /// Zero-PII onboarding milestone (`server/src/telemetry/taxonomy.rs` `ONBOARDING_STEPS`).
-#[allow(dead_code)]
 pub(crate) fn record_gpui_onboarding_step_telemetry(step: &'static str) {
     record_gpui_client_event_on_thread("onboarding.step", serde_json::json!({ "step": step }));
 }
