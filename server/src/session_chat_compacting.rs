@@ -112,15 +112,17 @@ impl SessionChatCompactingPublisher {
         );
     }
 
+    /// Returns `false` when the database could not be opened or the statement failed. A statement
+    /// that changed no row succeeded: the stored value already matches, or the session is gone.
     pub(crate) fn publish_marker(
         &self,
         project_id: &str,
         session_id: &str,
         key: &str,
         detected_at: Option<&str>,
-    ) {
+    ) -> bool {
         let Ok(db) = open_gxserver_database(&self.paths) else {
-            return;
+            return false;
         };
         let repository = DomainRepository::new(&db, self.server_id.as_str());
         let json_path = format!("$.{key}");
@@ -161,10 +163,10 @@ impl SessionChatCompactingPublisher {
             ),
         };
         if !matches!(changed, Ok(1)) {
-            return;
+            return changed.is_ok();
         }
         let Ok(_event_sequence) = self.presentation_event_sequence.lock() else {
-            return;
+            return true;
         };
         let Ok(delta) = crate::presentation::build_presentation_session_delta(
             &db,
@@ -172,10 +174,10 @@ impl SessionChatCompactingPublisher {
             project_id,
             session_id,
         ) else {
-            return;
+            return true;
         };
         let Ok(revision) = crate::presentation::increment_presentation_revision(&db) else {
-            return;
+            return true;
         };
         self.event_hub.broadcast(json!({
             "delta": delta,
@@ -184,6 +186,80 @@ impl SessionChatCompactingPublisher {
             "serverId": self.server_id,
             "type": "presentationDelta",
         }));
+        true
+    }
+}
+
+/// One screen-approval marker write at a time, across every session (see
+/// `publish_screen_approval_marker`).
+static SCREEN_APPROVAL_MARKER_WRITES: Mutex<()> = Mutex::new(());
+
+/// Holds off every other screen-approval marker write until the guard is dropped. Take it before
+/// the session option cache, never while holding the cache.
+pub(crate) fn lock_screen_approval_marker_writes() -> std::sync::MutexGuard<'static, ()> {
+    SCREEN_APPROVAL_MARKER_WRITES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Writes the screen-approval marker the session's latest committed verdict still owes
+/// (`SessionChatOptionCacheEntry::unpublished_screen_approval`), or clears it when the session has
+/// no reading. Every writer of the marker goes through here: the detector after each capture that
+/// owes a write and the stall sweep's refresh; `forget_session_chat_options` clears it through
+/// `clear_screen_approval_marker` under the same lock.
+///
+/// CDXC:SessionStatus 2026-11-23 WHY:
+/// Several readers capture one session's screen at once (a chat read, the probes after a send, the follower, the stall sweep), and each used to write the marker it had just decided after leaving the cache lock. A reader that saw the screen clear could then land its clear after a newer reader's set, and the cache, already holding "approval", wrote nothing again, so the session stopped reading as needing the user. A write that failed (the database busy or unopenable) was swallowed the same way. So the write is taken from the cache under one lock at the moment it is made, always the latest verdict's, and a failed one stays owed for the next capture to retry. The lock is one for all sessions because these writes happen only when the verdict changes or a retry is owed; the cache lock is never held across the database write, so detection of other sessions is not held up by SQLite. Dropping a reading takes this lock before it removes the cache entry and clears the marker while still holding it, without asking the cache: a capture that failed in between commits an entry owing no write and would otherwise keep the dropped reading's mark, while a whole capture committed after the removal writes its own verdict once the lock is released.
+pub(crate) fn publish_screen_approval_marker(state: &AppState, project_id: &str, session_id: &str) {
+    let writing = lock_screen_approval_marker_writes();
+    let key = crate::server::session_observer_key(project_id, session_id);
+    let owed = match state.session_chat_option_cache.lock() {
+        Ok(mut cache) => match cache.get_mut(&key) {
+            Some(entry) => entry.unpublished_screen_approval.take(),
+            None => Some(None),
+        },
+        Err(_) => return,
+    };
+    let Some(detected_at) = owed else {
+        return;
+    };
+    write_screen_approval_marker(&writing, state, project_id, session_id, detected_at);
+}
+
+/// Clears the screen-approval marker of a session whose reading the caller has just removed while
+/// holding `writing` (see `publish_screen_approval_marker`).
+pub(crate) fn clear_screen_approval_marker(
+    writing: &std::sync::MutexGuard<'static, ()>,
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) {
+    write_screen_approval_marker(writing, state, project_id, session_id, None);
+}
+
+fn write_screen_approval_marker(
+    _writing: &std::sync::MutexGuard<'static, ()>,
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    detected_at: Option<String>,
+) {
+    if SessionChatCompactingPublisher::new(state).publish_marker(
+        project_id,
+        session_id,
+        crate::session_approval::SESSION_CHAT_SCREEN_APPROVAL_DETECTED_AT_KEY,
+        detected_at.as_deref(),
+    ) {
+        return;
+    }
+    // A verdict committed meanwhile owes its own write, which replaces this one.
+    let key = crate::server::session_observer_key(project_id, session_id);
+    if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+        if let Some(entry) = cache.get_mut(&key) {
+            if entry.unpublished_screen_approval.is_none() {
+                entry.unpublished_screen_approval = Some(detected_at);
+            }
+        }
     }
 }
 
@@ -217,8 +293,8 @@ pub(crate) fn refresh_compacting_marker_from_screen(state: &AppState, session: &
 
 /// BLOCKING (at most one screen capture, through the detector's own cache lifetime). A running
 /// session marked as showing an approval on its screen has its screen read again, and the marker
-/// follows what that whole capture shows, for the reason the compaction marker above is: an
-/// approval answered in a terminal nothing else reads would otherwise keep its red dot (the
+/// follows the latest verdict, for the reason the compaction marker above is: an approval answered
+/// in a terminal nothing else reads would otherwise keep its red dot (the
 /// CDXC:SessionStatus 2026-11-21 WHY in session_approval.rs).
 pub(crate) fn refresh_screen_approval_marker_from_screen(state: &AppState, session: &Value) {
     if !crate::session_approval::screen_shows_approval(session) {
@@ -229,20 +305,25 @@ pub(crate) fn refresh_screen_approval_marker_from_screen(state: &AppState, sessi
         return;
     };
     let agent = crate::session_chat_composer::session_chat_composer_agent_id(session);
-    let detection = crate::session_chat_options::SessionChatOptionDetector::new(state)
-        .detect_blocking(&project_id, &session_id, agent.as_deref(), false);
-    // As above: a cache that already agreed with the screen while the stored marker did not.
-    if detection.captured
-        && !detection
-            .notice
-            .as_ref()
-            .is_some_and(crate::session_chat_notice::SessionChatTerminalNotice::is_screen_approval)
-    {
-        SessionChatCompactingPublisher::new(state).publish_marker(
+    crate::session_chat_options::SessionChatOptionDetector::new(state).detect_blocking(
+        &project_id,
+        &session_id,
+        agent.as_deref(),
+        false,
+    );
+    // The detector writes what a capture owes; a stored marker the latest verdict, already
+    // written, says is gone (a write made outside this path) is owed its clear here.
+    if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+        if let Some(entry) = cache.get_mut(&crate::server::session_observer_key(
             &project_id,
             &session_id,
-            crate::session_approval::SESSION_CHAT_SCREEN_APPROVAL_DETECTED_AT_KEY,
-            None,
-        );
+        )) {
+            if entry.projected_screen_approval == Some(false)
+                && entry.unpublished_screen_approval.is_none()
+            {
+                entry.unpublished_screen_approval = Some(None);
+            }
+        }
     }
+    publish_screen_approval_marker(state, &project_id, &session_id);
 }
