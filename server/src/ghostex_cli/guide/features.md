@@ -1592,10 +1592,11 @@ where they are while you open, change and close views.
   network is back. A "not moving" or "idle" report that waited in the
   coordinator's queue (for example while its input box could not be read) is
   dropped instead of delivered late when the thread has since moved on,
-  finished, or been closed or marked done. The queue checks this about every
-  30 seconds while the report waits, not again at the moment it is delivered,
-  so a thread that moved only in the last seconds before can still get its
-  report delivered.
+  finished, or been closed or marked done. The queue checks this once the
+  report has waited a minute and then about every 30 seconds, not again at the
+  moment it is delivered, so a report delivered within its first minute, or a
+  thread that moved only in the last seconds before delivery, can still get its
+  report delivered. Reports about a thread on another computer are not checked.
 - A new session goes straight into Drafts, below Pinned and above Sessions,
   and stays there until its first message is sent or its agent starts
   working, whether it is empty or holds unsent text. Drafts starts collapsed,

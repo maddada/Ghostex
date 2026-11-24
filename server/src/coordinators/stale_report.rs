@@ -1,5 +1,7 @@
 //! A "not moving" or "idle" thread report that waited in its coordinator's queue is checked
-//! against the thread again when it is about to go out, and dropped when it no longer holds.
+//! against the thread again while it waits (session_chat_queue_runtime/scheduler.rs: once it has
+//! waited a minute, then at most every 30 seconds, and only for a thread of this computer), and
+//! dropped when it no longer holds. Delivery itself does not check again.
 //!
 //! CDXC:Coordinators 2026-11-08 DECISION:
 //! User (for 11.1.1): "drop late 'not moving' / 'idle' thread reports when they're finally
