@@ -324,9 +324,25 @@ pub(crate) fn activity_for_hook_event(
         {
             return Some("attention".to_string());
         }
+        if lower == "stop" {
+            let cancelled = first_string([
+                payload.get("terminationReason"),
+                payload.get("termination_reason"),
+            ])
+            .is_some_and(|reason| {
+                let reason_lower = reason.to_ascii_lowercase();
+                reason_lower.contains("cancel")
+                    || reason_lower.contains("interrupt")
+                    || reason_lower.contains("abort")
+            });
+            if cancelled {
+                return Some("idle".to_string());
+            }
+            return Some("attention".to_string());
+        }
         if matches!(
             lower.as_str(),
-            "stop" | "turn-completion" | "sessionend" | "session-end"
+            "interrupt" | "turn-completion" | "sessionend" | "session-end"
         ) {
             return Some("idle".to_string());
         }

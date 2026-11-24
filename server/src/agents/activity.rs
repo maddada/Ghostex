@@ -648,13 +648,13 @@ fn coordinator_session_start_context(
             standing_role.as_ref().map(|record| record.role.as_str()),
             &source,
         );
-        let codex_workspace_note = if agent == "codex" && !matches!(source.as_str(), "resume" | "fork")
-        {
-            let paths = crate::paths::get_gxserver_paths(None);
-            load_workspace_instructions(&paths)
-        } else {
-            None
-        };
+        let codex_workspace_note =
+            if agent == "codex" && !matches!(source.as_str(), "resume" | "fork") {
+                let paths = crate::paths::get_gxserver_paths(None);
+                load_workspace_instructions(&paths)
+            } else {
+                None
+            };
         let combined = [base_context.as_deref(), codex_workspace_note.as_deref()]
             .into_iter()
             .flatten()
@@ -1514,9 +1514,12 @@ pub(crate) fn normalize_agent_hook_activity(
         }
     }
     if normalized_agent.as_deref() == Some("antigravity") {
+        if lower == "stop" {
+            return Some("attention".to_string());
+        }
         if matches!(
             lower.as_str(),
-            "stop" | "turn-completion" | "sessionend" | "session-end"
+            "interrupt" | "turn-completion" | "sessionend" | "session-end"
         ) {
             return Some("idle".to_string());
         }
@@ -1589,7 +1592,10 @@ pub(crate) fn normalize_agent_hook_activity(
     if compact == "askuserquestion" {
         return Some("attention".to_string());
     }
-    if matches!(compact.as_str(), "interrupt" | "sessionidle" | "stopfailure") {
+    if matches!(
+        compact.as_str(),
+        "interrupt" | "sessionidle" | "stopfailure"
+    ) {
         return Some("idle".to_string());
     }
     if let Some(status) = status

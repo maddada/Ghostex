@@ -283,6 +283,16 @@ struct ClaudeState {
     native_session_id: Option<String>,
     working: bool,
     last_turn_interrupted: bool,
+    last_turn_stop_error: Option<String>,
+    last_auth_error: Option<String>,
+    last_error: Option<(Option<String>, String)>,
+    compacting: bool,
+    compacting_started_at: Option<String>,
+    active_turn_user_msg: Option<Value>,
+    active_turn_auth_retried: bool,
+    turn_saw_auth_error: Option<String>,
+    turn_saw_api_error: Option<(Option<String>, String)>,
+    pending_auth_retry: Option<Value>,
     approval_level: AcpApprovalLevel,
     read_only: bool,
     native_mode: String,
@@ -319,6 +329,16 @@ impl ClaudeState {
             native_session_id: None,
             working: false,
             last_turn_interrupted: false,
+            last_turn_stop_error: None,
+            last_auth_error: None,
+            last_error: None,
+            compacting: false,
+            compacting_started_at: None,
+            active_turn_user_msg: None,
+            active_turn_auth_retried: false,
+            turn_saw_auth_error: None,
+            turn_saw_api_error: None,
+            pending_auth_retry: None,
             approval_level,
             read_only,
             native_mode: if read_only { "plan" } else { "default" }.to_string(),
@@ -354,6 +374,13 @@ impl ClaudeState {
     }
 
     fn live_activity_json(&self) -> Value {
+        if self.compacting {
+            return json!({
+                "kind": "compacting",
+                "label": "Compacting conversation",
+                "detectedAt": self.compacting_started_at.as_deref().unwrap_or_default(),
+            });
+        }
         if !self.working {
             return Value::Null;
         }
@@ -408,6 +435,12 @@ impl ClaudeState {
             .as_deref()
             .and_then(|id| transcript_path_for_session("claude", id))
             .map(|p| p.to_string_lossy().to_string());
+        let last_error = self.last_error.as_ref().map(|(code, msg)| {
+            json!({
+                "code": code,
+                "message": msg,
+            })
+        });
         json!({
             "family": "claude",
             "nativeSessionId": self.native_session_id,
@@ -434,6 +467,8 @@ impl ClaudeState {
             "transcriptPath": transcript_path,
             "childPid": self.child_pid,
             "childExited": self.child_exited,
+            "authError": self.last_auth_error,
+            "lastError": last_error,
         })
     }
 }
@@ -452,7 +487,7 @@ impl ClaudeActivityReporter {
         thread::spawn(move || {
             while rx.recv().is_ok() {
                 while rx.try_recv().is_ok() {}
-                let (act, sid, perm, interrupted) = {
+                let (act, sid, perm, interrupted, stop_error) = {
                     let s = state.lock().unwrap_or_else(|p| p.into_inner());
                     let front = s
                         .pending_requests
@@ -470,9 +505,18 @@ impl ClaudeActivityReporter {
                         s.native_session_id.clone(),
                         front,
                         s.last_turn_interrupted,
+                        s.last_turn_stop_error.clone(),
                     )
                 };
-                ep.report_activity("claude", act, sid.as_deref(), perm.as_ref(), interrupted);
+                ep.report_activity_with_error(
+                    "claude",
+                    act,
+                    sid.as_deref(),
+                    None,
+                    perm.as_ref(),
+                    interrupted,
+                    stop_error.as_deref(),
+                );
             }
         });
         Self { tx: Some(tx) }
@@ -504,6 +548,37 @@ impl Drop for ClaudeExitGuard {
 struct ClaudeProcess {
     child: Child,
     transport: Arc<ClaudeTransport>,
+}
+
+fn extract_claude_message_text(msg: &Value) -> String {
+    if let Some(text) = msg.get("result").and_then(Value::as_str) {
+        if !text.trim().is_empty() {
+            return text.trim().to_string();
+        }
+    }
+    match msg.pointer("/message/content") {
+        Some(Value::String(s)) => s.trim().to_string(),
+        Some(Value::Array(blocks)) => blocks
+            .iter()
+            .filter_map(|b| b.get("text").and_then(Value::as_str))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string(),
+        _ => String::new(),
+    }
+}
+
+fn is_claude_auth_error(error_code: Option<&str>, text: &str) -> bool {
+    if error_code.is_some_and(|c| c.eq_ignore_ascii_case("authentication_failed")) {
+        return true;
+    }
+    let lower = text.to_ascii_lowercase();
+    lower.contains("failed to authenticate")
+        || lower.contains("oauth session expired")
+        || lower.contains("oauth token revoked")
+        || lower.contains("please run /login")
+        || (lower.contains("401") && lower.contains("authentication_error"))
 }
 
 fn claude_tool_kind(tool_name: &str) -> &'static str {
@@ -1039,28 +1114,45 @@ fn spawn_and_init_claude(
                                 {
                                     s.native_mode = pm.to_string();
                                 }
-                            } else if subtype == Some("status")
-                                && msg.get("status").and_then(Value::as_str) == Some("requesting")
-                            {
-                                // When a mid-turn `user` message arrives just as a reply finishes
-                                // without another tool call, Claude emits `result` for turn 1 and
-                                // immediately begins a follow-up turn with `system/status: requesting`.
-                                // Track that follow-up turn so its `result` is not ignored and live
-                                // activity stays `working` until it finishes.
-                                let started = {
-                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                    if !s.working {
-                                        s.working = true;
-                                        s.last_turn_interrupted = false;
-                                        s.clear_live_turn_output();
-                                        true
-                                    } else {
-                                        false
+                            } else if subtype == Some("status") {
+                                let status = msg.get("status").and_then(Value::as_str);
+                                if status == Some("requesting") {
+                                    // When a mid-turn `user` message arrives just as a reply finishes
+                                    // without another tool call, Claude emits `result` for turn 1 and
+                                    // immediately begins a follow-up turn with `system/status: requesting`.
+                                    // Track that follow-up turn so its `result` is not ignored and live
+                                    // activity stays `working` until it finishes.
+                                    let started = {
+                                        let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                        s.compacting = false;
+                                        s.compacting_started_at = None;
+                                        if !s.working {
+                                            s.working = true;
+                                            s.last_turn_interrupted = false;
+                                            s.clear_live_turn_output();
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    };
+                                    if started {
+                                        act_out.sync();
                                     }
-                                };
-                                if started {
-                                    act_out.sync();
+                                } else if status == Some("compacting") {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    s.compacting = true;
+                                    if s.compacting_started_at.is_none() {
+                                        s.compacting_started_at = Some(now_iso_rfc3339());
+                                    }
+                                } else {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    s.compacting = false;
+                                    s.compacting_started_at = None;
                                 }
+                            } else if subtype == Some("compact_boundary") {
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                s.compacting = false;
+                                s.compacting_started_at = None;
                             }
                         }
                         "stream_event" => {
@@ -1191,12 +1283,41 @@ fn spawn_and_init_claude(
                                     s.usage_used_tokens = Some(used);
                                 }
                             }
+                            if msg.get("isApiErrorMessage").and_then(Value::as_bool) == Some(true) {
+                                let err_code = msg
+                                    .get("error")
+                                    .and_then(Value::as_str)
+                                    .map(str::trim)
+                                    .filter(|c| !c.is_empty())
+                                    .map(str::to_string);
+                                let err_text = extract_claude_message_text(&msg);
+                                if is_claude_auth_error(err_code.as_deref(), &err_text) {
+                                    s.turn_saw_auth_error = Some(if err_text.is_empty() {
+                                        "Failed to authenticate: OAuth session expired.".to_string()
+                                    } else {
+                                        err_text
+                                    });
+                                } else if !err_text.is_empty() || err_code.is_some() {
+                                    s.turn_saw_api_error = Some((
+                                        err_code,
+                                        if err_text.is_empty() {
+                                            "Claude API call failed.".to_string()
+                                        } else {
+                                            err_text
+                                        },
+                                    ));
+                                }
+                            }
                         }
                         "result" => {
                             // Deterministic 1:1 turn correlation: `abort` and `send(interrupt)`
                             // never write a new `user` turn until the previous turn's `result`
                             // has arrived or the old process has been replaced by a new `my_gen`.
-                            let (ignored, orphaned): (bool, Vec<PendingClaudeRequest>) = {
+                            let (ignored, orphaned, retrying_auth): (
+                                bool,
+                                Vec<PendingClaudeRequest>,
+                                bool,
+                            ) = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                                 if let Some(model_usage) =
                                     msg.get("modelUsage").and_then(Value::as_object)
@@ -1220,15 +1341,95 @@ fn spawn_and_init_claude(
                                             || lower.contains("cancel")
                                             || lower.contains("abort")
                                     });
+                                let result_is_error =
+                                    msg.get("is_error").and_then(Value::as_bool) == Some(true);
+                                let result_text = extract_claude_message_text(&msg);
+                                let result_error_code = msg
+                                    .get("error")
+                                    .and_then(Value::as_str)
+                                    .map(str::trim)
+                                    .filter(|c| !c.is_empty())
+                                    .map(str::to_string);
+                                let auth_error_text = s.turn_saw_auth_error.take().or_else(|| {
+                                    (result_is_error
+                                        && is_claude_auth_error(
+                                            result_error_code.as_deref(),
+                                            &result_text,
+                                        ))
+                                    .then(|| {
+                                        if result_text.is_empty() {
+                                            "Failed to authenticate: OAuth session expired."
+                                                .to_string()
+                                        } else {
+                                            result_text.clone()
+                                        }
+                                    })
+                                });
+                                let api_error = s.turn_saw_api_error.take().or_else(|| {
+                                    (result_is_error && auth_error_text.is_none()).then(|| {
+                                        (
+                                            result_error_code,
+                                            if result_text.is_empty() {
+                                                "Claude API call failed.".to_string()
+                                            } else {
+                                                result_text
+                                            },
+                                        )
+                                    })
+                                });
                                 if !s.working {
-                                    (true, Vec::new())
+                                    (true, Vec::new(), false)
+                                } else if let Some(auth_err) = auth_error_text {
+                                    if !s.active_turn_auth_retried
+                                        && s.active_turn_user_msg.is_some()
+                                    {
+                                        // Long-running Claude hosts can hold a stale in-memory
+                                        // OAuth token even while cswap/disk holds a fresh one.
+                                        // Restart the Claude subprocess once and replay this turn
+                                        // silently before surfacing a sign-in error.
+                                        s.active_turn_auth_retried = true;
+                                        s.pending_auth_retry = s.active_turn_user_msg.take();
+                                        s.compacting = false;
+                                        s.compacting_started_at = None;
+                                        s.clear_live_turn_output();
+                                        (false, s.pending_requests.drain(..).collect(), true)
+                                    } else {
+                                        s.working = false;
+                                        s.compacting = false;
+                                        s.compacting_started_at = None;
+                                        s.active_turn_user_msg = None;
+                                        s.last_auth_error = Some(auth_err);
+                                        s.last_error = None;
+                                        s.last_turn_stop_error =
+                                            Some("authentication_failed".to_string());
+                                        s.clear_live_turn_output();
+                                        (false, s.pending_requests.drain(..).collect(), false)
+                                    }
+                                } else if let Some((code, err_text)) = api_error {
+                                    s.working = false;
+                                    s.compacting = false;
+                                    s.compacting_started_at = None;
+                                    s.active_turn_user_msg = None;
+                                    s.last_auth_error = None;
+                                    s.last_turn_stop_error =
+                                        Some(code.clone().unwrap_or_else(|| "unknown".to_string()));
+                                    s.last_error = Some((code, err_text));
+                                    s.clear_live_turn_output();
+                                    (false, s.pending_requests.drain(..).collect(), false)
                                 } else {
                                     s.working = false;
+                                    s.compacting = false;
+                                    s.compacting_started_at = None;
+                                    s.active_turn_user_msg = None;
+                                    s.active_turn_auth_retried = false;
+                                    s.last_auth_error = None;
+                                    s.last_error = None;
+                                    s.last_turn_stop_error = None;
                                     if result_interrupted {
                                         s.last_turn_interrupted = true;
                                     }
                                     s.clear_live_turn_output();
-                                    (false, s.pending_requests.drain(..).collect())
+                                    (false, s.pending_requests.drain(..).collect(), false)
                                 }
                             };
                             if ignored {
@@ -1241,6 +1442,13 @@ fn spawn_and_init_claude(
                                     false,
                                     req.tool_use_id.as_deref(),
                                 );
+                            }
+                            if retrying_auth {
+                                println!(
+                                    "[Claude Native] OAuth error on turn; restarting Claude once to refresh credentials..."
+                                );
+                                let _ = std::io::stdout().flush();
+                                return;
                             }
                             println!("[Claude Native] Turn finished.");
                             let _ = std::io::stdout().flush();
@@ -1674,19 +1882,169 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     ]);
     let channel_agent = format!("acp:{}", spec.family);
     let mut reconnecting = false;
+    let mut crash_restarts: VecDeque<Instant> = VecDeque::new();
 
     loop {
         if shutting_down.load(Ordering::Acquire) {
             break;
         }
+        let retry_msg = {
+            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+            s.pending_auth_retry.take()
+        };
+        if let Some(mut retry_user_msg) = retry_msg {
+            let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
+            *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            stop_claude_gracefully(&proc.transport, &mut proc.child, &child_pid);
+            let (resume_id, model, effort, read_only, level) = {
+                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                s.child_pid = 0;
+                s.child_exited = false;
+                s.pending_requests.clear();
+                s.clear_live_turn_output();
+                (
+                    s.native_session_id.clone(),
+                    s.current_model.clone(),
+                    s.current_effort.clone(),
+                    s.read_only,
+                    s.approval_level,
+                )
+            };
+            match spawn_and_init_claude(
+                spec,
+                &parsed,
+                &cwd,
+                &spool_session_id,
+                resume_id.as_deref(),
+                false,
+                model.as_deref(),
+                effort.as_deref(),
+                read_only,
+                level,
+                &state,
+                &activity,
+                &mode_sync_lock,
+                &child_pid,
+                &active_transport,
+                &process_gen,
+                new_gen,
+            ) {
+                Ok(next_proc) => {
+                    proc = next_proc;
+                    let sid = state
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .native_session_id
+                        .clone();
+                    if let Some(sid_str) = sid.as_deref() {
+                        retry_user_msg["session_id"] = json!(sid_str);
+                    }
+                    if let Err(err) = proc.transport.write_json(&retry_user_msg) {
+                        eprintln!(
+                            "[Claude Native] Failed to replay turn after OAuth restart: {err}"
+                        );
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        s.working = false;
+                        s.last_auth_error = Some(format!(
+                            "Failed to authenticate: OAuth session expired ({err})."
+                        ));
+                        s.last_turn_stop_error = Some("authentication_failed".to_string());
+                        drop(s);
+                        activity.sync();
+                    } else {
+                        println!("[Claude Native] Replayed turn after credential refresh restart.");
+                        let _ = std::io::stdout().flush();
+                    }
+                }
+                Err(err) => {
+                    eprintln!("[Claude Native] Could not restart Claude after OAuth error: {err}");
+                    let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                    s.working = false;
+                    s.last_auth_error = Some(format!(
+                        "Failed to authenticate: OAuth session expired ({err})."
+                    ));
+                    s.last_turn_stop_error = Some("authentication_failed".to_string());
+                    drop(s);
+                    activity.sync();
+                }
+            }
+            continue;
+        }
         if state.lock().unwrap_or_else(|p| p.into_inner()).child_exited {
-            println!("\r\n[Claude Native] Agent process exited.");
-            break;
+            let now = Instant::now();
+            while crash_restarts
+                .front()
+                .is_some_and(|at| now.duration_since(*at) > Duration::from_secs(60))
+            {
+                crash_restarts.pop_front();
+            }
+            if crash_restarts.len() >= 3 {
+                println!("\r\n[Claude Native] Agent process exited repeatedly; stopping host.");
+                break;
+            }
+            crash_restarts.push_back(now);
+            println!("\r\n[Claude Native] Agent process exited unexpectedly; restarting...");
+            let _ = std::io::stdout().flush();
+            thread::sleep(Duration::from_millis(500));
+            let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
+            *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            stop_claude_gracefully(&proc.transport, &mut proc.child, &child_pid);
+            let (resume_id, model, effort, read_only, level) = {
+                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                s.working = false;
+                s.compacting = false;
+                s.compacting_started_at = None;
+                s.child_pid = 0;
+                s.child_exited = false;
+                s.pending_requests.clear();
+                s.clear_live_turn_output();
+                (
+                    s.native_session_id.clone(),
+                    s.current_model.clone(),
+                    s.current_effort.clone(),
+                    s.read_only,
+                    s.approval_level,
+                )
+            };
+            match spawn_and_init_claude(
+                spec,
+                &parsed,
+                &cwd,
+                &spool_session_id,
+                resume_id.as_deref(),
+                false,
+                model.as_deref(),
+                effort.as_deref(),
+                read_only,
+                level,
+                &state,
+                &activity,
+                &mode_sync_lock,
+                &child_pid,
+                &active_transport,
+                &process_gen,
+                new_gen,
+            ) {
+                Ok(next_proc) => {
+                    proc = next_proc;
+                    println!(
+                        "\r\n[Claude Native] Agent process restarted and conversation resumed."
+                    );
+                    let _ = std::io::stdout().flush();
+                    activity.sync();
+                    continue;
+                }
+                Err(err) => {
+                    eprintln!("[Claude Native] Failed to restart crashed agent process: {err}");
+                    break;
+                }
+            }
         }
         let Some(ep) = endpoint.as_ref() else {
             thread::sleep(Duration::from_millis(500));
             continue;
         };
+        let is_working_now = state.lock().unwrap_or_else(|p| p.into_inner()).working;
         let mut poll_params = json!({
             "action": "poll",
             "sessionRef": ep.session_ref,
@@ -1696,6 +2054,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             "version": 1,
             "capabilities": capabilities,
         });
+        if is_working_now {
+            poll_params["holdMs"] = json!(1500);
+        }
         if let Some(secret) = ep.channel_secret.as_deref() {
             poll_params["channelSecret"] = json!(secret);
         }
@@ -2095,11 +2456,19 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     let sid = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        s.compacting = false;
+                        s.compacting_started_at = None;
                         s.last_turn_interrupted = false;
+                        s.last_turn_stop_error = None;
+                        s.last_auth_error = None;
+                        s.last_error = None;
+                        s.active_turn_auth_retried = false;
+                        s.turn_saw_auth_error = None;
+                        s.turn_saw_api_error = None;
+                        s.pending_auth_retry = None;
                         s.clear_live_turn_output();
                         s.native_session_id.clone()
                     };
-                    activity.sync();
                     let mut user_msg = json!({
                         "type": "user",
                         "message": {
@@ -2110,6 +2479,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     if let Some(sid_str) = sid.as_deref() {
                         user_msg["session_id"] = json!(sid_str);
                     }
+                    {
+                        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        s.active_turn_user_msg = Some(user_msg.clone());
+                    }
+                    activity.sync();
                     println!("\r\n[Claude Native] Turn started...");
                     let _ = std::io::stdout().flush();
                     match proc.transport.write_json(&user_msg) {

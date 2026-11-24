@@ -116,7 +116,10 @@ pub(crate) fn enrich_notice(
         return;
     };
     let Some(account) = session_account(repository.db, provider, &session) else {
-        if provider == Provider::Claude && notice.sign_in_error() {
+        if provider == Provider::Claude
+            && notice.sign_in_error()
+            && !crate::acp::session_is_acp(&session)
+        {
             notice.actions.insert(
                 0,
                 SessionChatTerminalNoticeAction::send_keys(

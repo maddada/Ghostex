@@ -408,7 +408,12 @@ async fn poll(
         PreHold::Hold => {}
     }
     let guard = PollGuard(channel_key.clone());
-    let _ = tokio::time::timeout(POLL_HOLD, wake.notified()).await;
+    let hold_duration = params
+        .get("holdMs")
+        .and_then(Value::as_u64)
+        .map(|ms| Duration::from_millis(ms.clamp(200, POLL_HOLD.as_millis() as u64)))
+        .unwrap_or(POLL_HOLD);
+    let _ = tokio::time::timeout(hold_duration, wake.notified()).await;
     let (commands, woken_for_approval_sync) = {
         let mut channels = lock(&CHANNELS);
         match channels.get_mut(&guard.0) {
@@ -420,7 +425,7 @@ async fn poll(
         }
     };
     drop(guard);
-    let mut resp = json!({ "commands": commands, "holdMs": POLL_HOLD.as_millis() as u64 });
+    let mut resp = json!({ "commands": commands, "holdMs": hold_duration.as_millis() as u64 });
     if woken_for_approval_sync {
         if let Some(level) =
             read_persisted_acp_approval_level(state, &channel_key.0, &channel_key.1).await

@@ -173,6 +173,15 @@ fn parse_args(args: &[String]) -> Result<HostArgs, String> {
                 i += 1;
                 profile.developer_instructions = args.get(i).cloned();
             }
+            "--developer-instructions-json" => {
+                i += 1;
+                if let Some(raw) = args.get(i) {
+                    let decoded: String = serde_json::from_str(raw).map_err(|err| {
+                        format!("Invalid --developer-instructions-json value: {err}")
+                    })?;
+                    profile.developer_instructions = Some(decoded);
+                }
+            }
             "--gbot-chat" => profile.gbot_chat = true,
             "--gbot-api-chat" => profile.gbot_api_chat = true,
             "--gbot-computer-use-off" => profile.gbot_computer_use_off = true,
@@ -347,6 +356,28 @@ impl GxserverEndpoint {
         pending_permission: Option<&PendingPermission>,
         interrupted: bool,
     ) {
+        self.report_activity_with_error(
+            family,
+            activity,
+            native_session_id,
+            explicit_transcript_path,
+            pending_permission,
+            interrupted,
+            None,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn report_activity_with_error(
+        &self,
+        family: &str,
+        activity: &str,
+        native_session_id: Option<&str>,
+        explicit_transcript_path: Option<&str>,
+        pending_permission: Option<&PendingPermission>,
+        interrupted: bool,
+        stop_error: Option<&str>,
+    ) {
         let event_name = match activity {
             "working" => {
                 self.saw_working.store(true, Ordering::Relaxed);
@@ -356,6 +387,9 @@ impl GxserverEndpoint {
                 self.saw_working.store(true, Ordering::Relaxed);
                 "PermissionRequest"
             }
+            // A failed turn settles as `StopFailure` (idle, no blue dot, wakes account recovery
+            // and failure notifications) rather than `Stop`.
+            _ if stop_error.is_some() => "StopFailure",
             // An interrupted/cancelled turn settles as `Interrupt` (idle), never `Stop`, so
             // gxserver never treats a user-stopped Non-CLI turn as finished.
             _ if interrupted => "Interrupt",
@@ -372,6 +406,11 @@ impl GxserverEndpoint {
             "status": activity,
             "timestamp": now_ms(),
         });
+        if event_name == "StopFailure" {
+            if let Some(code) = stop_error.filter(|s| !s.trim().is_empty()) {
+                params["stopError"] = json!(code);
+            }
+        }
         if let Some(sid) = native_session_id.filter(|s| !s.is_empty()) {
             params["agentSessionId"] = json!(sid);
             if let Some(path) = explicit_transcript_path

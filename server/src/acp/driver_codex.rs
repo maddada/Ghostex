@@ -279,6 +279,29 @@ enum CodexDenyMode {
     GbotApi,
 }
 
+fn codex_error_info_code(info: Option<&Value>) -> Option<String> {
+    match info? {
+        Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
+        Value::Object(map) => map.keys().next().cloned(),
+        _ => None,
+    }
+}
+
+fn codex_model_is_available(available_models: &Value, requested: &str) -> bool {
+    let Some(arr) = available_models.as_array() else {
+        return true;
+    };
+    if arr.is_empty() {
+        return true;
+    }
+    arr.iter().any(|entry| {
+        ["modelId", "id", "model", "slug"]
+            .iter()
+            .filter_map(|key| entry.get(*key).and_then(Value::as_str))
+            .any(|candidate| candidate.eq_ignore_ascii_case(requested))
+    })
+}
+
 fn push_capped_turn_id(ring: &mut VecDeque<String>, tid: String) {
     if ring.iter().any(|existing| existing == &tid) {
         return;
@@ -337,6 +360,10 @@ struct CodexState {
     completed_turn_ids: VecDeque<String>,
     working: bool,
     last_turn_interrupted: bool,
+    last_turn_stop_error: Option<String>,
+    last_error: Option<(Option<String>, String)>,
+    compacting: bool,
+    compacting_started_at: Option<String>,
     approval_level: AcpApprovalLevel,
     read_only: bool,
     deny_mode: CodexDenyMode,
@@ -392,6 +419,10 @@ impl CodexState {
             completed_turn_ids: VecDeque::new(),
             working: false,
             last_turn_interrupted: false,
+            last_turn_stop_error: None,
+            last_error: None,
+            compacting: false,
+            compacting_started_at: None,
             approval_level,
             read_only,
             deny_mode,
@@ -433,6 +464,13 @@ impl CodexState {
     }
 
     fn live_activity_json(&self) -> Value {
+        if self.compacting {
+            return json!({
+                "kind": "compacting",
+                "label": "Compacting conversation",
+                "detectedAt": self.compacting_started_at.as_deref().unwrap_or_default(),
+            });
+        }
         if !self.working {
             return Value::Null;
         }
@@ -488,6 +526,17 @@ impl CodexState {
                 .and_then(|id| transcript_path_for_session("codex", id))
                 .map(|p| p.to_string_lossy().to_string())
         });
+        let last_error = self.last_error.as_ref().map(|(code, msg)| {
+            json!({
+                "code": code,
+                "message": msg,
+            })
+        });
+        let auth_error = self.last_error.as_ref().and_then(|(code, msg)| {
+            code.as_deref()
+                .is_some_and(|c| c.eq_ignore_ascii_case("unauthorized"))
+                .then_some(msg.as_str())
+        });
         json!({
             "family": "codex",
             "nativeSessionId": self.thread_id,
@@ -518,6 +567,8 @@ impl CodexState {
             "childPid": self.child_pid,
             "childExited": self.child_exited,
             "fatalError": self.fatal_error,
+            "lastError": last_error,
+            "authError": auth_error,
         })
     }
 }
@@ -536,7 +587,7 @@ impl CodexActivityReporter {
         thread::spawn(move || {
             while rx.recv().is_ok() {
                 while rx.try_recv().is_ok() {}
-                let (act, sid, path, perm, interrupted) = {
+                let (act, sid, path, perm, interrupted, stop_error) = {
                     let s = state.lock().unwrap_or_else(|p| p.into_inner());
                     let front = s
                         .pending_requests
@@ -555,15 +606,17 @@ impl CodexActivityReporter {
                         s.thread_path.clone(),
                         front,
                         s.last_turn_interrupted,
+                        s.last_turn_stop_error.clone(),
                     )
                 };
-                ep.report_activity_with_path(
+                ep.report_activity_with_error(
                     "codex",
                     act,
                     sid.as_deref(),
                     path.as_deref(),
                     perm.as_ref(),
                     interrupted,
+                    stop_error.as_deref(),
                 );
             }
         });
@@ -1069,7 +1122,11 @@ fn restart_codex_process(
     let (resume_id, level, read_only, next_profile) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.working = false;
+        s.compacting = false;
+        s.compacting_started_at = None;
         s.child_pid = 0;
+        s.child_exited = false;
+        s.fatal_error = None;
         s.awaiting_turn_start = false;
         s.active_turn_id = None;
         s.file_change_items.clear();
@@ -1929,16 +1986,31 @@ fn spawn_codex_stdout_reader(
                             .pointer("/turn/id")
                             .or_else(|| params.get("turnId"))
                             .and_then(Value::as_str);
-                        let turn_interrupted = params
+                        let turn_status = params
                             .pointer("/turn/status")
                             .or_else(|| params.get("status"))
                             .and_then(Value::as_str)
-                            .is_some_and(|status| {
-                                matches!(
-                                    status.to_ascii_lowercase().as_str(),
-                                    "interrupted" | "cancelled" | "canceled" | "aborted"
-                                )
+                            .unwrap_or_default()
+                            .to_ascii_lowercase();
+                        let turn_interrupted = matches!(
+                            turn_status.as_str(),
+                            "interrupted" | "cancelled" | "canceled" | "aborted"
+                        );
+                        let turn_error = params
+                            .pointer("/turn/error")
+                            .or_else(|| params.get("error"))
+                            .filter(|v| !v.is_null())
+                            .and_then(|err| {
+                                let msg = err
+                                    .get("message")
+                                    .and_then(Value::as_str)
+                                    .map(str::trim)
+                                    .filter(|m| !m.is_empty())
+                                    .map(str::to_string)?;
+                                let code = codex_error_info_code(err.get("codexErrorInfo"));
+                                Some((code, msg))
                             });
+                        let turn_failed = turn_status == "failed" || turn_error.is_some();
                         let (stale_turn, orphaned): (bool, Vec<PendingCodexRequest>) = {
                             let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
                             if let Some(done_id) = completed_tid {
@@ -1958,8 +2030,20 @@ fn spawn_codex_stdout_reader(
                                     (true, Vec::new())
                                 } else {
                                     s.working = false;
+                                    s.compacting = false;
+                                    s.compacting_started_at = None;
                                     if turn_interrupted {
                                         s.last_turn_interrupted = true;
+                                    }
+                                    if let Some((code, msg)) = turn_error {
+                                        s.last_turn_stop_error = Some(
+                                            code.clone().unwrap_or_else(|| "error".to_string()),
+                                        );
+                                        s.last_error = Some((code, msg));
+                                    } else if turn_failed && s.last_turn_stop_error.is_none() {
+                                        s.last_turn_stop_error = Some("error".to_string());
+                                    } else if !turn_failed && s.last_turn_stop_error.is_none() {
+                                        s.last_error = None;
                                     }
                                     s.awaiting_turn_start = false;
                                     s.active_turn_id = None;
@@ -1971,8 +2055,19 @@ fn spawn_codex_stdout_reader(
                                 (true, Vec::new())
                             } else {
                                 s.working = false;
+                                s.compacting = false;
+                                s.compacting_started_at = None;
                                 if turn_interrupted {
                                     s.last_turn_interrupted = true;
+                                }
+                                if let Some((code, msg)) = turn_error {
+                                    s.last_turn_stop_error =
+                                        Some(code.clone().unwrap_or_else(|| "error".to_string()));
+                                    s.last_error = Some((code, msg));
+                                } else if turn_failed && s.last_turn_stop_error.is_none() {
+                                    s.last_turn_stop_error = Some("error".to_string());
+                                } else if !turn_failed && s.last_turn_stop_error.is_none() {
+                                    s.last_error = None;
                                 }
                                 s.awaiting_turn_start = false;
                                 s.active_turn_id = None;
@@ -2079,6 +2174,45 @@ fn spawn_codex_stdout_reader(
                             if let Some(w) = window.filter(|v| *v > 0) {
                                 s.usage_window_size = Some(w);
                             }
+                        }
+                    }
+                    "error" => {
+                        let will_retry = params
+                            .get("willRetry")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false);
+                        if !will_retry {
+                            let err_obj = params.get("error").unwrap_or(params);
+                            let msg = err_obj
+                                .get("message")
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .filter(|m| !m.is_empty())
+                                .map(str::to_string);
+                            let code = codex_error_info_code(err_obj.get("codexErrorInfo"));
+                            if let Some(msg) = msg {
+                                eprintln!("[Codex Native] API error: {msg}");
+                                let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                s.last_turn_stop_error =
+                                    Some(code.clone().unwrap_or_else(|| "error".to_string()));
+                                s.last_error = Some((code, msg));
+                            }
+                        }
+                    }
+                    "thread/compacted" => {
+                        let should_sync = {
+                            let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                            s.compacting = false;
+                            s.compacting_started_at = None;
+                            if s.working && s.active_turn_id.is_none() {
+                                s.working = false;
+                                true
+                            } else {
+                                false
+                            }
+                        };
+                        if should_sync {
+                            act_out.sync();
                         }
                     }
                     "thread/name/updated" => {
@@ -2371,19 +2505,56 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     ]);
     let channel_agent = format!("acp:{}", spec.family);
     let mut reconnecting = false;
+    let mut crash_restarts: VecDeque<Instant> = VecDeque::new();
 
     loop {
         if shutting_down.load(Ordering::Acquire) {
             break;
         }
         if state.lock().unwrap_or_else(|p| p.into_inner()).child_exited {
-            println!("\r\n[Codex Native] Agent process exited.");
-            break;
+            let now = Instant::now();
+            while crash_restarts
+                .front()
+                .is_some_and(|at| now.duration_since(*at) > Duration::from_secs(60))
+            {
+                crash_restarts.pop_front();
+            }
+            if crash_restarts.len() >= 3 {
+                println!("\r\n[Codex Native] Agent process exited repeatedly; stopping host.");
+                break;
+            }
+            crash_restarts.push_back(now);
+            println!("\r\n[Codex Native] Agent process exited unexpectedly; restarting...");
+            let _ = std::io::stdout().flush();
+            thread::sleep(Duration::from_millis(500));
+            match restart_codex_process(
+                &mut proc_opt,
+                &spawn_cfg,
+                &state,
+                &activity,
+                &child_pid,
+                &active_transport,
+                &process_gen,
+            ) {
+                Ok(()) => {
+                    println!(
+                        "\r\n[Codex Native] Agent process restarted and conversation resumed."
+                    );
+                    let _ = std::io::stdout().flush();
+                    activity.sync();
+                    continue;
+                }
+                Err(err) => {
+                    eprintln!("[Codex Native] Failed to restart crashed agent process: {err}");
+                    break;
+                }
+            }
         }
         let Some(ep) = endpoint.as_ref() else {
             thread::sleep(Duration::from_millis(500));
             continue;
         };
+        let is_working_now = state.lock().unwrap_or_else(|p| p.into_inner()).working;
         let mut poll_params = json!({
             "action": "poll",
             "sessionRef": ep.session_ref,
@@ -2393,6 +2564,9 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             "version": 1,
             "capabilities": capabilities,
         });
+        if is_working_now {
+            poll_params["holdMs"] = json!(1500);
+        }
         if let Some(secret) = ep.channel_secret.as_deref() {
             poll_params["channelSecret"] = json!(secret);
         }
@@ -2629,20 +2803,38 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .get("model")
                         .and_then(Value::as_str)
                         .unwrap_or_default()
+                        .trim()
                         .to_string();
                     let effort = params
                         .get("effort")
                         .and_then(Value::as_str)
                         .unwrap_or_default()
+                        .trim()
                         .to_string();
-                    {
+                    let invalid_model = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        if !model.is_empty() {
-                            s.current_model = Some(model);
+                        if !model.is_empty()
+                            && !codex_model_is_available(&s.available_models, &model)
+                        {
+                            true
+                        } else {
+                            if !model.is_empty() {
+                                s.current_model = Some(model.clone());
+                            }
+                            if !effort.is_empty() {
+                                s.current_effort = Some(effort);
+                            }
+                            false
                         }
-                        if !effort.is_empty() {
-                            s.current_effort = Some(effort);
-                        }
+                    };
+                    if invalid_model {
+                        ep.ack(
+                            id,
+                            false,
+                            Value::Null,
+                            Some(&format!("Unsupported Codex model: {model}")),
+                        );
+                        continue;
                     }
                     let snap = state
                         .lock()
@@ -2783,6 +2975,50 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                         continue;
                     };
+                    if text.trim().eq_ignore_ascii_case("/compact") {
+                        {
+                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                            s.working = true;
+                            s.compacting = true;
+                            s.compacting_started_at = Some(now_iso_rfc3339());
+                            s.last_turn_interrupted = false;
+                            s.last_turn_stop_error = None;
+                            s.last_error = None;
+                            s.awaiting_turn_start = false;
+                            s.active_turn_id = None;
+                            s.clear_live_turn_output();
+                        }
+                        activity.sync();
+                        println!("\r\n[Codex Native] Compacting thread...");
+                        let _ = std::io::stdout().flush();
+                        match proc.transport.call(
+                            "thread/compact/start",
+                            json!({ "threadId": tid }),
+                            CODEX_RPC_TIMEOUT,
+                        ) {
+                            Ok(_) => {
+                                ep.ack(
+                                    id,
+                                    true,
+                                    json!({ "accepted": true, "compacting": true, "sessionId": tid }),
+                                    None,
+                                );
+                            }
+                            Err(err) => {
+                                {
+                                    let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                    s.working = false;
+                                    s.compacting = false;
+                                    s.compacting_started_at = None;
+                                    s.last_turn_stop_error = Some("error".to_string());
+                                    s.last_error = Some((None, err.clone()));
+                                }
+                                activity.sync();
+                                ep.ack(id, false, Value::Null, Some(&err));
+                            }
+                        }
+                        continue;
+                    }
                     let (approval_policy, reviewer, sandbox_policy) =
                         codex_turn_policies(level, read_only, &roots);
                     let mut turn_params = Map::new();
@@ -2803,7 +3039,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        s.compacting = false;
+                        s.compacting_started_at = None;
                         s.last_turn_interrupted = false;
+                        s.last_turn_stop_error = None;
+                        s.last_error = None;
                         s.awaiting_turn_start = true;
                         s.active_turn_id = None;
                         s.clear_live_turn_output();
@@ -3066,6 +3306,50 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         );
                         continue;
                     };
+                    if images.is_empty() && text.trim().eq_ignore_ascii_case("/compact") {
+                        {
+                            let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                            s.working = true;
+                            s.compacting = true;
+                            s.compacting_started_at = Some(now_iso_rfc3339());
+                            s.last_turn_interrupted = false;
+                            s.last_turn_stop_error = None;
+                            s.last_error = None;
+                            s.awaiting_turn_start = false;
+                            s.active_turn_id = None;
+                            s.clear_live_turn_output();
+                        }
+                        activity.sync();
+                        println!("\r\n[Codex Native] Compacting thread...");
+                        let _ = std::io::stdout().flush();
+                        match proc.transport.call(
+                            "thread/compact/start",
+                            json!({ "threadId": tid }),
+                            CODEX_RPC_TIMEOUT,
+                        ) {
+                            Ok(_) => {
+                                ep.ack(
+                                    id,
+                                    true,
+                                    json!({ "accepted": true, "compacting": true, "sessionId": tid }),
+                                    None,
+                                );
+                            }
+                            Err(err) => {
+                                {
+                                    let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                    s.working = false;
+                                    s.compacting = false;
+                                    s.compacting_started_at = None;
+                                    s.last_turn_stop_error = Some("error".to_string());
+                                    s.last_error = Some((None, err.clone()));
+                                }
+                                activity.sync();
+                                ep.ack(id, false, Value::Null, Some(&err));
+                            }
+                        }
+                        continue;
+                    }
                     let (approval_policy, reviewer, sandbox_policy) =
                         codex_turn_policies(level, read_only, &roots);
                     let mut turn_params = Map::new();
@@ -3086,7 +3370,11 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                         s.working = true;
+                        s.compacting = false;
+                        s.compacting_started_at = None;
                         s.last_turn_interrupted = false;
+                        s.last_turn_stop_error = None;
+                        s.last_error = None;
                         s.awaiting_turn_start = true;
                         s.active_turn_id = None;
                         s.clear_live_turn_output();

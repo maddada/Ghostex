@@ -301,8 +301,18 @@ fn build_acp_host_launch_command_for_platform(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        parts.push("--developer-instructions".to_string());
-        parts.push(quote_acp_launch_arg(instr, windows));
+        // Keep the `ghostex acp-host` launch line strictly single-line (no control chars like
+        // `\n`) so account switches (`account_switch_resume_command`) and raw shell writes never
+        // reject or split multiline Codex developer instructions.
+        if instr.chars().any(char::is_control) {
+            if let Ok(encoded) = serde_json::to_string(instr) {
+                parts.push("--developer-instructions-json".to_string());
+                parts.push(quote_acp_launch_arg(&encoded, windows));
+            }
+        } else {
+            parts.push("--developer-instructions".to_string());
+            parts.push(quote_acp_launch_arg(instr, windows));
+        }
     }
     if profile.gbot_chat {
         parts.push("--gbot-chat".to_string());

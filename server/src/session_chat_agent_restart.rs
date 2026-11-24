@@ -404,6 +404,32 @@ pub(crate) async fn heal_failed_start(
         }
         return None;
     }
+    if crate::acp::session_is_acp(&target.session) {
+        if crate::acp::channel::live(project_id, session_id, "send").is_some() {
+            return None;
+        }
+        let zmx_name = target.zmx_name.clone();
+        let host_running = tokio::task::spawn_blocking(move || {
+            match crate::zmx::read_zmx_session_tree(&zmx_name) {
+                Ok(Some(tree)) => tree.processes.iter().any(|process| {
+                    // Exclude the zmx daemon root itself: its argv can retain the original
+                    // startup script text containing "acp-host" even after the host exited.
+                    process.pid != tree.root && process.command.contains("acp-host")
+                }),
+                Ok(None) => false,
+                Err(()) => true,
+            }
+        })
+        .await
+        .unwrap_or(true);
+        if host_running {
+            return None;
+        }
+        return crate::session_chat_queue_runtime::restart_agent_for_send(state, &target, false)
+            .await
+            .err()
+            .filter(|reason| crate::session_chat_queue_runtime::restart_refusal_is_final(reason));
+    }
     let composer = crate::session_chat_options::cached_session_chat_composer_readiness(
         state, project_id, session_id,
     );

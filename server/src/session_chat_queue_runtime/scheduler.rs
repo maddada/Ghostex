@@ -870,7 +870,9 @@ impl SessionChatQueueRuntime {
         let acp_session = crate::acp::session_is_acp(&session) || acp_channel_live;
         if acp_session && !acp_channel_live {
             self.reset_gate(key);
-            if awaiting_startup && self.composer_holds.wake_check_due(key, &head.id, now) {
+            // Wake/heal both startup sends and regular sends when a Native host died back to the
+            // shell so a crashed `acp-host` recovers automatically instead of holding forever.
+            if self.composer_holds.wake_check_due(key, &head.id, now) {
                 (self.waker)(project_id, session_id, &head.id);
             }
             let reason = if crate::session_approval::session_awaits_answer(&session) {

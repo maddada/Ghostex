@@ -293,6 +293,107 @@ fn acp_terminal_notice(
         );
     }
 
+    if let Some(err) = acp_state
+        .and_then(|s| s.get("authError"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let family = acp_state
+            .and_then(|s| s.get("family"))
+            .and_then(Value::as_str)
+            .unwrap_or("claude");
+        let agent_label = match family {
+            "codex" => "Codex",
+            "antigravity" => "Antigravity",
+            _ => "Claude Code",
+        };
+        return Some(
+            SessionChatTerminalNotice::new(
+                crate::session_chat_notice::SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
+                SessionChatTerminalNoticeSeverity::Error,
+                SessionChatTerminalNoticeSource::Watchdog,
+                format!("Sign in to {agent_label} again"),
+            )
+            .with_detail(format!(
+                "{agent_label}'s login expired. Sign in again, or switch this chat to another account."
+            ))
+            .with_details(Some(err.to_string()))
+            .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+                "Switch to Terminal",
+            )])
+            .with_input_blocking(false),
+        );
+    }
+
+    if let Some(last_err) = acp_state
+        .and_then(|s| s.get("lastError"))
+        .and_then(Value::as_object)
+    {
+        let message = last_err
+            .get("message")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        let code = last_err
+            .get("code")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        if let Some(message) = message {
+            let family = acp_state
+                .and_then(|s| s.get("family"))
+                .and_then(Value::as_str)
+                .unwrap_or("agent");
+            let agent_label = match family {
+                "codex" => "Codex",
+                "antigravity" => "Antigravity",
+                "claude" => "Claude Code",
+                _ => "Agent",
+            };
+            let lower_code = code.unwrap_or_default().to_ascii_lowercase();
+            let lower_msg = message.to_ascii_lowercase();
+            let (kind, title, detail) = if lower_code.contains("usagelimit")
+                || lower_code.contains("rate_limit")
+                || lower_msg.contains("usage limit")
+                || lower_msg.contains("rate limit")
+            {
+                (
+                    crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT,
+                    format!("{agent_label} hit a usage limit"),
+                    "Switch this chat to another account, or wait for the limit to reset."
+                        .to_string(),
+                )
+            } else if lower_code.contains("unauthorized")
+                || lower_code.contains("authentication_failed")
+            {
+                (
+                    crate::session_chat_notice::SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
+                    format!("Sign in to {agent_label} again"),
+                    format!("{agent_label}'s login expired. Sign in again, or switch this chat to another account."),
+                )
+            } else {
+                (
+                    crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_ERROR,
+                    format!("{agent_label} could not finish"),
+                    "The last request failed. Try sending again, or pick a different model."
+                        .to_string(),
+                )
+            };
+            return Some(
+                SessionChatTerminalNotice::new(
+                    kind,
+                    SessionChatTerminalNoticeSeverity::Error,
+                    SessionChatTerminalNoticeSource::Watchdog,
+                    title,
+                )
+                .with_detail(detail)
+                .with_details(Some(message.to_string()))
+                .with_input_blocking(false),
+            );
+        }
+    }
+
     let ignored = session
         .and_then(|s| s.get("runtimeSettings"))
         .and_then(Value::as_object)
@@ -564,6 +665,26 @@ pub fn detect_session_chat_terminal_state(
                         background: None,
                     })
                 }
+                "compacting" => {
+                    let label = obj
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or("Compacting conversation");
+                    Some(crate::session_chat_terminal_activity::SessionChatTerminalActivity {
+                        kind: crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_COMPACTING,
+                        label: label.to_string(),
+                        percent: None,
+                        elapsed_seconds: None,
+                        detected_at,
+                        tokens: None,
+                        detail: None,
+                        text: None,
+                        stream: None,
+                        background: None,
+                    })
+                }
                 _ => None,
             }
         });
@@ -580,7 +701,12 @@ pub fn detect_session_chat_terminal_state(
             .get_session(project_id, session_id)
             .ok()
             .flatten();
-        let notice = acp_terminal_notice(Some(&acp_state), session_row.as_ref());
+        let mut notice = acp_terminal_notice(Some(&acp_state), session_row.as_ref());
+        if let Some(notice) = notice.as_mut() {
+            crate::session_chat_account_sign_in::enrich_notice(
+                repository, project_id, session_id, notice,
+            );
+        }
         let child_exited = acp_state.get("childExited").and_then(Value::as_bool) == Some(true);
         let has_fatal_error = acp_state
             .get("fatalError")
