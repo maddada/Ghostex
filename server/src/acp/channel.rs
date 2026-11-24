@@ -538,6 +538,26 @@ pub(crate) async fn check_approval_level_change_allowed(
 static APPROVAL_LOCKS: LazyLock<Mutex<HashMap<(String, String), Arc<tokio::sync::Mutex<()>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// Per-session lock serializing Terminal <-> Native switches (`switch_to_cli`,
+/// `execute_switch_to_acp`) with chat message sends (`session_chat_queue_runtime::send`) so a
+/// switch never cuts a send mid-delivery and a send arriving during a switch sees the updated
+/// transport once the cycle completes.
+static SESSION_SWITCH_LOCKS: LazyLock<
+    Mutex<HashMap<(String, String), Arc<tokio::sync::Mutex<()>>>>,
+> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+pub(crate) fn session_switch_lock(
+    project_id: &str,
+    session_id: &str,
+) -> Arc<tokio::sync::Mutex<()>> {
+    let mut map = SESSION_SWITCH_LOCKS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    map.entry((project_id.to_string(), session_id.to_string()))
+        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+        .clone()
+}
+
 fn approval_lock(project_id: &str, session_id: &str) -> Arc<tokio::sync::Mutex<()>> {
     let mut map = APPROVAL_LOCKS
         .lock()
@@ -718,6 +738,9 @@ pub(crate) async fn switch_to_cli(
     interrupt: bool,
 ) -> Result<Value, DomainStateError> {
     super::pending_switch::cancel(project_id, session_id);
+    let _switch_guard = session_switch_lock(project_id, session_id)
+        .lock_owned()
+        .await;
     let (native_session_id, switched_live) = if live(project_id, session_id, "switch_to_cli")
         .is_some()
     {
@@ -881,12 +904,181 @@ pub(crate) async fn switch_to_cli(
     }))
 }
 
+/// Origin of a Terminal -> Native switch attempt so `execute_switch_to_acp` enforces the exact
+/// eligibility rules under the per-session lock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SwitchOrigin {
+    /// User explicitly clicked "Switch to Native" on this one session.
+    Single,
+    /// Queued switch firing once a busy session becomes safe (`pending_switch.rs`).
+    Queued,
+    /// First-launch bulk switch (`switch_eligible_sessions_to_acp`): live running non-draft
+    /// sessions without an explicit Terminal override or coordinator-thread role.
+    Bulk,
+}
+
+/// Result of checking whether a running Terminal session can safely sleep and wake in Native mode
+/// right now without cutting a turn, tool call, approval wait, queued prompt, or background work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SwitchSafety {
+    Safe,
+    Busy(&'static str),
+    CannotResume(&'static str),
+}
+
+/// Whether `session` is an AgentBox, detected external, Claude Cloud, or Teleport session that
+/// cannot run inside Ghostex's local `acp-host` wrapper (`resume_plan.rs` bypasses `acp-host` for
+/// these, so flipping `nonCliMode` would leave them unusable).
+fn session_ineligible_reason(session: &Value) -> Option<&'static str> {
+    if crate::agentbox::is_agentbox_session(session) {
+        return Some("Switching to Native mode is not available for sessions that run in a box.");
+    }
+    if session
+        .pointer("/runtimeSettings/externalSession")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        return Some("Switching to Native mode is not available for externally attached sessions.");
+    }
+    if session
+        .pointer("/runtimeSettings/claudeCloud")
+        .is_some_and(Value::is_object)
+        || session
+            .pointer(&format!(
+                "/runtimeSettings/{}",
+                crate::claude_cloud::TELEPORT_RUNTIME_KEY
+            ))
+            .and_then(Value::as_str)
+            .is_some_and(crate::claude_cloud::is_cloud_session_id)
+    {
+        return Some("Switching to Native mode is not available for cloud or teleported sessions.");
+    }
+    None
+}
+
+/// Whether a session is structurally eligible to switch from Terminal to Native mode (advertised
+/// via `nativeModeSwitchCapable` in `readSessionChat`).
+pub(crate) fn session_is_switch_eligible(session: &Value) -> bool {
+    session_ineligible_reason(session).is_none()
+}
+
+/// Resolve the Native-capable agent family for `session`, rejecting unsupported agents as well as
+/// AgentBox, detected external, cloud, and teleported sessions.
+pub(crate) fn session_native_switch_family(session: &Value) -> Result<String, DomainStateError> {
+    if let Some(reason) = session_ineligible_reason(session) {
+        return Err(DomainStateError::bad_request(reason));
+    }
+    let family = session
+        .pointer("/runtimeSettings/acpFamily")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(session))
+        .ok_or_else(|| DomainStateError {
+            code: "invalidParams",
+            message: "This session does not belong to an agent that supports Native mode."
+                .to_string(),
+        })?;
+    if !super::supports_acp(&family) {
+        return Err(DomainStateError {
+            code: "invalidParams",
+            message: format!("Agent `{family}` does not support Native mode."),
+        });
+    }
+    Ok(family)
+}
+
+/// True when the user explicitly placed this session in Terminal mode (`switch_to_cli` writes
+/// `nonCliMode: false, acpMode: false`). Bulk switch always respects this choice.
+pub(crate) fn session_explicitly_terminal(session: &Value) -> bool {
+    session
+        .pointer(&format!(
+            "/runtimeSettings/{}",
+            super::SESSION_NON_CLI_ACTIVE_KEY
+        ))
+        .and_then(Value::as_bool)
+        == Some(false)
+        || session
+            .pointer(&format!(
+                "/runtimeSettings/{}",
+                super::SESSION_ACP_ACTIVE_KEY
+            ))
+            .and_then(Value::as_bool)
+            == Some(false)
+}
+
+/// Check whether a running Terminal session is safe to sleep and wake in Native mode right now.
+///
+/// Busy = working OR attention mid-turn (connector card, approval, question, or any non-turnComplete
+/// attention) OR `agent_is_busy` (hooks, compacting, pending question, transcript gate) OR pending
+/// chat queue rows OR live background work (`background_work_a_restart_would_end`: background
+/// shells/monitors or a coordinator with active unresolved threads). Also requires
+/// `can_start_on_its_conversation` so cycling never discards an unwritten or uncaptured history.
+pub(crate) async fn check_session_safe_to_switch_now(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    session: &Value,
+) -> SwitchSafety {
+    if crate::presentation::effective_lifecycle_state(session) != "running" {
+        return SwitchSafety::Safe;
+    }
+    let now = crate::presentation::now_iso();
+    let activity = crate::presentation::presentation_activity(session, &now);
+    if activity == "working" {
+        return SwitchSafety::Busy("the agent is currently working");
+    }
+    if activity == "attention" {
+        let waiting_connector = crate::connectors::waiting_connector_card(session).is_some();
+        let turn_complete = crate::session_status::is_turn_complete_attention(
+            session.pointer("/runtimeSettings/agentActivity"),
+        );
+        if waiting_connector || !turn_complete {
+            return SwitchSafety::Busy("the agent is waiting on an approval or prompt");
+        }
+    }
+    if crate::session_chat_queue_runtime::agent_is_busy(session).await {
+        return SwitchSafety::Busy("the agent is busy");
+    }
+    let has_pending_queue = open_gxserver_database(&state.paths).is_ok_and(|db| {
+        crate::session_chat_queue::session_has_pending_session_chat_queue(
+            &db, project_id, session_id,
+        )
+    });
+    if has_pending_queue {
+        return SwitchSafety::Busy("the chat has queued messages waiting to send");
+    }
+    let mut params = Map::new();
+    params.insert("projectId".to_string(), json!(project_id));
+    params.insert("sessionId".to_string(), json!(session_id));
+    if let Ok(target) = crate::session_chat_send::resolve_session_chat_send_target(
+        state,
+        &params,
+        "switchSessionCliToAcp",
+    ) {
+        if let Some(reason) =
+            crate::session_chat_queue_runtime::background_work_a_restart_would_end(state, &target)
+                .await
+        {
+            return SwitchSafety::Busy(reason);
+        }
+    }
+    if !crate::session_chat_queue_runtime::can_start_on_its_conversation(state, session).await {
+        return SwitchSafety::CannotResume(
+            "this chat does not have a resumable conversation yet; send a message first",
+        );
+    }
+    SwitchSafety::Safe
+}
+
 /// Switch a Terminal session whose agent supports Native mode into Native (`acp-host`).
 ///
 /// CDXC:AgentProviders 2026-11-24 DECISION:
-/// User (Q4771): never cycle a running session mid-reply. When `activity == "working"`, queue the
-/// switch and run it automatically as soon as the turn finishes, reporting `{ queued: true }` so
-/// clients show a cancelable pending state in the pill strip.
+/// User (Q4771): never cycle a running session mid-reply. When the session is busy (working,
+/// attention mid-turn, pending queue, or live background work), queue the switch and run it
+/// automatically once safe, reporting `{ queued: true }` so clients show a cancelable pending
+/// state in the pill strip.
 pub(crate) async fn switch_to_acp(
     state: &AppState,
     project_id: &str,
@@ -897,7 +1089,7 @@ pub(crate) async fn switch_to_acp(
     let server_id = state.metadata.server_id.clone();
     let pid = project_id.to_string();
     let sid = session_id.to_string();
-    let precheck = tokio::task::spawn_blocking(move || {
+    let (session, family, already_acp) = tokio::task::spawn_blocking(move || {
         let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
             code: "internalError",
             message: format!("SQLite gxserver state error: {error}"),
@@ -909,30 +1101,9 @@ pub(crate) async fn switch_to_acp(
                 code: "notFound",
                 message: "The session no longer exists.".to_string(),
             })?;
-        let family = session
-            .pointer("/runtimeSettings/acpFamily")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_string)
-            .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
-            .ok_or_else(|| DomainStateError {
-                code: "invalidParams",
-                message: "This session does not belong to an agent that supports Native mode."
-                    .to_string(),
-            })?;
-        if !super::supports_acp(&family) {
-            return Err(DomainStateError {
-                code: "invalidParams",
-                message: format!("Agent `{family}` does not support Native mode."),
-            });
-        }
+        let family = session_native_switch_family(&session)?;
         let already_acp = super::session_is_acp(&session);
-        let running = crate::presentation::effective_lifecycle_state(&session) == "running";
-        let now = crate::presentation::now_iso();
-        let working =
-            running && crate::presentation::presentation_activity(&session, &now) == "working";
-        Ok::<_, DomainStateError>((already_acp, family, working))
+        Ok::<_, DomainStateError>((session, family, already_acp))
     })
     .await
     .map_err(|error| DomainStateError {
@@ -940,7 +1111,6 @@ pub(crate) async fn switch_to_acp(
         message: format!("Could not inspect session for Native mode: {error}"),
     })??;
 
-    let (already_acp, family, working) = precheck;
     if already_acp {
         super::pending_switch::cancel(project_id, session_id);
         return Ok(json!({
@@ -951,53 +1121,96 @@ pub(crate) async fn switch_to_acp(
         }));
     }
 
-    if working {
-        super::pending_switch::queue(project_id, session_id, caller_is_user_device);
-        super::pending_switch::broadcast_state(state, project_id, session_id).await;
-        log(
-            LogLevel::Info,
-            "acp.switchToAcpQueued",
-            json!({
-                "projectId": project_id,
-                "sessionId": session_id,
-                "family": family,
-            }),
-        );
+    if super::pending_switch::is_in_flight(project_id, session_id) {
         return Ok(json!({
             "switched": false,
             "queued": true,
+            "inFlight": true,
             "restarted": false,
             "family": family,
         }));
     }
 
+    match check_session_safe_to_switch_now(state, project_id, session_id, &session).await {
+        SwitchSafety::Busy(_) => {
+            super::pending_switch::queue(project_id, session_id, caller_is_user_device);
+            super::pending_switch::broadcast_state(state, project_id, session_id).await;
+            log(
+                LogLevel::Info,
+                "acp.switchToAcpQueued",
+                json!({
+                    "projectId": project_id,
+                    "sessionId": session_id,
+                    "family": family,
+                }),
+            );
+            return Ok(json!({
+                "switched": false,
+                "queued": true,
+                "restarted": false,
+                "family": family,
+            }));
+        }
+        SwitchSafety::CannotResume(reason) => {
+            return Err(DomainStateError::bad_request(reason));
+        }
+        SwitchSafety::Safe => {}
+    }
+
     super::pending_switch::cancel(project_id, session_id);
-    execute_switch_to_acp(state, project_id, session_id, caller_is_user_device).await
+    match execute_switch_to_acp(
+        state,
+        project_id,
+        session_id,
+        caller_is_user_device,
+        SwitchOrigin::Single,
+    )
+    .await
+    {
+        Ok(result) => Ok(result),
+        Err(error) if error.code == "sessionBusy" => {
+            // Session became busy while waiting for the per-session lock: queue safely instead of failing.
+            super::pending_switch::queue(project_id, session_id, caller_is_user_device);
+            super::pending_switch::broadcast_state(state, project_id, session_id).await;
+            Ok(json!({
+                "switched": false,
+                "queued": true,
+                "restarted": false,
+                "family": family,
+            }))
+        }
+        Err(error) => Err(error),
+    }
 }
 
-/// Bulk-switch every safe existing Terminal session (Antigravity, Claude Code, Codex) to Native
-/// mode for the desktop first-launch Native mode modal (`Q4773`/`Q4774`).
+/// Bulk-switch every safe, live Terminal session (Antigravity, Claude Code, Codex) across projects
+/// on this computer to Native mode (`Q4773`/`Q4774`).
 ///
-/// Switches idle standalone sessions and idle coordinators right away. Skips worker threads under
-/// coordinators (they switch when reloaded or newly created) and skips any session actively
-/// working mid-turn (without queueing).
+/// Only switches live running non-draft sessions without an explicit Terminal override
+/// (`nonCliMode: false`) and not running as a coordinator worker thread. Re-checks busy/background
+/// work/resumability under each session's lock right before sleeping, runs bounded in parallel,
+/// and never blocks past the RPC soft wait window.
 pub(crate) async fn switch_eligible_sessions_to_acp(
     state: &AppState,
     caller_is_user_device: bool,
 ) -> Result<Value, DomainStateError> {
+    const MAX_CONCURRENT_SWITCHES: usize = 6;
+    const SOFT_WAIT: Duration = Duration::from_secs(25);
+
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
-    let (to_switch, skipped_working, skipped_threads) = tokio::task::spawn_blocking(move || {
+    let scan = tokio::task::spawn_blocking(move || {
         let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
             code: "internalError",
             message: format!("SQLite gxserver state error: {error}"),
         })?;
         let repository = DomainRepository::new(&db, server_id.as_str());
         let sessions = repository.list_sessions_excluding_stopped(None)?;
-        let now = crate::presentation::now_iso();
-        let mut to_switch: Vec<(String, String)> = Vec::new();
-        let mut skipped_working: usize = 0;
+        let mut candidates: Vec<(String, String)> = Vec::new();
         let mut skipped_threads: usize = 0;
+        let mut skipped_explicit_terminal: usize = 0;
+        let mut skipped_sleeping: usize = 0;
+        let mut skipped_unsupported: usize = 0;
 
         for session in sessions {
             let Some(project_id) = session.get("projectId").and_then(Value::as_str) else {
@@ -1006,18 +1219,21 @@ pub(crate) async fn switch_eligible_sessions_to_acp(
             let Some(session_id) = session.get("sessionId").and_then(Value::as_str) else {
                 continue;
             };
-            let family = session
-                .pointer("/runtimeSettings/acpFamily")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session));
-            let Some(family) = family.filter(|f| super::supports_acp(f)) else {
-                continue;
-            };
-            let _ = family;
             if super::session_is_acp(&session) {
+                continue;
+            }
+            if session_native_switch_family(&session).is_err() {
+                skipped_unsupported += 1;
+                continue;
+            }
+            if session_explicitly_terminal(&session) {
+                skipped_explicit_terminal += 1;
+                continue;
+            }
+            let running = crate::presentation::effective_lifecycle_state(&session) == "running";
+            let is_draft = crate::agents::session_is_draft(&session);
+            if !running || is_draft {
+                skipped_sleeping += 1;
                 continue;
             }
             if crate::coordinators::read_thread(&db, project_id, session_id)
@@ -1028,17 +1244,16 @@ pub(crate) async fn switch_eligible_sessions_to_acp(
                 skipped_threads += 1;
                 continue;
             }
-            let running = crate::presentation::effective_lifecycle_state(&session) == "running";
-            let working =
-                running && crate::presentation::presentation_activity(&session, &now) == "working";
-            if working {
-                skipped_working += 1;
-                continue;
-            }
-            to_switch.push((project_id.to_string(), session_id.to_string()));
+            candidates.push((project_id.to_string(), session_id.to_string()));
         }
 
-        Ok::<_, DomainStateError>((to_switch, skipped_working, skipped_threads))
+        Ok::<_, DomainStateError>((
+            candidates,
+            skipped_threads,
+            skipped_explicit_terminal,
+            skipped_sleeping,
+            skipped_unsupported,
+        ))
     })
     .await
     .map_err(|error| DomainStateError {
@@ -1046,47 +1261,144 @@ pub(crate) async fn switch_eligible_sessions_to_acp(
         message: format!("Could not scan sessions for Native mode: {error}"),
     })??;
 
-    let mut switched: usize = 0;
-    let mut failed: usize = 0;
-    for (project_id, session_id) in to_switch {
-        super::pending_switch::cancel(&project_id, &session_id);
-        match execute_switch_to_acp(state, &project_id, &session_id, caller_is_user_device).await {
-            Ok(_) => switched += 1,
-            Err(error) => {
-                failed += 1;
-                log(
-                    LogLevel::Warn,
-                    "acp.bulkSwitchToAcpSkipped",
-                    json!({
-                        "projectId": project_id,
-                        "sessionId": session_id,
-                        "code": error.code,
-                        "message": error.message,
-                    }),
-                );
+    let (
+        candidates,
+        skipped_threads_initial,
+        skipped_explicit_terminal_initial,
+        skipped_sleeping_initial,
+        skipped_unsupported_initial,
+    ) = scan;
+    let total_eligible = candidates.len();
+
+    let (done_tx, done_rx) = tokio::sync::oneshot::channel::<Value>();
+    let state_bg = state.clone();
+    tokio::spawn(async move {
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_SWITCHES));
+        let mut join_set = tokio::task::JoinSet::new();
+        for (project_id, session_id) in candidates {
+            let sem = semaphore.clone();
+            let state_task = state_bg.clone();
+            join_set.spawn(async move {
+                let Ok(_permit) = sem.acquire_owned().await else {
+                    return ("failed", project_id, session_id, None::<String>);
+                };
+                if super::pending_switch::is_in_flight(&project_id, &session_id) {
+                    return ("busy", project_id, session_id, None);
+                }
+                super::pending_switch::cancel(&project_id, &session_id);
+                match execute_switch_to_acp(
+                    &state_task,
+                    &project_id,
+                    &session_id,
+                    caller_is_user_device,
+                    SwitchOrigin::Bulk,
+                )
+                .await
+                {
+                    Ok(_) => ("switched", project_id, session_id, None),
+                    Err(error) => {
+                        let bucket = match error.code {
+                            "sessionBusy" => "busy",
+                            "coordinatorThread" => "thread",
+                            "explicitTerminal" => "explicitTerminal",
+                            "sessionNotRunning" => "sleeping",
+                            "cannotResume" => "cannotResume",
+                            "invalidParams" | "badRequest" => "unsupported",
+                            _ => "failed",
+                        };
+                        (bucket, project_id, session_id, Some(error.message))
+                    }
+                }
+            });
+        }
+
+        let mut switched: usize = 0;
+        let mut skipped_busy: usize = 0;
+        let mut skipped_threads: usize = skipped_threads_initial;
+        let mut skipped_explicit_terminal: usize = skipped_explicit_terminal_initial;
+        let mut skipped_sleeping: usize = skipped_sleeping_initial;
+        let mut skipped_unsupported: usize = skipped_unsupported_initial;
+        let mut skipped_cannot_resume: usize = 0;
+        let mut failed: usize = 0;
+
+        while let Some(joined) = join_set.join_next().await {
+            match joined {
+                Ok(("switched", _, _, _)) => switched += 1,
+                Ok(("busy", _, _, _)) => skipped_busy += 1,
+                Ok(("thread", _, _, _)) => skipped_threads += 1,
+                Ok(("explicitTerminal", _, _, _)) => skipped_explicit_terminal += 1,
+                Ok(("sleeping", _, _, _)) => skipped_sleeping += 1,
+                Ok(("unsupported", _, _, _)) => skipped_unsupported += 1,
+                Ok(("cannotResume", pid, sid, msg)) => {
+                    skipped_cannot_resume += 1;
+                    log(
+                        LogLevel::Info,
+                        "acp.bulkSwitchToAcpSkippedCannotResume",
+                        json!({
+                            "projectId": pid,
+                            "sessionId": sid,
+                            "message": msg,
+                        }),
+                    );
+                }
+                Ok((_, pid, sid, msg)) => {
+                    failed += 1;
+                    log(
+                        LogLevel::Warn,
+                        "acp.bulkSwitchToAcpFailed",
+                        json!({
+                            "projectId": pid,
+                            "sessionId": sid,
+                            "message": msg,
+                        }),
+                    );
+                }
+                Err(_) => failed += 1,
             }
         }
-    }
 
-    let deferred = skipped_working + skipped_threads + failed;
-    log(
-        LogLevel::Info,
-        "acp.switchEligibleSessionsToAcp",
-        json!({
+        let deferred = skipped_busy + skipped_threads + skipped_cannot_resume + failed;
+        let summary = json!({
+            "completed": true,
+            "inProgress": false,
+            "totalEligible": total_eligible,
             "switched": switched,
-            "deferred": deferred,
-            "skippedWorking": skipped_working,
+            "skippedBusy": skipped_busy,
+            "skippedWorking": skipped_busy,
             "skippedThreads": skipped_threads,
+            "skippedCannotResume": skipped_cannot_resume,
+            "skippedExplicitTerminal": skipped_explicit_terminal,
+            "skippedSleeping": skipped_sleeping,
+            "skippedUnsupported": skipped_unsupported,
             "failed": failed,
-        }),
-    );
+            "deferred": deferred,
+        });
+        log(
+            LogLevel::Info,
+            "acp.switchEligibleSessionsToAcp",
+            summary.clone(),
+        );
+        let _ = done_tx.send(summary);
+    });
 
-    Ok(json!({
-        "switched": switched,
-        "deferred": deferred,
-        "skippedWorking": skipped_working,
-        "skippedThreads": skipped_threads,
-    }))
+    match tokio::time::timeout(SOFT_WAIT, done_rx).await {
+        Ok(Ok(summary)) => Ok(summary),
+        _ => Ok(json!({
+            "completed": false,
+            "inProgress": true,
+            "totalEligible": total_eligible,
+            "switched": 0,
+            "skippedBusy": 0,
+            "skippedWorking": 0,
+            "skippedThreads": skipped_threads_initial,
+            "skippedCannotResume": 0,
+            "skippedExplicitTerminal": skipped_explicit_terminal_initial,
+            "skippedSleeping": skipped_sleeping_initial,
+            "skippedUnsupported": skipped_unsupported_initial,
+            "failed": 0,
+            "deferred": skipped_threads_initial,
+        })),
+    }
 }
 
 /// Cancel a queued Terminal-to-Native switch before the turn finishes (`Q4771`).
@@ -1112,19 +1424,36 @@ pub(crate) async fn cancel_switch_to_acp(
     }))
 }
 
-/// Execute the Terminal-to-Native switch immediately by updating `runtimeSettings.nonCliMode = true`
-/// and cycling a running session cleanly onto its same conversation id.
+#[derive(Clone, Debug)]
+struct PriorSwitchFields {
+    non_cli: Option<Value>,
+    acp_mode: Option<Value>,
+    acp_family: Option<Value>,
+    approval_level: Option<Value>,
+}
+
+/// Execute the Terminal-to-Native switch under the per-session switch lock: re-checks eligibility,
+/// busy state, background work, and conversation resumability right before persisting `nonCliMode`
+/// and cycling the provider. Rolls back exact prior fields, attempts a best-effort Terminal
+/// re-wake if `/api/wakeSession` failed after `/api/sleepSession`, and always broadcasts
+/// `sessionUpdated` so no client is left with stale state.
 pub(crate) async fn execute_switch_to_acp(
     state: &AppState,
     project_id: &str,
     session_id: &str,
     caller_is_user_device: bool,
+    origin: SwitchOrigin,
 ) -> Result<Value, DomainStateError> {
+    let _switch_guard = session_switch_lock(project_id, session_id)
+        .lock_owned()
+        .await;
+
+    // 1. Read fresh session state under the lock and validate structural eligibility.
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
     let pid = project_id.to_string();
     let sid = session_id.to_string();
-    let (already_acp, family, was_running) = tokio::task::spawn_blocking(move || {
+    let (session, family, already_acp, is_thread) = tokio::task::spawn_blocking(move || {
         let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
             code: "internalError",
             message: format!("SQLite gxserver state error: {error}"),
@@ -1136,33 +1465,118 @@ pub(crate) async fn execute_switch_to_acp(
                 code: "notFound",
                 message: "The session no longer exists.".to_string(),
             })?;
-        let family = session
-            .pointer("/runtimeSettings/acpFamily")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_string)
-            .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
+        let family = session_native_switch_family(&session)?;
+        let already_acp = super::session_is_acp(&session);
+        let is_thread = crate::coordinators::read_thread(&db, &pid, &sid)
+            .ok()
+            .flatten()
+            .is_some();
+        Ok::<_, DomainStateError>((session, family, already_acp, is_thread))
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Could not read session for Native mode: {error}"),
+    })??;
+
+    if already_acp {
+        return Ok(json!({
+            "switched": true,
+            "queued": false,
+            "restarted": false,
+            "family": family,
+        }));
+    }
+
+    let lifecycle = crate::presentation::effective_lifecycle_state(&session);
+    let was_running = lifecycle == "running";
+    let is_draft = crate::agents::session_is_draft(&session);
+
+    match origin {
+        SwitchOrigin::Bulk => {
+            if !was_running || is_draft {
+                return Err(DomainStateError {
+                    code: "sessionNotRunning",
+                    message: "Only live running chats are switched in bulk.".to_string(),
+                });
+            }
+            if session_explicitly_terminal(&session) {
+                return Err(DomainStateError {
+                    code: "explicitTerminal",
+                    message: "Session was explicitly set to Terminal mode.".to_string(),
+                });
+            }
+            if is_thread {
+                return Err(DomainStateError {
+                    code: "coordinatorThread",
+                    message: "Coordinator worker threads switch when reloaded or created."
+                        .to_string(),
+                });
+            }
+        }
+        SwitchOrigin::Queued => {
+            if !was_running || is_draft {
+                return Err(DomainStateError {
+                    code: "sessionNotRunning",
+                    message: "Session is no longer running.".to_string(),
+                });
+            }
+        }
+        SwitchOrigin::Single => {}
+    }
+
+    // 2. Final safety re-check right before writing `nonCliMode` and sleeping the provider.
+    if was_running {
+        match check_session_safe_to_switch_now(state, project_id, session_id, &session).await {
+            SwitchSafety::Safe => {}
+            SwitchSafety::Busy(reason) => {
+                return Err(DomainStateError {
+                    code: "sessionBusy",
+                    message: format!("Cannot switch right now: {reason}."),
+                });
+            }
+            SwitchSafety::CannotResume(reason) => {
+                return Err(DomainStateError {
+                    code: "cannotResume",
+                    message: reason.to_string(),
+                });
+            }
+        }
+    }
+
+    // 3. Persist Native runtimeSettings while capturing exact prior values for clean rollback.
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    let family_for_db = family.clone();
+    let prior = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, server_id.as_str());
+        let session = repository
+            .get_session(&pid, &sid)?
             .ok_or_else(|| DomainStateError {
-                code: "invalidParams",
-                message: "This session does not belong to an agent that supports Native mode."
-                    .to_string(),
+                code: "notFound",
+                message: "The session no longer exists.".to_string(),
             })?;
-        if !super::supports_acp(&family) {
-            return Err(DomainStateError {
-                code: "invalidParams",
-                message: format!("Agent `{family}` does not support Native mode."),
-            });
-        }
-        let running = crate::presentation::effective_lifecycle_state(&session) == "running";
-        if super::session_is_acp(&session) {
-            return Ok((true, family, running));
-        }
         let mut runtime_settings = session
             .get("runtimeSettings")
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
+        let prior = PriorSwitchFields {
+            non_cli: runtime_settings
+                .get(super::SESSION_NON_CLI_ACTIVE_KEY)
+                .cloned(),
+            acp_mode: runtime_settings.get(super::SESSION_ACP_ACTIVE_KEY).cloned(),
+            acp_family: runtime_settings.get(super::SESSION_ACP_FAMILY_KEY).cloned(),
+            approval_level: runtime_settings
+                .get(super::SESSION_ACP_APPROVAL_LEVEL_KEY)
+                .cloned(),
+        };
         let force_ask = crate::coordinators::is_read_only_thread(Some(&runtime_settings))
             || crate::side_chats::parent_of(&session).is_some()
             || crate::agents::is_gbot_api_chat(Some(&runtime_settings));
@@ -1179,7 +1593,10 @@ pub(crate) async fn execute_switch_to_acp(
         }
         runtime_settings.insert(super::SESSION_NON_CLI_ACTIVE_KEY.to_string(), json!(true));
         runtime_settings.insert(super::SESSION_ACP_ACTIVE_KEY.to_string(), json!(true));
-        runtime_settings.insert(super::SESSION_ACP_FAMILY_KEY.to_string(), json!(family));
+        runtime_settings.insert(
+            super::SESSION_ACP_FAMILY_KEY.to_string(),
+            json!(family_for_db),
+        );
         let mut update = Map::new();
         update.insert("projectId".to_string(), json!(pid));
         update.insert("sessionId".to_string(), json!(sid));
@@ -1187,16 +1604,8 @@ pub(crate) async fn execute_switch_to_acp(
             "runtimeSettings".to_string(),
             Value::Object(runtime_settings),
         );
-        let updated = repository.update_session(&update)?;
-        Ok((
-            false,
-            updated
-                .pointer("/runtimeSettings/acpFamily")
-                .and_then(Value::as_str)
-                .unwrap_or(&family)
-                .to_string(),
-            running,
-        ))
+        repository.update_session(&update)?;
+        Ok::<_, DomainStateError>(prior)
     })
     .await
     .map_err(|error| DomainStateError {
@@ -1204,22 +1613,15 @@ pub(crate) async fn execute_switch_to_acp(
         message: format!("Could not update session for Native mode: {error}"),
     })??;
 
-    if already_acp {
-        return Ok(json!({
-            "switched": true,
-            "queued": false,
-            "restarted": false,
-            "family": family,
-        }));
-    }
-
+    // 4. Cycle running provider. If wake fails after sleep, restore exact prior fields, attempt
+    //    a best-effort Terminal re-wake so the session is not left dead, and broadcast state.
     if was_running {
         if let Err(failure) = crate::session_chat_queue_runtime::cycle_session_explained(
             state, project_id, session_id,
         )
         .await
         {
-            // Roll back nonCliMode flag if cycling the provider failed.
+            let wake_failed = failure.step == "the session could not be started again";
             let paths = state.paths.clone();
             let server_id = state.metadata.server_id.clone();
             let pid = project_id.to_string();
@@ -1233,8 +1635,30 @@ pub(crate) async fn execute_switch_to_acp(
                             .and_then(Value::as_object)
                             .cloned()
                             .unwrap_or_default();
-                        rs.insert(super::SESSION_NON_CLI_ACTIVE_KEY.to_string(), json!(false));
-                        rs.insert(super::SESSION_ACP_ACTIVE_KEY.to_string(), json!(false));
+                        let restore =
+                            |map: &mut Map<String, Value>, key: &str, prev: Option<Value>| {
+                                if let Some(value) = prev {
+                                    map.insert(key.to_string(), value);
+                                } else {
+                                    map.remove(key);
+                                }
+                            };
+                        // If we are about to re-wake as Terminal while global `agentSessionMode`
+                        // may already be `"non-cli"`, pin `nonCliMode = false` ONLY if we need the
+                        // rollback wake to stay in Terminal, then restore the exact prior field.
+                        if wake_failed {
+                            rs.insert(super::SESSION_NON_CLI_ACTIVE_KEY.to_string(), json!(false));
+                            rs.insert(super::SESSION_ACP_ACTIVE_KEY.to_string(), json!(false));
+                        } else {
+                            restore(&mut rs, super::SESSION_NON_CLI_ACTIVE_KEY, prior.non_cli);
+                            restore(&mut rs, super::SESSION_ACP_ACTIVE_KEY, prior.acp_mode);
+                        }
+                        restore(&mut rs, super::SESSION_ACP_FAMILY_KEY, prior.acp_family);
+                        restore(
+                            &mut rs,
+                            super::SESSION_ACP_APPROVAL_LEVEL_KEY,
+                            prior.approval_level,
+                        );
                         let mut update = Map::new();
                         update.insert("projectId".to_string(), json!(pid));
                         update.insert("sessionId".to_string(), json!(sid));
@@ -1244,9 +1668,27 @@ pub(crate) async fn execute_switch_to_acp(
                 }
             })
             .await;
+
+            if wake_failed {
+                let rewoke = crate::session_chat_queue_runtime::wake_session_best_effort(
+                    state, project_id, session_id,
+                )
+                .await;
+                log(
+                    LogLevel::Warn,
+                    "acp.switchToAcpRollbackWake",
+                    json!({
+                        "projectId": project_id,
+                        "sessionId": session_id,
+                        "rewokeInTerminal": rewoke,
+                        "failure": failure.to_string(),
+                    }),
+                );
+            }
+            super::pending_switch::broadcast_state(state, project_id, session_id).await;
             return Err(DomainStateError {
                 code: "sessionInputFailed",
-                message: format!("Could not switch back to Native mode: {failure}"),
+                message: format!("Could not switch to Native mode: {failure}"),
             });
         }
     }

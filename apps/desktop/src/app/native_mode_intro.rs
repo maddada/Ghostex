@@ -29,21 +29,60 @@ const NATIVE_FAMILIES: [&str; 3] = ["antigravity", "claude", "codex"];
 /// settings file catches up.
 static NATIVE_MODE_INTRO_OPENED: AtomicBool = AtomicBool::new(false);
 
-pub(crate) fn format_bulk_switch_summary(switched: usize, deferred: usize) -> String {
-    let plural = |count: usize| if count == 1 { "chat" } else { "chats" };
-    match (switched, deferred) {
-        (s, d) if s > 0 && d > 0 => format!(
-            "Switched {s} {}; {d} will switch when they finish or reload.",
-            plural(s)
-        ),
-        (s, 0) if s > 0 => format!(
+pub(crate) struct BulkSwitchSummary {
+    pub(crate) completed: bool,
+    pub(crate) total_eligible: usize,
+    pub(crate) switched: usize,
+    pub(crate) skipped_busy: usize,
+    pub(crate) skipped_threads: usize,
+    pub(crate) failed: usize,
+}
+
+pub(crate) fn format_bulk_switch_summary(summary: &BulkSwitchSummary) -> String {
+    let chat_word = |count: usize| if count == 1 { "chat" } else { "chats" };
+    if !summary.completed {
+        return format!(
+            "Switching {} eligible {} in the background. New chats will use Native.",
+            summary.total_eligible,
+            chat_word(summary.total_eligible)
+        );
+    }
+
+    let mut notes: Vec<String> = Vec::new();
+    if summary.skipped_busy > 0 {
+        notes.push(if summary.skipped_busy == 1 {
+            "1 is busy and stays in Terminal until you switch it".to_string()
+        } else {
+            format!(
+                "{} are busy and stay in Terminal until you switch them",
+                summary.skipped_busy
+            )
+        });
+    }
+    if summary.skipped_threads > 0 {
+        notes.push(if summary.skipped_threads == 1 {
+            "1 worker thread will use Native on reload".to_string()
+        } else {
+            format!(
+                "{} worker threads will use Native on reload",
+                summary.skipped_threads
+            )
+        });
+    }
+    if summary.failed > 0 {
+        notes.push(format!(
+            "{} could not switch and stayed in Terminal",
+            summary.failed
+        ));
+    }
+
+    match (summary.switched, notes.is_empty()) {
+        (s, false) if s > 0 => format!("Switched {s} {}; {}.", chat_word(s), notes.join("; ")),
+        (s, true) if s > 0 => format!(
             "Switched {s} {} to Native mode. New chats will use Native.",
-            plural(s)
+            chat_word(s)
         ),
-        (0, d) if d > 0 => format!(
-            "Native mode is on for new chats. {d} active {} will switch when they finish or reload.",
-            plural(d)
-        ),
+        (0, false) => format!("Native mode is on for new chats. {}.", notes.join("; ")),
         _ => "Native mode is on for new chats with Antigravity, Claude Code and Codex.".to_string(),
     }
 }
@@ -144,18 +183,31 @@ impl GhostexGpuiApp {
             crate::app::helpers::gpui_gxserver_rpc_result(
                 "/api/switchEligibleSessionsToAcp",
                 &json!({}),
-                std::time::Duration::from_secs(60),
+                std::time::Duration::from_secs(45),
             )
         });
         cx.spawn(async move |this, cx| {
             let result = request.await;
             let _ = this.update(cx, |app, cx| match result {
                 Ok(value) => {
-                    let switched =
-                        value.get("switched").and_then(Value::as_u64).unwrap_or(0) as usize;
-                    let deferred =
-                        value.get("deferred").and_then(Value::as_u64).unwrap_or(0) as usize;
-                    let detail = format_bulk_switch_summary(switched, deferred);
+                    let read_usize =
+                        |key: &str| value.get(key).and_then(Value::as_u64).unwrap_or(0) as usize;
+                    let summary = BulkSwitchSummary {
+                        completed: value
+                            .get("completed")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true),
+                        total_eligible: read_usize("totalEligible"),
+                        switched: read_usize("switched"),
+                        skipped_busy: value
+                            .get("skippedBusy")
+                            .or_else(|| value.get("skippedWorking"))
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0) as usize,
+                        skipped_threads: read_usize("skippedThreads"),
+                        failed: read_usize("failed") + read_usize("skippedCannotResume"),
+                    };
+                    let detail = format_bulk_switch_summary(&summary);
                     app.dispatch_gpui_workspace_action_toast(
                         "success",
                         "Native mode is on",

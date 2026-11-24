@@ -72,6 +72,9 @@ pub(crate) struct SessionChatReadResolution {
     enabled_agent_icons: Vec<String>,
     /// True when this session is a coordinator worker thread (`Q4772`: hides the Switch to Native chip).
     is_coordinator_thread: bool,
+    /// True when this server supports Terminal -> Native switching for this session (false for
+    /// AgentBox, detected external sessions, and Claude Cloud / Teleport sessions).
+    native_mode_switch_capable: bool,
     pub(crate) fingerprint: String,
 }
 
@@ -176,6 +179,7 @@ pub(crate) fn resolve_session_chat_read_state(
         .ok()
         .flatten()
         .is_some();
+    let native_mode_switch_capable = crate::acp::channel::session_is_switch_eligible(&session);
     drop(session);
     drop(repository);
     drop(db);
@@ -399,6 +403,7 @@ pub(crate) fn resolve_session_chat_read_state(
         uses_own_login,
         enabled_agent_icons,
         is_coordinator_thread,
+        native_mode_switch_capable,
         fingerprint,
     })
 }
@@ -599,6 +604,7 @@ pub(crate) async fn handle_read_session_chat_http(
         uses_own_login,
         enabled_agent_icons,
         is_coordinator_thread,
+        native_mode_switch_capable,
         fingerprint,
     } = resolution;
 
@@ -794,7 +800,10 @@ pub(crate) async fn handle_read_session_chat_http(
     // Terminal -> Native switch capability and per-agent state (`Q4768`–`Q4772`): additive fields
     // ignored by older clients (11.2.1+ phones), and absent on older remote servers so clients
     // hide the offer quietly there.
-    result.insert("nativeModeSwitchCapable".to_string(), json!(true));
+    result.insert(
+        "nativeModeSwitchCapable".to_string(),
+        json!(native_mode_switch_capable),
+    );
     result.insert(
         "isCoordinatorThread".to_string(),
         json!(is_coordinator_thread),

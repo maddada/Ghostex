@@ -89,12 +89,12 @@ impl GpuiNativeModeIntroModalWindow {
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        match event.keystroke.key.as_str() {
-            "escape" => self.dismiss(window, cx),
-            "enter" => self.turn_on(window, cx),
-            _ => return,
+        // Never bind bare Enter to Turn on: this modal auto-focuses on open and could catch a
+        // prompt submit right as it appears.
+        if event.keystroke.key.as_str() == "escape" {
+            self.dismiss(window, cx);
+            cx.stop_propagation();
         }
-        cx.stop_propagation();
     }
 
     fn is_dark(&self) -> bool {

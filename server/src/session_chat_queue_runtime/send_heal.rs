@@ -702,11 +702,11 @@ pub(crate) async fn cycle_session_explained(
         .response;
         let ok = response.status().is_success();
         crate::session_chat_options::forget_session_chat_options(state, project_id, session_id);
+        let answer = axum::body::to_bytes(response.into_body(), 256 * 1024)
+            .await
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
         if !ok {
-            let answer = axum::body::to_bytes(response.into_body(), 256 * 1024)
-                .await
-                .ok()
-                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
             return Err(CycleFailure {
                 step: if path == "/api/sleepSession" {
                     "the session could not be put to sleep"
@@ -720,8 +720,56 @@ pub(crate) async fn cycle_session_explained(
                     .map(str::to_string),
             });
         }
+        // `/api/wakeSession` can answer HTTP 200 with `restoreBlocked` (e.g. missing cwd) and a
+        // still-sleeping session; treat that as a failed wake so callers roll back cleanly.
+        if path == "/api/wakeSession" {
+            if let Some(answer) = answer.as_ref() {
+                let blocked_reason = answer
+                    .pointer("/result/attach/restoreBlocked/reason")
+                    .and_then(Value::as_str);
+                let lifecycle = answer
+                    .pointer("/result/session/lifecycleState")
+                    .and_then(Value::as_str);
+                let provider_missing = answer
+                    .pointer("/result/session/providerState/lifecycleState")
+                    .and_then(Value::as_str)
+                    == Some("missing");
+                if blocked_reason.is_some()
+                    || (lifecycle.is_some() && lifecycle != Some("running"))
+                    || provider_missing
+                {
+                    let reason = blocked_reason
+                        .map(|r| format!("restore blocked: {r}"))
+                        .or_else(|| lifecycle.map(|l| format!("session remained {l} after wake")));
+                    return Err(CycleFailure {
+                        step: "the session could not be started again",
+                        reason,
+                    });
+                }
+            }
+        }
     }
     Ok(())
+}
+
+/// Best-effort `/api/wakeSession` after a failed cycle rollback so a session whose `zmx` PTY was
+/// already put to sleep is brought back alive in Terminal instead of left sleeping.
+pub(crate) async fn wake_session_best_effort(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> bool {
+    let body = json!({ "params": { "projectId": project_id, "sessionId": session_id } });
+    let response = crate::server::handle_zmx_lifecycle_http(
+        state,
+        "/api/wakeSession".to_string(),
+        uuid::Uuid::new_v4().to_string(),
+        &body,
+    )
+    .await
+    .response;
+    crate::session_chat_options::forget_session_chat_options(state, project_id, session_id);
+    response.status().is_success()
 }
 
 /// Whether a wake brings the agent back on this session's conversation. Claude and Pi need only
@@ -798,6 +846,31 @@ pub(crate) async fn work_a_restart_would_end(
     });
     if coordinating {
         return Some("the agent coordinates threads, and a restart would end its background work");
+    }
+    let screen = crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
+    if screen.as_deref().is_some_and(shows_claude_background_tasks) {
+        return Some("the agent has background tasks a restart would end");
+    }
+    if !transcript_background_jobs(&target.session).await.is_empty() {
+        return Some("the agent's transcript shows background jobs still running");
+    }
+    None
+}
+
+/// Like [`work_a_restart_would_end`], but allows an idle coordinator that has no active
+/// (unresolved) threads and no running background shells/monitors to be switched to Native mode.
+/// Any coordinator with an unresolved thread, or any session with live background shells/monitors
+/// on screen or in its transcript, is refused.
+pub(crate) async fn background_work_a_restart_would_end(
+    state: &AppState,
+    target: &crate::session_chat_send::SessionChatSendTarget,
+) -> Option<&'static str> {
+    let has_active_threads = open_gxserver_database(&state.paths).ok().is_some_and(|db| {
+        crate::coordinators::list_threads_for(&db, &target.project_id, &target.session_id)
+            .is_ok_and(|threads| threads.iter().any(|thread| !thread.is_resolved()))
+    });
+    if has_active_threads {
+        return Some("the coordinator has active threads a restart would disrupt");
     }
     let screen = crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
     if screen.as_deref().is_some_and(shows_claude_background_tasks) {

@@ -181,9 +181,9 @@ impl GhostexGpuiApp {
         });
     }
 
-    /// Opens the Native mode announcement modal in `gpui-web` when explicitly requested (e.g.
-    /// preview / live verification via `?previewModal=nativeModeIntro`). Never auto-opens on normal
-    /// `gpui-web` visits.
+    /// Opens the Native mode announcement modal in `gpui-web` as a safe no-op preview (matching
+    /// desktop's `open_native_mode_intro_preview`): never writes `agentSessionMode` or switches
+    /// running sessions, and never auto-opens on normal `gpui-web` visits.
     pub(crate) fn open_gpui_native_mode_intro_modal(&mut self, cx: &mut Context<Self>) {
         use crate::app::window::{
             GpuiNativeModeIntroModalWindow, NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT,
@@ -195,87 +195,7 @@ impl GhostexGpuiApp {
         };
         let host: NativeModeIntroHost =
             self.native_app_modal_host(cx, |app, command, cx| match command {
-                NativeModeIntroCommand::TurnOn => {
-                    app.release_native_app_modal_window(GpuiAppModalKind::NativeModeIntro, cx);
-                    let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
-                        .object()
-                        .clone();
-                    let mut modes = settings
-                        .get("agentSessionMode")
-                        .and_then(Value::as_object)
-                        .cloned()
-                        .unwrap_or_default();
-                    for family in ["antigravity", "claude", "codex"] {
-                        modes.insert(family.to_string(), serde_json::json!("non-cli"));
-                    }
-                    settings.insert("agentSessionMode".into(), Value::Object(modes.clone()));
-                    crate::shared_settings::install(settings);
-                    cx.refresh_windows();
-                    cx.spawn(async move |this, cx| {
-                        let _ = crate::app::gx_store::gx_rpc(
-                            None,
-                            "/api/dispatchRendererCommand",
-                            serde_json::json!({
-                                "action": "updateSettingsPatch",
-                                "payload": {
-                                    "patch": { "agentSessionMode": modes },
-                                    "source": "desktop:nativeModeIntro",
-                                },
-                            }),
-                        )
-                        .await;
-                        let result = crate::app::gx_store::gx_rpc(
-                            None,
-                            "/api/switchEligibleSessionsToAcp",
-                            serde_json::json!({}),
-                        )
-                        .await;
-                        let _ = this.update(cx, |app, cx| match result {
-                            Ok(value) => {
-                                let switched = value
-                                    .get("switched")
-                                    .and_then(Value::as_u64)
-                                    .unwrap_or(0) as usize;
-                                let deferred = value
-                                    .get("deferred")
-                                    .and_then(Value::as_u64)
-                                    .unwrap_or(0) as usize;
-                                let plural = |n: usize| if n == 1 { "chat" } else { "chats" };
-                                let detail = match (switched, deferred) {
-                                    (s, d) if s > 0 && d > 0 => format!(
-                                        "Switched {s} {}; {d} will switch when they finish or reload.",
-                                        plural(s)
-                                    ),
-                                    (s, 0) if s > 0 => format!(
-                                        "Switched {s} {} to Native mode. New chats will use Native.",
-                                        plural(s)
-                                    ),
-                                    (0, d) if d > 0 => format!(
-                                        "Native mode is on for new chats. {d} active {} will switch when they finish or reload.",
-                                        plural(d)
-                                    ),
-                                    _ => "Native mode is on for new chats with Antigravity, Claude Code and Codex.".to_string(),
-                                };
-                                app.dispatch_gpui_app_modal_toast(
-                                    "success",
-                                    "Native mode is on",
-                                    &detail,
-                                    cx,
-                                );
-                            }
-                            Err(err) => {
-                                app.dispatch_gpui_app_modal_toast(
-                                    "warning",
-                                    "Native mode is on for new chats",
-                                    &format!("Could not switch existing chats right now: {}", err.message),
-                                    cx,
-                                );
-                            }
-                        });
-                    })
-                    .detach();
-                }
-                NativeModeIntroCommand::Dismiss => {
+                NativeModeIntroCommand::TurnOn | NativeModeIntroCommand::Dismiss => {
                     app.release_native_app_modal_window(GpuiAppModalKind::NativeModeIntro, cx);
                     cx.notify();
                 }

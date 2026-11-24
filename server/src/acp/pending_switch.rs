@@ -32,6 +32,14 @@ static PENDING_SWITCHES: LazyLock<Mutex<HashMap<(String, String), PendingSwitchE
     LazyLock::new(Mutex::default);
 static IN_FLIGHT: LazyLock<Mutex<HashSet<(String, String)>>> = LazyLock::new(Mutex::default);
 
+pub(crate) fn is_in_flight(project_id: &str, session_id: &str) -> bool {
+    let key = (project_id.to_string(), session_id.to_string());
+    IN_FLIGHT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .contains(&key)
+}
+
 pub(crate) fn is_pending(project_id: &str, session_id: &str) -> bool {
     let key = (project_id.to_string(), session_id.to_string());
     let pending = PENDING_SWITCHES
@@ -41,10 +49,7 @@ pub(crate) fn is_pending(project_id: &str, session_id: &str) -> bool {
     if pending {
         return true;
     }
-    IN_FLIGHT
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .contains(&key)
+    is_in_flight(project_id, session_id)
 }
 
 pub(crate) fn queue(project_id: &str, session_id: &str, caller_is_user_device: bool) {
@@ -113,32 +118,43 @@ async fn tick(state: &Arc<AppState>) {
         let server_id = state.metadata.server_id.clone();
         let pid = project_id.clone();
         let sid = session_id.clone();
-        let outcome = tokio::task::spawn_blocking(move || -> PollOutcome {
+        let session_opt = tokio::task::spawn_blocking(move || {
             let Ok(db) = open_gxserver_database(&paths) else {
-                return PollOutcome::StillWorking;
+                return Err(());
             };
             let repo = DomainRepository::new(&db, server_id.as_str());
-            let Ok(Some(session)) = repo.get_session(&pid, &sid) else {
-                return PollOutcome::Drop;
-            };
-            if super::session_is_acp(&session) {
-                return PollOutcome::Drop;
-            }
-            let lifecycle = crate::presentation::effective_lifecycle_state(&session);
-            if lifecycle == "stopped" {
-                return PollOutcome::Drop;
-            }
-            if lifecycle == "running" {
-                let now = crate::presentation::now_iso();
-                let activity = crate::presentation::presentation_activity(&session, &now);
-                if activity == "working" {
-                    return PollOutcome::StillWorking;
-                }
-            }
-            PollOutcome::Ready
+            Ok(repo.get_session(&pid, &sid).ok().flatten())
         })
         .await
-        .unwrap_or(PollOutcome::StillWorking);
+        .ok()
+        .and_then(Result::ok);
+
+        let outcome = match session_opt {
+            None => PollOutcome::StillWorking,
+            Some(None) => PollOutcome::Drop,
+            Some(Some(session)) => {
+                if super::session_is_acp(&session)
+                    || super::channel::session_native_switch_family(&session).is_err()
+                    || crate::agents::session_is_draft(&session)
+                    || crate::presentation::effective_lifecycle_state(&session) != "running"
+                {
+                    PollOutcome::Drop
+                } else {
+                    match super::channel::check_session_safe_to_switch_now(
+                        state,
+                        &project_id,
+                        &session_id,
+                        &session,
+                    )
+                    .await
+                    {
+                        super::channel::SwitchSafety::Safe => PollOutcome::Ready,
+                        super::channel::SwitchSafety::Busy(_) => PollOutcome::StillWorking,
+                        super::channel::SwitchSafety::CannotResume(_) => PollOutcome::Drop,
+                    }
+                }
+            }
+        };
 
         match outcome {
             PollOutcome::StillWorking => {}
@@ -175,6 +191,7 @@ async fn tick(state: &Arc<AppState>) {
                         &pid,
                         &sid,
                         entry.caller_is_user_device,
+                        super::channel::SwitchOrigin::Queued,
                     )
                     .await;
                     IN_FLIGHT
@@ -182,19 +199,25 @@ async fn tick(state: &Arc<AppState>) {
                         .unwrap_or_else(|poisoned| poisoned.into_inner())
                         .remove(&(pid.clone(), sid.clone()));
                     if let Err(error) = result {
-                        super::channel::log(
-                            LogLevel::Warn,
-                            "acp.queuedSwitchToAcpFailed",
-                            json!({
-                                "projectId": pid,
-                                "sessionId": sid,
-                                "queuedAtMs": entry.queued_at_ms,
-                                "code": error.code,
-                                "message": error.message,
-                            }),
-                        );
+                        if error.code == "sessionBusy" {
+                            // A send or queued prompt grabbed the per-session lock right before us:
+                            // put the queued switch back so it waits for the newly started turn.
+                            queue(&pid, &sid, entry.caller_is_user_device);
+                        } else {
+                            super::channel::log(
+                                LogLevel::Warn,
+                                "acp.queuedSwitchToAcpFailed",
+                                json!({
+                                    "projectId": pid,
+                                    "sessionId": sid,
+                                    "queuedAtMs": entry.queued_at_ms,
+                                    "code": error.code,
+                                    "message": error.message,
+                                }),
+                            );
+                        }
                     }
-                    // Refresh queue + presentation state after IN_FLIGHT clears so clients drop the queued badge.
+                    // Refresh queue + presentation state after IN_FLIGHT clears so clients stay in sync.
                     broadcast_state(&state_for_task, &pid, &sid).await;
                 });
             }

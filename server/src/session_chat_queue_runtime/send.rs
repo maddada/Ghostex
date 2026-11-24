@@ -824,6 +824,11 @@ async fn send_session_chat_message_locked(
         ghostex_gx_chat_core::session::appended_notes::with_system_notes(&expanded, &riders)
     };
     let text = expanded.as_str();
+    // Serialize with any in-flight Terminal <-> Native switch on this session so a send never
+    // races a sleep/wake cycle or lands on a stale transport (`acp::channel::session_switch_lock`).
+    let _switch_guard = crate::acp::channel::session_switch_lock(project_id, session_id)
+        .lock_owned()
+        .await;
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("sessionId".to_string(), json!(session_id));
