@@ -275,6 +275,22 @@ fn report_question_form(
     if form.is_withdrawal() {
         return Ok(());
     }
+    let mut guard_errors = Vec::new();
+    for (index, question) in form.questions.iter().enumerate() {
+        if let Some(refusal) =
+            crate::coordinators::form_question_refusal(&question.title, &question.detail)
+        {
+            let label = if question.tag.is_empty() {
+                format!("Question {}", index + 1)
+            } else {
+                question.tag.clone()
+            };
+            guard_errors.push(format!("{label} (\"{}\"): {refusal}", question.title));
+        }
+    }
+    if !guard_errors.is_empty() {
+        return Err(CliError::Other(guard_errors.join("\n\n")));
+    }
     println!(
         "A Ghostex form, \"{}\", with {} question{}:",
         form.title,

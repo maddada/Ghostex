@@ -914,89 +914,6 @@ fn question_tag(word: &str) -> Option<String> {
     (!digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())).then(|| format!("Q{digits}"))
 }
 
-/// Bare work-item IDs (`W34`, `w37`) in `text` (outside quotes and backticks) that match an
-/// existing item in `items`, in order of appearance without duplicates.
-///
-/// CDXC:Coordinators 2026-11-22 DECISION:
-/// User, after a coordinator asked `"Rebuild and relaunch Ghostex Mac app with W34, W37, and W38?"`:
-/// "wtf are w34 w37 and w38 PLEASE modify the playbook/instructions for the coodrinator to tell me
-/// what the work item IS and not just it's ID. I'm not robot! Do this so all users would get this
-/// fix please not just me." Work-item IDs are CLI handles, never how to talk to the user; matching
-/// only existing item numbers on whole tokens outside quotes/backticks catches bare IDs with zero
-/// false positives on words like `W3C`, `Windows`, `W-2`, or paths like `/w34`.
-/// SEE-ALSO: server/src/coordinators/playbook.md ("Asking the user", "Work items", "Your reply").
-fn bare_work_item_ids_in_title<'a>(text: &str, items: &'a [WorkItem]) -> Vec<&'a WorkItem> {
-    let unquoted = super::user_handoff::unquoted(text);
-    let chars: Vec<char> = unquoted.chars().collect();
-    let mut found: Vec<&'a WorkItem> = Vec::new();
-    let mut i = 0;
-    while i < chars.len() {
-        let ch = chars[i];
-        let left_ok = i == 0 || {
-            let prev = chars[i - 1];
-            !prev.is_alphanumeric() && !matches!(prev, '-' | '_' | '/' | '.' | '@' | '#')
-        };
-        if left_ok && matches!(ch, 'W' | 'w') {
-            let start = i + 1;
-            let mut end = start;
-            while end < chars.len() && chars[end].is_ascii_digit() {
-                end += 1;
-            }
-            if end > start && chars[start] != '0' {
-                let right_ok = if end == chars.len() {
-                    true
-                } else {
-                    let next = chars[end];
-                    let domain_dot = next == '.'
-                        && chars
-                            .get(end + 1)
-                            .is_some_and(|after| after.is_alphanumeric());
-                    !next.is_alphanumeric() && !matches!(next, '-' | '_' | '/') && !domain_dot
-                };
-                if right_ok {
-                    let digits: String = chars[start..end].iter().collect();
-                    if let Ok(number) = digits.parse::<i64>() {
-                        if let Some(matched) = items.iter().find(|item| item.number == number) {
-                            if !found.iter().any(|seen| seen.number == matched.number) {
-                                found.push(matched);
-                            }
-                        }
-                    }
-                    i = end;
-                    continue;
-                }
-            }
-        }
-        i += 1;
-    }
-    found
-}
-
-/// Why `item ask` refuses `title`, or `None` when it may stand.
-fn ask_title_refusal(title: &str, items: &[WorkItem]) -> Option<String> {
-    let found = bare_work_item_ids_in_title(title, items);
-    if found.is_empty() {
-        return None;
-    }
-    let refs: Vec<String> = found.iter().map(|item| item.reference()).collect();
-    let named: Vec<String> = found
-        .iter()
-        .map(|item| {
-            let title = item.title.trim();
-            if title.is_empty() {
-                item.reference()
-            } else {
-                format!("{} (\"{}\")", item.reference(), title)
-            }
-        })
-        .collect();
-    Some(format!(
-        "Work-item IDs ({}) are CLI handles, not how to talk to the user. Name what the work actually is in plain words instead: {}.",
-        refs.join(", "),
-        named.join(", ")
-    ))
-}
-
 /// Whether a thread row's wait genuinely requires the user in Needs you (approval, folder trust,
 /// sign-in, or an exhausted account pool with no auto-resume). Usage-limit pauses that stay calm
 /// or auto-recover, exited agents, and coordinator-handled questions return `false`
@@ -1987,9 +1904,10 @@ pub fn handle_work_request(
         }
         "ask" => {
             let words = param_text(params, "text").ok_or_else(|| bad("Say what you ask."))?;
+            let detail = param_text(params, "detail").unwrap_or_default();
             let items = list_work_items(db, key)?;
             if params.get("fromThread").is_none() {
-                if let Some(refusal) = ask_title_refusal(&words, &items) {
+                if let Some(refusal) = super::ask_guard::ask_refusal(&words, &detail, &items) {
                     return Err(bad(refusal));
                 }
             }
@@ -2021,7 +1939,7 @@ pub fn handle_work_request(
             item.asks.push(WorkAsk {
                 tag: tag.clone(),
                 text: words.clone(),
-                detail: param_text(params, "detail").unwrap_or_default(),
+                detail,
                 answers: param_text(params, "answers").unwrap_or_default(),
                 holds: params.get("holds").and_then(Value::as_bool) == Some(true),
                 steps: param_text(params, "steps").unwrap_or_default(),

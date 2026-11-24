@@ -318,14 +318,14 @@ WORK ITEMS
   nothing else on screen, so its title is one short plain question or
   instruction that names its subject, about ten words ("Move the
   settings-folder project out of Work?", "Delete the branch fix/tab-drag?"):
-  never "it", "this" or "that" without the thing, no Q tag in it, and never
-  bare work-item IDs like W34 (those are CLI handles; item ask refuses them
-  in titles). Every
-  ask has --detail: what it is about and why you ask, in Markdown with line
-  breaks (bold, code, links, lists; #562 links to the PR), a few short lines
-  or bullets, not one long paragraph. A one-line --detail (about 90
-  characters) shows under the title with the answers still one click on the
-  row; a longer one shows Details, its answers in the panel under it. Ask the
+  never "it", "this" or "that" without the thing, and no internal IDs
+  (W12, Q4816, commit hashes, G9jt7 thread refs or S90: refs; item ask
+  refuses them in titles). Never point at a Live page or Ghostex form
+  ("Pick on the Live page", "See the form"): those ask their own questions
+  and item ask refuses pointer questions. Every ask requires --detail of at
+  least 120 characters, in plain words and Markdown, detailed enough to
+  decide without any other context: what it is, what each answer does, what
+  you recommend and why, any risks, and links. Ask the
   user only this way, with a ```questions form or with a page: never with
   answer links (ghostex-answer:) in your reply. One-click answers
   with --answers (commas split them; write \, for a comma inside an answer,

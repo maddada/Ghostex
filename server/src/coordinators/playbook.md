@@ -214,13 +214,16 @@ nothing.
 
 ## Asking the user
 
+Ask only what only the user can decide. If there is a sensible default, a standing rule, or the
+choice is easy to undo, decide yourself and tell them under Done or Read this.
+
 Ask each question in exactly one place, never in plain text the user has to type an answer to, and
 never with your built-in question tool. The user reads it in the dock, the Work panel, a
-notification or the phone, usually without your reply on screen: **the row alone must say what it is
-about**. Never write answer links (`ghostex-answer:`) in your reply.
+notification or the phone, usually without your reply on screen: **the question alone must hold
+everything they need to decide**. Never write answer links (`ghostex-answer:`) in your reply.
 
 - **It belongs to a line of work:**
-  `ghostex coordinator item ask W<n> "<title>" --detail "<what and why>" --answers "A,B" --recommended A`.
+  `ghostex coordinator item ask W<n> "<title>" --detail "<full context to decide>" --answers "A,B" --recommended A`.
   Its row above the chat box is the question.
 - **No line of work fits, or several questions, a text answer, multi-select, or choices that need a
   line of detail:** a Ghostex form, a ` ```questions ` block in your reply holding every open
@@ -229,17 +232,27 @@ about**. Never write answer links (`ghostex-answer:`) in your reply.
   `ghostex visual guide pages`), each question right under the mockups it asks about; its `<title>`
   names the subject.
 
-Every question, whichever way you ask it:
+Rules for every question, whichever way you ask it:
 
-- **Title:** names its subject: one short plain question or instruction, about ten words, that a
-  reader who saw nothing else understands ("Delete the branch fix/tab-drag?"). Never "it", "this",
-  "that" or "them" without the thing they stand for, no Q tag (Ghostex shows it), and never bare
-  work-item IDs like `W34` (`item ask` refuses them: say what the work is in plain words, e.g.
-  "Rebuild with the checkout fix, billing retry and export button?").
-- **Description** (`--detail`, `"detail"`), always: what it is about and why you ask, in plain words
-  and Markdown, a few short lines or bullets; say what each answer does when that is not obvious. A quick yes/no gets
-  one line of about 90 characters ("CI is green and two reviews approved."): it shows under the title
-  with the answers still on the row; a longer one hides the answers under Details.
+- **Never a question that points at a page or form.** A Live page or Ghostex form asks its own
+  questions; never repeat or mirror them with `item ask` in the Work panel (`item ask` and
+  `visual check` refuse pointer questions like "Pick on the Live page" or "See the form").
+- **The "away for a day" test:** before asking, read the title as if you had been away for a day. It
+  must name the thing in plain words (about ten words), make clear what each answer does, and have
+  no internal numbers (`W12`, `Q4816`, commit hashes, thread refs like `G9jt7`, or `S90:`; `item ask`
+  and `visual check` refuse them). Never "it", "this", "that" or "them" without the thing they stand
+  for, and no Q tag in the title (Ghostex shows it).
+- **Description** (`--detail`, `"detail"`), always required (at least 120 characters; `item ask` and
+  `visual check` refuse missing or thin descriptions): detailed enough to decide without any other
+  context, in plain words and Markdown (short paragraphs or bullets). Cover what the thing is in
+  plain words, what each answer does, what you recommend and why, any risks, and links (PRs, issues,
+  files). A thin one-liner ("From an outside contributor. Tests pass. I'd ask for two small changes
+  first.") is not enough.
+- **Show the exact words for anything posted in the user's name:** for any reply, comment or message
+  to post or send for them, put its full verbatim text inside the question's description.
+- **If the user says "I don't get it"** (or similar confusion), close that question
+  (`item ask W<n> --withdraw Q<n>`, or `"withdraw"` in a form) and ask again more simply. Never
+  re-send the same wording.
 - **Tag:** Q1, Q2, … counting up across the whole conversation, never restarting or reusing a
   number; refer to it by tag and mark the answer you recommend. After a compaction, or when unsure of
   the count, run `ghostex coordinator next-tag` (newer Ghostex; a thread running it gets its
@@ -249,6 +262,22 @@ Every question, whichever way you ask it:
   A page gets `ghostex visual check <page.html> --out <file.png>` before the user sees it; put that
   in the brief of a thread that builds one.
 - End your turn after asking: the answers arrive as your next message.
+
+Example of a good `item ask`:
+
+```bash
+ghostex coordinator item ask W12 \
+  "Merge PR #412, a fix for stalled uploads on slow networks?" \
+  --detail "Outside contributor PR [#412](https://github.com/org/repo/pull/412) retries chunk uploads after a 30s timeout instead of failing the whole transfer. All unit and integration tests pass.
+
+- **Ask for changes first (recommended):** asks the author to cap retries at 3 and log each retry so bad connections do not loop forever. Delays the fix by a day or two.
+- **Merge now:** ships the fix in today's build, and we open a small follow-up PR for the retry cap and logging.
+
+Risk if merged as is: a permanently offline client retries indefinitely until closed." \
+  --answer "Ask for changes first" \
+  --answer "Merge now" \
+  --recommended "Ask for changes first"
+```
 
 Answers:
 
@@ -298,14 +327,15 @@ flag):
 
 - `item add "<line of work>" --thread <ref>` starts one.
 - `item now W<n> "<where it stands>"`: one line that replaces the last, only for work a thread or you
-  are doing right now. **Everything that needs the user (try, test, check, confirm, decide, sign in,
-  approve) is an `item ask`, so it shows under Needs you**: never a `now` or `wait` line ("waiting on
-  your try" is refused).
+  are doing right now. Never park the user's part of a task in a `now` or `wait` line ("waiting on
+  your try" is refused): when a real blocker or decision only the user can make is needed (a sign-in,
+  an approval, an irreversible choice), use `item ask` instead. If there is a sensible default or it
+  is easy to undo, decide yourself and note it under Done or Read this rather than asking.
 - `item step W<n> "<step>"`: a step the user cares about. Rebuilds and test runs are chores: leave
   them out, or add `--chore`.
-- `item ask W<n> "<title>" --detail "<what and why>"`: anything the user must do or decide, its
-  title naming the subject in plain words, never a bare `W<n>` (see "Asking the user"); `--holds`
-  when the work stops until they do.
+- `item ask W<n> "<title>" --detail "<full context to decide>"`: only for a decision or action that
+  truly needs the user (see "Asking the user"), with a plain title free of internal IDs and a full
+  description; `--holds` when the work stops until they act.
 - `item wait W<n> --on <W<m> | Q<n> | release | ota | rebuild | "something outside">`: an item, a
   question or one of those events clears itself; words never do. After a release or phone update,
   `item delivered release v<x>` (or `ota`) brings back the items it delivered: check each and finish
@@ -319,9 +349,9 @@ Ghostex works out each status:
 
 - **Done:** `item done` in the turn the work is done: the thread reported, the change is on main
   (committed and pushed) and, for the desktop, in the user's rebuilt app. "Ships in the next
-  release" is a note on the done line, not a status. What the user must try or confirm is an
-  `item ask`, never a reason to hold it In progress. If they later find a fault, reopen the item or
-  add one.
+  release" is a note on the done line, not a status. Never hold finished work In progress waiting on
+  the user; open an `item ask` only if they truly must act or decide, otherwise report it under Done
+  or Read this. If they later find a fault, reopen the item or add one.
 - **In progress:** a thread or you are on it right now, nothing else.
 - **Waiting:** on something outside that hasn't happened (a store review, a vendor, CI, another item,
   the rebuild that puts it in the user's app): `item wait`. Never Blocked, never the user.
