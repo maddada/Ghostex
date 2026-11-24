@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 12.1.1 - 2026-11-25
+
+**Ghostex 12.1.1 is out.** This patch fixes saving the Auto permission mode and the approval prompts chats kept showing after switching to Native, and makes switching projects in a new session calmer.
+
+### 🔐 Permissions
+
+- **Auto now saves in Settings > Agents > Permission mode on the computer.** 12.1.0 added it, but picking it there failed to save.
+- **Chats that 12.0 set to Ask on its own follow Accept all and Full permissions again.** A one-time cleanup removes that automatic Ask from Native chats and coordinator threads, and an Ask you pick in a chat's Mode menu is kept from now on.
+- **A skip-permissions flag in the agent's command counts as Full permissions in Native chats,** as it already did in Terminal-based chats (`--dangerously-skip-permissions` for Claude Code, `--dangerously-bypass-approvals-and-sandbox` or `--yolo` for Codex). A level picked in the Mode menu or a Permission mode set for the chat or agent still comes first.
+
+### ✨ New sessions
+
+- **No project and the project you pick stay put until you press Send,** on the computer and the phone, instead of moving the draft while you choose.
+- **On Send, the chat moves into its project quickly and smoothly,** and the sidebar stays on the Space you were in.
+
+### 🔒 Privacy and analytics
+
+- **Settings > About has a Privacy & Analytics section with a switch for anonymous usage analytics,** also on the second onboarding step and in the phone's Settings. Turned off, Ghostex stops all usage tracking and sends only one anonymous weekly count of active installs, and only in weeks you use it. Starting Ghostex with `DO_NOT_TRACK=1` or `--no-analytics` stops even that.
+- **View what's sent in Settings > About shows the analytics Ghostex sends,** and your choice survives "Reset all settings to defaults".
+
+### 📥 Inbox and Needs you
+
+- **Inbox rows whose item has any detail get the Details button,** on the computer and the phone, so a short detail is no longer hidden.
+- **A coordinator's Needs you item carries everything you need to act on in Details,** such as text to paste, a command or a link, and a to-do that asks you to paste, run or open something without including it is refused.
+
 ## 12.1.0 - 2026-11-25
 
 **Ghostex 12.1.0 is out.** New sessions start in one click with No project and Coordinator pills, Settings > Agents gains an Auto permission mode, Rewind works in Native chats, Needs you cards get Details and Run it, and chats keep their permission mode when they switch to Native.
