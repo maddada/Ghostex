@@ -293,7 +293,7 @@ impl AgentsTab {
                     value: "ask".to_string(),
                 },
                 SettingOption {
-                    label: "Skip permissions".to_string(),
+                    label: "Full permissions".to_string(),
                     value: "bypass".to_string(),
                 },
             ];
@@ -317,7 +317,7 @@ impl AgentsTab {
                 p,
                 "agentApprovals",
                 RowSpec::new("Agent approvals").description(
-                    "Choose whether supported agents ask before editing files or running commands. Per-agent settings can override this default.",
+                    "Choose whether supported agents ask before editing files or running commands. Full permissions: the agent won't ask for permission before edits or commands. At your own risk. Per-agent settings can override this default.",
                 ),
                 None,
                 control,
@@ -563,7 +563,7 @@ impl AgentsTab {
         let confirm = settings_button(
             p,
             "agents-skip-permissions-confirm",
-            "Skip permissions",
+            "Full permissions",
             None,
             ButtonVariant::DestructiveDialog,
             false,
@@ -578,11 +578,11 @@ impl AgentsTab {
         let focus = self.confirm_focus.clone();
         Some(settings_dialog(
             p,
-            SettingsDialogSpec::new("agents-skip-permissions", "Skip permissions?")
+            SettingsDialogSpec::new("agents-skip-permissions", "Full permissions?")
                 .width(400.0)
                 .spacing(20.0, 16.0)
                 .description(
-                    "Supported agents may edit files and run commands without asking you first. Only enable this for agents and projects you trust."
+                    "The agent won't ask for permission before edits or commands. At your own risk. Only enable this for agents and projects you trust."
                         .into_any_element(),
                 ),
             Vec::new(),

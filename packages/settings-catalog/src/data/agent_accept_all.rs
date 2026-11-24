@@ -7,8 +7,8 @@ use crate::json::{opt, Opt, J};
 /// and standalone agent configuration.
 pub const AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS: &[Opt] = &[
     opt("Use app default", "inherit"),
-    opt("Skip permissions", "enabled"),
     opt("Keep default", "disabled"),
+    opt("Full permissions", "enabled"),
 ];
 
 /// CDXC:AgentLauncher 2026-05-19-10:05:

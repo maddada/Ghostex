@@ -291,7 +291,7 @@ pub(crate) fn preview_value(plan: &Plan) -> Value {
         }
     }
     let approval_sentence = match plan.approval.as_str() {
-        "full" => "They run on Codex at Full access, as every new Codex GBot does; change that in GBot Settings.",
+        "full" => "They run on Codex at Full permissions, as every new Codex GBot does; change that in GBot Settings.",
         _ => "They ask before they act (approval Ask), as every new GBot does; change that in GBot Settings.",
     };
     json!({

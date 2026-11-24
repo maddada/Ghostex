@@ -357,7 +357,7 @@
     {
       "key": "chatComposerModePicker",
       "title": "Mode in the chat box",
-      "subtitle": "Show the mode picker (Auto, Plan, Bypass permissions and the like) in the chat box. Off, sessions run in Auto, or in Bypass permissions while Skip permissions is on. The phone has its own switch.",
+      "subtitle": "Show the mode picker (Auto, Plan, Full permissions and the like) in the chat box. Off, sessions run in Auto, or in Full permissions while Agent approvals is set to Full permissions. The phone has its own switch.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -11083,7 +11083,7 @@
     {
       "key": "acceptAll",
       "title": "Agent approvals",
-      "subtitle": "Choose whether supported agents ask before editing files or running commands. Per-agent settings can override this default.",
+      "subtitle": "Choose whether supported agents ask before editing files or running commands. Full permissions: the agent won't ask for permission before edits or commands. At your own risk. Per-agent settings can override this default.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "config",
@@ -11141,8 +11141,8 @@
     },
     {
       "key": "agentAcceptAllEnabled",
-      "title": "Agent approvals: accept all",
-      "subtitle": "Start supported agents with approvals turned off (full access) by default. Off keeps each agent CLI default approval mode. Projects can override it. Only your own devices can turn this on; agents can only turn it off.",
+      "title": "Agent approvals: Full permissions",
+      "subtitle": "Start supported agents in Full permissions by default. The agent won't ask for permission before edits or commands. At your own risk. Off keeps each agent CLI default approval mode. Projects can override it. Only your own devices can turn this on; agents can only turn it off.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "config",
@@ -13869,7 +13869,7 @@
     {
       "key": "syncAgentDefaults",
       "title": "Agent defaults",
-      "subtitle": "Keep the default agent, how new sessions open, the title agent, Accept all, and each agent's default model and effort the same on your computers. Off by default.",
+      "subtitle": "Keep the default agent, how new sessions open, the title agent, Agent approvals, and each agent's default model and effort the same on your computers. Off by default.",
       "tab": "sync",
       "tabTitle": "Sync",
       "section": "whatSyncs",

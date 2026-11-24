@@ -198,7 +198,7 @@ ghostex gbots routine add --name "Inbox watch" \
   `{"kind":"command","command":"…"}`, or a read-only connector tool
   (`{"kind":"connector","tool":"…"}`). The first check only looks; runs start
   from the next change. A command check you set waits paused until the user
-  turns it on, unless your approval level is Autopilot or Full access.
+  turns it on, unless your approval level is Autopilot or Full permissions.
 - `--deliver chief` also tells Ghostex AI when a run finds something or
   needs the user; `--deliver brief` hands your whole final message to Ghostex
   AI, who tells the user with a notification (the day watch's routines do

@@ -716,7 +716,7 @@ impl GpuiOnboardingWindow {
     /// User: add the "Agent approvals" setting (Keep default / Skip permissions) to the last page of the setup flow, with the same shared segmented control and the same setting key as Settings -> Agents -> Defaults so the two always agree, plus a one-line explanation. The line already warns what Skip permissions does, so the pick saves at once without Settings' "Skip permissions?" confirmation.
     fn render_agent_approvals(&mut self, s: S, cx: &mut Context<Self>) -> AnyElement {
         use super::super::native_modal_kit::{ModalRailItem, modal_bordered_segmented_control};
-        let items = ["Keep default", "Skip permissions"].map(|label| ModalRailItem {
+        let items = ["Keep default", "Full permissions"].map(|label| ModalRailItem {
             label: label.into(),
             trailing: None,
             dot: None,
@@ -739,7 +739,7 @@ impl GpuiOnboardingWindow {
             .flex_col()
             .child(control)
             .child(ss(s, 13.0).mt(s.px(10.0)).child(
-                "Skip permissions: agents edit files and run commands without asking. Change it in Settings → Agents.",
+                "Full permissions: the agent won't ask for permission before edits or commands. At your own risk. Change it in Settings → Agents.",
             ))
             .into_any_element()
     }

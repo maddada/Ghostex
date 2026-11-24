@@ -47,7 +47,7 @@ pub fn sidebar_hud_mutation_raises_accept_all(
                 Some(Value::String(raw)) => match raw.trim() {
                     "inherit" => None,
                     "disabled" => return false,
-                    mode @ ("enabled" | "acceptAll") => Some(mode),
+                    mode @ ("enabled" | "acceptAll" | "auto") => Some(mode),
                     // Invalid values will be rejected by `sidebar_agent_accept_all_mode_update`.
                     _ => return false,
                 },

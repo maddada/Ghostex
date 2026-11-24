@@ -552,16 +552,21 @@ fn fast_mode_descriptor(agent: &CatalogAgent) -> OptionDescriptor {
 /// `CLAUDE_MODES`.
 fn claude_modes() -> Vec<OptionChoice> {
     [
-        ("bypass", "Bypass permissions"),
-        ("auto", "Auto"),
-        ("manual", "Manual"),
-        ("accept-edits", "Accept edits"),
-        ("plan", "Plan"),
+        (
+            "bypass",
+            "Full permissions",
+            Some("The agent won't ask for permission before edits or commands. At your own risk."),
+        ),
+        ("auto", "Auto", None),
+        ("manual", "Manual", None),
+        ("accept-edits", "Accept edits", None),
+        ("plan", "Plan", None),
     ]
     .into_iter()
-    .map(|(value, label)| OptionChoice {
+    .map(|(value, label, description)| OptionChoice {
         value: value.to_string(),
         label: label.to_string(),
+        description: description.map(str::to_string),
         ..OptionChoice::default()
     })
     .collect()
@@ -660,9 +665,9 @@ fn codex_permissions() -> OptionDescriptor {
         ),
         (
             "full-access",
-            "Full Access",
+            "Full permissions",
             ":danger-full-access",
-            "Edits anywhere and uses the internet without asking",
+            "The agent won't ask for permission before edits or commands. At your own risk.",
         ),
         (
             "read-only",
@@ -870,15 +875,20 @@ fn grok_mode() -> OptionDescriptor {
     );
     descriptor.choices = Some(
         [
-            ("default", "Default"),
-            ("plan", "Plan"),
-            ("auto-review", "Auto review"),
-            ("always-approve", "Always approve"),
+            ("default", "Default", None),
+            ("plan", "Plan", None),
+            ("auto-review", "Auto review", None),
+            (
+                "always-approve",
+                "Full permissions",
+                Some("The agent won't ask for permission before edits or commands. At your own risk."),
+            ),
         ]
         .into_iter()
-        .map(|(value, label)| OptionChoice {
+        .map(|(value, label, description)| OptionChoice {
             value: value.to_string(),
             label: label.to_string(),
+            description: description.map(str::to_string),
             ..OptionChoice::default()
         })
         .collect(),
@@ -966,8 +976,8 @@ pub fn acp_approval_mode() -> OptionDescriptor {
             ),
             (
                 "full-access",
-                "Full access",
-                "Approve edits and commands automatically.",
+                "Full permissions",
+                "The agent won't ask for permission before edits or commands. At your own risk.",
             ),
         ]
         .into_iter()

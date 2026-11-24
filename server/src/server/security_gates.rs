@@ -275,9 +275,11 @@ fn accept_all_default_raise_refused(
 ) -> bool {
     use crate::acp::approval::{
         accept_all_mode_change_raises, command_has_accept_all_flag,
-        global_accept_all_enabled_in_shared_settings, is_accept_all_disabled_value,
-        is_accept_all_enabled_value,
+        global_accept_all_enabled_in_shared_settings, is_accept_all_auto_value,
+        is_accept_all_disabled_value, is_accept_all_enabled_value,
     };
+    let is_elevated_mode =
+        |mode: Option<&str>| is_accept_all_enabled_value(mode) || is_accept_all_auto_value(mode);
 
     if caller.is_user_device() {
         return false;
@@ -305,8 +307,8 @@ fn accept_all_default_raise_refused(
         }
         "/api/undoSettingsSyncChange" | "/api/restoreSettingsSyncComputer" => true,
         "/api/createProject" => {
-            if is_accept_all_enabled_value(params.get("acceptAllMode").and_then(Value::as_str))
-                || is_accept_all_enabled_value(
+            if is_elevated_mode(params.get("acceptAllMode").and_then(Value::as_str))
+                || is_elevated_mode(
                     params
                         .get("launchSettings")
                         .and_then(Value::as_object)
@@ -321,12 +323,11 @@ fn accept_all_default_raise_refused(
                 .and_then(Value::as_array)
                 .is_some_and(|arr| {
                     arr.iter().any(|agent| {
-                        is_accept_all_enabled_value(
-                            agent.get("acceptAllMode").and_then(Value::as_str),
-                        ) || agent
-                            .get("command")
-                            .and_then(Value::as_str)
-                            .is_some_and(command_has_accept_all_flag)
+                        is_elevated_mode(agent.get("acceptAllMode").and_then(Value::as_str))
+                            || agent
+                                .get("command")
+                                .and_then(Value::as_str)
+                                .is_some_and(command_has_accept_all_flag)
                     })
                 })
         }
@@ -408,7 +409,7 @@ fn accept_all_default_raise_refused(
                     let Some(key) = custom_agent_identity_key(agent) else {
                         // Fail closed when an agent entry lacks an identity key and tries to
                         // enable accept-all (or could mask a disabled agent when global is on).
-                        if is_accept_all_enabled_value(incoming_mode)
+                        if is_elevated_mode(incoming_mode)
                             || incoming_cmd.is_some_and(command_has_accept_all_flag)
                             || global_enabled
                         {

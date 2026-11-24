@@ -59,7 +59,7 @@ impl AcpApprovalLevel {
             Self::Ask => "Ask",
             Self::AutoEdits => "Auto-edits",
             Self::Auto => "Auto",
-            Self::FullAccess => "Full access",
+            Self::FullAccess => "Full permissions",
         }
     }
 
@@ -70,9 +70,8 @@ impl AcpApprovalLevel {
             "auto-edits" | "accept-edits" | "auto-accept-edits" | "auto_edits" | "auto_edit"
             | "accept_edits" => Some(Self::AutoEdits),
             "auto" => Some(Self::Auto),
-            "full-access" | "full_access" | "bypass" | "yolo" | "accept-all" | "accept_all" => {
-                Some(Self::FullAccess)
-            }
+            "full-access" | "full_access" | "full-permissions" | "full_permissions" | "bypass"
+            | "yolo" | "accept-all" | "accept_all" => Some(Self::FullAccess),
             _ => None,
         }
     }
@@ -121,10 +120,15 @@ fn read_trimmed_str<'a>(map: &'a Map<String, Value>, key: &str) -> Option<&'a st
         .filter(|value| !value.is_empty())
 }
 
-/// True when an `acceptAllMode` string explicitly turns accept-all on.
+/// True when an `acceptAllMode` string explicitly turns Full permissions on.
 pub fn is_accept_all_enabled_value(raw: Option<&str>) -> bool {
     raw.map(str::trim)
         .is_some_and(|v| matches!(v, "enabled" | "acceptAll"))
+}
+
+/// True when an `acceptAllMode` string explicitly selects per-agent Auto mode.
+pub fn is_accept_all_auto_value(raw: Option<&str>) -> bool {
+    raw.map(str::trim).is_some_and(|v| v == "auto")
 }
 
 /// True when an `acceptAllMode` string explicitly turns accept-all off.
@@ -132,23 +136,30 @@ pub fn is_accept_all_disabled_value(raw: Option<&str>) -> bool {
     raw.map(str::trim).is_some_and(|v| v == "disabled")
 }
 
-/// True if changing `acceptAllMode` from `stored` to `incoming` enables accept-all or removes a
-/// `"disabled"` override while global `agentAcceptAllEnabled` is `true`.
+fn accept_all_mode_rank(raw: Option<&str>, global_accept_all_enabled: bool) -> u8 {
+    if is_accept_all_enabled_value(raw) {
+        2
+    } else if is_accept_all_auto_value(raw) {
+        1
+    } else if is_accept_all_disabled_value(raw) {
+        0
+    } else if global_accept_all_enabled {
+        2
+    } else {
+        0
+    }
+}
+
+/// True if changing `acceptAllMode` from `stored` to `incoming` raises the effective permission
+/// level (e.g. Keep default -> Auto, Keep default/Auto -> Full permissions, or clearing
+/// `"disabled"` while global `agentAcceptAllEnabled` is `true`).
 pub fn accept_all_mode_change_raises(
     stored: Option<&str>,
     incoming: Option<&str>,
     global_accept_all_enabled: bool,
 ) -> bool {
-    if is_accept_all_enabled_value(incoming) && !is_accept_all_enabled_value(stored) {
-        return true;
-    }
-    if global_accept_all_enabled
-        && is_accept_all_disabled_value(stored)
-        && !is_accept_all_disabled_value(incoming)
-    {
-        return true;
-    }
-    false
+    accept_all_mode_rank(incoming, global_accept_all_enabled)
+        > accept_all_mode_rank(stored, global_accept_all_enabled)
 }
 
 /// Read the global `agentAcceptAllEnabled` boolean from shared settings or SQLite `agents.settings.v1`
@@ -292,10 +303,12 @@ pub fn guard_create_session_params(
         }
         if let Some(launch) = cleaned.get("launchSettings").and_then(Value::as_object) {
             let incoming_accept = launch.get("acceptAllMode").and_then(Value::as_str);
-            if is_accept_all_enabled_value(incoming_accept) {
+            if is_accept_all_enabled_value(incoming_accept)
+                || is_accept_all_auto_value(incoming_accept)
+            {
                 return Err(DomainStateError {
                     code: "forbidden",
-                    message: "Only your own devices can start a session with accept-all enabled."
+                    message: "Only your own devices can start a session with elevated permissions."
                         .to_string(),
                 });
             }
@@ -574,22 +587,22 @@ pub fn resolve_explicit_starting_level(
         return Some(remembered);
     }
     let explicit_override = |val: Option<&str>| match val {
-        Some("enabled" | "acceptAll") => Some(true),
-        Some("disabled") => Some(false),
+        Some("enabled" | "acceptAll") => Some(Some(AcpApprovalLevel::FullAccess)),
+        Some("auto") => Some(Some(AcpApprovalLevel::Auto)),
+        Some("disabled") => Some(None),
         _ => None,
     };
-    // Explicit per-launch `acceptAllMode` (`"enabled"` / `"disabled"`) takes precedence over
-    // per-agent config, which in turn takes precedence over global `agentAcceptAllEnabled`.
-    let accept_all_effective =
-        explicit_override(read_trimmed_str(launch_settings, "acceptAllMode"))
-            .or_else(|| explicit_override(read_trimmed_str(agent_config, "acceptAllMode")))
-            .unwrap_or_else(|| {
-                global_settings
-                    .get("agentAcceptAllEnabled")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
-            });
-    accept_all_effective.then_some(AcpApprovalLevel::FullAccess)
+    // Explicit per-launch `acceptAllMode` (`"enabled"` / `"auto"` / `"disabled"`) takes precedence
+    // over per-agent config, which in turn takes precedence over global `agentAcceptAllEnabled`.
+    explicit_override(read_trimmed_str(launch_settings, "acceptAllMode"))
+        .or_else(|| explicit_override(read_trimmed_str(agent_config, "acceptAllMode")))
+        .unwrap_or_else(|| {
+            global_settings
+                .get("agentAcceptAllEnabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+                .then_some(AcpApprovalLevel::FullAccess)
+        })
 }
 
 /// Resolve a concrete starting approval level for an ACP session, falling back to `Ask` when
@@ -908,13 +921,13 @@ fn no_allow_once_reason(options: &[AcpPermissionOption], level: AcpApprovalLevel
     let has_allow_always = options.iter().any(|opt| opt.kind == "allow_always");
     if has_allow_always {
         if level == AcpApprovalLevel::FullAccess {
-            "Full access didn't approve this automatically because the agent only offered a saved allow option. Ghostex asked you instead of saving it.".to_string()
+            "Full permissions didn't approve this automatically because the agent only offered a saved allow option. Ghostex asked you instead of saving it.".to_string()
         } else {
             "This agent only offered a saved allow option, so Ghostex asked you instead of saving it."
                 .to_string()
         }
     } else if level == AcpApprovalLevel::FullAccess {
-        "Full access didn't approve this automatically because the agent didn't offer a one-time allow option.".to_string()
+        "Full permissions didn't approve this automatically because the agent didn't offer a one-time allow option.".to_string()
     } else {
         "This agent didn't offer a one-time allow option, so Ghostex asked you to choose."
             .to_string()

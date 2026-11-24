@@ -560,7 +560,7 @@ impl CodexState {
                 { "id": "ask", "name": "Ask" },
                 { "id": "auto-edits", "name": "Auto-edits" },
                 { "id": "auto", "name": "Auto" },
-                { "id": "full-access", "name": "Full access" }
+                { "id": "full-access", "name": "Full permissions" }
             ],
             "configOptions": [],
             "pendingPermission": self.pending_requests.front().map(|p| p.to_ghostex_prompt()),

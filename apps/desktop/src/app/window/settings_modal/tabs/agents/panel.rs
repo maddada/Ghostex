@@ -9,15 +9,16 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     ButtonSize, ButtonVariant, ROW_PADDING_X, RowSpec, SELECT_WIDTH, setting_row,
-    settings_button_sized, settings_list_item, settings_select, wrapped_tooltip_text,
+    settings_button_sized, settings_list_item, settings_select, settings_select_described,
+    wrapped_tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::AgentsTab;
 use super::icons;
 use super::model::{
-    AgentButton, HookStatusItem, accept_all_mode_options, default_agents, hook_removable,
-    inherit_value, non_cli_mode_family, preferred_interface_override_options, session_mode_options,
-    supports_accept_all, supports_chat_view,
+    AgentButton, HookStatusItem, default_agents, hook_removable, inherit_value,
+    non_cli_mode_family, permission_mode_options, preferred_interface_override_options,
+    session_mode_options, supports_accept_all, supports_chat_view,
 };
 use super::roster::hook_detail_icon;
 use super::select::DropdownOption;
@@ -340,11 +341,11 @@ impl AgentsTab {
                 .clone()
                 .unwrap_or_else(|| "inherit".to_string());
             let mode_agent = agent.clone();
-            let mode_select = settings_select(
+            let mode_select = settings_select_described(
                 self,
                 p,
                 SharedString::from(format!("agent-permission-{agent_id}")),
-                &accept_all_mode_options(),
+                &permission_mode_options(&agent.agent_id, agent.icon.as_deref()),
                 &mode,
                 Some(SELECT_WIDTH),
                 !accept_supported,

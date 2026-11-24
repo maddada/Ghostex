@@ -204,12 +204,73 @@ pub(super) fn supports_accept_all(agent_id: &str, icon: Option<&str>) -> bool {
     default_agent_by_icon(icon).is_some_and(|agent| accept_all_spec_is_set(&agent.agent_id))
 }
 
-/// `AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS`.
-pub(super) fn accept_all_mode_options() -> Vec<SettingOption> {
-    settings_catalog().options(
-        module::SIDEBAR_AGENT_ACCEPT_ALL,
-        "AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS",
-    )
+/// Per-agent Permission mode options (with muted descriptions). Claude Code and Codex offer Auto
+/// in addition to Use app default, Keep default, and Full permissions.
+pub(super) fn permission_mode_options(
+    agent_id: &str,
+    icon: Option<&str>,
+) -> Vec<(SettingOption, Option<String>)> {
+    let family = auto_permission_family(agent_id, icon);
+    let keep_default_desc = match family {
+        Some("claude") => "Uses Claude's own permissions.defaultMode setting.",
+        Some("codex") => "Uses Codex's own config.toml approval policy and sandbox.",
+        _ => "Keeps this agent's default approval mode.",
+    };
+    let mut options = vec![
+        (
+            SettingOption {
+                label: "Use app default".to_string(),
+                value: "inherit".to_string(),
+            },
+            Some("Follows Settings > Agents > Agent approvals.".to_string()),
+        ),
+        (
+            SettingOption {
+                label: "Keep default".to_string(),
+                value: "disabled".to_string(),
+            },
+            Some(keep_default_desc.to_string()),
+        ),
+    ];
+    if let Some(auto_desc) = match family {
+        Some("claude") => {
+            Some("Starts new sessions in Claude Auto mode (Native and Terminal-based).")
+        }
+        Some("codex") => Some(
+            "Approve for me (on-request with auto review in Native; --approve-for-me in Terminal-based).",
+        ),
+        _ => None,
+    } {
+        options.push((
+            SettingOption {
+                label: "Auto".to_string(),
+                value: "auto".to_string(),
+            },
+            Some(auto_desc.to_string()),
+        ));
+    }
+    options.push((
+        SettingOption {
+            label: "Full permissions".to_string(),
+            value: "enabled".to_string(),
+        },
+        Some(
+            "The agent won't ask for permission before edits or commands. At your own risk."
+                .to_string(),
+        ),
+    ));
+    options
+}
+
+/// Canonical family for agents that offer the per-agent Auto permission mode choice (Claude Code
+/// and Codex, including custom agents that work like them).
+pub(super) fn auto_permission_family(agent_id: &str, icon: Option<&str>) -> Option<&'static str> {
+    let check = |value: &str| match value.trim().to_ascii_lowercase().as_str() {
+        "claude" | "claude-code" => Some("claude"),
+        "codex" | "codex-cli" => Some("codex"),
+        _ => None,
+    };
+    check(agent_id).or_else(|| icon.and_then(check))
 }
 
 /// `resolveSessionChatTranscriptAgent(agentId, icon) !== null` (`agentSupportsChatView`).

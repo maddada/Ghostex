@@ -1733,9 +1733,10 @@ pub(crate) fn resolve_session_launch_command_for_workspace(
     coordinator: bool,
     workspace: Option<&WorkspaceNoteContext>,
 ) -> String {
+    let is_auto = accept_all_mode == Some("auto");
     let enabled = match accept_all_mode {
         Some("enabled") => true,
-        Some("disabled") => false,
+        Some("disabled") | Some("auto") => false,
         _ => global_accept_all_enabled,
     };
     let command = crate::agent_cli::opencode::with_opencode2(agent_id, icon, command);
@@ -1744,8 +1745,13 @@ pub(crate) fn resolve_session_launch_command_for_workspace(
         agent_id,
         enabled,
         icon,
-        accept_all_mode == Some("disabled"),
+        accept_all_mode == Some("disabled") || is_auto,
     );
+    let command = if is_auto {
+        apply_auto_permission_mode(&command, agent_id, icon)
+    } else {
+        command
+    };
     let command = super::mode_picker_off::with_auto_mode(agent_id, icon, enabled, &command);
     let command = with_codex_no_daemon(agent_id, icon, &command);
     let command = with_launch_notes_for_workspace(agent_id, icon, &command, coordinator, workspace);

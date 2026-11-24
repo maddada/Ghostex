@@ -48,11 +48,21 @@ pub fn search_keywords(key: &str) -> &'static [&'static str] {
         // not connected.
         "sidebarHideDisconnectedMachines" => &["offline", "disconnected machines", "hide offline"],
         // CDXC:RemoteMachines 2026-11-22: people say machine icon as often as computer icon.
-        "hideComputerIconUntilHover" => {
-            &["machine icon", "machine icons", "computer icon", "computer icons", "hover"]
-        }
+        "hideComputerIconUntilHover" => &[
+            "machine icon",
+            "machine icons",
+            "computer icon",
+            "computer icons",
+            "hover",
+        ],
         // CDXC:RemoteMachines 2026-11-20: what people call the computer they're on, and the dot.
-        "markComputerYouAreOn" => &["this computer", "this machine", "current computer", "dot", "dock dot"],
+        "markComputerYouAreOn" => &[
+            "this computer",
+            "this machine",
+            "current computer",
+            "dot",
+            "dock dot",
+        ],
         // CDXC:SessionChat 2026-11-19: Live pages were Ghostex pages (gx page) and inline HTML
         // until the user renamed them (Q4207, Q4208); a search for the old names still finds them.
         "chatPageOpenTarget" | "chatAnswersWaitForIdle" => {
@@ -66,6 +76,13 @@ pub fn search_keywords(key: &str) -> &'static [&'static str] {
         | "windowGlassLiveSpeed"
         | "windowGlassLiveBrightness"
         | "windowGlassVideoOnlyOnPower" => &["live", "live background"],
+        "acceptAll" | "agentAcceptAllEnabled" => &[
+            "skip permissions",
+            "bypass permissions",
+            "full access",
+            "accept all",
+            "yolo",
+        ],
         _ => &[],
     }
 }

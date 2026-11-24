@@ -96,6 +96,42 @@ pub(crate) fn settings_select<V: SettingsPage>(
 /// A select's change handler, shared by the trigger's keys and every popup row.
 type SelectChange<V> = Rc<dyn Fn(&mut V, String, &mut Window, &mut Context<V>)>;
 
+/// [`settings_select`] where each option may carry a muted description line beneath its label.
+/// Used for Settings > Agents > Permission mode so each approval mode explains what it does.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn settings_select_described<V: SettingsPage>(
+    page: &mut V,
+    p: &SettingsPalette,
+    id: impl Into<SharedString>,
+    options: &[(SettingOption, Option<String>)],
+    value: &str,
+    width: Option<f32>,
+    disabled: bool,
+    disabled_reason: Option<SharedString>,
+    on_change: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + Clone + 'static,
+    window: &mut Window,
+    cx: &mut Context<V>,
+) -> AnyElement {
+    let plain: Vec<SettingOption> = options.iter().map(|(opt, _)| opt.clone()).collect();
+    let descriptions: Vec<Option<String>> = options.iter().map(|(_, desc)| desc.clone()).collect();
+    settings_select_shared(
+        page,
+        p,
+        id.into(),
+        &plain,
+        Some(&descriptions),
+        &[],
+        None,
+        value,
+        width,
+        disabled,
+        disabled_reason,
+        Rc::new(on_change),
+        window,
+        cx,
+    )
+}
+
 /// [`settings_select`] with options that show, dimmed, but cannot be picked (`unavailable` holds
 /// their values): an editor app that is not installed, for example.
 ///
@@ -120,6 +156,7 @@ pub(crate) fn settings_select_with_unavailable<V: SettingsPage>(
         p,
         id.into(),
         options,
+        None,
         unavailable,
         None,
         value,
@@ -152,6 +189,7 @@ pub(crate) fn settings_select_with_footer<V: SettingsPage>(
         p,
         id.into(),
         options,
+        None,
         &[],
         Some(footer),
         value,
@@ -170,6 +208,7 @@ fn settings_select_shared<V: SettingsPage>(
     p: &SettingsPalette,
     id: SharedString,
     options: &[SettingOption],
+    descriptions: Option<&[Option<String>]>,
     unavailable: &[String],
     footer: Option<SharedString>,
     value: &str,
@@ -324,12 +363,52 @@ fn settings_select_shared<V: SettingsPage>(
     let Some(bounds) = trigger_bounds.get() else {
         return wrapper.into_any_element();
     };
+    let has_descriptions = descriptions.is_some_and(|list| {
+        list.iter()
+            .any(|desc| desc.as_deref().is_some_and(|s| !s.is_empty()))
+    });
     let rows = options.iter().enumerate().map(|(index, option)| {
         let is_selected = selected == Some(index);
         let highlighted = highlight == Some(index);
         let pickable = !unavailable.contains(&option.value);
         let value = option.value.clone();
         let on_change = on_change.clone();
+        let description = descriptions
+            .and_then(|list| list.get(index))
+            .and_then(|desc| desc.clone())
+            .filter(|desc| !desc.is_empty());
+        let label_el = if let Some(desc) = description {
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .gap(px(2.0))
+                .child(
+                    div()
+                        .w_full()
+                        .text_size(px(13.5))
+                        .line_height(px(18.0))
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .child(option.label.clone()),
+                )
+                .child(
+                    div()
+                        .w_full()
+                        .text_size(px(11.5))
+                        .line_height(px(15.5))
+                        .text_color(hsla(p.muted))
+                        .child(desc),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(option.label.clone())
+                .into_any_element()
+        };
         div()
             .id((SharedString::from(format!("{id}-option")), index))
             .role(gpui::Role::ListBoxOption)
@@ -338,8 +417,8 @@ fn settings_select_shared<V: SettingsPage>(
             .w_full()
             .flex_shrink_0()
             .min_h(px(POPUP_ROW_HEIGHT))
-            .px(px(8.0))
-            .py(px(6.0))
+            .px(px(if has_descriptions { 10.0 } else { 8.0 }))
+            .py(px(if has_descriptions { 7.0 } else { 6.0 }))
             .flex()
             .items_center()
             .rounded(px(6.0))
@@ -365,24 +444,32 @@ fn settings_select_shared<V: SettingsPage>(
                     on_change(page, value.clone(), window, cx);
                 })
             })
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .child(option.label.clone()),
-            )
+            .child(label_el)
     });
-    // Base UI lays the selected row over the trigger: the row's text sits on the trigger's text.
-    let selected_offset = selected.unwrap_or(0) as f32 * POPUP_ROW_HEIGHT;
-    let top = bounds.origin.y - px(6.0) - px(selected_offset);
+    let popup_width = if has_descriptions {
+        bounds.size.width.max(px(292.0))
+    } else {
+        bounds.size.width
+    };
+    let (popup_x, top) = if has_descriptions {
+        let right_aligned = bounds.origin.x + bounds.size.width - popup_width;
+        (
+            right_aligned.max(px(8.0)),
+            bounds.origin.y + bounds.size.height + px(4.0),
+        )
+    } else {
+        // Base UI lays the selected row over the trigger: the row's text sits on the trigger's text.
+        let selected_offset = selected.unwrap_or(0) as f32 * POPUP_ROW_HEIGHT;
+        (
+            bounds.origin.x,
+            bounds.origin.y - px(6.0) - px(selected_offset),
+        )
+    };
     let max_height = (window.viewport_size().height - px(16.0)).max(px(0.0));
     let popup = v_flex()
         .id(SharedString::from(format!("{id}-popup")))
         .occlude()
-        .w(bounds.size.width)
+        .w(popup_width)
         .max_h(max_height)
         .overflow_y_scroll()
         .p(px(4.0))
@@ -420,7 +507,7 @@ fn settings_select_shared<V: SettingsPage>(
             deferred(
                 anchored()
                     .position_mode(AnchoredPositionMode::Window)
-                    .position(point(bounds.origin.x, top.max(px(8.0))))
+                    .position(point(popup_x, top.max(px(8.0))))
                     .snap_to_window_with_margin(px(8.0))
                     .child(popup),
             )

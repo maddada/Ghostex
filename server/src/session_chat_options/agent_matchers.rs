@@ -147,7 +147,7 @@ pub(super) fn match_claude_mode(segment: &str) -> Option<SessionChatDetectedChoi
     let status = strip_mode_cycle_hint(status);
     let (value, label) = match status {
         "auto mode on" => ("auto", "Auto"),
-        "bypass permissions on" => ("bypass", "Bypass permissions"),
+        "bypass permissions on" => ("bypass", "Full permissions"),
         "plan mode on" => ("plan", "Plan"),
         "accept edits on" => ("accept-edits", "Accept edits"),
         "manual mode on" => ("manual", "Manual"),
@@ -320,7 +320,7 @@ pub(super) fn codex_plan_mode_choice() -> SessionChatDetectedChoice {
 pub(crate) const CODEX_PERMISSION_MODES: [(&str, &str, &str); 4] = [
     ("ask-for-approval", "Ask for approval", ":ask-for-approval"),
     ("approve-for-me", "Approve for me", ":approve-for-me"),
-    ("full-access", "Full Access", ":danger-full-access"),
+    ("full-access", "Full permissions", ":danger-full-access"),
     ("read-only", "Read Only", ":read-only"),
 ];
 
@@ -334,13 +334,18 @@ pub(crate) fn codex_permissions_choice(
     if label.is_empty() {
         return None;
     }
+    let normalized_label = if label.eq_ignore_ascii_case("Full Access") {
+        "Full permissions"
+    } else {
+        label
+    };
     let value = CODEX_PERMISSION_MODES
         .iter()
-        .find(|(_, name, _)| *name == label)
-        .map_or(label, |(value, _, _)| value);
+        .find(|(_, name, _)| *name == normalized_label)
+        .map_or(normalized_label, |(value, _, _)| value);
     Some(SessionChatDetectedChoice {
         value: value.to_string(),
-        label: label.to_string(),
+        label: normalized_label.to_string(),
         source,
     })
 }
@@ -776,9 +781,13 @@ pub(super) fn grok_mode_choice(segments: &[String]) -> SessionChatDetectedChoice
         .map(|segment| segment.trim())
         .find(|segment| matches!(*segment, "plan" | "auto-review" | "always-approve"))
         .unwrap_or("default");
+    let label = match value {
+        "always-approve" => "Full permissions",
+        _ => value,
+    };
     SessionChatDetectedChoice {
         value: value.to_string(),
-        label: value.to_string(),
+        label: label.to_string(),
         source: SessionChatOptionEvidence::Terminal,
     }
 }

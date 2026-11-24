@@ -136,7 +136,7 @@ wins when present because it is the live value.
 pub(crate) fn claude_transcript_mode_choice(mode: &str) -> Option<SessionChatDetectedChoice> {
     let (value, label) = match mode.trim() {
         "auto" => ("auto", "Auto"),
-        "bypassPermissions" => ("bypass", "Bypass permissions"),
+        "bypassPermissions" => ("bypass", "Full permissions"),
         "plan" => ("plan", "Plan"),
         "acceptEdits" => ("accept-edits", "Accept edits"),
         "default" => ("manual", "Manual"),

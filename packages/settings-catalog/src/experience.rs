@@ -137,7 +137,7 @@ const CHAT_BOX: Area = Area {
     ],
     always: &["Field", "Model", "Effort", "•••", "Attach", "Mic", "Send"],
     controls: &[
-        Control { key: COMPOSER_MODE_PICKER_KEY, label: "Mode picker", hint: "Off, sessions run in Auto, or in Bypass permissions while Skip permissions is on.", shown_when: true },
+        Control { key: COMPOSER_MODE_PICKER_KEY, label: "Mode picker", hint: "Off, sessions run in Auto, or in Full permissions while Agent approvals is set to Full permissions.", shown_when: true },
         Control { key: COMPOSER_MAXIMIZE_KEY, label: "Maximize chat box", hint: "The button that makes the chat box fill the chat.", shown_when: true },
         Control { key: COMPOSER_TERMINAL_BUTTON_KEY, label: "Terminal button", hint: "Off, Terminal View is in the ••• menu.", shown_when: true },
         Control { key: COMPOSER_CONTEXT_RING_KEY, label: "Context ring", hint: "Off, it stays in ••• › More › Context window.", shown_when: true },

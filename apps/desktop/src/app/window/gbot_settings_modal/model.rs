@@ -58,15 +58,15 @@ pub(crate) const GBOT_APPROVALS: [(&str, &str, &str); 4] = [
     ),
     (
         "full",
-        "Full access",
-        "It does everything without asking. Only you can choose this.",
+        "Full permissions",
+        "The agent won't ask for permission before edits or commands. At your own risk. Only you can choose this.",
     ),
 ];
 
-/// Why a Codex GBot starts at Full access, shown under the approval control (the level itself is
+/// Why a Codex GBot starts at Full permissions, shown under the approval control (the level itself is
 /// gxserver's, server/src/gbots/session.rs `default_approval`).
 pub(crate) const GBOT_CODEX_APPROVAL_NOTE: &str =
-    "Codex GBots start at Full access: below it, Codex's sandbox stops them reaching Ghostex.";
+    "Codex GBots start at Full permissions: below it, Codex's sandbox stops them reaching Ghostex.";
 
 /// The svg asset of a Ghostex icon name.
 pub(crate) fn gbot_icon_path(icon: &str) -> String {

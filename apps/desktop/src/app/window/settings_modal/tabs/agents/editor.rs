@@ -4,13 +4,13 @@
 //! they are empty or still the previous choice's. Existing agents are edited in their own row.
 use super::super::super::fields::{
     ButtonVariant, CONTROL_LANE_WIDTH, FieldStates, RowSpec, SELECT_WIDTH, card_inset, setting_row,
-    settings_button, settings_select, settings_text_input, settings_textarea,
+    settings_button, settings_select_described, settings_text_input, settings_textarea,
 };
 use super::super::super::palette::SettingsPalette;
 use super::AgentsTab;
 use super::model::{
-    AgentButton, accept_all_mode_options, default_agent_by_icon, default_agents,
-    supports_accept_all,
+    AgentButton, auto_permission_family, default_agent_by_icon, default_agents,
+    permission_mode_options, supports_accept_all,
 };
 use super::select::DropdownOption;
 use gpui::{
@@ -177,6 +177,17 @@ impl AgentsTab {
         let next_default =
             default_agent_by_icon(Some(next.as_str()).filter(|icon| *icon != "custom"));
         editor.icon = next;
+        if editor.accept_all_mode == "auto" {
+            let icon_for_check = (editor.icon != "custom").then_some(editor.icon.as_str());
+            let resolved_id = editor
+                .agent_id
+                .as_deref()
+                .or_else(|| next_default.map(|agent| agent.agent_id.as_str()))
+                .unwrap_or_default();
+            if auto_permission_family(resolved_id, icon_for_check).is_none() {
+                editor.accept_all_mode = "inherit".to_string();
+            }
+        }
         let Some(next_default) = next_default else {
             cx.notify();
             return;
@@ -311,11 +322,11 @@ impl AgentsTab {
             .or_else(|| default_agent_by_icon(icon_for_check).map(|agent| agent.agent_id.clone()))
             .unwrap_or_default();
         let accept_supported = supports_accept_all(&resolved_agent_id, icon_for_check);
-        let mode_select = settings_select(
+        let mode_select = settings_select_described(
             self,
             p,
             "agent-editor-approvals",
-            &accept_all_mode_options(),
+            &permission_mode_options(&resolved_agent_id, icon_for_check),
             &mode,
             Some(SELECT_WIDTH),
             !accept_supported,
@@ -333,7 +344,7 @@ impl AgentsTab {
             p,
             "agent-editor-approvals-row",
             RowSpec::new("Permission mode").description(if accept_supported {
-                "Use app default follows the global Agents setting. Skip permissions applies this agent's permission-bypass mode at launch without changing the stored command."
+                "Use app default follows the global Agents setting. Full permissions: the agent won't ask for permission before edits or commands. At your own risk."
             } else {
                 "This agent does not expose a supported approval policy in Ghostex."
             }),

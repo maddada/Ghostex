@@ -2344,28 +2344,33 @@ texts and then drops the project. A new chat shows its worktree tray instead, an
 this pill yet.
 Claude panels such as `/status` and `/usage` show as clickable tabs, tables and
 usage meters instead of terminal text.
-Claude Code's permission mode (Bypass permissions, Auto, Manual, Accept edits or
-Plan) is the Mode button beside the model pill. Claude can also put itself into
-Plan mode on its own, for example when a message asks it to plan something;
-Ghostex then switches the session straight back to the mode you had, so only you
-change it. Plan mode you pick yourself (the Mode button, `/plan`, or Shift+Tab in
-the terminal) stays on. Claude can only use Bypass permissions when it was started
-with it allowed (Settings > Agents > Agent approvals > Accept all does that for new
-chats). For a chat started without it, the Mode menu greys Bypass out and shows a
-Restart in Bypass when idle switch under it: turn it on and Ghostex restarts Claude
-in Bypass as soon as it has finished what it is doing (at once if it is idle), on
-the same conversation, and that chat keeps starting in Bypass from then on. While it
-waits, the Mode button says "Bypass when idle"; turn the switch off to cancel. Only
-that chat changes, and only you can turn it on (agents can't). From the CLI:
+Claude Code's permission mode (Full permissions, Auto, Manual, Accept edits or
+Plan) is the Mode button beside the model pill. Full permissions means the agent
+won't ask for permission before edits or commands (at your own risk). Claude can
+also put itself into Plan mode on its own, for example when a message asks it to
+plan something; Ghostex then switches the session straight back to the mode you
+had, so only you change it. Plan mode you pick yourself (the Mode button, `/plan`,
+or Shift+Tab in the terminal) stays on. In Terminal-based sessions, Claude can
+only use Full permissions when it was started with it allowed (Settings > Agents >
+Agent approvals > Full permissions does that for new chats). For a chat started
+without it, the Mode menu greys Full permissions out and shows a Restart in Full
+permissions when idle switch under it: turn it on and Ghostex restarts Claude in
+Full permissions as soon as it has finished what it is doing (at once if it is
+idle), on the same conversation, and that chat keeps starting in Full permissions
+from then on. While it waits, the Mode button says "Full permissions when idle";
+turn the switch off to cancel. Only that chat changes, and only you can turn it
+on (agents can't). From the CLI:
 `ghostex select-session-chat-model <session> --mode bypass|auto|manual|accept-edits|plan --defer`.
 Codex chats have a Mode button too, for what Codex is allowed to do: Ask for
 approval (it asks before editing outside the project or using the
 internet), Approve for me (an automatic reviewer approves safe actions and only
-unsafe ones come to you), Full Access (no approvals at all) or Read Only. The
-check follows the mode Codex is in, also when you change it with `/permissions`
-in the terminal, and a pick applies to the running session as soon as Codex
-finishes what it is doing (at once if it is idle). A session started with Agent approvals set to accept all
-starts in Full Access. Plan mode stays in the options menu. From the CLI:
+unsafe ones come to you), Full permissions (the agent won't ask for permission
+before edits or commands, at your own risk) or Read Only. The check follows the
+mode Codex is in, also when you change it with `/permissions` in the terminal,
+and a pick applies to the running session as soon as Codex finishes what it is
+doing (at once if it is idle). A session started with Agent approvals set to
+Full permissions starts in Full permissions. Plan mode stays in the options menu.
+From the CLI:
 `ghostex select-session-chat-model <session> --permissions ask-for-approval|approve-for-me|full-access|read-only --defer`.
 `/resume` works from the chat. In Claude Code and Codex chats it opens a Resume a
 conversation card listing the agent's own conversations: type to search, Up and
@@ -2500,13 +2505,13 @@ menu lists your Copilot skills and Copilot's own commands; skills run as
 `/skill-name`. Sleeping and waking a Copilot session, Full Reload and Fork
 keep the same conversation.
 Grok Build chats show the same cards. When Grok asks for permission (any mode
-but Always approve, which Grok starts in while Agent approvals is set to accept
-all), the request appears as a card naming the
+but Full permissions, which Grok starts in while Agent approvals is set to Full
+permissions), the request appears as a card naming the
 command, with Grok's own choices: Yes, proceed (Cmd+Enter), always approve, No
 (Esc) and never allow. Its questions appear as a question card: pick one or more
 options or write your own answer. Stop and Interrupt & Send really end the
 running turn, including a shell command. The mode button switches Grok between
-Default, Plan, Auto review and Always approve, the context meter shows how full
+Default, Plan, Auto review and Full permissions, the context meter shows how full
 Grok's context window is, and Fork starts a copy of the conversation in a new
 session. Picking a model in the chat also makes it Grok's default for new
 sessions, because Grok saves every model switch.
@@ -4211,8 +4216,8 @@ Agents with that computer picked. From a terminal, `ghostex agent-hooks status`,
 `ghostex agent-hooks install <agent>` (or `--all`) and `ghostex agent-hooks
 uninstall <agent>` (or `--all`) do what the Session resume hooks card does; add
 `--computer <name>` to run them on a connected computer.
-Agent approvals ("accept all") is a
-per-machine default with per-project overrides. Actions (Settings > Actions)
+Agent approvals (Keep default or Full permissions) is a
+per-machine default with per-agent (including Auto for Claude Code and Codex) and per-project overrides. Actions (Settings > Actions)
 are saved terminal commands or browser URLs shown on project headers and in
 the header’s Quick Actions button, which shows the name and icon of the Action
 you used last and runs it again on click (its caret opens the full list; it
@@ -5379,8 +5384,8 @@ you turn them back on.
   Settings…): Profile (name, role, description, icon and colour, the agent and
   model it runs on, how much it may do without asking), Instructions,
   Department, Memory, Routines, Computer and Bot API, each described below. A
-  new GBot starts at Ask; a Codex GBot starts at Full access, because Codex's
-  sandbox below Full can't reach Ghostex, and Codex still keeps it out of your
+  new GBot starts at Ask; a Codex GBot starts at Full permissions, because Codex's
+  sandbox below Full permissions can't reach Ghostex, and Codex still keeps it out of your
   secret folders. Only you can let a GBot do more.
 - **Adding a GBot**: press + on the GBots heading, ask Ghostex AI for one, or run
   `ghostex gbots create --name <name> --title <role>` (add `--soul-file
@@ -5464,7 +5469,7 @@ you turn them back on.
   first, since the box gets your agent logins and the GBot's instructions and
   memory, and runs and bills while it works. Use the screen and apps
   lets it drive apps on that computer with SpaceO or cua-driver (macOS); off,
-  its chats start without those tools (a Codex GBot at Full access can still run
+  its chats start without those tools (a Codex GBot at Full permissions can still run
   their command-line tools from a shell). Its folder, memory and routine runs
   stay on this computer. Only you give a GBot a computer, a new folder there or
   computer use, from Ghostex on your computer; the phone's
@@ -5543,7 +5548,7 @@ you turn them back on.
   how many). Import Team… (or Import Team on the phone) shows what a file adds
   before anything is added: names already taken get " 2", routines arrive
   paused until you resume them, and imported GBots start at the approval level
-  every new GBot starts at (Ask; Codex GBots at Full access). Importing asks for
+  every new GBot starts at (Ask; Codex GBots at Full permissions). Importing asks for
   your approval, like adding a GBot; afterwards Undo Import removes the whole
   import, unless one of its GBots was changed since. From a terminal: `ghostex
   gbots team export [--department <name> | --preset <bot>] [--notes] [--out
@@ -6645,7 +6650,7 @@ agents, a connection from either side is enough.
   Turn Sidebar organization off and each computer keeps what it has. Appearance
   (theme, colours, fonts, the chat's look and the glass; the glass picture or
   video, the interface scale and zoom stay on each computer), Agent defaults
-  (the default agent, how new sessions open, the title agent, Accept all, each
+  (the default agent, how new sessions open, the title agent, Agent approvals, each
   agent's default model and effort), Sounds and notifications, Keybindings
   (between computers of the same system), Coordinator (coordinator settings
   and your playbook overrides), Agents, Skills
@@ -6976,7 +6981,7 @@ Rows named zmx or gxserver in System Settings > Privacy & Security are left over
 
 ## Approvals (only at the door)
 
-Ghostex asks only when something could let someone new in, and then with one Approve / Deny card: a new phone or computer asking to pair (compare the three words it shows), each message a Collab guest sends in Ask me mode, and, when an agent asks, turning on Easy Connect (once), letting a device into it, making a Collab share or showing its link again, and turning on Send for a share. Your own clicks in Ghostex never ask. Everything else just works, for you and your agents: connecting your computers, every setting, GBots, Autopilot, Cloud Boxes, teams, extensions, secret providers and starting an agent with full access. Agents can't approve a card or answer a secret request. The card opens in the middle of the Ghostex window on your computer, saying who asked and on which computer; Enter never approves, and Escape, Close or the corner X put it aside behind an "Approvals waiting" pill in the work area header. A card from a computer you added under Settings > Remote can be approved right where you are. On the phone, open the computer in Machines, then Approvals. Approve is one click; to require Touch ID or your Mac password (Windows Hello or your Windows password, your password on Linux, Face ID or your fingerprint on the phone) first, turn on Settings > Security > "Require Touch ID or your password to approve" (on the phone: "Require Face ID to approve" on the computer's page under Machines); it applies to every device that approves for that computer. A request waits 10 minutes, also across a restart of Ghostex or the computer's gxserver, and an approval is good for that one change only. When the same phone or agent asks again for the same thing, the newer request replaces the waiting one and its card shows instead (check its words, then approve); a card whose request ran out of time says so ("This request expired. Ask again from the phone.").
+Ghostex asks only when something could let someone new in, and then with one Approve / Deny card: a new phone or computer asking to pair (compare the three words it shows), each message a Collab guest sends in Ask me mode, and, when an agent asks, turning on Easy Connect (once), letting a device into it, making a Collab share or showing its link again, and turning on Send for a share. Your own clicks in Ghostex never ask. Everything else just works, for you and your agents: connecting your computers, every setting, GBots, Autopilot, Cloud Boxes, teams, extensions, secret providers and starting an agent with Full permissions. Agents can't approve a card or answer a secret request. The card opens in the middle of the Ghostex window on your computer, saying who asked and on which computer; Enter never approves, and Escape, Close or the corner X put it aside behind an "Approvals waiting" pill in the work area header. A card from a computer you added under Settings > Remote can be approved right where you are. On the phone, open the computer in Machines, then Approvals. Approve is one click; to require Touch ID or your Mac password (Windows Hello or your Windows password, your password on Linux, Face ID or your fingerprint on the phone) first, turn on Settings > Security > "Require Touch ID or your password to approve" (on the phone: "Require Face ID to approve" on the computer's page under Machines); it applies to every device that approves for that computer. A request waits 10 minutes, also across a restart of Ghostex or the computer's gxserver, and an approval is good for that one change only. When the same phone or agent asks again for the same thing, the newer request replaces the waiting one and its card shows instead (check its words, then approve); a card whose request ran out of time says so ("This request expired. Ask again from the phone.").
 
 Older Ghostex apps and phones keep working with a computer on this version: their Touch ID or Face ID approvals count as a plain Approve. A computer still on an older Ghostex keeps asking for Touch ID or Face ID to approve, as before.
 
@@ -8319,7 +8324,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   until you turn them on: Pair my phone after setup (opens Connect a Phone)
   and Add another computer after setup (opens Connect a Computer), each after
   your first agent reply. Last, the default session view
-  and Agent approvals (Keep default or Skip permissions, the same setting as
+  and Agent approvals (Keep default or Full permissions, the same setting as
   Settings > Agents, `agentAcceptAllEnabled`), with a small preview window
   that shows your picks at once, next to the look: Appearance, the theme
   colour squares (Dark and Light tabs), Colourfulness and one Transparency row
@@ -8565,8 +8570,8 @@ switches match no level says Custom. Every switch also stays on its own
 Settings page.
 While the terminal button is off the chat box, the ••• button turns red when
 the terminal has a problem, and pointing at it says why. With the mode picker
-off, new Claude sessions on that computer start in Auto, or in Bypass
-permissions while Skip permissions is on. A new phone asks once after pairing,
+off, new Claude sessions on that computer start in Auto, or in Full
+permissions while Agent approvals is set to Full permissions. A new phone asks once after pairing,
 with Regular picked. Settings keys: `chatComposerModePicker`,
 `chatComposerTerminalButton`, `chatComposerContextRing`, `chatComposerMaximize`,
 `chatQuietViewCalm`, plus the Quiet View and Card details keys; open the page
@@ -8577,7 +8582,7 @@ with `ghostex settings open --tab experience`.
 Reset all settings to defaults (Settings > About) puts every setting and the app
 icon back to their defaults. It asks first, in a "Reset all settings?" dialog
 that needs a second click (from 11.6.0; before, one click reset everything with no
-way back). While a Settings confirmation such as this one, Skip permissions? or
+way back). While a Settings confirmation such as this one, Full permissions? or
 Install Hex? is open, the keys you type stay in it instead of going into the
 Settings search behind it.
 

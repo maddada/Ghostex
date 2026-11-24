@@ -66,7 +66,7 @@ pub(crate) fn read_options(
                 _ => {
                     return Err(DomainStateError {
                         code: "invalidParams",
-                        message: "Native chats take Ask, Auto-edits, Auto or Full access; Read-only needs Terminal-based mode.".into(),
+                        message: "Native chats take Ask, Auto-edits, Auto or Full permissions; Read-only needs Terminal-based mode.".into(),
                     })
                 }
             };
