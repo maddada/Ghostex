@@ -432,6 +432,8 @@ pub struct RewindRequest {
     pub message_id: String,
     pub prompt: String,
     pub agent: String,
+    /// A Native chat, whose rewind gxserver runs without the agent's terminal dialog.
+    pub native: bool,
     pub busy: bool,
     pub completed: bool,
     pub synchronization_pending: bool,

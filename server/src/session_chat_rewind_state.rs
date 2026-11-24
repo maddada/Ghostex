@@ -64,6 +64,15 @@ fn load() -> HashMap<String, SessionChatPendingRewind> {
     HashMap::new()
 }
 
+/// The rewind recorded for `transcript_path`, read from the file each time instead of from this
+/// process's copy: `ghostex acp-host` is its own process and must see a rewind gxserver recorded
+/// after it started (SEE-ALSO: acp/driver_claude_rewind.rs).
+pub(crate) fn persisted_session_chat_pending_rewind(
+    transcript_path: &Path,
+) -> Option<SessionChatPendingRewind> {
+    load().remove(&store_key(transcript_path))
+}
+
 #[cfg(not(test))]
 fn save(entries: &HashMap<String, SessionChatPendingRewind>) {
     let path = persisted_path();

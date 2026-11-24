@@ -36,6 +36,9 @@ use super::spec::{
 
 const CLAUDE_CTRL_TIMEOUT: Duration = Duration::from_secs(30);
 
+#[path = "driver_claude_rewind.rs"]
+mod rewind;
+
 struct ClaudeTransport {
     stdin: Mutex<Option<ChildStdin>>,
     next_id: AtomicU64,
@@ -314,6 +317,10 @@ struct ClaudeState {
     last_event_at_ms: i64,
     child_pid: u32,
     child_exited: bool,
+    /// Row a rewind resumed Claude at, kept for every restart until the next turn finishes.
+    resume_session_at: Option<String>,
+    /// Id of the empty conversation a rewind to the first prompt started, until its first turn.
+    fresh_session_id: Option<String>,
 }
 
 impl ClaudeState {
@@ -360,6 +367,8 @@ impl ClaudeState {
             last_event_at_ms: now_ms(),
             child_pid: 0,
             child_exited: false,
+            resume_session_at: None,
+            fresh_session_id: None,
         }
     }
 
@@ -909,8 +918,7 @@ fn spawn_and_init_claude(
         argv.push(prompt_file);
     }
     if let Some(resume_id) = resume_session_id.map(str::trim).filter(|s| !s.is_empty()) {
-        argv.push("--resume".to_string());
-        argv.push(resume_id.to_string());
+        argv.extend(rewind::claude_resume_flags(state, resume_id));
         if fork_session {
             argv.push("--fork-session".to_string());
         }
@@ -1373,6 +1381,7 @@ fn spawn_and_init_claude(
                                 bool,
                             ) = {
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                rewind::forget_rewind_resume_point(&mut s);
                                 if let Some(model_usage) =
                                     msg.get("modelUsage").and_then(Value::as_object)
                                 {
@@ -1935,7 +1944,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         "model",
         "mode",
         "state",
-        "switch_to_cli"
+        "switch_to_cli",
+        "rewind"
     ]);
     let channel_agent = format!("acp:{}", spec.family);
     let mut reconnecting = false;
@@ -2583,6 +2593,35 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             activity.sync();
                             ep.ack(id, false, Value::Null, Some(&err));
                         }
+                    }
+                }
+                "rewind" => {
+                    let leaf_id = params
+                        .get("leafId")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|leaf| !leaf.is_empty())
+                        .map(str::to_string);
+                    match rewind::rewind_claude(
+                        &mut proc,
+                        spec,
+                        &parsed,
+                        &cwd,
+                        &spool_session_id,
+                        record_target.as_ref(),
+                        &state,
+                        &activity,
+                        &mode_sync_lock,
+                        &child_pid,
+                        &active_transport,
+                        &process_gen,
+                        leaf_id,
+                    ) {
+                        Ok(result) => {
+                            activity.sync();
+                            ep.ack(id, true, result, None);
+                        }
+                        Err(err) => ep.ack(id, false, Value::Null, Some(&err)),
                     }
                 }
                 "switch_to_cli" => {

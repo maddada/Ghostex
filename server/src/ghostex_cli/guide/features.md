@@ -4100,8 +4100,11 @@ without terminal scraping) or **Terminal-based** (legacy interactive terminal wi
 switching between Chat and Terminal; will be removed in a future release, and picking it
 in Settings shows a yellow dot next to the dropdown with a tooltip). Existing installs and Terminal-first new
 installs keep their existing mode (existing installs see the one-time Native mode prompt).
-Native chats do not offer Rewind to here yet, and a Native Codex chat's `/` list offers
-only `/compact`, `/btw` and `/mention`; the other Codex commands need Terminal-based mode.
+Rewind to here works in Native Claude Code and Codex chats too: the agent goes back to
+before that message, the message returns to the chat box for editing, and files stay as
+they are. Native Antigravity chats do not offer it, because Antigravity has no way to go back.
+A Native Codex chat's `/` list offers only `/compact`, `/btw` and `/mention`; the other
+Codex commands need Terminal-based mode.
 For a Native session, **Switch to Terminal-based** lives in the chat's
 More actions (`•••`) menu instead of the composer toolbar; choosing it asks
 first and explains that switching is not instant and interrupts any active turn

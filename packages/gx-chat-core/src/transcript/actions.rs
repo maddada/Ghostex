@@ -236,6 +236,7 @@ fn handle_action(state: &mut ChatState, action: &UserAction, context: &ChatConte
                 message_id: text(action, "messageId"),
                 prompt: text(action, "prompt"),
                 agent: state.session.agent.clone().unwrap_or_default(),
+                native: state.session.non_cli_mode,
                 ..RewindRequest::default()
             });
             Vec::new()

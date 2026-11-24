@@ -33,6 +33,9 @@ use super::spec::{
 
 const CODEX_RPC_TIMEOUT: Duration = Duration::from_secs(30);
 
+#[path = "driver_codex_rewind.rs"]
+mod rewind;
+
 struct CodexTransport {
     stdin: Mutex<Option<ChildStdin>>,
     next_id: AtomicU64,
@@ -2548,7 +2551,8 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         "model",
         "mode",
         "state",
-        "switch_to_cli"
+        "switch_to_cli",
+        "rewind"
     ]);
     let channel_agent = format!("acp:{}", spec.family);
     let mut reconnecting = false;
@@ -3136,6 +3140,25 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             activity.sync();
                             ep.ack(id, false, Value::Null, Some(&err));
                         }
+                    }
+                }
+                "rewind" => {
+                    let message_id = params
+                        .get("messageId")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .unwrap_or_default()
+                        .to_string();
+                    let Some(proc) = proc_opt.as_ref().filter(|_| !message_id.is_empty()) else {
+                        ep.ack(id, false, Value::Null, Some("REWIND_NOT_FOUND"));
+                        continue;
+                    };
+                    match rewind::rewind_codex_thread(&proc.transport, &state, &message_id) {
+                        Ok(result) => {
+                            activity.sync();
+                            ep.ack(id, true, result, None);
+                        }
+                        Err(err) => ep.ack(id, false, Value::Null, Some(&err)),
                     }
                 }
                 "send" => {
