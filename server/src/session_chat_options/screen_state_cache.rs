@@ -254,10 +254,6 @@ pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, se
     if let Ok(mut cache) = state.session_chat_option_cache.lock() {
         cache.remove(&session_observer_key(project_id, session_id));
     }
-    crate::session_chat_compacting::clear_screen_approval_marker(
-        &writing, state, project_id, session_id,
-    );
-    drop(writing);
     // A restarted or woken agent is no longer the one seen gone.
     crate::session_chat_start_failure::forget_agent_gone(project_id, session_id);
     // Sleeping/stopped sessions have no live screen. Clear the durable
@@ -269,6 +265,10 @@ pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, se
         .publish_fleet(project_id, session_id, None);
     crate::session_chat_compacting::SessionChatCompactingPublisher::new(state)
         .publish_monitor(project_id, session_id, None);
+    crate::session_chat_compacting::clear_screen_approval_marker(
+        &writing, state, project_id, session_id,
+    );
+    drop(writing);
     crate::session_chat_mode_availability::forget_for_agent_restart(
         &crate::session_chat_compacting::SessionChatCompactingPublisher::new(state),
         project_id,

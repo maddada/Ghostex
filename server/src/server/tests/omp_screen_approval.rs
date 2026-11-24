@@ -854,3 +854,78 @@ fn a_failed_capture_while_a_reading_is_dropped_does_not_keep_the_mark() {
     );
     assert_eq!(fixture.awaiting_approval(), None);
 }
+
+/// A reading is dropped while another reader's whole capture sees an approval and commits it in
+/// between. That newer reading wins: its mark is written after the drop's clear, so the session
+/// waits for the user.
+#[test]
+fn an_approval_read_while_a_reading_is_dropped_keeps_its_mark() {
+    let fixture = Fixture::new();
+    let _daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+
+    // Dropping the reading stops at its fleet mark's clear: the clear is written, and its
+    // presentation delta waits for the event sequence this test holds. No approval is marked
+    // yet, so the capture below has a mark to write, which also waits for the event sequence.
+    open_gxserver_database(&fixture.state.paths)
+        .expect("db")
+        .execute(
+            r#"UPDATE sessions SET runtimeSettingsJson = json_set(runtimeSettingsJson, '$.sessionChatFleetDetectedAt', '2026-11-23T10:00:00.000Z')
+            WHERE projectId = ?1 AND sessionId = ?2"#,
+            rusqlite::params![fixture.project_id(), fixture.session_id],
+        )
+        .expect("a fleet mark");
+    let fleet_marked = || {
+        fixture.stored()["runtimeSettings"]
+            .get("sessionChatFleetDetectedAt")
+            .is_some()
+    };
+    let wait_for = |what: &str, done: &dyn Fn() -> bool| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !done() {
+            assert!(std::time::Instant::now() < deadline, "{what}");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    };
+    let held = fixture
+        .state
+        .presentation_event_sequence
+        .lock()
+        .expect("event sequence");
+    let forget = {
+        let state = fixture.state.clone();
+        let (project_id, session_id) =
+            (fixture.project_id().to_string(), fixture.session_id.clone());
+        std::thread::spawn(move || {
+            crate::session_chat_options::forget_session_chat_options(
+                &state,
+                &project_id,
+                &session_id,
+            );
+        })
+    };
+    wait_for("the drop reaches its fleet clear", &|| !fleet_marked());
+
+    // The approval is still on screen, so the other reader's whole capture sees it.
+    let approval_reader =
+        {
+            let state = fixture.state.clone();
+            let (project_id, session_id) =
+                (fixture.project_id().to_string(), fixture.session_id.clone());
+            std::thread::spawn(move || {
+                crate::session_chat_options::SessionChatOptionDetector::new(&state)
+                    .detect_blocking(&project_id, &session_id, Some("omp"), true);
+            })
+        };
+    wait_for("the capture commits the approval", &|| {
+        latest_verdict(&fixture) == Some(true)
+    });
+
+    drop(held);
+    forget.join().expect("dropping the reading");
+    approval_reader.join().expect("the approval reader");
+    assert!(
+        stored_mark(&fixture).is_some(),
+        "the newer reading's approval is marked"
+    );
+    assert_eq!(fixture.awaiting_approval(), Some(json!(true)));
+}
