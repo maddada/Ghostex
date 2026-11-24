@@ -4639,9 +4639,9 @@ version of the Projects features in Cursor and Claude Code.
 - **Above the chat box**: what needs you sits right on top of the chat box as
   one compact list, one row each: the question or task, its answer buttons (the
   recommended one has a small star) or **Done**, and how long ago it was asked;
-  below them, blocked work, plus collapsible **Snoozed**, **Handled**
-  (recently answered questions, asks and to-dos) and **Done** (what the coordinator's
-  latest turn finished, with **Archive all** inside) drawers at the bottom. At most four rows show (three on the phone),
+  below them, blocked work, plus collapsible **Snoozed** and **Recent**
+  (recently handled questions, asks, approvals, to-dos, and work finished in the
+  latest turn, newest first, with **Archive all** inside) drawers at the bottom. At most four rows show (three on the phone),
   then **N more need you**: on the computer it opens the rest right there, under
   the first rows, and **Show fewer** folds them back (a long list scrolls inside
   the dock); on the phone it opens the Work panel at Needs you. Something

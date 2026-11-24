@@ -53,7 +53,7 @@ pub(crate) struct Choice {
     pub(crate) answer: Value,
 }
 
-fn tone_of(label: &str, first: bool) -> &'static str {
+pub(crate) fn tone_of(label: &str, first: bool) -> &'static str {
     let trimmed = label.trim_start();
     if trimmed.starts_with("No") || trimmed.starts_with("Deny") || trimmed.starts_with("Don't") {
         "deny"

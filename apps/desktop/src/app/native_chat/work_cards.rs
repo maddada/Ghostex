@@ -519,12 +519,13 @@ const DOCK_MOTION_KEY: &str = "work-dock:rows";
 
 /// The fold key that shows every dock row in place instead of the first `limit`.
 const DOCK_ALL_ROWS: &str = "dock-rows:all";
-/// `NativeChatView::expanded`'s key for the dock's Done drawer opened (`work_dock_done`).
-const DOCK_DONE_ROWS: &str = "dock-rows:done";
 /// `NativeChatView::expanded`'s key for the dock's Snoozed row opened (`work_dock_snoozed`).
 const DOCK_SNOOZED_ROWS: &str = "dock-rows:snoozed";
-/// `NativeChatView::expanded`'s key for the dock's Handled drawer opened (`work_dock_answered`).
-const DOCK_ANSWERED_ROWS: &str = "dock-rows:answered";
+/// `NativeChatView::expanded`'s key for the dock's Recent drawer opened (`work_dock_recent`).
+const DOCK_RECENT_ROWS: &str = "dock-rows:recent";
+/// Legacy keys from before Done and Handled merged into Recent; migrated on read and toggle.
+const DOCK_LEGACY_DONE_ROWS: &str = "dock-rows:done";
+const DOCK_LEGACY_ANSWERED_ROWS: &str = "dock-rows:answered";
 /// The dock's cards fold by themselves while the draft is longer than this.
 const DOCK_FOLDS_PAST_CHARS: usize = 280;
 
@@ -694,23 +695,30 @@ impl NativeChatView {
             rows.iter()
                 .any(|row| row["key"].as_str() == Some(key.as_str()))
         });
-        // Finished work items from the newest turn, folded under the Done drawer (`work_dock_done`).
-        let done: Vec<Value> = dock["done"].as_array().cloned().unwrap_or_default();
-        let done_archive_all = dock["doneArchiveAll"]["command"]
-            .is_object()
-            .then(|| dock["doneArchiveAll"]["command"].clone());
         // The snoozed asks, forms, pages and to-dos, folded under one Snoozed row (`work_dock_snoozed`).
         let snoozed: Vec<Value> = dock["snoozed"].as_array().cloned().unwrap_or_default();
-        // Recently answered asks/questions/to-dos, folded in the Handled drawer (`work_dock_answered`).
-        let answered: Vec<Value> = dock["answered"].as_array().cloned().unwrap_or_default();
+        // Combined Recent drawer (recently handled asks/approvals/to-dos + finished work items),
+        // falling back to answered + done for older chat cores.
+        let recent: Vec<Value> = if let Some(list) = dock["recent"].as_array() {
+            list.clone()
+        } else {
+            let mut merged = dock["answered"].as_array().cloned().unwrap_or_default();
+            merged.extend(dock["done"].as_array().cloned().unwrap_or_default());
+            merged
+        };
+        let recent_archive_all = dock["recentArchiveAll"]["command"]
+            .is_object()
+            .then(|| dock["recentArchiveAll"]["command"].clone())
+            .or_else(|| {
+                dock["doneArchiveAll"]["command"]
+                    .is_object()
+                    .then(|| dock["doneArchiveAll"]["command"].clone())
+            });
         let undo = dock["undoMarkAllRead"]
             .is_object()
             .then(|| dock["undoMarkAllRead"].clone());
-        let has_dock_content = !rows.is_empty()
-            || !done.is_empty()
-            || !snoozed.is_empty()
-            || !answered.is_empty()
-            || undo.is_some();
+        let has_dock_content =
+            !rows.is_empty() || !snoozed.is_empty() || !recent.is_empty() || undo.is_some();
         if !has_dock_content && !board.is_object() {
             return None;
         }
@@ -922,16 +930,18 @@ impl NativeChatView {
                 list = list.child(self.work_dock_undo_bar(&undo_bar, p, cx));
             }
             // CDXC:Coordinators 2026-11-24 DECISION:
-            // User: order the coordinator Inbox dock's drawers Snoozed, then Handled, then Done
-            // (Done at the bottom).
+            // User: combine Handled and Done into one Recent drawer ordered after Snoozed,
+            // newest first, with Archive all inside and the same row left inset for all drawers.
             if !snoozed.is_empty() {
                 list = list.children(self.work_dock_snoozed(&snoozed, p, cx));
             }
-            if !answered.is_empty() {
-                list = list.children(self.work_dock_answered(&answered, p, cx));
-            }
-            if !done.is_empty() {
-                list = list.children(self.work_dock_done(&done, done_archive_all.as_ref(), p, cx));
+            if !recent.is_empty() {
+                list = list.children(self.work_dock_recent(
+                    &recent,
+                    recent_archive_all.as_ref(),
+                    p,
+                    cx,
+                ));
             }
             surface = surface.child(self.disclosure_body_motion(
                 DOCK_MOTION_KEY,
@@ -1059,122 +1069,6 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// The dock's Done drawer at the bottom of the Inbox: styled like Snoozed with the finished check
-    /// icon, "Done", count badge, and chevron, collapsed by default with remembered open state.
-    /// Open, finished rows follow with their per-row Archive action, and "Archive all" sits on
-    /// the expanded header.
-    fn work_dock_done(
-        &self,
-        done: &[Value],
-        archive_all: Option<&Value>,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let s = p.scale;
-        let open = self.expanded.contains(DOCK_DONE_ROWS);
-        let (done_icon, done_color) = status_look("finished", p);
-        let archive_all_cmd = archive_all.cloned();
-        let line = div()
-            .id("work-dock-done")
-            .role(gpui::Role::Button)
-            .aria_label(format!("Done, {}", done.len()))
-            .aria_expanded(open)
-            .w_full()
-            .min_w_0()
-            .flex()
-            .items_center()
-            .gap(px(DOCK_GAP * s))
-            .px(px(DOCK_ROW_PAD_X * s))
-            .py(px(5.0 * s))
-            .rounded(px(8.0 * s))
-            .text_color(p.muted)
-            .chat_cursor_pointer()
-            .hover(|style| {
-                style
-                    .bg(p.foreground.opacity(0.04))
-                    .text_color(p.foreground)
-            })
-            .child(
-                svg()
-                    .path(done_icon)
-                    .flex_shrink_0()
-                    .size(px(13.0 * s))
-                    .text_color(done_color),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .items_center()
-                    .gap(px(6.0 * s))
-                    .child("Done")
-                    .child(crate::app::element::count_badge(
-                        done.len().to_string(),
-                        p.foreground,
-                        s,
-                    )),
-            )
-            .when_some(archive_all_cmd.filter(|_| open), |row, command| {
-                row.child(
-                    div()
-                        .id("work-dock-done-archive-all")
-                        .role(gpui::Role::Button)
-                        .aria_label(format!("Archive all, {}", done.len()))
-                        .flex_shrink_0()
-                        .px(px(8.0 * s))
-                        .py(px(1.0 * s))
-                        .rounded(px(6.0 * s))
-                        .border_1()
-                        .border_color(p.foreground.opacity(0.10))
-                        .bg(p.foreground.opacity(0.04))
-                        .text_size(px(PROSE_SIZE * 0.90 * s))
-                        .line_height(px((PROSE_LINE_HEIGHT - 4.0) * s))
-                        .text_color(p.foreground)
-                        .chat_cursor_pointer()
-                        .hover(|style| style.bg(p.foreground.opacity(0.09)))
-                        .tooltip(|window, cx| {
-                            gpui_component::tooltip::Tooltip::new("Archive all finished items")
-                                .build(window, cx)
-                        })
-                        .child("Archive all")
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            cx.stop_propagation();
-                            this.invoke(command.clone(), cx);
-                        })),
-                )
-            })
-            .child(
-                svg()
-                    .path("titlebar/chevron-down.svg")
-                    .flex_shrink_0()
-                    .size(px(12.0 * s))
-                    .text_color(p.card_muted)
-                    .when(open, |icon| {
-                        icon.with_transformation(gpui::Transformation::rotate(gpui::radians(
-                            std::f32::consts::PI,
-                        )))
-                    }),
-            )
-            .on_click(cx.listener(|this, _, _, cx| {
-                if !this.expanded.remove(DOCK_DONE_ROWS) {
-                    this.expanded.insert(DOCK_DONE_ROWS.to_string());
-                }
-                cx.notify();
-            }));
-        let mut out = vec![line.into_any_element()];
-        if open {
-            out.extend(done.iter().map(|row| {
-                div()
-                    .w_full()
-                    .opacity(0.72)
-                    .child(self.dock_row(row, p, cx))
-                    .into_any_element()
-            }));
-        }
-        out
-    }
-
     /// The dock's Snoozed row under the others (Q4686 A): "Snoozed" and its count badge with a
     /// moon icon and chevron, folded until clicked; open, snoozed asks, forms, pages and to-dos
     /// follow dimmed.
@@ -1258,21 +1152,29 @@ impl NativeChatView {
         out
     }
 
-    /// The collapsible Handled drawer between Snoozed and Done (Q4684 A): green check icon,
-    /// "Handled" and its count badge, expanding dimmed rows with their outcome and age.
-    fn work_dock_answered(
+    /// The collapsible Recent drawer below Snoozed: combines recently handled asks/approvals/to-dos
+    /// and work finished in the latest turn, newest first, with the Done check icon, "Recent",
+    /// count badge, "Archive all" on the expanded header, and chevron. Collapsed by default;
+    /// migrates legacy Done/Handled open state on read and toggle.
+    fn work_dock_recent(
         &self,
-        answered: &[Value],
+        recent: &[Value],
+        archive_all: Option<&Value>,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let s = p.scale;
-        let open = self.expanded.contains(DOCK_ANSWERED_ROWS);
+        let open = self.expanded.contains(DOCK_RECENT_ROWS)
+            || self.expanded.contains(DOCK_LEGACY_DONE_ROWS)
+            || self.expanded.contains(DOCK_LEGACY_ANSWERED_ROWS);
+        let (done_icon, done_color) = status_look("finished", p);
         let green: gpui::Hsla = gpui::rgb(0x2fa865).into();
+        let red: gpui::Hsla = gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into();
+        let archive_all_cmd = archive_all.cloned();
         let line = div()
-            .id("work-dock-answered")
+            .id("work-dock-recent")
             .role(gpui::Role::Button)
-            .aria_label(format!("Handled, {}", answered.len()))
+            .aria_label(format!("Recent, {}", recent.len()))
             .aria_expanded(open)
             .w_full()
             .min_w_0()
@@ -1291,10 +1193,10 @@ impl NativeChatView {
             })
             .child(
                 svg()
-                    .path("titlebar/message-circle-check.svg")
+                    .path(done_icon)
                     .flex_shrink_0()
                     .size(px(13.0 * s))
-                    .text_color(green),
+                    .text_color(done_color),
             )
             .child(
                 div()
@@ -1303,13 +1205,42 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .gap(px(6.0 * s))
-                    .child("Handled")
+                    .child("Recent")
                     .child(crate::app::element::count_badge(
-                        answered.len().to_string(),
+                        recent.len().to_string(),
                         p.foreground,
                         s,
                     )),
             )
+            .when_some(archive_all_cmd.filter(|_| open), |row, command| {
+                row.child(
+                    div()
+                        .id("work-dock-recent-archive-all")
+                        .role(gpui::Role::Button)
+                        .aria_label(format!("Archive all, {}", recent.len()))
+                        .flex_shrink_0()
+                        .px(px(8.0 * s))
+                        .py(px(1.0 * s))
+                        .rounded(px(6.0 * s))
+                        .border_1()
+                        .border_color(p.foreground.opacity(0.10))
+                        .bg(p.foreground.opacity(0.04))
+                        .text_size(px(PROSE_SIZE * 0.90 * s))
+                        .line_height(px((PROSE_LINE_HEIGHT - 4.0) * s))
+                        .text_color(p.foreground)
+                        .chat_cursor_pointer()
+                        .hover(|style| style.bg(p.foreground.opacity(0.09)))
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new("Archive all recent items")
+                                .build(window, cx)
+                        })
+                        .child("Archive all")
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.invoke(command.clone(), cx);
+                        })),
+                )
+            })
             .child(
                 svg()
                     .path("titlebar/chevron-down.svg")
@@ -1323,30 +1254,45 @@ impl NativeChatView {
                     }),
             )
             .on_click(cx.listener(|this, _, _, cx| {
-                if !this.expanded.remove(DOCK_ANSWERED_ROWS) {
-                    this.expanded.insert(DOCK_ANSWERED_ROWS.to_string());
+                let was_open = this.expanded.remove(DOCK_RECENT_ROWS)
+                    | this.expanded.remove(DOCK_LEGACY_DONE_ROWS)
+                    | this.expanded.remove(DOCK_LEGACY_ANSWERED_ROWS);
+                if !was_open {
+                    this.expanded.insert(DOCK_RECENT_ROWS.to_string());
                 }
                 cx.notify();
             }));
         let mut out = vec![line.into_any_element()];
         if open {
-            for (idx, row) in answered.iter().enumerate() {
+            for (idx, row) in recent.iter().enumerate() {
+                if text(row, "kind") == "finished" {
+                    out.push(
+                        div()
+                            .w_full()
+                            .opacity(0.72)
+                            .child(self.dock_row(row, p, cx))
+                            .into_any_element(),
+                    );
+                    continue;
+                }
                 let key = text(row, "key");
                 let title = text(row, "title");
                 let outcome = text(row, "outcome");
                 let age = text(row, "age");
                 let show_in_chat = row["showInChat"].clone();
                 let clickable = show_in_chat.is_object();
+                let (icon_path, icon_color) = match text(row, "status").as_str() {
+                    "approved" => ("titlebar/shield-check.svg", green),
+                    "denied" | "dropped" => ("titlebar/shield-x.svg", red),
+                    _ => ("titlebar/message-circle-check.svg", green.opacity(0.85)),
+                };
                 out.push(
                     div()
-                        .id(gpui::SharedString::from(format!(
-                            "dock-answered:{key}:{idx}"
-                        )))
+                        .id(gpui::SharedString::from(format!("dock-recent:{key}:{idx}")))
                         .w_full()
                         .min_w_0()
                         .opacity(0.72)
-                        .pl(px((DOCK_ROW_PAD_X + 16.0) * s))
-                        .pr(px(DOCK_ROW_PAD_X * s))
+                        .px(px(DOCK_ROW_PAD_X * s))
                         .py(px(5.0 * s))
                         .rounded(px(8.0 * s))
                         .flex()
@@ -1362,10 +1308,10 @@ impl NativeChatView {
                         })
                         .child(
                             svg()
-                                .path("titlebar/message-circle-check.svg")
+                                .path(icon_path)
                                 .flex_shrink_0()
-                                .size(px(12.0 * s))
-                                .text_color(green.opacity(0.85)),
+                                .size(px(13.0 * s))
+                                .text_color(icon_color),
                         )
                         .child(
                             div()

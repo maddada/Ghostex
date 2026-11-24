@@ -1272,6 +1272,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     // (when it comes back, row): the snoozed asks, to-dos, forms and pages, folded under the
     // dock's Snoozed row (`snoozed`).
     let mut snoozed_rows: Vec<(i64, Value)> = snoozed_question_rows(state, now_ms);
+    let dismissed = &state.extras.panels.work_dock_dismissed;
     let mut answered_rows: Vec<(i64, Value)> = Vec::new();
     // The session's to-dos (`ghostex needs-you add`), in any agent chat. A chat with no work items
     // has read no turns for its Show in chat, so it reads them here, only while a to-do exists.
@@ -1546,16 +1547,80 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         let at = at_ms(text(item, "at")).unwrap_or(0);
         later.push((at, work_row(item, &turns, now_ms, None)));
     }
-    // Finished items from the newest turn live in their own collapsed Done (N) drawer at the
-    // bottom of the Inbox rather than in the main list, with Archive all inside the expanded drawer.
+    // Recently settled relayed approvals keep shield-check / shield-x in the Recent drawer.
+    if let Some(approvals) = state
+        .session
+        .coordinator_threads
+        .as_deref()
+        .and_then(|threads| threads.get("approvals"))
+        .and_then(Value::as_array)
+    {
+        for card in approvals {
+            let card_key = text(card, "key");
+            if card_key.is_empty() {
+                continue;
+            }
+            let status = text(card, "status");
+            if !matches!(status, "answeredHere" | "answeredInThread") {
+                continue;
+            }
+            let Some(at) = at_ms(text(card, "settledAt")) else {
+                continue;
+            };
+            if now_ms - at > SETTLED_KEPT_MS {
+                continue;
+            }
+            let key = format!("answered:approval:{card_key}");
+            if dismissed.contains(&key) {
+                continue;
+            }
+            let answer = text(card, "answer").trim();
+            let denied = crate::extras::relayed_approvals::tone_of(answer, false) == "deny";
+            let (_, title, _, code, _, _) = crate::extras::relayed_approvals::body(card);
+            let first_code = code
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .unwrap_or_default();
+            let title = match (title.trim(), first_code) {
+                ("", "") => "Approval".to_string(),
+                ("", code) => code.to_string(),
+                (title, "") => title.to_string(),
+                (title, code) => format!("{title} \u{b7} {code}"),
+            };
+            let outcome = match answer {
+                "" => "",
+                words
+                    if words.eq_ignore_ascii_case("answered")
+                        || words.eq_ignore_ascii_case("handled")
+                        || words.eq_ignore_ascii_case("done") =>
+                {
+                    ""
+                }
+                words => words,
+            };
+            let mut row = json!({
+                "key": key,
+                "kind": "answered",
+                "status": if denied { "denied" } else { "approved" },
+                "title": title,
+                "outcome": outcome,
+                "age": crate::transcript::message_time::age_label(now_ms, at),
+            });
+            row["showInChat"] = show_in_chat(turns, at, &key);
+            answered_rows.push((at, row));
+        }
+    }
+    // Finished items from the newest turn join recently handled asks/approvals/to-dos inside the
+    // collapsed Recent drawer at the bottom of the Inbox (below Snoozed), newest first, with
+    // "Archive all" inside.
     //
     // CDXC:Coordinators 2026-11-24 DECISION:
-    // User, after finished items sat in the main Inbox list with "4 done · Archive all (4)" in the
-    // footer: move finished items out of the main list into a collapsed "Done (N)" drawer like
-    // Snoozed, with "Archive all" inside the expanded drawer and never in the main list footer.
+    // User: combine the Handled and Done drawers into one collapsed "Recent" drawer (green
+    // circle-check header icon, ordered after Snoozed), sorted newest first, keeping each row's
+    // distinct icon and right-side content, with "Archive all" archiving everything in Recent.
     let newest_turn = turns.len().checked_sub(1);
-    let dismissed = &state.extras.panels.work_dock_dismissed;
-    let mut done_rows: Vec<(i64, Value)> = Vec::new();
+    let mut done_entries: Vec<(i64, Value)> = Vec::new();
     for item in items
         .iter()
         .filter(|item| text(item, "status") == "finished")
@@ -1580,7 +1645,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             turns[turn.unwrap_or(0)].id
         );
         if !dismissed.contains(&key) {
-            done_rows.push((done_at, work_row(item, &turns, now_ms, Some(key))));
+            done_entries.push((done_at, work_row(item, &turns, now_ms, Some(key))));
         }
     }
     // Q4682 C: group duplicate rows sharing a Q-tag or pageId under one expandable row.
@@ -1589,8 +1654,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     let mut needs = bundle_same_turn_pages(needs, todo_turns, now_ms);
     needs.sort_by(|left, right| left.0.cmp(&right.0).then(right.1.cmp(&left.1)));
     later.sort_by(|left, right| right.0.cmp(&left.0));
-    done_rows.sort_by(|left, right| right.0.cmp(&left.0));
-    let done_rows: Vec<Value> = done_rows.into_iter().map(|(_, row)| row).collect();
+    done_entries.sort_by(|left, right| right.0.cmp(&left.0));
     // The approval the agent waits on, and the one just answered, lead (`dock_approvals`).
     let mut rows: Vec<Value> = crate::extras::dock_approvals::rows(state)
         .into_iter()
@@ -1605,15 +1669,27 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     // Soonest back first.
     snoozed_rows.sort_by_key(|(back, _)| *back);
     let snoozed_rows: Vec<Value> = snoozed_rows.into_iter().map(|(_, row)| row).collect();
-    // Newest answered first, capped at 12.
+    // Newest answered first, excluding archived keys, deduplicated, capped at 12.
     answered_rows.sort_by(|left, right| right.0.cmp(&left.0));
     let mut seen_answered = std::collections::BTreeSet::new();
-    let answered_rows: Vec<Value> = answered_rows
+    let answered_entries: Vec<(i64, Value)> = answered_rows
         .into_iter()
-        .filter(|(_, row)| seen_answered.insert(text(row, "key").to_string()))
+        .filter(|(_, row)| {
+            let key = text(row, "key");
+            !dismissed.contains(key) && seen_answered.insert(key.to_string())
+        })
         .take(12)
-        .map(|(_, row)| row)
         .collect();
+    // Combined Recent drawer: finished work items + recently handled asks/approvals/to-dos, newest first.
+    let mut recent_entries: Vec<(i64, Value)> = done_entries
+        .iter()
+        .cloned()
+        .chain(answered_entries.iter().cloned())
+        .collect();
+    recent_entries.sort_by(|left, right| right.0.cmp(&left.0));
+    let recent_rows: Vec<Value> = recent_entries.into_iter().map(|(_, row)| row).collect();
+    let done_rows: Vec<Value> = done_entries.into_iter().map(|(_, row)| row).collect();
+    let answered_rows: Vec<Value> = answered_entries.into_iter().map(|(_, row)| row).collect();
     let undo_mark_all_read = state
         .extras
         .panels
@@ -1630,9 +1706,8 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         })
         .unwrap_or(Value::Null);
     if rows.is_empty()
-        && done_rows.is_empty()
+        && recent_rows.is_empty()
         && snoozed_rows.is_empty()
-        && answered_rows.is_empty()
         && undo_mark_all_read.is_null()
     {
         return Value::Null;
@@ -1648,7 +1723,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         && undo_mark_all_read.is_null();
     // Q4685 A: Mark all read sweeps clearable non-question rows in the main list (seen-only pages
     // including bundled pages, and plain to-dos with only Done), with a breakdown summary and Undo.
-    // Finished rows keep their own Archive all inside the expanded Done drawer (`doneArchiveAll`).
+    // Recent rows keep their own Archive all inside the expanded Recent drawer (`recentArchiveAll`).
     let mut clear_page_ids: Vec<String> = Vec::new();
     let mut clear_todo_tags: Vec<String> = Vec::new();
     for row in &rows {
@@ -1709,6 +1784,25 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     } else {
         Value::Null
     };
+    let clear_recent_keys: Vec<String> = recent_rows
+        .iter()
+        .map(|row| text(row, "key").to_string())
+        .filter(|key| !key.is_empty())
+        .collect();
+    let recent_archive_all = if !clear_recent_keys.is_empty() {
+        json!({
+            "label": "Archive all",
+            "count": clear_recent_keys.len(),
+            "command": {
+                "type": "markAllInboxRead",
+                "pageIds": [],
+                "todoTags": [],
+                "finishedKeys": clear_recent_keys,
+            },
+        })
+    } else {
+        Value::Null
+    };
     let clear_finished_keys: Vec<String> = done_rows
         .iter()
         .filter(|row| row["dismiss"].is_object())
@@ -1737,6 +1831,8 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         "more": { "type": "showCoordinatorBoardGroup", "group": "needs" },
         "markAllSeen": mark_all_seen,
         "undoMarkAllRead": undo_mark_all_read,
+        "recent": recent_rows,
+        "recentArchiveAll": recent_archive_all,
         "done": done_rows,
         "doneArchiveAll": done_archive_all,
         "snoozed": snoozed_rows,
