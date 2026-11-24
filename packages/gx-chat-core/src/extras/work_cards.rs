@@ -1546,8 +1546,8 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         let at = at_ms(text(item, "at")).unwrap_or(0);
         later.push((at, work_row(item, &turns, now_ms, None)));
     }
-    // Finished items from the newest turn live in their own collapsed Done (N) drawer right above
-    // Snoozed rather than in the main list, with Archive all inside the expanded drawer.
+    // Finished items from the newest turn live in their own collapsed Done (N) drawer at the
+    // bottom of the Inbox rather than in the main list, with Archive all inside the expanded drawer.
     //
     // CDXC:Coordinators 2026-11-24 DECISION:
     // User, after finished items sat in the main Inbox list with "4 done · Archive all (4)" in the

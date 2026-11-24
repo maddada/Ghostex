@@ -921,14 +921,17 @@ impl NativeChatView {
             if let Some(undo_bar) = undo {
                 list = list.child(self.work_dock_undo_bar(&undo_bar, p, cx));
             }
-            if !done.is_empty() {
-                list = list.children(self.work_dock_done(&done, done_archive_all.as_ref(), p, cx));
-            }
+            // CDXC:Coordinators 2026-11-24 DECISION:
+            // User: order the coordinator Inbox dock's drawers Snoozed, then Handled, then Done
+            // (Done at the bottom).
             if !snoozed.is_empty() {
                 list = list.children(self.work_dock_snoozed(&snoozed, p, cx));
             }
             if !answered.is_empty() {
                 list = list.children(self.work_dock_answered(&answered, p, cx));
+            }
+            if !done.is_empty() {
+                list = list.children(self.work_dock_done(&done, done_archive_all.as_ref(), p, cx));
             }
             surface = surface.child(self.disclosure_body_motion(
                 DOCK_MOTION_KEY,
@@ -1056,7 +1059,7 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// The dock's Done drawer right above Snoozed: styled like Snoozed with the finished check
+    /// The dock's Done drawer at the bottom of the Inbox: styled like Snoozed with the finished check
     /// icon, "Done", count badge, and chevron, collapsed by default with remembered open state.
     /// Open, finished rows follow with their per-row Archive action, and "Archive all" sits on
     /// the expanded header.
@@ -1255,7 +1258,7 @@ impl NativeChatView {
         out
     }
 
-    /// The collapsible Handled drawer at the bottom of the Inbox (Q4684 A): green check icon,
+    /// The collapsible Handled drawer between Snoozed and Done (Q4684 A): green check icon,
     /// "Handled" and its count badge, expanding dimmed rows with their outcome and age.
     fn work_dock_answered(
         &self,
