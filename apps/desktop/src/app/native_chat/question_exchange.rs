@@ -242,6 +242,8 @@ impl NativeChatView {
                         options_key.clone(),
                         if expanded {
                             "Hide options".to_string()
+                        } else if options.len() == 1 {
+                            "Show 1 option".to_string()
                         } else {
                             format!("Show all {} options", options.len())
                         },

@@ -199,9 +199,13 @@ impl GhostexGpuiApp {
                         purple,
                         Some("Clean up all"),
                         "cleanUp",
-                        format!(
-                            "Remove the worktrees of these {count} threads and put them to sleep. A worktree with uncommitted changes is kept."
-                        ),
+                        if count == 1 {
+                            "Remove the worktree of this thread and put it to sleep. A worktree with uncommitted changes is kept.".to_string()
+                        } else {
+                            format!(
+                                "Remove the worktrees of these {count} threads and put them to sleep. A worktree with uncommitted changes is kept."
+                            )
+                        },
                         cx,
                     ))
                     .child(chip(
@@ -210,8 +214,12 @@ impl GhostexGpuiApp {
                         appearance.muted,
                         Some("Keep"),
                         "keep",
-                        "Keep these threads and their worktrees. Ghostex won't ask again for these PRs."
-                            .to_string(),
+                        if count == 1 {
+                            "Keep this thread and its worktree. Ghostex won't ask again for this PR."
+                        } else {
+                            "Keep these threads and their worktrees. Ghostex won't ask again for these PRs."
+                        }
+                        .to_string(),
                         cx,
                     ))
                     .into_any_element(),

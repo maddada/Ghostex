@@ -178,7 +178,7 @@ fn codex_tool_search_output(tools: Option<&Value>) -> String {
         .filter_map(|item| extract_string(item.as_object().and_then(|inner| inner.get("name"))))
         .collect();
     if names.is_empty() {
-        format!("{} tools", items.len())
+        ghostex_gx_protocol::plural(items.len(), "tool", "tools")
     } else {
         names.join("\n")
     }

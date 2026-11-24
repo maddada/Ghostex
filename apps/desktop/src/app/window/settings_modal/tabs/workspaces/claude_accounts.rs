@@ -440,15 +440,20 @@ impl WorkspacesTab {
             "Add a Claude account in Settings > Accounts to see its claude.ai connectors."
                 .to_string()
         } else if missing_count == 0 {
-            format!(
-                "Slack and Linear last seen connected on all {} account(s) in this workspace.",
-                shown_accounts.len()
-            )
+            if shown_accounts.len() == 1 {
+                "Slack and Linear last seen connected on the 1 account in this workspace."
+                    .to_string()
+            } else {
+                format!(
+                    "Slack and Linear last seen connected on all {} accounts in this workspace.",
+                    shown_accounts.len()
+                )
+            }
         } else {
             format!(
-                "{} of {} account(s) missing Slack or Linear on claude.ai.",
+                "{} of {} missing Slack or Linear on claude.ai.",
                 missing_count,
-                shown_accounts.len()
+                ghostex_gx_protocol::plural(shown_accounts.len(), "account", "accounts")
             )
         };
 

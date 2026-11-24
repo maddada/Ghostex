@@ -280,9 +280,10 @@ fn conversation_lines(conversation: &Value) -> Vec<String> {
         .cloned()
         .unwrap_or_default();
     if turns.len() > SHOWN_TURNS {
+        let earlier = turns.len() - SHOWN_TURNS;
         lines.push(format!(
-            "… {} earlier messages are on the session's claude.ai page.",
-            turns.len() - SHOWN_TURNS
+            "… {} on the session's claude.ai page.",
+            ghostex_gx_protocol::plural(earlier, "earlier message is", "earlier messages are")
         ));
         lines.push(String::new());
     }

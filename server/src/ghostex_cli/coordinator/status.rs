@@ -299,7 +299,10 @@ pub(super) fn print_memory(view: &Value) {
         println!("Memory: (no notes)");
         return;
     }
-    println!("Memory ({} notes):", memory.len());
+    println!(
+        "Memory ({}):",
+        ghostex_gx_protocol::plural(memory.len(), "note", "notes")
+    );
     for (index, note) in memory.iter().enumerate() {
         println!("  {}. {}", index + 1, agents::text(note, "text"));
     }

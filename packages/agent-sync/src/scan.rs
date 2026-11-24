@@ -1093,14 +1093,15 @@ fn build_problems(source: &SourceInfo, agents: &[AgentReport]) -> Vec<Problem> {
         });
     }
     if source.main_md_ready() && !pointers.is_empty() {
+        let count = pointers.len();
         problems.push(Problem {
             kind: ProblemKind::MissingPointers,
-            count: pointers.len(),
-            title: format!(
-                "{} instruction file{} do not point at ~/.agents/main.md",
-                pointers.len(),
-                plural(pointers.len())
-            ),
+            count,
+            title: if count == 1 {
+                "1 instruction file does not point at ~/.agents/main.md".to_string()
+            } else {
+                format!("{count} instruction files do not point at ~/.agents/main.md")
+            },
             detail:
                 "Sync writes the one-line pointer. A file with other content is backed up first."
                     .to_string(),
@@ -1109,20 +1110,30 @@ fn build_problems(source: &SourceInfo, agents: &[AgentReport]) -> Vec<Problem> {
         });
     }
     if !source.lock.stale_entries.is_empty() {
+        let count = source.lock.stale_entries.len();
         problems.push(Problem {
             kind: ProblemKind::StaleLockEntries,
-            count: source.lock.stale_entries.len(),
-            title: format!("{} lock entr{} have no skill folder", source.lock.stale_entries.len(), if source.lock.stale_entries.len() == 1 { "y" } else { "ies" }),
+            count,
+            title: if count == 1 {
+                "1 lock entry has no skill folder".to_string()
+            } else {
+                format!("{count} lock entries have no skill folder")
+            },
             detail: "Left over in .skill-lock.json after skills were removed or renamed. Pruning is an opt-in step of the plan.".to_string(),
             items: source.lock.stale_entries.clone(),
             fixable: true,
         });
     }
     if !source.lock.untracked_skills.is_empty() {
+        let count = source.lock.untracked_skills.len();
         problems.push(Problem {
             kind: ProblemKind::UntrackedSkills,
-            count: source.lock.untracked_skills.len(),
-            title: format!("{} skills in the source have no lock entry", source.lock.untracked_skills.len()),
+            count,
+            title: if count == 1 {
+                "1 skill in the source has no lock entry".to_string()
+            } else {
+                format!("{count} skills in the source have no lock entry")
+            },
             detail: "Your own skills and the Ghostex bundled skills. The skills CLI skips them on update, which is fine. Nothing to fix.".to_string(),
             items: source.lock.untracked_skills.clone(),
             fixable: false,

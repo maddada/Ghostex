@@ -206,10 +206,16 @@ fn body_text(
     }
     if !log_tail.is_empty() || lines_left_out > 0 {
         lines.push(String::new());
-        lines.push(format!("Last {} log lines", log_tail.len()));
+        lines.push(format!(
+            "Last {}",
+            ghostex_gx_protocol::plural(log_tail.len(), "log line", "log lines")
+        ));
         lines.push("```text".to_string());
         if lines_left_out > 0 {
-            lines.push(format!("… {lines_left_out} older lines left out to fit"));
+            lines.push(format!(
+                "… {} left out to fit",
+                ghostex_gx_protocol::plural(lines_left_out, "older line", "older lines")
+            ));
         }
         lines.extend(log_tail.iter().map(|line| fenced(line)));
         lines.push("```".to_string());

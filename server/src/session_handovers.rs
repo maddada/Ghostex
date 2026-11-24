@@ -544,13 +544,14 @@ pub(crate) async fn handle_handoff_to_existing_session_http(
         .unwrap_or(&from_session_id);
     let handover_kind = if delta && prior_turns > 0 {
         format!(
-            "Delta handover ({} new turn(s) since turn {}) from session \"{source_label}\"",
-            outcome.kept_turns, prior_turns
+            "Delta handover ({} since turn {}) from session \"{source_label}\"",
+            ghostex_gx_protocol::plural(outcome.kept_turns, "new turn", "new turns"),
+            prior_turns
         )
     } else {
         format!(
-            "Handover ({} turn(s)) from session \"{source_label}\"",
-            outcome.kept_turns
+            "Handover ({}) from session \"{source_label}\"",
+            ghostex_gx_protocol::plural(outcome.kept_turns, "turn", "turns")
         )
     };
     let mut prompt = format!(

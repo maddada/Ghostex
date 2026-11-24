@@ -786,7 +786,11 @@ pub fn item_chips(item: &Value, now_ms: i64) -> Vec<Value> {
     if total > 0 {
         chips.push(json!({
             "kind": "steps",
-            "label": format!("{} of {total} steps", item["steps"]["done"].as_u64().unwrap_or(0)),
+            "label": format!(
+                "{} of {}",
+                item["steps"]["done"].as_u64().unwrap_or(0),
+                ghostex_gx_protocol::plural(total, "step", "steps")
+            ),
         }));
     }
     let open = item["asks"]

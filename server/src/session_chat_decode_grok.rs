@@ -59,7 +59,10 @@ fn grok_tool_result_output(update: &Map<String, Value>) -> String {
                         "Edited"
                     };
                     let lines = new_text.lines().count();
-                    parts.push(format!("{verb} {path} ({lines} lines)"));
+                    parts.push(format!(
+                        "{verb} {path} ({})",
+                        ghostex_gx_protocol::plural(lines, "line", "lines")
+                    ));
                 }
                 _ => {}
             }

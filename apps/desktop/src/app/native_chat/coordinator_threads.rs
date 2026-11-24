@@ -277,6 +277,7 @@ impl NativeChatView {
                 .aria_label(match step {
                     0 => "Show fewer workers".to_string(),
                     1 => "Show recent workers".to_string(),
+                    _ if more == "1 more" => "Show 1 more worker".to_string(),
                     _ => format!("Show {more} workers"),
                 })
                 .h(px(super::chat_pills::MENU_FOOTER_HEIGHT * s))

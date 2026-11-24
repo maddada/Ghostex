@@ -141,9 +141,13 @@ impl GhostexGpuiApp {
                 if short_status_has_changes(&facts.status) {
                     warnings.push("This worktree has uncommitted changes. They move with the folder and are not touched.".to_string());
                 }
-                if running_sessions > 0 {
+                if running_sessions == 1 {
+                    warnings.push(
+                        "1 running session will keep working, but its shell still thinks it is in the old folder until you cd or restart it.".to_string(),
+                    );
+                } else if running_sessions > 1 {
                     warnings.push(format!(
-                        "{running_sessions} running session(s) will keep working, but their shell still thinks it is in the old folder until you cd or restart them."
+                        "{running_sessions} running sessions will keep working, but their shells still think they are in the old folder until you cd or restart them."
                     ));
                 }
                 if has_agent_history {

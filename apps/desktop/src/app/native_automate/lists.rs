@@ -98,7 +98,11 @@ impl NativeAutomateView {
                 });
                 let id = automation.id.clone();
                 let unread_id = automation.id.clone();
-                let unread_label = format!("View {unread} unread runs for {}", automation.name);
+                let unread_label = format!(
+                    "View {} for {}",
+                    ghostex_gx_protocol::plural(unread, "unread run", "unread runs"),
+                    automation.name
+                );
                 let unread_bg = p.accent.opacity(0.14);
                 let unread_hover = p.accent.opacity(0.24);
                 let toggle = automation.clone();

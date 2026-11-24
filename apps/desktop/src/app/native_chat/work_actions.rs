@@ -275,7 +275,10 @@ impl NativeChatView {
             locked,
             p,
         )
-        .aria_label(format!("{CHOOSE_ANSWER}, {} answers", rows.len()))
+        .aria_label(format!(
+            "{CHOOSE_ANSWER}, {}",
+            ghostex_gx_protocol::plural(rows.len(), "answer", "answers")
+        ))
         .child(
             svg()
                 .path("titlebar/chevron-down.svg")
@@ -677,7 +680,10 @@ impl NativeChatView {
                         "work-answers-choose-compact:{key}"
                     )))
                     .role(gpui::Role::Button)
-                    .aria_label(format!("{CHOOSE_ANSWER}, {} answers", rows.len()))
+                    .aria_label(format!(
+            "{CHOOSE_ANSWER}, {}",
+            ghostex_gx_protocol::plural(rows.len(), "answer", "answers")
+        ))
                     .h(px(24.0 * s))
                     .px(px(8.0 * s))
                     .flex_shrink_0()

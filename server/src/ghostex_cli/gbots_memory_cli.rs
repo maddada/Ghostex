@@ -215,8 +215,12 @@ fn print_memory(verb: &str, answer: &Value) {
                 memory["maxBytes"].as_u64().unwrap_or(0) / 1024,
             );
             println!(
-                "Archive: {} notes · Topics: {}\n",
-                answer["archive"]["notes"].as_u64().unwrap_or(0),
+                "Archive: {} · Topics: {}\n",
+                ghostex_gx_protocol::plural(
+                    answer["archive"]["notes"].as_u64().unwrap_or(0),
+                    "note",
+                    "notes"
+                ),
                 answer["topics"].as_array().map(Vec::len).unwrap_or(0)
             );
             print!("{}", text(memory, "text"));

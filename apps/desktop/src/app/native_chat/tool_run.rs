@@ -1137,11 +1137,16 @@ impl NativeChatView {
             ));
             if capped {
                 let toggle = show_all_key.clone();
+                let show_all_label = if output_lines == 1 {
+                    "Show 1 line".to_string()
+                } else {
+                    format!("Show all {output_lines} lines")
+                };
                 detail.push(
                     div()
                         .id(SharedString::from(toggle.clone()))
                         .role(gpui::Role::Button)
-                        .aria_label(format!("Show all {output_lines} lines"))
+                        .aria_label(show_all_label.clone())
                         .flex_none()
                         .self_start()
                         .px(px(10.0 * s))
@@ -1153,7 +1158,7 @@ impl NativeChatView {
                         .text_color(p.foreground)
                         .chat_cursor_pointer()
                         .hover(|style| style.bg(p.foreground.opacity(0.04)))
-                        .child(format!("Show all {output_lines} lines"))
+                        .child(show_all_label)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.expanded.insert(toggle.clone());
                             cx.notify();

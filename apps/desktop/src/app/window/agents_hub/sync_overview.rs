@@ -362,17 +362,22 @@ impl GpuiAgentsHubModalWindow {
             .count();
 
         let title = if synced {
-            format!("All {} agents are in sync", summary.agents_detected)
+            if summary.agents_detected == 1 {
+                "1 agent is in sync".to_string()
+            } else {
+                format!("All {} agents are in sync", summary.agents_detected)
+            }
         } else if summary.agents_attention > 0 {
             format!(
-                "{} of {} agents are out of sync",
-                summary.agents_attention, summary.agents_detected
+                "{} of {} {} out of sync",
+                summary.agents_attention,
+                ghostex_gx_protocol::plural(summary.agents_detected, "agent", "agents"),
+                ghostex_gx_protocol::plural_word(summary.agents_attention, "is", "are")
             )
         } else {
             format!(
-                "{} {} to fix in your shared folder",
-                to_fix.len(),
-                if to_fix.len() == 1 { "thing" } else { "things" }
+                "{} to fix in your shared folder",
+                ghostex_gx_protocol::plural(to_fix.len(), "thing", "things")
             )
         };
         let sub = if synced {
@@ -492,10 +497,18 @@ impl GpuiAgentsHubModalWindow {
                     .overflow_hidden()
                     .text_ellipsis()
                     .child(format!(
-                        "· {} skills, {} instruction files, {} hook scripts",
-                        source_skills,
-                        report.source.md_files.len(),
-                        report.source.hook_script_count
+                        "· {}, {}, {}",
+                        ghostex_gx_protocol::plural(source_skills, "skill", "skills"),
+                        ghostex_gx_protocol::plural(
+                            report.source.md_files.len(),
+                            "instruction file",
+                            "instruction files",
+                        ),
+                        ghostex_gx_protocol::plural(
+                            report.source.hook_script_count,
+                            "hook script",
+                            "hook scripts",
+                        ),
                     )),
             )
             .child(div().flex_1())
@@ -803,7 +816,10 @@ impl GpuiAgentsHubModalWindow {
                                     .text_color(hsla(hp.foreground))
                                     .child(done.to_string()),
                             )
-                            .child(format!("of {total} agents")),
+                            .child(format!(
+                                "of {}",
+                                ghostex_gx_protocol::plural(total, "agent", "agents")
+                            )),
                     ),
             )
             .child(

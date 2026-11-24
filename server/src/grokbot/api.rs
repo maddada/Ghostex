@@ -186,8 +186,8 @@ fn test(paths: &GxserverPaths) -> Result<Value, DomainStateError> {
     };
     if let Some(wait) = delivery::wait_before_next_post() {
         return Err(DomainStateError::bad_request(format!(
-            "Ghostex sends Grok Bot at most one call every 20 seconds. Try again in {} seconds.",
-            wait.as_secs().max(1)
+            "Ghostex sends Grok Bot at most one call every 20 seconds. Try again in {}.",
+            ghostex_gx_protocol::plural(wait.as_secs().max(1), "second", "seconds")
         )));
     }
     let note = test_note("Test from Ghostex. Reply here to check the bot can reach Ghostex too.");

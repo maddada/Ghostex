@@ -272,7 +272,12 @@ fn autopilot_widening(before: &AutopilotConfig, after: &AutopilotConfig) -> Opti
         .count();
     if added > 0 {
         changes.push(format!(
-            "Autopilot covers {added} more project(s) or session(s)"
+            "Autopilot covers {}",
+            ghostex_gx_protocol::plural(
+                added,
+                "more project or session",
+                "more projects or sessions"
+            )
         ));
     }
     let mut summary = changes.join(", ");

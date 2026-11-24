@@ -71,11 +71,15 @@ impl GhostexGpuiApp {
                         snapshot.groups.iter().find(|group| group.group_id == id)
                     })
                 {
-                    let detail = format!(
-                        "This will close all {} sessions in {}.",
-                        group.sessions.len(),
-                        group.title
-                    );
+                    let detail = if group.sessions.len() == 1 {
+                        format!("This will close 1 session in {}.", group.title)
+                    } else {
+                        format!(
+                            "This will close all {} sessions in {}.",
+                            group.sessions.len(),
+                            group.title
+                        )
+                    };
                     let confirmation = ghostex_gx_core::CloseConfirmation {
                         title: "Close group?".to_owned(),
                         message: detail,

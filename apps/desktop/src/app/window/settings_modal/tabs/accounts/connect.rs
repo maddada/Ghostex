@@ -887,14 +887,12 @@ impl AccountsTab {
             };
             let mut message = if sessions.is_empty() {
                 format!("Codex is open in {}.", plural(others.max(1), "window"))
+            } else if sessions.len() == 1 {
+                "1 session is running Codex on this account. It pauses while you sign in and picks up when you open it.".to_string()
             } else {
                 format!(
-                    "{} running Codex on this account. They pause while you sign in and pick up when you open them.",
-                    if sessions.len() == 1 {
-                        "1 session is".to_string()
-                    } else {
-                        format!("{} sessions are", sessions.len())
-                    }
+                    "{} sessions are running Codex on this account. They pause while you sign in and pick up when you open them.",
+                    sessions.len()
                 )
             };
             if !sessions.is_empty() && others > 0 {

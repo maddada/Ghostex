@@ -782,13 +782,13 @@ pub(super) fn decide_prompt(
                     .collect::<Vec<_>>()
                     .join("\n");
                 let saw = format!(
-                    "It asked {} and you didn't answer for {} minutes.",
+                    "It asked {} and you didn't answer for {}.",
                     if questions.len() == 1 {
                         "a question".to_string()
                     } else {
                         format!("{} questions", questions.len())
                     },
-                    config.answer_after_minutes
+                    ghostex_gx_protocol::plural(config.answer_after_minutes, "minute", "minutes")
                 );
                 if picks.iter().all(Option::is_some) && !questions.is_empty() {
                     let labels: Vec<String> = questions
@@ -820,8 +820,8 @@ pub(super) fn decide_prompt(
                     saw,
                     PromptAct::Judge {
                         why: format!(
-                            "It asked a question with no recommended choice, and the user didn't answer for {} minutes.",
-                            config.answer_after_minutes
+                            "It asked a question with no recommended choice, and the user didn't answer for {}.",
+                            ghostex_gx_protocol::plural(config.answer_after_minutes, "minute", "minutes")
                         ),
                         detail: format!("Its question:\n{asked}"),
                     },
@@ -1005,13 +1005,13 @@ pub(super) fn decide_prompt(
         return decision(
             "question",
             format!(
-                "Its chat asks {} and you didn't answer for {} minutes.",
+                "Its chat asks {} and you didn't answer for {}.",
                 if open_forms == 1 {
                     "a question".to_string()
                 } else {
                     format!("{open_forms} questions")
                 },
-                config.answer_after_minutes
+                ghostex_gx_protocol::plural(config.answer_after_minutes, "minute", "minutes")
             ),
             PromptAct::Forms,
         );

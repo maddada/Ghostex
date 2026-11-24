@@ -99,7 +99,7 @@ async fn compute(
         .with_timezone(&chrono::Local)
         .format("%Y-%m-%d %H:%M");
     let age = if days.fract() == 0.0 {
-        format!("{days:.0} days")
+        ghostex_gx_protocol::plural(days as u64, "day", "days")
     } else {
         format!("{days} days")
     };

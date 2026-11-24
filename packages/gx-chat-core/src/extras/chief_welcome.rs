@@ -13,6 +13,7 @@
 //! User: Ask Ghostex AI "can help the user fix issues with ghostex and submit bug reports also"; the brief asked for a "Report a bug" chip where it fits the card. Both cards end with a small "Report a bug" chip in the spec's chip style (after the new user's four, and alone under the set-up card's prompts, whose grid stays two by two). Like every prompt it only fills the chat box; the playbook's "When Ghostex misbehaves" takes it from there (server/src/chief/playbook.md).
 //! SEE-ALSO: apps/desktop/src/app/native_chat/chief_welcome.rs and apps/mobile/app/src/chat/native/cards/ChiefWelcome.tsx (the two cards), server/src/chief/welcome.rs (the state).
 
+use ghostex_gx_protocol::plural;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -122,10 +123,6 @@ fn report_bug() -> WelcomePrompt {
     prompt("Report a bug", "bug", REPORT_BUG)
 }
 
-fn plural(count: u64, one: &str, many: &str) -> String {
-    format!("{count} {}", if count == 1 { one } else { many })
-}
-
 /// The card for Ask Ghostex AI's empty chat, from gxserver's `chiefWelcome` state.
 pub fn build(data: &Value) -> ChiefWelcome {
     let flag = |key: &str| data.get(key).and_then(Value::as_bool) == Some(true);
@@ -182,7 +179,7 @@ pub fn build(data: &Value) -> ChiefWelcome {
                 plural(count("runningProjects").max(1), "project", "projects")
             )
         },
-        needs: (needs > 0).then(|| format!("{needs} needs you")),
+        needs: (needs > 0).then(|| plural(needs, "needs you", "need you")),
         attention: needs > 0,
         fill: if needs > 0 { NEEDS_ME } else { GOING_ON }.to_string(),
     };

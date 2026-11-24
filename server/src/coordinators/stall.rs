@@ -62,8 +62,8 @@ pub fn minutes_of(ms: i64) -> i64 {
 /// The message Ghostex sends a thread at its first round of quiet.
 pub fn nudge_message() -> String {
     format!(
-        "Ghostex: no new output from you for {} minutes. Still working? Say what you're waiting on, or carry on.",
-        minutes_of(quiet_round_ms())
+        "Ghostex: no new output from you for {}. Still working? Say what you're waiting on, or carry on.",
+        ghostex_gx_protocol::plural(minutes_of(quiet_round_ms()), "minute", "minutes")
     )
 }
 /// Whether a message's text is Ghostex's stall nudge (`nudge_message`), whatever its minutes.
@@ -406,10 +406,11 @@ pub fn quiet_minutes(quiet_since: i64, now: i64) -> i64 {
 pub fn quiet_detail(quiet: &SessionQuiet, now: i64) -> String {
     let rounds = (now - quiet.quiet_since).max(0) / quiet_round_ms();
     let minutes = minutes_of(rounds.max(1) * quiet_round_ms());
+    let duration = ghostex_gx_protocol::plural(minutes, "minute", "minutes");
     if quiet.stuck {
-        format!("Not moving: no new output for over {minutes} minutes")
+        format!("Not moving: no new output for over {duration}")
     } else {
-        format!("No new output for over {minutes} minutes")
+        format!("No new output for over {duration}")
     }
 }
 

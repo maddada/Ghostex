@@ -337,7 +337,11 @@ impl GhostexGpuiApp {
                 session.session_id
             ))
             .role(gpui::Role::Image)
-            .aria_label(format!("{} suggested links", badge.count))
+            .aria_label(ghostex_gx_protocol::plural(
+                badge.count,
+                "suggested link",
+                "suggested links",
+            ))
             .into_any_element()
         } else {
             body.into_any_element()
@@ -482,7 +486,11 @@ impl GhostexGpuiApp {
             )
             .id(format!("native-session-links-more-{session_id}"))
             .role(gpui::Role::Button)
-            .aria_label(format!("{hidden} more links"))
+            .aria_label(ghostex_gx_protocol::plural(
+                hidden,
+                "more link",
+                "more links",
+            ))
             .when(key.is_some(), |pill| {
                 let session_id = session_id.clone();
                 pill.cursor_pointer()

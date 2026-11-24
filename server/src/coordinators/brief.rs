@@ -371,11 +371,13 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
         } => {
             let mut body = if *stuck {
                 format!(
-                    "Ghostex thread report: still not moving: no new output for {quiet_minutes} minutes (quiet since {quiet_since}), even after Ghostex nudged it. The user now sees it as not moving (a red dot on its row) and was notified."
+                    "Ghostex thread report: still not moving: no new output for {} (quiet since {quiet_since}), even after Ghostex nudged it. The user now sees it as not moving (a red dot on its row) and was notified.",
+                    ghostex_gx_protocol::plural(*quiet_minutes, "minute", "minutes")
                 )
             } else {
                 format!(
-                    "Ghostex thread report: still working, but no new output for {quiet_minutes} minutes (quiet since {quiet_since}). Its transcript has no new row and its screen has not changed in that time, so it may be stuck (a hung command, a lost connection) or on a long silent step."
+                    "Ghostex thread report: still working, but no new output for {} (quiet since {quiet_since}). Its transcript has no new row and its screen has not changed in that time, so it may be stuck (a hung command, a lost connection) or on a long silent step.",
+                    ghostex_gx_protocol::plural(*quiet_minutes, "minute", "minutes")
                 )
             };
             match nudge {
@@ -393,8 +395,12 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
                 body.push_str(&format!("\n\nIts last row: {row}"));
             }
             body.push_str(&format!(
-                "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}). If a command hangs or it sits without moving, interrupt it (ghostex interrupt-session-chat {thread_ref}) and tell it to carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A long silent build or test is not stuck: leave it. Ghostex never interrupts or reloads on its own. Tell the user only if healing fails. You hear again every {} minutes until it moves.",
-                super::stall::minutes_of(super::stall::quiet_round_ms())
+                "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}). If a command hangs or it sits without moving, interrupt it (ghostex interrupt-session-chat {thread_ref}) and tell it to carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A long silent build or test is not stuck: leave it. Ghostex never interrupts or reloads on its own. Tell the user only if healing fails. You hear again every {} until it moves.",
+                ghostex_gx_protocol::plural(
+                    super::stall::minutes_of(super::stall::quiet_round_ms()),
+                    "minute",
+                    "minutes"
+                )
             ));
             body
         }
@@ -422,11 +428,13 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
             };
             let mut body = if *stuck {
                 format!(
-                    "Ghostex thread report: still idle: no new turn for {idle_minutes} minutes (since {idle_since}), even after Ghostex nudged it, though {why}. The user now sees it as not moving (a red dot on its row) and was notified."
+                    "Ghostex thread report: still idle: no new turn for {} (since {idle_since}), even after Ghostex nudged it, though {why}. The user now sees it as not moving (a red dot on its row) and was notified.",
+                    ghostex_gx_protocol::plural(*idle_minutes, "minute", "minutes")
                 )
             } else {
                 format!(
-                    "Ghostex thread report: idle for {idle_minutes} minutes (since {idle_since}), though {why}."
+                    "Ghostex thread report: idle for {} (since {idle_since}), though {why}.",
+                    ghostex_gx_protocol::plural(*idle_minutes, "minute", "minutes")
                 )
             };
             match nudge {
@@ -440,8 +448,12 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
                 StallNudge::Earlier => {}
             }
             body.push_str(&format!(
-                "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}), then tell it to read its background job's result and carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A job that is really still running is not stuck: leave it. Tell the user only if healing fails. You hear again every {} minutes until it starts a new turn.",
-                super::stall::minutes_of(super::idle_wait::idle_round_ms())
+                "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}), then tell it to read its background job's result and carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A job that is really still running is not stuck: leave it. Tell the user only if healing fails. You hear again every {} until it starts a new turn.",
+                ghostex_gx_protocol::plural(
+                    super::stall::minutes_of(super::idle_wait::idle_round_ms()),
+                    "minute",
+                    "minutes"
+                )
             ));
             body
         }

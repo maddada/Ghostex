@@ -562,15 +562,21 @@ fn skills(state: &ChatState, data: &Value) -> Option<Value> {
         .collect();
     let tokens = number(data.pointer("/context/breakdown/skills/tokens"));
     let count = all.len();
+    let all_skills = if count == 1 {
+        "1 skill".to_string()
+    } else {
+        format!("All {count} skills")
+    };
+    let all_label = match tokens {
+        Some(tokens) => format!("{all_skills} · {} tokens", format_context_tokens(Some(tokens))),
+        None => all_skills,
+    };
     Some(json!({
         "meta": format!("{count} available"),
         "used": used,
         "usedEmpty": tracks_use.then_some("None used in this session yet"),
         "all": all,
-        "allLabel": match tokens {
-            Some(tokens) => format!("All {count} skills · {} tokens", format_context_tokens(Some(tokens))),
-            None => format!("All {count} skills"),
-        },
+        "allLabel": all_label,
         "allOpen": state.extras.session_details.open_lists.iter().any(|list| list == "skills"),
         "allToggle": json!({"type": "sessionDetailsList", "list": "skills"}),
     }))

@@ -74,7 +74,10 @@ pub(crate) fn render(result: &Value) -> String {
     let check = &result["check"];
     let count = check["entries"].as_u64().unwrap_or(0);
     if check["intact"].as_bool() == Some(true) {
-        out.push_str(&format!("Security log intact: {count} entries.\n"));
+        out.push_str(&format!(
+            "Security log intact: {}.\n",
+            ghostex_gx_protocol::plural(count, "entry", "entries")
+        ));
     } else {
         let message = check
             .pointer("/problem/message")

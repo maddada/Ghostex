@@ -506,7 +506,7 @@ fn compacted_first_note(result: &Value) -> Option<String> {
     let span = |minutes: u64| match minutes {
         0..=59 => format!("{minutes} min"),
         60..=1439 => format!("{} h {} min", minutes / 60, minutes % 60),
-        _ => format!("{} days", minutes / 1440),
+        _ => ghostex_gx_protocol::plural(minutes / 1440, "day", "days"),
     };
     let cache = match number("cacheLifeMinutes") {
         5 => "5-minute".to_string(),

@@ -370,6 +370,8 @@ impl GpuiAgentsHubModalWindow {
             "agents-hub-sync-skill-list",
             if show {
                 "Hide the skill list".to_string()
+            } else if skills.entries.len() == 1 {
+                "Show 1 skill".to_string()
             } else {
                 format!("Show all {} skills", skills.entries.len())
             },

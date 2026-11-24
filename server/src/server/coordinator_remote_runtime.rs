@@ -795,9 +795,13 @@ async fn deliver(
             );
             if let Some(due) = stall_due {
                 body.push_str(&format!(
-                    "\n\n(Its computer still showed it working: Ghostex read the end of this turn from its transcript after {} minutes without new output. Its hooks there may be missing; `ghostex agent-hooks status --computer {}` shows them.)",
-                    crate::coordinators::minutes_of(
-                        i64::from(due.round) * crate::coordinators::quiet_round_ms()
+                    "\n\n(Its computer still showed it working: Ghostex read the end of this turn from its transcript after {} without new output. Its hooks there may be missing; `ghostex agent-hooks status --computer {}` shows them.)",
+                    ghostex_gx_protocol::plural(
+                        crate::coordinators::minutes_of(
+                            i64::from(due.round) * crate::coordinators::quiet_round_ms()
+                        ),
+                        "minute",
+                        "minutes"
                     ),
                     report.computer.name
                 ));

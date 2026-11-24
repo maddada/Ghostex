@@ -197,7 +197,10 @@ pub(crate) async fn serve(
         return refuse(
             StatusCode::TOO_MANY_REQUESTS,
             "rateLimited",
-            format!("This key made {CALLS_PER_MINUTE} calls in the last minute. Try again in {seconds} seconds."),
+            format!(
+                "This key made {CALLS_PER_MINUTE} calls in the last minute. Try again in {}.",
+                ghostex_gx_protocol::plural(seconds, "second", "seconds")
+            ),
         );
     }
     match route {

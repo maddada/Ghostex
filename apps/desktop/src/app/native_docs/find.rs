@@ -445,7 +445,13 @@ impl GhostexGpuiApp {
         let replacement = find.replace.read(cx).value().to_string();
         let matches = find.matches.clone();
         find.active = 0;
-        find.status = Some((format!("Replaced {} matches", matches.len()), false));
+        find.status = Some((
+            format!(
+                "Replaced {}",
+                ghostex_gx_protocol::plural(matches.len(), "match", "matches")
+            ),
+            false,
+        ));
         match &target {
             FindTarget::Live(editor) => editor.update(cx, |editor, cx| {
                 for range in matches.into_iter().rev() {
@@ -509,7 +515,10 @@ impl GhostexGpuiApp {
             Some((text, error)) => (text.clone(), *error),
             None if needle_empty => (String::new(), false),
             None if find.matches.is_empty() => ("No matches".into(), true),
-            None => (format!("{} matches", find.matches.len()), false),
+            None => (
+                ghostex_gx_protocol::plural(find.matches.len(), "match", "matches"),
+                false,
+            ),
         };
         let (hover, icon_color) = (p.control_hover, p.toolbar_icon);
         let button =

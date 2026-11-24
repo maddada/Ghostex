@@ -155,7 +155,10 @@ pub fn close_confirmation(core: &Core, sessions: &[SessionKey]) -> Option<CloseC
         .map(|(name, busy)| reason(name, *busy))
         .collect();
     if asking.len() > 3 {
-        lines.push(format!("{} more are busy too.", asking.len() - 3));
+        lines.push(format!(
+            "{} busy too.",
+            ghostex_gx_protocol::plural(asking.len() - 3, "more is", "more are")
+        ));
     }
     lines.push(KEEP.to_string());
     Some(CloseConfirmation {

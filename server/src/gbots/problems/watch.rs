@@ -422,7 +422,8 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Restart> {
                     &chat,
                     STALLED,
                     &format!(
-                        "It has been working with no new output for {minutes} minutes (since {}); it may be stuck on a hung command.",
+                        "It has been working with no new output for {} (since {}); it may be stuck on a hung command.",
+                        ghostex_gx_protocol::plural(minutes, "minute", "minutes"),
                         crate::network_status::local_clock(quiet_since)
                     ),
                     false,

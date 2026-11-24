@@ -355,7 +355,8 @@ impl AutopilotTab {
             RowSpec::new("When it asks a question").description(match question.as_str() {
                 "wait" => "Questions wait for you.".to_string(),
                 minutes => format!(
-                    "After {minutes} minutes without your answer, it picks each question's recommended choice and says so in the chat. A question with none goes to the supervisor."
+                    "After {minutes} {} without your answer, it picks each question's recommended choice and says so in the chat. A question with none goes to the supervisor.",
+                    if minutes == "1" { "minute" } else { "minutes" }
                 ),
             }),
             None,

@@ -411,8 +411,8 @@ async fn handle_unlock(state: &ProxyState, req: Request) -> Response<Body> {
         }
         Err((StatusCode::TOO_MANY_REQUESTS, retry_after)) => {
             let msg = format!(
-                "Too many wrong passcodes. Try again in {} seconds.",
-                retry_after
+                "Too many wrong passcodes. Try again in {}.",
+                ghostex_gx_protocol::plural(retry_after, "second", "seconds")
             );
             let mut res = if json_client {
                 json_response(

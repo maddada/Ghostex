@@ -133,7 +133,11 @@ fn item_chips(all_items: &[&Value], item: &Value, status: &str, now_ms: i64) -> 
     if total > 0 {
         chips.push(json!({
             "kind": "steps",
-            "label": format!("{} of {total} steps", item["steps"]["done"].as_u64().unwrap_or(0)),
+            "label": format!(
+                "{} of {}",
+                item["steps"]["done"].as_u64().unwrap_or(0),
+                ghostex_gx_protocol::plural(total, "step", "steps")
+            ),
             "tone": "",
         }));
     }

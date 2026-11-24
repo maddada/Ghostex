@@ -224,9 +224,13 @@ fn announce_stuck(
                 .to_string()
         }
         QuietOwner::Sessions => format!(
-            "Not moving: no new output for {} minutes. It may be stuck on a hung command.",
-            coordinators::minutes_of(
-                i64::from(coordinators::SESSION_STUCK_ROUNDS) * coordinators::quiet_round_ms()
+            "Not moving: no new output for {}. It may be stuck on a hung command.",
+            ghostex_gx_protocol::plural(
+                coordinators::minutes_of(
+                    i64::from(coordinators::SESSION_STUCK_ROUNDS) * coordinators::quiet_round_ms()
+                ),
+                "minute",
+                "minutes"
             )
         ),
         QuietOwner::Heal => "Stopped and couldn't restart: it ended unexpectedly and Ghostex couldn't keep it running. Open it to start it again.".to_string(),

@@ -128,15 +128,18 @@ impl GhostexGpuiApp {
                 files,
                 delivery,
             }), _) => format!(
-                "{}: {count} annotations across {files} files",
-                sent_label(delivery)
+                "{}: {} across {}",
+                sent_label(delivery),
+                ghostex_gx_protocol::plural(*count, "annotation", "annotations"),
+                ghostex_gx_protocol::plural(*files, "file", "files")
             )
             .into(),
             (Some(DocsSendStatus::Error(error)), _) => error.clone().into(),
             (_, _) if total == 0 => "No annotations to send".into(),
             (_, Some(target)) => format!(
-                "Send {send_count} {}annotations{} to the {} of {} in {} ({})",
+                "Send {send_count} {}{}{} to the {} of {} in {} ({})",
                 if resending { "" } else { "new " },
+                ghostex_gx_protocol::plural_word(send_count, "annotation", "annotations"),
                 if resending { " again" } else { "" },
                 match target.surface {
                     crate::app::docs_annotation_feedback::DocsAnnotationFeedbackSurface::Chat => "chat",
@@ -152,8 +155,9 @@ impl GhostexGpuiApp {
             )
             .into(),
             (_, None) => format!(
-                "Copy {send_count} {}annotations to the clipboard. No agent session is selected in the sidebar",
+                "Copy {send_count} {}{} to the clipboard. No agent session is selected in the sidebar",
                 if resending { "" } else { "new " },
+                ghostex_gx_protocol::plural_word(send_count, "annotation", "annotations"),
             )
             .into(),
         };

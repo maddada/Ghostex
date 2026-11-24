@@ -171,15 +171,21 @@ pub(crate) fn precheck_sentence(precheck: &Value) -> String {
         "mail" => "new mail in Gmail".to_string(),
         "calendar" => match precheck.get("withinMinutes").and_then(Value::as_u64) {
             Some(minutes) => {
-                format!("events starting in the next {minutes} minutes in Google Calendar")
+                format!(
+                    "events starting in the next {} in Google Calendar",
+                    ghostex_gx_protocol::plural(minutes, "minute", "minutes")
+                )
             }
-            None => format!(
-                "events in the next {} hours in Google Calendar",
-                precheck
+            None => {
+                let hours = precheck
                     .get("withinHours")
                     .and_then(Value::as_u64)
-                    .unwrap_or(4)
-            ),
+                    .unwrap_or(4);
+                format!(
+                    "events in the next {} in Google Calendar",
+                    ghostex_gx_protocol::plural(hours, "hour", "hours")
+                )
+            }
         },
         "any" => precheck
             .get("checks")

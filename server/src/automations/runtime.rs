@@ -349,8 +349,8 @@ impl AutomationRuntime {
                     .map(|reason| format!(" ({})", reason.trim_end_matches('.')))
                     .unwrap_or_default();
                 return Err(format!(
-                    "The automation's prompt waited {} minutes and never reached the agent{waiting}.",
-                    limit_seconds / 60
+                    "The automation's prompt waited {} and never reached the agent{waiting}.",
+                    ghostex_gx_protocol::plural(limit_seconds / 60, "minute", "minutes")
                 ));
             }
         }

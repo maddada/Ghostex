@@ -92,15 +92,36 @@ impl AgentsTab {
                     "No agent CLI with a hook is installed on {}.",
                     self.cli_machine_label()
                 ),
-                Some(_) if remote => format!(
-                    "{ready} of the {} agent CLIs on {} have their hook.",
-                    on_hooks.len(),
-                    self.cli_machine_label()
-                ),
-                Some(_) => format!(
-                    "{ready} of the {} agent CLIs you use have their hook.",
-                    on_hooks.len()
-                ),
+                Some(_) if remote => {
+                    let total = on_hooks.len();
+                    if total == 1 {
+                        format!(
+                            "{ready} of 1 agent CLI on {} {} its hook.",
+                            self.cli_machine_label(),
+                            ghostex_gx_protocol::plural_word(ready, "has", "have")
+                        )
+                    } else {
+                        format!(
+                            "{ready} of the {total} agent CLIs on {} {} their hook.",
+                            self.cli_machine_label(),
+                            ghostex_gx_protocol::plural_word(ready, "has", "have")
+                        )
+                    }
+                }
+                Some(_) => {
+                    let total = on_hooks.len();
+                    if total == 1 {
+                        format!(
+                            "{ready} of 1 agent CLI you use {} its hook.",
+                            ghostex_gx_protocol::plural_word(ready, "has", "have")
+                        )
+                    } else {
+                        format!(
+                            "{ready} of the {total} agent CLIs you use {} their hook.",
+                            ghostex_gx_protocol::plural_word(ready, "has", "have")
+                        )
+                    }
+                }
                 None if loading => "Checking hooks…".to_string(),
                 None => "Hooks not checked yet.".to_string(),
             };

@@ -162,7 +162,10 @@ impl AutomationRuntime {
                     .map_err(sql_error)?
                     .flatten();
                 let when = if next.as_deref() == Some(retry_at.as_str()) {
-                    format!("It tries again in {minutes} minutes.")
+                    format!(
+                        "It tries again in {}.",
+                        ghostex_gx_protocol::plural(minutes, "minute", "minutes")
+                    )
                 } else {
                     "It tries again at its next run.".to_string()
                 };

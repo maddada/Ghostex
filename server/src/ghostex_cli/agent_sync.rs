@@ -255,8 +255,8 @@ pub fn agent_sync_command(args: &[String]) -> CliResult<()> {
                 );
             } else {
                 println!(
-                    "Applied {} operation(s), {} failed, {} already correct.",
-                    result.done.len(),
+                    "Applied {}, {} failed, {} already correct.",
+                    ghostex_gx_protocol::plural(result.done.len(), "operation", "operations"),
                     result.failed.len(),
                     result.skipped_keeps
                 );
@@ -273,8 +273,8 @@ pub fn agent_sync_command(args: &[String]) -> CliResult<()> {
                 Ok(())
             } else {
                 Err(CliError::Other(format!(
-                    "{} operation(s) failed.",
-                    result.failed.len()
+                    "{} failed.",
+                    ghostex_gx_protocol::plural(result.failed.len(), "operation", "operations")
                 )))
             }
         }
@@ -315,21 +315,25 @@ fn print_status(report: &SyncReport) {
         "ok"
     };
     println!(
-        "Source {}: {} skills, {} md files (main.md {}), {} hook scripts, lock {} entries, git {:?}",
+        "Source {}: {}, {} (main.md {}), {}, lock {}, git {:?}",
         source.path,
-        source.skills.len(),
-        source.md_files.len(),
+        ghostex_gx_protocol::plural(source.skills.len(), "skill", "skills"),
+        ghostex_gx_protocol::plural(source.md_files.len(), "md file", "md files"),
         main_md_status,
-        source.hook_script_count,
-        source.lock.entry_count,
+        ghostex_gx_protocol::plural(source.hook_script_count, "hook script", "hook scripts"),
+        ghostex_gx_protocol::plural(source.lock.entry_count, "entry", "entries"),
         source.git
     );
     let summary = &report.summary;
     println!(
-        "Agents: {} detected, {} linked, {} need attention. Dangling links {}, dangling pointers {}, copied folders {}, whole-folder links {}, missing pointers {}, stale lock entries {}, unneeded links {}, backup folders {}.",
+        "Agents: {} detected, {} linked, {}. Dangling links {}, dangling pointers {}, copied folders {}, whole-folder links {}, missing pointers {}, stale lock entries {}, unneeded links {}, backup folders {}.",
         summary.agents_detected,
         summary.agents_linked,
-        summary.agents_attention,
+        ghostex_gx_protocol::plural(
+            summary.agents_attention,
+            "needs attention",
+            "need attention"
+        ),
         summary.dangling_links,
         summary.dangling_pointers,
         summary.copied_skill_folders,
@@ -389,14 +393,14 @@ fn print_status(report: &SyncReport) {
 
 fn print_plan(plan: &SyncPlan, enabled: &[PlanGroupKind]) {
     println!(
-        "Plan ({}, pointer policy {}): {} links, {} writes, {} backups, {} unlinks, {} lock drops; backups go to {}",
+        "Plan ({}, pointer policy {}): {}, {}, {}, {}, {}; backups go to {}",
         plan.scope,
         plan.pointer_policy.as_str(),
-        plan.summary.links,
-        plan.summary.writes,
-        plan.summary.backups,
-        plan.summary.unlinks,
-        plan.summary.drops,
+        ghostex_gx_protocol::plural(plan.summary.links, "link", "links"),
+        ghostex_gx_protocol::plural(plan.summary.writes, "write", "writes"),
+        ghostex_gx_protocol::plural(plan.summary.backups, "backup", "backups"),
+        ghostex_gx_protocol::plural(plan.summary.unlinks, "unlink", "unlinks"),
+        ghostex_gx_protocol::plural(plan.summary.drops, "lock drop", "lock drops"),
         plan.backup_dir
     );
     if !plan.warnings.is_empty() {

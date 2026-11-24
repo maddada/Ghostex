@@ -68,11 +68,15 @@ fn print_snapshot(snapshot: &Value) {
     }
     for section in &sections {
         println!(
-            "\n{}  CPU {}  RAM {}  {} rows",
+            "\n{}  CPU {}  RAM {}  {}",
             text(section, "label"),
             format_cpu(number(section, "cpu")),
             format_memory(number(section, "memoryMb")),
-            integer(section, "rowCount"),
+            ghostex_gx_protocol::plural(
+                section.get("rowCount").and_then(Value::as_u64).unwrap_or(0),
+                "row",
+                "rows",
+            ),
         );
         let rows = section
             .get("rows")
@@ -119,8 +123,8 @@ fn print_snapshot(snapshot: &Value) {
         .cloned()
         .unwrap_or_default();
     println!(
-        "\nPROCESSES ({} sampled pids behind the rows above)",
-        processes.len()
+        "\nPROCESSES ({} behind the rows above)",
+        ghostex_gx_protocol::plural(processes.len(), "sampled pid", "sampled pids")
     );
     println!(
         "{:>7} {:>7} {:>6} {:>10}  NAME",

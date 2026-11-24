@@ -483,7 +483,10 @@ pub(crate) fn message_text(message: &Value, tool_summary_chars: usize) -> String
             .flatten()
             .filter_map(Value::as_str)
             .collect();
-        let mut note = format!("[{count} rows of work collapsed");
+        let mut note = format!(
+            "[{} of work collapsed",
+            ghostex_gx_protocol::plural(count, "row", "rows")
+        );
         if !files.is_empty() {
             note.push_str(&format!("; files: {}", files.join(", ")));
         }
@@ -580,7 +583,9 @@ fn render_text(
         header.push_str(&format!(" {id}"));
     }
     header.push_str(&format!(
-        " · {total} rows read in {pages} page(s) · times are local (UTC{})",
+        " · {} read in {} · times are local (UTC{})",
+        ghostex_gx_protocol::plural(total, "row", "rows"),
+        ghostex_gx_protocol::plural(pages, "page", "pages"),
         chrono::Local::now().format("%:z")
     ));
     if let Some(last_user) = messages
@@ -594,7 +599,10 @@ fn render_text(
         ));
     }
     if options.grep.is_some() {
-        header.push_str(&format!(" · {match_count} match(es)"));
+        header.push_str(&format!(
+            " · {}",
+            ghostex_gx_protocol::plural(match_count, "match", "matches")
+        ));
     }
     if !options.all {
         header.push_str(" · newest page only (add --all for the whole thread)");
@@ -604,7 +612,10 @@ fn render_text(
         let (index, matched) = match line {
             Line::Row { index, matched } => (*index, *matched),
             Line::Gap(skipped) => {
-                out.push_str(&format!("\n   … {skipped} row(s) skipped …\n"));
+                out.push_str(&format!(
+                    "\n   … {} skipped …\n",
+                    ghostex_gx_protocol::plural(*skipped, "row", "rows")
+                ));
                 continue;
             }
         };

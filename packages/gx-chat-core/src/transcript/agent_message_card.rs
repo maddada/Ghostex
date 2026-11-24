@@ -611,7 +611,10 @@ pub fn dress_sent(sent: &mut Value) {
             })
         })
         .collect();
-    let sentence = format!("Message to {count} sessions");
+    let sentence = format!(
+        "Message to {}",
+        ghostex_gx_protocol::plural(count, "session", "sessions")
+    );
     // The row's own mark is the coordinator's crown only when every recipient is a coordinator.
     let coordinator = recipients
         .iter()

@@ -614,10 +614,14 @@ impl LegacyMigrationReport {
             return None;
         }
         const SHOWN: usize = 10;
-        let mut text = format!(
-            "Ghostex left {} item(s) of its old storage where they are because they could not be moved. Ghostex keeps working and tries again on its next start.",
-            self.skipped.len()
-        );
+        let mut text = if self.skipped.len() == 1 {
+            "Ghostex left 1 item of its old storage where it is because it could not be moved. Ghostex keeps working and tries again on its next start.".to_string()
+        } else {
+            format!(
+                "Ghostex left {} items of its old storage where they are because they could not be moved. Ghostex keeps working and tries again on its next start.",
+                self.skipped.len()
+            )
+        };
         for item in self.skipped.iter().take(SHOWN) {
             text.push_str(&format!("\n  - {item}"));
         }

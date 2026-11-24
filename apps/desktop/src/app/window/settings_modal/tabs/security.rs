@@ -258,9 +258,13 @@ impl SecurityTab {
                 "Log intact",
                 Some(
                     div()
-                        .child(format!(
-                            "{count} entries, each chained to the one before it. Nothing was changed or removed."
-                        ))
+                        .child(if count == 1 {
+                            "1 entry. Nothing was changed or removed.".to_string()
+                        } else {
+                            format!(
+                                "{count} entries, each chained to the one before it. Nothing was changed or removed."
+                            )
+                        })
                         .into_any_element(),
                 ),
                 None,

@@ -133,7 +133,8 @@ fn room_for_new_chat(
         if last.elapsed() < NEW_CHAT_EVERY {
             let wait = (NEW_CHAT_EVERY - last.elapsed()).as_secs().max(1);
             return Err(SendRefusal::Limited(format!(
-                "This key opens at most one new chat a minute. Try again in {wait} seconds, or leave out \"chat\": \"new\"."
+                "This key opens at most one new chat a minute. Try again in {}, or leave out \"chat\": \"new\".",
+                ghostex_gx_protocol::plural(wait, "second", "seconds")
             )));
         }
     }

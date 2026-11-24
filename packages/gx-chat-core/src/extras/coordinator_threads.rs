@@ -341,7 +341,10 @@ fn work_pill(item: &Value, report: &str) -> WorkPill {
         item["steps"]["total"].as_u64().unwrap_or(0),
     );
     let steps = if total > 0 {
-        format!("{done} of {total} steps")
+        format!(
+            "{done} of {}",
+            ghostex_gx_protocol::plural(total, "step", "steps")
+        )
     } else {
         String::new()
     };

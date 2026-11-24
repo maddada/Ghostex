@@ -45,24 +45,28 @@ pub(crate) fn gpui_resources_clean_ram_prompt(snapshot: &GpuiNativeResourcesSnap
         }
         let memory_mb = rows.iter().map(|row| row.memory_mb).sum::<f64>();
         prompt.push_str(&format!(
-            "- {label}: {} over {} rows\n",
+            "- {label}: {} over {}\n",
             format_gpui_resource_memory_compact(memory_mb),
-            rows.len(),
+            ghostex_gx_protocol::plural(rows.len(), "row", "rows"),
         ));
         for row in rows.iter().take(CLEAN_RAM_PROMPT_MAX_ROWS_PER_SECTION) {
             prompt.push_str(&format!(
-                "  - {} ({}): {}, {} processes{}\n",
+                "  - {} ({}): {}, {}{}\n",
                 truncate_prompt_label(&row.label),
                 row.detail,
                 format_gpui_resource_memory_compact(row.memory_mb),
-                row.pids.len(),
+                ghostex_gx_protocol::plural(row.pids.len(), "process", "processes"),
                 if row.sleep_candidate { ", idle" } else { "" },
             ));
         }
         if rows.len() > CLEAN_RAM_PROMPT_MAX_ROWS_PER_SECTION {
             prompt.push_str(&format!(
-                "  - and {} more rows\n",
-                rows.len() - CLEAN_RAM_PROMPT_MAX_ROWS_PER_SECTION
+                "  - and {}\n",
+                ghostex_gx_protocol::plural(
+                    rows.len() - CLEAN_RAM_PROMPT_MAX_ROWS_PER_SECTION,
+                    "more row",
+                    "more rows",
+                )
             ));
         }
     }

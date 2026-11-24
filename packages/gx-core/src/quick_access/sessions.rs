@@ -901,7 +901,7 @@ pub(crate) fn tag_select(state: &SessionsTabState, data: &QuickAccessData) -> Qu
         label: if state.tag_filters.is_empty() {
             "All tags".to_string()
         } else {
-            format!("{} tags", state.tag_filters.len())
+            ghostex_gx_protocol::plural(state.tag_filters.len(), "tag", "tags")
         },
         count: None,
         detail: String::new(),

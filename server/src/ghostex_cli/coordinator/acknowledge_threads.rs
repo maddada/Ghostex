@@ -33,8 +33,8 @@ pub(super) fn acknowledge_threads(parsed: &ParsedArgs) -> CliResult<()> {
         }));
     } else {
         println!(
-            "Marked {} finished thread(s) of {} as seen.",
-            acknowledged.len(),
+            "Marked {} of {} as seen.",
+            ghostex_gx_protocol::plural(acknowledged.len(), "finished thread", "finished threads"),
             agents::text(&coordinator, "title")
         );
     }

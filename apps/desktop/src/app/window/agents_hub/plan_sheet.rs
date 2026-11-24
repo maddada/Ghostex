@@ -198,30 +198,38 @@ impl GpuiAgentsHubModalWindow {
                         .child(pill(
                             hp,
                             PillTone::Ok,
-                            format!("{} links", grouped(plan.summary.links)),
-                        ))
-                        .child(pill(
-                            hp,
-                            PillTone::Info,
                             format!(
                                 "{} {}",
-                                plan.summary.writes,
-                                if plan.groups.iter().any(|group| group.kind == "seedMainMd") {
-                                    "files to write"
-                                } else {
-                                    "pointer files"
-                                }
+                                grouped(plan.summary.links),
+                                ghostex_gx_protocol::plural_word(plan.summary.links, "link", "links")
                             ),
                         ))
                         .child(pill(
                             hp,
+                            PillTone::Info,
+                            if plan.groups.iter().any(|group| group.kind == "seedMainMd") {
+                                ghostex_gx_protocol::plural(
+                                    plan.summary.writes,
+                                    "file to write",
+                                    "files to write",
+                                )
+                            } else {
+                                ghostex_gx_protocol::plural(
+                                    plan.summary.writes,
+                                    "pointer file",
+                                    "pointer files",
+                                )
+                            },
+                        ))
+                        .child(pill(
+                            hp,
                             PillTone::Warn,
-                            format!("{} backups", plan.summary.backups),
+                            ghostex_gx_protocol::plural(plan.summary.backups, "backup", "backups"),
                         ))
                         .child(pill(
                             hp,
                             PillTone::Err,
-                            format!("{} removals", plan.summary.unlinks),
+                            ghostex_gx_protocol::plural(plan.summary.unlinks, "removal", "removals"),
                         )),
                 )
             });

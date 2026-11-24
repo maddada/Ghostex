@@ -407,7 +407,12 @@ pub(crate) fn describe_schedule(schedule: &AutomationSchedule) -> String {
                     format!("Every {hours} hours")
                 }
             } else {
-                format!("Every {} minutes", (every_ms / 60_000.0).round())
+                let minutes = (every_ms / 60_000.0).round() as u64;
+                if minutes == 1 {
+                    "Every minute".to_string()
+                } else {
+                    format!("Every {minutes} minutes")
+                }
             }
         }
         AutomationSchedule::Daily { time, .. } => format!("Daily at {time}"),

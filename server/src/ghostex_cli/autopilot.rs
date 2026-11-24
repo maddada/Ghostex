@@ -177,14 +177,22 @@ pub(crate) fn autopilot_command(args: &[String]) -> CliResult<()> {
             if on { "on" } else { "off" },
             if on {
                 format!(
-                    " ({}, sweeping every {} seconds, {} sessions covered)",
+                    " ({}, sweeping every {}, {} covered)",
                     match config["scope"].as_str() {
                         Some("projects") => "projects you picked",
                         Some("sessions") => "sessions you picked",
                         _ => "every session",
                     },
-                    config["sweepSeconds"],
-                    answer["watching"]["covered"]
+                    ghostex_gx_protocol::plural(
+                        config["sweepSeconds"].as_u64().unwrap_or(0),
+                        "second",
+                        "seconds"
+                    ),
+                    ghostex_gx_protocol::plural(
+                        answer["watching"]["covered"].as_u64().unwrap_or(0),
+                        "session",
+                        "sessions"
+                    )
                 )
             } else {
                 String::new()
@@ -201,8 +209,19 @@ pub(crate) fn autopilot_command(args: &[String]) -> CliResult<()> {
         }
         let summary = &answer["summary"];
         println!(
-            "Since it went on: {} actions, {} sessions kept moving, {} left for you, {} failed.",
-            summary["actions"], summary["keptMoving"], summary["parkedCount"], summary["failed"]
+            "Since it went on: {}, {} kept moving, {} left for you, {} failed.",
+            ghostex_gx_protocol::plural(
+                summary["actions"].as_u64().unwrap_or(0),
+                "action",
+                "actions"
+            ),
+            ghostex_gx_protocol::plural(
+                summary["keptMoving"].as_u64().unwrap_or(0),
+                "session",
+                "sessions"
+            ),
+            summary["parkedCount"],
+            summary["failed"]
         );
     }
     for entry in answer["log"].as_array().into_iter().flatten() {
@@ -223,7 +242,10 @@ fn checkup_words(config: &Value) -> String {
     match config["checkupMinutes"].as_u64() {
         Some(0) => "Supervisor check-up: off.".to_string(),
         Some(60) => "Supervisor check-up: every hour.".to_string(),
-        Some(minutes) => format!("Supervisor check-up: every {minutes} minutes."),
+        Some(minutes) => format!(
+            "Supervisor check-up: every {}.",
+            ghostex_gx_protocol::plural(minutes, "minute", "minutes")
+        ),
         None => "Supervisor check-up: needs a newer Ghostex.".to_string(),
     }
 }

@@ -296,11 +296,15 @@ fn print_answer(verb: &str, answer: &Value) {
                     ""
                 };
                 println!(
-                    "{}\t{}\t{}\t{} open chats{lead}",
+                    "{}\t{}\t{}\t{}{lead}",
                     text(bot, "name"),
                     text(bot, "botId"),
                     text(bot, "title"),
-                    bot["openChats"].as_u64().unwrap_or(0)
+                    ghostex_gx_protocol::plural(
+                        bot["openChats"].as_u64().unwrap_or(0),
+                        "open chat",
+                        "open chats"
+                    )
                 );
             };
             // The GBots of no department first, then each department's, its lead first (the
@@ -491,9 +495,13 @@ fn print_answer(verb: &str, answer: &Value) {
                 )
             };
             println!(
-                "Removed the GBot {}: closed {} chats, {folder}.",
+                "Removed the GBot {}: closed {}, {folder}.",
                 text(bot, "name"),
-                answer["closedChats"].as_u64().unwrap_or(0)
+                ghostex_gx_protocol::plural(
+                    answer["closedChats"].as_u64().unwrap_or(0),
+                    "chat",
+                    "chats"
+                )
             );
         }
         "new-chat" => {

@@ -132,8 +132,9 @@ impl RenderedParts {
             out.push_str(&self.preamble);
         } else if skip_turns > 0 && start == start_from_skip {
             let turns_word = if start == 1 { "turn was" } else { "turns were" };
+            let kept_words = ghostex_gx_protocol::plural(kept, "new turn follows", "new turns follow");
             out.push_str(&format!(
-                "## ⏪ Delta handover\n\nThe first {start} {turns_word} already sent in an earlier handover. Only the {kept} new turn(s) follow:\n\n"
+                "## ⏪ Delta handover\n\nThe first {start} {turns_word} already sent in an earlier handover. Only the {kept_words}:\n\n"
             ));
         } else {
             out.push_str(&self.earlier_block(kept));
@@ -456,7 +457,10 @@ fn tail_capped(text: &str, tail_lines: usize) -> String {
     }
     let trimmed = lines.len() - tail_lines;
     let kept = lines[lines.len() - tail_lines..].join("\n");
-    format!("... ({trimmed} lines trimmed) ...\n{kept}")
+    format!(
+        "... ({} trimmed) ...\n{kept}",
+        ghostex_gx_protocol::plural(trimmed, "line", "lines")
+    )
 }
 
 fn render_patch(entry: &ExportEntry, cwd: Option<&str>) -> String {
