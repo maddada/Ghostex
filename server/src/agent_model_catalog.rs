@@ -595,9 +595,36 @@ pub fn resolve_acp_model(
     let catalog_label = catalog_model(canonical, raw)
         .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
         .filter(|label| !is_placeholder_model_label(label));
-    let label = catalog_label
+    let raw_label = catalog_label
         .or(available_name)
         .unwrap_or_else(|| raw.to_string());
+    let (label, extracted_effort) = if let Some(without_close) = raw_label.trim().strip_suffix(')')
+    {
+        if let Some((base, inside)) = without_close.rsplit_once(" (") {
+            let eff = match inside.trim().to_ascii_lowercase().as_str() {
+                "minimal" => Some("minimal"),
+                "low" => Some("low"),
+                "medium" => Some("medium"),
+                "high" => Some("high"),
+                "xhigh" | "extra high" | "extra-high" => Some("xhigh"),
+                "max" => Some("max"),
+                "ultracode" => Some("ultracode"),
+                _ => None,
+            };
+            if let (Some(e), false) = (eff, base.trim().is_empty()) {
+                (base.trim().to_string(), Some(e.to_string()))
+            } else {
+                (raw_label, None)
+            }
+        } else {
+            (raw_label, None)
+        }
+    } else {
+        (raw_label, None)
+    };
+    if effort.is_none() {
+        effort = extracted_effort;
+    }
     if is_placeholder_model_label(&label) {
         let (value, fallback_label, default_effort) = preferred_default_model(canonical)?;
         return Some((value, fallback_label, effort.or(default_effort)));
