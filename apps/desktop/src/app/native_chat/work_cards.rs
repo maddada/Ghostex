@@ -2168,7 +2168,10 @@ impl NativeChatView {
         let answered_by = text(row, "answeredBy");
         let answered_by_chip = (!answered_by.is_empty()).then(|| {
             let green: gpui::Hsla = gpui::rgb(if p.light { 0x168049 } else { 0x34d399 }).into();
+            let open_page = row["open"].clone();
+            let has_open = open_page.is_object();
             div()
+                .id(gpui::SharedString::from(format!("dock-row-answered-by:{key}")))
                 .flex_shrink_0()
                 .px(px(7.0 * s))
                 .py(px(1.5 * s))
@@ -2183,6 +2186,25 @@ impl NativeChatView {
                 .line_height(px(16.0 * s))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(green)
+                .when(has_open, |chip| {
+                    chip.role(gpui::Role::Button)
+                        .chat_cursor_pointer()
+                        .hover(move |style| {
+                            style
+                                .bg(green.opacity(if p.light { 0.20 } else { 0.26 }))
+                                .border_color(green.opacity(0.55))
+                        })
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new(
+                                "Open Live page to preview their answers",
+                            )
+                            .build(window, cx)
+                        })
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.open_work_target(open_page.clone(), window, cx);
+                        }))
+                })
                 .child(
                     svg()
                         .path("titlebar/user.svg")

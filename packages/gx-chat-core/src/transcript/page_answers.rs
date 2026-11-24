@@ -566,7 +566,19 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
         out["by"] = json!(by);
     }
     if answers.outside {
+        let who = answers
+            .by
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .unwrap_or("Visitor");
         out["outside"] = json!(true);
+        out["noteLabel"] = json!(format!("{who}'s note"));
+        out["ownAnswerLabel"] = json!(format!("{who}'s own answer"));
+        out["headLabel"] = json!(format!(
+            "{who} answered \u{201c}{}\u{201d} via share link",
+            plain_words(&answers.title)
+        ));
     }
     out
 }
@@ -633,6 +645,7 @@ pub fn answers_below<'a>(
             if row["role"] == "user"
                 && card.is_object()
                 && card["withText"] != true
+                && card["outside"] != true
                 && row[crate::transcript::folded_cards::FOLDED_INTO_WORK] != true
             {
                 let reply_id = reply["id"].as_str().unwrap_or_default();

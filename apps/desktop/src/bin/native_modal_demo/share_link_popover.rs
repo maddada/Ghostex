@@ -787,3 +787,324 @@ pub(super) fn open_inbox_ping(demo: &super::DemoEnv, cx: &mut App) {
         cx,
     );
 }
+
+#[derive(Clone)]
+struct TranscriptAnswerRow {
+    label: String,
+    value: String,
+    picks: Vec<String>,
+    note: String,
+    extra: bool,
+}
+
+#[derive(Clone)]
+struct TranscriptCardData {
+    quiet_text: String,
+    quiet_count: String,
+    head_label: String,
+    note_label: String,
+    summary: String,
+    rows: Vec<TranscriptAnswerRow>,
+}
+
+struct ShareTranscriptCardDemo {
+    palette: ModalPalette,
+    data: TranscriptCardData,
+}
+
+fn build_real_transcript_card() -> TranscriptCardData {
+    use ghostex_gx_chat_core::transcript::{page_answers, quiet_view};
+    use serde_json::json;
+
+    let envelope = concat!(
+        "<ghostex-page-answers page=\"ad82e9e634104467ec560acc784cc3e4\" ",
+        "title=\"Agent events: push updates to outside assistants\" ",
+        "by=\"maddada2\" source=\"shared-link\">\n",
+        "{\n",
+        "  \"Architecture for agent events and control\": \"webhooks\",\n",
+        "  \"Architecture for agent events and control (note)\": \"cleanest integration path\",\n",
+        "  \"Default event batching window for new assistants\": \"immediate\",\n",
+        "  \"Default event batching window for new assistants (note)\": \"low latency matters\",\n",
+        "  \"Default control scope for a newly connected assistant\": \"read-only\",\n",
+        "  \"Default events turned on for a new assistant\": \"coord-core\",\n",
+        "  \"First destinations to ship in Phase 1\": \"grokbot\",\n",
+        "  \"Additional notes\": \"Looks great overall! Ship webhooks first.\"\n",
+        "}\n",
+        "</ghostex-page-answers>"
+    );
+    let parsed = page_answers::parse_page_answers(envelope).expect("parses outside envelope");
+    let projected = page_answers::project_page_answers(&parsed, None);
+    assert_eq!(projected["outside"], true);
+    assert_eq!(projected["noteLabel"], "maddada2's note");
+    assert_eq!(
+        projected["headLabel"],
+        "maddada2 answered \u{201c}Agent events: push updates to outside assistants\u{201d} via share link"
+    );
+
+    let mut state = ghostex_gx_chat_core::ChatState::default();
+    quiet_view::apply_from_host(&mut state, quiet_view::QuietViewSettings::default());
+    let msg_item = ghostex_gx_chat_core::TranscriptItem::Message {
+        message: std::sync::Arc::new(json!({
+            "id": "msg-outside-1",
+            "role": "user",
+            "pageAnswers": projected,
+        })),
+    };
+    state.transcript_view.items = std::sync::Arc::new(
+        ghostex_gx_chat_core::transcript::items::TranscriptItems::from_items(vec![msg_item]),
+    )
+    .into();
+    let quiet = quiet_view::document(
+        &state,
+        &ghostex_gx_chat_core::ChatContext::default(),
+        &json!({}),
+        &json!([]),
+    )
+    .expect("quiet_view emits QuietViewDocument");
+    let qa = quiet
+        .answers
+        .first()
+        .expect("quiet_view emits QuietAnswers for outside answers");
+    assert_eq!(
+        qa.text,
+        "maddada2 answered \u{201c}Agent events: push updates to outside assistants\u{201d} via share link"
+    );
+    assert_eq!(qa.count, "5 answers \u{b7} 1 note");
+    assert!(qa.outside, "QuietAnswers must flag outside=true");
+
+    let rows: Vec<TranscriptAnswerRow> = projected["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|row| TranscriptAnswerRow {
+            label: row["label"].as_str().unwrap_or_default().to_string(),
+            value: row["value"].as_str().unwrap_or_default().to_string(),
+            picks: row["picks"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            note: row["note"].as_str().unwrap_or_default().to_string(),
+            extra: row["extra"] == true,
+        })
+        .collect();
+
+    TranscriptCardData {
+        quiet_text: qa.text.clone(),
+        quiet_count: qa.count.clone(),
+        head_label: projected["headLabel"].as_str().unwrap_or_default().to_string(),
+        note_label: projected["noteLabel"].as_str().unwrap_or_default().to_string(),
+        summary: projected["summary"].as_str().unwrap_or_default().to_string(),
+        rows,
+    }
+}
+
+impl Render for ShareTranscriptCardDemo {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let p = self.palette;
+        let green: gpui::Hsla = rgb(0x34d399).into();
+        let card_bg = rgba(0x1f1f23ff);
+        let hairline = rgba(0xffffff12);
+        let pill_bg = rgba(0xffffff0a);
+        let pill_border = rgba(0xffffff1a);
+
+        // Quiet View header line (real gx-chat-core QuietAnswers output)
+        let quiet_header = h_flex()
+            .w(px(820.0))
+            .items_center()
+            .gap(px(8.0))
+            .px(px(4.0))
+            .child(
+                svg()
+                    .path("titlebar/user.svg")
+                    .size(px(14.0))
+                    .text_color(green),
+            )
+            .child(
+                div()
+                    .text_size(px(13.5))
+                    .text_color(hsla(p.muted))
+                    .child(format!(
+                        "{} \u{b7} {}",
+                        self.data.quiet_text, self.data.quiet_count
+                    )),
+            )
+            .child(
+                svg()
+                    .path("titlebar/chevron-down.svg")
+                    .size(px(12.0))
+                    .text_color(hsla(p.muted)),
+            );
+
+        // Expanded card body styled as outside input (emerald left accent)
+        let mut body_rows = v_flex().w_full().px(px(16.0)).py(px(6.0));
+        let mut drawn = 0usize;
+        for row in self.data.rows.iter().filter(|r| r.extra) {
+            body_rows = body_rows.child(
+                v_flex()
+                    .w_full()
+                    .py(px(9.0))
+                    .when(drawn > 0, |el| el.border_t_1().border_color(hairline))
+                    .gap(px(4.0))
+                    .child(
+                        div()
+                            .text_size(px(11.5))
+                            .text_color(hsla(p.muted))
+                            .child(self.data.note_label.clone()),
+                    )
+                    .child(
+                        div()
+                            .pl(px(10.0))
+                            .border_l_2()
+                            .border_color(rgba(0xffffff22))
+                            .text_size(px(13.5))
+                            .text_color(hsla(p.foreground))
+                            .child(row.value.clone()),
+                    ),
+            );
+            drawn += 1;
+        }
+        for row in self.data.rows.iter().filter(|r| !r.extra) {
+            body_rows = body_rows.child(
+                v_flex()
+                    .w_full()
+                    .py(px(9.0))
+                    .when(drawn > 0, |el| el.border_t_1().border_color(hairline))
+                    .gap(px(5.0))
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .text_color(hsla(p.muted))
+                            .child(row.label.clone()),
+                    )
+                    .child(h_flex().flex_wrap().gap(px(5.0)).children(
+                        row.picks.iter().map(|pick| {
+                            div()
+                                .px(px(9.0))
+                                .py(px(2.0))
+                                .rounded_full()
+                                .bg(pill_bg)
+                                .border_1()
+                                .border_color(pill_border)
+                                .text_size(px(12.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(hsla(p.foreground))
+                                .child(pick.clone())
+                        }),
+                    ))
+                    .when(!row.note.is_empty(), |el| {
+                        el.child(
+                            div()
+                                .pl(px(10.0))
+                                .border_l_2()
+                                .border_color(rgba(0xffffff1a))
+                                .text_size(px(12.5))
+                                .text_color(hsla(p.muted))
+                                .child(row.note.clone()),
+                        )
+                    }),
+            );
+            drawn += 1;
+        }
+
+        let quiet_card = div()
+            .w(px(820.0))
+            .rounded(px(12.0))
+            .bg(card_bg)
+            .border_1()
+            .border_color(rgba(0xffffff14))
+            .border_l(px(3.0))
+            .border_color(green.opacity(0.55))
+            .child(body_rows);
+
+        // Non-quiet folded card header (showing emerald person tile + full headLabel)
+        let folded_card = h_flex()
+            .w(px(820.0))
+            .h(px(46.0))
+            .px(px(12.0))
+            .gap(px(10.0))
+            .items_center()
+            .rounded(px(10.0))
+            .bg(card_bg)
+            .border_1()
+            .border_color(rgba(0xffffff14))
+            .border_l(px(3.0))
+            .border_color(green.opacity(0.55))
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .size(px(28.0))
+                    .rounded(px(8.0))
+                    .bg(green.opacity(0.18))
+                    .border_1()
+                    .border_color(green.opacity(0.32))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        svg()
+                            .path("titlebar/user.svg")
+                            .size(px(15.0))
+                            .text_color(green),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(px(13.5))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(hsla(p.foreground))
+                    .child(self.data.head_label.clone()),
+            )
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .text_size(px(12.5))
+                    .text_color(hsla(p.muted))
+                    .child(self.data.summary.clone()),
+            );
+
+        div()
+            .size_full()
+            .font_family(MODAL_UI_FONT)
+            .bg(rgb(0x131313))
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(14.0))
+            .child(quiet_header)
+            .child(quiet_card)
+            .child(
+                div()
+                    .w(px(820.0))
+                    .pt(px(14.0))
+                    .text_size(px(11.5))
+                    .text_color(hsla(p.muted))
+                    .child("Collapsed card (Full View)"),
+            )
+            .child(folded_card)
+    }
+}
+
+pub(super) fn open_transcript_card(demo: &super::DemoEnv, cx: &mut App) {
+    let palette = demo.palette;
+    let data = build_real_transcript_card();
+    let _ = super::open_modal_window(
+        1650.0,
+        962.0,
+        move |_, cx| {
+            cx.new(|_| ShareTranscriptCardDemo {
+                palette,
+                data: data.clone(),
+            })
+        },
+        cx,
+    );
+}

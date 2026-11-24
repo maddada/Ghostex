@@ -115,6 +115,9 @@ pub struct QuietAnswers {
     /// Starts open (`chatQuietViewExpandLast`, the newest answers after the last reply).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub open: bool,
+    /// True when submitted by an outside person via a shared Live page link.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub outside: bool,
 }
 
 /// The longest single answer the shut line says in full.
@@ -207,7 +210,14 @@ fn page_answers(row: &Value) -> Option<QuietAnswers> {
         more += card["more"].as_u64().unwrap_or(0) as usize;
         titles.push(card["title"].as_str().unwrap_or("the page"));
     }
+    let outside = first["outside"] == true;
+    let who = first["by"]
+        .as_str()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or("Visitor");
     let text = match titles.as_slice() {
+        [only] if outside => format!("{who} answered \u{201c}{}\u{201d} via share link", clip(only, 60)),
         [only] => format!("You answered \u{201c}{}\u{201d}", clip(only, 60)),
         many => {
             let summary = many
@@ -215,7 +225,11 @@ fn page_answers(row: &Value) -> Option<QuietAnswers> {
                 .map(|title| format!("\u{201c}{}\u{201d}", clip(title, 36)))
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!("You answered {summary}")
+            if outside {
+                format!("{who} answered {summary} via share link")
+            } else {
+                format!("You answered {summary}")
+            }
         }
     };
     Some(QuietAnswers {
@@ -224,6 +238,7 @@ fn page_answers(row: &Value) -> Option<QuietAnswers> {
         count: page_answers_count(&entries, more),
         id,
         open: false,
+        outside,
     })
 }
 
@@ -263,6 +278,7 @@ fn turn_answers(turn: &str, questions: &[Value]) -> Option<QuietAnswers> {
         count: answers_count(&values, asked.len().max(values.len())),
         id,
         open: false,
+        outside: false,
     })
 }
 

@@ -782,11 +782,22 @@ impl NativeChatView {
             .iter()
             .map(|(piece, _)| piece.as_str())
             .collect::<String>();
+        let icon = if card.outside {
+            let green = super::page_answers::answered_color(p);
+            gpui::svg()
+                .path("titlebar/user.svg")
+                .size(px(13.0 * p.scale))
+                .flex_shrink_0()
+                .text_color(green)
+                .into_any_element()
+        } else {
+            line_icon("titlebar/chat-card-checklist.svg", 13.0, p)
+        };
         self.quiet_line(
             card.key.clone(),
             spoken,
-            // The question card's own icon alone, as every finished quiet line starts.
-            vec![line_icon("titlebar/chat-card-checklist.svg", 13.0, p)],
+            // The question card's own icon (or emerald user mark for outside shared-link answers).
+            vec![icon],
             styled_segments(segments),
             open,
             true,

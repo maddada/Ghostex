@@ -1642,9 +1642,15 @@ impl NativeChatView {
                                     }
                                     let count_text = text(row, "count");
                                     let answered_by = text(row, "answeredBy");
+                                    let open_page = row["open"].clone();
+                                    let chip_key = key.clone();
                                     let answered_by_chip = (!answered_by.is_empty()).then(|| {
                                         let green: gpui::Hsla = gpui::rgb(if p.light { 0x168049 } else { 0x34d399 }).into();
+                                        let has_open = open_page.is_object();
                                         div()
+                                            .id(gpui::SharedString::from(format!(
+                                                "board-row-answered-by:{chip_key}"
+                                            )))
                                             .flex_shrink_0()
                                             .px(px(7.0 * s))
                                             .py(px(1.5 * s))
@@ -1652,11 +1658,43 @@ impl NativeChatView {
                                             .bg(green.opacity(if p.light { 0.12 } else { 0.16 }))
                                             .border_1()
                                             .border_color(green.opacity(0.32))
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(4.0 * s))
                                             .text_size(px(TITLE_SIZE * 0.84 * s))
                                             .line_height(px(16.0 * s))
                                             .font_weight(gpui::FontWeight::MEDIUM)
                                             .text_color(green)
                                             .whitespace_nowrap()
+                                            .when(has_open, |chip| {
+                                                chip.role(gpui::Role::Button)
+                                                    .chat_cursor_pointer()
+                                                    .hover(move |style| {
+                                                        style
+                                                            .bg(green.opacity(if p.light {
+                                                                0.20
+                                                            } else {
+                                                                0.26
+                                                            }))
+                                                            .border_color(green.opacity(0.55))
+                                                    })
+                                                    .on_click(cx.listener(
+                                                        move |this, _, window, cx| {
+                                                            cx.stop_propagation();
+                                                            this.open_work_target(
+                                                                open_page.clone(),
+                                                                window,
+                                                                cx,
+                                                            );
+                                                        },
+                                                    ))
+                                            })
+                                            .child(
+                                                svg()
+                                                    .path("titlebar/user.svg")
+                                                    .size(px(11.0 * s))
+                                                    .text_color(green),
+                                            )
                                             .child(answered_by)
                                     });
                                     // A page's name, then how much it still asks (work_cards.rs

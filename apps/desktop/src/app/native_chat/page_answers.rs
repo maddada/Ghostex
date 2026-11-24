@@ -31,6 +31,31 @@ fn answered_tile(p: &ChatAppearance) -> AnyElement {
         .into_any_element()
 }
 
+/// Tile for outside visitor answers received via a shared Live page link: clearly distinguished
+/// from the user's own answers with an emerald person glyph.
+fn outside_answered_tile(p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    let green = answered_color(p);
+    let size = SINGLE_LINE_CARD.tile_size() * s;
+    div()
+        .flex_shrink_0()
+        .size(px(size))
+        .rounded(px(8.0 * s))
+        .bg(green.opacity(if p.light { 0.14 } else { 0.18 }))
+        .border_1()
+        .border_color(green.opacity(0.32))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            svg()
+                .path("titlebar/user.svg")
+                .size(px(15.0 * s))
+                .text_color(green),
+        )
+        .into_any_element()
+}
+
 /// One picked answer as a quiet pill: the card's neutral hairline and a faint fill, the answer in
 /// the foreground's medium type, cut with an ellipsis rather than past the card.
 fn answer_pill(label: String, p: &ChatAppearance) -> AnyElement {
@@ -109,6 +134,7 @@ impl NativeChatView {
         let note = delivery
             .is_object()
             .then(|| self.answers_delivery(&key, delivery, p, cx));
+        let outside = answers["outside"] == true;
         if body_only {
             let body = div()
                 .flex()
@@ -119,7 +145,20 @@ impl NativeChatView {
                 .children(rows)
                 .children(note)
                 .into_any_element();
-            return self.lined_ask_card(div().into_any_element(), Some(body), p);
+            let card = self.lined_ask_card(div().into_any_element(), Some(body), p);
+            return if outside {
+                let green = answered_color(p);
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .rounded(px(12.0 * p.scale))
+                    .border_l(px(2.5 * p.scale))
+                    .border_color(green.opacity(0.55))
+                    .child(card)
+                    .into_any_element()
+            } else {
+                card
+            };
         }
         let head = self.answers_head(answers, &key, open, default_open, motion.is_some(), p, cx);
         let body = match (rows, note) {
@@ -135,7 +174,7 @@ impl NativeChatView {
                     .into_any_element(),
             ),
         };
-        self.single_line_ask_card(
+        let card = self.single_line_ask_card(
             head,
             body,
             Some(AskBodyMotion {
@@ -143,7 +182,20 @@ impl NativeChatView {
                 frame: motion,
             }),
             p,
-        )
+        );
+        if outside {
+            let green = answered_color(p);
+            div()
+                .w_full()
+                .min_w_0()
+                .rounded(px(10.0 * p.scale))
+                .border_l(px(2.5 * p.scale))
+                .border_color(green.opacity(0.55))
+                .child(card)
+                .into_any_element()
+        } else {
+            card
+        }
     }
 
     /// The folded line: the answered tile, the name, the count and, for a page, its open button.
@@ -160,12 +212,23 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let shape = &*SINGLE_LINE_CARD;
+        let outside = answers["outside"] == true;
         let by = text(answers, "by");
         let summary = text(answers, "summary");
-        let count = match (by.is_empty(), summary.is_empty()) {
-            (true, _) => summary,
-            (false, true) => by,
-            (false, false) => format!("{by} \u{b7} {summary}"),
+        let head_label = text(answers, "headLabel");
+        let title_text = if outside && !head_label.is_empty() {
+            head_label
+        } else {
+            text(answers, "title")
+        };
+        let count = if outside {
+            summary
+        } else {
+            match (by.is_empty(), summary.is_empty()) {
+                (true, _) => summary,
+                (false, true) => by.clone(),
+                (false, false) => format!("{by} \u{b7} {summary}"),
+            }
         };
         let mut trailing: Vec<AnyElement> = Vec::new();
         if !count.is_empty() {
@@ -192,23 +255,34 @@ impl NativeChatView {
             .min_w_0()
             .h(px(shape.header_height(s)))
             .px(px(shape.padding_x * s))
-            .child(answered_tile(p))
+            .child(if outside {
+                outside_answered_tile(p)
+            } else {
+                answered_tile(p)
+            })
             .child(
                 shape
                     .title(div().flex_1().min_w_0().truncate(), p)
                     .text_color(p.foreground)
-                    .child(text(answers, "title")),
+                    .child(title_text),
             )
             .children(trailing);
         let toggle_key = key.to_string();
+        let toggle_label: &'static str = if outside {
+            if open {
+                "Hide shared-link answers"
+            } else {
+                "Show shared-link answers"
+            }
+        } else if open {
+            "Hide your answers"
+        } else {
+            "Show your answers"
+        };
         single_line_press_head(
             head,
             SharedString::from(format!("{key}:head")),
-            if open {
-                "Hide your answers"
-            } else {
-                "Show your answers"
-            },
+            toggle_label,
             open || moving,
             p,
         )
@@ -328,6 +402,22 @@ impl NativeChatView {
                 .py(px(7.0 * s))
                 .when(drawn > 0, |row| row.border_t_1().border_color(hairline))
         };
+        let note_label = {
+            let label = text(answers, "noteLabel");
+            if label.is_empty() {
+                "Your note".to_string()
+            } else {
+                label
+            }
+        };
+        let own_answer_label = {
+            let label = text(answers, "ownAnswerLabel");
+            if label.is_empty() {
+                "Your own answer".to_string()
+            } else {
+                label
+            }
+        };
         // The reader's own notes come first: what they said about the whole form.
         for (index, row) in rows
             .iter()
@@ -341,7 +431,7 @@ impl NativeChatView {
                             .text_size(px(11.5 * s))
                             .line_height(px(16.0 * s))
                             .text_color(p.muted)
-                            .child("Your note"),
+                            .child(note_label.clone()),
                     )
                     .child(self.answers_note(
                         text(row, "value"),
@@ -409,7 +499,7 @@ impl NativeChatView {
                             .text_color(p.foreground)
                             .child(format!("\u{201c}{words}\u{201d}")),
                     )
-                    .child(answer_aside("Your own answer".to_string(), false, p))
+                    .child(answer_aside(own_answer_label.clone(), false, p))
                     .into_any_element()
             });
             let note = (!note.is_empty())

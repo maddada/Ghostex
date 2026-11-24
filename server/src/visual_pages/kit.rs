@@ -393,6 +393,25 @@ html[data-gx-theme=light] #gx-mention .gx-m-ico.gx-m-main{color:#b08415}
 #gx-mention .gx-m-det{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:color-mix(in srgb,var(--gx-tip-fg) 56%,transparent);font-size:12px}
 #gx-mention .gx-m-det.gx-m-work{color:#f5a524}
 #gx-mention .gx-m-empty{padding:6px 8px;color:color-mix(in srgb,var(--gx-tip-fg) 56%,transparent);font-size:12px}
+/* Outside answerer chips and per-person read-only preview (CDXC:Sharing 2026-11-24). */
+.gx-outside-bar{position:fixed;top:14px;right:18px;z-index:25;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;max-width:min(480px,calc(100vw - 36px))}
+@media (max-width:960px){.gx-outside-bar{position:sticky;top:8px;right:auto;margin:10px var(--gx-gutter,16px) -6px auto;width:fit-content;max-width:calc(100% - 2*var(--gx-gutter,16px))}}
+.gx-outside-chip,.gx-outside-viewing,.gx-outside-back{display:inline-flex;align-items:center;gap:6px;height:30px;box-sizing:border-box;padding:0 11px;border-radius:999px;font:500 12.5px/1 var(--font-sans);white-space:nowrap;-webkit-backdrop-filter:blur(20px) saturate(1.15);backdrop-filter:blur(20px) saturate(1.15);box-shadow:var(--gx-tip-shadow)}
+.gx-outside-chip{border:1px solid color-mix(in srgb,var(--success) 38%,var(--gx-tip-border));background:var(--gx-tip-bg);color:var(--gx-tip-fg);cursor:pointer;transition:border-color .15s,background-color .15s,transform .12s}
+.gx-outside-chip:hover{border-color:color-mix(in srgb,var(--success) 68%,var(--gx-tip-border));background:color-mix(in srgb,var(--success) 14%,var(--gx-tip-bg))}
+.gx-outside-chip:focus-visible,.gx-outside-back:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 35%,transparent),var(--gx-tip-shadow)}
+.gx-outside-dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex:none}
+.gx-outside-viewing{border:1px solid color-mix(in srgb,var(--success) 42%,var(--gx-tip-border));background:color-mix(in srgb,var(--success) 14%,var(--gx-tip-bg));color:var(--success)}
+.gx-outside-viewing svg,.gx-outside-back svg{width:13px;height:13px;flex:none}
+.gx-outside-back{border:1px solid var(--gx-control);background:var(--gx-control);color:var(--gx-bg);font-weight:600;cursor:pointer;padding:0 12px}
+.gx-outside-back:hover{opacity:.9}
+.gx-outside-banner{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;font:500 13px/1.45 var(--font-sans);color:var(--success);background:color-mix(in srgb,var(--success) 10%,var(--gx-card));border:1px solid color-mix(in srgb,var(--success) 34%,transparent);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+.gx-outside-banner svg{width:15px;height:15px;flex:none}
+.gx-outside-banner span{flex:1;min-width:0}
+gx-question.gx-outside-preview{border-color:color-mix(in srgb,var(--success) 26%,var(--gx-card-border))}
+gx-question.gx-outside-preview .gx-choice[aria-checked=true]{border-color:color-mix(in srgb,var(--success) 55%,transparent);background:color-mix(in srgb,var(--success) 10%,transparent)}
+gx-question.gx-outside-preview .gx-choice[aria-checked=true] .gx-mark{border-color:var(--success);background:var(--success)}
+[data-gx-preview-hidden]{display:none!important}
 </style>"#;
 
 /// The kit's behaviour: turns the first `<gx-questions>` into a working form once the page has
@@ -673,8 +692,10 @@ function question(qe,index,used,changed){
     var area=el("textarea","gx-text");area.placeholder=qe.getAttribute("placeholder")||"Your answer (optional)";area.setAttribute("aria-labelledby",titleId);
     has=function(){return !!area.value.trim();};area.addEventListener("input",notify);qe.append(area);
     return{el:qe,title:title,key:key,tag:(tag||"").trim(),choices:[],collect:function(out){out[key]=area.value.trim()||SKIPPED;},
-      restore:function(answers){if(typeof answers[key]==="string"&&answers[key]!==SKIPPED)area.value=answers[key];live();},
-      lock:function(){answered(!!area.value.trim());area.readOnly=true;if(!area.value)area.hidden=true;}};
+      restore:function(answers){area.value=(typeof answers[key]==="string"&&answers[key]!==SKIPPED)?answers[key]:"";live();},
+      lock:function(){answered(!!area.value.trim());area.readOnly=true;if(!area.value)area.hidden=true;},
+      lockPreview:function(){qe.classList.remove("gx-answered","gx-unanswered");answered(!!area.value.trim());qe.classList.add("gx-outside-preview");area.readOnly=true;area.hidden=!area.value.trim();},
+      unlock:function(){qe.classList.remove("gx-answered","gx-unanswered","gx-outside-preview");area.readOnly=false;area.hidden=false;live();}};
   }
   var list=el("div","gx-choices"),choices=[];
   list.setAttribute("role",multiple?"group":"radiogroup");list.setAttribute("aria-labelledby",titleId);
@@ -700,8 +721,10 @@ function question(qe,index,used,changed){
       var written=note.value.trim();out[key]=on.length?(multiple?on:on[0]):written?null:SKIPPED;if(written)out[key+" (note)"]=written;},
     restore:function(answers){var v=answers[key],picked=Array.isArray(v)?v:v==null?[]:[v];
       choices.forEach(function(c){c.set(picked.indexOf(c.value)>=0);});
-      if(typeof answers[key+" (note)"]==="string")note.value=answers[key+" (note)"];sync();live();},
-    lock:function(){answered(choices.some(function(c){return c.on();})||!!note.value.trim());choices.forEach(function(c){c.button.disabled=true;});note.readOnly=true;if(!note.value)note.hidden=true;}};
+      note.value=typeof answers[key+" (note)"]==="string"?answers[key+" (note)"]:"";sync();live();},
+    lock:function(){answered(choices.some(function(c){return c.on();})||!!note.value.trim());choices.forEach(function(c){c.button.disabled=true;});note.readOnly=true;if(!note.value)note.hidden=true;},
+    lockPreview:function(){qe.classList.remove("gx-answered","gx-unanswered");answered(choices.some(function(c){return c.on();})||!!note.value.trim());qe.classList.add("gx-outside-preview");choices.forEach(function(c){c.button.disabled=true;});note.readOnly=true;note.hidden=!note.value.trim();},
+    unlock:function(){qe.classList.remove("gx-answered","gx-unanswered","gx-outside-preview");choices.forEach(function(c){c.button.disabled=false;});note.readOnly=false;note.hidden=false;sync();live();}};
 }
 /* The Pick button of one variant: at the right end of its heading's row (or a small head the kit adds when the variant has no heading), it clicks that choice, and shows it picked, here and in the question. `node` carries the picked ring. */
 function attachPick(node,heading,c,q){
@@ -968,10 +991,12 @@ function setup(root){
   var repeated=repeatedLists(questions,explicit.concat(rowTies,auto.options).map(function(o){return o.q;})),allRows=rowTies,lists=[];
   allRows.forEach(function(o){if(!lists.some(function(L){return L.q===o.q;}))lists.push(rowList(o.q,allRows.filter(function(x){return x.q===o.q;}),changed));});
   /* A row's note goes with its question's answer as "<key> · <value> (note)", the key the answers card already folds into the question's row (packages/gx-chat-core/src/transcript/page_answers.rs). */
-  allRows.forEach(function(o){var q=o.q,k=q.key+" \u00b7 "+o.value+" (note)",c0=q.collect,r0=q.restore,l0=q.lock;
+  allRows.forEach(function(o){var q=o.q,k=q.key+" \u00b7 "+o.value+" (note)",c0=q.collect,r0=q.restore,l0=q.lock,lp0=q.lockPreview,u0=q.unlock;
     q.collect=function(out){c0(out);var t=o.note.value.trim();if(t)out[k]=t;};
     q.restore=function(a){r0(a);o.note.value=typeof a[k]==="string"?a[k]:"";};
-    q.lock=function(){l0();o.note.readOnly=true;};});
+    q.lock=function(){l0();o.note.readOnly=true;};
+    q.lockPreview=function(){lp0();o.note.readOnly=true;};
+    q.unlock=function(){u0();o.note.readOnly=false;};});
   var cards=tidyCards(questions,explicit.concat(auto.options,rowTies));
   options=explicit.concat(auto.options,allRows,lists,cards);window.__ghostexKit={tied:explicit.length,auto:auto.report.auto,untied:auto.report.untied,rows:rowTies.length,repeated:repeated};syncOptions();
   function refoldAll(){allRows.forEach(function(o){o.refold();});lists.forEach(function(L){L.sync();});}
@@ -998,10 +1023,10 @@ function setup(root){
     var n=a[q.key+" (note)"];r.note=typeof n==="string"?n:null;return r;});
     if(notes&&typeof a[notesKey]==="string")rows.push({tag:null,question:seen?"Reply about this page":"Anything else?",key:notesKey,value:a[notesKey],note:null});return rows;};
   /* "Anything else?": see the SessionChat 2026-11-04 DECISION on KIT_SCRIPT. */
-  var last=questions[questions.length-1],notes=null,notesCard=null,notesKey=seen?"reply":NOTES;
+  var last=questions[questions.length-1],notes=null,notesCard=null,notesTitleEl=null,notesOrigTitle=seen?"Reply about this page":"Anything else?",notesKey=seen?"reply":NOTES;
   for(var copy=2;questions.some(function(q){return q.key===notesKey||q.key+" (note)"===notesKey;});copy++)notesKey=NOTES+" ("+copy+")";
   if(!(last&&!last.choices.length&&OWN_NOTES.test(last.title))){
-    notesCard=el("div","gx-notes");var notesHead=el("div","gx-q-head"),notesTitle=el("div","gx-q-title",seen?"Reply about this page":"Anything else?");notesTitle.id="gx-notes-title";
+    notesCard=el("div","gx-notes");var notesHead=el("div","gx-q-head"),notesTitle=el("div","gx-q-title",notesOrigTitle);notesTitle.id="gx-notes-title";notesTitleEl=notesTitle;
     notes=el("textarea","gx-text");notes.setAttribute("aria-labelledby","gx-notes-title");notes.placeholder=seen?"Write a reply about the page, or paste images (optional)":"Write anything more, or paste images (optional)";notes.__gxThumbs=true;
     notes.addEventListener("input",changed);notesHead.append(notesTitle);notesCard.append(notesHead,notes);
   }
@@ -1025,6 +1050,7 @@ function setup(root){
   /* CDXC:SessionChat 2026-11-11 DECISION:
      User: "please show number of questions answered so far in bottom right corner always". A page with questions shows "3 of 10 answered" in a small glass pill fixed at the window's bottom right, whatever the scroll, updated as the reader answers. A question counts as answered as the tile's check and Send count it (`gx-has-answer`): a choice picked, or a note or text written; one left blank counts as not answered, also after Skip all. All answered turns it green. (2026-11-12: it stays fully on screen: User, on an Android phone's page sheet where the pill's right end was cut off by the screen's edge: "make questions bottom right not off screen pls". Its margin is the page's own gutter (16px on a phone, 24px otherwise) or the safe area, it shrinks with an ellipsis if the screen is narrower than its text, and the script places it by the visual viewport, so a web view whose layout is wider than the screen cannot push it off.) The page gets room at its end (the gutter plus 34px; measured from the pill since 2026-11-15, below), so scrolled to the bottom the pill sits below the send bar instead of on it. The floating window, a browser tab and the phone's page sheet all get it from here.
      CDXC:SessionChat 2026-11-15 DECISION: User, with a screenshot of a page on their Android foldable where the "1 of 2 answered" pill sat over an option card, among cards that overflowed and overlapped: "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." Asked whether the pill should fade whenever content is under it or always show, the user answered "Always show", so the "always" above stands: the pill never hides. It cannot hide a control: clicks and taps go through it (`pointer-events:none`), and the page's room at its end is measured from the pill itself (its margin, its height at the current text size and a 12px gap), so scrolled to the end every card, the send bar and its buttons sit clear above it. Supersedes the fading pill tried the same day. */
+  var ownerTally=null,ownerRowbar=null;
   if(questions.length&&!seen){
     var tally=el("div","gx-tally");tally.setAttribute("role","status");tally.setAttribute("aria-live","polite");
     /* While a list's rows are on screen, a bar takes the pill's place: that list's picks, the page's count and Send (the SessionChat 2026-11-20 DECISION on `bindRows`). `ghostex visual check` treats it as it does the pill. */
@@ -1050,7 +1076,7 @@ function setup(root){
       room.style.height=Math.ceil(gb+Math.max(tally.getBoundingClientRect().height,rowbar?rowbar.offsetHeight:0)+ROOM_GAP)+"px";
     };
     var room=el("div","gx-tally-room"),ROOM_GAP=12;
-    document.body.append(room,tally);if(rowbar){document.body.append(rowbar);addEventListener("scroll",barLater,{passive:true});addEventListener("resize",barLater);}tallied();place();
+    document.body.append(room,tally);if(rowbar){document.body.append(rowbar);addEventListener("scroll",barLater,{passive:true});addEventListener("resize",barLater);}ownerTally=tally;ownerRowbar=rowbar;tallied();place();
     window.addEventListener("resize",place);
     window.addEventListener("load",place);
     if(window.visualViewport){visualViewport.addEventListener("resize",place);visualViewport.addEventListener("scroll",place);}
@@ -1077,8 +1103,131 @@ function setup(root){
     row.hidden=!row.querySelector(".gx-thumb")||area.hidden;
   }
   function allPills(){boxes().forEach(pills);}
+  var previewState=null,outsideBar=null,outsideBanner=null;
+  var USER_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  var BACK_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>';
+  function setupOutsideAnswers(){
+    if(!window.ghostex||ghostex.shared||ghostex.exported||outsideBar)return;
+    var raw=Array.isArray(ghostex.outsideAnswers)?ghostex.outsideAnswers:[];
+    if(!raw.length)return;
+    /* Keep the latest submission per outside answerer, newest first. */
+    var byName={},list=[];
+    for(var i=raw.length-1;i>=0;i--){
+      var item=raw[i];if(!item||typeof item!=="object")continue;
+      var who=String(item.by||"Visitor").trim()||"Visitor";
+      var key=who.toLowerCase();
+      if(byName[key])continue;
+      byName[key]=true;
+      list.push({by:who,answeredAt:item.answeredAt||"",answers:item.answers&&typeof item.answers==="object"?item.answers:{}});
+    }
+    if(!list.length)return;
+    outsideBar=el("div","gx-outside-bar");
+    outsideBar.setAttribute("role","region");
+    outsideBar.setAttribute("aria-label","Shared link answers");
+    function renderBar(){
+      outsideBar.textContent="";
+      if(previewState){
+        var viewing=el("span","gx-outside-viewing");
+        viewing.innerHTML=USER_ICON;
+        viewing.append(el("span",null,previewState.entry.by+"'s answers"));
+        var back=el("button","gx-outside-back");
+        back.type="button";
+        back.innerHTML=BACK_ICON;
+        back.append(el("span",null,"Back"));
+        back.setAttribute("data-gx-tip","Back to your page");
+        back.addEventListener("click",exitPreview);
+        outsideBar.append(viewing,back);
+      }else{
+        list.forEach(function(entry){
+          var chip=el("button","gx-outside-chip");
+          chip.type="button";
+          chip.setAttribute("data-gx-tip","Preview "+entry.by+"'s answers");
+          chip.append(el("span","gx-outside-dot"),el("span",null,entry.by));
+          chip.addEventListener("click",function(){enterPreview(entry);});
+          outsideBar.append(chip);
+        });
+      }
+    }
+    function setPreviewHidden(node,hide){
+      if(!node)return;
+      if(hide)node.setAttribute("data-gx-preview-hidden","1");
+      else node.removeAttribute("data-gx-preview-hidden");
+    }
+    function enterPreview(entry){
+      if(dictStop)dictStop();
+      if(!previewState){
+        previewState={
+          ownerAnswered:!!ghostex.answered,
+          ownerAnswers:ghostex.answered?(ghostex.answers||{}):collect(),
+          entry:entry
+        };
+      }else{
+        previewState.entry=entry;
+      }
+      if(ghostex.__setPreview)ghostex.__setPreview(true);
+      restore(entry.answers||{});
+      questions.forEach(function(q){q.lockPreview();});
+      if(notes){
+        notes.readOnly=true;
+        if(notesTitleEl)notesTitleEl.textContent=entry.by+"'s note";
+        if(notesCard)notesCard.hidden=!notes.value.trim();
+      }
+      setPreviewHidden(bar,true);
+      setPreviewHidden(ownerTally,true);
+      setPreviewHidden(ownerRowbar,true);
+      setPreviewHidden(document.getElementById("gx-answered"),true);
+      if(!outsideBanner){
+        outsideBanner=el("div","gx-outside-banner");
+        outsideBanner.setAttribute("role","status");
+      }
+      var when="";
+      try{when=entry.answeredAt?" on "+new Date(entry.answeredAt).toLocaleString():"";}catch(e){}
+      outsideBanner.innerHTML=USER_ICON;
+      outsideBanner.append(el("span",null,"Viewing "+entry.by+"'s answers (read-only) \u00b7 submitted via share link"+when+". Press Back to return to your page."));
+      if(!outsideBanner.isConnected){
+        var firstQ=root.querySelector("gx-question");
+        if(firstQ&&firstQ.parentNode)firstQ.parentNode.insertBefore(outsideBanner,firstQ);
+        else root.insertBefore(outsideBanner,root.firstChild);
+      }
+      syncOptions();
+      allPills();
+      renderBar();
+    }
+    function exitPreview(){
+      if(!previewState)return;
+      var snap=previewState;
+      previewState=null;
+      if(outsideBanner&&outsideBanner.isConnected)outsideBanner.remove();
+      if(notesTitleEl)notesTitleEl.textContent=notesOrigTitle;
+      setPreviewHidden(bar,false);
+      setPreviewHidden(ownerTally,false);
+      setPreviewHidden(ownerRowbar,false);
+      setPreviewHidden(document.getElementById("gx-answered"),false);
+      if(snap.ownerAnswered){
+        questions.forEach(function(q){q.unlock();});
+        restore(snap.ownerAnswers||{});
+        lock();
+      }else{
+        questions.forEach(function(q){q.unlock();});
+        if(notes){notes.readOnly=false;if(notesCard)notesCard.hidden=false;}
+        restore(snap.ownerAnswers||{});
+        syncOptions();
+        allPills();
+        syncSeenButton();
+      }
+      if(ghostex.__setPreview)ghostex.__setPreview(false);
+      renderBar();
+    }
+    renderBar();
+    document.body.insertBefore(outsideBar,document.body.firstChild);
+    window.__ghostexPreviewOutside=function(name){
+      if(!name){exitPreview();return;}
+      var target=list.filter(function(x){return x.by.toLowerCase()===String(name).trim().toLowerCase();})[0]||list[0];
+      if(target)enterPreview(target);
+    };
+  }
   if(!window.ghostex){button.disabled=true;skipAll.remove();status.textContent="This Ghostex can't send answers from a page; type them in the chat.";return;}
-  if(ghostex.answered){restore(ghostex.answers||{});lock();return;}
+  if(ghostex.answered){restore(ghostex.answers||{});lock();setupOutsideAnswers();return;}
   /* An exported page has no Ghostex to send to: Send becomes Export answers, which shows the answers to copy or download, and the page stays open for more (exported.rs). */
   exported=!!ghostex.exported;
   if(exported){if(seen){button.classList.remove("gx-send-seen");button.removeAttribute("data-gx-mode");button.removeAttribute("aria-label");archiveState=sendState=null;button.textContent="";button.append(label);}else{var svg=button.querySelector("svg");if(svg)svg.remove();}label.textContent="Export answers";button.setAttribute("data-gx-tip","Export answers");skipAll.remove();infoText=seen?"Exports that you saw the page, with your reply if you write one.":"Questions you leave blank are exported as skipped.";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);}
@@ -1161,8 +1310,9 @@ function setup(root){
     });
   }
   allPills();
+  setupOutsideAnswers();
   /* A newer draft than the one the page was served came after it loaded (PAGE_API's "gx-draft", sent only before the reader changed anything): show it. */
-  document.addEventListener("gx-draft",function(){if(button.disabled)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();syncSeenButton();});
+  document.addEventListener("gx-draft",function(){if(button.disabled||previewState)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();syncSeenButton();});
   function send(out,sent){
     if(pendingImages){status.classList.add("gx-error");status.textContent="Wait for the pasted image to finish saving.";return;}
     if(exported){status.classList.remove("gx-error");ghostex.submit(out).then(function(){status.textContent="Answers exported. Send them back to whoever shared this page.";});return;}

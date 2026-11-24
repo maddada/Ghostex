@@ -879,6 +879,7 @@ fn main() {
                 "share-popover" => share_popover_demo::open(&demo, cx),
                 "share-link-popover" => share_link_popover_demo::open(&demo, cx),
                 "share-inbox-ping" => share_link_popover_demo::open_inbox_ping(&demo, cx),
+                "share-transcript-card" => share_link_popover_demo::open_transcript_card(&demo, cx),
                 "jobs-popover" => jobs_popover_demo::open(&demo, cx),
                 "start-menu" => start_menu_demo::open(&demo, cx),
                 "start-menu-click" => start_menu_click_demo::open(&demo, cx),
