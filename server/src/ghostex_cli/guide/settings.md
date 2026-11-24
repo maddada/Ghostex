@@ -577,10 +577,10 @@ How to use this file:
 ### Views
 
 - **Arrange views** `titlebarViewOrder` (structured value; change it in Settings, not with `ghostex settings set`): Reorder built-in, extension, and custom views. New tabs open in this order, and ⌥1 through ⌥9 follow the tabs in the view panel.
-- **Hide VS Code view** `codeViewTabHidden` (boolean, default false): Stop offering the VS Code view, so it is missing from the view panel tab strip, its + menu and the view picker.
+- **Hide VS Code view** `codeViewTabHidden` (boolean, default true): Stop offering the VS Code view, so it is missing from the view panel tab strip, its + menu and the view picker.
 - **Hide Browser view** `browserViewTabHidden` (boolean, default false): Stop offering the Browser view, so it is missing from the view panel tab strip, its + menu and the view picker.
-- **Hide Beads view** `kanbanViewTabHidden` (boolean, default false): Stop offering the Beads view, so it is missing from the view panel tab strip, its + menu and the view picker.
-- **Hide Automate view** `automateViewTabHidden` (boolean, default false): Stop offering the Automate view, so it is missing from the view panel tab strip, its + menu and the view picker.
+- **Hide Beads view** `kanbanViewTabHidden` (boolean, default true): Stop offering the Beads view, so it is missing from the view panel tab strip, its + menu and the view picker.
+- **Hide Automate view** `automateViewTabHidden` (boolean, default true): Stop offering the Automate view, so it is missing from the view panel tab strip, its + menu and the view picker.
 - **Hide Changes view** `changesViewTabHidden` (boolean, default false): Stop offering the Changes view, so it is missing from the view panel tab strip, its + menu and the view picker.
 - **Hide Files view** `docsViewTabHidden` (boolean, default false): Stop offering the Files view, so it is missing from the view panel tab strip, its + menu and the view picker.
 - **Hide Linear view** `linearViewTabHidden` (boolean, default false): Hide the Linear view from the view picker and tab menus.

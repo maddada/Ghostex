@@ -143,6 +143,7 @@ impl NativeChatView {
         self.draft.clear();
         self.draft_id = next_id;
         self.draft_revision = 1;
+        self.boost_suggestions_dismissed_draft_id = None;
         if let Some(input) = &self.input {
             input.update(cx, |input, cx| input.set_value("", window, cx));
         }
@@ -910,6 +911,12 @@ impl NativeChatView {
             self.set_where_pill_shows_project(shows, cx);
             strip
         };
+        // Contextual prompt-aware Boost suggestions while typing just above the box (boosts.rs).
+        let boost_row = (!collapsed && !maximized && !self.collab_guest())
+            .then(|| self.render_contextual_boost_suggestions(p, cx))
+            .flatten();
+        let lead_in = if boost_row.is_some() { 0.0 } else { lead_in };
+        footer = footer.children(boost_row.map(|row| div().mt(px(8.0 * s)).w_full().child(row)));
         footer = footer.child(
             div()
                 .relative()

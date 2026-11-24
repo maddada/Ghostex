@@ -175,10 +175,15 @@ fn titlebar_mode_required_hidden_settings_key(mode: TitlebarMode) -> Option<&'st
 
 /// A view whose switch is off until the user turns it on, so a settings file without the key hides it.
 fn titlebar_mode_hidden_by_default(mode: TitlebarMode) -> bool {
-    mode == TitlebarMode::BotFeed
-        || mode
-            .website_provider()
-            .is_some_and(|provider| provider.hidden_by_default)
+    matches!(
+        mode,
+        TitlebarMode::Source
+            | TitlebarMode::Kanban
+            | TitlebarMode::Automate
+            | TitlebarMode::BotFeed
+    ) || mode
+        .website_provider()
+        .is_some_and(|provider| provider.hidden_by_default)
 }
 
 pub(crate) fn gpui_titlebar_mode_hidden_from_settings(mode: TitlebarMode) -> bool {

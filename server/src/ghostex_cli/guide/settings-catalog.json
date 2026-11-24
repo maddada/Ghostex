@@ -12034,7 +12034,7 @@
       "section": "viewOrder",
       "sectionTitle": "Views",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "agentWritable": true
     },
     {
@@ -12058,7 +12058,7 @@
       "section": "viewOrder",
       "sectionTitle": "Views",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "agentWritable": true
     },
     {
@@ -12070,7 +12070,7 @@
       "section": "viewOrder",
       "sectionTitle": "Views",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "agentWritable": true
     },
     {

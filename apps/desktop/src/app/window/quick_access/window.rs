@@ -17,13 +17,14 @@ use super::actions_menu::{QuickAccessMenuRequest, QuickAccessOpenMenu};
 use super::chrome::{
     QuickAccessMenuFrames, QuickAccessMenuPaint, QuickAccessMenuState, capture_bounds,
     quick_access_filter_trigger, quick_access_footer, quick_access_search_bar,
-    quick_access_select_menu, segments_as_select, visible_options,
+    quick_access_select_menu, quick_access_tooltip, segments_as_select, visible_options,
 };
 use super::editor::{quick_access_prompt_editor, quick_access_tag_composer};
 use super::model::{QuickAccessSnapshot, QuickAccessTabId, QuickAccessToolbar};
 use super::palette::{
-    QUICK_ACCESS_GROUP_HEADING_HEIGHT, QUICK_ACCESS_ITEM_FONT_SIZE, QUICK_ACCESS_LIST_PADDING,
-    QUICK_ACCESS_META_FONT_SIZE, QUICK_ACCESS_ROW_PADDING_X, QuickAccessPalette, hsla,
+    QUICK_ACCESS_FILTER_HEIGHT, QUICK_ACCESS_GROUP_HEADING_HEIGHT, QUICK_ACCESS_ITEM_FONT_SIZE,
+    QUICK_ACCESS_LIST_PADDING, QUICK_ACCESS_META_FONT_SIZE, QUICK_ACCESS_ROW_PADDING_X,
+    QuickAccessPalette, hsla,
 };
 use super::rows::{RowCallbacks, quick_access_row};
 use crate::app::window::native_modal_kit::MODAL_UI_FONT;
@@ -950,7 +951,48 @@ impl GpuiQuickAccessWindow {
         if tags.label.is_empty() {
             tags.label = "Tags".to_string();
         }
+        let find_prompts_tooltip =
+            match crate::app::hotkeys::gpui_configured_hotkey_label("openFindPrompts") {
+                Some(hotkey) if !hotkey.is_empty() => format!("Search by Prompt ({hotkey})"),
+                _ => "Search by Prompt".to_string(),
+            };
+        let p_copy = *p;
+        let find_prompts_button = h_flex()
+            .id("quick-access-find-prompts")
+            .flex_shrink_0()
+            .h(px(QUICK_ACCESS_FILTER_HEIGHT))
+            .px(px(9.0))
+            .gap(px(5.0))
+            .items_center()
+            .rounded(px(7.0))
+            .border_1()
+            .border_color(hsla(p_copy.hairline))
+            .bg(hsla(p_copy.raised))
+            .text_size(px(12.5))
+            .line_height(px(18.0))
+            .text_color(hsla(p_copy.item))
+            .cursor_pointer()
+            .hover(move |this| this.bg(hsla(p_copy.raised_hover)))
+            .tooltip(move |window, cx| {
+                quick_access_tooltip(find_prompts_tooltip.clone(), window, cx)
+            })
+            .on_click(cx.listener(|this: &mut Self, _, _, cx| {
+                this.post(
+                    json!({ "type": "action", "actionId": "findPrompts", "key": "" }),
+                    cx,
+                );
+            }))
+            .child(
+                gpui::svg()
+                    .path("titlebar/file-search.svg")
+                    .size(px(13.0))
+                    .flex_shrink_0()
+                    .text_color(hsla(p_copy.muted)),
+            )
+            .child("By prompt")
+            .into_any_element();
         vec![
+            find_prompts_button,
             div()
                 .flex_shrink_0()
                 .on_children_prepainted(capture_bounds(self.view_menu.trigger_bounds.clone(), 0))

@@ -834,13 +834,146 @@ pub fn pill_tooltip(prompt: &str) -> String {
 /// The Boost pill's id in the strip.
 pub const BOOST_PILL: &str = "boost";
 
+/// Maximum contextual Boost suggestions shown inline for a draft.
+const MAX_CONTEXTUAL_SUGGESTIONS: usize = 2;
+
+fn is_word_char(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+}
+
+/// Whether `haystack` (already lowercased) contains `needle` at ASCII word boundaries.
+fn contains_term(haystack: &str, needle: &str) -> bool {
+    let bytes = haystack.as_bytes();
+    let mut from = 0;
+    while let Some(offset) = haystack[from..].find(needle) {
+        let start = from + offset;
+        let end = start + needle.len();
+        let left_ok = start == 0 || !is_word_char(bytes[start - 1]);
+        let right_ok = end == bytes.len() || !is_word_char(bytes[end]);
+        if left_ok && right_ok {
+            return true;
+        }
+        from = start + 1;
+    }
+    false
+}
+
+/// Contextual Boost ids that match what the user is currently typing in the composer, capped at
+/// [`MAX_CONTEXTUAL_SUGGESTIONS`]. Returns empty when the draft is too short, is a slash/shell
+/// command, or already carries a Boost pill so suggestions stay quiet and out of the way.
+pub fn contextual_suggestions(draft: &str) -> Vec<&'static str> {
+    let trimmed = draft.trim();
+    if trimmed.len() < 8 || trimmed.starts_with(['/', '!']) || !boosts_in(trimmed).is_empty() {
+        return Vec::new();
+    }
+    let lower = trimmed.to_lowercase();
+    const RULES: [(&str, &[&str]); 8] = [
+        (
+            "live-page",
+            &[
+                "mockup",
+                "mockups",
+                "wireframe",
+                "prototype",
+                "live page",
+                "html page",
+                "landing page",
+                "interactive page",
+                "visual report",
+            ],
+        ),
+        (
+            "chart",
+            &[
+                "chart",
+                "charts",
+                "graph",
+                "graphs",
+                "histogram",
+                "plot",
+                "visualize",
+                "visualise",
+                "dashboard",
+                "bar chart",
+                "line chart",
+                "pie chart",
+                "breakdown of",
+            ],
+        ),
+        (
+            "map",
+            &[
+                "diagram",
+                "flowchart",
+                "mermaid",
+                "architecture",
+                "dataflow",
+                "data flow",
+                "mind map",
+                "system map",
+                "how it works",
+                "how these connect",
+                "explain the flow",
+                "dependency graph",
+            ],
+        ),
+        (
+            "compare",
+            &[
+                "compare",
+                "comparison",
+                "tradeoff",
+                "tradeoffs",
+                "trade-off",
+                "trade-offs",
+                "side by side",
+                "pros and cons",
+                "vs",
+            ],
+        ),
+        (
+            "triage",
+            &["triage", "open issues", "open prs", "open pull requests"],
+        ),
+        (
+            "form",
+            &["ask me in a form", "clarifying questions", "interview me"],
+        ),
+        ("worktree", &["worktree", "separate branch", "fresh branch"]),
+        (
+            "schedule-it",
+            &[
+                "cron",
+                "every day",
+                "every morning",
+                "every week",
+                "every weekday",
+                "schedule a",
+                "remind me in",
+            ],
+        ),
+    ];
+    let mut matched = Vec::with_capacity(MAX_CONTEXTUAL_SUGGESTIONS);
+    for (id, terms) in RULES {
+        if terms.iter().any(|term| contains_term(&lower, term)) {
+            matched.push(id);
+            if matched.len() == MAX_CONTEXTUAL_SUGGESTIONS {
+                break;
+            }
+        }
+    }
+    matched
+}
+
 /// The `boosts` document key: `null` while there are no Boosts here (an older gxserver, no answer
-/// yet, or Boosts switched off), else `{pill, tabs, tab, list, hint}`:
+/// yet, or Boosts switched off), else `{pill, tabs, tab, list, suggestions, hint}`:
 /// - `pill`: the strip's Boost pill (`label`, `ariaLabel`, `active` while the draft has a Boost).
 /// - `tabs`: `[{id, label, count}]`, Custom only once the user has a Boost of their own; `tab`
 ///   the open one.
 /// - `list`: every Boost with `id`, `label`, `iconPath`, `category`, `description`, `preview`,
 ///   `prompt`, `edited`, `custom`, `tooltip` and `inDraft`.
+/// - `suggestions`: up to two contextual Boost ids matching the current draft (empty when none
+///   match or a Boost is already in the draft).
 /// - `hint`: the one-time callout's `{title, text}` while it has not been seen and this chat has
 ///   no messages sent yet (`allow_hint`), or `null`.
 pub fn document(state: &ChatState, allow_hint: bool) -> Value {
@@ -852,6 +985,7 @@ pub fn document(state: &ChatState, allow_hint: bool) -> Value {
         .into_iter()
         .map(|(id, _)| id)
         .collect();
+    let suggestions = contextual_suggestions(&state.composer.text);
     let rows = boosts.rows();
     let list: Vec<Value> = rows
         .iter()
@@ -897,6 +1031,7 @@ pub fn document(state: &ChatState, allow_hint: bool) -> Value {
         "tabs": tabs,
         "tab": tab,
         "list": list,
+        "suggestions": suggestions,
         "hint": (allow_hint && boosts.hint_seen == Some(false)).then(|| json!({
             "title": "New: Boosts",
             "text": "Pages, charts, maps and more.",

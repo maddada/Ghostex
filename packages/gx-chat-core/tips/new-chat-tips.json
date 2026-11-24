@@ -36,6 +36,13 @@
       "body": "Open the sidebar's menu > Connect a Phone and scan the code with the Ghostex app to follow your agents."
     },
     {
+      "id": "use-boosts",
+      "first": 6,
+      "icon": "sparkles",
+      "title": "Boost any prompt with *",
+      "body": "Type * or click Boost above the chat box to ask for a Live page, a chart, a diagram, or a browser run in one click."
+    },
+    {
       "id": "quiet-view",
       "icon": "eye-off",
       "title": "Read chats in Quiet View",
@@ -226,6 +233,7 @@
     },
     {
       "id": "find-session-by-prompt-text",
+      "first": 7,
       "icon": "file-search",
       "title": "Find sessions by prompt",
       "body": "The sidebar's menu > Tools > Search by Prompt searches every prompt you sent. Pick one to resume that session."

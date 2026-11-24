@@ -194,6 +194,12 @@ impl GhostexPaths {
         self.state_dir.join("hub-secret-folders-added")
     }
 
+    /// Written once the opt-in built-in views step (`keep_old_heavy_views_once` in the desktop app)
+    /// has run over an existing settings file so upgrading users keep VS Code, Beads and Automate.
+    pub fn heavy_views_default_marker_file(&self) -> PathBuf {
+        self.state_dir.join("heavy-views-default-migrated")
+    }
+
     pub fn gxserver_config_dir(&self) -> PathBuf {
         self.config_dir.join("gxserver")
     }

@@ -328,6 +328,8 @@ pub(crate) struct NativeChatView {
     /// Top edge of any bar or card stacked above the chat box (`composer.rs`), so floating
     /// callouts anchored to the Boost pill sit above the stack and never overlap it.
     pub(super) composer_above_top: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
+    /// Draft id for which the user dismissed inline contextual Boost suggestions (boosts.rs).
+    pub(super) boost_suggestions_dismissed_draft_id: Option<String>,
     /// The note and text boxes of the open question forms, by `<form id>:<question>`.
     pub(super) form_inputs: std::collections::HashMap<String, super::question_form::FormInput>,
     /// Transcript search (Cmd+F): the field, and the navigation it last scrolled to.
@@ -731,6 +733,7 @@ impl NativeChatView {
             boost_scroll: gpui::ScrollHandle::new(),
             boost_pill_bounds: Default::default(),
             composer_above_top: Default::default(),
+            boost_suggestions_dismissed_draft_id: None,
             form_inputs: Default::default(),
             search_input: None,
             search_subscription: None,

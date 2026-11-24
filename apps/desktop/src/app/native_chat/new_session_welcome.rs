@@ -396,6 +396,24 @@ impl NativeChatView {
                         cx,
                     );
                 })),
+            )
+            .child(
+                inline_pill(
+                    "welcome-inline-find-prompts",
+                    "titlebar/file-search.svg",
+                    "Past prompts".to_string(),
+                    false,
+                )
+                .tooltip(|window, cx| {
+                    gpui_component::tooltip::Tooltip::new("Search by Prompt")
+                        .keys(super::composer::hotkey_chord(Some("openFindPrompts")))
+                        .build(window, cx)
+                })
+                .on_click(cx.listener(|_, _, _, cx| {
+                    cx.emit(super::state::NativeChatEvent::Host(
+                        json!({ "type": "open", "modal": "findPrompts" }),
+                    ));
+                })),
             );
 
         Some(

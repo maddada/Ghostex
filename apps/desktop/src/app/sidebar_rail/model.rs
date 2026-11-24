@@ -124,6 +124,7 @@ pub(crate) fn sidebar_rail_pins() -> Vec<String> {
 pub(crate) fn rail_item_icon(key: &str) -> &'static str {
     match key {
         "search" => "titlebar/search.svg",
+        "findPrompts" => "titlebar/file-search.svg",
         "mainHub" => crate::app::native_sidebar::chief_row_view::FLOWER_ICON,
         "agentsHub" => "titlebar/users-group.svg",
         "allAutomations" => "titlebar/clock.svg",

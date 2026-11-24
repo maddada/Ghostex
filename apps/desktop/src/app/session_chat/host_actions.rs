@@ -206,7 +206,7 @@ impl GhostexGpuiApp {
         if message.get("type").and_then(serde_json::Value::as_str) == Some("open")
             && matches!(
                 message.get("modal").and_then(serde_json::Value::as_str),
-                Some("settings" | "mermaidDiagram" | "markdownTable")
+                Some("settings" | "mermaidDiagram" | "markdownTable" | "findPrompts")
             )
         {
             self.receive_app_modal_host_bridge_event(

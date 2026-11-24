@@ -1868,7 +1868,7 @@ when you open it.
   and replies there do not reach the chat app. Other chat apps, cron, empty
   sessions, Discord threads only bots wrote in, and scripted one-shot runs
   (`hermes chat -q`) are left out.
-- Search by Prompt (Tools in the sidebar's menu, Actions (Cmd+K) in Quick Access > Sessions,
+- Search by Prompt (By prompt in Quick Access > Sessions or Saved Prompts, Past prompts on a new chat, the sidebar rail's ⋯ menu, Tools in the sidebar's menu, Actions (Cmd+K) in Quick Access > Sessions,
   the `openFindPrompts` hotkey, default
   `cmd+shift+f`, or `gx f` in a terminal) fuzzy-searches every prompt you ever
   sent to an agent; Enter resumes that session, and starred prompts stay on
@@ -2595,7 +2595,7 @@ when done) and Custom, your own. The chips at the bottom of the menu jump to a
 section, and Edit… beside them opens Settings > Boosts. Pointing at a Boost shows a small
 preview of what comes back, with its whole description. You can also type `*` at the start of a word in the chat box
 to pick one, your own Boosts included (`*ch` finds Chart it; a space right after the `*` closes the list, so lists
-and sums type as before). A pick adds a Boost pill
+and sums type as before), and typing a prompt that asks for a page, chart, diagram, comparison or triage surfaces matching Boost chips just above the chat box. A pick adds a Boost pill
 to your message; pick it again, or delete the pill, to take it out. A Boost lasts that
 one message. Point at the pill in the chat box to read the instruction the agent gets;
 double-click it to change that instruction. Settings > Boosts turns Boosts on or off,

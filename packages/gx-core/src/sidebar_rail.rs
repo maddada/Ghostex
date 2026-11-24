@@ -44,6 +44,7 @@ pub const RAIL_MENU_GROUPS: [&str; 2] = ["Go to", "Agents"];
 /// User: views on the rail "don't make sense", "even when I have a view open in the side panel, don't show it in the left-side rail"; the rail is for agents and hubs (Hermes, the Claude and Grok bots, Voice Call, All Automations, Main Hub, Agents Hub, Search). So the side panel views (Files, Changes, Browser, Project Board, Dev servers, Resources, Extensions) are no rail items: never an icon, not even while open, never a pin, and no Views group in ⋯ (coordinator's call; they stay in the side panel and their usual buttons). Notifications left too: the bell is in the sidebar's top bar. Saved pins of theirs are not read, and the desktop drops them from the settings file once (`drop_retired_rail_pins` in packages/settings-catalog). Supersedes the Views group and the Notifications row of the 2026-11-20 rail.
 pub const RAIL_ITEMS: &[RailItem] = &[
     item("search", "Search", "Go to"),
+    item("findPrompts", "Search by Prompt", "Go to"),
     // Opens Ask Ghostex AI's chat (CDXC:Chief 2026-11-21 in server/src/chief/mod.rs); the key stays.
     item("mainHub", "Ask Ghostex AI", "Go to"),
     item("agentsHub", "Agents Hub", "Go to"),

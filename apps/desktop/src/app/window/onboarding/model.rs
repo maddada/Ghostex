@@ -399,7 +399,10 @@ impl OnboardingSettings {
                 .unwrap_or_else(|| catalog_number(key))
         };
         Self {
-            view_hidden: VIEW_KEYS.map(|key| read_bool(object, key.hidden_key(), false)),
+            view_hidden: VIEW_KEYS.map(|key| {
+                let default_hidden = catalog_default(key.hidden_key()) == Some(&J::Bool(true));
+                read_bool(object, key.hidden_key(), default_hidden)
+            }),
             spaces_on: read_bool(object, "sidebarSpacesEnabled", true),
             unified_sidebar: text("sidebarView") == Some("unified"),
             experience_values: ghostex_settings_catalog::experience::AREAS

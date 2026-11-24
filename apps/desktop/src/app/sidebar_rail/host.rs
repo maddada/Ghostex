@@ -29,7 +29,7 @@ impl GhostexGpuiApp {
             return state;
         }
         match key {
-            "search" | "commands" => state.available = true,
+            "search" | "findPrompts" | "commands" => state.available = true,
             "mainHub" => {
                 let chief = snapshot
                     .and_then(|snapshot| snapshot.chiefs.iter().find(|chief| chief.is_local));
@@ -122,6 +122,7 @@ impl GhostexGpuiApp {
         let sidebar_action = |action: &str| json!({"type": "sidebarAction", "action": action});
         match key {
             "search" => self.dispatch_native_sidebar_ui(sidebar_action("sessions"), cx),
+            "findPrompts" => self.open_gpui_find_prompts_modal(cx),
             "commands" => self
                 .dispatch_native_sidebar_ui(sidebar_action(ghostex_gx_core::COMMANDS_ACTION), cx),
             "mainHub" => self.handle_native_sidebar_action(

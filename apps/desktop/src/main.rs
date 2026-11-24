@@ -350,6 +350,9 @@ fn main() {
     // Fresh installs whose preferred view is Chat default Native mode for Antigravity, Claude Code
     // and Codex; existing installs and Terminal-preferred installs keep what they have.
     shared_settings::native_mode_intro::seed_fresh_install_native_mode_once();
+    // VS Code, Beads and Automate are opt-in for new installs; existing users keep them
+    // (shared_settings/heavy_views_default.rs). Before the first settings read too.
+    shared_settings::heavy_views_default::keep_old_heavy_views_once();
     // The CLIProxyAPI hub key files join a saved secret-folder list once (shared_settings/hub_secret_folders.rs).
     shared_settings::hub_secret_folders::add_hub_secret_folders_once();
     // Enable Experimental Features becomes one switch each, once (shared_settings/experimental_switches.rs).

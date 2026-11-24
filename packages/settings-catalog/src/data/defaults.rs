@@ -119,10 +119,16 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatToolCallLines", J::Bool(false)),
     ("securityLogsEnabled", J::Bool(false)),
     ("approvalsRequirePresence", J::Bool(false)),
-    ("codeViewTabHidden", J::Bool(false)),
+    // CDXC:Extensions 2026-11-24 WHY:
+    // PostHog audit (Q6 slim-and-discover): VS Code (`code`), Beads (`kanban`) and Automate
+    // (`automate`) are the top actively disabled built-ins, so brand-new installs start with them
+    // opt-in (hidden by default) while Settings > Extensions can turn any of them on. Existing
+    // users with a completed setup keep them enabled through `keep_old_heavy_views_once`
+    // (apps/desktop/src/shared_settings/heavy_views_default.rs).
+    ("codeViewTabHidden", J::Bool(true)),
     ("browserViewTabHidden", J::Bool(false)),
-    ("kanbanViewTabHidden", J::Bool(false)),
-    ("automateViewTabHidden", J::Bool(false)),
+    ("kanbanViewTabHidden", J::Bool(true)),
+    ("automateViewTabHidden", J::Bool(true)),
     ("docsViewTabHidden", J::Bool(false)),
     ("changesViewTabHidden", J::Bool(false)),
     ("terminalViewTabHidden", J::Bool(false)),

@@ -323,6 +323,41 @@ pub fn add_hub_secret_folders(settings: &mut serde_json::Map<String, serde_json:
     changed
 }
 
+/// The built-in views that became opt-in for new installs on 2026-11-24 (VS Code, Beads, Automate),
+/// with the default each had before so existing users keep their enabled views on upgrade.
+pub const OPT_IN_HEAVY_VIEWS_2026_11_24_OLD_DEFAULTS: &[(&str, J)] = &[
+    ("codeViewTabHidden", J::Bool(false)),
+    ("kanbanViewTabHidden", J::Bool(false)),
+    ("automateViewTabHidden", J::Bool(false)),
+];
+
+/// Writes the old default (`false`, visible) for any of `codeViewTabHidden`, `kanbanViewTabHidden`
+/// or `automateViewTabHidden` missing from an existing user's settings file, while preserving any
+/// explicit choice they already saved. Returns whether it changed anything.
+///
+/// CDXC:Extensions 2026-11-24 WHY:
+/// Stored settings omit keys that were never changed from their default, so an existing user who
+/// relied on VS Code, Beads or Automate being on by default would otherwise lose them on update.
+/// The desktop runs this once at start-up, behind a marker file, only when a settings file already
+/// exists from a finished setup (`keep_old_heavy_views_once` in
+/// apps/desktop/src/shared_settings/heavy_views_default.rs); new installs get the opt-in defaults.
+pub fn keep_old_heavy_views_for_existing_settings(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    let mut changed = false;
+    for (key, old_default) in OPT_IN_HEAVY_VIEWS_2026_11_24_OLD_DEFAULTS {
+        if settings.contains_key(*key) {
+            continue;
+        }
+        settings.insert(
+            (*key).to_string(),
+            serde_json::Value::Bool(*old_default == J::Bool(true)),
+        );
+        changed = true;
+    }
+    changed
+}
+
 /// Switches someone who already had a settings file to the rail when it became the default, and
 /// marks their one-time "Meet the rail" pop-up as pending. Returns whether it changed anything; a
 /// layout they chose themselves is left alone.
