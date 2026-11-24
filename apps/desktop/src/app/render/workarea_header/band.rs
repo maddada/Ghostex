@@ -97,6 +97,9 @@ impl GhostexGpuiApp {
                     // lifts them by it and keeps them level with the sidebar's top row and the
                     // traffic lights, while nothing opaque in the band paints over the border.
                     .pb(px(2.0 * WORK_AREA_FRAME_BORDER))
+                    // CDXC:Titlebar 2026-11-24 WHY:
+                    // That padding leaves the opaque header row 2pt short of the band, while the content fade starts at the band's bottom (`render_workarea_header_content_fade`), so a transcript scrolled under the header showed undarkened through a 2pt strip between them (seen as a white line over an image on Linux). The region paints the row's colour, so the band is opaque to its bottom edge.
+                    .bg(self.workarea_header_surface_color())
                     .when(!hosts_tab_strip, |region| region.flex_1().min_w_0())
                     .when(hosts_tab_strip, |region| {
                         // Grows by 1 while the strip slides beside it (render/workarea_split.rs).
