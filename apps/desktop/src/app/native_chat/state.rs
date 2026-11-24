@@ -290,7 +290,7 @@ pub(crate) struct NativeChatView {
     /// Whether the last render drew the "Scroll to bottom" pill (scroll_bottom.rs).
     pub(super) scroll_bottom_drawn: std::rc::Rc<std::cell::Cell<bool>>,
     input_needs_sync: bool,
-    input_placeholder: String,
+    pub(super) input_placeholder: String,
     input_undoable: bool,
     pub(super) input_caret: Option<usize>,
     /// The draft's markdown references, and the draft they were parsed from.

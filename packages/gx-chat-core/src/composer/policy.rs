@@ -23,11 +23,11 @@ pub const INTERRUPTED_TOAST_MS: u64 = 2_000;
 /// The red toast an interrupt that stopped a working agent raises.
 pub const INTERRUPTED_TOAST_TEXT: &str = "Agent was interrupted";
 
-/// What the desktop composer says when nothing is blocking it; `+` mentions another agent session
-/// (`transcript/session_mentions.rs`). `$` still opens the skills (CDXC:AgentSkills 2026-11-08 on
-/// `trigger::is_slash_skill_token`), but the hint names `/`, the one key for every agent.
+/// CDXC:SessionChat 2026-11-24 DECISION:
+/// User: one-line desktop chat box placeholder replacing the old two-line hint:
+/// `Tab to Queue, @ files, / commands, $ skills, * boosts`.
 pub const DESKTOP_COMPOSER_PLACEHOLDER: &str =
-    "Press Enter to send a message and Tab to Queue.\nUse / for skills and commands, @ to mention a file and + for agents.";
+    "Tab to Queue, @ files, / commands, $ skills, * boosts";
 
 /// What a touch composer (the phone, `StartConfig::touch_composer`) says when nothing is blocking
 /// it, the text of the React chat's `MOBILE_SESSION_CHAT_PLACEHOLDER`

@@ -705,6 +705,17 @@ impl NativeChatView {
         )
         .absolute()
         .size_full();
+        let editor_line_height = if collapsed {
+            metrics.collapsed_line_height_px
+        } else {
+            metrics.expanded_line_height_px
+        } * s;
+        let placeholder_line = input
+            .read(cx)
+            .value()
+            .is_empty()
+            .then(|| self.input_placeholder.lines().next().unwrap_or_default())
+            .filter(|line| !line.is_empty());
         let content = div()
             .flex()
             .flex_col()
@@ -728,6 +739,7 @@ impl NativeChatView {
                 self.with_composer_top_right(
                     div()
                         .id("composer-editor")
+                        .relative()
                         .role(gpui::Role::Group)
                         .aria_label("Message composer")
                         .min_w_0()
@@ -775,12 +787,29 @@ impl NativeChatView {
                                 }
                             }),
                         )
+                        // Draw the placeholder as a single-line truncated overlay because
+                        // gpui-component's TextElement shapes placeholder lines without ellipsis;
+                        // TextareaState keeps the placeholder string for accessibility with transparent ink.
+                        .when_some(placeholder_line, |this, line| {
+                            this.child(
+                                div()
+                                    .absolute()
+                                    .top_0()
+                                    .left_0()
+                                    .right(px(2.0 * s))
+                                    .text_size(px(14.0 * s))
+                                    .line_height(px(editor_line_height))
+                                    .text_color(p.muted.opacity(0.6))
+                                    .truncate()
+                                    .child(line.to_owned()),
+                            )
+                        })
                         .child(
                             Textarea::new(&input)
                                 .on_paste(Self::paste_handler(cx.entity().downgrade(), None))
                                 // Cut, Copy, Paste, Select All and Save as Boost (boosts.rs).
                                 .context_menu(Self::composer_context_menu(cx.entity().downgrade()))
-                                .placeholder_color(p.muted.opacity(0.6))
+                                .placeholder_color(gpui::transparent_black())
                                 // CDXC:SessionChat 2026-09-27 WHY: The chat draws in its own palette (sessionChatTheme can differ from the app theme, and the web page never switches GPUI Kit off its light default), so the kit theme's caret vanished against the composer. Every chat field takes its caret from the chat palette.
                                 .caret_color(p.foreground)
                                 .appearance(false)
@@ -795,12 +824,7 @@ impl NativeChatView {
                                 .p_0()
                                 .text_size(px(14.0 * s))
                                 .text_color(p.primary)
-                                .line_height(px(if collapsed {
-                                    metrics.collapsed_line_height_px
-                                } else {
-                                    metrics.expanded_line_height_px
-                                } * s))
-                                // CDXC:SessionChat 2026-09-14 DECISION: User: an empty, collapsed composer shows only the first line of its placeholder. The collapsed field is one line tall and its row clips, so the placeholder's second line never shows.
+                                .line_height(px(editor_line_height))
                                 .when(collapsed, |this| {
                                     this.h(px(metrics.collapsed_height_px * s))
                                         .max_h(px(metrics.collapsed_height_px * s))
