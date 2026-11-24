@@ -291,3 +291,111 @@ pub fn session_acp_family(session: &Value) -> Option<String> {
         .map(str::to_string)
         .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(session))
 }
+
+/// Extract the canonical Native family from an `/api/agentChatChannel` agent name (`"acp:claude"`).
+pub fn acp_family_from_channel_agent(channel_agent: &str) -> Option<String> {
+    channel_agent
+        .trim()
+        .strip_prefix("acp:")
+        .and_then(canonical_native_family)
+        .map(str::to_string)
+}
+
+fn extract_acp_flag_value<'a>(command: &'a str, flag: &str) -> Option<&'a str> {
+    let acp_pos = command.find("acp-host")?;
+    // Ensure `acp-host` is a standalone token, not part of another identifier.
+    if acp_pos > 0 {
+        let prev = command.as_bytes()[acp_pos - 1];
+        if !prev.is_ascii_whitespace() && prev != b'"' && prev != b'\'' && prev != b';' {
+            return None;
+        }
+    }
+    let after_host = &command[acp_pos + "acp-host".len()..];
+    let mut tokens = after_host.split_whitespace();
+    while let Some(tok) = tokens.next() {
+        let cleaned = tok.trim_matches(|c| c == '\'' || c == '"' || c == ';');
+        if cleaned == flag {
+            let val = tokens.next()?;
+            let trimmed = val.trim_matches(|c| c == '\'' || c == '"' || c == ';');
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+            return None;
+        }
+        if let Some(rest) = cleaned.strip_prefix(&format!("{flag}=")) {
+            let trimmed = rest.trim_matches(|c| c == '\'' || c == '"' || c == ';');
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+            return None;
+        }
+    }
+    None
+}
+
+/// Extract the canonical Native agent family from a launch/resume startup command that invokes
+/// `ghostex acp-host --agent <family>` (including wrapped restore scripts and PowerShell forms).
+pub fn acp_family_from_launch_command(command: &str) -> Option<String> {
+    extract_acp_flag_value(command, "--agent")
+        .and_then(canonical_native_family)
+        .map(str::to_string)
+}
+
+/// Extract the `--approval-level <level>` value from an `acp-host` launch/resume command.
+pub fn acp_approval_level_from_launch_command(command: &str) -> Option<AcpApprovalLevel> {
+    acp_family_from_launch_command(command)?;
+    extract_acp_flag_value(command, "--approval-level").and_then(AcpApprovalLevel::parse)
+}
+
+/// Persist `nonCliMode: true`, `acpMode: true`, and `acpFamily` into `runtime_settings` so the
+/// stored session row matches a running `acp-host` process. Preserves any stored `acpApprovalLevel`,
+/// seeding it from `approval_level` only when absent. Returns `true` when any key changed.
+pub fn apply_acp_runtime_settings(
+    runtime_settings: &mut serde_json::Map<String, Value>,
+    family: &str,
+    approval_level: Option<AcpApprovalLevel>,
+) -> bool {
+    let mut changed = false;
+    if runtime_settings
+        .get(SESSION_NON_CLI_ACTIVE_KEY)
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        runtime_settings.insert(SESSION_NON_CLI_ACTIVE_KEY.to_string(), Value::Bool(true));
+        changed = true;
+    }
+    if runtime_settings
+        .get(SESSION_ACP_ACTIVE_KEY)
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        runtime_settings.insert(SESSION_ACP_ACTIVE_KEY.to_string(), Value::Bool(true));
+        changed = true;
+    }
+    if runtime_settings
+        .get(SESSION_ACP_FAMILY_KEY)
+        .and_then(Value::as_str)
+        != Some(family)
+    {
+        runtime_settings.insert(
+            SESSION_ACP_FAMILY_KEY.to_string(),
+            Value::String(family.to_string()),
+        );
+        changed = true;
+    }
+    if let Some(level) = approval_level {
+        let has_level = runtime_settings
+            .get(SESSION_ACP_APPROVAL_LEVEL_KEY)
+            .and_then(Value::as_str)
+            .and_then(AcpApprovalLevel::parse)
+            .is_some();
+        if !has_level {
+            runtime_settings.insert(
+                SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+                Value::String(level.as_str().to_string()),
+            );
+            changed = true;
+        }
+    }
+    changed
+}

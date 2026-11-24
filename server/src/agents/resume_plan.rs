@@ -512,20 +512,21 @@ pub(crate) fn to_agent_resume_input(
             settings,
         )
     };
-    let acp_mode = match runtime_settings
-        .get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
-        .and_then(Value::as_bool)
-        .or_else(|| {
-            runtime_settings
-                .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
-                .and_then(Value::as_bool)
-        }) {
-        Some(flag) => flag,
-        None => agent_id.as_deref().is_some_and(|fam| {
-            crate::acp::agent_acp_setting(settings, fam)
-                .unwrap_or_else(|| crate::acp::agent_acp_enabled_in_shared_settings(fam))
-        }),
-    };
+    let acp_mode = crate::acp::channel::session_is_switch_eligible(session)
+        && match runtime_settings
+            .get(crate::acp::SESSION_NON_CLI_ACTIVE_KEY)
+            .and_then(Value::as_bool)
+            .or_else(|| {
+                runtime_settings
+                    .get(crate::acp::SESSION_ACP_ACTIVE_KEY)
+                    .and_then(Value::as_bool)
+            }) {
+            Some(flag) => flag,
+            None => agent_id.as_deref().is_some_and(|fam| {
+                crate::acp::agent_acp_setting(settings, fam)
+                    .unwrap_or_else(|| crate::acp::agent_acp_enabled_in_shared_settings(fam))
+            }),
+        };
     let (acp_profile, acp_model, acp_effort) = if acp_mode {
         if let Some(fam) = agent_id.as_deref() {
             let stored_account_cmd = read_text_from_map(&runtime_settings, "accountCommand");

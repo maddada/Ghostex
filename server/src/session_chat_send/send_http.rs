@@ -161,7 +161,21 @@ pub(super) async fn send_session_chat_message_attempt(
             };
         // An ACP session does not run an interactive TUI in its PTY, so raw keystrokes cannot be
         // typed into zmx; route supported keys through the structured ACP channel instead.
-        if crate::acp::session_is_acp(&target.session) {
+        let live_acp_key_channel =
+            crate::acp::channel::live(&target.project_id, &target.session_id, "abort");
+        if crate::acp::session_is_acp(&target.session) || live_acp_key_channel.is_some() {
+            if !crate::acp::session_is_acp(&target.session) {
+                if let Some(channel) = live_acp_key_channel.as_ref() {
+                    crate::acp::channel::reconcile_live_host_mode_locked(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                        &channel.agent,
+                        "send_key",
+                    )
+                    .await;
+                }
+            }
             return match key {
                 "escape" => {
                     // Record the user interrupt BEFORE awaiting ACP abort so any idle/stop event
@@ -341,7 +355,10 @@ pub(super) async fn send_session_chat_message_attempt(
             },
         );
     }
-    if crate::acp::session_is_acp(&target.session) && !image_paths.is_empty() {
+    if (crate::acp::session_is_acp(&target.session)
+        || crate::acp::channel::live(&target.project_id, &target.session_id, "send").is_some())
+        && !image_paths.is_empty()
+    {
         if let Err(error) = crate::acp::validate_acp_image_paths(&state.paths, &image_paths) {
             return domain_error_response(endpoint_path, request_id, error);
         }
@@ -659,7 +676,21 @@ pub(crate) async fn handle_interrupt_session_chat_http(
     // An ACP-mode session cancels its active turn via ACP `session/cancel` (acp/channel.rs).
     // Record the user interrupt BEFORE awaiting abort so any activity report from the host while
     // cancelling never enters finished-turn `attention`.
-    if crate::acp::session_is_acp(&target.session) {
+    let live_acp_abort_channel =
+        crate::acp::channel::live(&target.project_id, &target.session_id, "abort");
+    if crate::acp::session_is_acp(&target.session) || live_acp_abort_channel.is_some() {
+        if !crate::acp::session_is_acp(&target.session) {
+            if let Some(channel) = live_acp_abort_channel.as_ref() {
+                crate::acp::channel::reconcile_live_host_mode(
+                    state,
+                    &target.project_id,
+                    &target.session_id,
+                    &channel.agent,
+                    "interrupt_chat",
+                )
+                .await;
+            }
+        }
         record_session_chat_interrupt(state, &target, &request_id);
         return match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
             Ok(()) => routed_json(

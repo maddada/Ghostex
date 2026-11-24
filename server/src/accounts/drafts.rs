@@ -111,7 +111,9 @@ pub(crate) fn switch_in_live_provider(
 ) -> Result<(), DomainStateError> {
     let project_id = session["projectId"].as_str().unwrap_or_default();
     let session_id = session["sessionId"].as_str().unwrap_or_default();
-    let is_acp = crate::acp::session_is_acp(session) || command.trim().contains(" acp-host ");
+    let launched_acp = crate::acp::acp_family_from_launch_command(command)
+        .map(|family| (family, crate::acp::acp_approval_level_from_launch_command(command)));
+    let is_acp = crate::acp::session_is_acp(session) || launched_acp.is_some();
     let (typed_command, mut cleanup_paths) = if is_acp {
         let (prepared, guard_files) = super::restart::prepare_non_cli_in_place_launch_command(
             &state.paths,
@@ -130,7 +132,20 @@ pub(crate) fn switch_in_live_provider(
         project_id,
         session_id,
     );
-    let updated = agents::arm_launch_activity_suppression(repository, session)?;
+    let session = if let Some((family, approval_level)) = launched_acp.as_ref() {
+        let mut runtime = session["runtimeSettings"]
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        if crate::acp::apply_acp_runtime_settings(&mut runtime, family, *approval_level) {
+            super::endpoint::update_session_changes(repository, session, &runtime, Map::new())?
+        } else {
+            session.clone()
+        }
+    } else {
+        session.clone()
+    };
+    let updated = agents::arm_launch_activity_suppression(repository, &session)?;
     crate::session_chat_send::cancel_session_chat_sends(project_id, session_id);
     let completion = crate::session_chat_send::enqueue_session_write_sequence_with_completion(
         &updated,

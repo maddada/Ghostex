@@ -1001,7 +1001,22 @@ async fn send_session_chat_message_locked(
     let text = agent_text.as_ref();
     // An ACP-mode session running inside `ghostex acp-host` takes messages directly over ACP
     // (`session/prompt`) without typing into a terminal (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
-    if crate::acp::session_is_acp(&target.session) {
+    // If a live authenticated `acp-host` channel is open while stored `nonCliMode` is out of sync,
+    // reconcile the stored mode and deliver over the Native channel instead of waiting on a CLI box.
+    let live_acp_channel = crate::acp::channel::live(&target.project_id, &target.session_id, "send");
+    if crate::acp::session_is_acp(&target.session) || live_acp_channel.is_some() {
+        if !crate::acp::session_is_acp(&target.session) {
+            if let Some(channel) = live_acp_channel.as_ref() {
+                crate::acp::channel::reconcile_live_host_mode_locked(
+                    state,
+                    &target.project_id,
+                    &target.session_id,
+                    &channel.agent,
+                    "send_path",
+                )
+                .await;
+            }
+        }
         if interrupt {
             crate::session_chat_send::record_session_chat_interrupt(
                 state,

@@ -559,6 +559,116 @@ pub(crate) fn is_switching(project_id: &str, session_id: &str) -> bool {
         .contains(&(project_id.to_string(), session_id.to_string()))
 }
 
+/// Reconcile a session's stored `runtimeSettings` (`nonCliMode`/`acpMode`/`acpFamily`) with an
+/// authenticated live `acp-host` channel when they diverge (e.g. an older session that woke into
+/// `acp-host` before wake persisted `nonCliMode: true`). Skips when a Terminal <-> Native switch
+/// is in flight so it never races `switch_to_cli` or `execute_switch_to_acp`.
+pub(crate) async fn reconcile_live_host_mode(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    channel_agent: &str,
+    source: &'static str,
+) -> bool {
+    if is_switching(project_id, session_id) {
+        return false;
+    }
+    let switch_lock = session_switch_lock(project_id, session_id);
+    let Ok(_guard) = switch_lock.try_lock() else {
+        return false;
+    };
+    reconcile_live_host_mode_inner(state, project_id, session_id, channel_agent, source).await
+}
+
+/// Variant of [`reconcile_live_host_mode`] for callers that already hold `session_switch_lock`.
+pub(crate) async fn reconcile_live_host_mode_locked(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    channel_agent: &str,
+    source: &'static str,
+) -> bool {
+    if is_switching(project_id, session_id) {
+        return false;
+    }
+    reconcile_live_host_mode_inner(state, project_id, session_id, channel_agent, source).await
+}
+
+async fn reconcile_live_host_mode_inner(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    channel_agent: &str,
+    source: &'static str,
+) -> bool {
+    let state_for_db = state.clone();
+    let pid = project_id.to_string();
+    let sid = session_id.to_string();
+    let channel_agent = channel_agent.to_string();
+    let updated = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&state_for_db.paths).ok()?;
+        let repository = DomainRepository::new(&db, state_for_db.metadata.server_id.as_str());
+        let session = repository.get_session(&pid, &sid).ok().flatten()?;
+        if super::session_is_acp(&session) {
+            return None;
+        }
+        let family = super::acp_family_from_channel_agent(&channel_agent)
+            .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session))
+            .filter(|fam| super::supports_acp(fam))?;
+        let mut runtime_settings = session
+            .get("runtimeSettings")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        if !super::apply_acp_runtime_settings(&mut runtime_settings, &family, None) {
+            return None;
+        }
+        let mut update = Map::new();
+        update.insert("projectId".to_string(), json!(pid));
+        update.insert("sessionId".to_string(), json!(sid));
+        update.insert(
+            "runtimeSettings".to_string(),
+            Value::Object(runtime_settings),
+        );
+        let updated_session = repository.update_session(&update).ok()?;
+        let _ = crate::server::presentation_delta::schedule_presentation_session_delta(
+            &state_for_db,
+            &db,
+            &repository,
+            &pid,
+            &sid,
+        );
+        Some((updated_session, family))
+    })
+    .await
+    .ok()
+    .flatten();
+
+    let Some((updated_session, family)) = updated else {
+        return false;
+    };
+    super::pending_switch::cancel(project_id, session_id);
+    state.event_hub.broadcast(json!({
+        "type": "sessionUpdated",
+        "projectId": project_id,
+        "session": updated_session,
+    }));
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+        state, project_id, session_id,
+    );
+    log(
+        LogLevel::Info,
+        "acp.reconciledLiveHostMode",
+        json!({
+            "projectId": project_id,
+            "sessionId": session_id,
+            "family": family,
+            "source": source,
+        }),
+    );
+    true
+}
+
 struct ActiveSwitchGuard {
     key: (String, String),
 }

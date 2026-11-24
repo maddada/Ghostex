@@ -52,6 +52,7 @@ fn apply_account_settings(runtime: &mut Map<String, Value>, settings: &Value) {
 pub(crate) struct RestartPlan {
     agent: String,
     resume_command: String,
+    launched_acp: Option<(String, Option<crate::acp::AcpApprovalLevel>)>,
     cleanup_paths: TempFilesGuard,
     account_settings: Value,
     expected_identity: String,
@@ -120,11 +121,18 @@ pub(crate) fn plan(
                     "This account switch needs an exact saved conversation and a single-line agent command.",
                 )
             })?;
-    let (resume_command, cleanup_paths) = typed_resume_command(
-        state,
-        session,
-        super::default_login::route_around_signed_out_default(&resume_command),
-    )?;
+    let routed_resume_command =
+        super::default_login::route_around_signed_out_default(&resume_command);
+    let launched_acp = crate::acp::acp_family_from_launch_command(&routed_resume_command).map(
+        |family| {
+            (
+                family,
+                crate::acp::acp_approval_level_from_launch_command(&routed_resume_command),
+            )
+        },
+    );
+    let (resume_command, cleanup_paths) =
+        typed_resume_command(state, session, routed_resume_command)?;
     let zmx_name = crate::zmx::provider_zmx_session_name(session)?;
     // CDXC:AgentProviders 2026-11-16 WHY: this read of the session's own processes is the check
     // before anything is stopped (GitHub #630); the exit loop reads the same way
@@ -169,6 +177,7 @@ pub(crate) fn plan(
     Ok(RestartPlan {
         agent,
         resume_command,
+        launched_acp,
         cleanup_paths,
         account_settings: Value::Object(account_settings),
         expected_identity,
@@ -335,6 +344,9 @@ pub(crate) fn start(
         })),
         source == SwitchSource::Automatic,
     );
+    if let Some((family, approval_level)) = plan.launched_acp.as_ref() {
+        crate::acp::apply_acp_runtime_settings(&mut runtime, family, *approval_level);
+    }
     endpoint::update_session_changes(repository, session, &runtime, Map::new())?;
     let cwd = session["cwd"].as_str().map(str::to_string).or_else(|| {
         repository

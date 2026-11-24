@@ -71,7 +71,8 @@ async fn agent_mid_turn(
             return (false, false);
         };
         let session = target.session;
-        let is_acp = crate::acp::session_is_acp(&session);
+        let is_acp = crate::acp::session_is_acp(&session)
+            || crate::acp::channel::live(&project_id, &session_id, "state").is_some();
         if crate::session_chat_send::transcript_pending_question_prompt(&session).is_some() {
             return (false, is_acp);
         }
