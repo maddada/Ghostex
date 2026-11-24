@@ -2,6 +2,66 @@
 
 ## Unreleased
 
+## 12.1.0 - 2026-11-25
+
+**Ghostex 12.1.0 is out.** New sessions start in one click with No project and Coordinator pills, Settings > Agents gains an Auto permission mode, Rewind works in Native chats, Needs you cards get Details and Run it, and chats keep their permission mode when they switch to Native.
+
+### ✨ New sessions
+
+- **New session is one click.** The sidebar's New session row and Cmd+N open a chat draft right away in the active project (or Main Hub), and a draft you never typed in goes away when you leave it.
+- **No project and Coordinator pills sit above a new draft's chat box,** so you can start a chat without a project or make it a coordinator before you send. The setup bar's shortcut hints show when you hover.
+- **The New Thread picker is gone,** and a project header's terminal and agent buttons now live in one split menu on its chat button.
+
+### 🔐 Permissions
+
+- **Settings > Agents has an Auto permission mode for Claude Code and Codex,** for Native and Terminal-based chats.
+- **"Skip permissions", "Bypass permissions", "Full access" and "Always approve" are now all called Full permissions,** on the computer and the phone.
+- **Switching a Terminal-based chat to Native keeps its permission mode,** so a Claude chat in Auto, Accept edits or Bypass no longer restarts asking before every edit and command ([#746](https://github.com/maddada/Ghostex/issues/746)).
+- **Keep default follows Claude's and Codex's own settings in Native chats** instead of always starting at Ask ([#742](https://github.com/maddada/Ghostex/issues/742)).
+- **Accept all turned on for a computer without the app (`ghostex settings set`) now applies everywhere,** coordinator threads included ([#744](https://github.com/maddada/Ghostex/issues/744)).
+
+### 💬 Chat
+
+- **Rewind works in Native Claude Code and Codex chats.** Files stay as they are, as in Terminal-based chats, and a rewind holds even when the chat sleeps or restarts before your next message.
+- **The agent's thoughts show in the Working line as single-line cards** with a preview that fades out.
+- **"Agent was interrupted" is a divider with a stop sign,** on the computer and the phone.
+- **A new chat's empty screen is calmer:** the agent, the headline and the tips card, without starter buttons. Onboarding's last step drops its starter prompts too, and the wrong "Queue your next prompts" tip is gone.
+- **The Suggested Boosts row above the chat box is removed.**
+- **Expanding a Quiet View line opens its last group.**
+- **Native Claude chats offer only the / commands Claude answers there.**
+
+### 📥 Inbox and Needs you
+
+- **Needs you cards have a Details button and keep their answers when folded,** and opening one from a notification shows it.
+- **A Needs you card can carry a command with a Run it button** that runs it on the right computer, on the computer and the phone.
+- **Inbox rows above the chat box show one line,** the title.
+- **Opening an automation run's session marks it read,** so the "N unread" badge clears ([#719](https://github.com/maddada/Ghostex/issues/719)).
+
+### 🧭 Main Hub and coordinators
+
+- **Main Hub folds each computer's rows, and Sessions is now Chats** with a New chat row.
+- **Coordinators can set the model and effort of an OpenCode thread** (`start-thread --model --effort`) without changing OpenCode's saved default ([#747](https://github.com/maddada/Ghostex/issues/747)).
+- **A thread whose report already reached its coordinator no longer sends a false "its final message could not be read"** ([#748](https://github.com/maddada/Ghostex/issues/748)).
+- **A session whose subagents are still writing is no longer flagged "Not moving"** ([#741](https://github.com/maddada/Ghostex/pull/741)), thanks to @cagatay-io.
+- **A session waiting on an approval keeps reading as needing you** when its screen readings finish out of order or are dropped by a restart or sign-in ([#740](https://github.com/maddada/Ghostex/pull/740), [#743](https://github.com/maddada/Ghostex/pull/743)), thanks to @cagatay-io.
+
+### 🌐 Remote computers
+
+- **Update gxserver really updates WSL and Linux remotes:** it installs the new package and restarts it, and says so when that computer runs the Ghostex app instead ([#745](https://github.com/maddada/Ghostex/issues/745)).
+- **Phone commands work on computers whose login shell is fish,** thanks to @escottalexander.
+
+### 📂 Files
+
+- **Files has Back and Forward** (Cmd+[ and Cmd+]) that return to each file at its scroll position ([#733](https://github.com/maddada/Ghostex/issues/733)).
+
+### 🩹 Fixes and polish
+
+- **Antigravity updates from Settings > Updates with `agy update`,** and Update all skips update methods that have no command instead of doing nothing ([#739](https://github.com/maddada/Ghostex/issues/739)).
+- **Usage analytics are more private:** a random install ID only, nothing sent before you finish onboarding, daily summaries only on days you use Ghostex, and custom agent names are never sent.
+- **Ghostex Help runs setup commands itself** instead of asking you to copy and paste them.
+- **Buttons and the Boost pill use calm neutral fills,** and suggested-link pills no longer show on coordinators.
+- **The pill showing who answered a shared Live page lines up with the window's controls.**
+
 ## 12.0.0 - 2026-11-24
 
 **Ghostex 12.0 is the Native Chat update.** Chats with Claude Code, Codex and Antigravity now run Native: steadier, smoother streaming, faster, and they recover on their own. New chat users start on Native, more agents are moving to Native, and Terminal-based mode is now legacy.
