@@ -1155,8 +1155,9 @@ impl NativeChatView {
         out
     }
 
-    /// The dock's Snoozed row under the others (Q4686 A): "Snoozed (N) · back in 1h" with a clock
-    /// and chevron, folded until clicked; open, snoozed asks, forms, pages and to-dos follow dimmed.
+    /// The dock's Snoozed row under the others (Q4686 A): "Snoozed" and its count badge with a
+    /// moon icon and chevron, folded until clicked; open, snoozed asks, forms, pages and to-dos
+    /// follow dimmed.
     fn work_dock_snoozed(
         &self,
         snoozed: &[Value],
@@ -1165,18 +1166,10 @@ impl NativeChatView {
     ) -> Vec<AnyElement> {
         let s = p.scale;
         let open = self.expanded.contains(DOCK_SNOOZED_ROWS);
-        let soonest = snoozed
-            .first()
-            .and_then(|row| row["age"].as_str())
-            .filter(|age| !age.is_empty());
-        let aria = match soonest {
-            Some(age) if !open => format!("Snoozed, {}, {age}", snoozed.len()),
-            _ => format!("Snoozed, {}", snoozed.len()),
-        };
         let line = div()
             .id("work-dock-snoozed")
             .role(gpui::Role::Button)
-            .aria_label(aria)
+            .aria_label(format!("Snoozed, {}", snoozed.len()))
             .aria_expanded(open)
             .w_full()
             .min_w_0()
@@ -1212,16 +1205,7 @@ impl NativeChatView {
                         snoozed.len().to_string(),
                         p.foreground,
                         s,
-                    ))
-                    .when_some(soonest.filter(|_| !open), |row, age| {
-                        row.child(
-                            div()
-                                .min_w_0()
-                                .truncate()
-                                .text_color(p.card_muted)
-                                .child(format!("\u{b7} {age}")),
-                        )
-                    }),
+                    )),
             )
             .child(
                 svg()
@@ -1401,7 +1385,7 @@ impl NativeChatView {
         out
     }
 
-    /// The Inbox header (Q4680 B + E): `[inbox icon] Inbox · [ghost count chips]` and chevron.
+    /// The Inbox header (Q4680 B + E): `[inbox icon] Inbox [ghost count chips]` and chevron.
     /// Count chips sit clean at rest (no dotted underline); hovering a count chip lights up only
     /// that chip (pill background, subtle border, brighter label) and never lights up the collapse
     /// bar behind it.
@@ -1457,7 +1441,7 @@ impl NativeChatView {
             - 8.0
             - if collapsible { 24.0 + 6.0 } else { 0.0 };
         let bar_font = crate::assets::chat_working::VISUAL.font_size;
-        let inbox_label_width = 14.0 + 5.0 + dock_text_width(INBOX_NAME, bar_font, p, cx) + 12.0;
+        let inbox_label_width = 14.0 + 5.0 + dock_text_width(INBOX_NAME, bar_font, p, cx) + 10.0;
         let named_width: f32 = counts
             .iter()
             .map(|(group, count)| {
@@ -1588,6 +1572,9 @@ impl NativeChatView {
             .flex()
             .items_center()
             .gap(px(5.0 * s))
+            .when(!quiet || (!collapsible && status_card.is_none()), |badge| {
+                badge.mr(px(6.0 * s))
+            })
             .flex_shrink_0()
             .tooltip(|window, cx| {
                 gpui_component::tooltip::Tooltip::new(INBOX_FULL_NAME)
@@ -1655,14 +1642,9 @@ impl NativeChatView {
                     .gap(px(4.0 * s))
                     .overflow_hidden()
                     .child(inbox_badge)
-                    .when(!quiet, |summary| {
-                        summary.child(div().px(px(2.0 * s)).text_color(p.muted).child("\u{b7}"))
-                    })
                     .children(marks)
                     .when(quiet && !collapsible && status_card.is_none(), |summary| {
-                        summary
-                            .child(div().px(px(2.0 * s)).text_color(p.muted).child("\u{b7}"))
-                            .child(div().text_color(p.muted).child("Nothing in progress"))
+                        summary.child(div().text_color(p.muted).child("Nothing in progress"))
                     }),
             )
             .when(status_card.is_none(), |head| {
