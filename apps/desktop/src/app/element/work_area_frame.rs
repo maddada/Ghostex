@@ -20,6 +20,10 @@ thread_local! {
     /// records itself in prepaint, before any element inside it prepaints, so the panes and web
     /// pages in it read this frame's bounds, never the last frame's.
     static CARD_BOUNDS: RefCell<HashMap<u64, Bounds<Pixels>>> = RefCell::new(HashMap::new());
+    /// Each window's docked sidebar divider this frame, by window id: where the sidebar's own tint
+    /// ends, as layout snapped it. Taken by the glass gutter when it paints.
+    static SIDEBAR_DIVIDER_BOUNDS: RefCell<HashMap<u64, Bounds<Pixels>>> =
+        RefCell::new(HashMap::new());
 }
 
 fn window_key(window: &Window) -> u64 {
@@ -171,6 +175,9 @@ fn add_rounded_rect(path: &mut PathBuilder, bounds: Bounds<Pixels>, radius: Pixe
 /// Under window glass the sidebar and the work area each tint the blurred desktop themselves and nothing tints the window beneath them (CDXC:Theming 2026-09-23 on `SIDEBAR_GLASS_PERCENT_DARK`), so the gutter cannot be a fill under the card: the card's own tint would stack on it. The gutter is the sidebar's tint painted as a ring around the card, from the sidebar's edge to the window's, with the card's rounded shape left out. Must come before the card in the body row.
 /// `card_beside_rail`: the card starts at the rail's right edge (`work_area_frame_left_gutter`), so
 /// no gutter lies left of it and the rail tints its own column.
+///
+/// CDXC:Workarea 2026-11-24 WHY:
+/// The user on Windows: "i see a 2nd line between the native ... please remove this line here no need for it. on linux and mac i dont see this extra line". The ring's left edge was worked out as the card's left less the 6pt gutter, but layout snaps the divider (1pt) and the card's padding (5pt) to device pixels one by one. At 175% that is 2 + 9 = 11 device pixels, not the 10.5 the 6pt gutter comes to, so the ring started half a device pixel right of the sidebar and left a column that was barely tinted, where the blurred desktop showed through as a second line beside the card's border. At 200% every one of those is a whole pixel, which is why macOS never showed it. The ring now starts at the divider's own snapped edge, where the sidebar's tint ends (`work_area_frame_sidebar_edge_marker`).
 pub(crate) fn work_area_frame_glass_gutter(card_beside_rail: bool) -> impl IntoElement {
     canvas(
         |_, _, _| {},
@@ -184,12 +191,17 @@ pub(crate) fn work_area_frame_glass_gutter(card_beside_rail: bool) -> impl IntoE
             // The gutter: the strip above the sidebar and the card, then everything right of the
             // sidebar down to the window's bottom edge.
             let margin = px(WORK_AREA_FRAME_MARGIN);
-            let side = if card_beside_rail {
-                card.left()
-            } else {
-                card.left() - margin
+            let divider = SIDEBAR_DIVIDER_BOUNDS
+                .with(|dividers| dividers.borrow_mut().remove(&window_key(window)));
+            // A divider recorded in an earlier frame (glass turned on with the sidebar since
+            // hidden) no longer sits left of the card and is ignored.
+            let (side, strip) = match divider {
+                Some(divider) if !card_beside_rail && divider.right() <= card.left() => {
+                    (divider.left(), divider.top())
+                }
+                _ if card_beside_rail => (card.left(), bounds.top() + margin),
+                _ => (card.left() - margin, bounds.top() + margin),
             };
-            let strip = bounds.top() + margin;
             let mut ring = PathBuilder::fill()
                 .with_style(gpui::PathStyle::Fill(gpui::FillOptions::even_odd()));
             ring.move_to(bounds.origin);
@@ -204,6 +216,24 @@ pub(crate) fn work_area_frame_glass_gutter(card_beside_rail: bool) -> impl IntoE
                 window.paint_path(path, sidebar_glass_tint());
             }
         },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
+/// A zero-paint child of the docked sidebar's divider that records the divider's laid-out bounds
+/// for the glass gutter this frame (see `work_area_frame_glass_gutter`). The divider comes before
+/// the gutter in the body row, so its prepaint runs before the gutter paints.
+pub(crate) fn work_area_frame_sidebar_edge_marker() -> impl IntoElement {
+    canvas(
+        |bounds, window, _cx| {
+            SIDEBAR_DIVIDER_BOUNDS.with(|dividers| {
+                dividers.borrow_mut().insert(window_key(window), bounds);
+            });
+        },
+        |_, _, _, _| {},
     )
     .absolute()
     .top_0()
@@ -268,4 +298,5 @@ pub(crate) fn clip_native_view_to_work_area_frame(
 pub(crate) fn forget_work_area_frame_window(window_id: gpui::WindowId) {
     let key = window_id.as_u64();
     CARD_BOUNDS.with(|cards| cards.borrow_mut().remove(&key));
+    SIDEBAR_DIVIDER_BOUNDS.with(|dividers| dividers.borrow_mut().remove(&key));
 }
