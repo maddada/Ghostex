@@ -1177,9 +1177,11 @@ fn hook_blocked_note(label: &str, reason: &str) -> Value {
 /// SEE-ALSO: apps/desktop/src/app/native_chat/status_rows.rs, apps/mobile/app/src/chat/native/transcript/SystemRows.tsx.
 fn command_output_note(raw_text: &str) -> Value {
     let body = js_trim(&strip_ansi(&suppressed_turn_body(raw_text))).to_string();
+    // Claude's `/context` prints Markdown, so its first line is "## Context Usage": the note's
+    // label drops the heading marks (the opened text keeps them).
     let first_line = split_newlines(&body)
         .into_iter()
-        .map(js_trim)
+        .map(|line| js_trim(js_trim(line).trim_start_matches('#')))
         .find(|line| !line.is_empty())
         .unwrap_or_default()
         .to_string();
