@@ -12,6 +12,50 @@ use std::{
     time::Duration,
 };
 
+/// A destination chosen in a new chat's "No project" pill or setup bar before the first message is
+/// sent: changing it keeps the open chat, window, Space, Workspace, and side panels completely
+/// still, and only commits on Send (CDXC:NewSession 2026-11-25 in `draft_project_picker.rs`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PendingDraftTarget {
+    pub(crate) repo_key: String,
+    pub(crate) machine_id: String,
+    pub(crate) project_id: String,
+    pub(crate) label: String,
+    pub(crate) is_main_hub: bool,
+}
+
+/// Prewarmed `/api/draftWorktree` options for a pending target project on the same computer, plus
+/// any worktree/branch choice the user made for it before Send.
+#[derive(Clone, Debug)]
+pub(super) struct PendingTargetTray {
+    pub(super) project_id: String,
+    pub(super) answer: Value,
+    pub(super) mode: Option<String>,
+    pub(super) base_branch: Option<String>,
+    pub(super) worktree_key: Option<String>,
+}
+
+/// What a draft's pending send carries across the single-frame follow into its target project.
+#[derive(Clone, Debug)]
+pub(crate) struct PendingDraftSend {
+    pub(crate) from_machine_id: String,
+    pub(crate) from_project_id: String,
+    pub(crate) from_session_id: String,
+    pub(crate) from_shell_session_id: crate::TerminalSessionId,
+    pub(crate) target: PendingDraftTarget,
+    pub(crate) agent_id: String,
+    pub(crate) agent_model: Option<String>,
+    pub(crate) agent_effort: Option<String>,
+    pub(crate) starting_coordinator: bool,
+    pub(crate) skill_only_start: bool,
+    pub(crate) send_request_id: String,
+    pub(crate) submission: Value,
+    pub(crate) original_draft: String,
+    /// Worktree/branch pick chosen for `target` before Send, applied on the target chat right
+    /// before dispatching `submission`.
+    pub(crate) pending_worktree_action: Option<Value>,
+}
+
 /// The keys of the folds the reader opened (`expanded`) or closed (`collapsed`). Reads go to the
 /// set; every change bumps `revision`, so the fold report to the core (search.rs,
 /// `sync_search_folds`) is rebuilt only when a fold moved, not on every frame.
@@ -441,6 +485,18 @@ pub(crate) struct NativeChatView {
     pub(crate) draft_setup_changed: bool,
     /// True while the draft's setup bar "Coordinator" toggle is turned on.
     pub(crate) draft_coordinator_mode: bool,
+    /// Destination picked via "No project" or the setup bar's project/computer picker before Send.
+    /// `None` means the draft stays in `self.config.machine_id` / `self.config.project_id`.
+    pub(crate) pending_draft_target: Option<PendingDraftTarget>,
+    /// Previous non-Main-Hub target remembered when toggling "No project" on, so toggling it back
+    /// off restores that project instantaneously without leaving this view.
+    pub(super) no_project_return: Option<PendingDraftTarget>,
+    /// Prewarmed `/api/draftWorktree` answer and choices for `pending_draft_target`.
+    pub(super) pending_target_tray: Option<PendingTargetTray>,
+    /// Generation counter for background `/api/draftWorktree` prewarm reads so stale replies drop.
+    pub(super) pending_target_tray_generation: u64,
+    /// True while a Send with a `pending_draft_target` is committing on gxserver.
+    pub(crate) pending_target_move_in_flight: bool,
     /// The worktree tray's project search, while it is open.
     pub(super) draft_project_picker: Option<super::draft_project_picker::DraftProjectPicker>,
     pub(super) draft_project_chip_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
@@ -661,6 +717,11 @@ impl NativeChatView {
             option_menu: None,
             draft_setup_changed: false,
             draft_coordinator_mode: false,
+            pending_draft_target: None,
+            no_project_return: None,
+            pending_target_tray: None,
+            pending_target_tray_generation: 0,
+            pending_target_move_in_flight: false,
             draft_project_picker: None,
             draft_project_chip_bounds: Default::default(),
             draft_machine_chip_bounds: Default::default(),
@@ -1065,6 +1126,8 @@ impl NativeChatView {
     /// nothing sent, queued, or attached.
     pub(crate) fn is_untouched_draft(&self) -> bool {
         !self.draft_setup_changed
+            && self.pending_draft_target.is_none()
+            && !self.pending_target_move_in_flight
             && self.draft.trim().is_empty()
             && self.items.is_empty()
             && self.sent_rows_listed == 0
@@ -1082,6 +1145,65 @@ impl NativeChatView {
                 .is_none_or(Vec::is_empty)
     }
 
+    /// Rebinds this live `NativeChatView` in place after its draft committed to a pending target
+    /// project on Send (Q4849 `"follow"` + Q4850 `"keep-space"`), preserving the 0ms optimistic
+    /// user message row, composer focus, and transcript state with zero remount flash.
+    pub(crate) fn rebind_moved_session(
+        &mut self,
+        mut config: NativeChatConfig,
+        pending_worktree_action: Option<Value>,
+        submission: Option<Value>,
+        cx: &mut Context<Self>,
+    ) {
+        let presentation = config.initial_presentation.get_or_insert_with(|| json!({}));
+        for field in ["agent", "sessionAgentId"] {
+            if presentation[field].is_null() {
+                presentation[field] = self.snapshot[field].clone();
+            }
+        }
+        self.config = config;
+        self.pending_draft_target = None;
+        self.pending_target_tray = None;
+        self.pending_target_tray_generation = self.pending_target_tray_generation.wrapping_add(1);
+        self.pending_target_move_in_flight = false;
+        self.retarget_send_watch();
+        let runtime = Self::start_runtime(&self.config, cx);
+        if let Some(worktree_action) = pending_worktree_action {
+            runtime.call("action", vec![worktree_action]);
+        }
+        if let Some(action) = submission {
+            runtime.call("action", vec![action]);
+        }
+        self.runtime = Some(runtime);
+        self.search_folds_sent = None;
+        cx.notify();
+    }
+
+    /// Restores the composer draft cleanly if committing a pending target on Send fails on the
+    /// server, leaving the user on their current view with their text and target intact.
+    pub(crate) fn restore_failed_pending_send(
+        &mut self,
+        send_request_id: &str,
+        original_draft: &str,
+        starting_coordinator: bool,
+        cx: &mut Context<Self>,
+    ) {
+        self.pending_target_move_in_flight = false;
+        self.pending_send = false;
+        if starting_coordinator {
+            self.draft_coordinator_mode = true;
+        }
+        self.cancel_send_watch(send_request_id);
+        if self.draft.is_empty() && !original_draft.is_empty() {
+            self.draft = original_draft.to_string();
+            self.draft_revision += 1;
+            self.input_needs_sync = true;
+            self.focus_requested = true;
+            cx.emit(NativeChatEvent::DraftState(false));
+        }
+        cx.notify();
+    }
+
     pub(crate) fn invoke(&mut self, action: Value, cx: &mut Context<Self>) {
         // A pick in the dock ask panel's ⋯ menu closes the panel as it goes (dock_ask_modal.rs).
         let action = self.unwrap_dock_ask_command(action, cx);
@@ -1091,6 +1213,11 @@ impl NativeChatView {
             .is_some_and(action_marks_draft_changed)
         {
             self.draft_setup_changed = true;
+        }
+        if action.get("type").and_then(Value::as_str) == Some("setDraftWorktree")
+            && self.handle_pending_target_tray_action(&action, cx)
+        {
+            return;
         }
         self.hold_for_answer(&action, cx);
         self.note_resource_modal_send(&action);

@@ -1034,6 +1034,22 @@ pub(crate) fn move_draft_session(
         DomainStateError::corrupt_state(format!("SQLite commit error: {error}"))
     })?;
 
+    if let Some(promote) = params.get("promoteCoordinator").and_then(Value::as_object) {
+        let mut promote_params = Map::new();
+        promote_params.insert("projectId".to_string(), json!(target_project_id.clone()));
+        promote_params.insert("sessionId".to_string(), json!(lifecycle.session_id.clone()));
+        promote_params.insert("goal".to_string(), json!(""));
+        promote_params.insert("forDraft".to_string(), json!(true));
+        if promote.get("skillOnlyStart").and_then(Value::as_bool) == Some(true) {
+            promote_params.insert("skillOnlyStart".to_string(), json!(true));
+        }
+        let _ = crate::coordinators::promote_session_to_coordinator(
+            db,
+            &server_id,
+            &promote_params,
+        );
+    }
+
     let updated = repository
         .get_session(&target_project_id, &lifecycle.session_id)?
         .ok_or_else(|| {

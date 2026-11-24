@@ -118,6 +118,10 @@ pub(crate) struct SidebarUiHost {
     /// CHANGE of focused session, as `rememberNativeSidebarFocus` did; running it on every update
     /// instead would drag the selection back every time the user picked another Space.
     followed_session: Option<String>,
+    /// One-shot session id whose next focus must keep the sidebar on its current Space (Q4850
+    /// `keep-space`: following a sent draft into Main Hub or another project never pulls the
+    /// sidebar into another Space).
+    suppress_space_follow: Option<String>,
     /// The sidebar's own copy of the project collections, read with the rest of the state.
     pub(super) stored_project_collections: Option<Value>,
     pub(super) counters: SidebarUiCounters,
@@ -139,6 +143,7 @@ impl Default for SidebarUiHost {
             generation: 0,
             handled_reveal: None,
             followed_session: None,
+            suppress_space_follow: None,
             stored_project_collections: None,
             counters: SidebarUiCounters::default(),
             last_error: None,
@@ -191,6 +196,21 @@ impl SidebarUiHost {
         }
         self.followed_session = next;
         true
+    }
+
+    /// Marks `sidebar_session_id` so its next focus keeps the sidebar on its current Space.
+    pub(crate) fn suppress_next_space_follow_for(&mut self, sidebar_session_id: &str) {
+        self.suppress_space_follow = Some(sidebar_session_id.to_string());
+    }
+
+    /// Consumes the one-shot Space-follow suppression if it matches `sidebar_session_id`.
+    pub(super) fn take_suppressed_space_follow(&mut self, sidebar_session_id: &str) -> bool {
+        if self.suppress_space_follow.as_deref() == Some(sidebar_session_id) {
+            self.suppress_space_follow = None;
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn selected_machine_id(&self) -> &str {

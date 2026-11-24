@@ -348,16 +348,25 @@ async fn source_branch(context: &ProjectWorktreeOperationContext) -> Option<Stri
         .and_then(normalize_branch_name)
 }
 
-/// `/api/draftWorktree {projectId, sessionId, light?, remember?, start?, finish?, folderBranch?}`.
+/// `/api/draftWorktree {projectId, sessionId, targetProjectId?, light?, remember?, start?, finish?, folderBranch?}`.
 ///
 /// The answer is `{available, currentBranch, branches, worktrees, remembered, move}`; a `light`
-/// read (the client's poll while a move runs) carries only `move`.
+/// read (the client's poll while a move runs) carries only `move`. When `targetProjectId` is set,
+/// the draft in `projectId` is validated as a draft, and the tray (or `remember` / `folderBranch`)
+/// is read against `targetProjectId` so clients can preview another project's branches and
+/// worktrees before moving the draft on Send.
 pub(crate) async fn draft_worktree(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> std::result::Result<Value, ProjectWorktreeOperationError> {
     let project_id = read_project_id(params)?;
     let session_id = read_session_id(params)?;
+    let target_project_id = params
+        .get("targetProjectId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != project_id)
+        .map(str::to_string);
     if params.get("finish").and_then(Value::as_bool) == Some(true) {
         // `moved`: the host started this draft's replacement in another project or machine, which
         // no move on this gxserver knows about.
@@ -385,7 +394,19 @@ pub(crate) async fn draft_worktree(
     if params.get("light").and_then(Value::as_bool) == Some(true) {
         return Ok(json!({ "move": move_value(&project_id, &session_id) }));
     }
-    let (project, session) = read_draft(state, &project_id, &session_id)?;
+    let read_project_and_session = || -> std::result::Result<(Value, Value), DomainStateError> {
+        let (source_project, session) = read_draft(state, &project_id, &session_id)?;
+        let Some(target_id) = target_project_id.as_deref() else {
+            return Ok((source_project, session));
+        };
+        let db = open_repository(state)?;
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let target_project = repository.get_project(target_id)?.ok_or_else(|| {
+            DomainStateError::not_found(format!("Project {target_id} does not exist."))
+        })?;
+        Ok((target_project, session))
+    };
+    let (project, session) = read_project_and_session()?;
     if let Some(request) = params.get("folderBranch").filter(|value| value.is_object()) {
         if !tray_applies(&project, &session) {
             return Err(DomainStateError::bad_request(
@@ -397,17 +418,20 @@ pub(crate) async fn draft_worktree(
             .await;
     }
     if let Some(remember) = params.get("remember").and_then(Value::as_object) {
-        let cloud =
+        let cloud = if target_project_id.is_none() {
             super::draft_cloud_box::remember_cloud_choice(state, &project, &session, remember)
-                .await?;
+                .await?
+        } else {
+            false
+        };
         if !cloud {
             // Read again: the Cloud Box memory was just written into the same runtime settings.
-            let (project, _) = read_draft(state, &project_id, &session_id)?;
+            let (project, _) = read_project_and_session()?;
             remember_choice(state, &project, remember)?;
         }
     }
     let (project, session) = match params.get("remember") {
-        Some(_) => read_draft(state, &project_id, &session_id)?,
+        Some(_) => read_project_and_session()?,
         None => (project, session),
     };
     read_tray(state, &project, &session).await

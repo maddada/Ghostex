@@ -154,16 +154,49 @@ impl NativeChatView {
     }
 
     /// The `worktreeTray` snapshot object when present, or an empty object for the fallback draft
-    /// setup bar while it is still an unsent draft.
+    /// setup bar while it is still an unsent draft. When the user picked a pending target project
+    /// before Send, overlays its prewarmed `/api/draftWorktree` options (or hides stale source
+    /// project branches while loading) without moving the session.
     fn effective_draft_tray(&self) -> Option<Value> {
-        if let Some(tray) = self
+        let base = if let Some(tray) = self
             .snapshot
             .get("worktreeTray")
             .filter(|tray| tray.is_object())
         {
-            return Some(tray.clone());
+            Some(tray.clone())
+        } else {
+            self.draft_setup_bar_fallback_active().then(|| json!({}))
+        }?;
+        let Some(target) = self.pending_draft_target.as_ref() else {
+            return Some(base);
+        };
+        if target.is_main_hub {
+            return Some(json!({
+                "projectName": target.label,
+                "busy": false,
+                "status": Value::Null,
+            }));
         }
-        self.draft_setup_bar_fallback_active().then(|| json!({}))
+        if let Some(pending) = self
+            .pending_target_tray
+            .as_ref()
+            .filter(|pending| pending.project_id == target.project_id)
+            && let Some(preview) = ghostex_gx_chat_core::menus::draft_worktree::preview_tray(
+                &pending.answer,
+                pending.mode.as_deref(),
+                pending.base_branch.as_deref(),
+                pending.worktree_key.as_deref(),
+            )
+        {
+            return Some(preview);
+        }
+        // Target project's tray is still loading (or on another computer): show its project/computer
+        // immediately without showing the old project's branches/worktrees.
+        Some(json!({
+            "projectName": target.label,
+            "busy": false,
+            "status": Value::Null,
+        }))
     }
 
     /// Whether the bar is on screen (the hotkeys act only then).

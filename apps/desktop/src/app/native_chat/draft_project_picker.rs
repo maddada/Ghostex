@@ -9,7 +9,6 @@
 //! User (Q1186 "split", after Q1167 "i want to go towards not separating projects by machines"): the tray picks the project and the machine with two chips. The project chip reads the project's name and opens a search of projects only (Recent first, then A to Z, "No sessions" on a project without one), with no machine chips on its rows; a pick moves the draft to that project on the machine it starts on (the last one used for it). The machine chip beside it reads the draft's machine and lists the machines that have the project, a machine that isn't connected dimmed; it shows while the project is on more than one machine or the draft is on another computer. Both open on the draft's own place, so Escape leaves things as they were. This supersedes Q848's machine chips on every row of the search (CDXC:Worktrees 2026-10-31, Q847 "we need to add picking the project and machine in the bar").
 
 use super::{appearance::ChatAppearance, option_menu, reply_popover, state::NativeChatView};
-use crate::app::gx_store::unified_new_session::PendingDraftMove;
 use crate::app::native_chat::cursor::ChatCursor as _;
 use ghostex_gx_core::unified_sidebar::{UnifiedProjectChoice, filter_project_choices};
 use gpui::Focusable as _;
@@ -282,8 +281,36 @@ fn card_bounds(
 }
 
 impl NativeChatView {
-    /// Whether this draft lives in a computer's Main Hub ("No project" mode).
+    /// CDXC:NewSession 2026-11-25 DECISION:
+    /// User: "clicking on \"No project\" to switch it on and off is SO bad currently :( it literally
+    /// switches so much stuff cuz it's going between spaces/projects :( ... I want turning this on
+    /// and off to be fully stable and smooth. also changing the project that a new session is a part
+    /// of needs to be also same super stable and not jumpy like it is now no matter what project i
+    /// pick and what space that project is in".
+    /// Q4849: `"follow"` ("but how to make this super fast and smooth?").
+    /// Q4850: `"keep-space"` ("yes but please smooth").
+    ///
+    /// Toggling "No project" or picking any project/computer before Send only updates
+    /// `self.pending_draft_target` on this open `NativeChatView` (0 ms, zero Space/Workspace/sidebar
+    /// jumps, zero view remounts) and quietly prewarms the target project's `/api/draftWorktree`
+    /// branches/worktrees in the background. On Send, the optimistic user message renders at 0 ms
+    /// while the server commits the move, then the live view transfers into the target project in a
+    /// single frame without switching the sidebar's Space or widening filters.
+    ///
+    /// The effective `(machine_id, project_id)` for this draft's pills and setup bar: the pending
+    /// target when the user picked another destination before Send, else this chat's own session.
+    pub(super) fn effective_draft_target(&self) -> (&str, &str) {
+        match self.pending_draft_target.as_ref() {
+            Some(target) => (target.machine_id.as_str(), target.project_id.as_str()),
+            None => (self.config.machine_id.as_str(), self.config.project_id.as_str()),
+        }
+    }
+
+    /// Whether this draft is currently aimed at a computer's Main Hub ("No project" mode).
     pub(super) fn draft_is_no_project(&self, cx: &Context<Self>) -> bool {
+        if let Some(target) = self.pending_draft_target.as_ref() {
+            return target.is_main_hub;
+        }
         let Some(app) = self.config.app.as_ref().and_then(|app| app.upgrade()) else {
             return false;
         };
@@ -291,73 +318,301 @@ impl NativeChatView {
             .gx_store_is_main_hub_project(&self.config.machine_id, &self.config.project_id)
     }
 
-    /// Toggles "No project" on this draft: moves it into Main Hub when off, or back to its
-    /// previous/default project when on.
+    /// Applies a new pending target destination on this draft without moving the session, switching
+    /// Spaces/Workspaces, or remounting this chat view.
+    fn set_pending_draft_target(
+        &mut self,
+        target: super::state::PendingDraftTarget,
+        cx: &mut Context<Self>,
+    ) {
+        self.pending_target_tray = None;
+        self.pending_target_tray_generation = self.pending_target_tray_generation.wrapping_add(1);
+        if target.machine_id == self.config.machine_id && target.project_id == self.config.project_id
+        {
+            self.pending_draft_target = None;
+            cx.notify();
+            return;
+        }
+        self.draft_setup_changed = true;
+        let prewarm = !target.is_main_hub && target.machine_id == self.config.machine_id;
+        let target_project_id = target.project_id.clone();
+        self.pending_draft_target = Some(target);
+        if prewarm {
+            self.prewarm_pending_target_tray(target_project_id, cx);
+        }
+        cx.notify();
+    }
+
+    /// Quietly fetches `/api/draftWorktree` for a pending target project on the same computer so
+    /// the setup bar shows that project's real branches and worktrees before Send.
+    fn prewarm_pending_target_tray(&mut self, target_project_id: String, cx: &mut Context<Self>) {
+        if self.config.session_id.is_empty() {
+            return;
+        }
+        let generation = self.pending_target_tray_generation;
+        let remote = self.config.remote.clone();
+        let params = serde_json::json!({
+            "projectId": self.config.project_id,
+            "sessionId": self.config.session_id,
+            "targetProjectId": target_project_id,
+        });
+        cx.spawn(async move |chat, cx| {
+            let result = super::rpc::request(remote, "/api/draftWorktree", &params).await;
+            let Ok(answer) = result else {
+                return;
+            };
+            let _ = chat.update(cx, |chat, cx| {
+                if chat.pending_target_tray_generation != generation {
+                    return;
+                }
+                let Some(target) = chat.pending_draft_target.as_ref() else {
+                    return;
+                };
+                if target.project_id != target_project_id || target.is_main_hub {
+                    return;
+                }
+                // Guard against older gxservers that ignore `targetProjectId` and return the
+                // original project's tray instead.
+                if let Some(name) = answer["projectName"].as_str().map(str::trim)
+                    && !name.is_empty()
+                    && !target.label.is_empty()
+                    && name != target.label
+                {
+                    return;
+                }
+                chat.pending_target_tray = Some(super::state::PendingTargetTray {
+                    project_id: target_project_id,
+                    answer,
+                    mode: None,
+                    base_branch: None,
+                    worktree_key: None,
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Handles `setDraftWorktree` actions while a `pending_draft_target` is active so branch,
+    /// worktree, and run-mode picks update the pending target in place without mutating the
+    /// draft's original project.
+    pub(super) fn handle_pending_target_tray_action(
+        &mut self,
+        action: &Value,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(target) = self.pending_draft_target.clone() else {
+            return false;
+        };
+        if target.is_main_hub || target.machine_id != self.config.machine_id {
+            return true;
+        }
+        if let Some(folder_branch) = action.get("folderBranch").and_then(Value::as_str) {
+            let mut request = serde_json::json!({ "branch": folder_branch });
+            if action.get("remote") == Some(&Value::Bool(true)) {
+                request["remote"] = serde_json::json!(true);
+            }
+            if action.get("create") == Some(&Value::Bool(true)) {
+                request["create"] = serde_json::json!(true);
+            }
+            if action.get("force") == Some(&Value::Bool(true)) {
+                request["force"] = serde_json::json!(true);
+            }
+            let params = serde_json::json!({
+                "projectId": self.config.project_id,
+                "sessionId": self.config.session_id,
+                "targetProjectId": target.project_id,
+                "folderBranch": request,
+            });
+            let remote = self.config.remote.clone();
+            let target_project_id = target.project_id.clone();
+            cx.spawn(async move |chat, cx| {
+                let _ = super::rpc::request(remote, "/api/draftWorktree", &params).await;
+                let _ = chat.update(cx, |chat, cx| {
+                    if chat
+                        .pending_draft_target
+                        .as_ref()
+                        .is_some_and(|pending| pending.project_id == target_project_id)
+                    {
+                        chat.prewarm_pending_target_tray(target_project_id, cx);
+                    }
+                });
+            })
+            .detach();
+            return true;
+        }
+        let Some(tray) = self.pending_target_tray.as_mut() else {
+            return true;
+        };
+        if tray.project_id != target.project_id {
+            return true;
+        }
+        let mut remember = serde_json::Map::new();
+        if let Some(mode) = action.get("mode").and_then(Value::as_str) {
+            tray.mode = Some(mode.to_string());
+            remember.insert("mode".to_string(), serde_json::json!(mode));
+        }
+        if let Some(branch) = action.get("baseBranch").and_then(Value::as_str) {
+            tray.base_branch = Some(branch.to_string());
+            remember.insert("baseBranch".to_string(), serde_json::json!(branch));
+        }
+        if let Some(key) = action.get("worktreeKey").and_then(Value::as_str) {
+            tray.worktree_key = Some(key.to_string());
+        }
+        if !remember.is_empty() && !self.config.session_id.is_empty() {
+            if !remember.contains_key("mode")
+                && let Some(mode) = tray.mode.as_deref()
+            {
+                remember.insert("mode".to_string(), serde_json::json!(mode));
+            }
+            if remember.contains_key("mode") {
+                let params = serde_json::json!({
+                    "projectId": self.config.project_id,
+                    "sessionId": self.config.session_id,
+                    "targetProjectId": target.project_id,
+                    "remember": Value::Object(remember),
+                });
+                let remote = self.config.remote.clone();
+                cx.background_executor()
+                    .spawn(async move {
+                        let _ = super::rpc::request(remote, "/api/draftWorktree", &params).await;
+                    })
+                    .detach();
+            }
+        }
+        cx.notify();
+        true
+    }
+
+    /// Toggles "No project" on this draft instantaneously in place: aims the draft at Main Hub
+    /// when off, or back at its previous/default project when on, with zero Space/Workspace jump.
     pub(super) fn toggle_draft_no_project(&mut self, cx: &mut Context<Self>) {
-        let agent_id = self.snapshot["sessionAgentId"]
-            .as_str()
-            .or_else(|| self.snapshot["optionLabels"]["agentIcon"].as_str())
-            .map(str::to_string);
-        let (Some(agent_id), Some(app)) = (
-            agent_id,
-            self.config.app.as_ref().and_then(|app| app.upgrade()),
-        ) else {
+        if self.pending_target_move_in_flight {
+            return;
+        }
+        let Some(app) = self.config.app.as_ref().and_then(|app| app.upgrade()) else {
             return;
         };
         let currently_no_project = self.draft_is_no_project(cx);
-        let coordinator_mode = self.draft_coordinator_mode;
-        self.draft_setup_changed = true;
-        let agent_model = self.snapshot["selectedOptions"]["model"]["value"]
-            .as_str()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string);
-        let agent_effort = self.snapshot["selectedOptions"]["effort"]["value"]
-            .as_str()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string);
-        let draft = PendingDraftMove {
-            from_machine_id: self.config.machine_id.clone(),
-            from_project_id: self.config.project_id.clone(),
-            from_session_id: self.config.session_id.clone(),
-            text: self.draft.clone(),
-            agent_model,
-            agent_effort,
+        let (eff_machine_id, eff_project_id) = {
+            let (m, p) = self.effective_draft_target();
+            (m.to_string(), p.to_string())
         };
-        cx.defer(move |cx| {
-            app.update(cx, |app, cx| {
-                app.gx_store
-                    .unified_sidebar
-                    .carry_coordinator_draft
-                    .set(coordinator_mode);
-                app.gx_store_toggle_draft_no_project(draft, &agent_id, currently_no_project, cx);
+        if !currently_no_project {
+            let current_choice = self.draft_choice(cx);
+            let current_label = current_choice
+                .as_ref()
+                .map(|choice| choice.label.clone())
+                .or_else(|| {
+                    self.snapshot["worktreeTray"]["projectName"]
+                        .as_str()
+                        .map(str::trim)
+                        .filter(|name| !name.is_empty())
+                        .map(str::to_string)
+                })
+                .unwrap_or_default();
+            let current_repo_key = current_choice
+                .map(|choice| choice.repo_key)
+                .or_else(|| {
+                    let machine = if eff_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID {
+                        ghostex_gx_core::MachineId::Local
+                    } else {
+                        ghostex_gx_core::MachineId::Remote(eff_machine_id.clone())
+                    };
+                    app.read(cx).gx_store_repo_key_of(&machine, &eff_project_id)
+                })
+                .unwrap_or_default();
+            self.no_project_return = Some(super::state::PendingDraftTarget {
+                repo_key: current_repo_key,
+                machine_id: eff_machine_id.clone(),
+                project_id: eff_project_id,
+                label: current_label,
+                is_main_hub: false,
             });
-        });
-    }
-
-    /// The draft's project as a row of the project list, with the machines that have it.
-    pub(super) fn draft_choice(&self, cx: &Context<Self>) -> Option<UnifiedProjectChoice> {
-        let app = self.config.app.as_ref()?.upgrade()?;
-        if app
-            .read(cx)
-            .gx_store_is_main_hub_project(&self.config.machine_id, &self.config.project_id)
-        {
-            return app
-                .read(cx)
-                .gx_store_main_hub_choice(&self.config.machine_id);
+            let Some(home_choice) = app.read(cx).gx_store_main_hub_choice(&eff_machine_id) else {
+                return;
+            };
+            let Some(target) = home_choice
+                .machines
+                .get(home_choice.selected)
+                .filter(|machine| machine.connected)
+                .or_else(|| {
+                    home_choice
+                        .machines
+                        .iter()
+                        .find(|machine| machine.connected)
+                })
+            else {
+                return;
+            };
+            self.set_pending_draft_target(
+                super::state::PendingDraftTarget {
+                    repo_key: home_choice.repo_key,
+                    machine_id: target.machine_id.clone(),
+                    project_id: target.project_id.clone(),
+                    label: home_choice.label,
+                    is_main_hub: true,
+                },
+                cx,
+            );
+            return;
         }
         let choices = app.read(cx).gx_store_project_choices();
-        let (machine_id, project_id) = (&self.config.machine_id, &self.config.project_id);
+        let saved_target = self.no_project_return.take().filter(|saved| {
+            !app.read(cx)
+                .gx_store_is_main_hub_project(&saved.machine_id, &saved.project_id)
+                && choices.iter().any(|choice| {
+                    choice.machines.iter().any(|machine| {
+                        machine.connected
+                            && machine.machine_id == saved.machine_id
+                            && machine.project_id == saved.project_id
+                    })
+                })
+        });
+        let target = saved_target.or_else(|| {
+            let find_in = |require_same_machine: bool| {
+                choices.iter().find_map(|choice| {
+                    let machine = choice.selected_machine().filter(|machine| {
+                        machine.connected
+                            && (!require_same_machine || machine.machine_id == eff_machine_id)
+                            && !app.read(cx).gx_store_is_main_hub_project(
+                                &machine.machine_id,
+                                &machine.project_id,
+                            )
+                    })?;
+                    Some(super::state::PendingDraftTarget {
+                        repo_key: choice.repo_key.clone(),
+                        machine_id: machine.machine_id.clone(),
+                        project_id: machine.project_id.clone(),
+                        label: choice.label.clone(),
+                        is_main_hub: false,
+                    })
+                })
+            };
+            find_in(true).or_else(|| find_in(false))
+        });
+        if let Some(target) = target {
+            self.set_pending_draft_target(target, cx);
+        }
+    }
+
+    /// The draft's effective project as a row of the project list, with the machines that have it.
+    pub(super) fn draft_choice(&self, cx: &Context<Self>) -> Option<UnifiedProjectChoice> {
+        let app = self.config.app.as_ref()?.upgrade()?;
+        let (machine_id, project_id) = self.effective_draft_target();
+        if self.draft_is_no_project(cx) {
+            return app.read(cx).gx_store_main_hub_choice(machine_id);
+        }
+        let choices = app.read(cx).gx_store_project_choices();
         let mut choice = choices.into_iter().find(|choice| {
             choice.machines.iter().any(|machine| {
-                &machine.machine_id == machine_id && &machine.project_id == project_id
+                machine.machine_id == machine_id && machine.project_id == project_id
             })
         })?;
         choice.selected = choice
             .machines
             .iter()
-            .position(|machine| &machine.machine_id == machine_id)
+            .position(|machine| machine.machine_id == machine_id)
             .unwrap_or(choice.selected);
         Some(choice)
     }
@@ -420,10 +675,10 @@ impl NativeChatView {
         } else {
             None
         };
-        let (machine_id, project_id) = (
-            self.config.machine_id.clone(),
-            self.config.project_id.clone(),
-        );
+        let (machine_id, project_id) = {
+            let (m, p) = self.effective_draft_target();
+            (m.to_string(), p.to_string())
+        };
         let highlighted = match &machines_of {
             Some(choice) => choice.selected,
             None => choices
@@ -669,7 +924,7 @@ impl NativeChatView {
     }
 
     /// A pick: a project row (on the machine it starts on) or, with `picked_machine`, a machine of
-    /// the draft's project.
+    /// the draft's project. Updates `pending_draft_target` in place with zero Space/Workspace jump.
     fn pick_draft_project(
         &mut self,
         row: &UnifiedProjectChoice,
@@ -677,6 +932,9 @@ impl NativeChatView {
         picked_machine: bool,
         cx: &mut Context<Self>,
     ) {
+        if self.pending_target_move_in_flight {
+            return;
+        }
         let Some(machine) = row.machines.get(chip) else {
             return;
         };
@@ -684,64 +942,39 @@ impl NativeChatView {
         if !machine.connected {
             return;
         }
-        let same = machine.project_id == self.config.project_id
-            && machine.machine_id == self.config.machine_id;
-        // The draft's own project, picked again from the project list: nothing moves.
+        let (current_machine_id, current_project_id) = self.effective_draft_target();
+        let same = machine.project_id == current_project_id
+            && machine.machine_id == current_machine_id;
+        // The draft's effective project, picked again from the project list: nothing changes.
         let same = same
             || (!picked_machine
-                && row.machines.iter().any(|machine| {
-                    machine.project_id == self.config.project_id
-                        && machine.machine_id == self.config.machine_id
+                && row.machines.iter().any(|entry| {
+                    entry.project_id == current_project_id
+                        && entry.machine_id == current_machine_id
                 }));
-        let agent_id = self.snapshot["sessionAgentId"].as_str().map(str::to_string);
-        let (false, Some(agent_id), Some(app)) = (
-            same,
-            agent_id,
-            self.config.app.as_ref().and_then(|app| app.upgrade()),
-        ) else {
+        if same {
             return;
-        };
-        self.draft_setup_changed = true;
-        let coordinator_mode = self.draft_coordinator_mode;
-        let agent_model = self.snapshot["selectedOptions"]["model"]["value"]
-            .as_str()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string);
-        let agent_effort = self.snapshot["selectedOptions"]["effort"]["value"]
-            .as_str()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string);
-        let draft = PendingDraftMove {
-            from_machine_id: self.config.machine_id.clone(),
-            from_project_id: self.config.project_id.clone(),
-            from_session_id: self.config.session_id.clone(),
-            text: self.draft.clone(),
-            agent_model,
-            agent_effort,
-        };
-        let (repo_key, machine_id, project_id) = (
-            row.repo_key.clone(),
-            machine.machine_id.clone(),
-            machine.project_id.clone(),
+        }
+        let is_main_hub = row.repo_key == "main-hub"
+            || self
+                .config
+                .app
+                .as_ref()
+                .and_then(|app| app.upgrade())
+                .is_some_and(|app| {
+                    app.read(cx)
+                        .gx_store_is_main_hub_project(&machine.machine_id, &machine.project_id)
+                });
+        self.set_pending_draft_target(
+            super::state::PendingDraftTarget {
+                repo_key: row.repo_key.clone(),
+                machine_id: machine.machine_id.clone(),
+                project_id: machine.project_id.clone(),
+                label: row.label.clone(),
+                is_main_hub,
+            },
+            cx,
         );
-        cx.defer(move |cx| {
-            app.update(cx, |app, cx| {
-                app.gx_store
-                    .unified_sidebar
-                    .carry_coordinator_draft
-                    .set(coordinator_mode);
-                app.gx_store_move_draft_to_project(
-                    draft,
-                    &agent_id,
-                    &repo_key,
-                    &machine_id,
-                    &project_id,
-                    cx,
-                );
-            });
-        });
     }
 }
 

@@ -125,30 +125,37 @@ impl NativeChatView {
                 return;
             }
         };
+        let pending_target = self.pending_draft_target.clone().filter(|target| {
+            target.machine_id != self.config.machine_id
+                || target.project_id != self.config.project_id
+        });
+        let original_draft = self.draft.clone();
         self.close_maximized(cx);
         self.pending_send = true;
+        let skill_only_start = starting_coordinator && self.draft.trim().is_empty();
         let outgoing_text = if starting_coordinator {
             self.draft_coordinator_mode = false;
             let guide = ghostex_gx_chat_core::composer::skill_invocation::COORDINATOR_GUIDE_LINE;
-            let trimmed = self.draft.trim();
-            let skill_only = trimmed.is_empty();
-            let remote = self.config.remote.clone();
-            let project_id = self.config.project_id.clone();
-            let session_id = self.config.session_id.clone();
-            let promote_params = json!({
-                "projectId": project_id,
-                "sessionId": session_id,
-                "goal": "",
-                "forDraft": true,
-                "skillOnlyStart": skill_only,
-            });
-            cx.background_executor()
-                .spawn(async move {
-                    let _ = super::rpc::request(remote, "/api/promoteCoordinator", &promote_params)
-                        .await;
-                })
-                .detach();
-            if skill_only {
+            if pending_target.is_none() {
+                let remote = self.config.remote.clone();
+                let project_id = self.config.project_id.clone();
+                let session_id = self.config.session_id.clone();
+                let promote_params = json!({
+                    "projectId": project_id,
+                    "sessionId": session_id,
+                    "goal": "",
+                    "forDraft": true,
+                    "skillOnlyStart": skill_only_start,
+                });
+                cx.background_executor()
+                    .spawn(async move {
+                        let _ =
+                            super::rpc::request(remote, "/api/promoteCoordinator", &promote_params)
+                                .await;
+                    })
+                    .detach();
+            }
+            if skill_only_start {
                 guide.to_string()
             } else {
                 format!("{guide}\n\n{}", self.draft)
@@ -179,6 +186,71 @@ impl NativeChatView {
         }
         cx.emit(super::state::NativeChatEvent::DraftState(true));
         self.follow_tail_for_send(mode);
+        if let Some(target) = pending_target
+            && let Some(app) = self.config.app.as_ref().and_then(|app| app.upgrade())
+        {
+            let agent_id = self.snapshot["sessionAgentId"]
+                .as_str()
+                .or_else(|| self.snapshot["optionLabels"]["agentIcon"].as_str())
+                .unwrap_or_default()
+                .to_string();
+            let agent_model = self.snapshot["selectedOptions"]["model"]["value"]
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            let agent_effort = self.snapshot["selectedOptions"]["effort"]["value"]
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            let pending_worktree_action = self
+                .pending_target_tray
+                .as_ref()
+                .filter(|tray| !target.is_main_hub && tray.project_id == target.project_id)
+                .and_then(|tray| {
+                    let mut action = serde_json::Map::new();
+                    action.insert("type".to_string(), json!("setDraftWorktree"));
+                    if let Some(mode) = tray.mode.as_deref() {
+                        action.insert("mode".to_string(), json!(mode));
+                    }
+                    if let Some(branch) = tray.base_branch.as_deref() {
+                        action.insert("baseBranch".to_string(), json!(branch));
+                    }
+                    if let Some(key) = tray.worktree_key.as_deref() {
+                        action.insert("worktreeKey".to_string(), json!(key));
+                    }
+                    (action.len() > 1).then_some(Value::Object(action))
+                });
+            self.pending_target_move_in_flight = true;
+            // Show the optimistic sent message row at 0 ms before the server move finishes.
+            self.watch_send(send_request_id.clone(), submission.clone(), cx);
+            self.return_keyboard_to_card(window, cx);
+            crate::app::native_sidebar::github_star::note_prompt_sent();
+            let view = cx.entity();
+            let pending_send = super::state::PendingDraftSend {
+                from_machine_id: self.config.machine_id.clone(),
+                from_project_id: self.config.project_id.clone(),
+                from_session_id: self.config.session_id.clone(),
+                from_shell_session_id: self.config.shell_session_id,
+                target,
+                agent_id,
+                agent_model,
+                agent_effort,
+                starting_coordinator,
+                skill_only_start,
+                send_request_id,
+                submission,
+                original_draft,
+                pending_worktree_action,
+            };
+            cx.defer(move |cx| {
+                app.update(cx, |app, cx| {
+                    app.gx_store_commit_pending_draft_send(view, pending_send, cx);
+                });
+            });
+            return;
+        }
         self.invoke(submission.clone(), cx);
         // A message left the chat box: an open secret card takes the keyboard back (secret_request.rs).
         self.return_keyboard_to_card(window, cx);

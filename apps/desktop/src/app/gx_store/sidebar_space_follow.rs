@@ -65,6 +65,13 @@ impl GhostexGpuiApp {
         // The memory first: the follow moves the section, and the row has to be remembered under
         // the Space it belongs to and not under whichever one the section was showing.
         self.gx_store_remember_space_session(&resolved, &focused, cx);
+        if self
+            .gx_store
+            .sidebar_ui
+            .take_suppressed_space_follow(&focused)
+        {
+            return;
+        }
         if resolved.follow {
             // Following into a hidden Space turns Show Hidden on first, as a reveal does: the
             // selection never rests on a hidden Space while it is off (gx-core `FocusedRowSpace`).

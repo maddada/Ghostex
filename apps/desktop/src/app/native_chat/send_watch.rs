@@ -146,6 +146,28 @@ impl NativeChatView {
         format!("{}:{}", self.config.project_id, self.config.session_id)
     }
 
+    /// Retargets an active send watch after a draft moves in place on Send so the 0ms optimistic
+    /// user message row stays rendered continuously across the single-frame rebind.
+    pub(super) fn retarget_send_watch(&mut self) {
+        let next = self.session_key();
+        if let Some(watch) = self.send_watch.as_mut() {
+            watch.session = next;
+        }
+        self.sync_sent_rows();
+    }
+
+    /// Removes a watched unconfirmed send when a pending-target move fails before delivery so the
+    /// message can return cleanly to the chat box.
+    pub(super) fn cancel_send_watch(&mut self, id: &str) {
+        if let Some(watch) = self.send_watch.as_mut() {
+            watch.sends.retain(|send| send.id != id);
+            if watch.sends.is_empty() {
+                self.send_watch = None;
+            }
+        }
+        self.sync_sent_rows();
+    }
+
     /// Starts watching the send that just left the box as `action`, named `id`.
     pub(super) fn watch_send(
         &mut self,
