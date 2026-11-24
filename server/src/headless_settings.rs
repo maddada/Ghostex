@@ -130,6 +130,23 @@ pub(crate) fn save_settings_patch(
     ghostex_paths::settings_file::save(&path, &bytes)
         .map_err(|error| format!("Could not save {}: {error}", path.display()))?;
     vouch(json!({ "sha256": new_hash }))?;
+    // If SQLite already holds a persisted `agents.settings.v1` row, keep its `agentAcceptAllEnabled`
+    // in step with a headless write so a stale `false` there cannot override turning it on (or vice
+    // versa) under `agents::resolve_global_accept_all_enabled`. When no row is persisted yet, leave
+    // it absent so first-start desktop hydration still sees `isPersisted: false`.
+    if let Some(value) = patch.get("agentAcceptAllEnabled") {
+        let next = value.as_bool().unwrap_or(false);
+        if let Ok(db) = crate::storage::open_gxserver_database(paths) {
+            if matches!(
+                crate::agents::read_agent_settings_metadata_value(&db),
+                Ok(Some(_))
+            ) {
+                let mut update = Map::new();
+                update.insert("agentAcceptAllEnabled".to_string(), Value::Bool(next));
+                let _ = crate::agents::update_agent_settings(&db, &update);
+            }
+        }
+    }
     Ok(Some(json!({
         "ok": true,
         "savedBy": "gxserver",

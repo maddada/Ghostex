@@ -162,24 +162,11 @@ pub fn accept_all_mode_change_raises(
         > accept_all_mode_rank(stored, global_accept_all_enabled)
 }
 
-/// Read the global `agentAcceptAllEnabled` boolean from shared settings or SQLite `agents.settings.v1`
-/// (`true` if either enables it, `false` if both are off/absent).
+/// Read the effective global `agentAcceptAllEnabled` boolean across shared settings
+/// (`native-sidebar-settings.json`) and SQLite `agents.settings.v1` using the same shared reader
+/// that launch and resume use (`agents::resolve_global_accept_all_enabled`).
 pub fn global_accept_all_enabled_in_shared_settings(paths: &crate::paths::GxserverPaths) -> bool {
-    let shared_enabled = crate::shared_settings_file::read_shared_settings(paths)
-        .and_then(|v| v.pointer("/agentAcceptAllEnabled").and_then(Value::as_bool))
-        .unwrap_or(false);
-    if shared_enabled {
-        return true;
-    }
-    crate::storage::open_gxserver_database(paths)
-        .ok()
-        .and_then(|db| crate::agents::read_agent_settings(&db).ok())
-        .and_then(|settings| {
-            settings
-                .get("agentAcceptAllEnabled")
-                .and_then(Value::as_bool)
-        })
-        .unwrap_or(false)
+    crate::agents::read_global_accept_all_enabled_for_paths(paths)
 }
 
 /// True when a shell command or startup text contains flags that bypass approvals or launch ACP
