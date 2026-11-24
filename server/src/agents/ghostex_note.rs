@@ -27,7 +27,7 @@ pub const GHOSTEX_NOTE: &str = "You are running inside Ghostex. Ghostex can show
 /// user can do blocks their work, matching "always, in this kind of case, put a needs you work
 /// item for me so I can do it". One short paragraph in the note every session's prompt carries,
 /// and the same in `ghostex agent-guide`; it is not behind a setting.
-pub const NEEDS_YOU_NOTE: &str = "When a step can only be done by the user (a sudo command, a tap on their phone, a sign-in, a check by eye), add it with `ghostex needs-you add \"<what to do>\" [--command \"…\"]` and also list it under Needs you in your reply. Their answer arrives as \"Q<n>: Done\". If you see it done yourself, run `ghostex needs-you done Q<n>`.";
+pub const NEEDS_YOU_NOTE: &str = "Never ask the user to run or paste a Ghostex command you can run yourself (setup, sign-in, connect, `ghostex settings open`): run it yourself and ask only for the step that needs their hands (Touch ID or fingerprint, approving a prompt, signing in in the browser, scanning a QR, a check by eye); never approve permission, Keychain, pairing or sign-in prompts or type passwords/2FA. When a step can only be done by the user, add it with `ghostex needs-you add \"<what to do>\" [--command \"…\"]` and also list it under Needs you in your reply. Their answer arrives as \"Q<n>: Done\". If you see it done yourself, run `ghostex needs-you done Q<n>`.";
 
 /// The paragraph after the Needs you one that has agents ask for a secret through Ghostex.
 ///

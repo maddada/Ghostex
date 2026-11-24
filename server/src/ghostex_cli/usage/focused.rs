@@ -949,12 +949,15 @@ pub fn needs_you_usage() -> String {
   ghostex needs-you done Q<n> [--session <alias|id|title>]
   ghostex needs-you drop Q<n> [--session <alias|id|title>]
 
-add: when a step can only be done by the user (a sudo command, a tap on their phone, a sign-in,
-a check by eye), put it above this session's chat box as a to-do with a Done button, without
-being asked. It takes the session's next Q tag and stays until the user presses Done or you
-clear it, even if the chat is cleared. The user reads it with nothing else on screen, often in
-another chat: its title names what it is about ("Run the signing setup on this computer"), never
-"it", "this" or "that" without the thing. --command shows as a chip the user clicks to copy.
+add: when a step can only be done by the user (an owner-only command, a phone tap, a browser
+sign-in, a check by eye), put it above this session's chat box as a to-do with a Done button,
+without being asked. Never ask the user to run or paste a `ghostex` command you can run yourself:
+run setup, sign-in, connect and `ghostex settings open` commands yourself first and ask only for
+the part that needs their hands (Touch ID or fingerprint, clicking Approve, signing in in the
+browser window that opened). It takes the session's next Q tag and stays until the user presses
+Done or you clear it, even if the chat is cleared. The user reads it with nothing else on screen,
+often in another chat: its title names what it is about ("Run the signing setup on this computer"),
+never "it", "this" or "that" without the thing. --command shows as a chip the user clicks to copy.
 --detail says what it is about and why, always: one short line (about 90 characters) shows under
 the title with Done or the answers still on the row; a longer one shows Details, and its Done or
 answers wait under it. --answer (repeated) offers choices such as "Works" and

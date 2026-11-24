@@ -193,7 +193,7 @@ pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
     );
     // CDXC:AgentSkills 2026-11-17 WHY: `ghostex-secrets` no longer loads on its own (agents/ghostex_note.rs `SECRETS_NOTE`) and a thread takes no launch note, so the brief names the verb.
     brief.push_str(
-        "\n- If a step needs a secret only the user has (a password, an API key or token), run `ghostex secret request --label <what> --reason <why>`: the user types it on a private card. Never ask for it in your report.",
+        "\n- If a step needs a secret only the user has (a password, an API key or token), run `ghostex secret request --label <what> --reason <why>`: the user types it on a private card. Never ask for it in your report.\n- Never ask the user to run or paste a Ghostex command you can run yourself (setup, connect, sign-in, `ghostex settings open`): run it yourself and ask only for the step that needs their hands (Touch ID or fingerprint, clicking Approve, signing in in the browser window that opened, or filling in a private secret card). Never approve permission, Keychain, consent, pairing or sign-in prompts for the user, and never type passwords or 2FA.",
     );
     // CDXC:Coordinators 2026-11-18 WHY: a thread (S90:P3lv0:G76dp) reported, then a background
     // "Wait for the PR diff reader to finish" it no longer needed ended; its task notification
@@ -300,10 +300,13 @@ pub enum StallNudge<'a> {
 /// linked sessions alike.
 pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
     match report {
-        ThreadReport::Finished { message: Some(message) } => {
+        ThreadReport::Finished {
+            message: Some(message),
+        } => {
             let message = without_foreign_agent_blocks(message);
             let message = message.trim();
-            let mut body = String::from("Ghostex thread report: finished its turn. Its final message:\n\n");
+            let mut body =
+                String::from("Ghostex thread report: finished its turn. Its final message:\n\n");
             if message.chars().count() > COORDINATOR_REPORT_MAX_CHARS {
                 body.extend(message.chars().take(COORDINATOR_REPORT_MAX_CHARS));
                 body.push_str(&format!(
@@ -315,7 +318,9 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
             body
         }
         ThreadReport::CutOff { message } => {
-            let mut body = String::from("Ghostex thread report: it stopped before its turn ended: its session was put to sleep, or its agent stopped, while it was still working, so its task is not done.");
+            let mut body = String::from(
+                "Ghostex thread report: it stopped before its turn ended: its session was put to sleep, or its agent stopped, while it was still working, so its task is not done.",
+            );
             let message = message.map(without_foreign_agent_blocks);
             if let Some(message) = message
                 .as_deref()
@@ -346,7 +351,10 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
                 excerpt,
                 ghostex_gx_chat_core::transcript::delivery_notice::DELIVERY_NOTICE_PREVIEW_MAX_CHARS,
             );
-            let mut body = match evidence.map(str::trim).filter(|evidence| !evidence.is_empty()) {
+            let mut body = match evidence
+                .map(str::trim)
+                .filter(|evidence| !evidence.is_empty())
+            {
                 Some(evidence) => {
                     format!("Ghostex thread report: message wasn't delivered ({evidence}).")
                 }
@@ -385,10 +393,9 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
                     "\n\nGhostex nudged it: \"{}\"",
                     super::stall::nudge_message()
                 )),
-                StallNudge::Failed(error) => body.push_str(&format!(
-                    "\n\nGhostex could not nudge it: {}",
-                    error.trim()
-                )),
+                StallNudge::Failed(error) => {
+                    body.push_str(&format!("\n\nGhostex could not nudge it: {}", error.trim()))
+                }
                 StallNudge::Earlier => {}
             }
             if let Some(row) = last_row.map(str::trim).filter(|row| !row.is_empty()) {
@@ -441,10 +448,9 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
                 StallNudge::Sent => {
                     body.push_str(&format!("\n\nGhostex nudged it: \"{nudge_message}\""))
                 }
-                StallNudge::Failed(error) => body.push_str(&format!(
-                    "\n\nGhostex could not nudge it: {}",
-                    error.trim()
-                )),
+                StallNudge::Failed(error) => {
+                    body.push_str(&format!("\n\nGhostex could not nudge it: {}", error.trim()))
+                }
                 StallNudge::Earlier => {}
             }
             body.push_str(&format!(

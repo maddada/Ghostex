@@ -84,7 +84,7 @@ pub(crate) async fn relay(
         return refusal(
             StatusCode::NOT_FOUND,
             "computerNotConnected",
-            "That computer isn't connected to this one. Connect it in Settings > Remote > Remote machines, then try again.".to_string(),
+            "That computer isn't connected to this one. Open Settings > Remote > Remote machines (`ghostex settings open --tab remote`) so the user can connect it, then try again.".to_string(),
             request_id,
         );
     };
@@ -154,7 +154,7 @@ pub(crate) async fn relay(
                     "badRequest",
                     message.to_string(),
                     request_id,
-                )
+                );
             }
         }
     } else if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) {
@@ -169,7 +169,7 @@ pub(crate) async fn relay(
                     "badRequest",
                     message.to_string(),
                     request_id,
-                )
+                );
             }
         }
     } else if forwarded == "/api/createAgentSession" {
@@ -184,7 +184,7 @@ pub(crate) async fn relay(
                     "badRequest",
                     message.to_string(),
                     request_id,
-                )
+                );
             }
         }
     } else {

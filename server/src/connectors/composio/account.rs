@@ -22,16 +22,13 @@ pub(crate) const MCP_URL: &str = "https://connect.composio.dev/mcp";
 /// The provider folder the sealed sign-ins live in.
 const PROVIDER: &str = "composio";
 
-pub(crate) const NOT_CONNECTED: &str =
-    "Composio isn't connected in this workspace. Sign in with `ghostex connectors sign-in`.";
-pub(crate) const EXPIRED: &str =
-    "This workspace's Composio sign-in expired. Sign in again with `ghostex connectors sign-in`.";
-pub(crate) const UNREADABLE: &str =
-    "This workspace's Composio sign-in can't be read anymore. Sign in again with `ghostex connectors sign-in`.";
+pub(crate) const NOT_CONNECTED: &str = "Composio isn't connected in this workspace. Run `ghostex connectors sign-in` to open the browser sign-in, then let the user finish signing in there.";
+pub(crate) const EXPIRED: &str = "This workspace's Composio sign-in expired. Run `ghostex connectors sign-in` to open the browser sign-in again, then let the user finish signing in there.";
+pub(crate) const UNREADABLE: &str = "This workspace's Composio sign-in can't be read anymore. Run `ghostex connectors sign-in` to open the browser sign-in again, then let the user finish signing in there.";
 const NO_SIGN_IN: &str =
-    "No Composio sign-in is in progress. Start it again with `ghostex connectors sign-in`.";
+    "No Composio sign-in is in progress. Run `ghostex connectors sign-in` to start it again.";
 pub(super) const STALE_LINK: &str =
-    "This sign-in link is out of date. Start the Composio sign-in again with `ghostex connectors sign-in`.";
+    "This sign-in link is out of date. Run `ghostex connectors sign-in` to start a new one.";
 /// How long a started sign-in waits for Composio's redirect.
 const SIGN_IN_TTL_MS: i64 = 10 * 60 * 1000;
 const DIDNT_COMPLETE: &str = "Composio sign-in didn't complete. Try again.";

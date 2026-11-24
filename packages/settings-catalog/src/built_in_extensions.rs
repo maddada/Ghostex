@@ -371,8 +371,8 @@ pub fn terminal_hint(key: &str, value: bool) -> String {
         .into_iter()
         .any(|entry| entry.key == key && entry.agent_writable);
     if writable {
-        format!(" From a terminal: ghostex settings set {key} {value}")
+        format!(" Run `ghostex settings set {key} {value}`.")
     } else {
-        format!(" From a terminal: ghostex settings open {key}")
+        format!(" Open it with `ghostex settings open {key}`.")
     }
 }

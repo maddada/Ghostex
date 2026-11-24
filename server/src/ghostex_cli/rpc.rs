@@ -406,7 +406,7 @@ fn wait_for_approval(
             "expired" | "consumed" => {
                 return Err(CliError::Other(format!(
                     "Nobody approved this in time: {summary}. Run the command again to ask again."
-                )))
+                )));
             }
             _ => {}
         }
@@ -774,7 +774,7 @@ pub fn resolve_gxserver_server_target(flags: &Flags, params: &Value) -> CliResul
         }
         let Some(profile) = find_gxserver_connection_profile_by_server_id(&server_id) else {
             return Err(CliError::Other(format!(
-                "{global_ref} is a session on a computer this one isn't connected to. Connect that computer in Settings > Remote > Remote machines, or list its sessions with ghostex sessions --computer <name>."
+                "{global_ref} is a session on a computer this one isn't connected to. Open Settings > Remote > Remote machines (`ghostex settings open --tab remote`) so the user can connect it, or list connected sessions with `ghostex sessions --computer <name>`."
             )));
         };
         return resolve_gxserver_profile_target(&profile, flags);

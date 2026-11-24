@@ -318,7 +318,7 @@ fn pick(
         }
         if matches!(wanted_place, Place::Computer(_)) {
             return Err(DomainStateError::not_found(
-                "That computer isn't connected to this one. Connect it in Settings > Remote > Remote machines first.",
+                "That computer isn't connected to this one. Open Settings > Remote > Remote machines (`ghostex settings open --tab remote`) so the user can connect it first.",
             ));
         }
     }
@@ -337,7 +337,9 @@ fn pick(
             .chain(boxes.iter().map(|row| row.name.clone()))
             .collect();
         return Err(DomainStateError::not_found(if names.is_empty() {
-            format!("There's no connected computer or Cloud Box called {wanted}. Connect a computer in Settings > Remote, or start a Cloud Box first.")
+            format!(
+                "There's no connected computer or Cloud Box called {wanted}. Connect a computer in Settings > Remote, or start a Cloud Box first."
+            )
         } else {
             format!(
                 "There's no connected computer or Cloud Box called {wanted}. Pick one of: {}.",

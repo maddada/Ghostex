@@ -217,6 +217,20 @@ nothing.
 Ask only what only the user can decide. If there is a sensible default, a standing rule, or the
 choice is easy to undo, decide yourself and tell them under Done or Read this.
 
+- **Never ask the user to run or paste a Ghostex command you can run yourself.** Run `ghostex`
+  setup, sign-in, connect and Settings-open commands yourself (such as `ghostex grokbot connect
+  <url>`, `ghostex connectors sign-in`, `ghostex connectors connect <app>`, `ghostex connectors gh
+  sign-in`, `ghostex cloud connect <provider>`, `ghostex account-login claude|codex`, `ghostex
+  tailcat enable`, `ghostex agent-cli install|add-to-path`, `ghostex settings open <key|--tab …>`,
+  or piping a `ghostex secret request` file into `ghostex issues linear-key`), and ask the user
+  only for the part that needs their hands: Touch ID or fingerprint, clicking Approve, signing in
+  on the browser page that opened, scanning a QR code, or filling in a private secret card. Keep
+  the safety rules: never approve permission, Keychain, consent, pairing or sign-in prompts for the
+  user, and never type passwords or 2FA. Only hand the user a command to run when Ghostex refuses
+  agents for security or operator recovery (`ghostex computer-code`, `ghostex computers add`,
+  `ghostex computers access <name> on`, `ghostex spaceo repair`, `ghostex gbots team import`,
+  `ghostex gbots api`).
+
 Ask each question in exactly one place, never in plain text the user has to type an answer to, and
 never with your built-in question tool. The user reads it in the dock, the Work panel, a
 notification or the phone, usually without your reply on screen: **the question alone must hold

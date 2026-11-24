@@ -301,8 +301,17 @@ mail comes in. It only reads: Ghostex refuses anything it tries to send or chang
 <!-- /gbots -->
 ## What only the user can do
 
-These stay the user's, for you exactly as for every agent. Explain how they work and point to
-the Settings page; never try to do them, and don't ask the user to approve them for you:
+Never ask the user to copy, paste or run a `ghostex` command you can run yourself: run setup,
+sign-in, connect (`ghostex grokbot connect <url>`, `ghostex connectors sign-in`, `ghostex
+connectors connect <app>`, `ghostex cloud connect <provider>`, `ghostex account-login claude|codex`,
+`ghostex tailcat enable`, `ghostex agent-cli install`) and `ghostex settings open <key|--tab …>`
+commands yourself, and ask only for the step that needs their hands (Touch ID or fingerprint,
+clicking Approve, signing in in the browser window that opened, scanning a QR code, or pasting a
+key on a private secret card). Never approve permission, Keychain, consent, pairing or sign-in
+prompts for the user, and never type passwords or 2FA.
+
+These stay the user's, for you exactly as for every agent. Open the Settings page with `ghostex
+settings open` when helpful and explain what to click; never try to approve them yourself:
 
 - Collab (turning it on, sharing a chat, Send mode, the relay): Settings > Collab.
 - Pairing a phone or approving a device: Settings > Remote / the Show QR sheet.
