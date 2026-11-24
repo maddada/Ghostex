@@ -631,6 +631,25 @@ impl SessionLinks {
     /// CDXC:SessionLinks 2026-10-24 DECISION:
     /// User: "why didn't we suggest #263 here for this session?" A session whose only links are suggestions shows a quiet badge (muted and dashed, counting the suggestions) that opens the floating card on hover, under every option but Off, instead of nothing.
     pub fn row(&self, display: SessionLinksDisplay, selected: bool) -> SessionLinksRow {
+        self.row_for(display, selected, true)
+    }
+
+    /// What a row shows under `display`, with `show_suggested_badge` controlling whether a
+    /// suggestions-only session draws its quiet suggested badge. Hovering the row still opens the
+    /// floating links card (`hover_card: true`) so suggestions can still be linked manually.
+    ///
+    /// CDXC:SessionLinks 2026-11-24 DECISION:
+    /// User: "don't show suggested link pill on the session item for a coordinator, also don't show
+    /// the suggested session pill for coordinator thread (allow me to link by hovering on the
+    /// coordinator anyways and clicking in the menu but otherwise we don't show the pill for those 2)".
+    /// Coordinator rows and coordinator thread rows pass `show_suggested_badge = false`: they hide
+    /// the automatic suggested-links pill while keeping `hover_card = true` and any linked items.
+    pub fn row_for(
+        &self,
+        display: SessionLinksDisplay,
+        selected: bool,
+        show_suggested_badge: bool,
+    ) -> SessionLinksRow {
         if display == SessionLinksDisplay::Off {
             return SessionLinksRow::default();
         }
@@ -640,7 +659,7 @@ impl SessionLinks {
             }
             return SessionLinksRow {
                 line: Vec::new(),
-                badge: Some(SessionLinksBadge {
+                badge: show_suggested_badge.then(|| SessionLinksBadge {
                     count: self.suggested.len(),
                     tone: SessionLinkTone::Draft,
                     suggested: true,

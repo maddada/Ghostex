@@ -163,8 +163,15 @@ impl NativeChatView {
         cx.emit(super::state::NativeChatEvent::Host(open));
     }
 
-    /// The Boost pill: the sparkles and "Boost" in the accent, a fill while the message has a
-    /// Boost or its menu is open. A click opens the menu against it.
+    /// The Boost pill: the sparkles and "Boost" in the neutral style of the other strip pills,
+    /// with a subtle neutral fill while the message has a Boost or its menu is open. A click opens
+    /// the menu against it.
+    ///
+    /// CDXC:Boosts 2026-11-24 DECISION:
+    /// User: "please color this like the other pills, pill shouldn't be yellow". The strip pill
+    /// uses the exact same neutral fill, border, text and icon colours as the panel pills beside
+    /// it (`chat_pills.rs` `chat_pill`), across dark, light and all built-in themes. Supersedes
+    /// the gold accent on the strip pill from 2026-11-20; Boost chips inside messages keep gold.
     pub(super) fn boost_strip_pill(
         &self,
         p: &ChatAppearance,
@@ -173,7 +180,6 @@ impl NativeChatView {
         let boosts = self.boosts()?;
         let pill = &boosts["pill"];
         let s = p.scale;
-        let tone = accent(p.light);
         let open = self.chat_menu_is_open(BOOST_TRIGGER);
         let active = pill["active"] == true;
         let bounds: Rc<Cell<Bounds<Pixels>>> = self.boost_pill_bounds.clone();
@@ -189,18 +195,19 @@ impl NativeChatView {
                 .items_center()
                 .flex_shrink_0()
                 .gap(px(5.0 * s))
+                .h(px(super::chat_pills::PILL_HEIGHT * s))
                 .px(px(8.0 * s))
                 .py(px(2.0 * s))
                 .rounded_full()
                 .border(px(s))
-                .border_color(tone.opacity(if active { 0.6 } else { 0.4 }))
+                .border_color(p.foreground.opacity(0.1))
                 .text_size(px(13.0 * s))
                 .line_height(px(19.0 * s))
                 .whitespace_nowrap()
-                .text_color(tone)
+                .text_color(p.card_muted)
                 .chat_cursor_pointer()
-                .when(active || open, |pill| pill.bg(tone.opacity(0.14)))
-                .hover(|style| style.bg(tone.opacity(0.1)))
+                .when(active || open, |pill| pill.bg(p.foreground.opacity(0.08)))
+                .hover(|style| style.bg(p.foreground.opacity(0.06)))
                 .when(!open, |pill| {
                     pill.tooltip(|window, cx| {
                         gpui_component::tooltip::Tooltip::new(
@@ -214,7 +221,7 @@ impl NativeChatView {
                         .path("titlebar/sparkles.svg")
                         .size(px(14.0 * s))
                         .flex_shrink_0()
-                        .text_color(tone),
+                        .text_color(p.card_muted),
                 )
                 .child(text(pill, "label"))
                 .on_click(cx.listener(move |this, _, window, cx| {

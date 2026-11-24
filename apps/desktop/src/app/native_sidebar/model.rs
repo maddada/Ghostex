@@ -124,6 +124,9 @@ pub(crate) struct NativeSidebarSession {
     /// with New Chat, Change Agent and its editors (native_sidebar/chief.rs).
     #[serde(default)]
     pub(crate) is_chief: bool,
+    /// A thread started by a coordinator (`SessionRow::coordinator_parent.is_some() && !row.lead_linked`).
+    #[serde(default)]
+    pub(crate) is_coordinator_thread: bool,
     pub(crate) display_title: Option<String>,
     pub(crate) alias: String,
     pub(crate) activity: String,

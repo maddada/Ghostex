@@ -292,7 +292,14 @@ impl GhostexGpuiApp {
             session.is_focused,
             session.is_visible,
         );
-        links.row(self.native_session_links_display(), selected)
+        let show_suggested_badge = !super::threads::is_coordinator(session)
+            && !session.is_chief
+            && !super::threads::is_coordinator_thread(session);
+        links.row_for(
+            self.native_session_links_display(),
+            selected,
+            show_suggested_badge,
+        )
     }
 
     /// Whether the row draws a second line: its links line, or a Work mode card's Clean up / Keep

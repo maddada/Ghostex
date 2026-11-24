@@ -179,6 +179,10 @@ pub(crate) fn is_coordinator(session: &NativeSidebarSession) -> bool {
         == Some(true)
 }
 
+pub(crate) fn is_coordinator_thread(session: &NativeSidebarSession) -> bool {
+    session.is_coordinator_thread
+}
+
 /// The icon a coordinator row draws in place of its agent's logo.
 ///
 /// CDXC:Coordinators 2026-10-01 DECISION:
