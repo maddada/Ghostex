@@ -670,7 +670,7 @@ mod tests {
                         "Grok Bot"
                     ]
                 ),
-                ("Connections", vec!["Remote", "Sync", "Collab"]),
+                ("Connections", vec!["Remote", "Sync", "Collab", "Sharing"]),
                 (
                     "System",
                     vec!["Notifications", "Power & Sleep", "Security", "About"]
