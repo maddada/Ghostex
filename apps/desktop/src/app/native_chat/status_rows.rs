@@ -77,6 +77,9 @@ impl NativeChatView {
         let suppressed = &message["suppressed"];
         match text(suppressed, "kind").as_str() {
             "status" => self.status_rows(id, suppressed, p, cx),
+            "inline" if suppressed["divider"].as_bool() == Some(true) => {
+                self.divider_suppressed_row(suppressed, p)
+            }
             "inline" => self.inline_suppressed_row(suppressed, p),
             _ => self.collapsed_suppressed_row(id, suppressed, p, cx),
         }
@@ -391,6 +394,35 @@ impl NativeChatView {
             .tooltip(move |window, cx| {
                 gpui_component::tooltip::Tooltip::new(hint.clone()).build(window, cx)
             })
+            .into_any_element()
+    }
+
+    /// The interrupted marker as a centred divider with the stop-sign octagon
+    /// (decision in `gx-chat-core` `transcript/noise.rs`, `interrupted_marker`).
+    fn divider_suppressed_row(&self, suppressed: &Value, p: &ChatAppearance) -> AnyElement {
+        let s = p.scale;
+        let rule = || div().h(px(1.0)).flex_1().min_w_0().bg(p.border);
+        div()
+            .flex()
+            .items_center()
+            .w_full()
+            .min_w_0()
+            .gap(px(10.0 * s))
+            .pt(px(4.0 * s))
+            .pb(px(p.inner_gap(13.0) * s))
+            .text_size(px(12.5 * s))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(p.muted)
+            .child(rule())
+            .child(
+                gpui::svg()
+                    .path("titlebar/octagon-x.svg")
+                    .size(px(14.0 * s))
+                    .flex_shrink_0()
+                    .text_color(p.muted),
+            )
+            .child(div().flex_shrink_0().child(text(suppressed, "label")))
+            .child(rule())
             .into_any_element()
     }
 

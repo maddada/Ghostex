@@ -1042,10 +1042,15 @@ fn status_row_value(row: &StatusRow) -> Value {
     Value::Object(entry)
 }
 
+/// CDXC:SessionChat 2026-11-24 DECISION: User picked "A. Divider" for the interrupted marker, with "make it stop sign icon tho please": "Agent was interrupted" is drawn as a centred divider (hairline, the stop-sign `octagon-x` icon, the sentence, hairline) instead of a lane row, on desktop, web and phone. `divider: true` tells the renderers; older phones ignore it and keep the lane row.
+fn interrupted_marker() -> Value {
+    json!({ "kind": "inline", "label": INTERRUPTED_MARKER_TEXT, "text": "", "divider": true })
+}
+
 /// Human-readable label and expandable text for a suppressed harness turn, or `Value::Null`.
 ///
-/// `kind` is `collapsed`, `inline` (a short collapsed turn shown as prose instead of a chevron) or
-/// `status`.
+/// `kind` is `collapsed`, `inline` (a short collapsed turn shown as prose instead of a chevron;
+/// with `divider: true`, the interrupted marker drawn as a centred divider) or `status`.
 pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
     let suppressed = classify_suppressed_turn(message);
     let (kind, label, tone) = match &suppressed {
@@ -1055,7 +1060,7 @@ pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
     };
 
     if kind == "collapsed" && label == INTERRUPTED_LABEL {
-        return json!({ "kind": "inline", "label": INTERRUPTED_MARKER_TEXT, "text": "" });
+        return interrupted_marker();
     }
     if let Some(blocked) = crate::transcript::hook_blocked::parse_hook_blocked_prompt(message) {
         return hook_blocked_note(&label, &blocked.reason);
