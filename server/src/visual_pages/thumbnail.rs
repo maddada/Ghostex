@@ -294,6 +294,7 @@ fn picture_state(state_dir: &Path, id: &str, with_picture: bool, theme: Option<&
                 }
                 None => (thumbnail_path(state_dir, id), None, false),
             };
+            let missing_themed = theme.is_some() && resolved_theme.is_none();
             let captured_at = record
                 .get("thumbnailAt")
                 .and_then(Value::as_str)
@@ -302,14 +303,16 @@ fn picture_state(state_dir: &Path, id: &str, with_picture: bool, theme: Option<&
                 .filter(|_| with_picture)
                 .and_then(|_| fs::read(&chosen_path).ok())
                 .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes));
+            let needs_themed = missing_themed && captured_at.is_some();
             json!({
                 "pageId": id,
                 "png": png,
                 "capturedAt": captured_at,
-                "stale": captured_at.is_none() || answered_since_picture(&record),
+                "stale": captured_at.is_none() || needs_themed || answered_since_picture(&record),
                 "gone": false,
-                "backgroundPicture": captured_at.is_none()
+                "backgroundPicture": (captured_at.is_none() || needs_themed)
                     && record.get("pictureInBackground").and_then(Value::as_bool) == Some(true),
+                "needsThemedPicture": needs_themed,
                 "theme": resolved_theme,
                 "transparent": transparent,
             })

@@ -142,10 +142,13 @@ impl UnopenedPageQueue {
 }
 
 /// Whether gxserver's answer about a page's picture (`readVisualPageThumbnail`) lets it be pictured
-/// unopened: the page is still there, has no picture, and was published since background pictures
-/// (pages published before carry no mark and wait until they are opened).
+/// unopened: the page is still there, has no picture (or only a legacy unthemed picture), and was
+/// published since background pictures (pages published before carry no mark and wait until they
+/// are opened).
 pub(crate) fn may_picture_unopened(state: &serde_json::Value) -> bool {
-    state["backgroundPicture"] == true && state["gone"] != true && state["capturedAt"].is_null()
+    state["backgroundPicture"] == true
+        && state["gone"] != true
+        && (state["capturedAt"].is_null() || state["needsThemedPicture"] == true)
 }
 
 thread_local! {
@@ -351,7 +354,9 @@ async fn picture_page_unopened(
     viewport: (f32, f32),
     cx: &mut gpui::AsyncApp,
 ) -> Outcome {
-    let Some(state) = read_picture_state(page.remote.clone(), &page.page_id).await else {
+    let theme = if light { "light" } else { "dark" };
+    let Some(state) = read_picture_state(page.remote.clone(), &page.page_id, Some(theme)).await
+    else {
         return Outcome::Done;
     };
     let should_picture = if page.force_stale {
@@ -402,7 +407,7 @@ async fn load_and_picture(
             parent,
             page_url,
             VISUAL_PAGE_CEF_PROFILE_ID.to_string(),
-            pane_prepaint_background_color(),
+            0x0000_0000,
             false,
             background,
             None,

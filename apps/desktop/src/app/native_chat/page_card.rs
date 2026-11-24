@@ -55,11 +55,6 @@ static VISUAL: std::sync::LazyLock<PageCardVisual> = std::sync::LazyLock::new(||
 const CARD_GROUP: &str = "chat-page-card";
 /// How long after the card opens its page in the floating window it asks for the new picture.
 const PICTURE_AFTER_OPEN: Duration = Duration::from_secs(4);
-/// Desktop/web preview max height: shows header + KPI cards cleanly on wide chat cards while
-/// shrinking smoothly to the thumbnail's 1.6 aspect ratio on narrow sidebars/panes.
-const DESKTOP_PREVIEW_MAX_HEIGHT: f32 = 276.0;
-/// Subtle bottom fade height for the cropped preview edge (short enough not to obscure content).
-const DESKTOP_FADE_HEIGHT: f32 = 34.0;
 
 /// One page's picture as this view knows it.
 #[derive(Default)]
@@ -292,8 +287,8 @@ impl NativeChatView {
         // is drawn, so the desktop pictures it in the background. Each answer offers it again (the
         // desktop takes each page once per run), so a page let go for now is offered again.
         let picture_unopened = super::visual_popup::FLOATING_PAGES
-            && image.is_none()
-            && params["backgroundPicture"] == true;
+            && params["backgroundPicture"] == true
+            && (image.is_none() || !transparent);
         let mut unopened_url = None;
         let mut replaced = Vec::new();
         {
@@ -585,21 +580,11 @@ impl NativeChatView {
         } else {
             bar.into_any_element()
         };
+        // Under window glass, keep the preview area transparent so it blends directly with the
+        // card's own translucent surface (`window_bg`) with no separate dark/light slab. When
+        // glass is off (solid theme or gpui-web), match the card's own surface (`window_bg`).
         let preview_bg = if p.window_glass {
-            if p.light {
-                gpui::white().opacity(0.32)
-            } else {
-                gpui::black().opacity(0.22)
-            }
-        } else {
-            p.background
-        };
-        let fade_bottom = if p.window_glass {
-            if p.light {
-                gpui::white().opacity(0.48)
-            } else {
-                p.background.opacity(0.68)
-            }
+            gpui::transparent_black()
         } else {
             window_bg
         };
@@ -607,32 +592,31 @@ impl NativeChatView {
         let preview = div()
             .relative()
             .w_full()
+            .h(px(v.preview_height * s))
             .overflow_hidden()
             .bg(preview_bg)
             .when(p.window_glass, |this| {
-                this.border_b(px(1.0)).border_color(p.border.opacity(0.6))
+                this.border_b(px(1.0)).border_color(p.border)
             })
             .map(|this| match picture {
-                // Full width at the stored 1.6 aspect ratio, clipped cleanly at max height so wide
-                // desktop cards reveal KPI cards/content while narrow panes avoid blank bottom gaps.
-                Some((picture, _transparent)) => this
-                    .flex()
-                    .flex_col()
-                    .max_h(px(DESKTOP_PREVIEW_MAX_HEIGHT * s))
-                    .child(
-                        div()
-                            .flex_none()
-                            .w_full()
-                            .aspect_ratio(v.thumbnail_width / v.thumbnail_height)
-                            .child(
-                                img(picture)
-                                    .size_full()
-                                    .object_fit(gpui::ObjectFit::Fill),
-                            ),
-                    ),
+                // As wide as the card, cut at the bottom: the top of the page is what it opens on.
+                // Wrapped in a plain `div` with `aspect_ratio` so GPUI/Taffy computes height from
+                // the card width (`width / 1.6`) rather than the 2x PNG's intrinsic 1000px height.
+                Some((picture, _transparent)) => this.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .w_full()
+                        .aspect_ratio(v.thumbnail_width / v.thumbnail_height)
+                        .child(
+                            img(picture)
+                                .size_full()
+                                .object_fit(gpui::ObjectFit::Fill),
+                        ),
+                ),
                 // No picture yet: a page icon and the file name.
                 None => this
-                    .h(px(v.preview_height * s))
                     .flex()
                     .flex_col()
                     .items_center()
@@ -653,19 +637,20 @@ impl NativeChatView {
                             .child(placeholder_label),
                     ),
             })
-            // Subtle bottom fade when a picture is shown: softens the clip edge without hiding cards.
-            .when(has_picture, |this| {
+            // On opaque themes (glass off), fade the preview cleanly into the card's solid footer;
+            // on window glass, avoid painting a dark/opaque fade band over the translucent surface.
+            .when(has_picture && !p.window_glass, |this| {
                 this.child(
                     div()
                         .absolute()
                         .left_0()
                         .right_0()
                         .bottom_0()
-                        .h(px(DESKTOP_FADE_HEIGHT * s))
+                        .h(px(v.fade_height * s))
                         .bg(gpui::linear_gradient(
                             180.0,
-                            gpui::linear_color_stop(fade_bottom.opacity(0.0), 0.0),
-                            gpui::linear_color_stop(fade_bottom, 1.0),
+                            gpui::linear_color_stop(window_bg.opacity(0.0), 0.0),
+                            gpui::linear_color_stop(window_bg, 1.0),
                         )),
                 )
             })

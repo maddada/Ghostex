@@ -116,18 +116,19 @@ const RELEASE_PAGE_TOP: &str =
     "window.__ghostexPageScroll && window.__ghostexPageScroll.release();";
 
 /// What the page's gxserver says about its picture (`readVisualPageThumbnail` without the
-/// picture): `stale`, `gone` and `backgroundPicture`.
+/// picture): `stale`, `gone`, `backgroundPicture` and `needsThemedPicture`.
 pub(super) async fn read_picture_state(
     remote: Option<GpuiRemoteGxserverRequestTarget>,
     page_id: &str,
+    theme: Option<&str>,
 ) -> Option<serde_json::Value> {
-    gx_rpc(
-        remote,
-        "/api/readVisualPageThumbnail",
-        json!({"pageId": page_id, "withPicture": false}),
-    )
-    .await
-    .ok()
+    let mut params = json!({"pageId": page_id, "withPicture": false});
+    if let Some(theme) = theme {
+        params["theme"] = json!(theme);
+    }
+    gx_rpc(remote, "/api/readVisualPageThumbnail", params)
+        .await
+        .ok()
 }
 
 async fn picture_page(
@@ -138,7 +139,7 @@ async fn picture_page(
     cx: &mut gpui::AsyncApp,
 ) -> Option<()> {
     // Only a page with no picture, or one answered since its picture, is pictured.
-    let known = read_picture_state(remote.clone(), page_id).await?;
+    let known = read_picture_state(remote.clone(), page_id, None).await?;
     if known["stale"] != true || known["gone"] == true {
         return None;
     }
