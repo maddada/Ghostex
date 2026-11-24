@@ -4132,11 +4132,9 @@ OpenCode with npm instead. OpenCode's Homebrew choice installs
 adds it to your user PATH so new terminals find the command; Add to PATH
 does the same for a CLI installed earlier. Installs run one at a time and wait
 their turn. Ghostex updates a CLI the way it was installed; when it cannot tell,
-it uses the CLI's own updater (such as `copilot update`, `pi update` or
-`omp update`), and only a CLI without one asks you to choose the original
-installation method. Antigravity updates itself in the background while it
-runs, so its Update says so instead of running anything; start a new session
-to use the newest version. Hermes Agent is checked with its own `hermes update --check`,
+it uses the CLI's own updater (such as `copilot update`, `pi update`,
+`omp update` or `agy update`), and only a CLI without one asks you to choose the original
+installation method. Hermes Agent is checked with its own `hermes update --check`,
 so Update available is shown when Hermes is behind even if its version number has
 not changed. When mise's `minimum_release_age` setting holds a newer release back,
 the CLI shows that release as held back by mise and the date it becomes eligible

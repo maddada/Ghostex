@@ -110,7 +110,12 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                     .as_array()
                     .into_iter()
                     .flatten()
-                    .find(|method| method["unavailableReason"].is_null())
+                    .find(|method| {
+                        method["unavailableReason"].is_null()
+                            && method["command"]
+                                .as_str()
+                                .is_some_and(|command| !command.trim().is_empty())
+                    })
                     .and_then(|method| method["id"].as_str())
                     .map(str::to_string)
                     .ok_or_else(|| {

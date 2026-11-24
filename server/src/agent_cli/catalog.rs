@@ -86,7 +86,7 @@ pub(crate) struct Native {
     #[serde(default)]
     needs_npm: bool,
     /// The CLI updates itself in the background while it runs and has no update command, and its
-    /// installer does nothing over an existing install (Antigravity's).
+    /// installer does nothing over an existing install.
     #[serde(default)]
     updates_itself: bool,
 }
@@ -139,7 +139,7 @@ impl Definition {
             .or(self.self_update.as_deref())
     }
 
-    /// The CLI updates itself while it runs and Ghostex has no update to run (Antigravity).
+    /// The CLI updates itself while it runs and Ghostex has no update to run.
     pub(crate) fn updates_itself(&self) -> bool {
         self.native
             .as_ref()
@@ -976,11 +976,8 @@ mod tests {
             assert!(elsewhere.iter().all(|method| method.id != "mise"));
             if definition.agent_id == "antigravity" {
                 let native = elsewhere.iter().find(|m| m.id == "native").unwrap();
-                assert!(native.command.is_empty());
-                assert!(native
-                    .unavailable_reason
-                    .as_deref()
-                    .is_some_and(|reason| reason.contains("updates itself")));
+                assert_eq!(native.command, "agy update");
+                assert!(native.unavailable_reason.is_none());
             }
             println!(
                 "{:<14} not on mise: {:<28} default {:?}\n{:<14} mise tool:   {:<28} default {:?}\n{:<14} mise node:   {:<28} default {:?}",

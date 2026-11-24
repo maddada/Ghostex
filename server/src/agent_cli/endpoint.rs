@@ -102,7 +102,12 @@ pub(crate) async fn install_default_and_wait(
     let methods = state["methods"].as_array().cloned().unwrap_or_default();
     let method = methods
         .iter()
-        .find(|method| method["unavailableReason"].is_null())
+        .find(|method| {
+            method["unavailableReason"].is_null()
+                && method["command"]
+                    .as_str()
+                    .is_some_and(|command| !command.trim().is_empty())
+        })
         .ok_or_else(|| {
             methods
                 .first()
@@ -269,7 +274,11 @@ async fn start(
         .as_array()
         .and_then(|methods| methods.iter().find(|method| method["id"] == method_id))
         .ok_or_else(|| refused("Unsupported installation method."))?;
-    if let Some(reason) = method["unavailableReason"].as_str() {
+    if let Some(reason) = method["unavailableReason"]
+        .as_str()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+    {
         return Err(refused(reason));
     }
     if installed {
@@ -283,8 +292,24 @@ async fn start(
     }
     let script = method["command"]
         .as_str()
-        .ok_or_else(|| error("Missing CLI command."))?
+        .map(str::trim)
+        .filter(|command| !command.is_empty())
+        .ok_or_else(|| refused("Ghostex has no command to run for this installation method."))?
         .to_string();
+    // Run a CLI's own updater (`agy update`, `copilot update`, ...) through the resolved
+    // executable path so it works even when its install folder isn't on PATH and targets the exact
+    // copy Ghostex detected (macOS, Linux and Windows `.exe` / `.cmd` / `.ps1`).
+    let script = if installed && matches!(method_id, "native" | "self") {
+        match state["executablePath"].as_str() {
+            Some(executable) => super::launch_path::rewrite_program(&script, |program| {
+                (program == definition.binary)
+                    .then(|| super::launch_path::direct_program(executable))
+            }),
+            None => script,
+        }
+    } else {
+        script
+    };
     let mut env = if method_id == "native" || method_id == "self" {
         definition.native_env()
     } else {
