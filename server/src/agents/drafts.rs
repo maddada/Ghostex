@@ -1043,11 +1043,8 @@ pub(crate) fn move_draft_session(
         if promote.get("skillOnlyStart").and_then(Value::as_bool) == Some(true) {
             promote_params.insert("skillOnlyStart".to_string(), json!(true));
         }
-        let _ = crate::coordinators::promote_session_to_coordinator(
-            db,
-            &server_id,
-            &promote_params,
-        );
+        let _ =
+            crate::coordinators::promote_session_to_coordinator(db, &server_id, &promote_params);
     }
 
     let updated = repository

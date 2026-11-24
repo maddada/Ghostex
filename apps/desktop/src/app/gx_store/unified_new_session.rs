@@ -1005,7 +1005,12 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                         });
-                        this.gx_store_create_toast("warning", "Could not start chat", Some(&msg), cx);
+                        this.gx_store_create_toast(
+                            "warning",
+                            "Could not start chat",
+                            Some(&msg),
+                            cx,
+                        );
                     });
                     return;
                 };
@@ -1049,7 +1054,8 @@ impl GhostexGpuiApp {
                         "forDraft": true,
                         "skillOnlyStart": send.skill_only_start,
                     });
-                    let _ = super::rpc::gx_rpc(None, "/api/promoteCoordinator", promote_params).await;
+                    let _ =
+                        super::rpc::gx_rpc(None, "/api/promoteCoordinator", promote_params).await;
                 }
                 let _ = this.update(cx, |this, cx| {
                     this.gx_store_remember_new_session_keep_space(

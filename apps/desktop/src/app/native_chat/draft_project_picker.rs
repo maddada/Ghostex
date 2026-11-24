@@ -302,7 +302,10 @@ impl NativeChatView {
     pub(super) fn effective_draft_target(&self) -> (&str, &str) {
         match self.pending_draft_target.as_ref() {
             Some(target) => (target.machine_id.as_str(), target.project_id.as_str()),
-            None => (self.config.machine_id.as_str(), self.config.project_id.as_str()),
+            None => (
+                self.config.machine_id.as_str(),
+                self.config.project_id.as_str(),
+            ),
         }
     }
 
@@ -327,7 +330,8 @@ impl NativeChatView {
     ) {
         self.pending_target_tray = None;
         self.pending_target_tray_generation = self.pending_target_tray_generation.wrapping_add(1);
-        if target.machine_id == self.config.machine_id && target.project_id == self.config.project_id
+        if target.machine_id == self.config.machine_id
+            && target.project_id == self.config.project_id
         {
             self.pending_draft_target = None;
             cx.notify();
@@ -605,9 +609,10 @@ impl NativeChatView {
         }
         let choices = app.read(cx).gx_store_project_choices();
         let mut choice = choices.into_iter().find(|choice| {
-            choice.machines.iter().any(|machine| {
-                machine.machine_id == machine_id && machine.project_id == project_id
-            })
+            choice
+                .machines
+                .iter()
+                .any(|machine| machine.machine_id == machine_id && machine.project_id == project_id)
         })?;
         choice.selected = choice
             .machines
@@ -943,14 +948,13 @@ impl NativeChatView {
             return;
         }
         let (current_machine_id, current_project_id) = self.effective_draft_target();
-        let same = machine.project_id == current_project_id
-            && machine.machine_id == current_machine_id;
+        let same =
+            machine.project_id == current_project_id && machine.machine_id == current_machine_id;
         // The draft's effective project, picked again from the project list: nothing changes.
         let same = same
             || (!picked_machine
                 && row.machines.iter().any(|entry| {
-                    entry.project_id == current_project_id
-                        && entry.machine_id == current_machine_id
+                    entry.project_id == current_project_id && entry.machine_id == current_machine_id
                 }));
         if same {
             return;

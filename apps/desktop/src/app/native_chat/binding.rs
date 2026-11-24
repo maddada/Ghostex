@@ -338,7 +338,10 @@ impl GhostexGpuiApp {
                 .get(&local_key)
                 .copied()
                 .filter(|id| self.agents_workspace.pane_id_for_session(*id).is_some())
-                .or_else(|| self.agents_workspace.add_mounting_session_to_pane(focused_pane));
+                .or_else(|| {
+                    self.agents_workspace
+                        .add_mounting_session_to_pane(focused_pane)
+                });
             if let Some(new_shell_id) = new_shell_id {
                 if let Some(session) = self
                     .agents_workspace
