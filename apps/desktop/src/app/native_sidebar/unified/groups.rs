@@ -186,29 +186,90 @@ impl GhostexGpuiApp {
                 }))
             })
             .when(hovered, |row| {
+                let chevron_key = new_key.clone();
+                let header_owner = owner.clone();
+                let chevron_owner = crate::app::native_sidebar::menus::MenuOwner::default();
+                let trigger_id = format!("unified-project:{key}:launcher");
                 row.child(
-                    div()
-                        .id(format!("native-unified-group-new-{key}"))
-                        .role(gpui::Role::Button)
-                        .aria_label(format!("New session in {}", group.label))
-                        .size(px(22.0 * scale))
+                    h_flex()
                         .flex_shrink_0()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(px(4.0 * scale))
-                        .hover(|button| button.bg(appearance.hover))
                         .child(
-                            gpui::svg()
-                                .path("titlebar/plus.svg")
-                                .size(px(14.0 * scale))
-                                .text_color(appearance.chrome_icon),
+                            div()
+                                .id(format!("native-unified-group-new-{key}"))
+                                .role(gpui::Role::Button)
+                                .aria_label(format!("New chat in {}", group.label))
+                                .h(px(22.0 * scale))
+                                .w(px(24.0 * scale))
+                                .flex_shrink_0()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded_l(px(4.0 * scale))
+                                .cursor_pointer()
+                                .hover(|button| button.bg(appearance.hover))
+                                .child(
+                                    gpui::svg()
+                                        .path("titlebar/message.svg")
+                                        .size(px(14.0 * scale))
+                                        .text_color(appearance.muted),
+                                )
+                                .on_click(cx.listener(
+                                    move |app, event: &gpui::ClickEvent, window, cx| {
+                                        cx.stop_propagation();
+                                        app.unified_group_new_session(
+                                            &new_key, event, scale, window, cx,
+                                        );
+                                    },
+                                )),
                         )
-                        .on_click(
-                            cx.listener(move |app, event: &gpui::ClickEvent, window, cx| {
-                                cx.stop_propagation();
-                                app.unified_group_new_session(&new_key, event, scale, window, cx);
-                            }),
+                        .child(
+                            div()
+                                .on_prepaint(crate::app::native_sidebar::menus::record_menu_owner(
+                                    &chevron_owner,
+                                ))
+                                .id(format!("native-unified-group-new-menu-{key}"))
+                                .role(gpui::Role::Button)
+                                .aria_label(format!("More new session options in {}", group.label))
+                                .h(px(22.0 * scale))
+                                .w(px(17.0 * scale))
+                                .flex_shrink_0()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded_r(px(4.0 * scale))
+                                .cursor_pointer()
+                                .hover(|button| button.bg(appearance.hover))
+                                .child(
+                                    gpui::svg()
+                                        .path("titlebar/chevron-down.svg")
+                                        .size(px(14.0 * scale))
+                                        .text_color(appearance.muted),
+                                )
+                                .on_click(cx.listener(
+                                    move |app, event: &gpui::ClickEvent, window, cx| {
+                                        cx.stop_propagation();
+                                        let Some(children) = app
+                                            .gx_store_unified_project_launcher_menu(&chevron_key)
+                                        else {
+                                            return;
+                                        };
+                                        Self::show_native_sidebar_menu_hung(
+                                            &children,
+                                            header_owner.get(),
+                                            chevron_owner.get(),
+                                            Some((
+                                                trigger_id.clone(),
+                                                crate::app::native_sidebar::menus::press_position(
+                                                    event,
+                                                ),
+                                            )),
+                                            event.position(),
+                                            scale,
+                                            window,
+                                            cx,
+                                        );
+                                    },
+                                )),
                         ),
                 )
             })

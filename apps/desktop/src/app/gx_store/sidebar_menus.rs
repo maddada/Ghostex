@@ -185,6 +185,9 @@ impl GhostexGpuiApp {
             app_lifecycle: true,
             menu_panels: true,
             agentbox_locations: self.gx_store.menu_host.agentbox_locations.clone(),
+            browser_view_tab_hidden: hud
+                .and_then(|hud| hud["settings"]["browserViewTabHidden"].as_bool())
+                .unwrap_or(false),
         }
     }
 

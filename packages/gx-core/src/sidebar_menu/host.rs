@@ -73,6 +73,8 @@ pub struct MenuHost {
     /// The agentbox locations `/api/agentbox status` last reported ready on this computer; empty
     /// where the host has not read one (the launcher then offers no Run in a Box page).
     pub agentbox_locations: Vec<crate::agentbox::AgentboxLocation>,
+    /// True when the Browser view tab is hidden in Settings, so menus omit Browser rows.
+    pub browser_view_tab_hidden: bool,
 }
 
 impl MenuHost {

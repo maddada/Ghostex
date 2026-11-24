@@ -439,6 +439,9 @@ impl GhostexGpuiApp {
             // servers, Extensions): they are the desktop's own windows.
             menu_panels: false,
             agentbox_locations: store.agentbox_locations.clone(),
+            browser_view_tab_hidden: hud["settings"]["browserViewTabHidden"]
+                .as_bool()
+                .unwrap_or(false),
         };
         store.sidebar_list.last_inputs.host.project_diff_stats = store
             .runtime_facts

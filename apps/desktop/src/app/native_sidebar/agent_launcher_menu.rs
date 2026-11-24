@@ -11,7 +11,7 @@ use gpui_component::{h_flex, v_flex};
 use serde_json::Value;
 
 /// `GROUP_AGENT_MENU_WIDTH_PX` in the deleted React sidebar's packages/core-ui/session-group-section.tsx (git history).
-pub(crate) const AGENT_LAUNCHER_MENU_WIDTH: f32 = 220.0;
+pub(crate) const AGENT_LAUNCHER_MENU_WIDTH: f32 = 236.0;
 const PANEL_PADDING: f32 = 6.0;
 const ROW_GAP: f32 = 2.0;
 /// 13px menu text at the panel's 1.4 line height.
@@ -320,6 +320,10 @@ impl GhostexGpuiApp {
         } else {
             name.into_any_element()
         };
+        let shortcut = item["hotkey"]
+            .as_str()
+            .and_then(crate::app::hotkeys::gpui_configured_hotkey_label)
+            .filter(|text| !text.is_empty());
         let launch = h_flex()
             .id(format!(
                 "native-agent-launcher-row-{panel_index}-{item_index}"
@@ -331,6 +335,15 @@ impl GhostexGpuiApp {
             .gap(scaled(8.0))
             .children(icon)
             .child(body)
+            .when_some(shortcut, |launch, shortcut| {
+                launch.child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(scaled(11.0))
+                        .text_color(palette.muted)
+                        .child(shortcut),
+                )
+            })
             .when(!disabled, |launch| {
                 launch
                     // The row highlights only while the launch area is hovered, not the accounts button.

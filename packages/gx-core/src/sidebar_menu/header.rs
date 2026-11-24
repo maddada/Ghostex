@@ -110,43 +110,31 @@ pub fn project_header_actions(
         ));
         return pinned;
     }
-    // CDXC:Sidebar 2026-10-20 DECISION:
-    // User: "add to the left of the 'select agent' combined button a button to start a terminal in that project ... i want it back at top level for each project header". New Terminal is a header button again, right before the agent split, and stays in the ⋯ menu too. This supersedes the 2026-10-08 decision below for that one button; the other moved buttons stay in the ⋯ menu.
-    let mut actions = vec![MenuItem::row(
-        "New Terminal",
-        "terminal-2",
-        MenuCommand::command(message::create_project_terminal(group_id)),
-    )
-    .with_hotkey("createSession")];
+    // Merged project header button: one split button with an outlined chat bubble icon.
+    // Primary click starts a new chat draft in this project; the chevron opens the menu with
+    // New chat, Terminal, Coordinator, Browser, Run in a Box, the configured agents, and Configure.
     let primary = host.primary_agent_at(&group.agent_place);
-    let primary_icon = primary.and_then(|agent| agent.icon.as_deref());
-    actions.push(MenuItem {
-        label: Some(format!(
-            "Create {}",
-            primary.map_or("Agent", |agent| agent.name.as_str())
-        )),
-        icon: Some("sparkles".to_string()),
-        agent_icon: primary_icon.map(str::to_string),
-        image_data_url: primary_icon
-            .and_then(colored_agent_logo)
-            .map(str::to_string),
-        command: Some(MenuCommand::project_action(
-            group_id,
-            "agent",
-            primary.map(|agent| agent.agent_id.as_str()),
-        )),
-        split: Some(MenuSplit::Start),
-        hotkey: Some("createAgentSession".to_string()),
-        ..MenuItem::default()
-    });
-    actions.push(MenuItem {
-        label: Some("Select Agent".to_string()),
-        icon: Some("chevron-down".to_string()),
-        children: Some(agent_launcher_items(group_id, &group.agent_place, host)),
-        split: Some(MenuSplit::End),
-        ..MenuItem::default()
-    });
-    actions
+    vec![
+        MenuItem {
+            label: Some("New chat".to_string()),
+            icon: Some("message".to_string()),
+            command: Some(MenuCommand::project_action(
+                group_id,
+                "agent",
+                primary.map(|agent| agent.agent_id.as_str()),
+            )),
+            split: Some(MenuSplit::Start),
+            hotkey: Some("openNewThreadPalette".to_string()),
+            ..MenuItem::default()
+        },
+        MenuItem {
+            label: Some("More new session options".to_string()),
+            icon: Some("chevron-down".to_string()),
+            children: Some(agent_launcher_items(group_id, &group.agent_place, host)),
+            split: Some(MenuSplit::End),
+            ..MenuItem::default()
+        },
+    ]
 }
 
 /// The project header buttons that live in the project's menu, each in its place: the project
@@ -308,7 +296,33 @@ pub fn agent_launcher_items_with_accounts(
     let primary_id = host
         .primary_agent_at(place)
         .map(|agent| agent.agent_id.as_str());
-    let mut items: Vec<MenuItem> = host
+    let mut items = vec![
+        MenuItem::row(
+            "New chat",
+            "message",
+            MenuCommand::project_action(group_id, "agent", primary_id),
+        )
+        .with_hotkey("openNewThreadPalette"),
+        MenuItem::row(
+            "Terminal",
+            "terminal-2",
+            MenuCommand::command(message::create_project_terminal(group_id)),
+        )
+        .with_hotkey("createSession"),
+        new_coordinator_row(group_id),
+    ];
+    if !host.browser_view_tab_hidden {
+        items.push(
+            MenuItem::row(
+                "Browser",
+                "world",
+                MenuCommand::command(message::open_browser_pane_in_group(group_id)),
+            )
+            .with_hotkey("openBrowserPane"),
+        );
+    }
+    items.extend(super::run_in_box::run_in_box_row(group_id, host));
+    let agent_rows: Vec<MenuItem> = host
         .agents
         .iter()
         .map(|agent| {
@@ -346,12 +360,11 @@ pub fn agent_launcher_items_with_accounts(
             }
         })
         .collect();
-    if !items.is_empty() {
+    if !agent_rows.is_empty() {
         items.push(MenuItem::separator());
+        items.extend(agent_rows);
     }
-    items.extend(super::run_in_box::run_in_box_row(group_id, host));
-    items.insert(0, new_coordinator_row(group_id));
-    items.insert(1, MenuItem::separator());
+    items.push(MenuItem::separator());
     items.push(MenuItem::row(
         "Configure",
         "settings",
@@ -365,17 +378,13 @@ pub fn agent_launcher_items_with_accounts(
     items
 }
 
-/// The launcher's "New Coordinator…" row.
-///
-/// CDXC:Coordinators 2026-10-03 DECISION:
-/// User: "Please move this to the top in both apps": "New Coordinator…" is the first row of a project's agent launcher, above the agents, on the desktop, the web build and the phone. A coordinator is started where agents are started, so the launcher offers it; the dialog behind it names the coordinator and picks its agent. Supersedes the 2026-09-30 placement after Run in a box.
-/// SEE-ALSO: `agentMenuItems` in apps/mobile/app/src/screens/sessions-screen/use-sessions-screen-menus.tsx (the phone's agent menu keeps the same order).
+/// The launcher's "Coordinator" row.
 fn new_coordinator_row(group_id: &str) -> MenuItem {
     MenuItem {
         info: Some(NEW_ORCHESTRATOR_BENEFITS.to_string()),
         ..MenuItem::row(
-            "New Coordinator…",
-            "users-group",
+            "Coordinator",
+            "coordinator-crown",
             MenuCommand::project_action(group_id, "coordinator", None),
         )
     }

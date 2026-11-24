@@ -491,7 +491,7 @@ impl GhostexGpuiApp {
         self.open_gpui_new_thread_picker(cx);
     }
 
-    /// A filter row's "+": the picker on that repository, on the machine it starts on.
+    /// Starts a new chat draft in `repo_key` on the machine it starts on (no picker).
     pub(crate) fn open_new_session_in_repo(
         &mut self,
         repo_key: &str,
@@ -504,12 +504,50 @@ impl GhostexGpuiApp {
         let Some(machine) = choice.selected_machine() else {
             return;
         };
-        self.gx_store.unified_sidebar.picker_start = Some(UnifiedNewSessionTarget {
-            repo_key: repo_key.to_string(),
-            machine_id: machine.machine_id.clone(),
-            project_id: machine.project_id.clone(),
+        let group_id = group_id_of(&machine.machine_id, &machine.project_id);
+        self.gx_store_new_session_started(
+            &UnifiedNewSessionTarget {
+                repo_key: repo_key.to_string(),
+                machine_id: machine.machine_id.clone(),
+                project_id: machine.project_id.clone(),
+            },
+            cx,
+        );
+        let menu_host = self.gx_store_menu_host();
+        let place = ghostex_gx_core::AgentChoicePlace {
+            project: Some(machine.project_id.clone()),
+            ..Default::default()
+        };
+        let primary_id = menu_host
+            .primary_agent_at(&place)
+            .map(|agent| agent.agent_id.clone());
+        let mut command = json!({
+            "type": "projectAction",
+            "groupId": group_id,
+            "action": "agent",
         });
-        self.open_gpui_new_thread_picker(cx);
+        if let Some(agent_id) = primary_id {
+            command["agentId"] = json!(agent_id);
+        }
+        self.dispatch_native_sidebar_ui(command, cx);
+    }
+
+    /// The merged header chevron menu for a Unified project group (`agent_launcher_items`).
+    pub(crate) fn gx_store_unified_project_launcher_menu(
+        &mut self,
+        repo_key: &str,
+    ) -> Option<Value> {
+        let choices = self.gx_store_project_choices();
+        let choice = choices.iter().find(|choice| choice.repo_key == repo_key)?;
+        let machine = choice.selected_machine()?;
+        let group_id = group_id_of(&machine.machine_id, &machine.project_id);
+        let menu_host = self.gx_store_menu_host();
+        let place = ghostex_gx_core::AgentChoicePlace {
+            project: Some(machine.project_id.clone()),
+            ..Default::default()
+        };
+        let items = ghostex_gx_core::agent_launcher_items(&group_id, &place, &menu_host);
+        Some(ghostex_gx_core::menu_to_json(&items))
     }
 
     /// Whether `(machine_id, project_id)` is a computer's Main Hub project (`is_home && !is_help_home`).
