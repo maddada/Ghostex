@@ -176,7 +176,7 @@ pub fn rows_split(
     (live, snoozed_rows)
 }
 
-/// Recently answered to-dos for the Inbox's "Answered (N)" drawer (Q4684 A).
+/// Recently answered to-dos for the Inbox's "Handled" drawer (Q4684 A).
 pub fn answered_rows(
     state: &ChatState,
     turns: &[Turn],
@@ -206,6 +206,7 @@ pub fn answered_rows(
                 "" => "",
                 answer
                     if answer.eq_ignore_ascii_case("answered")
+                        || answer.eq_ignore_ascii_case("handled")
                         || answer.eq_ignore_ascii_case("done") =>
                 {
                     ""

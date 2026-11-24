@@ -1318,7 +1318,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     for item in &items {
         for ask in item["asks"].as_array().into_iter().flatten() {
             if ask["open"] != true {
-                // Q4684 A: recently answered asks populate the "Answered (N)" drawer.
+                // Q4684 A: recently answered asks populate the "Handled" drawer.
                 if ask["withdrawn"] != true {
                     if let Some(at) = at_ms(text(ask, "settledAt")) {
                         if now_ms - at <= SETTLED_KEPT_MS {
@@ -1327,12 +1327,14 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                                 text(item, "ref"),
                                 text(ask, "tag")
                             );
-                            // Q4784 A: omit generic "Answered"/"Done" outcome pills under the
-                            // Answered drawer; keep only specific choices that differ from header.
+                            // Q4784 A: omit generic "Answered"/"Handled"/"Done" outcome pills
+                            // under the Handled drawer; keep only specific choices that differ
+                            // from the header.
                             let outcome = match text(ask, "answered").trim() {
                                 "" => "",
                                 words
                                     if words.eq_ignore_ascii_case("answered")
+                                        || words.eq_ignore_ascii_case("handled")
                                         || words.eq_ignore_ascii_case("done") =>
                                 {
                                     ""
@@ -1445,7 +1447,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             needs.push((now_ms - at > DAY_MS, at, row));
         }
     }
-    // Q4684 A: recently answered transcript forms, pages and one-click questions for "Answered (N)".
+    // Q4684 A: recently answered transcript forms, pages and one-click questions for the "Handled" drawer.
     for asker in state.transcript_view.askers.iter() {
         if !asker.answered || asker.obsolete {
             continue;

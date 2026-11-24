@@ -523,7 +523,7 @@ const DOCK_ALL_ROWS: &str = "dock-rows:all";
 const DOCK_DONE_ROWS: &str = "dock-rows:done";
 /// `NativeChatView::expanded`'s key for the dock's Snoozed row opened (`work_dock_snoozed`).
 const DOCK_SNOOZED_ROWS: &str = "dock-rows:snoozed";
-/// `NativeChatView::expanded`'s key for the dock's Answered drawer opened (`work_dock_answered`).
+/// `NativeChatView::expanded`'s key for the dock's Handled drawer opened (`work_dock_answered`).
 const DOCK_ANSWERED_ROWS: &str = "dock-rows:answered";
 /// The dock's cards fold by themselves while the draft is longer than this.
 const DOCK_FOLDS_PAST_CHARS: usize = 280;
@@ -696,7 +696,7 @@ impl NativeChatView {
             .then(|| dock["doneArchiveAll"]["command"].clone());
         // The snoozed asks, forms, pages and to-dos, folded under one Snoozed row (`work_dock_snoozed`).
         let snoozed: Vec<Value> = dock["snoozed"].as_array().cloned().unwrap_or_default();
-        // Recently answered asks/questions/to-dos, folded in the Answered drawer (`work_dock_answered`).
+        // Recently answered asks/questions/to-dos, folded in the Handled drawer (`work_dock_answered`).
         let answered: Vec<Value> = dock["answered"].as_array().cloned().unwrap_or_default();
         let undo = dock["undoMarkAllRead"]
             .is_object()
@@ -1238,8 +1238,8 @@ impl NativeChatView {
         out
     }
 
-    /// The collapsible Answered drawer at the bottom of the Inbox (Q4684 A): green check icon,
-    /// "Answered (N)", expanding dimmed rows with their outcome and age.
+    /// The collapsible Handled drawer at the bottom of the Inbox (Q4684 A): green check icon,
+    /// "Handled" and its count badge, expanding dimmed rows with their outcome and age.
     fn work_dock_answered(
         &self,
         answered: &[Value],
@@ -1252,7 +1252,7 @@ impl NativeChatView {
         let line = div()
             .id("work-dock-answered")
             .role(gpui::Role::Button)
-            .aria_label(format!("Answered, {}", answered.len()))
+            .aria_label(format!("Handled, {}", answered.len()))
             .aria_expanded(open)
             .w_full()
             .min_w_0()
@@ -1283,7 +1283,7 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .gap(px(6.0 * s))
-                    .child("Answered")
+                    .child("Handled")
                     .child(crate::app::element::count_badge(
                         answered.len().to_string(),
                         p.foreground,
@@ -1358,6 +1358,7 @@ impl NativeChatView {
                         .when(
                             !outcome.is_empty()
                                 && !outcome.eq_ignore_ascii_case("answered")
+                                && !outcome.eq_ignore_ascii_case("handled")
                                 && !outcome.eq_ignore_ascii_case("done"),
                             |el| {
                                 el.child(
