@@ -771,3 +771,86 @@ fn a_refused_mark_write_is_made_by_the_next_reading() {
     fixture.read_screen();
     assert_eq!(fixture.awaiting_approval(), Some(json!(true)));
 }
+
+/// A reading is dropped (an agent restart, an account restart or sign-in) while another reader's
+/// capture of the same session fails and commits its empty reading in between. The dropped
+/// reading's mark goes with it, so the session does not wait for an approval nobody sees.
+#[test]
+fn a_failed_capture_while_a_reading_is_dropped_does_not_keep_the_mark() {
+    let fixture = Fixture::new();
+    let daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    fixture.read_screen();
+    assert!(stored_mark(&fixture).is_some(), "the approval is marked");
+
+    // Dropping the reading stops after removing the cache entry: its clears wait for the event
+    // sequence this test holds, a fleet mark's clear at the latest.
+    open_gxserver_database(&fixture.state.paths)
+        .expect("db")
+        .execute(
+            r#"UPDATE sessions SET runtimeSettingsJson = json_set(runtimeSettingsJson, '$.sessionChatFleetDetectedAt', '2026-11-23T10:00:00.000Z')
+            WHERE projectId = ?1 AND sessionId = ?2"#,
+            rusqlite::params![fixture.project_id(), fixture.session_id],
+        )
+        .expect("a fleet mark");
+    let reading_present = || {
+        fixture
+            .state
+            .session_chat_option_cache
+            .lock()
+            .expect("cache")
+            .contains_key(&crate::server::session_observer_key(
+                fixture.project_id(),
+                &fixture.session_id,
+            ))
+    };
+    let wait_for = |what: &str, done: &dyn Fn() -> bool| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !done() {
+            assert!(std::time::Instant::now() < deadline, "{what}");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    };
+    let held = fixture
+        .state
+        .presentation_event_sequence
+        .lock()
+        .expect("event sequence");
+    let forget = {
+        let state = fixture.state.clone();
+        let (project_id, session_id) =
+            (fixture.project_id().to_string(), fixture.session_id.clone());
+        std::thread::spawn(move || {
+            crate::session_chat_options::forget_session_chat_options(
+                &state,
+                &project_id,
+                &session_id,
+            );
+        })
+    };
+    wait_for("the reading is dropped", &|| !reading_present());
+
+    // The screen daemon is gone, so the other reader's capture fails.
+    drop(daemon);
+    let failed_reader =
+        {
+            let state = fixture.state.clone();
+            let (project_id, session_id) =
+                (fixture.project_id().to_string(), fixture.session_id.clone());
+            std::thread::spawn(move || {
+                crate::session_chat_options::SessionChatOptionDetector::new(&state)
+                    .detect_blocking(&project_id, &session_id, Some("omp"), true);
+            })
+        };
+    wait_for("the failed capture commits its reading", &reading_present);
+    assert_eq!(latest_verdict(&fixture), None, "the capture saw nothing");
+
+    drop(held);
+    forget.join().expect("dropping the reading");
+    failed_reader.join().expect("the failed reader");
+    assert_eq!(
+        stored_mark(&fixture),
+        None,
+        "the dropped reading's mark is gone"
+    );
+    assert_eq!(fixture.awaiting_approval(), None);
+}

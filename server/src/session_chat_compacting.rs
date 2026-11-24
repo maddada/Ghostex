@@ -194,17 +194,24 @@ impl SessionChatCompactingPublisher {
 /// `publish_screen_approval_marker`).
 static SCREEN_APPROVAL_MARKER_WRITES: Mutex<()> = Mutex::new(());
 
+/// Holds off every other screen-approval marker write until the guard is dropped. Take it before
+/// the session option cache, never while holding the cache.
+pub(crate) fn lock_screen_approval_marker_writes() -> std::sync::MutexGuard<'static, ()> {
+    SCREEN_APPROVAL_MARKER_WRITES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// Writes the screen-approval marker the session's latest committed verdict still owes
-/// (`SessionChatOptionCacheEntry::unpublished_screen_approval`), or clears it when the session's
-/// reading was dropped. Every writer of the marker goes through here: the detector after each
-/// capture that owes a write, the stall sweep's refresh and `forget_session_chat_options`.
+/// (`SessionChatOptionCacheEntry::unpublished_screen_approval`), or clears it when the session has
+/// no reading. Every writer of the marker goes through here: the detector after each capture that
+/// owes a write and the stall sweep's refresh; `forget_session_chat_options` clears it through
+/// `clear_screen_approval_marker` under the same lock.
 ///
 /// CDXC:SessionStatus 2026-11-23 WHY:
-/// Several readers capture one session's screen at once (a chat read, the probes after a send, the follower, the stall sweep), and each used to write the marker it had just decided after leaving the cache lock. A reader that saw the screen clear could then land its clear after a newer reader's set, and the cache, already holding "approval", wrote nothing again, so the session stopped reading as needing the user. A write that failed (the database busy or unopenable) was swallowed the same way. So the write is taken from the cache under one lock at the moment it is made, always the latest verdict's, and a failed one stays owed for the next capture to retry. The lock is one for all sessions because these writes happen only when the verdict changes or a retry is owed; the cache lock is never held across the database write, so detection of other sessions is not held up by SQLite.
+/// Several readers capture one session's screen at once (a chat read, the probes after a send, the follower, the stall sweep), and each used to write the marker it had just decided after leaving the cache lock. A reader that saw the screen clear could then land its clear after a newer reader's set, and the cache, already holding "approval", wrote nothing again, so the session stopped reading as needing the user. A write that failed (the database busy or unopenable) was swallowed the same way. So the write is taken from the cache under one lock at the moment it is made, always the latest verdict's, and a failed one stays owed for the next capture to retry. The lock is one for all sessions because these writes happen only when the verdict changes or a retry is owed; the cache lock is never held across the database write, so detection of other sessions is not held up by SQLite. Dropping a reading takes this lock before it removes the cache entry and clears the marker while still holding it, without asking the cache: a capture that failed in between commits an entry owing no write and would otherwise keep the dropped reading's mark, while a whole capture committed after the removal writes its own verdict once the lock is released.
 pub(crate) fn publish_screen_approval_marker(state: &AppState, project_id: &str, session_id: &str) {
-    let _writing = SCREEN_APPROVAL_MARKER_WRITES
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let writing = lock_screen_approval_marker_writes();
     let key = crate::server::session_observer_key(project_id, session_id);
     let owed = match state.session_chat_option_cache.lock() {
         Ok(mut cache) => match cache.get_mut(&key) {
@@ -216,6 +223,27 @@ pub(crate) fn publish_screen_approval_marker(state: &AppState, project_id: &str,
     let Some(detected_at) = owed else {
         return;
     };
+    write_screen_approval_marker(&writing, state, project_id, session_id, detected_at);
+}
+
+/// Clears the screen-approval marker of a session whose reading the caller has just removed while
+/// holding `writing` (see `publish_screen_approval_marker`).
+pub(crate) fn clear_screen_approval_marker(
+    writing: &std::sync::MutexGuard<'static, ()>,
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) {
+    write_screen_approval_marker(writing, state, project_id, session_id, None);
+}
+
+fn write_screen_approval_marker(
+    _writing: &std::sync::MutexGuard<'static, ()>,
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    detected_at: Option<String>,
+) {
     if SessionChatCompactingPublisher::new(state).publish_marker(
         project_id,
         session_id,
@@ -225,6 +253,7 @@ pub(crate) fn publish_screen_approval_marker(state: &AppState, project_id: &str,
         return;
     }
     // A verdict committed meanwhile owes its own write, which replaces this one.
+    let key = crate::server::session_observer_key(project_id, session_id);
     if let Ok(mut cache) = state.session_chat_option_cache.lock() {
         if let Some(entry) = cache.get_mut(&key) {
             if entry.unpublished_screen_approval.is_none() {
