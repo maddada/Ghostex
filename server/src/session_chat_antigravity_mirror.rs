@@ -495,6 +495,32 @@ impl BackgroundTasks {
     }
 }
 
+/// The pictures a prompt carried, as the absolute paths of agy's own copies.
+///
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// agy keeps a prompt's pictures out of its text: the step's `media` lists each one (`mime_type`, and `uri`, the path of the copy it saved under `brain/<id>/.user_uploaded/`). The mirror kept only the text, so a picture sent from the chat vanished from the message once the transcript row replaced the local echo (found testing Native Antigravity on Linux).
+fn antigravity_user_images(record: &Map<String, Value>) -> Vec<String> {
+    let Some(Value::Array(media)) = record.get("media") else {
+        return Vec::new();
+    };
+    media
+        .iter()
+        .filter_map(Value::as_object)
+        .filter(|item| {
+            item.get("mime_type")
+                .and_then(Value::as_str)
+                .is_some_and(|mime| mime.starts_with("image/"))
+        })
+        .filter_map(|item| extract_string(item.get("uri")))
+        .map(|uri| {
+            uri.strip_prefix("file://")
+                .map(str::to_string)
+                .unwrap_or(uri)
+        })
+        .filter(|path| Path::new(path).is_absolute())
+        .collect()
+}
+
 /// One mirror row for a step: its index, part and time, plus `extra`.
 fn step_row(record: &Map<String, Value>, part: &str, extra: Map<String, Value>) -> Option<Value> {
     let step_index = record.get("step_index").and_then(Value::as_u64)?;
@@ -524,11 +550,21 @@ fn mirror_rows_for_step(record: &Map<String, Value>, awaits_background_tasks: bo
     let row = |part: &str, extra: Map<String, Value>| step_row(record, part, extra);
     match (source, step_type) {
         ("USER_EXPLICIT", "USER_INPUT") => {
-            let text = step_text(record, "content").map(|content| antigravity_user_text(&content));
-            text.filter(|text| !text.is_empty())
-                .and_then(|text| row("user", Map::from_iter([("text".into(), Value::from(text))])))
-                .into_iter()
-                .collect()
+            let text = step_text(record, "content")
+                .map(|content| antigravity_user_text(&content))
+                .filter(|text| !text.is_empty());
+            let images = antigravity_user_images(record);
+            if text.is_none() && images.is_empty() {
+                return Vec::new();
+            }
+            let mut extra = Map::new();
+            if let Some(text) = text {
+                extra.insert("text".into(), Value::from(text));
+            }
+            if !images.is_empty() {
+                extra.insert("images".into(), Value::from(images));
+            }
+            row("user", extra).into_iter().collect()
         }
         ("MODEL", "PLANNER_RESPONSE") => {
             let mut rows = Vec::new();

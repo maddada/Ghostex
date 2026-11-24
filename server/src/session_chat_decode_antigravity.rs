@@ -8,7 +8,8 @@ step log. One mirror row per rendered message, in this shape:
      "toolCalls": [{"name": "run_command", "args": {"CommandLine": "echo pong"}}]}
     {"stepIndex": 27, "part": "assistant", "createdAt": "…", "text": "…will wait…",
      "awaitsBackgroundTasks": true}
-    {"stepIndex": 0, "part": "user", "createdAt": "…", "text": "…"}
+    {"stepIndex": 0, "part": "user", "createdAt": "…", "text": "…",
+     "images": ["/home/…/brain/<id>/.user_uploaded/uploaded_media_1.png"]}
     {"stepIndex": 34, "part": "task", "taskIndex": 0, "createdAt": "…",
      "text": "<task-notification>…</task-notification>"}
     {"stepIndex": 2, "part": "tool", "createdAt": "…", "toolType": "GENERIC",
@@ -251,7 +252,26 @@ pub fn decode_antigravity_transcript_line(
 
     match part {
         // A background task's end, which the chat draws as the call it reports on.
-        "user" | "task" => Some(message(SessionChatRole::User, vec![text_block(text?)])),
+        "task" => Some(message(SessionChatRole::User, vec![text_block(text?)])),
+        "user" => {
+            let mut blocks: Vec<SessionChatBlock> = record
+                .get("images")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(|path| SessionChatBlock::ImageRef {
+                    path: Some(path.to_string()),
+                    url: None,
+                    alt: None,
+                })
+                .collect();
+            blocks.extend(text.map(text_block));
+            if blocks.is_empty() {
+                return None;
+            }
+            Some(message(SessionChatRole::User, blocks))
+        }
         "reasoning" => Some(message(SessionChatRole::Reasoning, vec![text_block(text?)])),
         "assistant" => {
             let mut blocks = Vec::new();
