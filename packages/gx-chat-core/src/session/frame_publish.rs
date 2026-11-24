@@ -121,6 +121,10 @@ pub fn side_state_moves(
         || side.retired_async_question_ids.is_some()
         || side.later_question_ids.is_some()
         || side
+            .agent_restarted_at
+            .as_ref()
+            .is_some_and(|times| &session.agent_restarted_at != times)
+        || side
             .unavailable_modes
             .as_ref()
             .is_some_and(|modes| &session.unavailable_modes != modes)

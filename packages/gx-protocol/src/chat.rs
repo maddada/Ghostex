@@ -323,6 +323,7 @@ pub struct TurnLifecycle {
 /// | `starredPageIds` | UNCHANGED (a daemon before 2026-11-16 never writes it) |
 /// | `laterQuestionUntil` | UNCHANGED (a daemon before 2026-11-16 never writes it) |
 /// | `resourceIndex` | UNCHANGED (a daemon before 2026-10-30 never writes it) |
+/// | `agentRestartedAt` | UNCHANGED (a daemon before 2026-11-24 never writes it) |
 ///
 /// Payload shapes are kept loose (`Value`) until the native chat needs each one typed; every one
 /// has a TypeScript interface in `packages/shared/session-chat.ts`.
@@ -440,6 +441,11 @@ pub struct ChatSideState {
     /// questions its transcript carries from before then were asked in the parent.
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub forked_at: Tri<i64>,
+    /// When gxserver restarted this session's agent because its Native host died in the middle of
+    /// a turn, in epoch ms, oldest first (server/src/session_chat_agent_restarts.rs): the chat
+    /// marks the turn each one cut off. Absent means unchanged (an older gxserver never sends it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_restarted_at: Option<Vec<i64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retired_async_question_ids: Option<Vec<String>>,
     /// The question forms and pages the user put off "For later" (form or page ids,

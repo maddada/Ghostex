@@ -475,6 +475,8 @@ async fn run_heal(state: &Arc<AppState>, due: &HealDue) -> HealOutcome {
     else {
         return HealOutcome::Cancelled;
     };
+    // Before the agent is started again, so the restarted agent's first rows sort after it.
+    let lost_at = chrono::Utc::now().timestamp_millis();
     log(
         state,
         "sessionDaemonLost",
@@ -540,6 +542,22 @@ async fn run_heal(state: &Arc<AppState>, due: &HealDue) -> HealOutcome {
         return HealOutcome::Hopeless(GiveUpReason::RestartFailed(
             "its working folder no longer exists".to_string(),
         ));
+    }
+    // Recorded before the restart notice republishes the chat's state, so that frame carries it.
+    if due.was_working && crate::acp::session_is_acp(&session) {
+        let mark_state = state.clone();
+        let mark_key = key.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            if let Ok(db) = open_gxserver_database(&mark_state.paths) {
+                let _ = crate::session_chat_agent_restarts::record_agent_restarted_mid_turn(
+                    &db,
+                    &mark_key.0,
+                    &mark_key.1,
+                    lost_at,
+                );
+            }
+        })
+        .await;
     }
     crate::session_chat_agent_restart::note_agent_restarted(state, &key.0, &key.1);
     crate::session_chat_send_diagnostics::record_send_recovery(

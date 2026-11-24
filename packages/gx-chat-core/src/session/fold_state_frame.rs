@@ -35,6 +35,7 @@ pub fn fold_state_frame(mut folded: FoldedSnapshot, frame: &ChatStateFrame) -> F
         // `incoming ?? previous`.
         retired_async_question_ids: _,
         later_question_ids: _,
+        agent_restarted_at: _,
         removed_question_ids: _,
         retired_page_ids: _,
         starred_page_ids: _,
@@ -109,6 +110,7 @@ pub fn fold_state_frame(mut folded: FoldedSnapshot, frame: &ChatStateFrame) -> F
     carry!(
         retired_async_question_ids,
         later_question_ids,
+        agent_restarted_at,
         removed_question_ids,
         retired_page_ids,
         starred_page_ids,

@@ -148,6 +148,9 @@ pub struct SessionChatQueueSnapshot {
     pub async_questions_since: Option<i64>,
     /// When the session was forked from another (`session_chat_open_questions::read_forked_at`).
     pub forked_at: Option<i64>,
+    /// When gxserver restarted this session's agent after its Native host died mid-turn, oldest
+    /// first (`session_chat_agent_restarts::read_agent_restarted_at`).
+    pub agent_restarted_at: Vec<i64>,
     pub retired_async_question_ids: Vec<String>,
     /// The question forms and pages put off "For later" (`session_chat_open_questions::read_later_ids`).
     pub later_question_ids: Vec<String>,
@@ -194,6 +197,10 @@ impl SessionChatQueueSnapshot {
             json!(self.async_questions_since),
         );
         target.insert("forkedAt".to_string(), json!(self.forked_at));
+        target.insert(
+            "agentRestartedAt".to_string(),
+            json!(self.agent_restarted_at),
+        );
         target.insert(
             "laterQuestionIds".to_string(),
             json!(self.later_question_ids),
@@ -265,6 +272,7 @@ impl SessionChatQueueSnapshot {
         revision.push_str(&serde_json::to_string(&self.api_retry).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.async_questions_since).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.forked_at).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.agent_restarted_at).unwrap_or_default());
         revision
             .push_str(&serde_json::to_string(&self.retired_async_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.later_question_ids).unwrap_or_default());
@@ -1284,6 +1292,9 @@ fn read_snapshot(
                 db, project_id, session_id,
             ),
             forked_at: crate::session_chat_open_questions::read_forked_at(
+                db, project_id, session_id,
+            ),
+            agent_restarted_at: crate::session_chat_agent_restarts::read_agent_restarted_at(
                 db, project_id, session_id,
             ),
             later_question_ids: crate::session_chat_open_questions::read_later_ids(

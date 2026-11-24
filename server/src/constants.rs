@@ -210,4 +210,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0084_lead_links",
     "0085_session_handovers",
     "0086_notification_feed_seen_at",
+    "0087_session_agent_restarts",
 ];

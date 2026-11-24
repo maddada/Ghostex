@@ -188,6 +188,7 @@ pub struct ComposeKey {
     pub identity: u64,
     pub working: bool,
     pub async_questions_since: Option<i64>,
+    pub agent_restarted_at: Vec<i64>,
     pub preview_text: Option<String>,
     pub sends: Vec<crate::state::PendingSend>,
     pub markers: Vec<crate::state::CommandMarker>,
@@ -272,6 +273,7 @@ pub fn compose_cached(state: &mut ChatState, preview_text: Option<&str>, working
         identity: state.messages.composition_identity,
         working,
         async_questions_since: state.session.async_questions_since,
+        agent_restarted_at: state.session.agent_restarted_at.clone(),
         preview_text: preview_text.map(str::to_string),
         sends: state.pending.sends.clone(),
         markers: state.pending.markers.clone(),
@@ -322,6 +324,7 @@ pub struct TranscriptPartKey {
     pub app_commands: Vec<serde_json::Value>,
     pub pending: Vec<ChatRow>,
     pub async_questions_since: Option<i64>,
+    pub agent_restarted_at: Vec<i64>,
 }
 
 /// The composed list's head as the last composition built it: what from, how many rows, and a
@@ -404,6 +407,7 @@ fn compose_after(
         app_commands: state.session.app_commands.clone(),
         pending: pending_messages.clone(),
         async_questions_since: state.session.async_questions_since,
+        agent_restarted_at: state.session.agent_restarted_at.clone(),
     };
     let kept = state
         .messages
@@ -424,7 +428,14 @@ fn compose_after(
             && part.key.app_commands == key.app_commands
             && part.key.pending == key.pending
             && part.key.async_questions_since == key.async_questions_since
+            && part.key.agent_restarted_at == key.agent_restarted_at
             && *from <= boundaried.len()
+            // A restart mark sits by time, so a new row older than one is placed by a full build.
+            && key.agent_restarted_at.last().is_none_or(|last| {
+                boundaried[*from..]
+                    .iter()
+                    .all(|message| message.timestamp.is_none_or(|at| at > *last))
+            })
             && !boundaried[*from..]
                 .iter()
                 .any(|message| message.id.starts_with("local-command:"));
@@ -465,9 +476,12 @@ fn compose_after(
             )
         }
         (None, None) => {
-            let mut transcript = crate::transcript::local_command::without_shell_echo_queue_rows(
-                reconcile_local_command_output(boundaried, &state.session.app_commands),
-                &pending_messages,
+            let mut transcript = crate::transcript::agent_restarts::with_agent_restart_rows(
+                crate::transcript::local_command::without_shell_echo_queue_rows(
+                    reconcile_local_command_output(boundaried, &state.session.app_commands),
+                    &pending_messages,
+                ),
+                &state.session.agent_restarted_at,
             );
             retire_async_questions(state, &mut transcript);
             let len = transcript.len();

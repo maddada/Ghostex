@@ -885,9 +885,12 @@ pub fn classify_suppressed_turn(message: &ChatMessage) -> Option<SuppressedTurn>
         }
     }
     // gxserver's own row for an interrupted turn (Codex's `turn_aborted`, Claude's `interruptedMessageId`): the same marker Claude's "[Request interrupted" prompt gets, kept under the prompt instead of folded into "Worked for".
+    // The row the chat adds for a turn cut off when gxserver restarted the agent
+    // (`transcript/agent_restarts.rs`) is placed the same way.
     if message.role == ChatRole::System
         && message.source == ChatSource::Transcript
-        && text.to_lowercase() == crate::session::constants::TRANSCRIPT_INTERRUPTED_TEXT
+        && (text.to_lowercase() == crate::session::constants::TRANSCRIPT_INTERRUPTED_TEXT
+            || text == crate::transcript::agent_restarts::AGENT_RESTARTED_TEXT)
     {
         return Some(SuppressedTurn::Collapsed {
             label: INTERRUPTED_LABEL.to_string(),
@@ -1055,7 +1058,15 @@ pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
     };
 
     if kind == "collapsed" && label == INTERRUPTED_LABEL {
-        return json!({ "kind": "inline", "label": INTERRUPTED_MARKER_TEXT, "text": "" });
+        let restarted = message.role == ChatRole::System
+            && js_trim(&joined_text(&message.blocks))
+                == crate::transcript::agent_restarts::AGENT_RESTARTED_TEXT;
+        let label = if restarted {
+            crate::transcript::agent_restarts::AGENT_RESTARTED_TEXT
+        } else {
+            INTERRUPTED_MARKER_TEXT
+        };
+        return json!({ "kind": "inline", "label": label, "text": "" });
     }
     if let Some(blocked) = crate::transcript::hook_blocked::parse_hook_blocked_prompt(message) {
         return hook_blocked_note(&label, &blocked.reason);

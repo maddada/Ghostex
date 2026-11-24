@@ -78,6 +78,9 @@ pub struct SessionState {
     /// When this session was forked from another (epoch ms): questions asked before then belong to
     /// the parent. Absent means unchanged, `null` means it is no fork.
     pub forked_at: Option<i64>,
+    /// When gxserver restarted the agent after its Native host died mid-turn, epoch ms, oldest
+    /// first (`agentRestartedAt`); `transcript/agent_restarts.rs` marks each cut-off turn.
+    pub agent_restarted_at: Vec<i64>,
     /// The transcript family, for example `claude` or `codex`.
     pub agent: Option<String>,
     pub agent_session_id: Option<String>,
@@ -231,6 +234,7 @@ impl Default for SessionState {
             resource_index: Default::default(),
             async_questions_since: None,
             forked_at: None,
+            agent_restarted_at: Vec::new(),
             agent: None,
             agent_session_id: None,
             session_agent_id: None,

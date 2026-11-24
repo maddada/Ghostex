@@ -7,6 +7,7 @@
 pub mod actions;
 pub mod agent_message;
 pub mod agent_message_card;
+pub mod agent_restarts;
 pub mod api_errors;
 pub mod approval_wait;
 pub mod background_rows;

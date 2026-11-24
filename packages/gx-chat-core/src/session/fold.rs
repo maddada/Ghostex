@@ -208,6 +208,10 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .later_question_ids
         .clone()
         .or_else(|| previous_side.and_then(|state| state.later_question_ids.clone()));
+    folded.result.state.agent_restarted_at = side
+        .agent_restarted_at
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.agent_restarted_at.clone()));
     folded.result.state.removed_question_ids = side
         .removed_question_ids
         .clone()

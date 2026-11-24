@@ -327,6 +327,7 @@ pub(crate) mod tests {
             forked_at: if flag { Tri::Value(number) } else { Tri::Null },
             retired_async_question_ids: Some(vec![format!("retired {tag}")]),
             later_question_ids: Some(vec![format!("later {tag}")]),
+            agent_restarted_at: Some(vec![number]),
             unavailable_modes: Some(vec![UnavailableMode {
                 value: "plan".into(),
                 why: tag.into(),
