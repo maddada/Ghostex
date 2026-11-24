@@ -277,7 +277,7 @@ pub(crate) struct GridCardSpec {
     pub(crate) scope_summary: Option<SharedString>,
     /// The type or author ("View", "by Ghostex"): the end of the (i) tooltip.
     pub(crate) meta: SharedString,
-    /// What the reader must know now ("Turn on Main Hub first", a runtime's state): shown in
+    /// What the reader must know now (for example, a runtime's state): shown in
     /// place of the description line.
     pub(crate) status: Option<SharedString>,
     pub(crate) actions: Vec<AnyElement>,

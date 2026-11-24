@@ -415,7 +415,7 @@ impl AgentsTab {
                 cx,
             ));
         }
-        // Shown while GBots are on (they need Main Hub, checked above).
+        // Shown while GBots are on.
         let gbots_on = ghostex_settings_catalog::built_in_extensions::on_with(
             ghostex_settings_catalog::built_in_extensions::GBOTS,
             |key| values.value(key).as_bool(),

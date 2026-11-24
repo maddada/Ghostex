@@ -221,7 +221,7 @@ impl ExtensionsTab {
         let filter = self.page_filter(cx);
         // CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make
         // sure ux makes sense after fix"; supersedes the greyed "Turn on X first" card): a card
-        // whose required extension is off (GBots without Main Hub, Bot automations without Bots)
+        // whose required extension is off (for example, Bot automations without Bots)
         // is hidden. So that the only way to it stays where people look for it (its tab, or a
         // search for its name), the required extension's card takes its place there unless that
         // card already shows in the same list, and says what it unlocks.

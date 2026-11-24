@@ -379,7 +379,7 @@ pub(in crate::server) async fn route_http(
     .then(|| bearer_token(&parts.headers).and_then(crate::collab_shim::registry::authorize_token))
     .flatten();
     // A session's own `gxs_` token or the desktop's `gxo_` owner session (crate::security).
-    // Chief's own token is the head for this request while its extension is on (chief/head.rs).
+    // Chief's own token is the head for this request (chief/head.rs).
     // A door session (the app's, for pairing codes and approvals) only on the door's routes
     // (review M2 in security/policy.rs); everywhere else it is no token at all.
     let token_principal = bearer_token(&parts.headers)

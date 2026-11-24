@@ -274,7 +274,6 @@ pub const FIELDS: &[Field] = &[
     field("agent_accept_all", "agentAcceptAllEnabled", Kind::Toggle),
     field("agent_hooks", "useAgentHooks", Kind::Toggle),
     field("marked_handovers", "markedHandovers", Kind::Choice),
-    field("chief_hidden", "chiefHidden", Kind::Toggle),
     field("voice_agent_hidden", "voiceAgentHidden", Kind::Toggle),
     field("floating_capture", "ghostexCaptureEnabled", Kind::Toggle),
     field(
