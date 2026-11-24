@@ -1,10 +1,87 @@
-//! New Agent Session (Cmd+Shift+O) and going back to a chat an agent launcher opened that is still empty.
-//! SEE-ALSO: packages/settings-catalog/src/hotkey_definitions.rs (CDXC:Hotkeys 2026-09-25), apps/desktop/src/app/hotkeys.rs.
+//! One-click New Session (sidebar button, Cmd+N), cached launcher agents/accounts, and returning
+//! to an untouched agent draft in the same project.
+//! SEE-ALSO: packages/settings-catalog/src/hotkey_definitions.rs, apps/desktop/src/app/hotkeys.rs.
 use super::native_chat::state::NativeChatView;
-use super::new_thread_picker_lifecycle::order_new_thread_picker_agents;
-use crate::app::window::NewThreadPickerAgent;
 use crate::*;
-use serde_json::json;
+use serde_json::{Value, json};
+use std::time::Duration;
+
+/// Minimal agent record ordered from the sidebar HUD for launching a new draft.
+#[derive(Clone, Debug)]
+struct LaunchableAgent {
+    agent_id: String,
+    name: String,
+    icon: Option<String>,
+}
+
+/// Registered account entry extracted from `/api/agentAccounts` for Claude Cloud controls.
+#[derive(Clone, Debug)]
+pub(crate) struct CachedAgentAccount {
+    pub(crate) id: String,
+    pub(crate) provider: String,
+    pub(crate) name: String,
+    pub(crate) ready: bool,
+}
+
+fn launchable_agent_from_hud(value: &Value) -> Option<LaunchableAgent> {
+    let agent_id = value.get("agentId")?.as_str()?.trim();
+    let name = value.get("name")?.as_str()?.trim();
+    if agent_id.is_empty() || name.is_empty() {
+        return None;
+    }
+    let icon = value
+        .get("icon")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|icon| !icon.is_empty())
+        .map(str::to_string);
+    Some(LaunchableAgent {
+        agent_id: agent_id.to_string(),
+        name: name.to_string(),
+        icon,
+    })
+}
+
+fn order_launcher_agents(
+    hud_agents: &[Value],
+    primary_agent_id: Option<&str>,
+) -> Vec<LaunchableAgent> {
+    let mut agents: Vec<LaunchableAgent> = hud_agents
+        .iter()
+        .filter_map(launchable_agent_from_hud)
+        .collect();
+    if let Some(primary_index) = primary_agent_id
+        .and_then(|primary| agents.iter().position(|agent| agent.agent_id == primary))
+    {
+        let primary = agents.remove(primary_index);
+        agents.insert(0, primary);
+    }
+    agents
+}
+
+/// The registered accounts of `/api/agentAccounts` that the user has not disabled.
+pub(crate) fn registered_agent_accounts(state: &Value) -> Vec<CachedAgentAccount> {
+    state["accounts"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter(|account| {
+            account["registered"].as_bool() == Some(true)
+                && account["userDisabled"].as_bool() != Some(true)
+        })
+        .filter_map(|account| {
+            let id = account["id"].as_str()?.to_string();
+            let provider = account["provider"].as_str()?.to_string();
+            Some(CachedAgentAccount {
+                name: crate::app::titlebar::account_usage::account_display_name(account),
+                ready: account["status"].as_str() == Some("ready"),
+                id,
+                provider,
+            })
+        })
+        .collect()
+}
 
 /// A chat an agent launcher opened in which nothing has been typed or sent yet.
 pub(crate) struct UntouchedAgentChat {
@@ -22,16 +99,85 @@ fn agent_chat_untouched(view: &NativeChatView) -> bool {
 }
 
 impl GhostexGpuiApp {
-    /// New session (sidebar button, Cmd+N, Cmd+Shift+O): immediately creates a draft in the open
-    /// session's project (or Main Hub when there is none), selects it under Drafts, and opens its
-    /// empty chat with no picker.
+    /// Reads the sidebar HUD agent buttons in the background and caches them.
+    pub(crate) fn refresh_gpui_new_thread_picker_agents(&mut self, cx: &mut gpui::Context<Self>) {
+        if self.new_thread_picker_agents_refresh_in_flight {
+            return;
+        }
+        self.new_thread_picker_agents_refresh_in_flight = true;
+        let active_project_id = self.gpui_app_modal_active_project_id();
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let agents = background
+                .spawn(async move {
+                    gpui_sidebar_hud_from_gxserver(
+                        Duration::from_secs(5),
+                        active_project_id.as_deref(),
+                    )
+                    .ok()
+                    .and_then(|hud| hud.agents.as_array().cloned())
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.new_thread_picker_agents_refresh_in_flight = false;
+                let Some(agents) = agents else {
+                    return;
+                };
+                this.new_thread_picker_agents = Some(agents);
+                this.push_gpui_export_transcript_modal_agents(cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Reads the local gxserver accounts list in the background and caches it.
+    pub(crate) fn refresh_gpui_new_thread_picker_accounts(&mut self, cx: &mut gpui::Context<Self>) {
+        let mut params = json!({ "operation": "list" });
+        if let Some(project_id) = self.gpui_app_modal_active_project_id() {
+            params["projectId"] = json!(project_id);
+        }
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result: Result<Value, String> = background
+                .spawn(async move {
+                    gpui_gxserver_rpc_result("/api/agentAccounts", &params, Duration::from_secs(30))
+                })
+                .await;
+            let _ = this.update(cx, |this, _cx| {
+                if let Ok(state) = result {
+                    this.new_thread_picker_accounts = Some(state);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Opens Settings directly on `tab` (Accounts, Workspaces, Tools, Cloud Boxes).
+    pub(crate) fn open_gpui_settings_tab_from_new_thread_picker(
+        &mut self,
+        tab: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let modal = GpuiAppModalKind::Settings;
+        let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
+        let mut open_message = modal.open_message();
+        open_message["initialTab"] = json!(tab);
+        if modal.requires_sidebar_state() {
+            open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
+        }
+        self.open_gpui_app_modal_window(modal, open_message, sidebar_state_message, None, cx);
+    }
+
+    /// New session (sidebar button, Cmd+N): immediately creates a draft in the open session's
+    /// project (or Main Hub when there is none), selects it under Drafts, and opens its empty chat
+    /// with no picker.
     pub(crate) fn start_new_agent_session(&mut self, cx: &mut gpui::Context<Self>) {
         let target_group_id = self.gx_store_new_session_default_group_id();
         self.start_new_agent_session_target(target_group_id, cx);
     }
 
-    /// Starts a new agent draft aimed at `group_id` (e.g. Main Hub's quiet "New chat" row),
-    /// through the same one-click entry point as `start_new_agent_session`.
+    /// Starts a new agent draft aimed at `group_id` through the same one-click entry point as
+    /// `start_new_agent_session`.
     pub(crate) fn start_new_agent_session_in_group(
         &mut self,
         group_id: String,
@@ -62,11 +208,9 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// CDXC:AgentBox 2026-10-01 WHY:
-    /// The Cloud Boxes default reads "Where new threads run unless you pick another location", so New Agent Session starts where the New Thread picker would, in that default location. A box default that this agent cannot use (agentbox runs only Claude, Codex, OpenCode and Pi) or that the status did not report ready starts on this computer with a toast saying why; before the first status answer the start waits for it rather than guessing. A project on another machine always starts there, because this computer's status says nothing about its boxes.
     fn new_agent_session_box_default(
         &mut self,
-        agent: &NewThreadPickerAgent,
+        agent: &LaunchableAgent,
         target_group_id: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) -> Option<String> {
@@ -79,7 +223,8 @@ impl GhostexGpuiApp {
         if !ghostex_gx_core::is_agentbox_run_location(Some(&default)) || target_is_remote {
             return None;
         }
-        if !crate::app::window::runs_in_box(agent) {
+        if ghostex_gx_core::agentbox_agent_family(&agent.agent_id, agent.icon.as_deref()).is_none()
+        {
             let title = format!(
                 "{} can't run in a box, so it started on this computer",
                 agent.name
@@ -94,7 +239,7 @@ impl GhostexGpuiApp {
     /// open untouched draft if the user is already sitting on one in that project.
     fn start_new_agent_session_at(
         &mut self,
-        agent: NewThreadPickerAgent,
+        agent: LaunchableAgent,
         target_group_id: Option<String>,
         box_default: Option<String>,
         cx: &mut gpui::Context<Self>,
@@ -131,7 +276,7 @@ impl GhostexGpuiApp {
     }
 
     /// Every `runSidebarAgent` launch calls this as it stores the launcher keys
-    /// (gx_store/create/agent.rs), so this order follows every launcher, not only the picker.
+    /// (gx_store/create/agent.rs).
     pub(crate) fn note_primary_agent_launcher(
         &mut self,
         agent_id: &str,
@@ -170,7 +315,7 @@ impl GhostexGpuiApp {
             .map(str::to_string)
     }
 
-    fn last_used_agent_for_group(&self, group_id: Option<&str>) -> Option<NewThreadPickerAgent> {
+    fn last_used_agent_for_group(&self, group_id: Option<&str>) -> Option<LaunchableAgent> {
         let hud_agents = self
             .new_thread_picker_agents
             .clone()
@@ -185,22 +330,9 @@ impl GhostexGpuiApp {
                     .and_then(|hud| hud["agents"].as_array().cloned())
             })?;
         let primary = self.project_agent_id_for_group(&hud_agents, group_id);
-        order_new_thread_picker_agents(&hud_agents, primary.as_deref())
+        order_launcher_agents(&hud_agents, primary.as_deref())
             .into_iter()
             .next()
-    }
-
-    /// Starts an agent in the active project (or the picker's target): the tab opens at once and
-    /// gxserver creates the session behind it, on this computer or in `run_location`.
-    pub(crate) fn launch_agent_in_active_project(
-        &mut self,
-        agent_id: String,
-        account_id: Option<String>,
-        run_location: Option<String>,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let group_id = self.gx_store.unified_sidebar.picker_target.take();
-        self.launch_agent_in_group(agent_id, group_id, account_id, run_location, cx);
     }
 
     /// Starts an agent in `group_id` (falling back to `gx_store_new_session_default_group_id` when
@@ -294,9 +426,18 @@ impl GhostexGpuiApp {
         if !agent_chat_untouched(view.read(cx)) {
             return false;
         }
+        let want_coordinator = self
+            .gx_store
+            .unified_sidebar
+            .carry_coordinator_draft
+            .replace(false);
         self.select_agents_tab(pane_id, shell_session_id, cx);
         self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
         view.update(cx, |view, cx| {
+            if want_coordinator {
+                view.draft_coordinator_mode = true;
+                view.draft_setup_changed = true;
+            }
             view.focus_requested = true;
             cx.notify();
         });

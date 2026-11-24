@@ -319,7 +319,7 @@ impl GhostexGpuiApp {
         let accounts: Vec<(String, String)> = self
             .new_thread_picker_accounts
             .as_ref()
-            .map(crate::app::new_thread_picker_lifecycle::new_thread_picker_accounts)
+            .map(crate::app::new_agent_session::registered_agent_accounts)
             .unwrap_or_default()
             .into_iter()
             .filter(|account| {

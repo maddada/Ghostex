@@ -680,15 +680,9 @@ pub struct GhostexGpuiApp {
     pub(crate) native_bot_feed: Option<Entity<crate::app::native_bot_feed::NativeBotFeedView>>,
     /// The Work page's pending ticket open (`app/work_view/host.rs`).
     pub(crate) work_view: crate::app::work_view::WorkViewState,
-    pub(crate) new_thread_picker_window: Option<WindowHandle<Root>>,
-    pub(crate) new_thread_picker: Option<Entity<GpuiNewThreadPickerWindow>>,
-    pub(crate) new_thread_picker_visible: bool,
-    pub(crate) new_thread_picker_preloaded_agent_count: usize,
-    /// The preload recycle waiting for the main window's frame to settle; dropping it cancels it.
-    pub(crate) new_thread_picker_recycle_task: Option<gpui::Task<()>>,
-    /// Cached local accounts list so a preloaded picker opens with its badges and rows filled.
+    /// Cached local accounts list for Claude Cloud controls and account menus.
     pub(crate) new_thread_picker_accounts: Option<serde_json::Value>,
-    /// Cached sidebar HUD agent buttons so the New Thread picker opens without a gxserver round trip.
+    /// Cached sidebar HUD agent buttons for instant one-click session drafts and dialogs.
     pub(crate) new_thread_picker_agents: Option<Vec<serde_json::Value>>,
     pub(crate) new_thread_picker_agents_refresh_in_flight: bool,
     /*

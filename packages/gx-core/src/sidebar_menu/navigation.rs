@@ -36,6 +36,9 @@ pub const COMMANDS_ACTION: &str = "commands";
 /// button.
 pub const ADD_PROJECT_ACTION: &str = "addProject";
 
+/// The menu's Coordinator row, which opens a new draft with Coordinator mode enabled.
+pub const NEW_COORDINATOR_ACTION: &str = "newCoordinator";
+
 /// The message a row for one of the app's panels posts: `{ type, panel }`, `panel` being one of
 /// the `MENU_PANEL_*` ids. Only a host that says it has those panels gets the rows
 /// (`MenuHost::menu_panels`).
@@ -307,6 +310,32 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     if !more.is_empty() {
         more.push(MenuItem::separator());
     }
+    // Coordinator, Browser and Terminal moved here (and to the project header menu) when the New
+    // Thread picker was removed.
+    more.push(
+        MenuItem::row(
+            "Terminal",
+            "terminal-2",
+            MenuCommand::command(message::create_session()),
+        )
+        .with_hotkey("createSession"),
+    );
+    more.push(intent(
+        "Coordinator",
+        "coordinator-crown",
+        NEW_COORDINATOR_ACTION,
+    ));
+    if !input.settings.browser_view_tab_hidden {
+        more.push(
+            MenuItem::row(
+                "Browser",
+                "world",
+                MenuCommand::command(message::open_browser_chat()),
+            )
+            .with_hotkey("openBrowserPane"),
+        );
+    }
+    more.push(MenuItem::separator());
     // CDXC:Sidebar 2026-11-11 DECISION: User (sidebar bottom page, Q2530 A and Q2531): the row of buttons under the usage meters goes away, and Commands, its lightning button, becomes a row of this menu, above Agents Hub, with its hotkey as the hint. Settings, the gear of that row, is already this menu's last row.
     more.push(intent("Commands", "bolt", COMMANDS_ACTION));
     more.push(intent("Agents Hub", "users-group", "agentsHub"));

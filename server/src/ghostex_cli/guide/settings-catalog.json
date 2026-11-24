@@ -10163,13 +10163,12 @@
         "voiceCallAboutSession": "",
         "holdToTalk": "",
         "toggleDictation": "ctrl+alt+space",
-        "createAgentSession": "cmd+shift+o",
+        "createAgentSession": "cmd+n",
         "createSession": "cmd+shift+t",
         "openCommandPalette": "cmd+shift+p",
         "openSessionSearchPalette": "cmd+p",
         "openProjectSearchPalette": "cmd+alt+shift+o",
         "openQuickAccessFiles": "cmd+o",
-        "openNewThreadPalette": "cmd+n",
         "openCommandsPanel": "cmd+j",
         "openCommandsPanelSecondKey": "shift+escape",
         "openSettings": "cmd+,",
@@ -15178,13 +15177,14 @@
     },
     {
       "id": "createAgentSession",
-      "title": "New Agent Session",
-      "description": "Start your last-used agent in the active project, in your default interface.",
-      "defaultKey": "cmd+shift+o",
+      "title": "New Session",
+      "description": "Start a new chat draft in the active project (or Main Hub).",
+      "defaultKey": "cmd+n",
       "retiredDefaultKeys": [
-        "cmd+t"
+        "cmd+t",
+        "cmd+shift+o"
       ],
-      "terminalDefaultKey": "cmd+shift+o",
+      "terminalDefaultKey": "cmd+n",
       "windowsLinuxTerminalDefaultKey": "cmd+shift+d"
     },
     {
@@ -15230,18 +15230,6 @@
       "defaultKey": "cmd+o",
       "terminalDefaultKey": "cmd+o",
       "windowsLinuxTerminalDefaultKey": "cmd+shift+y"
-    },
-    {
-      "id": "openNewThreadPalette",
-      "title": "New Thread in Active Project",
-      "description": "Pick an agent, Coordinator, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
-      "defaultKey": "cmd+n",
-      "retiredDefaultKeys": [
-        "cmd+shift+t",
-        "cmd+alt+t"
-      ],
-      "terminalDefaultKey": "cmd+n",
-      "windowsLinuxTerminalDefaultKey": "cmd+alt+shift+n"
     },
     {
       "id": "openCommandsPanel",

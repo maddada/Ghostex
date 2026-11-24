@@ -522,12 +522,20 @@ pub(crate) mod message {
         json!({ "type": "closeWorkspaceProjectForGroup", "groupId": group_id })
     }
 
+    pub(crate) fn create_session() -> Value {
+        json!({ "type": "createSession" })
+    }
+
     pub(crate) fn create_session_in_group(group_id: &str) -> Value {
         json!({ "type": "createSessionInGroup", "groupId": group_id })
     }
 
     pub(crate) fn run_sidebar_git_action(group_id: &str, action: &str) -> Value {
         json!({ "type": "runSidebarGitAction", "groupId": group_id, "action": action })
+    }
+
+    pub(crate) fn open_browser_chat() -> Value {
+        json!({ "type": "openBrowserChat" })
     }
 
     pub(crate) fn open_browser_pane_in_group(group_id: &str) -> Value {

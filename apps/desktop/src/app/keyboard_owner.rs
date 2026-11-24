@@ -367,10 +367,7 @@ impl GhostexGpuiApp {
         // whose page was still being created, a pane still mounting) used to land when its surface
         // arrived, focusing that surface under the dialog: typing into Add Worktree went nowhere
         // until the pane was hidden. It waits for the dialog to close, then lands as it would have.
-        if self.native_app_modal.is_some()
-            || self.app_modal_window.is_some()
-            || self.new_thread_picker_visible
-        {
+        if self.native_app_modal.is_some() || self.app_modal_window.is_some() {
             return;
         }
         /*
@@ -513,9 +510,7 @@ impl GhostexGpuiApp {
         let app = cx.weak_entity();
         cx.defer(move |cx| {
             let another_modal_open = app.read_with(cx, |app, _| {
-                app.native_app_modal.is_some()
-                    || app.app_modal_window.is_some()
-                    || app.new_thread_picker_visible
+                app.native_app_modal.is_some() || app.app_modal_window.is_some()
             });
             if another_modal_open.unwrap_or(true) || !ghostex_application_is_active() {
                 return;

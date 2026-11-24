@@ -277,12 +277,12 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     // SEE-ALSO: apps/desktop/src/app/hotkeys.rs (`GPUI_DEFAULT_GHOSTEX_HOTKEYS`, `gpui_migrated_hotkey_for_action`), apps/desktop/src/terminal_element.rs (`terminal_overlay_hotkey_label`).
     HotkeyDefinition {
         id: "createAgentSession",
-        title: "New Agent Session",
-        description: "Start your last-used agent in the active project, in your default interface.",
-        default_key: "cmd+shift+o",
+        title: "New Session",
+        description: "Start a new chat draft in the active project (or Main Hub).",
+        default_key: "cmd+n",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
-        retired_default_keys: &["cmd+t"],
+        retired_default_keys: &["cmd+t", "cmd+shift+o"],
         action: J::Obj(&[("id", J::Str("createAgentSession")), ("kind", J::Str("createAgentSession"))]),
     },
     // CDXC:Hotkeys 2026-05-11-09:26
@@ -354,19 +354,6 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         alternate_default_keys: &[],
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("openQuickAccessFiles")), ("kind", J::Str("openQuickAccessFiles"))]),
-    },
-    // CDXC:AgentLauncher 2026-09-09 DECISION:
-    // User: a hotkey opens a borderless picker that starts a new thread in the active project. It lists the agents with the last-used one preselected at the top, filters as you type, and ends with Browser and Terminal rows. Tab on Claude or Codex drills into that provider's accounts, mirroring the project-header agent dropdown.
-    // SEE-ALSO: packages/core-ui/new-thread-palette.tsx, apps/desktop/src/app/model/app_modal_kind.rs.
-    HotkeyDefinition {
-        id: "openNewThreadPalette",
-        title: "New Thread in Active Project",
-        description: "Pick an agent, Coordinator, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
-        default_key: "cmd+n",
-        windows_linux_default_key: None,
-        alternate_default_keys: &[],
-        retired_default_keys: &["cmd+shift+t", "cmd+alt+t"],
-        action: J::Obj(&[("id", J::Str("openNewThreadPalette")), ("kind", J::Str("openNewThreadPalette"))]),
     },
     // CDXC:Hotkeys 2026-09-27 DECISION:
     // User: Cmd+J, Shift+Esc and F12 all open the Commands panel, with one or two of them settable in Settings > Hotkeys. Cmd+J (F12 on Windows and Linux) is this row, Shift+Esc is the Second Key row, and F12 stays a fixed shortcut. This takes Shift+Esc from Focus Chat Box, which now has no default.

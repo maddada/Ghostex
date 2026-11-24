@@ -21,7 +21,7 @@ use serde_json::json;
 use crate::app::actions::ClaudeCloudMenuPicked;
 use crate::app::context_menu::GpuiContextMenu;
 use crate::app::helpers::*;
-use crate::app::new_thread_picker_lifecycle::new_thread_picker_accounts;
+use crate::app::new_agent_session::registered_agent_accounts;
 use crate::*;
 
 const ICON_CLOUD: &str = "titlebar/cloud.svg";
@@ -135,7 +135,7 @@ impl GhostexGpuiApp {
             return;
         };
         let accounts: Vec<ClaudeCloudMenuAccount> = match &self.new_thread_picker_accounts {
-            Some(state) => new_thread_picker_accounts(state)
+            Some(state) => registered_agent_accounts(state)
                 .into_iter()
                 .filter(|account| account.provider == "claude")
                 .map(|account| ClaudeCloudMenuAccount {

@@ -27,8 +27,8 @@ impl GhostexGpuiApp {
                 else {
                     return;
                 };
-                // Cmd+N and New Agent Session both create a draft directly with no picker.
-                if matches!(action_id, "openNewThreadPalette" | "createAgentSession") {
+                // Cmd+N (New Session) creates a draft directly with no picker.
+                if action_id == "createAgentSession" {
                     self.start_new_agent_session(cx);
                     return;
                 }

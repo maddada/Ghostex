@@ -254,6 +254,15 @@ impl GhostexGpuiApp {
             {
                 row["suffix"] = Value::from(shortcut);
             }
+            for row in rows.iter_mut() {
+                if row.get("suffix").is_none()
+                    && let Some(hotkey) = row["hotkey"].as_str()
+                    && let Some(label) = crate::app::hotkeys::gpui_configured_hotkey_label(hotkey)
+                        .filter(|label| !label.is_empty())
+                {
+                    row["suffix"] = Value::from(label);
+                }
+            }
             let offered = |row: &Value| {
                 let message = &row["command"]["message"];
                 message["type"] != ghostex_gx_core::MENU_PANEL_MESSAGE_TYPE

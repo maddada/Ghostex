@@ -199,7 +199,6 @@ pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
                 J::Str("openSessionSearchPalette"),
                 J::Str("openProjectSearchPalette"),
                 J::Str("openQuickAccessFiles"),
-                J::Str("openNewThreadPalette"),
                 J::Str("openCommandsPanel"),
                 J::Str("openCommandsPanelSecondKey"),
                 J::Str("openSettings"),

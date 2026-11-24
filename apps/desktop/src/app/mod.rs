@@ -96,8 +96,6 @@ pub(crate) mod new_agent_session;
 pub(crate) mod new_bot_modal_lifecycle;
 pub(crate) mod new_coordinator_modal_lifecycle;
 pub(crate) mod new_gbot_modal_lifecycle;
-pub(crate) mod new_thread_picker_cloud_box;
-pub(crate) mod new_thread_picker_lifecycle;
 pub(crate) mod notice_modal_host;
 pub(crate) mod notice_modal_window;
 pub(crate) mod onboarding_modal_lifecycle;

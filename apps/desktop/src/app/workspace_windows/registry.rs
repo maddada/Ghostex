@@ -527,8 +527,6 @@ impl GhostexGpuiApp {
             self.app_modal_window.map(|handle| handle.window_id()),
             self.app_toast_window.map(|handle| handle.window_id()),
             self.titlebar_popup_window.map(|handle| handle.window_id()),
-            self.new_thread_picker_window
-                .map(|handle| handle.window_id()),
             self.native_app_modal
                 .as_ref()
                 .map(|modal| modal.window.window_id()),

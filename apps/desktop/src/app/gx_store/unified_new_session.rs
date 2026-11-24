@@ -328,147 +328,7 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// The New thread picker's projects and where it starts: `picker_start` when a "+" set one,
-    /// else `gx_store_new_session_start`. `None` when no machine lists a project.
-    pub(crate) fn gx_store_new_thread_picker_place(
-        &mut self,
-    ) -> Option<crate::app::window::NewThreadPickerPlace> {
-        use crate::app::window::NewThreadPickerPlace;
-        // Recent reads the saved starts, which the Project sidebar never reads on its own.
-        self.gx_store.unified_sidebar.ensure_saved_read();
-        let choices = self.gx_store_project_choices();
-        let start = match self.gx_store.unified_sidebar.picker_start.take() {
-            Some(start) => Some(start),
-            None => self.gx_store_new_session_start(&choices),
-        }?;
-        let mut projects = choices;
-        let project = projects
-            .iter()
-            .position(|project| project.repo_key == start.repo_key)?;
-        let machine = projects[project]
-            .machines
-            .iter()
-            .position(|machine| machine.machine_id == start.machine_id)?;
-        // The start can be a worktree the row doesn't point at; on that machine it is "here".
-        projects[project].machines[machine].project_id = start.project_id.clone();
-        let marks = self.gx_store_new_thread_picker_marks();
-        let icons = self.gx_store_new_thread_picker_icons(&projects);
-        Some(NewThreadPickerPlace {
-            projects,
-            project,
-            machine,
-            hotkey: crate::gpui_configured_hotkey_label("openNewThreadPalette"),
-            marks,
-            icons,
-        })
-    }
-
-    /// Every machine's logo and name as the sidebar draws them, in the sidebar's order: the
-    /// picker's machine columns (CDXC:AgentLauncher 2026-11-15 in
-    /// window/new_thread_picker_place.rs). With only this computer the sidebar draws no mark, so
-    /// its logo is read the same way here: its picked icon, else its system's logo.
-    fn gx_store_new_thread_picker_marks(&self) -> Vec<crate::app::window::NewThreadPickerMark> {
-        let tabs = &self.gx_store.sidebar_list.last_inputs.host.machines;
-        let mut by_id = self.gx_store_computer_marks(tabs);
-        let mut marks: Vec<crate::app::window::NewThreadPickerMark> = tabs
-            .iter()
-            .filter_map(|tab| {
-                let mark = by_id.remove(&tab.machine_id)?;
-                Some(crate::app::window::NewThreadPickerMark {
-                    machine_id: tab.machine_id.clone(),
-                    asset: mark.asset,
-                    name: mark.name,
-                })
-            })
-            .collect();
-        if !marks.iter().any(|mark| mark.machine_id == LOCAL_MACHINE_ID) {
-            let facts =
-                super::computer_icons::computer_icon_facts(LOCAL_MACHINE_ID).unwrap_or_default();
-            let system = facts.platform.as_deref().or(match std::env::consts::OS {
-                "macos" => Some("macos"),
-                "windows" => Some("windows"),
-                _ => Some("linux"),
-            });
-            let asset = ghostex_gx_core::computer_icons::computer_icon_asset(
-                facts.icon.as_deref(),
-                facts.logo.as_deref(),
-                facts.kind.as_deref(),
-                system,
-            );
-            marks.insert(
-                0,
-                crate::app::window::NewThreadPickerMark {
-                    machine_id: LOCAL_MACHINE_ID.to_string(),
-                    asset,
-                    name: crate::host_name::local_computer_name(),
-                },
-            );
-        }
-        marks
-    }
-
-    /// Each project's own icon, as its sidebar row draws it: from the machine it starts on, else
-    /// the first of its machines that has one.
-    fn gx_store_new_thread_picker_icons(
-        &self,
-        projects: &[UnifiedProjectChoice],
-    ) -> std::collections::BTreeMap<String, String> {
-        let presentation = self.gx_store.core.presentation();
-        projects
-            .iter()
-            .filter_map(|project| {
-                let start = project.machines.get(project.selected);
-                let icon =
-                    start
-                        .into_iter()
-                        .chain(project.machines.iter())
-                        .find_map(|machine| {
-                            let id = if machine.machine_id == LOCAL_MACHINE_ID {
-                                MachineId::Local
-                            } else {
-                                MachineId::Remote(machine.machine_id.clone())
-                            };
-                            ghostex_gx_core::project_sidebar_icon_data_url(
-                                presentation.machine(&id)?,
-                                &machine.project_id,
-                            )
-                        })?;
-                Some((project.repo_key.clone(), icon))
-            })
-            .collect()
-    }
-
-    /// A picker command's pick: the group its launch goes to (the launch reads `picker_target`),
-    /// and what a start remembers (`gx_store_new_session_started`).
-    pub(crate) fn gx_store_take_new_thread_picker_target(
-        &mut self,
-        target: Option<crate::app::window::NewThreadPickerTarget>,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(target) = target else {
-            return;
-        };
-        self.gx_store.unified_sidebar.picker_target =
-            Some(group_id_of(&target.machine_id, &target.project_id));
-        self.gx_store_new_session_started(
-            &UnifiedNewSessionTarget {
-                repo_key: target.repo_key,
-                machine_id: target.machine_id,
-                project_id: target.project_id,
-            },
-            cx,
-        );
-    }
-
-    /// The New session row's arrow (native_sidebar/new_session_row.rs) and ⌘N: the New thread
-    /// picker, starting where `gx_store_new_session_start` says. Nothing is activated, so it cannot
-    /// start a default agent (CDXC:Sidebar 2026-10-31 WHY in gx-core unified_sidebar/choices.rs).
-    pub(crate) fn open_unified_new_session(&mut self, cx: &mut gpui::Context<Self>) {
-        self.gx_store.unified_sidebar.picker_start = None;
-        self.open_gpui_new_thread_picker(cx);
-    }
-
-    /// A group's "+" and a filter row's "+": the picker on that project, on that machine.
+    /// Starts a new chat draft in `project_id` on `machine_id` (no picker).
     pub(crate) fn open_new_session_in(
         &mut self,
         machine_id: &str,
@@ -480,15 +340,41 @@ impl GhostexGpuiApp {
         } else {
             MachineId::Remote(machine_id.to_string())
         };
-        let Some(repo_key) = self.gx_store_repo_key_of(&machine, project_id) else {
-            return;
-        };
-        self.gx_store.unified_sidebar.picker_start = Some(UnifiedNewSessionTarget {
-            repo_key,
-            machine_id: machine_id.to_string(),
-            project_id: project_id.to_string(),
-        });
-        self.open_gpui_new_thread_picker(cx);
+        if let Some(repo_key) = self.gx_store_repo_key_of(&machine, project_id) {
+            self.gx_store_new_session_started(
+                &UnifiedNewSessionTarget {
+                    repo_key,
+                    machine_id: machine_id.to_string(),
+                    project_id: project_id.to_string(),
+                },
+                cx,
+            );
+        }
+        let group_id = group_id_of(machine_id, project_id);
+        self.start_new_agent_session_in_group(group_id, cx);
+    }
+
+    /// Starts a new draft in `group_id` (or the default group) with Coordinator mode toggled on
+    /// and shows the coordinator toast (no picker or New Coordinator modal).
+    pub(crate) fn start_new_coordinator_draft(
+        &mut self,
+        group_id: Option<String>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.gx_store
+            .unified_sidebar
+            .carry_coordinator_draft
+            .set(true);
+        self.gx_store_create_toast(
+            "info",
+            "Coordinator",
+            Some("Pick a model and effort, then click Send to start this coordinator."),
+            cx,
+        );
+        match group_id {
+            Some(group_id) => self.start_new_agent_session_in_group(group_id, cx),
+            None => self.start_new_agent_session(cx),
+        }
     }
 
     /// Starts a new chat draft in `repo_key` on the machine it starts on (no picker).

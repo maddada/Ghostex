@@ -124,7 +124,7 @@ pub fn project_header_actions(
                 primary.map(|agent| agent.agent_id.as_str()),
             )),
             split: Some(MenuSplit::Start),
-            hotkey: Some("openNewThreadPalette".to_string()),
+            hotkey: Some("createAgentSession".to_string()),
             ..MenuItem::default()
         },
         MenuItem {
@@ -302,7 +302,7 @@ pub fn agent_launcher_items_with_accounts(
             "message",
             MenuCommand::project_action(group_id, "agent", primary_id),
         )
-        .with_hotkey("openNewThreadPalette"),
+        .with_hotkey("createAgentSession"),
         MenuItem::row(
             "Terminal",
             "terminal-2",

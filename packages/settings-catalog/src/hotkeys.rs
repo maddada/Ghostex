@@ -113,7 +113,6 @@ const WINDOWS_LINUX_TERMINAL_DEFAULTS: &[(&str, &str)] = &[
     ("splitMore", "cmd+shift+o"),
     ("splitMoreDown", "cmd+shift+e"),
     ("createAgentSession", "cmd+shift+d"),
-    ("openNewThreadPalette", "cmd+alt+shift+n"),
     ("openSessionSearchPalette", "cmd+alt+shift+p"),
     ("openQuickAccessFiles", "cmd+shift+y"),
     ("openHotkeys", "cmd+alt+/"),

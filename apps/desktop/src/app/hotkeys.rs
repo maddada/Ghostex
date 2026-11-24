@@ -81,9 +81,8 @@ pub(crate) fn gpui_migrated_hotkey_for_action<'a>(
     // CDXC:Hotkeys 2026-09-25: the new-session keys moved (Cmd+Shift+O, Cmd+N picker, Cmd+T browser
     // tab, Cmd+Ctrl+Shift+F fork), mirroring retiredDefaultKeys in packages/settings-catalog/src/hotkey_definitions.rs.
     let retired_new_session_keys: &[&str] = match action_id {
-        "createAgentSession" => &["cmd+t"],
+        "createAgentSession" => &["cmd+t", "cmd+shift+o"],
         "createSession" => &["cmd+t"],
-        "openNewThreadPalette" => &["cmd+shift+t", "cmd+alt+t"],
         "openBrowserPane" => &["cmd+n"],
         "forkSession" => &["ctrl+shift+f", "cmd+alt+f"],
         "openHotkeys" => &["cmd+."],
@@ -249,13 +248,12 @@ pub(crate) fn gpui_runtime_keystroke_parses(keystroke: &str, cx: &gpui::App) -> 
 /// from this table. Kept in lockstep with the catalog by
 /// packages/settings-catalog/tests/desktop_hotkey_defaults.rs.
 pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
-    ("createAgentSession", "cmd+shift+o"),
+    ("createAgentSession", "cmd+n"),
     ("createSession", "cmd+shift+t"),
     ("openCommandPalette", "cmd+shift+p"),
     ("openSessionSearchPalette", "cmd+p"),
     ("openProjectSearchPalette", "cmd+alt+shift+o"),
     ("openQuickAccessFiles", "cmd+o"),
-    ("openNewThreadPalette", "cmd+n"),
     ("openCommandsPanel", "cmd+j"),
     ("openCommandsPanelSecondKey", "shift+escape"),
     ("openSettings", "cmd+,"),
@@ -887,7 +885,7 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
     // New Agent Session starts the last-used agent in the active project, the picker's first row.
     // CDXC:Hotkeys 2026-09-25 DECISION:
     // User: while the Code editor itself has keyboard focus, Cmd+N and Cmd+Shift+O belong to VS Code (New File, Go to Symbol); only then, not whenever the Code view is merely open.
-    if matches!(action_id, "openNewThreadPalette" | "createAgentSession") {
+    if action_id == "createAgentSession" {
         return !matches!(
             owner,
             GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::CefSurface(

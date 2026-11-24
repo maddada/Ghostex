@@ -38,8 +38,6 @@ pub(crate) struct WebHostState {
     pub(crate) git_active_project: Option<String>,
     /// Whether the header's Git dropdown is open (`git_menu.rs`).
     pub(crate) git_menu_open: bool,
-    /// The New Thread picker open over the page (`new_thread_picker.rs`).
-    pub(crate) new_thread_picker: Option<new_thread_picker::WebNewThreadPicker>,
     /// The links card opened from the chat's links pill: where its bottom left goes, and when a
     /// press outside last closed it (`session_links.rs`).
     pub(crate) links_card_anchor: Option<gpui::Point<gpui::Pixels>>,

@@ -1285,6 +1285,12 @@ impl GhostexGpuiApp {
             }
             // CDXC:Sidebar 2026-10-31 DECISION: User (issue #359): Collapse All folds the groups the Unified sidebar draws, not the hidden Project list. It folds them all, or opens them all when every one is already folded.
             Some("sidebarAction")
+                if command["action"] == ghostex_gx_core::NEW_COORDINATOR_ACTION =>
+            {
+                self.start_new_coordinator_draft(None, cx);
+                true
+            }
+            Some("sidebarAction")
                 if command["action"] == ghostex_gx_core::UNIFIED_TOGGLE_GROUPS_ACTION =>
             {
                 let keys: Vec<String> = self

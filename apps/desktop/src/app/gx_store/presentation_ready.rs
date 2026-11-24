@@ -16,7 +16,6 @@ impl GhostexGpuiApp {
     pub(super) fn gx_store_presentation_ready(&mut self, cx: &mut gpui::Context<Self>) {
         self.refresh_gpui_new_thread_picker_agents(cx);
         self.refresh_gpui_new_thread_picker_accounts(cx);
-        self.ensure_gpui_new_thread_picker_preloaded(cx);
         let loading_toast_visible = self
             .app_toasts
             .iter()

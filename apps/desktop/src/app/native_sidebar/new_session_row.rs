@@ -47,14 +47,12 @@ fn button_width(
     (sidebar_width - insets.left - insets.right) / scale
 }
 
-/// The shortcut the button shows: Cmd+N (`openNewThreadPalette` until the picker hotkey is
-/// retired, falling back to `createAgentSession`). The browser build owns Cmd+N, so it shows none.
+/// The shortcut the button shows: Cmd+N (`createAgentSession`). The browser build owns Cmd+N, so it shows none.
 fn start_shortcut() -> Option<String> {
     if cfg!(ghostex_web) {
         return None;
     }
-    crate::gpui_configured_hotkey_label("openNewThreadPalette")
-        .or_else(|| crate::gpui_configured_hotkey_label("createAgentSession"))
+    crate::gpui_configured_hotkey_label("createAgentSession")
 }
 
 impl GhostexGpuiApp {

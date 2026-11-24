@@ -132,10 +132,6 @@ mod new_coordinator_modal;
 mod new_gbot_demo;
 #[path = "../app/window/new_gbot_modal.rs"]
 mod new_gbot_modal;
-#[path = "../app/window/new_thread_picker.rs"]
-mod new_thread_picker;
-#[path = "native_modal_demo/new_thread_picker.rs"]
-mod new_thread_picker_demo;
 #[path = "../app/window/notice_modal.rs"]
 mod notice_modal;
 #[path = "native_modal_demo/notice_modal.rs"]
@@ -870,7 +866,6 @@ fn main() {
                 "account-switch" => account_switch_demo::open(&demo, cx),
                 "theme-modals" => theme_modals_showcase_demo::open(&demo, cx),
                 "add-project" => add_project_demo::open(&demo, cx),
-                "new-thread-picker" => new_thread_picker_demo::open(&demo, cx),
                 "go-back" => go_back_demo::open(&demo, cx),
                 "crash-report" => crash_report_demo::open(&demo, cx),
                 "update-available" => update_available_demo::open(&demo, cx),
