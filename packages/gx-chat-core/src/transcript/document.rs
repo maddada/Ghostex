@@ -40,14 +40,14 @@ The transcript's per-message actions for GPUI chat: Rewind (the confirmation in 
 the "put the prompt back in the composer" rule came from those two files; only the rendering
 differs.
 */
+/// CDXC:SessionChat 2026-11-24 DECISION:
+/// User, of the rewind sheet's "Rewind the conversation to this point and put this message back in the composer for editing. Files stay as they are.": "please remove this text". Native Claude Code and Codex chats, Terminal Codex and OpenCode send no description, and the desktop (`native_chat/rewind.rs`) and phone (`RewindDialog.tsx`) sheets draw no line, and no gap, for an empty one.
 fn rewind_projection(request: &RewindRequest) -> Value {
     json!({
         "messageId": request.message_id,
         "preview": prompt_preview(&request.prompt),
-        // Codex 0.172 keeps the same conversation in Terminal too (its Escape-Escape rewind
-        // continues the thread in a new rollout file), so it shares the Native wording.
         "description": if request.native || matches!(request.agent.as_str(), "opencode" | "codex") {
-            "Rewind the conversation to this point and put this message back in the composer for editing. Files stay as they are."
+            ""
         } else {
             "We only rewind using \"Restore conversation\" in the Chat View currently. Switch to Terminal View and use /rewind to resume using another option."
         },
