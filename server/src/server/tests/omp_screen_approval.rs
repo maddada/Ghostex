@@ -962,13 +962,9 @@ fn an_approval_read_while_a_reading_is_dropped_keeps_its_mark() {
     assert_eq!(fixture.awaiting_approval(), Some(json!(true)));
 }
 
-/// Drops the reading of a marked approval while the screen cannot be read (an agent switch or a
-/// restart) and the database refuses the drop's clear, then lets the database take writes again.
-fn refuse_the_clear_of_a_dropped_reading(fixture: &Fixture) {
-    let daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
-    fixture.read_screen();
-    assert!(stored_mark(fixture).is_some(), "the approval is marked");
-    drop(daemon);
+/// Makes the database refuse every clear of a stored screen-approval mark until the returned
+/// connection drops the trigger.
+fn refuse_screen_approval_clears(fixture: &Fixture) -> crate::storage::GxserverDatabase {
     let db = open_gxserver_database(&fixture.state.paths).expect("db");
     db.execute_batch(
         r#"CREATE TRIGGER refuse_screen_approval_clear BEFORE UPDATE ON sessions
@@ -977,6 +973,17 @@ fn refuse_the_clear_of_a_dropped_reading(fixture: &Fixture) {
         BEGIN SELECT RAISE(ABORT, 'the database refused the clear'); END;"#,
     )
     .expect("a database refusing the clear");
+    db
+}
+
+/// Drops the reading of a marked approval while the screen cannot be read (an agent switch or a
+/// restart) and the database refuses the drop's clear, then lets the database take writes again.
+fn refuse_the_clear_of_a_dropped_reading(fixture: &Fixture) {
+    let daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    fixture.read_screen();
+    assert!(stored_mark(fixture).is_some(), "the approval is marked");
+    drop(daemon);
+    let db = refuse_screen_approval_clears(fixture);
     crate::session_chat_options::forget_session_chat_options(
         &fixture.state,
         fixture.project_id(),
@@ -1015,6 +1022,39 @@ fn a_refused_clear_of_a_dropped_reading_is_made_by_the_sweep() {
     let fixture = Fixture::new();
     refuse_the_clear_of_a_dropped_reading(&fixture);
     crate::server::session_stall_runtime::tick(&fixture.state, &Mutex::new(HashMap::new()));
+    assert_eq!(stored_mark(&fixture), None, "the owed clear is made");
+    assert_eq!(fixture.awaiting_approval(), None);
+}
+
+/// A drop's clear the database refused is made by the stall sweep even when a failed capture's
+/// own retry of it was refused too: the sweep's refresh gets that recent capture back from the
+/// detector's cache without reading the screen, so only the sweep's own publication can clear.
+#[test]
+fn a_refused_clear_of_a_dropped_reading_is_made_by_the_sweep_from_a_cached_failed_capture() {
+    let fixture = Fixture::new();
+    refuse_the_clear_of_a_dropped_reading(&fixture);
+    let db = refuse_screen_approval_clears(&fixture);
+    fixture.read_screen();
+    assert_eq!(
+        latest_verdict(&fixture),
+        None,
+        "the screen could not be read"
+    );
+    assert!(
+        stored_mark(&fixture).is_some(),
+        "the database refused the capture's retry too"
+    );
+    db.execute_batch("DROP TRIGGER refuse_screen_approval_clear;")
+        .expect("the database takes writes again");
+    let key = crate::server::session_observer_key(fixture.project_id(), &fixture.session_id);
+    let captured_at = || fixture.state.session_chat_option_cache.lock().unwrap()[&key].fetched_at;
+    let failed_capture = captured_at();
+    crate::server::session_stall_runtime::tick(&fixture.state, &Mutex::new(HashMap::new()));
+    assert_eq!(
+        captured_at(),
+        failed_capture,
+        "the sweep got the failed capture back from the cache"
+    );
     assert_eq!(stored_mark(&fixture), None, "the owed clear is made");
     assert_eq!(fixture.awaiting_approval(), None);
 }
