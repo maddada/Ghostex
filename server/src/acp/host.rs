@@ -1692,6 +1692,8 @@ pub fn run(args: &[String]) -> i32 {
         );
         return 2;
     };
+    let gx_paths = crate::paths::get_gxserver_paths(None);
+    crate::agent_model_catalog::adopt_cached_copy(&gx_paths);
     if spec.family == "claude" {
         return super::driver_claude::run(spec, parsed);
     }
@@ -2226,6 +2228,21 @@ pub fn run(args: &[String]) -> i32 {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         if s.current_effort.is_none() {
             s.current_effort = Some(effort.to_string());
+        }
+    }
+    {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        if s.current_effort.is_none() {
+            if let Some((_, _, Some(default_effort))) =
+                crate::agent_model_catalog::resolve_acp_model(
+                    spec.family,
+                    s.current_model.as_deref(),
+                    None,
+                    s.available_models.as_array().map(Vec::as_slice),
+                )
+            {
+                s.current_effort = Some(default_effort);
+            }
         }
     }
 

@@ -358,37 +358,6 @@ pub fn model_menu_traits(
     traits.into_iter().map(as_button).collect()
 }
 
-/// If a model label ends with a parenthesized reasoning effort such as `"Opus 5.5 (High)"` or
-/// `"Gemini 4 Neon (Medium)"`, splits it into `("Opus 5.5", Some("High"))` so the composer pill
-/// always shows effort as separate dimmed text next to the model name, never in brackets.
-fn split_parenthesized_effort(label: &str) -> (&str, Option<String>) {
-    let trimmed = label.trim();
-    let Some(without_close) = trimmed.strip_suffix(')') else {
-        return (trimmed, None);
-    };
-    let Some((base, inside)) = without_close.rsplit_once(" (") else {
-        return (trimmed, None);
-    };
-    let base = base.trim();
-    if base.is_empty() {
-        return (trimmed, None);
-    }
-    let normalized_effort = match inside.trim().to_ascii_lowercase().as_str() {
-        "minimal" => Some("Minimal"),
-        "low" => Some("Low"),
-        "medium" => Some("Medium"),
-        "high" => Some("High"),
-        "xhigh" | "extra high" | "extra-high" => Some("Extra High"),
-        "max" => Some("Max"),
-        "ultracode" => Some("Ultracode"),
-        _ => None,
-    };
-    match normalized_effort {
-        Some(effort) => (base, Some(effort.to_string())),
-        None => (trimmed, None),
-    }
-}
-
 /// `modelMenuPillLabels`: the model's name, then the footer values that are set, as "High · 200K".
 ///
 /// CDXC:SessionChat 2026-09-27 DECISION:
@@ -446,13 +415,13 @@ pub fn model_menu_pill_labels(
                 .map(|(_, label, _)| label)
         });
     let label = raw_label.map(|raw| {
-        let (clean, extracted_effort) = split_parenthesized_effort(&raw);
+        let (clean, extracted_effort) = crate::menus::catalog::split_parenthesized_effort(&raw);
         if let Some(eff) = extracted_effort {
             if !has_effort_part {
-                parts.insert(0, eff);
+                parts.insert(0, catalog.effort_label(&eff));
             }
         }
-        clean.to_string()
+        crate::menus::catalog::humanize_raw_model_slug(clean).unwrap_or_else(|| clean.to_string())
     });
     let suffix = (!parts.is_empty()).then(|| parts.join(" · "));
     // The pill cuts a long name to its width, so its tooltip carries the whole of it.

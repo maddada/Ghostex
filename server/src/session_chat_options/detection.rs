@@ -495,6 +495,77 @@ pub(crate) fn session_chat_questions_only_on_screen(agent: Option<&str>) -> bool
 ///
 /// CDXC:AgentScreenDetection 2026-08-19: the same capture is classified
 /// for terminal-state notices, so both readings ride one process spawn.
+/// Resolves the canonical ACP agent family (`"claude"`, `"codex"`, `"antigravity"`, ...) for a
+/// session row even when its `agentId` is a custom account wrapper such as `custom-claude-70-...`.
+pub(super) fn acp_family_for_session(agent_id: Option<&str>, session: Option<&Value>) -> String {
+    let raw = agent_id
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| {
+            session
+                .and_then(|s| s.get("agentId"))
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+        })
+        .unwrap_or("antigravity");
+    let lower = raw.trim().to_ascii_lowercase();
+    if lower.contains("claude") {
+        return "claude".to_string();
+    }
+    if lower.contains("codex") {
+        return "codex".to_string();
+    }
+    if lower.contains("antigravity") || lower == "agy" {
+        return "antigravity".to_string();
+    }
+    ghostex_gx_chat_core::menus::catalog::canonical_model_family(raw).to_string()
+}
+
+/// Reads the launched or pinned `(model, effort)` for an ACP session so a missing live effort (or
+/// a booting/disconnected ACP channel) falls back to what the session was launched with.
+pub(super) fn acp_session_launch_model_and_effort(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    session: Option<&Value>,
+    family: &str,
+) -> (Option<String>, Option<String>) {
+    let option_agent = session_chat_option_agent(Some(family));
+    let launch =
+        read_session_chat_launch_selection(repository, project_id, session_id, option_agent);
+    let mut model = launch
+        .as_ref()
+        .and_then(|sel| sel.model.as_ref())
+        .map(|c| c.value.clone());
+    let mut effort = launch
+        .as_ref()
+        .and_then(|sel| sel.effort.as_ref())
+        .map(|c| c.value.clone());
+    if let Some(pin) = session.and_then(|s| {
+        s.pointer(&format!(
+            "/runtimeSettings/{}",
+            crate::agent_model_pins::SESSION_PIN_KEY
+        ))
+    }) {
+        if model.is_none() {
+            model = pin
+                .get("model")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(s))
+                .map(str::to_string);
+        }
+        if effort.is_none() {
+            effort = pin
+                .get("effort")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_ascii_lowercase());
+        }
+    }
+    (model, effort)
+}
+
 pub fn detect_session_chat_terminal_state(
     repository: &DomainRepository<'_>,
     hook_state_directory: &Path,
@@ -506,16 +577,39 @@ pub fn detect_session_chat_terminal_state(
     // streaming activity directly through `ghostex acp-host` without terminal screen scraping
     // (CDXC:AgentProviders 2026-11-22 in acp/mod.rs).
     if let Some(acp_state) = crate::acp::channel::channel_state(project_id, session_id) {
-        let family = acp_state
+        let session_row = repository
+            .get_session(project_id, session_id)
+            .ok()
+            .flatten();
+        let family_owned = acp_state
             .get("family")
             .and_then(Value::as_str)
             .filter(|s| !s.trim().is_empty())
-            .or(agent_id)
-            .unwrap_or("antigravity");
+            .map(str::to_string)
+            .unwrap_or_else(|| acp_family_for_session(agent_id, session_row.as_ref()));
+        let family = family_owned.as_str();
+        let (launch_model, launch_effort) = acp_session_launch_model_and_effort(
+            repository,
+            project_id,
+            session_id,
+            session_row.as_ref(),
+            family,
+        );
+        let raw_model = acp_state
+            .get("model")
+            .and_then(Value::as_str)
+            .filter(|s| !ghostex_gx_chat_core::menus::catalog::is_placeholder_model_value(s))
+            .or(launch_model.as_deref());
+        let raw_effort = acp_state
+            .get("effort")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .or(launch_effort.as_deref());
         let resolved_acp = crate::agent_model_catalog::resolve_acp_model(
             family,
-            acp_state.get("model").and_then(Value::as_str),
-            acp_state.get("effort").and_then(Value::as_str),
+            raw_model,
+            raw_effort,
             acp_state
                 .get("availableModels")
                 .and_then(Value::as_array)
@@ -531,12 +625,7 @@ pub fn detect_session_chat_terminal_state(
         let effort = resolved_acp
             .as_ref()
             .and_then(|(_, _, effort)| effort.as_deref())
-            .or_else(|| {
-                acp_state
-                    .get("effort")
-                    .and_then(Value::as_str)
-                    .filter(|s| !s.is_empty())
-            })
+            .or(raw_effort)
             .map(|value| SessionChatDetectedChoice {
                 value: value.to_string(),
                 label: crate::agent_model_catalog::effort_display_label(value),
@@ -697,10 +786,6 @@ pub fn detect_session_chat_terminal_state(
         };
         let options = Some(SessionChatDetectedOptions::new(selection));
         let options = with_checkout_status(repository, project_id, session_id, agent_id, options);
-        let session_row = repository
-            .get_session(project_id, session_id)
-            .ok()
-            .flatten();
         let mut notice = acp_terminal_notice(Some(&acp_state), session_row.as_ref());
         if let Some(notice) = notice.as_mut() {
             crate::session_chat_account_sign_in::enrich_notice(
@@ -731,7 +816,7 @@ pub fn detect_session_chat_terminal_state(
         return detection;
     }
     // While an ACP session is booting or reconnecting its channel, never fall through to CLI TUI
-    // screen scraping; report its persisted approval level instead.
+    // screen scraping; report its persisted approval level, launched/pinned model, and effort.
     if let Some(session) = repository
         .get_session(project_id, session_id)
         .ok()
@@ -740,7 +825,39 @@ pub fn detect_session_chat_terminal_state(
         if crate::acp::session_is_acp(&session) {
             let level =
                 crate::acp::approval::stored_session_approval_level(&session).unwrap_or_default();
+            let family = acp_family_for_session(agent_id, Some(&session));
+            let (launch_model, launch_effort) = acp_session_launch_model_and_effort(
+                repository,
+                project_id,
+                session_id,
+                Some(&session),
+                &family,
+            );
+            let resolved_acp = crate::agent_model_catalog::resolve_acp_model(
+                &family,
+                launch_model.as_deref(),
+                launch_effort.as_deref(),
+                None,
+            );
+            let model = resolved_acp
+                .as_ref()
+                .map(|(value, label, _)| SessionChatDetectedChoice {
+                    value: value.clone(),
+                    label: label.clone(),
+                    source: SessionChatOptionEvidence::Launch,
+                });
+            let effort = resolved_acp
+                .as_ref()
+                .and_then(|(_, _, effort)| effort.as_deref())
+                .or(launch_effort.as_deref())
+                .map(|value| SessionChatDetectedChoice {
+                    value: value.to_string(),
+                    label: crate::agent_model_catalog::effort_display_label(value),
+                    source: SessionChatOptionEvidence::Launch,
+                });
             let selection = SessionChatDetectedSelection {
+                model,
+                effort,
                 mode: Some(SessionChatDetectedChoice {
                     value: level.as_str().to_string(),
                     label: level.label().to_string(),

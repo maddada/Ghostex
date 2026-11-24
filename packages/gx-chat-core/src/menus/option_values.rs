@@ -577,11 +577,76 @@ pub fn apply_detected_options(
             *next = updated;
         }
     };
+    let mut extracted_effort_from_model: Option<DetectedChoice> = None;
     if let Some(model) = &detected.model {
+        use crate::menus::catalog::{
+            humanize_raw_model_slug, is_placeholder_model_label, is_placeholder_model_value,
+            resolve_model_in_list, split_parenthesized_effort,
+        };
+        let choices = catalog.model.choice_list();
+        let resolved = resolve_model_in_list(
+            choices,
+            &model.value,
+            |c| c.value.as_str(),
+            |c| c.label.as_str(),
+            |c| c.picker_label.as_deref(),
+            |_| &[],
+        )
+        .or_else(|| {
+            resolve_model_in_list(
+                choices,
+                &model.label,
+                |c| c.value.as_str(),
+                |c| c.label.as_str(),
+                |c| c.picker_label.as_deref(),
+                |_| &[],
+            )
+        });
+        let normalized_model = if let Some((choice, embedded_effort)) = resolved {
+            if !is_placeholder_model_value(&choice.value)
+                && !is_placeholder_model_label(&choice.label)
+            {
+                if let Some(eff) = embedded_effort {
+                    extracted_effort_from_model = Some(DetectedChoice {
+                        value: eff.clone(),
+                        label: eff,
+                        source: model.source.clone(),
+                    });
+                }
+                DetectedChoice {
+                    value: choice.value.clone(),
+                    label: choice.label.clone(),
+                    source: model.source.clone(),
+                }
+            } else {
+                model.clone()
+            }
+        } else {
+            let (clean_label, paren_effort) = split_parenthesized_effort(&model.label);
+            if let Some(eff) = paren_effort {
+                extracted_effort_from_model = Some(DetectedChoice {
+                    value: eff.clone(),
+                    label: eff,
+                    source: model.source.clone(),
+                });
+            }
+            let friendly_label = humanize_raw_model_slug(clean_label)
+                .or_else(|| humanize_raw_model_slug(&model.value))
+                .unwrap_or_else(|| clean_label.to_string());
+            DetectedChoice {
+                value: model.value.clone(),
+                label: friendly_label,
+                source: model.source.clone(),
+            }
+        };
         let id = catalog.model.id.clone();
-        apply(&mut next, &id, model);
+        apply(&mut next, &id, &normalized_model);
     }
-    if let Some(effort) = &detected.effort {
+    if let Some(effort) = detected
+        .effort
+        .as_ref()
+        .or(extracted_effort_from_model.as_ref())
+    {
         let model_value = current_model_value(catalog, &next);
         // Only when the current model actually has an effort option (Haiku has none).
         let has_effort = catalog
@@ -687,26 +752,80 @@ pub fn option_value_label(
         .find(|entry| entry.value == current.value);
     let detected_label = current.label.as_deref().map(str::trim).unwrap_or("");
     if descriptor.id == "model" {
-        use crate::menus::catalog::{is_placeholder_model_label, is_placeholder_model_value};
+        use crate::menus::catalog::{
+            humanize_raw_model_slug, is_placeholder_model_label, is_placeholder_model_value,
+            resolve_model_in_list, split_parenthesized_effort,
+        };
+        let choices = descriptor.choice_list();
+        let resolved_choice = choice
+            .or_else(|| {
+                resolve_model_in_list(
+                    choices,
+                    &current.value,
+                    |c| c.value.as_str(),
+                    |c| c.label.as_str(),
+                    |c| c.picker_label.as_deref(),
+                    |_| &[],
+                )
+                .map(|(c, _)| c)
+            })
+            .or_else(|| {
+                (!detected_label.is_empty())
+                    .then(|| {
+                        resolve_model_in_list(
+                            choices,
+                            detected_label,
+                            |c| c.value.as_str(),
+                            |c| c.label.as_str(),
+                            |c| c.picker_label.as_deref(),
+                            |_| &[],
+                        )
+                        .map(|(c, _)| c)
+                    })
+                    .flatten()
+            });
         if is_placeholder_model_value(&current.value) {
+            if let Some(resolved) =
+                resolved_choice.filter(|c| !is_placeholder_model_label(&c.label))
+            {
+                return Some(resolved.label.clone());
+            }
             if !is_placeholder_model_label(detected_label) {
-                return Some(sentence_case_label(detected_label));
+                let (clean, _) = split_parenthesized_effort(detected_label);
+                return Some(
+                    humanize_raw_model_slug(clean).unwrap_or_else(|| sentence_case_label(clean)),
+                );
             }
             return None;
         }
-        if let Some(choice) = choice {
-            if !is_placeholder_model_label(&choice.label)
-                && (detected_label.is_empty()
-                    || is_placeholder_model_label(detected_label)
-                    || choice_names_label(choice, detected_label))
-            {
+        if let Some(choice) = resolved_choice {
+            let label_matches_choice = detected_label.is_empty()
+                || is_placeholder_model_label(detected_label)
+                || choice_names_label(choice, detected_label)
+                || resolve_model_in_list(
+                    std::slice::from_ref(choice),
+                    detected_label,
+                    |c| c.value.as_str(),
+                    |c| c.label.as_str(),
+                    |c| c.picker_label.as_deref(),
+                    |_| &[],
+                )
+                .is_some();
+            if !is_placeholder_model_label(&choice.label) && label_matches_choice {
                 return Some(choice.label.clone());
             }
         }
         if !detected_label.is_empty() && !is_placeholder_model_label(detected_label) {
-            return Some(sentence_case_label(detected_label));
+            let (clean, _) = split_parenthesized_effort(detected_label);
+            if let Some(human) = humanize_raw_model_slug(clean) {
+                return Some(human);
+            }
+            return Some(sentence_case_label(clean));
         }
-        return choice
+        if let Some(human) = humanize_raw_model_slug(&current.value) {
+            return Some(human);
+        }
+        return resolved_choice
             .filter(|choice| !is_placeholder_model_label(&choice.label))
             .map(|choice| choice.label.clone());
     }

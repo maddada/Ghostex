@@ -1072,6 +1072,15 @@ fn spawn_and_init_codex(
                             .filter(|e| !e.trim().is_empty())
                             .map(str::to_string)
                     })
+                })
+                .or_else(|| {
+                    crate::agent_model_catalog::resolve_acp_model(
+                        "codex",
+                        s.current_model.as_deref(),
+                        None,
+                        s.available_models.as_array().map(Vec::as_slice),
+                    )
+                    .and_then(|(_, _, effort)| effort)
                 });
         }
         s.active_profile = profile;

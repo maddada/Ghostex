@@ -1608,6 +1608,18 @@ fn spawn_and_init_claude(
                         resolved_default_to_apply = Some(chosen);
                     }
                 }
+                if s.current_effort.is_none() {
+                    if let Some((_, _, Some(default_effort))) =
+                        crate::agent_model_catalog::resolve_acp_model(
+                            "claude",
+                            s.current_model.as_deref(),
+                            None,
+                            Some(&mapped),
+                        )
+                    {
+                        s.current_effort = Some(default_effort);
+                    }
+                }
                 s.available_models = Value::Array(mapped);
             }
         }

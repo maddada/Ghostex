@@ -341,7 +341,7 @@ impl SessionOptionCatalog {
             CatalogOptions::Claude { agent, catalog } => {
                 // Until gxserver confirms the model, do not offer effort controls that may not
                 // exist for the actual model (the catalog gives Haiku none).
-                let current = agent.model(model_value);
+                let current = agent.resolve_model(model_value).map(|(model, _)| model);
                 let efforts = current
                     .map(|model| model.efforts.clone())
                     .unwrap_or_default();
@@ -356,7 +356,7 @@ impl SessionOptionCatalog {
                 sort_descriptors(descriptors)
             }
             CatalogOptions::Codex { agent, catalog } => {
-                let current = agent.model(model_value);
+                let current = agent.resolve_model(model_value).map(|(model, _)| model);
                 let mut descriptors =
                     vec![codex_effort(catalog, &agent.efforts_for_model(model_value))];
                 if agent.fast_mode.available && current.is_none_or(|model| model.fast_mode) {
@@ -382,8 +382,8 @@ impl SessionOptionCatalog {
             CatalogOptions::Antigravity { agent, catalog } => {
                 // The effort is typed together with the model, so it is only offered once
                 // gxserver has confirmed which catalog model is running.
-                let mut descriptors = match agent.model(model_value) {
-                    Some(model) if !model.efforts.is_empty() => {
+                let mut descriptors = match agent.resolve_model(model_value) {
+                    Some((model, _)) if !model.efforts.is_empty() => {
                         vec![antigravity_effort(agent, catalog, model)]
                     }
                     _ => Vec::new(),

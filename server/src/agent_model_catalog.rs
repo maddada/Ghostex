@@ -511,9 +511,41 @@ pub fn split_antigravity_model_id(raw: &str) -> Option<(String, String)> {
     None
 }
 
+/// Default reasoning effort for `model_value` on `family` from the live catalog.
+/// Returns `None` when the catalog explicitly declares no efforts for that model (e.g. Haiku 4.5).
+pub fn default_effort_for_model(family: &str, model_value: &str) -> Option<String> {
+    let canonical = ghostex_gx_chat_core::menus::catalog::canonical_model_family(family);
+    if let Some(parsed) =
+        ghostex_gx_chat_core::menus::catalog::parse_agent_model_catalog(&current())
+    {
+        if let Some(agent) = parsed.agents.get(canonical) {
+            if let Some((model, _)) = agent.resolve_model(model_value) {
+                return ghostex_gx_chat_core::menus::catalog::preferred_default_effort(
+                    canonical, agent, model,
+                );
+            }
+            if let Some(default_effort) = agent
+                .default_effort
+                .as_deref()
+                .filter(|e| !e.trim().is_empty())
+            {
+                return Some(default_effort.to_ascii_lowercase());
+            }
+            if matches!(canonical, "claude" | "codex" | "antigravity")
+                && agent.efforts.iter().any(|e| e == "high")
+            {
+                return Some("high".to_string());
+            }
+            return agent.efforts.first().cloned();
+        }
+    }
+    ghostex_gx_chat_core::menus::catalog::preferred_default_model_fallback(canonical)
+        .and_then(|(_, _, effort)| effort.map(str::to_string))
+}
+
 /// Resolves an ACP/Native session's reported model + effort into a concrete catalog-aligned
 /// `(value, label, effort)` tuple. Never returns "Default", "Default (recommended)", "Auto",
-/// or blank.
+/// a raw slug like `"claude-opus-5-5"`, or blank.
 pub fn resolve_acp_model(
     family: &str,
     raw_model: Option<&str>,
@@ -521,7 +553,8 @@ pub fn resolve_acp_model(
     available_models: Option<&[Value]>,
 ) -> Option<(String, String, Option<String>)> {
     use ghostex_gx_chat_core::menus::catalog::{
-        canonical_model_family, is_placeholder_model_label, is_placeholder_model_value,
+        canonical_model_family, humanize_raw_model_slug, is_placeholder_model_label,
+        is_placeholder_model_value, split_parenthesized_effort,
     };
     let canonical = canonical_model_family(family);
     let mut effort = raw_effort
@@ -544,8 +577,12 @@ pub fn resolve_acp_model(
             let label = catalog_model("antigravity", &base)
                 .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
                 .filter(|label| !is_placeholder_model_label(label))
+                .or_else(|| humanize_raw_model_slug(&base))
                 .unwrap_or_else(|| base.clone());
-            return Some((base, label, effort.or(Some(parsed_effort))));
+            let resolved_effort = effort
+                .or(Some(parsed_effort))
+                .or_else(|| default_effort_for_model("antigravity", &base));
+            return Some((base, label, resolved_effort));
         }
     }
 
@@ -558,17 +595,27 @@ pub fn resolve_acp_model(
                 .get("label")
                 .and_then(Value::as_str)
                 .filter(|label| !is_placeholder_model_label(label))
-                .unwrap_or(raw)
-                .to_string();
-            return Some((raw.to_string(), label, effort));
+                .map(str::to_string)
+                .or_else(|| humanize_raw_model_slug(raw))
+                .unwrap_or_else(|| raw.to_string());
+            let resolved_effort = effort.or_else(|| default_effort_for_model("claude", raw));
+            return Some((raw.to_string(), label, resolved_effort));
         }
         if let Some(mapped) = crate::session_chat_options::claude_transcript_model_choice(raw) {
             let label = catalog_model("claude", &mapped.value)
                 .and_then(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
                 .filter(|label| !is_placeholder_model_label(label))
-                .unwrap_or(mapped.label);
+                .unwrap_or_else(|| {
+                    mapped
+                        .label
+                        .strip_suffix(" (1M)")
+                        .unwrap_or(&mapped.label)
+                        .to_string()
+                });
             if !is_placeholder_model_label(&label) {
-                return Some((mapped.value, label, effort));
+                let resolved_effort =
+                    effort.or_else(|| default_effort_for_model("claude", &mapped.value));
+                return Some((mapped.value, label, resolved_effort));
             }
         }
     }
@@ -597,31 +644,10 @@ pub fn resolve_acp_model(
         .filter(|label| !is_placeholder_model_label(label));
     let raw_label = catalog_label
         .or(available_name)
+        .or_else(|| humanize_raw_model_slug(raw))
         .unwrap_or_else(|| raw.to_string());
-    let (label, extracted_effort) = if let Some(without_close) = raw_label.trim().strip_suffix(')')
-    {
-        if let Some((base, inside)) = without_close.rsplit_once(" (") {
-            let eff = match inside.trim().to_ascii_lowercase().as_str() {
-                "minimal" => Some("minimal"),
-                "low" => Some("low"),
-                "medium" => Some("medium"),
-                "high" => Some("high"),
-                "xhigh" | "extra high" | "extra-high" => Some("xhigh"),
-                "max" => Some("max"),
-                "ultracode" => Some("ultracode"),
-                _ => None,
-            };
-            if let (Some(e), false) = (eff, base.trim().is_empty()) {
-                (base.trim().to_string(), Some(e.to_string()))
-            } else {
-                (raw_label, None)
-            }
-        } else {
-            (raw_label, None)
-        }
-    } else {
-        (raw_label, None)
-    };
+    let (clean_label, extracted_effort) = split_parenthesized_effort(&raw_label);
+    let label = humanize_raw_model_slug(clean_label).unwrap_or_else(|| clean_label.to_string());
     if effort.is_none() {
         effort = extracted_effort;
     }
@@ -630,11 +656,7 @@ pub fn resolve_acp_model(
         return Some((value, fallback_label, effort.or(default_effort)));
     }
     if effort.is_none() {
-        effort = catalog_model(canonical, raw).and_then(|row| {
-            row.get("defaultEffort")
-                .and_then(Value::as_str)
-                .map(|s| s.to_ascii_lowercase())
-        });
+        effort = default_effort_for_model(canonical, raw);
     }
     Some((raw.to_string(), label, effort))
 }
