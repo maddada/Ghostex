@@ -27,8 +27,8 @@ use gpui::{
 use gpui_component::{h_flex, v_flex};
 use std::rc::Rc;
 
-pub(crate) const NATIVE_MODE_INTRO_MODAL_WIDTH: f32 = 468.0;
-pub(crate) const NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT: f32 = 368.0;
+pub(crate) const NATIVE_MODE_INTRO_MODAL_WIDTH: f32 = 500.0;
+pub(crate) const NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT: f32 = 340.0;
 
 const TITLE: &str = "Chat, straight from your agents.";
 const SUBTITLE: &str = "Native mode connects Antigravity, Claude Code and Codex directly instead of reading a terminal screen. More agents coming soon.";
@@ -253,7 +253,7 @@ impl Render for GpuiNativeModeIntroModalWindow {
                     .child(
                         div()
                             .w_full()
-                            .max_w(px(390.0))
+                            .max_w(px(420.0))
                             .text_center()
                             .text_size(px(13.5))
                             .line_height(px(20.0))
