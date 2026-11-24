@@ -272,7 +272,7 @@ pub use crate::sidebar_view::{
     BrowserTabInput, CleanupKept, CloseAfterDoneInput, Collection, CollectionView,
     CollectionsState, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendInput, DelayedSendView,
     DropLanding, DropWrites, EmptyState, FocusedRowSpace, FoldedStatus, FoldedWorktree,
-    GroupActionTarget, GroupCore, GroupSummary, GroupView, LabelDeadline, MachineChip,
+    GroupActionTarget, GroupCore, GroupSummary, GroupView, LabelDeadline, MachineChip, MachineFold,
     MachineNotice, MachineSummary, MachineTabInput, MachineTabLayout, MachineTabView, NeedsYou,
     OrderItem, OrderKind, PinnedSessionOrder, ProjectContextView, ProjectCopy, ProjectDiffStats,
     ProjectDropLanding, ProjectDropRow, ProjectSlotPlan, RemoteMachineView, RowNesting,

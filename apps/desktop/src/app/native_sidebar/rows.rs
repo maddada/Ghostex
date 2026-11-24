@@ -1,12 +1,12 @@
 use super::drag::SidebarDropTarget;
 use super::{appearance::SidebarAppearance, model::NativeSidebarGroup};
-use crate::GhostexGpuiApp;
+use crate::{GhostexGpuiApp, app::helpers::*};
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled,
     div, px,
 };
-use gpui_component::v_flex;
+use gpui_component::{h_flex, v_flex};
 use serde_json::{Value, json};
 
 impl GhostexGpuiApp {
@@ -31,6 +31,86 @@ impl GhostexGpuiApp {
                 cx,
             );
         }
+    }
+
+    /// Main Hub's quiet "New chat" row at the end of Chats (with one muted line underneath:
+    /// "Anything, no project needed"). Clicking it starts a new chat in Main Hub through the
+    /// shared `start_new_agent_session_in_group` entry point.
+    ///
+    /// CDXC:Chief 2026-11-24 DECISION:
+    /// User picked Part 2 option A: rename Main Hub's "Sessions" section to "Chats" and end it
+    /// with a quiet "New chat" row (chat-bubble outline icon, muted text) plus "Anything, no
+    /// project needed" underneath.
+    fn render_native_home_new_chat_row(
+        &self,
+        group: &NativeSidebarGroup,
+        appearance: &SidebarAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let scale = appearance.scale;
+        let group_id = group.group_id.clone();
+        let row = h_flex()
+            .id(format!("native-home-new-chat-{}", group.group_id))
+            .role(gpui::Role::Button)
+            .aria_label("New chat in Main Hub")
+            .h(px(super::session_list::SESSION_HEIGHT * scale))
+            .mx(px(super::session_list::SESSION_INSET_X * scale))
+            .pl(px(5.0 * scale))
+            .pr(px(6.0 * scale))
+            .gap(px(6.0 * scale))
+            .rounded(px(5.0 * scale))
+            .cursor_pointer()
+            .hover(|row| row.bg(appearance.session_hover))
+            .child(
+                div()
+                    .size(px(15.0 * scale))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(titlebar_svg_icon(
+                        "titlebar/message-plus.svg",
+                        14.0 * scale,
+                        appearance.muted,
+                    )),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .text_color(appearance.muted)
+                    .child("New chat"),
+            )
+            .on_click(cx.listener(move |app, _, _, cx| {
+                cx.stop_propagation();
+                app.start_new_agent_session_in_group(group_id.clone(), cx);
+            }))
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    format!("home-new-chat:{}", group.group_id),
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
+            });
+        v_flex()
+            .w_full()
+            .flex_shrink_0()
+            .child(row)
+            .child(
+                div()
+                    .mx(px(super::session_list::SESSION_INSET_X * scale))
+                    .pl(px((5.0 + 15.0 + 6.0) * scale))
+                    .pr(px(6.0 * scale))
+                    .pt(px(2.0 * scale))
+                    .pb(px(4.0 * scale))
+                    .text_size(px(11.5 * scale))
+                    .text_color(appearance.muted.opacity(0.75))
+                    .child("Anything, no project needed"),
+            )
+            .into_any_element()
     }
 
     /// A project's block: its header and, while it is open or folding, its rows and then its
@@ -59,6 +139,10 @@ impl GhostexGpuiApp {
             .sections
             .iter()
             .position(|section| section.id == "pinned");
+        let has_sessions_section = group
+            .sections
+            .iter()
+            .any(|section| section.id == "sessions");
         let hide_lone_sessions_heading =
             gbots.is_none() && matches!(group.sections.as_slice(), [only] if only.id == "sessions");
         let body = self
@@ -75,7 +159,9 @@ impl GhostexGpuiApp {
                         column.children(gbots.take())
                     })
                     .when(
-                        group.sessions.is_empty() && group.project_context.is_some(),
+                        !group.is_home
+                            && group.sessions.is_empty()
+                            && group.project_context.is_some(),
                         |column| {
                             let id = group.group_id.clone();
                             let is_bot = group.bot_status().is_some();
@@ -118,6 +204,7 @@ impl GhostexGpuiApp {
                             &section.session_ids,
                             section.collapsed,
                         );
+                        let append_home_new_chat = group.is_home && section.id == "sessions";
                         let body = self
                             .native_sidebar
                             .disclosures
@@ -140,7 +227,19 @@ impl GhostexGpuiApp {
                                     appearance,
                                     cx,
                                 );
-                                self.render_native_disclosure(key, rows, cx)
+                                let section_content = if append_home_new_chat {
+                                    v_flex()
+                                        .w_full()
+                                        .flex_shrink_0()
+                                        .child(rows)
+                                        .child(self.render_native_home_new_chat_row(
+                                            group, appearance, cx,
+                                        ))
+                                        .into_any_element()
+                                } else {
+                                    rows
+                                };
+                                self.render_native_disclosure(key, section_content, cx)
                             });
                         // The gap of the 2026-11-21 spacing (sections.rs).
                         let gap_above = if index > 0 && !hide_lone_sessions_heading {
@@ -169,7 +268,14 @@ impl GhostexGpuiApp {
                                 column.children(gbots.take())
                             })
                             .into_any_element()
-                    }));
+                    }))
+                    .when(group.is_home && !has_sessions_section, |column| {
+                        column
+                            .when(!group.sections.is_empty(), |column| {
+                                column.child(div().h(px(super::sections::SECTION_GAP_ABOVE * scale)))
+                            })
+                            .child(self.render_native_home_new_chat_row(group, appearance, cx))
+                    });
                 self.render_native_project_fold(
                     key,
                     content.into_any_element(),

@@ -40,8 +40,12 @@ pub(super) const SECTION_HEADING_GAP_BELOW: f32 = 2.0;
 /// Above a heading under another section, open or folded.
 pub(super) const SECTION_GAP_ABOVE: f32 = 6.0;
 
-/// A section's heading text: its id in sentence case ("pinned" → "Pinned").
-pub(super) fn section_heading_title(id: &str) -> String {
+/// A section's heading text: its id in sentence case ("pinned" → "Pinned"), except Main Hub's
+/// "sessions" section which reads "Chats" (2026-11-24 Main Hub Part 2 option A).
+pub(super) fn section_heading_title(id: &str, is_home: bool) -> String {
+    if is_home && id == "sessions" {
+        return "Chats".to_string();
+    }
     let mut chars = id.chars();
     chars.next().map_or_else(String::new, |first| {
         first.to_uppercase().chain(chars).collect()
@@ -91,11 +95,12 @@ impl GhostexGpuiApp {
         let owner = super::menus::MenuOwner::default();
         let menu_owner = owner.clone();
         let stop_key = format!("section:{key}");
+        let title = section_heading_title(&section.id, group.is_home);
         h_flex()
             .id(format!("native-sidebar-section-{key}"))
             .on_prepaint(super::menus::record_menu_owner(&owner))
             .role(gpui::Role::Button)
-            .aria_label(format!("{} section", section.id))
+            .aria_label(format!("{title} section"))
             .aria_expanded(!section.collapsed)
             .mx(px(3.0 * scale))
             .h(px(SECTION_HEADING_HEIGHT * scale))
@@ -117,7 +122,7 @@ impl GhostexGpuiApp {
                 Some(group.group_id.clone()),
                 cx,
             )
-            .child(section_heading_title(&section.id))
+            .child(title)
             .children(if hovered {
                 Some(
                     titlebar_svg_icon(

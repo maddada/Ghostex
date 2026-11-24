@@ -71,6 +71,10 @@ pub(crate) struct NativeSidebarGroup {
     pub(crate) sections: Vec<NativeSidebarSection>,
     pub(crate) title: String,
     pub(crate) is_active: bool,
+    /// The home project (Main Hub): its "Sessions" section reads "Chats" and ends with the quiet
+    /// "New chat" row.
+    #[serde(default)]
+    pub(crate) is_home: bool,
     #[serde(default)]
     pub(crate) is_stale: bool,
     /// The project a user-made session group belongs to (gx-core `owner_project_group_id`); the

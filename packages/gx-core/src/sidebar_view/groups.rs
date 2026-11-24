@@ -193,6 +193,7 @@ pub(crate) fn build_group(
                 is_focused,
                 is_visible,
                 nesting: Default::default(),
+                machine_fold: None,
                 is_multi_selected: ui
                     .selected_session_ids
                     .iter()
@@ -202,6 +203,7 @@ pub(crate) fn build_group(
         })
         .collect();
 
+    let is_home = plan.project.as_ref().is_some_and(|project| project.is_home);
     let GroupLayout {
         mut sessions,
         layout,
@@ -211,6 +213,7 @@ pub(crate) fn build_group(
         &store_rows,
         &plan.storage_id,
         is_active,
+        is_home,
         ui,
         settings,
         now_ms,
@@ -323,6 +326,7 @@ pub(crate) fn lay_out_group_rows(
     store_rows: &[SessionView],
     storage_id: &str,
     is_active: bool,
+    is_home: bool,
     ui: &SidebarUiState,
     settings: &SidebarSettings,
     now_ms: u64,
@@ -364,7 +368,7 @@ pub(crate) fn lay_out_group_rows(
         .map(|session| session.row.sidebar_session_id.clone())
         .filter(|id| !ui.collapse.expanded_coordinators.contains(id))
         .collect();
-    let (sessions, section_by_session) = nest_threads(
+    let (mut sessions, mut section_by_session) = nest_threads(
         sessions,
         settings.enable_session_parking,
         settings.group_working_sessions,
@@ -372,6 +376,13 @@ pub(crate) fn lay_out_group_rows(
         &folded_coordinators,
         &ui.collapse.expanded_coordinator_older_threads,
         now_ms,
+    );
+    super::chief::fold_home_machine_rows(
+        &mut sessions,
+        &mut section_by_session,
+        is_home,
+        storage_id,
+        &ui.collapse.expanded_machine_folds,
     );
     let section_collapse = ui
         .collapse
@@ -503,6 +514,7 @@ mod summary_tests {
             is_visible: false,
             is_multi_selected: false,
             nesting: RowNesting::default(),
+            machine_fold: None,
         }
     }
 

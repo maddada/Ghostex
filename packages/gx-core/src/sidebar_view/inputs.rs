@@ -233,6 +233,10 @@ pub struct SidebarCollapseState {
     pub expanded_coordinators: BTreeSet<String>,
     /// Coordinators whose older threads (idle for two hours) the user listed, by sidebar row id.
     pub expanded_coordinator_older_threads: BTreeSet<String>,
+    /// Main Hub's per-computer folds (`Ask Ghostex AI`, `Autopilot supervisor`) whose other
+    /// computers' rows the user unfolded during this run (`chief.rs` `machine_fold_key`). Never
+    /// stored: they start folded on every launch.
+    pub expanded_machine_folds: BTreeSet<String>,
     /// The computers whose sessions a merged project hides, keyed by [`project_machine_key`]
     /// (CDXC:RemoteMachines 2026-11-15 in `merged.rs`).
     pub hidden_project_machines: BTreeSet<String>,

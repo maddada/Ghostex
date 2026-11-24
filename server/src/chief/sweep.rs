@@ -8,12 +8,18 @@ use crate::server::AppState;
 
 pub(crate) fn start_chief_sweep(state: Arc<AppState>) {
     tokio::spawn(async move {
-        let _ = tokio::task::spawn_blocking(move || rename_old_title(&state)).await;
+        let _ = tokio::task::spawn_blocking(move || {
+            rename_old_title(&state);
+            unpin_earlier_chats(&state);
+        })
+        .await;
     });
 }
 
 /// The metadata row that says the rename below has run on this computer.
 const TITLES_RENAMED_KEY: &str = "chiefTitlesRenamed";
+/// The metadata row that says earlier Chief chats were unpinned once on this computer.
+const EARLIER_UNPINNED_KEY: &str = "chiefEarlierUnpinned";
 
 /// Once per computer, at gxserver start: a Chief chat still titled with a name Ghostex gave it under
 /// an earlier name ("Chief", "Main Hub", "Chief of Staff", or an earlier chat's "Chief of Staff ·
@@ -83,6 +89,59 @@ fn rename_old_title(state: &AppState) {
         "INSERT INTO metadata (key, value, updatedAt) VALUES (?1, 'true', ?2) \
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt",
         rusqlite::params![TITLES_RENAMED_KEY, crate::coordinators::now_iso()],
+    );
+}
+
+/// Once per computer, at gxserver start: earlier Chief chats (like "Ask Ghostex AI · 21 Nov,
+/// 04:33") that carried a leftover `isPinned` from when they were active Chief are unpinned so
+/// they move out of Pinned into Main Hub's Chats section. Because this runs once, any earlier chat
+/// the user pins themselves afterwards stays pinned.
+fn unpin_earlier_chats(state: &AppState) {
+    let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let ran = db
+        .query_row(
+            "SELECT value FROM metadata WHERE key = ?1",
+            [EARLIER_UNPINNED_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .is_ok();
+    if ran {
+        return;
+    }
+    if let Some(record) = super::read_record(&db) {
+        let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
+        for chat in &record.earlier {
+            let Some(session) = repository
+                .get_session(&chat.project_id, &chat.session_id)
+                .ok()
+                .flatten()
+            else {
+                continue;
+            };
+            if session.get("isPinned").and_then(serde_json::Value::as_bool) != Some(true) {
+                continue;
+            }
+            let mut params = Map::new();
+            params.insert("projectId".into(), json!(chat.project_id));
+            params.insert("sessionId".into(), json!(chat.session_id));
+            params.insert("isPinned".into(), json!(false));
+            if repository.update_session(&params).is_ok() {
+                let _ = crate::server::schedule_presentation_session_delta(
+                    state,
+                    &db,
+                    &repository,
+                    &chat.project_id,
+                    &chat.session_id,
+                );
+            }
+        }
+    }
+    let _ = db.execute(
+        "INSERT INTO metadata (key, value, updatedAt) VALUES (?1, 'true', ?2) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt",
+        rusqlite::params![EARLIER_UNPINNED_KEY, crate::coordinators::now_iso()],
     );
 }
 

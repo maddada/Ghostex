@@ -37,6 +37,11 @@ pub enum SidebarUiIntent {
     ToggleCoordinatorOlderThreads {
         sidebar_session_id: String,
     },
+    /// Fold or unfold the other computers' rows under a Main Hub per-computer row (Ask Ghostex AI
+    /// or Autopilot supervisor), by its fold key (`machine_fold_key`).
+    ToggleMachineFold {
+        key: String,
+    },
     /// Hide or show one computer's sessions in a project row that lists several computers (a
     /// click on that computer's icon after the project's name).
     ToggleProjectMachineHidden {

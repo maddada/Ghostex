@@ -537,6 +537,10 @@ fn native_group(
             .collect(),
         title: core.title.clone(),
         is_active: core.is_active,
+        is_home: core
+            .project_context
+            .as_ref()
+            .is_some_and(|project| project.is_home),
         is_stale: core.is_stale,
         owner_group_id: ghostex_gx_core::owner_project_group_id(&core.group_id),
         machine_names: core
@@ -947,6 +951,34 @@ fn build_session(
         details.insert("isMainCoordinator".to_string(), Value::Bool(true));
     }
     insert_coordinator_nesting(&mut details, row, &session.nesting);
+    if let Some(fold) = &session.machine_fold {
+        details.insert(
+            "machineFold".to_string(),
+            match fold {
+                ghostex_gx_core::MachineFold::Lead {
+                    key,
+                    other_count,
+                    expanded,
+                    contains_active,
+                } => json!({
+                    "role": "lead",
+                    "key": key,
+                    "count": other_count,
+                    "expanded": expanded,
+                    "containsActive": contains_active,
+                }),
+                ghostex_gx_core::MachineFold::Child {
+                    machine_label,
+                    machine_id,
+                    ..
+                } => json!({
+                    "role": "child",
+                    "machineLabel": machine_label,
+                    "machineId": machine_id,
+                }),
+            },
+        );
+    }
     insert_optional(&mut details, "threadState", row.thread_state.clone());
     // The computer a coordinator's thread runs on, drawn by native_sidebar/threads.rs.
     insert_optional(&mut details, "computerName", row.computer_name.clone());

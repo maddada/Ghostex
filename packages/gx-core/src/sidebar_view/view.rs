@@ -491,6 +491,35 @@ pub struct SectionView {
     pub member_ids: Vec<String>,
 }
 
+/// Per-computer folding on Main Hub's repeated rows (Ask Ghostex AI and Autopilot supervisor):
+/// with computers combined, this computer's row carries a neutral `+N` chip that unfolds the other
+/// computers' rows under it, each showing its computer icon and name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MachineFold {
+    /// The lead row (this computer's) with `other_count` other computers' rows folded under it.
+    Lead {
+        /// Key passed to [`crate::SidebarUiIntent::ToggleMachineFold`].
+        key: String,
+        /// Number of other computers' rows under this lead (`>= 1`).
+        other_count: usize,
+        /// Whether those other computers' rows are currently unfolded below this row.
+        expanded: bool,
+        /// Whether a folded (currently hidden) child row holds the focused session.
+        contains_active: bool,
+    },
+    /// One of the other computers' rows under a [`MachineFold::Lead`].
+    /// While the lead is folded, `SessionView::nesting.folded` is also `true` so `sections.rs`
+    /// hides it while keeping it in section and group counts.
+    Child {
+        /// The lead's fold key, for revealing a folded child row.
+        fold_key: String,
+        /// The computer's display name (e.g. "Windows", "Arch").
+        machine_label: String,
+        /// The computer's tab id, for looking up its icon.
+        machine_id: String,
+    },
+}
+
 /// A row in a group: the session's own values plus what this list says about it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionView {
@@ -500,6 +529,8 @@ pub struct SessionView {
     pub is_multi_selected: bool,
     /// Where the row sits in its coordinator's tree; default for every other row.
     pub nesting: RowNesting,
+    /// Per-computer fold role for Main Hub's Ask Ghostex AI and Autopilot supervisor rows.
+    pub machine_fold: Option<MachineFold>,
 }
 
 /// A coordinator's tree in the list: its open threads drawn right under it, indented.

@@ -221,6 +221,8 @@ fn normalize_collapse_state(state: Option<&Value>) -> SidebarCollapseState {
         expanded_coordinator_older_threads: flag_set(
             state.get("expandedCoordinatorOlderThreadsById"),
         ),
+        // Main Hub per-computer folds start folded on every launch; nothing is read back.
+        expanded_machine_folds: Default::default(),
         hidden_project_machines: flag_set(state.get(HIDDEN_PROJECT_MACHINES_KEY)),
         section_collapse: normalize_section_collapse(
             state.get("collapsedProjectSessionSectionsById"),

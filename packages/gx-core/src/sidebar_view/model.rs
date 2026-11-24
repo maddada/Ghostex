@@ -52,6 +52,8 @@ struct GroupKey {
     collapsed_coordinators: Vec<usize>,
     /// The group's coordinator rows whose older threads the user listed, by position.
     coordinators_showing_older: Vec<usize>,
+    /// Main Hub's per-computer folds (`chief`, `autopilot`) unfolded during this run.
+    expanded_machine_folds: (bool, bool),
     /// The threads of the group's coordinators, which may sit in other groups, by position.
     coordinator_threads: Vec<(usize, ThreadTally)>,
     section_collapse: SectionCollapse,
@@ -1402,6 +1404,21 @@ fn group_key(
             })
             .map(|(index, _)| index)
             .collect(),
+        expanded_machine_folds: (
+            inputs
+                .ui
+                .collapse
+                .expanded_machine_folds
+                .contains(&super::chief::machine_fold_key(&plan.storage_id, "chief")),
+            inputs
+                .ui
+                .collapse
+                .expanded_machine_folds
+                .contains(&super::chief::machine_fold_key(
+                    &plan.storage_id,
+                    "autopilot",
+                )),
+        ),
         coordinator_threads: plan
             .rows
             .iter()

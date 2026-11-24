@@ -216,6 +216,23 @@ impl GhostexGpuiApp {
     /// draft in the open session's project (or Main Hub when none is open), with no picker.
     pub(crate) fn start_new_agent_session(&mut self, cx: &mut Context<Self>) {
         let target_group_id = self.gx_store_new_session_default_group_id();
+        self.start_new_agent_session_target(target_group_id, cx);
+    }
+
+    /// Starts a new agent draft aimed at `group_id` (Main Hub's quiet "New chat" row).
+    pub(crate) fn start_new_agent_session_in_group(
+        &mut self,
+        group_id: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.start_new_agent_session_target(Some(group_id), cx);
+    }
+
+    fn start_new_agent_session_target(
+        &mut self,
+        target_group_id: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
         let hud_agents = self
             .new_thread_picker_agents
             .clone()

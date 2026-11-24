@@ -92,7 +92,7 @@ pub(crate) fn with_here_dot(
 }
 
 /// The session's computer is one this computer knows is offline.
-fn computer_offline(session: &NativeSidebarSession) -> bool {
+pub(super) fn computer_offline(session: &NativeSidebarSession) -> bool {
     let Some(key) = ghostex_gx_core::SessionKey::parse_sidebar_session_id(&session.session_id)
     else {
         return false;

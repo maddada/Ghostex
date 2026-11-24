@@ -532,6 +532,7 @@ mod tests {
             is_visible: false,
             is_multi_selected: false,
             nesting: RowNesting::default(),
+            machine_fold: None,
         }
     }
 
