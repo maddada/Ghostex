@@ -64,64 +64,27 @@ impl GhostexGpuiApp {
         let drop_target = self.native_sidebar_section_drop_target(&group.group_id, &section.id);
         // CDXC:Sidebar 2026-09-19 DECISION:
         // User: the working, attention and question dots next to a section title show only while that section is collapsed, not always; an expanded section already shows the state on its rows.
-        let summarize = section.collapsed;
-        let indicator = h_flex()
-            .gap(px(4.0 * scale))
-            .when(summarize && section.working_count > 0, |row| {
-                row.child(
-                    div()
-                        .size(px(super::status::STATUS_DOT_SIZE * scale))
-                        .rounded_full()
-                        .bg(rgb(super::status::WORKING_COLOR)),
-                )
-            })
-            .when(summarize && section.attention_count > 0, |row| {
-                row.child(
-                    div()
-                        .size(px(super::status::STATUS_DOT_SIZE * scale))
-                        .rounded_full()
-                        .bg(rgb(0x95d7f6)),
-                )
-            })
-            .when(
-                summarize && section.working_count == 0 && section.background_work_count > 0,
-                |row| {
-                    row.child(
-                        div()
-                            .size(px(super::status::STATUS_DOT_SIZE * scale))
-                            .rounded_full()
-                            .bg(super::status::background_work_color()),
-                    )
-                },
-            )
-            .when(summarize && section.question_count > 0, |row| {
-                row.child(
-                    div()
-                        .size(px(super::status::STATUS_DOT_SIZE * scale))
-                        .rounded_full()
-                        .bg(rgb(0xf472b6)),
-                )
-            })
-            .when(summarize && section.approval_count > 0, |row| {
-                row.child(
-                    div()
-                        .size(px(super::status::STATUS_DOT_SIZE * scale))
-                        .rounded_full()
-                        .bg(rgb(super::status::APPROVAL_COLOR)),
-                )
-            })
-            .when(
-                section.collapsed && section.contains_active_session,
-                |row| {
-                    row.child(
-                        div()
-                            .size(px(9.0 * scale))
-                            .rounded_full()
-                            .border(px(1.5 * scale))
-                            .border_color(chrome_color(0xa3a3a3, 0x858585)),
-                    )
-                },
-            );
+        // CDXC:Sidebar 2026-11-24 DECISION:
+        // User: multiple status dots always overlap like a coordinator row's stack (`status::folded_status_indicator`), never side by side with a gap; on section headers they sit at the far right in place of the count, and hovering swaps them for the count.
+        let has_status_dots = section.collapsed
+            && (section.working_count > 0
+                || section.attention_count > 0
+                || section.background_work_count > 0
+                || section.question_count > 0
+                || section.approval_count > 0);
+        let dot_ring = if drop_target {
+            titlebar_background().blend(rgb(0x60a5fa).opacity(0.18).into())
+        } else {
+            titlebar_background()
+        };
+        let active_ring = (section.collapsed && section.contains_active_session).then(|| {
+            div()
+                .size(px(9.0 * scale))
+                .rounded_full()
+                .border(px(1.5 * scale))
+                .border_color(chrome_color(0xa3a3a3, 0x858585))
+                .into_any_element()
+        });
         // CDXC:Sidebar 2026-09-18 DECISION:
         // User: a section heading is exactly as wide as a session card (the same 3px insets) with the card's 5px/6px side padding, and it has bottom padding too so the label sits centred in its rounded hover fill.
         // This supersedes the 2026-09-16 rule of letting the heading run through the sidebar's right edge for the native sidebar.
@@ -155,23 +118,37 @@ impl GhostexGpuiApp {
                 cx,
             )
             .child(section_heading_title(&section.id))
-            .child(if hovered {
-                titlebar_svg_icon(
-                    if section.collapsed {
-                        COMMAND_ICON_CHEVRON_RIGHT
-                    } else {
-                        COMMAND_ICON_CHEVRON_DOWN
-                    },
-                    14.0 * scale,
-                    appearance.muted,
+            .children(if hovered {
+                Some(
+                    titlebar_svg_icon(
+                        if section.collapsed {
+                            COMMAND_ICON_CHEVRON_RIGHT
+                        } else {
+                            COMMAND_ICON_CHEVRON_DOWN
+                        },
+                        14.0 * scale,
+                        appearance.muted,
+                    )
+                    .into_any_element(),
                 )
-                .into_any_element()
             } else {
-                indicator.into_any_element()
+                active_ring
             })
             .child(div().flex_1())
             .when(section.collapsed, |row| {
-                row.child(super::sessions::section_count_label(section.count, scale))
+                if has_status_dots && !hovered {
+                    row.child(super::status::folded_status_indicator(
+                        section.working_count > 0,
+                        section.attention_count > 0,
+                        section.background_work_count > 0,
+                        section.question_count > 0,
+                        section.approval_count > 0,
+                        scale,
+                        dot_ring,
+                    ))
+                } else {
+                    row.child(super::sessions::section_count_label(section.count, scale))
+                }
             })
             .on_hover(cx.listener(move |app, hovered, _, cx| {
                 if *hovered {

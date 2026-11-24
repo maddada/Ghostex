@@ -85,7 +85,7 @@ impl GhostexGpuiApp {
             .mt(px(2.0 * scale))
             .h(px(20.0 * scale))
             .pl(px(9.0 * scale))
-            .pr(px(4.0 * scale))
+            .pr(px(6.0 * scale))
             .gap(px(5.0 * scale))
             .text_size(px(11.5 * scale))
             .text_color(chrome_color(0xd8d8d8, 0x292929).opacity(0.42))
@@ -115,20 +115,21 @@ impl GhostexGpuiApp {
                     appearance.muted,
                 ))
             })
-            .when(collapsed && !hovered && folded.any(), |row| {
-                row.child(super::status::folded_status_indicator(
-                    folded.working,
-                    folded.attention,
-                    folded.background_work,
-                    folded.question,
-                    folded.approval,
-                    scale,
-                    titlebar_background(),
-                ))
-            })
             .child(div().flex_1())
-            .when(collapsed && !hovered, |row| {
-                row.child(folded.bots.to_string())
+            .when(collapsed, |row| {
+                if !hovered && folded.any() {
+                    row.child(super::status::folded_status_indicator(
+                        folded.working,
+                        folded.attention,
+                        folded.background_work,
+                        folded.question,
+                        folded.approval,
+                        scale,
+                        titlebar_background(),
+                    ))
+                } else {
+                    row.child(folded.bots.to_string())
+                }
             })
             .on_hover(cx.listener(move |app, hovered, _, cx| {
                 if *hovered {
