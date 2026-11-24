@@ -4,20 +4,19 @@ Machine/build properties every event carries, resolved once at init and cloned
 onto each capture so no emitter can forget one.
 
 CDXC:Telemetry 2026-08-27 (addendum v2, §2):
-`$process_person_profile: false` is GONE. Events are now identified, so PostHog
-builds a person record per `distinct_id` — which is the point, since
-`distinct_id` became per-human (`telemetry::identity`) and person profiles are
-what make cohorts, property breakdowns, and retention-by-property work in the
-UI. Two rules come with that and are enforced elsewhere in this module:
+`$process_person_profile: false` is GONE. Events are now identified by the
+random per-install UUIDv4 (`telemetry::identity`), so PostHog builds a person
+record per install for cohorts, property breakdowns, and retention-by-property.
+Two rules come with that and are enforced elsewhere in this module:
 identify/alias are NEVER called (PostHog creates the person implicitly from the
 events; an identify call risks an unrecoverable profile merge), and the person
-properties themselves ride the heartbeat's `$set` only.
+properties themselves ride `$set` on the daily events only.
 
-The per-EVENT profile fields (`interface`, `default_agent`,
-`project_bucket`, `identity_source`) deliberately do NOT live here: they change
-while the daemon runs, and they must pass the taxonomy validator, so they are
-assembled per capture in `telemetry::profile` from cached state. This map is
-only for values that are fixed for the life of the process.
+The per-EVENT profile fields (`interface`, `default_agent`, `project_bucket`)
+deliberately do NOT live here: they change while the daemon runs, and they must
+pass the taxonomy validator, so they are assembled per capture in
+`telemetry::profile` from cached state. This map is only for values that are
+fixed for the life of the process.
 
 `os_version` is a MAJOR version only, and it is read exactly once at startup:
 it is a machine attribute, it does not change under a running daemon, and

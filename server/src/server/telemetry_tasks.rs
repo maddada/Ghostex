@@ -22,7 +22,7 @@ pub(crate) fn spawn_telemetry_tasks(
     state: &Arc<AppState>,
     install_created_at: String,
 ) -> TelemetryTasks {
-    crate::telemetry::init(state.paths.clone(), state.metadata.server_id.as_str());
+    crate::telemetry::init(state.paths.clone());
     let startup_settings = crate::shared_settings_file::read_shared_settings(&state.paths);
     crate::telemetry::session_mode_state(
         "app_start",
@@ -37,7 +37,7 @@ pub(crate) fn spawn_telemetry_tasks(
         state.paths.clone(),
         state.shutdown_tx.subscribe(),
         move || collect_heartbeat_snapshot(&heartbeat_state, &install_created_at),
-        move || collect_settings_snapshot_facts(&snapshot_state),
+        move || collect_settings_snapshot_facts(&snapshot_state, true),
         move || collect_live_session_mode_counts(&live_modes_state),
     );
     TelemetryTasks { flush, heartbeat }
@@ -60,7 +60,7 @@ skipped heartbeat rather than a partial one: a snapshot missing half its counts
 would be worse than no data point at all, because it would silently drag every
 average down.
 */
-fn collect_heartbeat_snapshot(
+pub(crate) fn collect_heartbeat_snapshot(
     state: &Arc<AppState>,
     install_created_at: &str,
 ) -> Option<crate::telemetry::heartbeat::HeartbeatSnapshot> {
@@ -89,7 +89,6 @@ fn collect_heartbeat_snapshot(
         session_count: counts.session_count,
         running_session_count: counts.running_session_count,
         agents_used: counts.agents_used,
-        custom_agent_executables: counts.custom_agent_executables,
         default_agent: crate::telemetry::heartbeat::default_agent_from_settings(
             agent_settings.as_ref(),
         ),
@@ -106,17 +105,13 @@ fn collect_heartbeat_snapshot(
 CDXC:Telemetry 2026-11-20:
 What the daily `settings.snapshot` reports beyond the settings file
 (telemetry/settings_snapshot.rs). Runs on the heartbeat's blocking worker, only
-when the heartbeat is due. A part that cannot be read is left out of the event
-(`None`), never reported as zero.
-
-Accounts come from the snapshot gxserver already keeps for Settings > Accounts
-and the sidebar meters (`accounts::runtime::current_snapshot`); it is read, not
-refreshed, so the snapshot never runs Claude Swap or Codex Swap itself. When no
-client has listed the accounts since gxserver started there is nothing to read,
-and the account fields are left out.
+when the heartbeat is due, and in read-only mode (`persist_cache = false`) for
+`POST /api/telemetryPreview`. A part that cannot be read is left out of the
+event (`None`), never reported as zero.
 */
-fn collect_settings_snapshot_facts(
+pub(crate) fn collect_settings_snapshot_facts(
     state: &Arc<AppState>,
+    persist_cache: bool,
 ) -> crate::telemetry::settings_snapshot::SnapshotFacts {
     use crate::telemetry::settings_snapshot::SnapshotFacts;
     let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
@@ -138,9 +133,13 @@ fn collect_settings_snapshot_facts(
     );
     let accounts = match live_accounts {
         Some(report) => {
-            if let Some(db) = db.as_ref() {
-                if crate::telemetry::is_enabled(&state.paths) {
-                    crate::telemetry::state::write_cached_accounts(db, &report);
+            if persist_cache {
+                if let Some(db) = db.as_ref() {
+                    if crate::telemetry::is_enabled(&state.paths)
+                        && !crate::telemetry::is_onboarding_held(&state.paths)
+                    {
+                        crate::telemetry::state::write_cached_accounts(db, &report);
+                    }
                 }
             }
             Some(report)

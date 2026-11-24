@@ -19,11 +19,17 @@ use serde_json::{json, Value};
 
 pub const ANALYTICS_STATE_METADATA_KEY: &str = "analytics.state.v1";
 pub const LAST_HEARTBEAT_AT_KEY: &str = "lastHeartbeatAt";
+pub const LAST_ACTIVITY_AT_KEY: &str = "lastActivityAt";
 pub const BUILT_IN_EXTENSIONS_ON_KEY: &str = "builtInExtensionsOn";
 pub const BUILT_IN_EXTENSIONS_KNOWN_KEY: &str = "builtInExtensionsKnown";
 pub const LAST_MOBILE_HELLO_AT_KEY: &str = "lastMobileHelloAt";
 pub const CACHED_ACCOUNTS_KEY: &str = "cachedAccounts";
 pub const SESSION_MODE_SWITCHES_KEY: &str = "sessionModeSwitches";
+
+/// Maximum idle gap after the latest observed client or session activity during
+/// which a due daily heartbeat may still emit. Prevents an idle daemon from
+/// phoning home overnight or over a weekend.
+pub const HEARTBEAT_ACTIVITY_RECENCY_HOURS: i64 = 2;
 
 /// Daily switch counters between Terminal and Native mode, grouped by direction and entry point.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -138,6 +144,119 @@ impl SessionModeSwitchCounts {
 
 static PENDING_SWITCH_COUNTS: LazyLock<Mutex<SessionModeSwitchCounts>> =
     LazyLock::new(Mutex::default);
+
+#[derive(Default)]
+struct ActivityTracker {
+    last_activity_at: Option<chrono::DateTime<chrono::Utc>>,
+    dirty: bool,
+}
+
+static ACTIVITY_TRACKER: LazyLock<Mutex<ActivityTracker>> = LazyLock::new(Mutex::default);
+
+/// Records active Ghostex client or agent-session usage in memory without
+/// touching SQLite; flushed to `analytics.state.v1` by the telemetry background
+/// tasks so daily heartbeats are strictly activity-gated (Q20).
+pub fn record_activity() {
+    let now = chrono::Utc::now();
+    {
+        let mut tracker = ACTIVITY_TRACKER
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        tracker.last_activity_at = Some(now);
+        tracker.dirty = true;
+    }
+    super::task::notify_activity();
+}
+
+pub fn clear_pending_activity() {
+    let mut tracker = ACTIVITY_TRACKER
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    tracker.last_activity_at = None;
+    tracker.dirty = false;
+}
+
+/// Persists the latest in-memory activity timestamp into `analytics.state.v1`
+/// when dirty, so activity observed right before a daemon restart survives.
+pub fn persist_pending_activity(db: &Connection) {
+    let pending = {
+        let mut tracker = ACTIVITY_TRACKER
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !tracker.dirty {
+            return;
+        }
+        tracker.dirty = false;
+        tracker.last_activity_at
+    };
+    let Some(seen_at) = pending else {
+        return;
+    };
+    write_last_activity_at(
+        db,
+        &seen_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    );
+}
+
+pub fn read_last_activity_at(db: &Connection) -> Option<chrono::DateTime<chrono::Utc>> {
+    let in_memory = ACTIVITY_TRACKER
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .last_activity_at;
+    let stored = read_analytics_state(db)
+        .and_then(|value| {
+            value
+                .get(LAST_ACTIVITY_AT_KEY)
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .and_then(|raw| chrono::DateTime::parse_from_rfc3339(&raw).ok())
+        .map(|parsed| parsed.with_timezone(&chrono::Utc));
+    match (in_memory, stored) {
+        (Some(a), Some(b)) => Some(a.max(b)),
+        (Some(a), None) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    }
+}
+
+pub fn write_last_activity_at(db: &Connection, seen_at: &str) {
+    write_state_key(db, LAST_ACTIVITY_AT_KEY, Value::String(seen_at.to_string()));
+}
+
+/// True only when a client or agent session was actively used AFTER the
+/// previous heartbeat AND within `max_idle_hours` of `now`. Guarantees an idle
+/// daemon never emits passive daily heartbeats or settings snapshots.
+pub fn has_recent_activity_since_heartbeat(
+    now: chrono::DateTime<chrono::Utc>,
+    last_activity_at: Option<chrono::DateTime<chrono::Utc>>,
+    last_heartbeat_at: Option<chrono::DateTime<chrono::Utc>>,
+    max_idle_hours: i64,
+) -> bool {
+    let Some(activity) = last_activity_at else {
+        return false;
+    };
+    if let Some(previous_heartbeat) = last_heartbeat_at {
+        if activity <= previous_heartbeat {
+            return false;
+        }
+    }
+    let elapsed = now.signed_duration_since(activity);
+    elapsed <= chrono::Duration::hours(max_idle_hours) && elapsed >= chrono::Duration::minutes(-5)
+}
+
+/// Deletes the entire `analytics.state.v1` row from SQLite and clears all
+/// in-memory counters and activity timestamps (called immediately on opt-out, Q22).
+pub fn wipe_all_state(db: &Connection) {
+    clear_pending_switches();
+    clear_pending_activity();
+    if let Err(error) = db.execute(
+        "DELETE FROM metadata WHERE key = ?1",
+        [ANALYTICS_STATE_METADATA_KEY],
+    ) {
+        super::debug_log(format!("telemetry state wipe failed: {error}"));
+    }
+}
 
 /// Records one switch in memory without touching SQLite; flushed to `analytics.state.v1` by the
 /// telemetry background worker.

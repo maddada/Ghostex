@@ -1132,6 +1132,12 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             Transport::Http,
         ),
         /*
+        CDXC:Telemetry 2026-11-24 (privacy overhaul, Q22):
+        Read-only local preview of the exact sanitized telemetry payloads for
+        Settings > About ("View what's sent"). Local-only and owner-device gated.
+        */
+        "/api/telemetryPreview" => full_local(path),
+        /*
         CDXC:AgentHooks 2026-11-07 WHY:
         Hook read/install/uninstall inspect or write the agent CLIs' own config files, so they need auth and the protocol-version gate. They are remote-allowed (superseding the 2026-06-19 full-local contract) because a headless computer has no other way to get Ghostex's hooks: the desktop's Settings > Agents with that computer picked and `ghostex agent-hooks --computer` reach them from another computer (issue #431, connected_computers/scope.rs).
         */

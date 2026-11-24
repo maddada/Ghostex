@@ -60,6 +60,14 @@ pub fn send_batch(endpoint: &PostHogEndpoint, batch: Vec<Value>) -> bool {
         "api_key": endpoint.api_key,
         "batch": batch,
     });
+    if super::debug_payload_logging_enabled() {
+        if let Ok(pretty) = serde_json::to_string_pretty(&body) {
+            eprintln!(
+                "[telemetry] sending batch to {}:\n{pretty}",
+                endpoint.batch_url
+            );
+        }
+    }
     let agent: ureq::Agent = crate::http_agent::config()
         .timeout_connect(Some(CONNECT_TIMEOUT))
         .timeout_global(Some(TOTAL_TIMEOUT))

@@ -34,10 +34,6 @@ pub struct HeartbeatSnapshot {
     pub session_count: usize,
     pub running_session_count: usize,
     pub agents_used: Vec<&'static str>,
-    /// Executables of the user's custom agents that map to no catalog agent.
-    /// Sorted, deduplicated, and capped, so the list can never be a fingerprint
-    /// of how many custom agents someone has.
-    pub custom_agent_executables: Vec<String>,
     pub default_agent: &'static str,
     pub preferred_interface: &'static str,
     pub extension_count: usize,
@@ -60,12 +56,10 @@ would rewrite the same record with the same numbers, and putting `$set` on a
 high-frequency event is how person properties end up churning.
 
 Two deliberate omissions:
-- `agents_used` — an array is a poor person property (no breakdown, no cohort
+- `agents_used`: an array is a poor person property (no breakdown, no cohort
   filter that behaves), so it stays an event property.
-- `country_free` from the addendum's list — Ghostex never sends location. PostHog
-  derives country from the sender IP through its own GeoIP transformation, and
-  the base plan's "never sent" list forbids us shipping one ourselves, so there
-  is no value here to set that would not be invented.
+- Location fields: Ghostex never sends location fields from the client. PostHog
+  derives country-only GeoIP on ingest and discards raw client IP addresses.
 
 `os` and `arch` go through `match_enum` rather than being sent verbatim: an
 unrecognised target would fail validation for the WHOLE heartbeat, and a
@@ -112,9 +106,6 @@ fn person_properties(snapshot: &HeartbeatSnapshot) -> PropertyValue {
         "project_bucket",
         PropertyValue::Enum(taxonomy::project_bucket(snapshot.project_count)),
     ));
-    if let Some(identity_source) = super::queue::identity_source() {
-        person.push(("identity_source", PropertyValue::Enum(identity_source)));
-    }
     PropertyValue::PersonSet(person)
 }
 
@@ -149,10 +140,6 @@ pub fn heartbeat_properties(snapshot: &HeartbeatSnapshot) -> Vec<(&'static str, 
         (
             "agents_used",
             PropertyValue::EnumList(snapshot.agents_used.clone()),
-        ),
-        (
-            "custom_agent_executables",
-            PropertyValue::TokenList(snapshot.custom_agent_executables.clone()),
         ),
         ("default_agent", PropertyValue::Enum(snapshot.default_agent)),
         (
@@ -207,7 +194,6 @@ pub struct DomainCounts {
     pub session_count: usize,
     pub running_session_count: usize,
     pub agents_used: Vec<&'static str>,
-    pub custom_agent_executables: Vec<String>,
 }
 
 pub fn collect_domain_counts(repository: &DomainRepository<'_>) -> DomainCounts {
@@ -227,7 +213,6 @@ pub fn collect_domain_counts(repository: &DomainRepository<'_>) -> DomainCounts 
         .filter(|session| session.lifecycle_state == "running")
         .count();
     let mut agents_used: BTreeSet<&'static str> = BTreeSet::new();
-    let mut custom_agent_executables: BTreeSet<String> = BTreeSet::new();
     for session in &sessions {
         let Some(agent_id) = session.agent_id.as_deref() else {
             continue;
@@ -235,25 +220,18 @@ pub fn collect_domain_counts(repository: &DomainRepository<'_>) -> DomainCounts 
         if agent_id.trim().is_empty() {
             continue;
         }
-        // The two keys `session_agent_report` reads.
-        let report = super::capture::session_agent_report(&serde_json::json!({
+        // The two keys `session_agent_id` reads.
+        let agent = super::capture::session_agent_id(&serde_json::json!({
             "agentId": agent_id,
             "runtimeSettings": { "agentCommand": session.agent_command },
         }));
-        agents_used.insert(report.agent);
-        if let Some(executable) = report.executable {
-            custom_agent_executables.insert(executable);
-        }
+        agents_used.insert(agent);
     }
     DomainCounts {
         project_count,
         session_count,
         running_session_count,
         agents_used: agents_used.into_iter().collect(),
-        custom_agent_executables: custom_agent_executables
-            .into_iter()
-            .take(taxonomy::MAX_TOKEN_LIST_LENGTH)
-            .collect(),
     }
 }
 
@@ -274,11 +252,11 @@ pub fn collect_live_session_mode_counts(
         if agent_id.trim().is_empty() {
             continue;
         }
-        let report = super::capture::session_agent_report(&serde_json::json!({
+        let agent = super::capture::session_agent_id(&serde_json::json!({
             "agentId": agent_id,
             "runtimeSettings": { "agentCommand": session.agent_command },
         }));
-        if let Some(family) = crate::acp::canonical_native_family(report.agent) {
+        if let Some(family) = crate::acp::canonical_native_family(agent) {
             counts.record(family, session.is_non_cli);
         }
     }

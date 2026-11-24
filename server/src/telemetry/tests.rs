@@ -29,7 +29,6 @@ fn snapshot(enabled_extensions: EnabledExtensions) -> HeartbeatSnapshot {
         session_count: 10,
         running_session_count: 2,
         agents_used: vec!["claude", "codex"],
-        custom_agent_executables: vec![],
         default_agent: "claude",
         preferred_interface: "chat",
         extension_count: 3,

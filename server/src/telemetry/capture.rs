@@ -19,14 +19,13 @@ use serde_json::Value;
 use super::{
     extensions::ExtensionRef,
     queue::{capture, capture_throttled},
-    taxonomy::{self, AgentReport, PropertyValue},
+    taxonomy::{self, PropertyValue},
 };
 
-/// Resolve what a session row may report about its agent: the `agentId`
-/// through the catalog, and for a user-added agent the executable of the base
-/// command gxserver stamped into `runtimeSettings.agentCommand` at creation.
-/// Rules in `taxonomy::resolve_agent`.
-pub fn session_agent_report(session: &Value) -> AgentReport {
+/// Resolve what a session row may report about its agent: a known catalog id,
+/// or `"custom"`. Custom binary basenames are inspected locally only to map
+/// known catalog binaries and never leave the machine.
+pub fn session_agent_id(session: &Value) -> &'static str {
     let agent_id = session.get("agentId").and_then(Value::as_str);
     let command = session
         .get("runtimeSettings")
@@ -36,12 +35,21 @@ pub fn session_agent_report(session: &Value) -> AgentReport {
     taxonomy::resolve_agent(agent_id, command)
 }
 
-fn agent_properties(report: AgentReport) -> Vec<(&'static str, PropertyValue)> {
-    let mut properties = vec![("agent", PropertyValue::Enum(report.agent))];
-    if let Some(executable) = report.executable {
-        properties.push(("agent_executable", PropertyValue::Token(executable)));
+fn agent_properties(agent: &'static str) -> Vec<(&'static str, PropertyValue)> {
+    vec![("agent", PropertyValue::Enum(agent))]
+}
+
+/// Record client or agent-session activity for Q20's activity-gated daily
+/// heartbeat and settings snapshot. No-op when telemetry is uninitialized or
+/// opted out.
+fn note_active_usage() {
+    let Some(telemetry) = super::queue::handle() else {
+        return;
+    };
+    if !telemetry.is_enabled() {
+        return;
     }
-    properties
+    super::state::record_activity();
 }
 
 /// Both client-attach and surface-open events are noisy by nature — a browser
@@ -130,18 +138,20 @@ pub(super) fn reset_mobile_hello_cache() {
 /// counted here: they carry no agent, and reporting every one of them as
 /// `custom` would drown the agent-CLI distribution this event exists to measure.
 pub fn session_started(session: &Value) {
+    note_active_usage();
     capture(
         taxonomy::EVENT_SESSION_STARTED,
-        &agent_properties(session_agent_report(session)),
+        &agent_properties(session_agent_id(session)),
     );
 }
 
 /// A prompt was dispatched to an agent. `source` must already be one of the
-/// taxonomy's members — callers resolve it through
-/// [`super::taxonomy::match_enum`] or one of the mapping helpers below, so an
-/// unrecognised route emits nothing rather than inventing a bucket.
+/// taxonomy's members; callers resolve it through [`super::taxonomy::match_enum`]
+/// or one of the mapping helpers below, so an unrecognised route emits nothing
+/// rather than inventing a bucket.
 pub fn prompt_sent(session: &Value, source: &'static str) {
-    let mut properties = agent_properties(session_agent_report(session));
+    note_active_usage();
+    let mut properties = agent_properties(session_agent_id(session));
     properties.push(("source", PropertyValue::Enum(source)));
     capture(taxonomy::EVENT_PROMPT_SENT, &properties);
 }
@@ -163,6 +173,7 @@ pub struct ClientPlatform {
 /// `client-hello` carrying `android`/`ios`, and an iPhone plus Android phone
 /// using the same machine both report cleanly.
 pub fn client_connected(client: &'static str, platform: ClientPlatform) {
+    note_active_usage();
     if client == "mobile" && platform.os.is_some() {
         note_mobile_hello_seen();
     }
@@ -192,6 +203,7 @@ pub fn client_connected(client: &'static str, platform: ClientPlatform) {
 /// duplicate `client_os = null` event. Pre-2026-09-03 phones without
 /// `client-hello` still report on their next 60s renewal.
 pub fn mobile_keep_awake_connected() {
+    note_active_usage();
     let should_emit = {
         let mut state = mobile_hello_state()
             .lock()
@@ -220,10 +232,15 @@ pub fn mobile_keep_awake_connected() {
 
 /// Zero-PII onboarding funnel milestone (`taxonomy::ONBOARDING_STEPS`).
 pub fn onboarding_step(step: &'static str) {
+    note_active_usage();
     capture(
         taxonomy::EVENT_ONBOARDING_STEP,
         &[("step", PropertyValue::Enum(step))],
     );
+    if matches!(step, "completed" | "skipped") {
+        super::gate::mark_onboarding_released();
+        super::task::notify_activity();
+    }
 }
 
 /// Zero-PII reliability failure counter (`taxonomy::RELIABILITY_ERROR_CATEGORIES`).
@@ -257,7 +274,7 @@ pub fn reliability_error_for_session(category: &'static str, session: &Value) {
             .pointer("/runtimeSettings/agentCommand")
             .and_then(Value::as_str)
             .is_some_and(|value| !value.trim().is_empty());
-    let agent = has_agent.then(|| session_agent_report(session).agent);
+    let agent = has_agent.then(|| session_agent_id(session));
     reliability_error(category, agent);
 }
 
@@ -271,6 +288,7 @@ user's own extension name stops here. The id comes from the registry's answer,
 not from the request, so it is the extension that was really installed.
 */
 pub fn extension_installed(source: &'static str, id: Option<&str>, version: Option<&str>) {
+    note_active_usage();
     let mut properties = vec![("source", PropertyValue::Enum(source))];
     if let Some(id) = id {
         let extension = super::extensions::resolve_store_extension(id);
@@ -285,6 +303,7 @@ pub fn extension_installed(source: &'static str, id: Option<&str>, version: Opti
 }
 
 pub fn extension_uninstalled(id: Option<&str>) {
+    note_active_usage();
     let mut properties = Vec::new();
     if let Some(id) = id {
         properties.push((
@@ -298,6 +317,9 @@ pub fn extension_uninstalled(id: Option<&str>) {
 /// An extension was switched on or off: an installed one through Settings > Extensions (`kind`
 /// `installed`), or a built-in one, noticed by the daily snapshot (`kind` `built_in`).
 pub fn extension_toggled(extension: ExtensionRef, kind: &'static str, enabled: bool) {
+    if kind != "built_in" {
+        note_active_usage();
+    }
     capture(
         if enabled {
             taxonomy::EVENT_EXTENSION_ENABLED
@@ -328,7 +350,8 @@ pub fn boosts_used(
     if built_in.is_empty() && custom_count == 0 {
         return;
     }
-    let mut properties = agent_properties(session_agent_report(session));
+    note_active_usage();
+    let mut properties = agent_properties(session_agent_id(session));
     properties.push(("source", PropertyValue::Enum(source)));
     // A range, not the number, and no raw total beside it that would give the number back.
     properties.push((
@@ -342,6 +365,7 @@ pub fn boosts_used(
 /// The sidebar's layout changed (Settings, or the Meet the rail intro), forwarded from
 /// `/api/recordClientEvent`.
 pub fn sidebar_layout_changed(layout: &'static str, source: &'static str) {
+    note_active_usage();
     capture(
         taxonomy::EVENT_SIDEBAR_LAYOUT_CHANGED,
         &[
@@ -353,6 +377,7 @@ pub fn sidebar_layout_changed(layout: &'static str, source: &'static str) {
 
 /// The one-time Meet the rail pop-up opened on `layout`.
 pub fn rail_intro_shown(layout: &'static str) {
+    note_active_usage();
     capture(
         taxonomy::EVENT_RAIL_INTRO_SHOWN,
         &[("layout", PropertyValue::Enum(layout))],
@@ -361,6 +386,7 @@ pub fn rail_intro_shown(layout: &'static str) {
 
 /// The Meet the rail pop-up closed keeping `chose`.
 pub fn rail_intro_answered(chose: &'static str) {
+    note_active_usage();
     capture(
         taxonomy::EVENT_RAIL_INTRO_ANSWERED,
         &[("chose", PropertyValue::Enum(chose))],
@@ -482,6 +508,7 @@ pub fn session_mode_switched(
     if !telemetry.is_enabled() {
         return;
     }
+    note_active_usage();
     super::state::record_pending_switch(direction, source);
     capture(
         taxonomy::EVENT_SESSION_MODE_SWITCHED,
@@ -622,6 +649,7 @@ pub fn app_launched(
     linux_desktop: Option<&'static str>,
     linux_session: Option<&'static str>,
 ) {
+    note_active_usage();
     let mut properties = vec![
         ("client", PropertyValue::Enum("desktop")),
         ("app_version", PropertyValue::Version(app_version)),
@@ -682,6 +710,7 @@ pub fn surface_opened(
     extension: Option<ExtensionRef>,
     client: Option<&'static str>,
 ) {
+    note_active_usage();
     capture_throttled(
         taxonomy::EVENT_SURFACE_OPENED,
         &surface_opened_throttle_key(surface, extension.as_ref(), client),

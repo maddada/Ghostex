@@ -4,13 +4,12 @@ The closed event/property table from `docs/2026-08-26/anonymous-analytics/PLAN.m
 
 This module is the reason the privacy promise is structural rather than a review
 convention. A property value can only be a number, a bool, an enum string picked
-from a compile-time `&'static str` set, a list of such enum strings, or one of
-the two deliberately clamped free-form shapes: a marketing version
-(`app_version`) and the bare executable name of a custom agent
-(`agent_executable`, see `COMMAND_LAUNCHERS`), both charset- and
-length-clamped. There is no `PropertyValue` variant that carries a runtime-owned
-`String` a caller could fill with a prompt, a path, or a project name, so
-"someone adds a field with user text in it" is a compile error, not a bug.
+from a compile-time `&'static str` set, a list of such enum strings, or the one
+deliberately clamped free-form shape: a marketing version (`app_version`),
+charset- and length-clamped. There is no `PropertyValue` variant that carries a
+runtime-owned `String` a caller could fill with a prompt, a path, a custom
+executable name, or a project name, so "someone adds a field with user text in
+it" is a compile error, not a bug.
 The one runtime string added since (2026-10-27) is an official Store extension
 id inside `PropertyValue::Extension`/`ExtensionList`, and `encode_property`
 re-checks it against the Store's own catalog, so it cannot carry a name the
@@ -65,26 +64,16 @@ pub const KNOWN_AGENT_IDS: &[&str] = &[
 pub const CUSTOM_AGENT_ID: &str = "custom";
 
 /*
-CDXC:Telemetry 2026-09-03:
-User decision: a custom agent must still tell us WHICH agent CLI it runs.
-Before this, every user-added agent collapsed into one `custom` bucket, so a
-user who added "Claude (work)" with the command `claude --profile work`
-counted as `custom` and a user running `aider` was indistinguishable from one
-running `goose`. Two rules fix that, both keyed on the EXECUTABLE of the
-agent's command and nothing else:
+CDXC:Telemetry 2026-11-24 (privacy overhaul, Q23):
+Custom agent commands are inspected locally ONLY to map known catalog agent
+binaries (`claude`, `codex`, `cursor-agent`, `agy`, ...) back to their catalog
+id. If the executable does not match a known catalog agent, it collapses strictly
+to `"custom"` and the raw binary basename NEVER leaves the machine (preventing
+internal company wrapper script names from leaking).
 
-1. If the executable is the binary a catalog agent ships (`claude`, `codex`,
-   `cursor-agent`, `agy`, …) or is itself a catalog id, the custom agent is
-   reported AS that catalog agent. The user's name for it and the rest of the
-   command line still never leave.
-2. Otherwise the agent stays `custom` and the bare executable name rides along
-   as `agent_executable`, clamped to `[0-9a-z._-]{1,32}` by `PropertySpec::Token`.
-   Flags, arguments, env assignments, directories, and anything after the
-   executable are discarded before the value exists, so `~/dev/secret/run.sh
-   --key abc` reports as `run.sh`.
-
-Wrapper launchers (`npx`, `uvx`, `bun`, `node`, …) are skipped so that
-`npx some-agent` reports `some-agent`, not `npx`.
+Wrapper launchers (`npx`, `uvx`, `bun`, `node`, ...) are skipped locally so that
+`npx @anthropic-ai/claude-code` or `env claude --profile work` still maps to
+its catalog id when recognized.
 */
 const COMMAND_LAUNCHERS: &[&str] = &[
     "bash", "bun", "bunx", "cargo", "deno", "env", "node", "npm", "npx", "pipx", "pnpm", "pnpx",
@@ -175,10 +164,6 @@ pub const MOBILE_PLATFORMS: &[&str] = &["android", "ios"];
 pub const EXTENSION_SOURCES: &[&str] = &["local", "store"];
 
 pub const INTERFACE_KINDS: &[&str] = &["chat", "terminal"];
-
-/// Which link of the `distinct_id` chain produced this install's id
-/// (`telemetry::identity`).
-pub const IDENTITY_SOURCES: &[&str] = &["claude", "codex", "install"];
 
 /// The bucketed project count carried on EVERY event. The raw number is a
 /// heartbeat-only property: bucketing keeps a high-cardinality per-user integer
@@ -467,11 +452,6 @@ pub enum PropertyValue {
     EnumList(Vec<&'static str>),
     /// A clamped free-form field: a marketing version string.
     Version(String),
-    /// A clamped identifier-like field: the bare executable name of a custom
-    /// agent's command, already reduced by `command_executable`.
-    Token(String),
-    /// A sorted, deduplicated, capped list of such tokens.
-    TokenList(Vec<String>),
     /// An extension by its built-in or official Store id, or `custom`. Checked
     /// against the whitelist again when validated (`telemetry::extensions`).
     Extension(super::extensions::ExtensionRef),
@@ -508,8 +488,6 @@ pub(super) enum PropertySpec {
     Enum(&'static [&'static str]),
     EnumList(&'static [&'static str]),
     Version,
-    Token,
-    TokenList,
     /// One extension: built-in, official Store, or `custom`.
     Extension,
     /// Built-in extension ids only.
@@ -561,40 +539,18 @@ pub fn normalize_agent_id(agent_id: Option<&str>) -> &'static str {
         .unwrap_or(CUSTOM_AGENT_ID)
 }
 
-/// What an agent session reports: the catalog id (or `custom`) plus, for a
-/// custom agent only, the bare executable it runs.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AgentReport {
-    pub agent: &'static str,
-    pub executable: Option<String>,
-}
-
-/// Resolve a session's agent id and base command into what may be sent. See
-/// the note on `COMMAND_LAUNCHERS` for the two rules.
-pub fn resolve_agent(agent_id: Option<&str>, command: Option<&str>) -> AgentReport {
+/// Resolve a session's agent id and base command into a known catalog id, else
+/// `custom`. Custom binary basenames are only checked locally against the
+/// catalog and never leave the machine.
+pub fn resolve_agent(agent_id: Option<&str>, command: Option<&str>) -> &'static str {
     let agent = normalize_agent_id(agent_id);
     if agent != CUSTOM_AGENT_ID {
-        return AgentReport {
-            agent,
-            executable: None,
-        };
+        return agent;
     }
     let Some(executable) = command.and_then(command_executable) else {
-        return AgentReport {
-            agent: CUSTOM_AGENT_ID,
-            executable: None,
-        };
+        return CUSTOM_AGENT_ID;
     };
-    match catalog_agent_for_executable(&executable) {
-        Some(agent) => AgentReport {
-            agent,
-            executable: None,
-        },
-        None => AgentReport {
-            agent: CUSTOM_AGENT_ID,
-            executable: Some(executable),
-        },
-    }
+    catalog_agent_for_executable(&executable).unwrap_or(CUSTOM_AGENT_ID)
 }
 
 /// The catalog agent whose shipped command runs `executable`, or whose id IS
@@ -614,8 +570,9 @@ fn catalog_agent_for_executable(executable: &str) -> Option<&'static str> {
 }
 
 /// Reduce a command line to the bare, lowercased, charset-clamped name of the
-/// program it runs. `None` when nothing survives the reduction.
-pub fn command_executable(command: &str) -> Option<String> {
+/// program it runs, used strictly locally to match known catalog agents.
+/// `None` when nothing survives the reduction. Never sent over the wire.
+fn command_executable(command: &str) -> Option<String> {
     let mut after_launcher = false;
     for token in command.split_whitespace() {
         if token.starts_with('-') || token.contains('=') {
@@ -682,7 +639,6 @@ fn profile_property_spec(key: &str) -> Option<PropertySpec> {
         "interface" => Some(PropertySpec::Enum(INTERFACE_KINDS)),
         "default_agent" => Some(PropertySpec::Enum(KNOWN_AGENT_IDS)),
         "project_bucket" => Some(PropertySpec::Enum(PROJECT_BUCKETS)),
-        "identity_source" => Some(PropertySpec::Enum(IDENTITY_SOURCES)),
         _ => None,
     }
 }
@@ -713,11 +669,8 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         (EVENT_CLIENT_CONNECTED, "client_os") => Some(PropertySpec::Enum(CLIENT_PLATFORMS)),
         (EVENT_CLIENT_CONNECTED, "client_os_version")
         | (EVENT_CLIENT_CONNECTED, "client_app_version") => Some(PropertySpec::Version),
-        (EVENT_HEARTBEAT, "custom_agent_executables") => Some(PropertySpec::TokenList),
         (EVENT_SESSION_STARTED, "agent") => Some(PropertySpec::Enum(KNOWN_AGENT_IDS)),
-        (EVENT_SESSION_STARTED, "agent_executable") => Some(PropertySpec::Token),
         (EVENT_PROMPT_SENT, "agent") => Some(PropertySpec::Enum(KNOWN_AGENT_IDS)),
-        (EVENT_PROMPT_SENT, "agent_executable") => Some(PropertySpec::Token),
         (EVENT_PROMPT_SENT, "source") => Some(PropertySpec::Enum(PROMPT_SOURCES)),
         (EVENT_SURFACE_OPENED, "surface") => Some(PropertySpec::Enum(SURFACES)),
         (EVENT_SURFACE_OPENED, "extension") => Some(PropertySpec::Extension),
@@ -741,7 +694,6 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
             Some(PropertySpec::Enum(EXTENSION_TOGGLE_KINDS))
         }
         (EVENT_BOOSTS_USED, "agent") => Some(PropertySpec::Enum(KNOWN_AGENT_IDS)),
-        (EVENT_BOOSTS_USED, "agent_executable") => Some(PropertySpec::Token),
         (EVENT_BOOSTS_USED, "source") => Some(PropertySpec::Enum(PROMPT_SOURCES)),
         (EVENT_BOOSTS_USED, "boosts") => Some(PropertySpec::BoostList),
         (EVENT_BOOSTS_USED, "custom_boost_count") => Some(PropertySpec::Enum(COUNT_BUCKETS)),
@@ -836,10 +788,9 @@ fn person_property_spec(key: &str) -> Option<PropertySpec> {
             super::settings_snapshot::property_spec(key)
         }
         /*
-        `interface`, `default_agent`, `project_bucket`, and
-        `identity_source` reuse the profile table verbatim rather than being
-        restated, so a change to an enum member cannot apply to the event copy
-        of a field and not to the person copy.
+        `interface`, `default_agent`, and `project_bucket` reuse the profile
+        table verbatim rather than being restated, so a change to an enum member
+        cannot apply to the event copy of a field and not to the person copy.
         */
         _ => profile_property_spec(key),
     }
@@ -863,12 +814,11 @@ pub fn normalize_version_string(value: &str) -> Option<String> {
 }
 
 const MAX_TOKEN_LENGTH: usize = 32;
-pub const MAX_TOKEN_LIST_LENGTH: usize = 10;
 
-/// The clamp behind `PropertySpec::Token`: lowercase `[0-9a-z._-]{1,32}`,
-/// nothing else. Stricter than `Version` (no uppercase) so two spellings of
-/// one binary cannot split a breakdown.
-pub fn normalize_token(value: &str) -> Option<String> {
+/// Local binary-name normalization used only by `command_executable` when
+/// matching custom agent commands against `KNOWN_AGENT_IDS`. Values normalized
+/// here are never sent over the wire.
+fn normalize_token(value: &str) -> Option<String> {
     let value = value.trim();
     if value.is_empty() || value.len() > MAX_TOKEN_LENGTH {
         return None;
@@ -942,19 +892,6 @@ fn encode_property(spec: PropertySpec, value: &PropertyValue) -> Option<Value> {
             }),
         (PropertySpec::Version, PropertyValue::Version(version)) => {
             normalize_version_string(version).map(Value::String)
-        }
-        (PropertySpec::Token, PropertyValue::Token(token)) => {
-            normalize_token(token).map(Value::String)
-        }
-        (PropertySpec::TokenList, PropertyValue::TokenList(tokens)) => {
-            if tokens.len() > MAX_TOKEN_LIST_LENGTH {
-                return None;
-            }
-            tokens
-                .iter()
-                .map(|token| normalize_token(token).map(Value::String))
-                .collect::<Option<Vec<Value>>>()
-                .map(Value::Array)
         }
         (PropertySpec::Extension, PropertyValue::Extension(extension)) => {
             extension.sendable().map(Value::String)

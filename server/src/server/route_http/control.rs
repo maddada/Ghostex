@@ -44,6 +44,9 @@ pub(super) async fn route_control_http(
         "/api/recordClientEvent" => {
             handle_record_client_event_http(endpoint.path, request_id, &body_json)
         }
+        super::telemetry_http::TELEMETRY_PREVIEW_ENDPOINT => {
+            handle_telemetry_preview_http(&state, &caller, endpoint.path, request_id).await
+        }
         "/api/queryLogs" => handle_query_logs_http(&state, endpoint.path, request_id, &body_json),
         "/api/draftFeedback" | "/api/sendFeedback" => {
             handle_feedback_http(endpoint.path, request_id, &body_json).await

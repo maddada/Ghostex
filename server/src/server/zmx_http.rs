@@ -831,6 +831,18 @@ pub(crate) async fn save_settings_patch(
         }),
     };
     if result.is_ok() {
+        if settings_patch
+            .as_ref()
+            .and_then(|patch| patch.get("analyticsEnabled"))
+            .and_then(Value::as_bool)
+            == Some(false)
+        {
+            let paths = state.paths.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::telemetry::purge_on_opt_out(&paths);
+            })
+            .await;
+        }
         if let (Some(before), Some(patch)) = (before_modes, settings_patch.as_ref()) {
             let mut merged = crate::shared_settings_file::read_shared_settings(&state.paths)
                 .and_then(|value| value.as_object().cloned())

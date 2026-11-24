@@ -314,11 +314,11 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Sessions 2026-09-11 DECISION:
     // User: "Unpark after sending a message" defaults to on.
     ("unparkAfterSendingMessage", J::Bool(true)),
-    // CDXC:Telemetry 2026-08-26:
-    // Usage analytics are on by default and opt-out. Events carry only counts and
-    // fixed-list values, tied to a one-way salted hash so one person's machines
-    // group together. Nothing personal: no prompts, no paths, no project names,
-    // and never the raw account id the hash is derived from.
+    // CDXC:Telemetry 2026-11-24:
+    // Usage analytics are on by default and opt-out (held during first-run
+    // onboarding until it finishes or is skipped). Events carry only counts and
+    // fixed-list values tied to a random per-install UUIDv4. Nothing personal:
+    // no prompts, no paths, no project names, and no third-party account ids.
     ("analyticsEnabled", J::Bool(true)),
     ("debuggingMode", J::Bool(false)),
     (

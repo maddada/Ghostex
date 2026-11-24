@@ -45,7 +45,7 @@ Reviewers use the demo built into the app. Launch it and tap **Try a demo comput
 ## One-time steps in App Store Connect (no API)
 
 - **App Privacy** (App Store Connect → the app → App Privacy). Answer _Yes, we collect data_, then:
-  - **Usage Data → Product Interaction** and **Diagnostics → Other Diagnostic Data**: linked to the user, not used for tracking, purpose _Analytics_. Ghostex on the paired computer reports that a phone connected, with the phone's OS release and app version, to PostHog under a one-way hash of the user's agent account id (`docs/important/ANALYTICS.md`, `src/analytics/clientHello.ts` in the phone app).
+  - **Usage Data → Product Interaction** and **Diagnostics → Other Diagnostic Data**: not linked to the user's identity (uses a random per-install UUIDv4 on the paired computer, never derived from any account id), not used for tracking, purpose _Analytics_. Ghostex on the paired computer reports that a phone connected, with the phone's OS release and app version, to PostHog (`ANALYTICS.md`, `src/analytics/clientHello.ts` in the phone app); PostHog derives country-only GeoIP on ingest and discards raw client IP addresses.
   - Nothing else. Send Bug / Feedback posts a public GitHub issue the user writes and reviews, with their GitHub username on the form, each time they choose to; that meets Apple's "optional to disclose" criteria for feedback forms. Conversations, code and files go only to the user's own computer.
   - Privacy policy URL: `https://ghostex.dev/privacy-policy` (set by `prepare` too).
   - The app's privacy manifest declares the same two data types (`ios.privacyManifests` in `apps/mobile/app/app.json`); keep the two in step.

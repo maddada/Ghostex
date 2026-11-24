@@ -8910,58 +8910,94 @@ touched). There is no setting for it.
 
 ## Usage analytics
 
-Ghostex sends anonymous usage analytics (for example that the app started, which
-views you open, that a session started with a given agent, or that a phone
-connected) so the app can keep getting better. Only Ghostex's service on your
-computer sends them, to PostHog; events carry a one-way hash instead of your name,
-email or account id, and never prompts, file paths, project names or email
-addresses. A server Ghostex installed on a remote computer over SSH never sends
-any. Settings has no switch for analytics.
+Ghostex sends minimal, anonymous usage analytics so we know which platforms,
+views, and coding agents people rely on and where reliability errors happen.
+Only Ghostex's service (`gxserver`) on your local computer sends them, to
+PostHog; the desktop app, web UI, and mobile apps never talk to PostHog
+directly. Events use a random per-install UUIDv4 (`analytics-install-id`)
+instead of your name, email, machine name, or any third-party agent account id.
+PostHog performs country-only GeoIP lookup on ingest and discards raw client IP
+addresses. A server Ghostex installed on a remote computer over SSH
+(`analytics-role: remote`) never sends analytics.
 
-What is collected, all of it anonymous:
+On a brand-new install, Ghostex holds all outbound analytics flushes so zero
+bytes leave your computer until first-run onboarding finishes or is skipped.
+Daily summary events (`heartbeat`, `session_mode.daily_rollup`, and
+`settings.snapshot`) are strictly activity-gated: they are only emitted when a
+Ghostex client (desktop, web, or mobile) or an agent session was actively used
+since the previous heartbeat, so an idle background daemon never phones home.
 
-- That the app started (its version, and on Linux the desktop environment and
-  session type, such as GNOME on Wayland), which views you open, that a session
-  started or a message was sent and with which agent, and that a phone or the
-  web app connected.
-- Boosts: when a message goes out with Boosts, which of Ghostex's Boosts it had
-  and how many of your own; never your own Boosts' names or prompts.
-- Extensions: installs, uninstalls and switching an extension on or off, named
-  only when it is a built-in extension or one from the Ghostex Store (with its
-  version); your own extensions are counted, never named.
-- Once a day, what your setup looks like: your computer's operating system and
-  major version (on Linux the distribution and its version, the desktop
-  environment and whether it runs in WSL), counts (projects, sessions,
-  workspaces, other computers, your own Boosts, extensions), which agents you
-  use, and notable settings such as Appearance, the colour presets, Transparency
-  and its strengths, the sidebar kind and its main options, Boosts on or off and
-  Lean Codex workers. Numbers such as tints, zoom and sidebar width are sent as
-  ranges, and a background picture or video only as "set or not".
-- The sidebar layout: Rail or Classic (also in the daily setup), when you switch
-  it and whether from Settings or Meet the rail's Switch, and the layout Meet
-  the rail opened on and the one kept on Done; never your pinned icons or their
-  order.
-- Accounts: how many Claude, Codex, Cursor, Gemini and Copilot accounts you have,
-  and the plan Claude and Codex report for them (such as Pro, Max, Team or Plus).
+What is collected, all validated against a closed schema in
+`server/src/telemetry/taxonomy.rs` (see `ANALYTICS.md` in the repository root
+for the full table):
 
-Never sent: prompts or messages, file paths, project, session or workspace names,
-email addresses, account names or ids, your computer's name, theme colours, the
-picture or video you chose, or anything you typed into a setting.
+- App and client activity: that the desktop app started (its version, and on
+  Linux the desktop environment and session type, such as GNOME on Wayland),
+  which views or phone screens you open, that a session started or a prompt was
+  sent and with which known catalog agent (unknown custom agents collapse to
+  `custom`; custom binary or script names are never sent), and that a phone or
+  the web app connected.
+- Onboarding and reliability: zero-PII first-run onboarding milestones
+  (`onboarding.step`: `started`, `cli_detected`, `project_added`,
+  `project_opened`, `first_session`, `first_prompt`, `completed`, `skipped`)
+  and closed reliability failure categories (`reliability.error`, such as
+  `cli_not_found`, `session_launch_failed`, `zmx_attach_failed`, or
+  `provider_auth_failed`, never error messages, paths, or stack traces).
+- Session modes: whether Antigravity, Claude Code, and Codex are set to Native
+  or Terminal mode (`session_mode.state`), switches between them
+  (`session_mode.switched`), and a daily active rollup
+  (`session_mode.daily_rollup`).
+- Boosts: when a message goes out with Boosts, which of Ghostex's built-in
+  Boosts it had and a bucketed count of your own; never your own Boosts' names
+  or prompts.
+- Extensions: installs, uninstalls, and switching an extension on or off, named
+  only when it is a built-in extension or one from the official Ghostex Store
+  (with its version); your own extensions are counted in buckets, never named.
+- Once per active day (`heartbeat` and `settings.snapshot`), what your setup
+  looks like: your computer's operating system and major version (on Linux the
+  distribution and numeric version for known distros, the desktop environment,
+  and whether it runs in WSL), counts (projects, sessions, workspaces, other
+  computers, your own Boosts, extensions), which catalog agents you use, and
+  notable allowlisted settings such as Appearance, the colour presets,
+  Transparency and its strengths, the sidebar kind and its main options, Boosts
+  on or off, and Lean Codex workers. Numbers such as tints, zoom, and sidebar
+  width are sent as ranges, and a background picture or video only as "set or
+  not".
+- The sidebar layout: Rail or Classic (also in the daily snapshot), when you
+  switch it and whether from Settings or Meet the rail's Switch, and the layout
+  Meet the rail opened on and the one kept on Done; never your pinned icons or
+  their order.
+- Accounts: bucketed counts of Claude, Codex, Cursor, Gemini, and Copilot
+  accounts, and the plan tier Claude and Codex report for them (such as Pro,
+  Max, Team, or Plus); never emails, account names, org names, or account ids.
 
-To turn them off, start Ghostex with a launch option, the way many developer tools
-do:
+Never sent: prompts or messages, code, file paths, project, session, or
+workspace names, email addresses, account names or ids, custom CLI/tool names,
+custom extension names, custom Boost names or prompts, your computer's name,
+theme hex colours, the picture or video you chose, raw client IP addresses
+(discarded by PostHog after country-only GeoIP), or anything you typed into a
+setting.
 
-- `GHOSTEX_TELEMETRY_DISABLED=1` in the environment (`DO_NOT_TRACK=1` works too), or
-- the `--no-analytics` flag, on the desktop app or on gxserver.
+To turn analytics off, use any of:
 
-Quit Ghostex first: a Ghostex that is already open ignores a new launch's options.
-On a Mac, for example: `open -a Ghostex --args --no-analytics`, or
+- `GHOSTEX_TELEMETRY_DISABLED=1` or `DO_NOT_TRACK=1` in the environment,
+- the `--no-analytics` flag on the desktop app or on `gxserver`, or
+- `"analyticsEnabled": false` in `native-sidebar-settings.json`.
+
+Turning analytics off immediately drops any queued events, deletes the entire
+`analytics.state.v1` state row from SQLite, and removes `analytics-install-id`.
+Set `GHOSTEX_TELEMETRY_DEBUG=1` on `gxserver` to log the full outgoing JSON
+batch payloads to stderr for inspection.
+
+Quit Ghostex first when using launch flags or environment variables: a Ghostex
+that is already open ignores a new launch's options. On a Mac, for example:
+`open -a Ghostex --args --no-analytics`, or
 `launchctl setenv GHOSTEX_TELEMETRY_DISABLED 1` once so every Ghostex you start
 from the Dock gets it until you restart the computer. On Windows and Linux, run
-Ghostex with the flag or the variable from a shortcut or a terminal. The app passes
-it on to Ghostex's service, including one that is already running, which then stays
-off until it stops. A gxserver you run yourself (`gxserver --no-analytics`) takes
-the same option.
+Ghostex with the flag or the variable from a shortcut or a terminal. The app
+passes it on to Ghostex's service, including one that is already running, which
+then stays off until it stops. A `gxserver` you run yourself
+(`gxserver --no-analytics`) takes the same option.
 
 ## Sending feedback
 

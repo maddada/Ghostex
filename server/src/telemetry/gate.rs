@@ -32,6 +32,33 @@ use super::taxonomy;
 const SETTINGS_CACHE_TTL: Duration = Duration::from_secs(5);
 
 pub const SETTINGS_FILE_NAME: &str = "native-sidebar-settings.json";
+pub const ONBOARDING_STATE_FILE_NAME: &str = "gpui-first-run-onboarding-state.json";
+
+/// Why telemetry is currently enabled, held, or disabled. Returned by the
+/// read-only `/api/telemetryPreview` endpoint so Settings > About can explain
+/// the exact state clearly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TelemetryStatusReason {
+    Enabled,
+    OnboardingPending,
+    SettingsDisabled,
+    EnvDisabled,
+    ClientLaunchDisabled,
+    RemoteHelper,
+}
+
+impl TelemetryStatusReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Enabled => "enabled",
+            Self::OnboardingPending => "onboarding_pending",
+            Self::SettingsDisabled => "settings_disabled",
+            Self::EnvDisabled => "env_disabled",
+            Self::ClientLaunchDisabled => "client_launch_disabled",
+            Self::RemoteHelper => "remote_helper",
+        }
+    }
+}
 
 /*
 CDXC:Telemetry 2026-08-27 (addendum v2, §3):
@@ -67,6 +94,7 @@ static SETTINGS_CACHE: OnceLock<Mutex<Option<SettingsCache>>> = OnceLock::new();
 static ENVIRONMENT_OPT_OUT: OnceLock<bool> = OnceLock::new();
 static INSTALL_ROLE_OPT_OUT: OnceLock<bool> = OnceLock::new();
 static CLIENT_LAUNCH_OPT_OUT: AtomicBool = AtomicBool::new(false);
+static ONBOARDING_RELEASED: AtomicBool = AtomicBool::new(false);
 
 /// The command-line flag that turns analytics off for one run of the desktop
 /// app or gxserver. Both turn it into `GHOSTEX_TELEMETRY_DISABLED=1` before
@@ -95,6 +123,14 @@ pub fn opt_out_until_exit() {
                 .to_string(),
         );
     }
+    if let Some(telemetry) = super::queue::handle() {
+        super::task::purge_on_opt_out(telemetry.paths());
+    }
+}
+
+/// Lift the first-run onboarding hold once the user completes or skips onboarding.
+pub fn mark_onboarding_released() {
+    ONBOARDING_RELEASED.store(true, Ordering::SeqCst);
 }
 
 /// True when this process was started with the launch option, as either
@@ -136,7 +172,7 @@ fn install_role_opts_out(paths: &GxserverPaths) -> bool {
     *INSTALL_ROLE_OPT_OUT.get_or_init(|| super::role::marker_is_remote(paths))
 }
 
-fn env_is_truthy(name: &str) -> bool {
+pub(super) fn env_is_truthy(name: &str) -> bool {
     std::env::var(name)
         .ok()
         .map(|value| {
@@ -258,4 +294,99 @@ pub fn evaluate(paths: &GxserverPaths) -> SettingsProfile {
         };
     }
     settings_profile(paths)
+}
+
+/// Exact reason why telemetry is active, held during first-run onboarding, or disabled.
+pub fn status_reason(paths: &GxserverPaths) -> TelemetryStatusReason {
+    if launch_option_opts_out() {
+        return TelemetryStatusReason::EnvDisabled;
+    }
+    if analytics_role_is_remote() || install_role_opts_out(paths) {
+        return TelemetryStatusReason::RemoteHelper;
+    }
+    if CLIENT_LAUNCH_OPT_OUT.load(Ordering::SeqCst) {
+        return TelemetryStatusReason::ClientLaunchDisabled;
+    }
+    if !settings_profile(paths).analytics_enabled {
+        return TelemetryStatusReason::SettingsDisabled;
+    }
+    if is_onboarding_held(paths) {
+        return TelemetryStatusReason::OnboardingPending;
+    }
+    TelemetryStatusReason::Enabled
+}
+
+/*
+CDXC:Telemetry 2026-11-24 (privacy overhaul, Q19):
+Hold all outbound PostHog flushes on brand-new installs until first-run
+onboarding finishes or is skipped, so zero bytes leave the machine before the
+user sees the onboarding disclosure and toggle.
+
+Existing upgraded users are never broken: an install is treated as past
+onboarding as soon as ANY of the following is true:
+1. This process already observed `onboarding.step` `"completed"` or `"skipped"`.
+2. `gpui-first-run-onboarding-state.json` records `firstLaunchSetupComplete: true`
+   (or legacy `windowsFirstLaunchSetupComplete: true`).
+3. `state.db` already contains at least one user-visible presentation project
+   (the exact same test desktop's `setup_in_progress` uses).
+4. `state.db` already holds a prior `lastHeartbeatAt` in `analytics.state.v1`.
+*/
+pub fn is_onboarding_held(paths: &GxserverPaths) -> bool {
+    is_onboarding_held_with_released(paths, ONBOARDING_RELEASED.load(Ordering::SeqCst))
+}
+
+pub(super) fn is_onboarding_held_with_released(
+    paths: &GxserverPaths,
+    released_in_memory: bool,
+) -> bool {
+    if released_in_memory {
+        return false;
+    }
+    if onboarding_state_file_complete(paths) {
+        return false;
+    }
+    if !paths.state_db_file.is_file() {
+        return true;
+    }
+    let Ok(db) = rusqlite::Connection::open_with_flags(
+        &paths.state_db_file,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    ) else {
+        // Fail closed while waiting for a busy database so first-run bytes do
+        // not leak; the next flush cycle re-checks.
+        return true;
+    };
+    if db_has_presentation_projects(&db) {
+        return false;
+    }
+    if super::state::read_last_heartbeat_at(&db).is_some() {
+        return false;
+    }
+    true
+}
+
+fn onboarding_state_file_complete(paths: &GxserverPaths) -> bool {
+    let path = paths.app_state_dir.join(ONBOARDING_STATE_FILE_NAME);
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|state| {
+            state
+                .get("firstLaunchSetupComplete")
+                .or_else(|| state.get("windowsFirstLaunchSetupComplete"))
+                .and_then(Value::as_bool)
+        })
+        .unwrap_or(false)
+}
+
+fn db_has_presentation_projects(db: &rusqlite::Connection) -> bool {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM projects
+            WHERE COALESCE(isRecentProject, 0) <> 1
+              AND COALESCE(visibility, 'visible') <> 'hidden'
+              AND (systemKind IS NULL OR systemKind <> 'remoteAttachCarrier'))",
+        [],
+        |row| row.get::<_, bool>(0),
+    )
+    .unwrap_or(false)
 }
