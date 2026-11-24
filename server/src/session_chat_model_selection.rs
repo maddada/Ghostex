@@ -57,6 +57,23 @@ pub(crate) fn read_options(
         })?;
     options.owner_approved = None;
     if is_acp {
+        // CDXC:SessionChat 2026-11-24 WHY: `--permissions` types Codex's own `/permissions` into its terminal, which a Native chat does not have, so on a Native session it answered ok and changed nothing (found testing Native Codex on Linux). A Native chat's permissions are its approval level, so the Codex profile names map onto it (`approve-for-me` is Native's Auto: on-request with auto review), and it then goes through the same owner check as a Mode pick. Read-only has no Native level and is refused.
+        if let Some(permissions) = options.permissions.take() {
+            let level = match permissions.trim() {
+                "ask-for-approval" => "ask",
+                "approve-for-me" => "auto",
+                "full-access" | "danger-full-access" => "full-access",
+                _ => {
+                    return Err(DomainStateError {
+                        code: "invalidParams",
+                        message: "Native chats take Ask, Auto-edits, Auto or Full access; Read-only needs Terminal-based mode.".into(),
+                    })
+                }
+            };
+            if options.mode.is_none() {
+                options.mode = Some(level.to_string());
+            }
+        }
         if let Some(mode) = options.mode.as_deref() {
             let level =
                 crate::acp::AcpApprovalLevel::parse(mode).ok_or_else(|| DomainStateError {
