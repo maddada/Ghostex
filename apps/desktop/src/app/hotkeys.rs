@@ -160,6 +160,7 @@ pub(crate) fn gpui_chat_owned_hotkey_action_id(action_id: &str) -> bool {
             | "newChatPickComputer"
             | "newChatPickWhere"
             | "newChatPickBranch"
+            | "newChatPickAgent"
     )
 }
 
@@ -335,6 +336,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("newChatPickComputer", "alt+m"),
     ("newChatPickWhere", "alt+w"),
     ("newChatPickBranch", "alt+b"),
+    ("newChatPickAgent", "alt+a"),
     ("toggleVoiceAgent", "ctrl+alt+v"),
     // No default key (CDXC:VoiceMode 2026-10-23 DECISION in packages/settings-catalog/src/hotkey_definitions.rs).
     ("voiceCallAboutSession", ""),

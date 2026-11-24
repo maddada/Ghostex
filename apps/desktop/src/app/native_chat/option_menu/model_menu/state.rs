@@ -484,7 +484,15 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let trigger = trigger.unwrap_or_else(|| self.model_pill_bounds.get());
+        let trigger = trigger.unwrap_or_else(|| {
+            if self.worktree_tray_shown() {
+                let tray_bounds = self.worktree_tray_model_bounds.get();
+                if tray_bounds.size.width > gpui::px(0.0) {
+                    return tray_bounds;
+                }
+            }
+            self.model_pill_bounds.get()
+        });
         if !self.snapshot["modelMenu"].is_object() {
             self.pending_model_menu = Some((trigger, window.window_handle()));
             return;

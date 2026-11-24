@@ -510,7 +510,7 @@ fn pill_max_width(kind: &str) -> f32 {
 }
 
 /// The agent's accent, with the white and near-white ones turned to ink on a light theme.
-fn agent_accent(icon: &str, appearance: &ChatAppearance) -> u32 {
+pub(super) fn agent_accent(icon: &str, appearance: &ChatAppearance) -> u32 {
     let color = crate::app::helpers::workspace_tab_agent_icon_accent_color(icon);
     if appearance.light && matches!(color, 0xffffff | 0xedecec) {
         0x27272a

@@ -62,6 +62,12 @@ pub(crate) struct UnifiedSidebarHost {
     pub(crate) picker_start: Option<ghostex_gx_core::unified_sidebar::UnifiedNewSessionTarget>,
     /// A draft moving to another project, taken by the launch it asked for.
     pub(crate) pending_draft_move: Option<super::unified_new_session::PendingDraftMove>,
+    /// The project a draft was in before "No project" moved it to Main Hub, so toggling "No
+    /// project" back off returns to that project.
+    pub(crate) no_project_return: Option<ghostex_gx_core::unified_sidebar::UnifiedNewSessionTarget>,
+    /// True while a coordinator draft is being moved to another project (or toggled to/from Main
+    /// Hub), so the newly mounted chat view inherits Coordinator mode.
+    pub(crate) carry_coordinator_draft: std::cell::Cell<bool>,
     /// A project picked in Quick Access whose repository the filter is set to once the list
     /// holds it (a reopened project arrives a moment later).
     pending_project: Option<String>,

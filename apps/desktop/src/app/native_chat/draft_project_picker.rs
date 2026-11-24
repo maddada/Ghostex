@@ -282,9 +282,71 @@ fn card_bounds(
 }
 
 impl NativeChatView {
+    /// Whether this draft lives in a computer's Main Hub ("No project" mode).
+    pub(super) fn draft_is_no_project(&self, cx: &Context<Self>) -> bool {
+        let Some(app) = self.config.app.as_ref().and_then(|app| app.upgrade()) else {
+            return false;
+        };
+        app.read(cx)
+            .gx_store_is_main_hub_project(&self.config.machine_id, &self.config.project_id)
+    }
+
+    /// Toggles "No project" on this draft: moves it into Main Hub when off, or back to its
+    /// previous/default project when on.
+    pub(super) fn toggle_draft_no_project(&mut self, cx: &mut Context<Self>) {
+        let agent_id = self.snapshot["sessionAgentId"]
+            .as_str()
+            .or_else(|| self.snapshot["optionLabels"]["agentIcon"].as_str())
+            .map(str::to_string);
+        let (Some(agent_id), Some(app)) = (
+            agent_id,
+            self.config.app.as_ref().and_then(|app| app.upgrade()),
+        ) else {
+            return;
+        };
+        let currently_no_project = self.draft_is_no_project(cx);
+        let coordinator_mode = self.draft_coordinator_mode;
+        self.draft_setup_changed = true;
+        let agent_model = self.snapshot["selectedOptions"]["model"]["value"]
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let agent_effort = self.snapshot["selectedOptions"]["effort"]["value"]
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let draft = PendingDraftMove {
+            from_machine_id: self.config.machine_id.clone(),
+            from_project_id: self.config.project_id.clone(),
+            from_session_id: self.config.session_id.clone(),
+            text: self.draft.clone(),
+            agent_model,
+            agent_effort,
+        };
+        cx.defer(move |cx| {
+            app.update(cx, |app, cx| {
+                app.gx_store
+                    .unified_sidebar
+                    .carry_coordinator_draft
+                    .set(coordinator_mode);
+                app.gx_store_toggle_draft_no_project(draft, &agent_id, currently_no_project, cx);
+            });
+        });
+    }
+
     /// The draft's project as a row of the project list, with the machines that have it.
-    fn draft_choice(&self, cx: &Context<Self>) -> Option<UnifiedProjectChoice> {
+    pub(super) fn draft_choice(&self, cx: &Context<Self>) -> Option<UnifiedProjectChoice> {
         let app = self.config.app.as_ref()?.upgrade()?;
+        if app
+            .read(cx)
+            .gx_store_is_main_hub_project(&self.config.machine_id, &self.config.project_id)
+        {
+            return app
+                .read(cx)
+                .gx_store_main_hub_choice(&self.config.machine_id);
+        }
         let choices = app.read(cx).gx_store_project_choices();
         let (machine_id, project_id) = (&self.config.machine_id, &self.config.project_id);
         let mut choice = choices.into_iter().find(|choice| {
@@ -301,13 +363,14 @@ impl NativeChatView {
     }
 
     /// The bar's computer part: the draft's machine (its name, whether it is this computer, and
-    /// whether there is another to change to), while there is a machine to change to or the draft
-    /// is on another computer.
+    /// whether there is another to change to). In normal mode it shows while the project is on
+    /// more than one computer or on a remote computer; in "No project" mode it always stays
+    /// visible alongside the "No project" pill.
     pub(super) fn draft_machine_part(&self, cx: &Context<Self>) -> Option<(String, bool, bool)> {
         let choice = self.draft_choice(cx)?;
         let machine = choice.selected_machine()?.clone();
         let local = machine.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID;
-        if choice.machines.len() < 2 && local {
+        if !self.draft_is_no_project(cx) && choice.machines.len() < 2 && local {
             return None;
         }
         Some((machine.label, local, choice.machines.len() > 1))
@@ -639,11 +702,24 @@ impl NativeChatView {
             return;
         };
         self.draft_setup_changed = true;
+        let coordinator_mode = self.draft_coordinator_mode;
+        let agent_model = self.snapshot["selectedOptions"]["model"]["value"]
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let agent_effort = self.snapshot["selectedOptions"]["effort"]["value"]
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
         let draft = PendingDraftMove {
             from_machine_id: self.config.machine_id.clone(),
             from_project_id: self.config.project_id.clone(),
             from_session_id: self.config.session_id.clone(),
             text: self.draft.clone(),
+            agent_model,
+            agent_effort,
         };
         let (repo_key, machine_id, project_id) = (
             row.repo_key.clone(),
@@ -652,6 +728,10 @@ impl NativeChatView {
         );
         cx.defer(move |cx| {
             app.update(cx, |app, cx| {
+                app.gx_store
+                    .unified_sidebar
+                    .carry_coordinator_draft
+                    .set(coordinator_mode);
                 app.gx_store_move_draft_to_project(
                     draft,
                     &agent_id,

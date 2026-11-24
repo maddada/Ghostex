@@ -12,11 +12,12 @@ use gpui::{App, Context, EntityInputHandler as _, Focusable as _, Window};
 use std::collections::HashSet;
 
 /// The bar's hotkeys, in the order of its parts.
-pub(super) const TRAY_HOTKEYS: [&str; 4] = [
+pub(super) const TRAY_HOTKEYS: [&str; 5] = [
     "newChatPickProject",
     "newChatPickComputer",
     "newChatPickWhere",
     "newChatPickBranch",
+    "newChatPickAgent",
 ];
 
 #[derive(Clone, Debug, PartialEq, gpui::Action)]
@@ -111,6 +112,7 @@ mod tests {
             ("newChatPickComputer", "alt-m"),
             ("newChatPickWhere", "alt-w"),
             ("newChatPickBranch", "alt-b"),
+            ("newChatPickAgent", "alt-a"),
         ];
         for (id, keystroke) in expected {
             assert!(TRAY_HOTKEYS.contains(&id));

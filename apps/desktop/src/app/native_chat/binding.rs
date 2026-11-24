@@ -109,9 +109,16 @@ impl GhostexGpuiApp {
         state.account_key = key;
         let generation = state.generation;
         let armed_actions = self.session_chat_armed_actions(session_id);
+        let draft_coordinator_mode = self
+            .gx_store
+            .unified_sidebar
+            .carry_coordinator_draft
+            .replace(false);
         let view = cx.new(|cx| {
             let mut view = NativeChatView::new(config, cx);
             view.armed_actions = armed_actions;
+            view.draft_coordinator_mode = draft_coordinator_mode;
+            view.draft_setup_changed = draft_coordinator_mode;
             view
         });
         let subscription =

@@ -106,7 +106,7 @@ fn sum(widths: &[f32]) -> f32 {
 
 /// Cuts the widest down first, to one common level, until they fit in `room`, never below each
 /// one's `min` (they overflow at their mins when even those do not fit).
-fn shrink(widths: &[f32], mins: &[f32], room: f32) -> Vec<f32> {
+pub(super) fn shrink(widths: &[f32], mins: &[f32], room: f32) -> Vec<f32> {
     let at = |level: f32| -> Vec<f32> {
         widths
             .iter()

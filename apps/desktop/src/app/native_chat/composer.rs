@@ -77,8 +77,10 @@ impl NativeChatView {
             return;
         }
         // A picture still being saved goes with the message, even one with no words.
+        // A coordinator draft can also start with no extra prompt (sends the coordinator guide line).
         let pictures = self.attachments_on_their_way();
-        if self.draft.trim().is_empty() && !pictures {
+        let starting_coordinator = self.draft_coordinator_mode && mode == "send";
+        if self.draft.trim().is_empty() && !pictures && !starting_coordinator {
             return;
         }
         if mode != "send" && self.snapshot["queue"]["capabilities"]["canQueue"] != true {
@@ -125,7 +127,36 @@ impl NativeChatView {
         };
         self.close_maximized(cx);
         self.pending_send = true;
-        let mut submission = json!({"type":mode,"text":self.draft,"interrupt":interrupt,
+        let outgoing_text = if starting_coordinator {
+            self.draft_coordinator_mode = false;
+            let guide = ghostex_gx_chat_core::composer::skill_invocation::COORDINATOR_GUIDE_LINE;
+            let trimmed = self.draft.trim();
+            let skill_only = trimmed.is_empty();
+            let remote = self.config.remote.clone();
+            let project_id = self.config.project_id.clone();
+            let session_id = self.config.session_id.clone();
+            let promote_params = json!({
+                "projectId": project_id,
+                "sessionId": session_id,
+                "goal": "",
+                "forDraft": true,
+                "skillOnlyStart": skill_only,
+            });
+            cx.background_executor()
+                .spawn(async move {
+                    let _ = super::rpc::request(remote, "/api/promoteCoordinator", &promote_params)
+                        .await;
+                })
+                .detach();
+            if skill_only {
+                guide.to_string()
+            } else {
+                format!("{guide}\n\n{}", self.draft)
+            }
+        } else {
+            self.draft.clone()
+        };
+        let mut submission = json!({"type":mode,"text":outgoing_text,"interrupt":interrupt,
             "sendRequestId":send_request_id,
             "draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision.max(1)}});
         // The pictures still on their way go where the caret is, as a paste that lands writes

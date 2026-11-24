@@ -51,6 +51,8 @@ pub fn promote_session_to_coordinator(
             "Keep the goal under {COORDINATOR_GOAL_MAX_CHARS} characters; set standing instructions later with ghostex coordinator set-instructions."
         )));
     }
+    let for_draft = params.get("forDraft").and_then(Value::as_bool) == Some(true);
+    let skill_only_start = params.get("skillOnlyStart").and_then(Value::as_bool) == Some(true);
     // One writer reservation over the read and both writes, so a hook updating the session in
     // between cannot be overwritten by the row read here.
     let transaction =
@@ -66,6 +68,7 @@ pub fn promote_session_to_coordinator(
         &session,
         &project_id,
         &session_id,
+        for_draft,
     )?;
     let project = repository
         .get_project(&project_id)?
@@ -82,19 +85,41 @@ pub fn promote_session_to_coordinator(
         super::role::COORDINATOR_ROLE_SETTING.to_string(),
         json!(super::role::COORDINATOR_ROLE_SKILL),
     );
+    if for_draft {
+        runtime.insert("titleSource".to_string(), json!("placeholder"));
+        if skill_only_start {
+            runtime.insert(
+                super::role::COORDINATOR_SKILL_ONLY_START_SETTING.to_string(),
+                json!(true),
+            );
+        } else {
+            runtime.remove(super::role::COORDINATOR_SKILL_ONLY_START_SETTING);
+        }
+    }
     let mut update = Map::new();
     update.insert("projectId".to_string(), json!(project_id));
     update.insert("sessionId".to_string(), json!(session_id));
     update.insert("runtimeSettings".to_string(), Value::Object(runtime));
+    if for_draft {
+        update.insert("title".to_string(), json!("Coordinator"));
+    }
     repository.update_session(&update)?;
     insert_coordinator(&transaction, &project_id, &session_id, &goal, "")?;
     super::playbook::mark_new_coordinator(&transaction, &(project_id.clone(), session_id.clone()))?;
     transaction.commit().map_err(sql_error)?;
 
-    let playbook_message = playbook_message(&family, &goal);
+    let playbook_message = if for_draft {
+        String::new()
+    } else {
+        playbook_message(&family, &goal)
+    };
     Ok(CoordinatorPromotion {
         key: (project_id, session_id),
-        title,
+        title: if for_draft {
+            "Coordinator".to_string()
+        } else {
+            title
+        },
         family,
         playbook_message,
     })
@@ -106,6 +131,7 @@ fn refuse_ineligible(
     session: &Value,
     project_id: &str,
     session_id: &str,
+    allow_draft: bool,
 ) -> Result<(), DomainStateError> {
     if read_coordinator(db, project_id, session_id)?.is_some() {
         return Err(DomainStateError::bad_request(
@@ -135,8 +161,9 @@ fn refuse_ineligible(
             "A coordinator runs on this computer, so a session in a box cannot become one.",
         ));
     }
-    // A draft can still switch its agent before its first prompt, and the role would not follow.
-    if crate::agents::session_is_draft(session) {
+    // A draft can still switch its agent before its first prompt, and the role would not follow,
+    // unless promoted at first-send time (`forDraft: true`).
+    if !allow_draft && crate::agents::session_is_draft(session) {
         return Err(DomainStateError::bad_request(
             "This session has not started its conversation yet. Send it a first message first, or start a New Coordinator instead.",
         ));

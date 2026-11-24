@@ -470,6 +470,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         / session / agent ids the daemon itself published.
         */
         | "/api/switchDraftAgent"
+        | "/api/moveDraftSession"
         // CDXC:AgentBox 2026-10-01 WHY: same reasoning as switchDraftAgent above; where a draft
         // runs is decided by the daemon that owns the row and runs its CLI.
         | "/api/draftRunLocation"

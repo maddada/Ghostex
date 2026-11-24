@@ -313,6 +313,41 @@ pub(crate) fn dispatch_agent_http_blocking(
                     }
                 }
             }
+            if endpoint_path == "/api/moveDraftSession"
+                && result.get("moved").and_then(Value::as_bool) == Some(true)
+            {
+                if let (Some(from_project_id), Some(target_project_id), Some(session_id)) = (
+                    result.get("fromProjectId").and_then(Value::as_str),
+                    result.get("projectId").and_then(Value::as_str),
+                    result.get("sessionId").and_then(Value::as_str),
+                ) {
+                    let _ = restore_parked_project_for_new_session(
+                        state,
+                        &db,
+                        &repository,
+                        target_project_id,
+                    );
+                    crate::session_chat_options::forget_session_chat_options(
+                        state,
+                        from_project_id,
+                        session_id,
+                    );
+                    crate::session_chat_options::forget_session_chat_options(
+                        state,
+                        target_project_id,
+                        session_id,
+                    );
+                    if let Err(error) = schedule_presentation_session_delta(
+                        state,
+                        &db,
+                        &repository,
+                        from_project_id,
+                        session_id,
+                    ) {
+                        return domain_error_response(endpoint_path, request_id, error);
+                    }
+                }
+            }
             if let Some((project_id, session_id)) = presentation_session.as_ref() {
                 if let Err(error) = schedule_presentation_session_delta(
                     state,

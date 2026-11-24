@@ -70,6 +70,7 @@ pub(super) async fn route_agents_http(
         | "/api/forkSession"
         | "/api/startSideChat"
         | "/api/switchDraftAgent"
+        | "/api/moveDraftSession"
         | "/api/draftRunLocation"
         | "/api/switchSessionAgent"
         | "/api/requestSessionRename"

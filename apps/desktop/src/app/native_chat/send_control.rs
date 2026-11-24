@@ -72,7 +72,9 @@ impl NativeChatView {
     /// Visual-only Send/Stop button matching `render_send_control`, used by the non-interactive
     /// compact-toolbar cross-fade overlay during composer collapse/expand transitions.
     pub(super) fn render_send_control_visual(&self, p: &ChatAppearance) -> AnyElement {
-        let has_draft = !self.draft.trim().is_empty() || self.attachments_on_their_way();
+        let has_draft = !self.draft.trim().is_empty()
+            || self.attachments_on_their_way()
+            || self.draft_coordinator_mode;
         let stop = (self.snapshot["working"] == true || self.stop_cooldown_task.is_some())
             && !has_draft
             && !self.collab_guest();
@@ -127,7 +129,9 @@ impl NativeChatView {
 
     pub(super) fn render_send_control(&self, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
         // A picture still being saved can be sent on its own: it goes the moment it is in.
-        let has_draft = !self.draft.trim().is_empty() || self.attachments_on_their_way();
+        let has_draft = !self.draft.trim().is_empty()
+            || self.attachments_on_their_way()
+            || self.draft_coordinator_mode;
         // A Ghostex Collab guest never stops the owner's agent (gxserver refuses it too).
         let stop = (self.snapshot["working"] == true || self.stop_cooldown_task.is_some())
             && !has_draft

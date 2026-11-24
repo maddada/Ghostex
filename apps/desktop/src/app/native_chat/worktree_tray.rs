@@ -1,9 +1,8 @@
-//! The bar on top of a new chat's message box: one borderless breadcrumb, project › computer ›
-//! where › detail, drawn from the document's `worktreeTray` key. gx-chat-core decides when it
-//! shows, what it offers, what is picked, and builds the where and detail parts with their menus
-//! (`packages/gx-chat-core/src/menus/draft_worktree.rs`); `tray_layout.rs` decides one row or a
-//! two-row grid; this file measures the parts, draws them and opens their menus. The phone draws
-//! the same bar in `apps/mobile/app/src/chat/native/composer/WorktreeTray.tsx`.
+//! The bar on top of a new chat's message box: project › computer › where › detail, plus the draft's
+//! agent and model + effort, with each choice's hotkey shown on the bar while it is a draft.
+//! gx-chat-core decides the worktree/branch parts (`packages/gx-chat-core/src/menus/draft_worktree.rs`);
+//! this file measures the parts, draws them and opens their menus. The phone draws the worktree bar
+//! in `apps/mobile/app/src/chat/native/composer/WorktreeTray.tsx`.
 //!
 //! The project and computer parts, and the base branch and worktree lists, open the search card
 //! in `draft_project_picker.rs`; the Cloud Box boot card is
@@ -18,8 +17,11 @@
 //! 4-way switch are gone; the bar reads as one path whose parts open their own menus, with no border
 //! of their own (a hover wash shows what can be clicked). A part cut short shows its full words in
 //! its tooltip, with its hotkey (Q1228).
-use super::tray_layout::{NARROW_WIDTH, PartSize, TrayLayout, tray_layout};
-use super::{appearance::ChatAppearance, composer::hotkey_chord, state::NativeChatView};
+use super::tray_layout::{NARROW_WIDTH, PartSize, shrink};
+use super::{
+    appearance::ChatAppearance, composer::hotkey_chord, option_pills::agent_accent,
+    state::NativeChatView,
+};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -34,9 +36,11 @@ use std::rc::Rc;
 const WHERE_TRIGGER: &str = "chat-worktree-where";
 const DETAIL_TRIGGER: &str = "chat-worktree-detail";
 const CLOUD_TRIGGER: &str = "chat-cloud-box-picker";
+const AGENT_TRIGGER: &str = "chat-draft-agent";
 const FAILED_COLOR: u32 = 0xef4444;
 const STAR_COLOR: u32 = 0xf5b301;
 const MENU_WIDTH: f32 = 280.0;
+const AGENT_MENU_WIDTH: f32 = 220.0;
 /// The message box's corner radius (`composer.rs`), which the tray is inset by.
 const COMPOSER_RADIUS: f32 = 22.0;
 /// The gap the composer's footer leaves between the tray and the box (`composer.rs`).
@@ -49,15 +53,23 @@ const PART_PADDING: f32 = 6.0;
 const ICON: f32 = 13.0;
 const GAP: f32 = 5.0;
 const FONT: f32 = 13.0;
-/// The › between parts, with its margins.
-const SEPARATOR: f32 = 16.0;
+/// Key cap styling for draft bar hotkeys.
+const KEY_CAP_FONT: f32 = 10.5;
+const KEY_CAP_HEIGHT: f32 = 16.0;
+const KEY_CAP_PADDING: f32 = 4.0;
+/// The › between place/where parts, with its margins.
+const SEPARATOR: f32 = 14.0;
+/// The vertical hairline between the place/where group and the agent/model group on one row.
+const GROUP_DIVIDER: f32 = 13.0;
+/// Gap between agent and model parts.
+const GROUP_GAP: f32 = 4.0;
 /// The least a cut part keeps of its words.
 const MIN_WORDS: f32 = 36.0;
 
 /// What a part does when it is clicked or its hotkey is pressed.
 #[derive(Clone)]
 enum PartAction {
-    /// Only shown (This folder's branch, a computer with nowhere else to go).
+    /// Only shown (a computer with nowhere else to go, an unswitchable agent).
     None,
     /// The project search, or the computers that have the project (`draft_project_picker.rs`).
     Place { machines: bool },
@@ -72,16 +84,26 @@ enum PartAction {
         rows: Vec<Value>,
         width: f32,
     },
+    /// The model and effort picker (`show_model_menu` / `show_option_menu`).
+    Model,
+    /// Toggle "No project" mode (moves the draft to Main Hub when on, or back to a project when off).
+    ToggleNoProject,
+    /// Toggle "Coordinator" mode on this draft.
+    ToggleCoordinator,
 }
 
 #[derive(Clone)]
 struct Part {
     id: &'static str,
-    glyph: String,
+    glyph: Option<String>,
+    agent_icon: Option<String>,
     star: bool,
     prefix: Option<String>,
     label: String,
+    suffix: Option<String>,
     muted: bool,
+    pill: bool,
+    pressed: bool,
     tooltip: String,
     hotkey: Option<&'static str>,
     action: PartAction,
@@ -103,40 +125,299 @@ fn menu_rows(rows: &Value) -> Vec<Value> {
         .collect()
 }
 
+/// Fallback human label when `availableAgents` has no matching name yet.
+fn fallback_agent_label(raw: &str) -> String {
+    match raw {
+        "claude" => "Claude".to_string(),
+        "codex" => "Codex".to_string(),
+        "antigravity" | "antigravity-cli" => "Antigravity".to_string(),
+        "opencode" => "OpenCode".to_string(),
+        "cursor" => "Cursor".to_string(),
+        "gemini" => "Gemini".to_string(),
+        "amp" => "Amp".to_string(),
+        "pi" => "Pi".to_string(),
+        "hermes" => "Hermes".to_string(),
+        other => {
+            let mut chars = other.chars();
+            match chars.next() {
+                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        }
+    }
+}
+
 impl NativeChatView {
-    /// Whether the bar is on screen (the hotkeys act only then).
-    pub(super) fn worktree_tray_shown(&self) -> bool {
-        self.snapshot
-            .get("worktreeTray")
-            .is_some_and(Value::is_object)
+    /// Whether this chat is an unsent draft whose setup bar should be visible even before
+    /// `/api/draftWorktree` answers (e.g. Main Hub or a slow remote computer).
+    fn draft_setup_bar_fallback_active(&self) -> bool {
+        self.snapshot["availableAgents"].is_array()
+            && !self.snapshot["firstMessageCard"].is_object()
+            && !self.pending_send
+            && self.snapshot["working"] != true
+            && self.items.is_empty()
+            && self.snapshot["queue"]["prompts"]
+                .as_array()
+                .is_none_or(Vec::is_empty)
     }
 
-    /// The breadcrumb's parts, the place row (project, computer) and the where row (where,
-    /// detail).
+    /// The `worktreeTray` snapshot object when present, or an empty object for the fallback draft
+    /// setup bar while it is still an unsent draft.
+    fn effective_draft_tray(&self) -> Option<Value> {
+        if let Some(tray) = self
+            .snapshot
+            .get("worktreeTray")
+            .filter(|tray| tray.is_object())
+        {
+            return Some(tray.clone());
+        }
+        self.draft_setup_bar_fallback_active().then(|| json!({}))
+    }
+
+    /// Whether the bar is on screen (the hotkeys act only then).
+    pub(super) fn worktree_tray_shown(&self) -> bool {
+        self.effective_draft_tray().is_some()
+    }
+
+    /// The Agent segment for a draft setup bar (`Option+A` / click opens the agent list).
+    fn draft_agent_part(&self) -> Option<Part> {
+        let current_id = self.snapshot["sessionAgentId"]
+            .as_str()
+            .map(str::trim)
+            .filter(|id| !id.is_empty());
+        let agents = self.snapshot["availableAgents"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let current_entry = current_id.and_then(|id| {
+            agents
+                .iter()
+                .find(|row| row["agentId"].as_str() == Some(id))
+        });
+        let label = current_entry
+            .and_then(|row| row["name"].as_str())
+            .filter(|name| !name.is_empty())
+            .map(str::to_owned)
+            .or_else(|| {
+                self.snapshot["optionLabels"]["agentChip"]["name"]
+                    .as_str()
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_owned)
+            })
+            .or_else(|| {
+                self.snapshot["optionLabels"]["agentIcon"]
+                    .as_str()
+                    .or(current_id)
+                    .map(fallback_agent_label)
+                    .filter(|name| !name.is_empty())
+            })?;
+        let icon = current_entry
+            .and_then(|row| row["icon"].as_str().or_else(|| row["baseAgentId"].as_str()))
+            .or_else(|| self.snapshot["optionLabels"]["agentIcon"].as_str())
+            .or(current_id)
+            .filter(|icon| !icon.is_empty())
+            .map(str::to_owned);
+        let rows: Vec<Value> = agents
+            .iter()
+            .filter_map(|row| {
+                let agent_id = row["agentId"].as_str()?.trim();
+                let name = row["name"].as_str()?.trim();
+                if agent_id.is_empty() || name.is_empty() {
+                    return None;
+                }
+                let mut item = json!({
+                    "label": name,
+                    "checked": current_id == Some(agent_id),
+                    "command": { "type": "switchDraftAgent", "agentId": agent_id },
+                });
+                if let Some(row_icon) = row["icon"]
+                    .as_str()
+                    .or_else(|| row["baseAgentId"].as_str())
+                    .filter(|icon| !icon.is_empty())
+                {
+                    item["icon"] = json!(row_icon);
+                }
+                Some(item)
+            })
+            .collect();
+        let pickable = !rows.is_empty();
+        Some(Part {
+            id: AGENT_TRIGGER,
+            glyph: icon.is_none().then(|| "sparkles".to_string()),
+            agent_icon: icon,
+            star: false,
+            prefix: None,
+            tooltip: format!("Agent: {label}"),
+            label,
+            suffix: None,
+            muted: false,
+            pill: false,
+            pressed: false,
+            hotkey: pickable.then_some("newChatPickAgent"),
+            action: if pickable {
+                PartAction::Menu {
+                    trigger: AGENT_TRIGGER,
+                    rows,
+                    width: AGENT_MENU_WIDTH,
+                }
+            } else {
+                PartAction::None
+            },
+            bounds: self.worktree_tray_agent_bounds.clone(),
+        })
+    }
+
+    /// The Model + effort segment for a draft setup bar (`Option+P` / click opens the model picker).
+    fn draft_model_part(&self) -> Option<Part> {
+        let option_labels = &self.snapshot["optionLabels"];
+        let merged = self.snapshot["modelMenu"].is_object();
+        if option_labels["showModel"] != true && !merged {
+            return None;
+        }
+        let raw_model = option_labels["model"].as_str().unwrap_or_default().trim();
+        let label = self.snapshot["modelMenu"]["pill"]["label"]
+            .as_str()
+            .filter(|_| merged)
+            .map(str::trim)
+            .filter(|label| !label.is_empty())
+            .unwrap_or(raw_model);
+        let loading = label.is_empty();
+        let suffix = if loading {
+            None
+        } else if merged {
+            self.snapshot["modelMenu"]["pill"]["suffix"]
+                .as_str()
+                .map(str::trim)
+                .filter(|suffix| !suffix.is_empty())
+                .map(str::to_owned)
+        } else if option_labels["showOptions"] == true {
+            option_labels["options"]
+                .as_str()
+                .map(str::trim)
+                .filter(|suffix| !suffix.is_empty())
+                .map(str::to_owned)
+        } else {
+            None
+        };
+        let display_label = if loading {
+            "Model".to_string()
+        } else {
+            label.to_owned()
+        };
+        let tooltip = self.snapshot["modelMenu"]["pill"]["tooltip"]
+            .as_str()
+            .filter(|tooltip| merged && !tooltip.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| match &suffix {
+                Some(effort) => format!("Model: {display_label} ({effort})"),
+                None => format!("Model: {display_label}"),
+            });
+        Some(Part {
+            id: "chat-draft-model",
+            glyph: None,
+            agent_icon: None,
+            star: false,
+            prefix: None,
+            label: display_label,
+            suffix,
+            muted: loading,
+            pill: false,
+            pressed: false,
+            tooltip,
+            hotkey: Some("openModelPicker"),
+            action: PartAction::Model,
+            bounds: self.worktree_tray_model_bounds.clone(),
+        })
+    }
+
+    /// Toggles Coordinator mode on this draft, showing the coordinator first-message card and a
+    /// toast prompting the user to pick model/effort and click Send.
+    fn toggle_draft_coordinator(&mut self, cx: &mut Context<Self>) {
+        self.draft_coordinator_mode = !self.draft_coordinator_mode;
+        self.draft_setup_changed = true;
+        if self.draft_coordinator_mode {
+            if let Some(app) = self.config.app.as_ref().and_then(|app| app.upgrade()) {
+                cx.defer(move |cx| {
+                    app.update(cx, |app, cx| {
+                        app.gx_store_create_toast(
+                            "info",
+                            "Coordinator",
+                            Some(
+                                "Pick a model and effort, then click Send to start this coordinator.",
+                            ),
+                            cx,
+                        );
+                    });
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    /// The setup bar's parts in two groups:
+    /// - Row 0: toggle pills (`No project`, `Coordinator`) plus place and where (`project`, `computer`, `where`, `branch/detail`)
+    /// - Row 1: agent and model (`agent`, `model + effort`)
     fn tray_parts(&self, tray: &Value, cx: &Context<Self>) -> [Vec<Part>; 2] {
         let mut place = Vec::new();
-        if let Some(name) = tray["projectName"].as_str() {
+        let no_project = self.draft_is_no_project(cx);
+        let idle = tray["busy"] != true && tray["status"].is_null();
+        if idle {
             place.push(Part {
-                id: "chat-draft-project",
-                glyph: "folder".into(),
+                id: "chat-draft-no-project",
+                glyph: no_project.then(|| "check".to_string()),
+                agent_icon: None,
                 star: false,
                 prefix: None,
-                label: name.to_owned(),
-                muted: false,
-                tooltip: format!("Project: {name}"),
-                hotkey: Some("newChatPickProject"),
-                action: PartAction::Place { machines: false },
-                bounds: self.draft_project_chip_bounds.clone(),
+                label: "No project".to_string(),
+                suffix: None,
+                muted: !no_project,
+                pill: true,
+                pressed: no_project,
+                tooltip: if no_project {
+                    "No project is on (saved in Main Hub). Click to pick a project".to_string()
+                } else {
+                    "No project: move this draft to Main Hub".to_string()
+                },
+                hotkey: None,
+                action: PartAction::ToggleNoProject,
+                bounds: Rc::default(),
             });
+            place.push(Part {
+                id: "chat-draft-coordinator",
+                glyph: Some("coordinator-crown".to_string()),
+                agent_icon: None,
+                star: false,
+                prefix: None,
+                label: "Coordinator".to_string(),
+                suffix: None,
+                muted: !self.draft_coordinator_mode,
+                pill: true,
+                pressed: self.draft_coordinator_mode,
+                tooltip: if self.draft_coordinator_mode {
+                    "Coordinator is on. Click to switch back to a normal draft".to_string()
+                } else {
+                    "Start this draft as a Coordinator".to_string()
+                },
+                hotkey: None,
+                action: PartAction::ToggleCoordinator,
+                bounds: Rc::default(),
+            });
+        }
+        if no_project {
+            // In "No project" mode, hide Project, Where and Branch/Worktree; keep only the machine picker.
             if let Some((label, local, pickable)) = self.draft_machine_part(cx) {
                 place.push(Part {
                     id: "chat-draft-machine",
-                    glyph: if local { "device-desktop" } else { "server" }.into(),
+                    glyph: Some(if local { "device-desktop" } else { "server" }.into()),
+                    agent_icon: None,
                     star: false,
                     prefix: None,
                     tooltip: format!("Computer: {label}"),
                     label,
+                    suffix: None,
                     muted: !pickable,
+                    pill: false,
+                    pressed: false,
                     hotkey: pickable.then_some("newChatPickComputer"),
                     action: if pickable {
                         PartAction::Place { machines: true }
@@ -146,73 +427,138 @@ impl NativeChatView {
                     bounds: self.draft_machine_chip_bounds.clone(),
                 });
             }
-        }
-        let mut choice = Vec::new();
-        let place_of = &tray["where"];
-        if let Some(label) = place_of["label"].as_str() {
-            choice.push(Part {
-                id: WHERE_TRIGGER,
-                glyph: place_of["glyph"].as_str().unwrap_or("folder-open").into(),
-                star: false,
-                prefix: None,
-                label: label.to_owned(),
-                muted: false,
-                tooltip: format!("Where it runs: {label}"),
-                hotkey: Some("newChatPickWhere"),
-                action: PartAction::Menu {
-                    trigger: WHERE_TRIGGER,
-                    rows: menu_rows(&place_of["menu"]),
-                    width: MENU_WIDTH,
-                },
-                bounds: self.worktree_tray_where_bounds.clone(),
-            });
-        }
-        let detail = &tray["detail"];
-        if let Some(label) = detail["label"].as_str() {
-            let cloud = detail["kind"] == "cloudBox";
-            let has_menu = detail["menu"].is_array();
-            let list_kind = match detail["kind"].as_str() {
-                Some("baseBranch") => Some(super::draft_project_picker::DraftListKind::BaseBranch),
-                Some("worktree") => Some(super::draft_project_picker::DraftListKind::Worktree),
-                Some("folderBranch") => {
-                    Some(super::draft_project_picker::DraftListKind::FolderBranch)
+        } else {
+            let project_name = tray["projectName"]
+                .as_str()
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(str::to_owned)
+                .or_else(|| self.draft_choice(cx).map(|choice| choice.label));
+            if let Some(name) = project_name {
+                place.push(Part {
+                    id: "chat-draft-project",
+                    glyph: Some("folder".into()),
+                    agent_icon: None,
+                    star: false,
+                    prefix: None,
+                    tooltip: format!("Project: {name}"),
+                    label: name,
+                    suffix: None,
+                    muted: false,
+                    pill: false,
+                    pressed: false,
+                    hotkey: Some("newChatPickProject"),
+                    action: PartAction::Place { machines: false },
+                    bounds: self.draft_project_chip_bounds.clone(),
+                });
+                if let Some((label, local, pickable)) = self.draft_machine_part(cx) {
+                    place.push(Part {
+                        id: "chat-draft-machine",
+                        glyph: Some(if local { "device-desktop" } else { "server" }.into()),
+                        agent_icon: None,
+                        star: false,
+                        prefix: None,
+                        tooltip: format!("Computer: {label}"),
+                        label,
+                        suffix: None,
+                        muted: !pickable,
+                        pill: false,
+                        pressed: false,
+                        hotkey: pickable.then_some("newChatPickComputer"),
+                        action: if pickable {
+                            PartAction::Place { machines: true }
+                        } else {
+                            PartAction::None
+                        },
+                        bounds: self.draft_machine_chip_bounds.clone(),
+                    });
                 }
-                _ => None,
-            };
-            choice.push(Part {
-                id: if cloud { CLOUD_TRIGGER } else { DETAIL_TRIGGER },
-                glyph: detail["glyph"].as_str().unwrap_or("git-branch").into(),
-                star: detail["star"] == true,
-                prefix: detail["prefix"].as_str().map(str::to_owned),
-                label: label.to_owned(),
-                muted: !has_menu || detail["placeholder"] == true,
-                tooltip: detail["tooltip"].as_str().unwrap_or(label).to_owned(),
-                hotkey: has_menu.then_some("newChatPickBranch"),
-                action: if let (true, Some(kind)) = (has_menu, list_kind) {
-                    let mut rows = menu_rows(&detail["menu"]);
-                    // The search's "Create <typed> from <branch>" (This folder's branch only).
-                    if let Some(from) = detail["create"]["from"].as_str() {
-                        rows.push(json!({
-                            "createFrom": from,
-                            "command": detail["create"]["command"].clone(),
-                        }));
+            }
+            let place_of = &tray["where"];
+            if let Some(label) = place_of["label"].as_str() {
+                place.push(Part {
+                    id: WHERE_TRIGGER,
+                    glyph: Some(place_of["glyph"].as_str().unwrap_or("folder-open").into()),
+                    agent_icon: None,
+                    star: false,
+                    prefix: None,
+                    label: label.to_owned(),
+                    suffix: None,
+                    muted: false,
+                    pill: false,
+                    pressed: false,
+                    tooltip: format!("Where it runs: {label}"),
+                    hotkey: Some("newChatPickWhere"),
+                    action: PartAction::Menu {
+                        trigger: WHERE_TRIGGER,
+                        rows: menu_rows(&place_of["menu"]),
+                        width: MENU_WIDTH,
+                    },
+                    bounds: self.worktree_tray_where_bounds.clone(),
+                });
+            }
+            let detail = &tray["detail"];
+            if let Some(label) = detail["label"].as_str() {
+                let cloud = detail["kind"] == "cloudBox";
+                let has_menu = detail["menu"].is_array();
+                let list_kind = match detail["kind"].as_str() {
+                    Some("baseBranch") => {
+                        Some(super::draft_project_picker::DraftListKind::BaseBranch)
                     }
-                    PartAction::List { kind, rows }
-                } else if has_menu {
-                    PartAction::Menu {
-                        trigger: if cloud { CLOUD_TRIGGER } else { DETAIL_TRIGGER },
-                        rows: menu_rows(&detail["menu"]),
-                        width: detail["menuWidth"]
-                            .as_f64()
-                            .map_or(MENU_WIDTH, |w| w as f32),
+                    Some("worktree") => Some(super::draft_project_picker::DraftListKind::Worktree),
+                    Some("folderBranch") => {
+                        Some(super::draft_project_picker::DraftListKind::FolderBranch)
                     }
-                } else {
-                    PartAction::None
-                },
-                bounds: self.worktree_tray_detail_bounds.clone(),
-            });
+                    _ => None,
+                };
+                place.push(Part {
+                    id: if cloud { CLOUD_TRIGGER } else { DETAIL_TRIGGER },
+                    glyph: Some(detail["glyph"].as_str().unwrap_or("git-branch").into()),
+                    agent_icon: None,
+                    star: detail["star"] == true,
+                    prefix: detail["prefix"].as_str().map(str::to_owned),
+                    label: label.to_owned(),
+                    suffix: None,
+                    muted: !has_menu || detail["placeholder"] == true,
+                    pill: false,
+                    pressed: false,
+                    tooltip: detail["tooltip"].as_str().unwrap_or(label).to_owned(),
+                    hotkey: has_menu.then_some("newChatPickBranch"),
+                    action: if let (true, Some(kind)) = (has_menu, list_kind) {
+                        let mut rows = menu_rows(&detail["menu"]);
+                        // The search's "Create <typed> from <branch>" (This folder's branch only).
+                        if let Some(from) = detail["create"]["from"].as_str() {
+                            rows.push(json!({
+                                "createFrom": from,
+                                "command": detail["create"]["command"].clone(),
+                            }));
+                        }
+                        PartAction::List { kind, rows }
+                    } else if has_menu {
+                        PartAction::Menu {
+                            trigger: if cloud { CLOUD_TRIGGER } else { DETAIL_TRIGGER },
+                            rows: menu_rows(&detail["menu"]),
+                            width: detail["menuWidth"]
+                                .as_f64()
+                                .map_or(MENU_WIDTH, |w| w as f32),
+                        }
+                    } else {
+                        PartAction::None
+                    },
+                    bounds: self.worktree_tray_detail_bounds.clone(),
+                });
+            }
         }
-        [place, choice]
+        let mut agent_group = Vec::new();
+        if idle {
+            if let Some(agent) = self.draft_agent_part() {
+                agent_group.push(agent);
+            }
+            if let Some(model) = self.draft_model_part() {
+                agent_group.push(model);
+            }
+        }
+        [place, agent_group]
     }
 
     /// Opens what a part opens, from a click or its hotkey.
@@ -237,13 +583,21 @@ impl NativeChatView {
                 if self.chat_menu_toggled_shut(trigger, cx) {
                     return;
                 }
-                // The where and Cloud Box menus open upward from their part with their left edges
-                // lined up, as a composer menu does, instead of the side panel's place that put
-                // them below the bar over the chat box (CDXC:Worktrees 2026-11-10 in
-                // draft_project_picker.rs).
+                // Menus open upward from their part with their left edges lined up, as a composer
+                // menu does, instead of the side panel's place that put them below the bar over the
+                // chat box (CDXC:Worktrees 2026-11-10 in draft_project_picker.rs).
                 self.menu_side = Some(super::option_menu::MenuSide::Left);
                 self.show_chat_menu(rows.clone(), bounds, *width, window, cx);
             }
+            PartAction::Model => {
+                if self.snapshot["modelMenu"].is_object() {
+                    self.show_model_menu(bounds, window, cx);
+                } else {
+                    self.show_option_menu("model", bounds, window, cx);
+                }
+            }
+            PartAction::ToggleNoProject => self.toggle_draft_no_project(cx),
+            PartAction::ToggleCoordinator => self.toggle_draft_coordinator(cx),
         }
     }
 
@@ -255,51 +609,84 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(tray) = self.snapshot.get("worktreeTray").cloned() else {
+        let Some(tray) = self.effective_draft_tray() else {
             return;
         };
         if tray["busy"] == true {
             return;
         }
         let parts = self.tray_parts(&tray, cx);
-        let Some(part) = parts
+        if let Some(part) = parts
             .iter()
             .flatten()
             .find(|part| part.hotkey == Some(action_id))
             .cloned()
-        else {
-            return;
-        };
-        self.open_tray_part(&part.action, part.bounds.get(), window, cx);
+        {
+            self.open_tray_part(&part.action, part.bounds.get(), window, cx);
+        } else if action_id == "newChatPickProject" && self.draft_is_no_project(cx) {
+            self.toggle_draft_place_picker(false, window, cx);
+        }
+    }
+
+    /// The visible key cap label on the bar for a draft part, when clickable and bound.
+    fn tray_part_key_cap(part: &Part, busy: bool) -> Option<String> {
+        let clickable = !busy && !matches!(part.action, PartAction::None);
+        if !clickable {
+            return None;
+        }
+        let chord = hotkey_chord(part.hotkey);
+        (!chord.is_empty()).then_some(chord)
     }
 
     /// A part's natural width and the least it may be cut to, at the chat's zoom.
-    fn measure_tray_part(&self, part: &Part, p: &ChatAppearance, window: &Window) -> PartSize {
+    fn measure_tray_part(
+        &self,
+        part: &Part,
+        busy: bool,
+        p: &ChatAppearance,
+        window: &Window,
+    ) -> PartSize {
         let s = p.scale;
         let mut style = window.text_style();
         style.font_family = p.font.clone().into();
-        let text_width = |text: &str| {
+        let text_width = |text: &str, size: f32| {
             window
                 .text_system()
                 .shape_line(
                     text.to_owned().into(),
-                    px(FONT * s),
+                    px(size * s),
                     &[style.to_run(text.len())],
                     None,
                 )
                 .width
                 .as_f32()
         };
-        let chrome = (PART_PADDING * 2.0 + ICON + GAP) * s
-            + part
-                .prefix
-                .as_deref()
-                .map_or(0.0, |prefix| text_width(prefix) + GAP * s);
+        let has_icon = part.glyph.is_some() || part.agent_icon.is_some();
+        let pad = if part.pill { 8.0 } else { PART_PADDING };
+        let mut chrome = (pad * 2.0) * s + if part.pill { 2.0 } else { 0.0 };
+        if has_icon {
+            chrome += (ICON + GAP) * s;
+        }
+        if let Some(prefix) = part.prefix.as_deref() {
+            chrome += text_width(prefix, FONT) + GAP * s;
+        }
+        if let Some(suffix) = part.suffix.as_deref() {
+            chrome += text_width(suffix, FONT) + GAP * s;
+        }
+        if let Some(key_cap) = Self::tray_part_key_cap(part, busy) {
+            chrome += GAP * s
+                + (KEY_CAP_PADDING * 2.0 + 2.0) * s
+                + text_width(&key_cap, KEY_CAP_FONT).ceil();
+        }
         // A pixel of slack so a part measured whole is never drawn cut by rounding.
-        let words = text_width(&part.label).ceil() + 1.0;
+        let words = text_width(&part.label, FONT).ceil() + 1.0;
         PartSize {
             natural: chrome + words,
-            min: chrome + words.min(MIN_WORDS * s),
+            min: if part.pill {
+                chrome + words
+            } else {
+                chrome + words.min(MIN_WORDS * s)
+            },
         }
     }
 
@@ -319,6 +706,30 @@ impl NativeChatView {
         let tooltip = part.tooltip.clone();
         let hotkey = part.hotkey;
         let action = part.action.clone();
+        let key_cap = Self::tray_part_key_cap(&part, busy);
+        let icon = if let Some(agent_icon) = part.agent_icon.as_deref() {
+            Some(
+                svg()
+                    .path(format!("agent-icons/{agent_icon}.svg"))
+                    .size(px(ICON * s))
+                    .flex_shrink_0()
+                    .text_color(rgb(agent_accent(agent_icon, p))),
+            )
+        } else {
+            part.glyph.as_deref().map(|glyph| {
+                svg()
+                    .path(format!("titlebar/{glyph}.svg"))
+                    .size(px(ICON * s))
+                    .flex_shrink_0()
+                    .text_color(if part.star {
+                        rgb(STAR_COLOR).into()
+                    } else if part.pressed {
+                        p.primary
+                    } else {
+                        p.muted
+                    })
+            })
+        };
         div()
             .on_prepaint(move |painted, _, _| bounds.set(painted))
             .id(part.id)
@@ -326,13 +737,25 @@ impl NativeChatView {
             .aria_label(part.tooltip.clone())
             .flex_shrink_0()
             .when(cut, |this| this.w(px(width)))
-            .h(px(PART_HEIGHT * s))
-            .px(px(PART_PADDING * s))
+            .h(px(if part.pill { 22.0 } else { PART_HEIGHT } * s))
+            .px(px(if part.pill { 8.0 } else { PART_PADDING } * s))
             .flex()
             .items_center()
             .gap(px(GAP * s))
-            .rounded(px(6.0 * s))
-            .text_size(px(FONT * s))
+            .when(part.pill, |this| {
+                this.rounded_full()
+                    .border_1()
+                    .border_color(if part.pressed {
+                        p.foreground.opacity(0.28)
+                    } else {
+                        p.border
+                    })
+                    .when(part.pressed, |pill| {
+                        pill.bg(p.border).font_weight(gpui::FontWeight::MEDIUM)
+                    })
+            })
+            .when(!part.pill, |this| this.rounded(px(6.0 * s)))
+            .text_size(px(if part.pill { 12.0 } else { FONT } * s))
             .when(clickable, |this| {
                 let trigger = part.bounds.clone();
                 this.chat_cursor_pointer()
@@ -346,17 +769,7 @@ impl NativeChatView {
                     .keys(hotkey_chord(hotkey))
                     .build(window, cx)
             })
-            .child(
-                svg()
-                    .path(format!("titlebar/{}.svg", part.glyph))
-                    .size(px(ICON * s))
-                    .flex_shrink_0()
-                    .text_color(if part.star {
-                        rgb(STAR_COLOR).into()
-                    } else {
-                        p.muted
-                    }),
-            )
+            .children(icon)
             .when_some(part.prefix, |this, prefix| {
                 this.child(div().flex_shrink_0().text_color(p.muted).child(prefix))
             })
@@ -369,6 +782,34 @@ impl NativeChatView {
                     .text_color(if part.muted { p.muted } else { p.primary })
                     .child(part.label),
             )
+            .when_some(part.suffix, |this, suffix| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .text_color(p.muted)
+                        .child(suffix),
+                )
+            })
+            .when_some(key_cap, |this, chord| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .h(px(KEY_CAP_HEIGHT * s))
+                        .px(px(KEY_CAP_PADDING * s))
+                        .flex()
+                        .items_center()
+                        .rounded(px(4.0 * s))
+                        .border_1()
+                        .border_color(p.border)
+                        .bg(p.border.opacity(0.6))
+                        .text_size(px(KEY_CAP_FONT * s))
+                        .line_height(px(12.0 * s))
+                        .text_color(p.muted)
+                        .whitespace_nowrap()
+                        .child(chord),
+                )
+            })
             .into_any_element()
     }
 
@@ -387,7 +828,32 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// The breadcrumb, placed by `tray_layout`.
+    fn tray_group_divider(p: &ChatAppearance) -> AnyElement {
+        div()
+            .flex_shrink_0()
+            .w(px(GROUP_DIVIDER * p.scale))
+            .h(px(12.0 * p.scale))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(div().w(px(1.0)).h_full().bg(p.border))
+            .into_any_element()
+    }
+
+    /// Computes widths for one natural row (using `shrink` only when the row exceeds `available`).
+    fn fit_row_widths(sizes: &[PartSize], gap_total: f32, available: f32) -> Vec<f32> {
+        let natural: Vec<f32> = sizes.iter().map(|part| part.natural).collect();
+        let total = natural.iter().sum::<f32>() + gap_total;
+        if available > 0.0 && total > available {
+            let mins: Vec<f32> = sizes.iter().map(|part| part.min).collect();
+            shrink(&natural, &mins, (available - gap_total).max(0.0))
+        } else {
+            natural
+        }
+    }
+
+    /// The setup bar breadcrumb: one row while every segment fits, else two compact rows
+    /// (place/where on top, agent/model underneath) so nothing clips or stretches awkwardly.
     fn render_tray_breadcrumb(
         &self,
         tray: &Value,
@@ -397,15 +863,18 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let s = p.scale;
-        let parts = self.tray_parts(tray, cx);
-        if parts.iter().all(Vec::is_empty) {
+        let [place_parts, agent_parts] = self.tray_parts(tray, cx);
+        if place_parts.is_empty() && agent_parts.is_empty() {
             return None;
         }
-        let sizes = parts.clone().map(|row| {
-            row.iter()
-                .map(|part| self.measure_tray_part(part, p, window))
-                .collect::<Vec<_>>()
-        });
+        let place_sizes: Vec<PartSize> = place_parts
+            .iter()
+            .map(|part| self.measure_tray_part(part, busy, p, window))
+            .collect();
+        let agent_sizes: Vec<PartSize> = agent_parts
+            .iter()
+            .map(|part| self.measure_tray_part(part, busy, p, window))
+            .collect();
         // The room inside the tray: the box's width less the tray's inset, padding and border.
         let composer = self.composer_bounds.get().size.width.as_f32();
         let available = if composer > 0.0 {
@@ -413,68 +882,171 @@ impl NativeChatView {
         } else {
             0.0
         };
-        let TrayLayout {
-            two_rows,
-            centered,
-            widths,
-            columns,
-        } = tray_layout(&sizes, SEPARATOR * s, available, NARROW_WIDTH * s);
-        let mut drawn = Vec::new();
-        for (row, (parts, widths)) in parts.into_iter().zip(widths).enumerate() {
-            let mut cells = Vec::new();
-            for (index, (part, width)) in parts.into_iter().zip(widths).enumerate() {
-                if index > 0 || (!two_rows && row > 0 && !drawn_is_empty(&drawn, &cells)) {
-                    cells.push(Self::tray_separator(p));
-                }
-                let natural = sizes[row][index].natural;
-                let element = self.render_tray_part(part, width, natural, p, busy, cx);
-                cells.push(if two_rows {
-                    div()
-                        .flex_shrink_0()
-                        .w(px(columns[index]))
-                        .flex()
-                        .child(element)
-                        .into_any_element()
+        let place_sep_total: f32 = place_parts
+            .windows(2)
+            .map(|pair| {
+                if pair[0].pill && pair[1].pill {
+                    GROUP_GAP * s
+                } else if pair[0].pill {
+                    GROUP_DIVIDER * s
                 } else {
-                    element
-                });
-            }
-            drawn.push(cells);
-        }
-        let breadcrumb = if two_rows {
-            let grid_width = columns.iter().sum::<f32>()
-                + SEPARATOR * s * (columns.len().saturating_sub(1)) as f32;
-            div()
-                .w_full()
-                .flex()
-                .flex_col()
-                .gap(px(2.0 * s))
-                .when(centered, |this| this.items_center())
-                .children(
-                    drawn
-                        .into_iter()
-                        .filter(|cells| !cells.is_empty())
-                        .map(|cells| {
-                            div()
-                                .w(px(grid_width))
-                                .flex()
-                                .items_center()
-                                .children(cells)
-                        }),
-                )
+                    SEPARATOR * s
+                }
+            })
+            .sum();
+        let agent_gap_total = GROUP_GAP * s * agent_parts.len().saturating_sub(1) as f32;
+        let divider_total = if !place_parts.is_empty() && !agent_parts.is_empty() {
+            GROUP_DIVIDER * s
         } else {
+            0.0
+        };
+        let one_row_natural = place_sizes.iter().map(|part| part.natural).sum::<f32>()
+            + agent_sizes.iter().map(|part| part.natural).sum::<f32>()
+            + place_sep_total
+            + agent_gap_total
+            + divider_total;
+        let measured = available > 0.0;
+        let two_rows = measured
+            && !place_parts.is_empty()
+            && !agent_parts.is_empty()
+            && one_row_natural > available;
+        let centered = measured && available < NARROW_WIDTH * s;
+
+        let place_between = |prev_pill: bool, curr_pill: bool| -> AnyElement {
+            if prev_pill && curr_pill {
+                div()
+                    .flex_shrink_0()
+                    .w(px(GROUP_GAP * s))
+                    .into_any_element()
+            } else if prev_pill {
+                Self::tray_group_divider(p)
+            } else {
+                Self::tray_separator(p)
+            }
+        };
+
+        let breadcrumb = if !two_rows {
+            let mut all_sizes = Vec::with_capacity(place_sizes.len() + agent_sizes.len());
+            all_sizes.extend_from_slice(&place_sizes);
+            all_sizes.extend_from_slice(&agent_sizes);
+            let widths = Self::fit_row_widths(
+                &all_sizes,
+                place_sep_total + agent_gap_total + divider_total,
+                available,
+            );
+            let split = place_parts.len();
+            let mut cells = Vec::new();
+            let mut prev_pill = false;
+            for (index, (part, width)) in place_parts.into_iter().zip(&widths[..split]).enumerate()
+            {
+                let is_pill = part.pill;
+                if index > 0 {
+                    cells.push(place_between(prev_pill, is_pill));
+                }
+                prev_pill = is_pill;
+                cells.push(self.render_tray_part(
+                    part,
+                    *width,
+                    place_sizes[index].natural,
+                    p,
+                    busy,
+                    cx,
+                ));
+            }
+            if split > 0 && !agent_parts.is_empty() {
+                cells.push(Self::tray_group_divider(p));
+            }
+            for (index, (part, width)) in agent_parts.into_iter().zip(&widths[split..]).enumerate()
+            {
+                if index > 0 {
+                    cells.push(
+                        div()
+                            .flex_shrink_0()
+                            .w(px(GROUP_GAP * s))
+                            .into_any_element(),
+                    );
+                }
+                cells.push(self.render_tray_part(
+                    part,
+                    *width,
+                    agent_sizes[index].natural,
+                    p,
+                    busy,
+                    cx,
+                ));
+            }
             div()
                 .w_full()
                 .flex()
                 .items_center()
                 .when(centered, |this| this.justify_center())
-                .children(drawn.into_iter().flatten())
+                .children(cells)
+        } else {
+            let place_widths = Self::fit_row_widths(&place_sizes, place_sep_total, available);
+            let agent_widths = Self::fit_row_widths(&agent_sizes, agent_gap_total, available);
+            let mut row_zero = Vec::new();
+            let mut prev_pill = false;
+            for (index, (part, width)) in place_parts.into_iter().zip(place_widths).enumerate() {
+                let is_pill = part.pill;
+                if index > 0 {
+                    row_zero.push(place_between(prev_pill, is_pill));
+                }
+                prev_pill = is_pill;
+                row_zero.push(self.render_tray_part(
+                    part,
+                    width,
+                    place_sizes[index].natural,
+                    p,
+                    busy,
+                    cx,
+                ));
+            }
+            let mut row_one = Vec::new();
+            for (index, (part, width)) in agent_parts.into_iter().zip(agent_widths).enumerate() {
+                if index > 0 {
+                    row_one.push(
+                        div()
+                            .flex_shrink_0()
+                            .w(px(GROUP_GAP * s))
+                            .into_any_element(),
+                    );
+                }
+                row_one.push(self.render_tray_part(
+                    part,
+                    width,
+                    agent_sizes[index].natural,
+                    p,
+                    busy,
+                    cx,
+                ));
+            }
+            div()
+                .w_full()
+                .flex()
+                .flex_col()
+                .gap(px(2.0 * s))
+                .child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .items_center()
+                        .when(centered, |this| this.justify_center())
+                        .children(row_zero),
+                )
+                .child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .items_center()
+                        .when(centered, |this| this.justify_center())
+                        .children(row_one),
+                )
         };
         Some(
             breadcrumb
                 .id("chat-worktree-breadcrumb")
                 .role(gpui::Role::Toolbar)
-                .aria_label("Where this chat runs")
+                .aria_label("New chat setup")
                 .when(busy, |this| this.opacity(0.6))
                 .into_any_element(),
         )
@@ -486,11 +1058,7 @@ impl NativeChatView {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let tray = self
-            .snapshot
-            .get("worktreeTray")
-            .filter(|tray| tray.is_object())?
-            .clone();
+        let tray = self.effective_draft_tray()?;
         let s = p.scale;
         let busy = tray["busy"] == true;
         let breadcrumb = self.render_tray_breadcrumb(&tray, p, busy, window, cx);
@@ -582,6 +1150,13 @@ impl NativeChatView {
             _ => None,
         };
         let folder_prompt = self.render_folder_prompt(&tray["folderPrompt"], p, cx);
+        if breadcrumb.is_none()
+            && status_line.is_none()
+            && folder_prompt.is_none()
+            && !status["card"].is_object()
+        {
+            return None;
+        }
         /*
         CDXC:Worktrees 2026-10-31 DECISION:
         User: "the bar above the composer must be transparent like it". The tray is part of the
@@ -711,10 +1286,4 @@ impl NativeChatView {
                 .into_any_element(),
         )
     }
-}
-
-/// Whether nothing has been drawn before this row (so a one-row breadcrumb puts no › before its
-/// first part when the place row is empty).
-fn drawn_is_empty(drawn: &[Vec<AnyElement>], cells: &[AnyElement]) -> bool {
-    drawn.iter().all(Vec::is_empty) && cells.is_empty()
 }

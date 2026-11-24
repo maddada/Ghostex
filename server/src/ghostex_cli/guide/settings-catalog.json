@@ -10158,6 +10158,7 @@
         "newChatPickComputer": "alt+m",
         "newChatPickWhere": "alt+w",
         "newChatPickBranch": "alt+b",
+        "newChatPickAgent": "alt+a",
         "toggleVoiceAgent": "ctrl+alt+v",
         "voiceCallAboutSession": "",
         "holdToTalk": "",
@@ -15122,6 +15123,13 @@
       "title": "New Chat: Branch",
       "description": "While a new chat's message box has focus, open the last part of the bar above it: This folder's branch, a new worktree's base branch, the existing worktree, or the Cloud Box pick. It takes Option+B from the message box on a Mac (no ∫ there): if your keyboard types a letter with Option+B, pick another key.",
       "defaultKey": "alt+b",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "newChatPickAgent",
+      "title": "New Chat: Agent",
+      "description": "While a new chat's message box has focus, open the agent list in the bar above it. It takes Option+A from the message box on a Mac (no å there): if your keyboard types a letter with Option+A, pick another key.",
+      "defaultKey": "alt+a",
       "noTerminalBinding": true
     },
     {

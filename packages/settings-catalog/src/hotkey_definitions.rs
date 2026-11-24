@@ -190,6 +190,16 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("newChatPickBranch")), ("kind", J::Str("chatAction"))]),
     },
+    HotkeyDefinition {
+        id: "newChatPickAgent",
+        title: "New Chat: Agent",
+        description: "While a new chat's message box has focus, open the agent list in the bar above it. It takes Option+A from the message box on a Mac (no å there): if your keyboard types a letter with Option+A, pick another key.",
+        default_key: "alt+a",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("newChatPickAgent")), ("kind", J::Str("chatAction"))]),
+    },
     // CDXC:VoiceMode 2026-10-20 DECISION:
     // User picked "Add both as proposed": Toggle Voice Agent starts the voice agent call or ends the one running, from anywhere in the window (Option+Ctrl+V on Mac; Ctrl+Alt+Shift+V on Windows and Linux, where Ctrl+Shift+V is terminal paste), and Dictate starts recording in the chat box of the chat session you are in and, pressed again, stops and transcribes, like its microphone (Option+Ctrl+D; Ctrl+Alt+Shift+D). Both show in their button's tooltip, the shape the other chat box keys use.
     // SEE-ALSO: apps/desktop/src/app/hotkeys.rs (`gpui_platform_hotkey_for_action`, `GPUI_DEFAULT_GHOSTEX_HOTKEYS`), apps/desktop/src/app/focused_chat_hotkeys.rs, apps/desktop/src/app/voice_agent/header_button.rs.

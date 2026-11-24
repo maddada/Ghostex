@@ -2222,9 +2222,15 @@ pub(crate) async fn handle_promote_coordinator_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     // The coordinator record is committed, so a failure from here on is reported, not raised.
-    let playbook_error = send_playbook_now(state, &promoted.key, &promoted.playbook_message)
-        .await
-        .err();
+    // A draft promoted at first-send time (`forDraft: true`) sends its own first prompt carrying
+    // `COORDINATOR_GUIDE_LINE`, so skip the extra mid-conversation playbook message.
+    let playbook_error = if promoted.playbook_message.is_empty() {
+        None
+    } else {
+        send_playbook_now(state, &promoted.key, &promoted.playbook_message)
+            .await
+            .err()
+    };
     let (project_id, session_id) = &promoted.key;
     routed_json(
         Some(endpoint_path),

@@ -39,7 +39,17 @@ impl GhostexGpuiApp {
             initial_snapshot: None,
             initial_presentation: self.initial_web_chat_presentation(session),
         };
-        let view = cx.new(|cx| NativeChatView::new(config, cx));
+        let draft_coordinator_mode = self
+            .gx_store
+            .unified_sidebar
+            .carry_coordinator_draft
+            .replace(false);
+        let view = cx.new(|cx| {
+            let mut view = NativeChatView::new(config, cx);
+            view.draft_coordinator_mode = draft_coordinator_mode;
+            view.draft_setup_changed = draft_coordinator_mode;
+            view
+        });
         let key = session.clone();
         let subscription =
             cx.subscribe(

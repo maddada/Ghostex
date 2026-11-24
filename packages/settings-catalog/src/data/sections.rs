@@ -183,6 +183,7 @@ pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
                 J::Str("newChatPickComputer"),
                 J::Str("newChatPickWhere"),
                 J::Str("newChatPickBranch"),
+                J::Str("newChatPickAgent"),
                 J::Str("toggleVoiceAgent"),
                 J::Str("voiceCallAboutSession"),
                 J::Str("holdToTalk"),

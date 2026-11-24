@@ -964,6 +964,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
             ("newChatPickComputer", J::Str("alt+m")),
             ("newChatPickWhere", J::Str("alt+w")),
             ("newChatPickBranch", J::Str("alt+b")),
+            ("newChatPickAgent", J::Str("alt+a")),
             ("toggleVoiceAgent", J::Str("ctrl+alt+v")),
             ("voiceCallAboutSession", J::Str("")),
             ("holdToTalk", J::Str("")),

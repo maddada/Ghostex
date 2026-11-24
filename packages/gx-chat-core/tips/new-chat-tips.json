@@ -19,7 +19,7 @@
       "first": 3,
       "icon": "coordinator-crown-points",
       "title": "Let a coordinator delegate",
-      "body": "A coordinator hands work to threads and brings results back. Click the arrow beside New session and pick Coordinator."
+      "body": "A coordinator hands work to threads and brings results back. Click New session and turn on Coordinator in the bar above the chat box."
     },
     {
       "id": "connect-a-device",
@@ -132,12 +132,6 @@
       "icon": "puzzle",
       "title": "See what you turned on",
       "body": "Settings > Extensions > On lists everything you switched on. The other tabs have more to add."
-    },
-    {
-      "id": "new-thread-picker",
-      "icon": "plus",
-      "title": "Start anything from one picker",
-      "body": "Click the arrow beside New session for the New Thread picker: pick an agent, Coordinator, Browser or Terminal."
     },
     {
       "id": "jump-to-latest-unread",

@@ -436,14 +436,18 @@ pub(crate) struct NativeChatView {
     /// account, attachments, etc.) on this draft, so leaving it keeps the draft instead of
     /// removing it as untouched.
     pub(crate) draft_setup_changed: bool,
+    /// True while the draft's setup bar "Coordinator" toggle is turned on.
+    pub(crate) draft_coordinator_mode: bool,
     /// The worktree tray's project search, while it is open.
     pub(super) draft_project_picker: Option<super::draft_project_picker::DraftProjectPicker>,
     pub(super) draft_project_chip_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(super) draft_machine_chip_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
-    /// The new chat bar's where and detail parts, which their menus open from (`worktree_tray.rs`).
+    /// The new chat bar's where, detail, agent and model parts, which their menus open from (`worktree_tray.rs`).
     pub(super) worktree_tray_where_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(super) worktree_tray_detail_bounds:
         std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    pub(super) worktree_tray_agent_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    pub(super) worktree_tray_model_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(crate) draft_revision: u64,
     pub(crate) draft_id: String,
     /// A send left this composer and has not settled; Enter does not wait for it (the core holds
@@ -653,11 +657,14 @@ impl NativeChatView {
             input_focus_listeners: Vec::new(),
             option_menu: None,
             draft_setup_changed: false,
+            draft_coordinator_mode: false,
             draft_project_picker: None,
             draft_project_chip_bounds: Default::default(),
             draft_machine_chip_bounds: Default::default(),
             worktree_tray_where_bounds: Default::default(),
             worktree_tray_detail_bounds: Default::default(),
+            worktree_tray_agent_bounds: Default::default(),
+            worktree_tray_model_bounds: Default::default(),
             menu_toggle: Default::default(),
             pill_bounds: Default::default(),
             stat_room: Default::default(),
