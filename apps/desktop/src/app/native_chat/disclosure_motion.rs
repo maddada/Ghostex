@@ -341,6 +341,12 @@ impl DisclosureMotions {
         self.heights.retain(|key, _| !key.starts_with(prefix));
     }
 
+    /// Forget one disclosure so its next draw starts settled in its current state.
+    pub(super) fn forget_key(&mut self, key: &str) {
+        self.observed.remove(key);
+        self.settle(key);
+    }
+
     fn settle(&mut self, key: &str) {
         self.motions.remove(key);
         let prefix = format!("{key}#");

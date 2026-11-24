@@ -217,7 +217,10 @@ fn page_answers(row: &Value) -> Option<QuietAnswers> {
         .filter(|name| !name.is_empty())
         .unwrap_or("Visitor");
     let text = match titles.as_slice() {
-        [only] if outside => format!("{who} answered \u{201c}{}\u{201d} via share link", clip(only, 60)),
+        [only] if outside => format!(
+            "{who} answered \u{201c}{}\u{201d} via share link",
+            clip(only, 60)
+        ),
         [only] => format!("You answered \u{201c}{}\u{201d}", clip(only, 60)),
         many => {
             let summary = many
@@ -326,10 +329,14 @@ pub struct QuietStretch {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub turns: Vec<QuietTurnLook>,
     /// The reads opening the line sends (`{type: 'loadWork', id, work}` each): the rows still on
-    /// the server of the turns it draws straight on its rail (`QuietTurnLook::flat`), which have
-    /// no card or line of their own to open.
+    /// the server of the turns it draws straight on its rail (`QuietTurnLook::flat`), or of the
+    /// deferred turn card `open_inner` opens with it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loads: Vec<QuietLoad>,
+    /// The disclosure key of the last collapsible inner group this line holds, opened alongside
+    /// the line when the user expands it (`quiet_inner.rs`, CDXC:SessionChat 2026-11-24).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_inner: Option<String>,
 }
 
 /// One read of a turn's rows still on the server: `id` is the owner a finished turn's card reads
@@ -765,6 +772,8 @@ pub fn document_kept(
             calm: calm(state),
             working_since: working_since(state),
             all_open: detailed(state),
+            quiet_style: state.transcript_view.effective_chat_look().agent_work
+                != crate::transcript::chat_look::AgentWork::Default,
             approvals: open_approval_anchors(approvals),
             cards: turn_lines(work_cards),
         };
@@ -817,6 +826,8 @@ struct Inputs {
     working_since: Option<i64>,
     /// Detailed view: every line and answers card starts open ([`detailed`]).
     all_open: bool,
+    /// Agent work is Reduced or Quiet (`effective_chat_look`).
+    quiet_style: bool,
     /// The rows an open relayed approval sits under (`relayedApprovals` `anchorId`).
     approvals: BTreeSet<String>,
     /// The work item lines under replies: (reply id, card key).
@@ -1159,8 +1170,10 @@ fn stretches<'a>(
     let mut replies: Vec<(String, usize)> = Vec::new();
     let mut length = 0usize;
     let mut turn_rows: Vec<TurnRow> = Vec::new();
+    let mut all_items: Vec<&'a TranscriptItem> = Vec::new();
     for (at, item) in items.enumerate() {
         length = at + 1;
+        all_items.push(item);
         turn_rows.extend(TurnRow::of(at, item));
         for id in reply_ids(item) {
             replies.push((id, at));
@@ -1241,6 +1254,15 @@ fn stretches<'a>(
             .iter()
             .rposition(|(line, _)| line.after.is_some_and(|row| row + 1 == length)),
     };
+    let turn_loads: Vec<(usize, Vec<QuietLoad>)> = turn_rows
+        .iter()
+        .filter(|turn| !turn.loads.is_empty())
+        .map(|turn| (turn.row, turn.loads.clone()))
+        .collect();
+    let inner_ctx = crate::transcript::quiet_inner::InnerContext {
+        simple: !inputs.all_open,
+        quiet_style: inputs.quiet_style,
+    };
     let lines: Vec<QuietStretch> = built
         .into_iter()
         .enumerate()
@@ -1250,6 +1272,12 @@ fn stretches<'a>(
                 || (inputs.expand_last && Some(at) == newest && !(inputs.calm && line.running));
             let names_time = !line.running && counts.reports == 0 && counts.worked.is_some();
             turn_looks(&mut line, &turn_rows, names_time);
+            crate::transcript::quiet_inner::fill_stretch(
+                &mut line,
+                &all_items,
+                &turn_loads,
+                inner_ctx,
+            );
             words(&mut line, counts, inputs, context);
             line
         })
@@ -1286,6 +1314,7 @@ pub(crate) fn summary_work_lines(
         calm: false,
         working_since: None,
         all_open: false,
+        quiet_style: false,
         approvals: BTreeSet::new(),
         cards: Vec::new(),
     };
@@ -1312,9 +1341,14 @@ pub(crate) fn summary_work_lines(
         (line, counts)
     });
     built.extend(trailing);
+    let inner_ctx = crate::transcript::quiet_inner::InnerContext {
+        simple: true,
+        quiet_style: false,
+    };
     built
         .into_iter()
         .map(|(mut line, counts)| {
+            crate::transcript::quiet_inner::fill_summary_stretch(&mut line, work, inner_ctx);
             count_words(&mut line, counts, &inputs);
             line
         })
@@ -1513,6 +1547,8 @@ pub fn closed_rows(
         calm: calm(state),
         working_since: working_since(state),
         all_open: detailed(state),
+        quiet_style: state.transcript_view.effective_chat_look().agent_work
+            != crate::transcript::chat_look::AgentWork::Default,
         approvals: open_approval_anchors(&approvals),
         cards: Vec::new(),
     };
