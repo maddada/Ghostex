@@ -233,7 +233,22 @@ impl SessionLinks {
     /// CDXC:SessionLinks 2026-10-28 DECISION:
     /// User: "I don't like how the top bar just says "3 suggested" there. I think it's better to move the links to always be in the bar above the composer. It should be between Tasks and Threads down there in a pill, so I just click on it and see all of them. The look of the pill needs to look like the one we have in the sidebar [the Badge option]. It just shows a link icon and the number of links we have. If it's just one link, you can just put the name or the ID of that link, like SPX-123, for example, or #123." So the pill is the sidebar badge's look and text (`badge_label`: the link icon, one link's ID and "+N", in the most pressing link's colour, grey once all are finished); with no linked links but suggestions it reads "3 suggested", quiet like the sidebar's suggestions badge (muted, dashed). A click opens the session's links list. This replaces the chips and the "+N" / "N suggested" / "List" pill in the chat's top bar (and the phone's strip under its header) and the setting that hid them.
     pub fn chat_pill(&self) -> Option<SessionLinksChatPill> {
+        self.chat_pill_for(true)
+    }
+
+    /// The Links pill on the chat's bar above the composer, with `show_suggested` controlling
+    /// whether a suggestions-only session shows the quiet "{count} suggested" pill. Linked items
+    /// always show their pill.
+    ///
+    /// CDXC:SessionLinks 2026-11-24 DECISION:
+    /// Coordinators, Chief of Staff and coordinator threads pass `show_suggested = false` so they
+    /// hide the automatic "{count} suggested" pill in the chat bar just like in the sidebar row
+    /// (`row_for`), while keeping linked-item pills and manual linking from hover/menus.
+    pub fn chat_pill_for(&self, show_suggested: bool) -> Option<SessionLinksChatPill> {
         if self.items.is_empty() {
+            if !show_suggested {
+                return None;
+            }
             let count = self.suggested.len();
             return (count > 0).then(|| SessionLinksChatPill {
                 label: format!("{count} suggested"),

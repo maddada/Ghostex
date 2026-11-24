@@ -54,8 +54,24 @@ impl NativeChatView {
                 .core
                 .presentation()
                 .session(&key)
-                .and_then(|session| session.links.as_ref().map(SessionLinks::from_presentation))
-                .and_then(|links| links.chat_pill());
+                .and_then(|session| {
+                    // CDXC:SessionLinks 2026-11-24 DECISION: hide the automatic "{count} suggested"
+                    // pill in the chat bar for coordinators, Chief of Staff and coordinator threads,
+                    // matching the sidebar row (`native_sidebar/link_chips.rs`). Linked items still
+                    // show their pill.
+                    let show_suggested = !session.is_chief
+                        && session.coordinator_role.as_deref() != Some("coordinator")
+                        && session.coordinator_role.as_deref() != Some("thread")
+                        && session
+                            .coordinator_session_id
+                            .as_deref()
+                            .is_none_or(str::is_empty);
+                    session
+                        .links
+                        .as_ref()
+                        .map(SessionLinks::from_presentation)
+                        .and_then(|links| links.chat_pill_for(show_suggested))
+                });
             let _ = chat.update(cx, |chat, cx| {
                 if chat.links_pill != pill {
                     chat.links_pill = pill;
