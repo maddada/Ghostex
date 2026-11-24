@@ -323,6 +323,10 @@ pub(crate) struct DocsDocument {
     pub(crate) _live_subscription: Option<Subscription>,
     /// The document's scroll position (the live editor does not scroll itself).
     pub(crate) scroll: ScrollHandle,
+    /// Last-known scroll position reported by the HTML embed viewer.
+    pub(crate) html_scroll: super::history::DocsScrollPosition,
+    /// Scroll position to restore once this document's viewer or editor is ready.
+    pub(crate) pending_scroll: Option<super::history::DocsScrollPosition>,
     /// The file at HEAD, and each line's change against it, for the gutter's git stripe.
     pub(crate) git_base: Option<String>,
     pub(crate) changes: Option<(Vec<super::gutter::LineChange>, Vec<usize>)>,
@@ -406,6 +410,8 @@ impl DocsDocument {
             live: None,
             _live_subscription: None,
             scroll: ScrollHandle::new(),
+            html_scroll: super::history::DocsScrollPosition::default(),
+            pending_scroll: None,
             git_base: None,
             changes: None,
             changes_task: None,
@@ -468,6 +474,8 @@ pub(crate) struct NativeDocsState {
     pub(crate) search_subscription: Option<Subscription>,
     pub(crate) documents: Vec<DocsDocument>,
     pub(crate) active: Option<String>,
+    /// Per-pane Back/Forward trail of visited files and their scroll positions (`history.rs`).
+    pub(crate) history: super::history::DocsHistory,
     /// The persisted intent: the files list is pinned (docked on a wide view) or hidden.
     pub(crate) sidebar_pinned: bool,
     /// A drawer or a peek showing the list over the document.

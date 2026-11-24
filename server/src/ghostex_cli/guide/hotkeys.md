@@ -84,6 +84,8 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Toggle Chat View | `alt+g` |  | `alt+g` |  | Toggle between the terminal and chat view for the focused agent session. | `toggleChatView` |
 | Find Prompts | `cmd+shift+f` |  | `cmd+shift+f` | `cmd+alt+h` | Search every prompt you have sent to an agent, then resume or fork it. | `openFindPrompts` |
 | Search in Files | `cmd+shift+f` |  | none |  | While the Files view has focus, search the text of every file in the project, like VS Code's Search. Elsewhere the same keys open Find Prompts. | `searchProjectFiles` |
+| Back in Files | `cmd+[` |  | none |  | While the Files view has focus, go back to the previous file at its scroll position. Elsewhere the same keys go back to the previous session or project. | `navigateFilesBack` |
+| Forward in Files | `cmd+]` |  | none |  | While the Files view has focus, go forward to the next file at its scroll position. Elsewhere the same keys go forward in session and project history. | `navigateFilesForward` |
 | Scroll Terminal to Top | unassigned |  | unassigned |  | Scroll the focused terminal to the top. | `scrollTerminalToTop` |
 | Scroll Terminal to Bottom | unassigned |  | unassigned |  | Scroll the focused terminal to the bottom. | `scrollTerminalToBottom` |
 | Split Right | `alt+shift+d` |  | `alt+shift+d` |  | Move the focused session into a pane to the right. | `splitSessionRight` |

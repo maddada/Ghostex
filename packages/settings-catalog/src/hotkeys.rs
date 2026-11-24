@@ -56,6 +56,8 @@ impl HotkeyDefinition {
 /// hotkey without the two clashing (Settings marks no duplicate for them).
 pub const VIEW_SCOPED_HOTKEY_IDS: &[&str] = &[
     "searchProjectFiles",
+    "navigateFilesBack",
+    "navigateFilesForward",
     // Bound in or answered by the browser page only (CDXC:Hotkeys 2026-10-27 DECISION in
     // hotkey_definitions.rs).
     "findNextInBrowser",
@@ -90,6 +92,8 @@ pub const TERMINAL_ONLY_HOTKEY_IDS: &[&str] =
 const NO_TERMINAL_BINDING_HOTKEY_IDS: &[&str] = &[
     "readAloudLastReply",
     "searchProjectFiles",
+    "navigateFilesBack",
+    "navigateFilesForward",
     "findNextInBrowser",
     "findPreviousInBrowser",
     "openBrowserHistory",

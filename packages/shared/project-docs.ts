@@ -83,8 +83,15 @@ export type ProjectDocsRequest = {
     | 'annotateState'
     | 'annotateNotes'
     | 'annotateToggle'
-    | 'copyPageAnnotation';
+    | 'copyPageAnnotation'
+    | 'scrollPosition'
+    | 'navigateDocsHistory';
   content?: string;
+  /** `scrollPosition` / `openDocsFile` / `navigateDocsHistory`: rendered HTML document scroll offsets. */
+  scrollX?: number;
+  scrollY?: number;
+  /** `navigateDocsHistory`: which way to step in the Files view's per-pane history. */
+  direction?: 'back' | 'forward';
   /** `annotateState`: what Annotate's header buttons in Files show for this HTML file. */
   annotateState?: ProjectDocsAnnotateState;
   /** `annotateNotes`: Annotate's notes on this HTML file, as Agentation keeps them. */
@@ -150,6 +157,13 @@ export type ProjectDocsAnnotateLoad = {
   notes?: unknown[];
   /** The Annotate hotkey, which the page listens for itself while it has the keyboard. */
   hotkey?: ProjectDocsAnnotateHotkey | null;
+  /** Initial scroll position to restore when navigating back or forward to this HTML file. */
+  scroll?: { x: number; y: number } | null;
+  /** Back/Forward hotkeys for the Files view, listened for inside the HTML page on Windows/Linux. */
+  navHotkeys?: {
+    back?: ProjectDocsAnnotateHotkey | null;
+    forward?: ProjectDocsAnnotateHotkey | null;
+  } | null;
 };
 
 /** A chord as a page's `keydown` reads it: `code` for letters and digits (Option changes `key`), else `key`. */

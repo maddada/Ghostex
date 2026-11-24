@@ -207,6 +207,8 @@ pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
                 J::Str("toggleScreenshotMode"),
                 J::Str("openFileInFiles"),
                 J::Str("searchProjectFiles"),
+                J::Str("navigateFilesBack"),
+                J::Str("navigateFilesForward"),
                 J::Str("findInFocusedView"),
                 J::Str("findNextInBrowser"),
                 J::Str("findPreviousInBrowser"),

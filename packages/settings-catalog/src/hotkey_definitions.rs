@@ -887,6 +887,31 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("searchProjectFiles")), ("kind", J::Str("searchProjectFiles"))]),
     },
+    // CDXC:Docs 2026-11-24 DECISION:
+    // GitHub #733: Back and Forward in the Files view walk the view's own per-pane file history
+    // (path and scroll position) while Files has focus, using Cmd+[ / Cmd+] on macOS and
+    // Ctrl+[ / Ctrl+] on Windows and Linux (no Terminal focused binding, so Ctrl+[ never touches
+    // ESC in a terminal). Settings does not mark a clash with app-wide Back/Forward (`VIEW_SCOPED_HOTKEY_IDS`).
+    HotkeyDefinition {
+        id: "navigateFilesBack",
+        title: "Back in Files",
+        description: "While the Files view has focus, go back to the previous file at its scroll position. Elsewhere the same keys go back to the previous session or project.",
+        default_key: "cmd+[",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("direction", J::Str("back")), ("id", J::Str("navigateFilesBack")), ("kind", J::Str("navigateFilesHistory"))]),
+    },
+    HotkeyDefinition {
+        id: "navigateFilesForward",
+        title: "Forward in Files",
+        description: "While the Files view has focus, go forward to the next file at its scroll position. Elsewhere the same keys go forward in session and project history.",
+        default_key: "cmd+]",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("direction", J::Str("forward")), ("id", J::Str("navigateFilesForward")), ("kind", J::Str("navigateFilesHistory"))]),
+    },
     HotkeyDefinition {
         id: "scrollTerminalToTop",
         title: "Scroll Terminal to Top",

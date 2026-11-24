@@ -15,6 +15,25 @@ export const MANAGE_ANNOTATION_SCREENSHOT_PREFIX = 'ghostex-annotation-screensho
 /** Annotate's Send in the rendered document: its markdown and screenshots, delivered by Files (the document asks by message). */
 export type ManageAnnotationSend = (markdown: string, screenshots: { id: string; png: string }[]) => Promise<void>;
 
+/** Scroll offsets inside a rendered HTML document. */
+export type ManageHtmlScroll = { x: number; y: number };
+
+/** A chord as the rendered HTML page's own key listener reads it. */
+export type ManageHtmlHotkey = {
+  key: string;
+  code: string;
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+  meta: boolean;
+};
+
+/** Back/Forward hotkeys for the Files view, listened for inside the HTML page on Windows/Linux. */
+export type ManageHtmlNavHotkeys = {
+  back?: ManageHtmlHotkey | null;
+  forward?: ManageHtmlHotkey | null;
+};
+
 /** How Annotate starts in the rendered document (`annotateLoad`), and what Files keeps for its reloads. */
 export type ManageAnnotateBoot = {
   on: boolean;
@@ -22,7 +41,11 @@ export type ManageAnnotateBoot = {
   settings?: Record<string, unknown>;
   notes?: unknown[];
   /** The Annotate hotkey: the sealed page has the keyboard while it is focused, so it listens itself. */
-  hotkey?: { key: string; code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean } | null;
+  hotkey?: ManageHtmlHotkey | null;
+  /** Scroll position to restore when navigating back or forward to this HTML file. */
+  scroll?: ManageHtmlScroll | null;
+  /** Back/Forward hotkeys while this HTML page has focus. */
+  navHotkeys?: ManageHtmlNavHotkeys | null;
 };
 
 /** A command from the Files header for the rendered document's Agentation (`ghostex-manage-annotate-command`). */
@@ -30,6 +53,8 @@ export type ManageAnnotateCommand = { command: string; value?: unknown };
 
 /** The event the app dispatches into this page with a header command (app/native_docs/annotate.rs). */
 export const MANAGE_ANNOTATE_COMMAND_EVENT = 'ghostex-manage-annotate-command';
+/** The event the app dispatches into this page to restore scroll on an already-loaded HTML view (app/native_docs/history.rs). */
+export const MANAGE_SCROLL_COMMAND_EVENT = 'ghostex-manage-scroll-command';
 
 export function ManageHtmlRenderViewer({
   annotate,
@@ -39,7 +64,9 @@ export function ManageHtmlRenderViewer({
   onAnnotateHotkey,
   onAnnotateState,
   onCopyAnnotation,
+  onNavigateHistory,
   onOpenDocument,
+  onScrollChange,
   onSendAnnotation,
   pageName,
 }: {
@@ -55,7 +82,11 @@ export function ManageHtmlRenderViewer({
   onCopyAnnotation: (markdown: string) => void;
   /** The Annotate hotkey, pressed while the page had the keyboard. */
   onAnnotateHotkey: () => void;
-  onOpenDocument: (path: string) => void;
+  /** Files Back/Forward hotkey pressed while the page had the keyboard. */
+  onNavigateHistory?: (direction: 'back' | 'forward', scroll?: ManageHtmlScroll) => void;
+  onOpenDocument: (path: string, scroll?: ManageHtmlScroll) => void;
+  /** Latest scroll position of the rendered HTML document, for restoring on Back/Forward. */
+  onScrollChange?: (scroll: ManageHtmlScroll) => void;
   /** Annotate's Send: delivers the notes and their screenshots to the agent (see CDXC:Browser 2026-11-07 in app/page_annotations.rs). */
   onSendAnnotation: ManageAnnotationSend;
   /** What Annotate's copied feedback calls this page (see `manageHtmlPageName`). */
@@ -70,6 +101,8 @@ export function ManageHtmlRenderViewer({
     () =>
       buildManageHtmlDocument(content, {
         annotate: boot.current,
+        initialScroll: boot.current.scroll ?? undefined,
+        navHotkeys: boot.current.navHotkeys ?? undefined,
         pageName,
         resourceBaseUrl,
       }),
@@ -78,7 +111,7 @@ export function ManageHtmlRenderViewer({
 
   /*
    * CDXC:Docs 2026-11-14 DECISION:
-   * The rendered file runs in its own sealed (opaque) origin, so its script cannot reach this page, the Files bridge or the app. It talks to Files only through `postMessage`, and only these messages are accepted, from this frame's own window: open another HTML file beside it, and Annotate's Send, Copy, notes and state for this file. Everything else is ignored.
+   * The rendered file runs in its own sealed (opaque) origin, so its script cannot reach this page, the Files bridge or the app. It talks to Files only through `postMessage`, and only these messages are accepted, from this frame's own window: open another HTML file beside it, scroll position updates, Files history navigation, and Annotate's Send, Copy, notes and state for this file. Everything else is ignored.
    */
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -94,10 +127,16 @@ export function ManageHtmlRenderViewer({
         case MANAGE_HTML_FRAME_OPEN_DOCUMENT: {
           const linkedDocumentPath = manageHtmlLinkedDocumentPath(message.href, resourceBaseUrl);
           if (linkedDocumentPath && linkedDocumentPath !== documentKey) {
-            onOpenDocument(linkedDocumentPath);
+            onOpenDocument(linkedDocumentPath, message.scroll);
           }
           return;
         }
+        case MANAGE_HTML_FRAME_SCROLL:
+          onScrollChange?.(message.scroll);
+          return;
+        case MANAGE_HTML_FRAME_NAVIGATE_HISTORY:
+          onNavigateHistory?.(message.direction, message.scroll);
+          return;
         case MANAGE_HTML_FRAME_ANNOTATE_STATE:
           onAnnotateState(message.state);
           return;
@@ -132,7 +171,9 @@ export function ManageHtmlRenderViewer({
     onAnnotateNotes,
     onAnnotateState,
     onCopyAnnotation,
+    onNavigateHistory,
     onOpenDocument,
+    onScrollChange,
     onSendAnnotation,
     resourceBaseUrl,
   ]);
@@ -156,6 +197,25 @@ export function ManageHtmlRenderViewer({
     };
     window.addEventListener(MANAGE_ANNOTATE_COMMAND_EVENT, onCommand);
     return () => window.removeEventListener(MANAGE_ANNOTATE_COMMAND_EVENT, onCommand);
+  }, []);
+
+  // Restores scroll position when Back/Forward returns to a parked, already-loaded HTML page.
+  useEffect(() => {
+    const onScrollCommand = (event: Event) => {
+      const detail = (event as CustomEvent<ManageHtmlScroll>).detail;
+      if (!detail || typeof detail.x !== 'number' || typeof detail.y !== 'number') {
+        return;
+      }
+      if (!Number.isFinite(detail.x) || !Number.isFinite(detail.y)) {
+        return;
+      }
+      frame.current?.contentWindow?.postMessage(
+        { type: MANAGE_HTML_FRAME_SCROLL_TO, x: Math.max(0, detail.x), y: Math.max(0, detail.y) },
+        '*'
+      );
+    };
+    window.addEventListener(MANAGE_SCROLL_COMMAND_EVENT, onScrollCommand);
+    return () => window.removeEventListener(MANAGE_SCROLL_COMMAND_EVENT, onScrollCommand);
   }, []);
 
   /*
@@ -186,6 +246,9 @@ export function ManageHtmlRenderViewer({
 
 /** What the rendered document may ask of Files (see CDXC:Docs 2026-11-14 in `ManageHtmlRenderViewer`). */
 export const MANAGE_HTML_FRAME_OPEN_DOCUMENT = 'ghostex-open-document';
+export const MANAGE_HTML_FRAME_SCROLL = 'ghostex-html-scroll';
+export const MANAGE_HTML_FRAME_SCROLL_TO = 'ghostex-html-scroll-to';
+export const MANAGE_HTML_FRAME_NAVIGATE_HISTORY = 'ghostex-navigate-history';
 export const MANAGE_HTML_FRAME_SEND_ANNOTATION = 'ghostex-send-annotation';
 export const MANAGE_HTML_FRAME_SEND_ANNOTATION_RESULT = 'ghostex-send-annotation-result';
 export const MANAGE_HTML_FRAME_ANNOTATE_STATE = 'ghostex-annotate-state';
@@ -198,7 +261,13 @@ const MANAGE_HTML_FRAME_MAX_SCREENSHOTS = 50;
 const MANAGE_HTML_FRAME_MAX_NOTES = 500;
 
 export type ManageHtmlFrameMessage =
-  | { type: typeof MANAGE_HTML_FRAME_OPEN_DOCUMENT; href: string }
+  | { type: typeof MANAGE_HTML_FRAME_OPEN_DOCUMENT; href: string; scroll?: ManageHtmlScroll }
+  | { type: typeof MANAGE_HTML_FRAME_SCROLL; scroll: ManageHtmlScroll }
+  | {
+      type: typeof MANAGE_HTML_FRAME_NAVIGATE_HISTORY;
+      direction: 'back' | 'forward';
+      scroll?: ManageHtmlScroll;
+    }
   | {
       type: typeof MANAGE_HTML_FRAME_SEND_ANNOTATION;
       id: string;
@@ -221,6 +290,13 @@ const MANAGE_ANNOTATE_STATE_FLAGS = [
 ] as const;
 const MANAGE_ANNOTATE_SEND_STATES = ['idle', 'sending', 'sent', 'failed'];
 
+function parseFiniteScroll(x: unknown, y: unknown): ManageHtmlScroll | undefined {
+  if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return undefined;
+  }
+  return { x: Math.max(0, x), y: Math.max(0, y) };
+}
+
 /** One of the messages the rendered document may send, checked field by field; `undefined` for anything else. */
 export function parseManageHtmlFrameMessage(data: unknown): ManageHtmlFrameMessage | undefined {
   if (!data || typeof data !== 'object') {
@@ -228,9 +304,26 @@ export function parseManageHtmlFrameMessage(data: unknown): ManageHtmlFrameMessa
   }
   const message = data as Record<string, unknown>;
   if (message.type === MANAGE_HTML_FRAME_OPEN_DOCUMENT) {
-    return typeof message.href === 'string' && message.href.length <= 4096
-      ? { type: MANAGE_HTML_FRAME_OPEN_DOCUMENT, href: message.href }
-      : undefined;
+    if (typeof message.href !== 'string' || message.href.length > 4096) {
+      return undefined;
+    }
+    const scroll = parseFiniteScroll(message.scrollX, message.scrollY);
+    return scroll
+      ? { type: MANAGE_HTML_FRAME_OPEN_DOCUMENT, href: message.href, scroll }
+      : { type: MANAGE_HTML_FRAME_OPEN_DOCUMENT, href: message.href };
+  }
+  if (message.type === MANAGE_HTML_FRAME_SCROLL) {
+    const scroll = parseFiniteScroll(message.x, message.y);
+    return scroll ? { type: MANAGE_HTML_FRAME_SCROLL, scroll } : undefined;
+  }
+  if (message.type === MANAGE_HTML_FRAME_NAVIGATE_HISTORY) {
+    if (message.direction !== 'back' && message.direction !== 'forward') {
+      return undefined;
+    }
+    const scroll = parseFiniteScroll(message.scrollX, message.scrollY);
+    return scroll
+      ? { type: MANAGE_HTML_FRAME_NAVIGATE_HISTORY, direction: message.direction, scroll }
+      : { type: MANAGE_HTML_FRAME_NAVIGATE_HISTORY, direction: message.direction };
   }
   if (message.type === MANAGE_HTML_FRAME_ANNOTATE_STATE) {
     const state = message.state as Record<string, unknown> | null;
@@ -285,7 +378,13 @@ export function parseManageHtmlFrameMessage(data: unknown): ManageHtmlFrameMessa
 
 export function buildManageHtmlDocument(
   html: string,
-  options: { annotate?: ManageAnnotateBoot; pageName?: string; resourceBaseUrl?: string } = {}
+  options: {
+    annotate?: ManageAnnotateBoot;
+    initialScroll?: ManageHtmlScroll;
+    navHotkeys?: ManageHtmlNavHotkeys;
+    pageName?: string;
+    resourceBaseUrl?: string;
+  } = {}
 ): string {
   /*
    * CDXC:Docs 2026-07-01-18:12:
@@ -293,7 +392,10 @@ export function buildManageHtmlDocument(
    */
   const documentValue = new DOMParser().parseFromString(html, 'text/html');
   injectManageHtmlResourceBase(documentValue, options.resourceBaseUrl);
-  injectManageHtmlFrameHelper(documentValue);
+  injectManageHtmlFrameHelper(documentValue, {
+    initialScroll: options.initialScroll,
+    navHotkeys: options.navHotkeys,
+  });
   injectManageHtmlViewerChromeStyles(documentValue);
   if (options.annotate) {
     injectManageAgentationScript(documentValue, options.pageName, options.annotate);
@@ -347,7 +449,17 @@ export function manageHtmlContentSecurityPolicy(): string {
  * CDXC:Docs 2026-11-14 WHY:
  * Files used to reach into the rendered document from outside (its scrollbars, its `--foreground`, fragment links and links to other HTML files, Annotate's Send). The document has its own sealed origin now, so that work runs inside it: this script goes first in the document, before any authored script. Pages that keep settings in `localStorage` or `sessionStorage` get an in-memory copy, because a sealed origin has no storage and reading it throws; their settings last until the page reloads.
  */
-export function buildManageHtmlFrameHelperScript(): string {
+export function buildManageHtmlFrameHelperScript(
+  options: { initialScroll?: ManageHtmlScroll; navHotkeys?: ManageHtmlNavHotkeys } = {}
+): string {
+  const initialScroll =
+    options.initialScroll &&
+    Number.isFinite(options.initialScroll.x) &&
+    Number.isFinite(options.initialScroll.y) &&
+    (options.initialScroll.x > 0 || options.initialScroll.y > 0)
+      ? { x: Math.max(0, options.initialScroll.x), y: Math.max(0, options.initialScroll.y) }
+      : null;
+  const navHotkeys = options.navHotkeys ?? null;
   return `
 (() => {
   "use strict";
@@ -369,6 +481,100 @@ export function buildManageHtmlFrameHelperScript(): string {
       try { Object.defineProperty(window, name, { configurable: true, enumerable: true, value: memoryStorage() }); } catch {}
     }
   }
+  const currentScroll = () => ({
+    x: Math.max(0, Math.round(window.scrollX || document.documentElement.scrollLeft || 0)),
+    y: Math.max(0, Math.round(window.scrollY || document.documentElement.scrollTop || 0)),
+  });
+  let lastReportedX = -1;
+  let lastReportedY = -1;
+  let scrollTimer = 0;
+  let restoringInitialScroll = ${initialScroll ? 'true' : 'false'};
+  let userInteracted = false;
+  const sendScrollNow = () => {
+    if (scrollTimer) {
+      clearTimeout(scrollTimer);
+      scrollTimer = 0;
+    }
+    const pos = currentScroll();
+    if (pos.x === lastReportedX && pos.y === lastReportedY) return;
+    lastReportedX = pos.x;
+    lastReportedY = pos.y;
+    parent.postMessage({ type: ${JSON.stringify(MANAGE_HTML_FRAME_SCROLL)}, x: pos.x, y: pos.y }, "*");
+  };
+  const scheduleScrollReport = () => {
+    if (restoringInitialScroll || scrollTimer) return;
+    scrollTimer = setTimeout(sendScrollNow, 80);
+  };
+  const applyScrollTarget = (target) => {
+    try {
+      window.scrollTo({ left: target.x, top: target.y, behavior: "instant" });
+    } catch {
+      window.scrollTo(target.x, target.y);
+    }
+  };
+  const initialScroll = ${inlineScriptJson(initialScroll)};
+  if (initialScroll) {
+    const cancelInitialRestore = () => {
+      userInteracted = true;
+      restoringInitialScroll = false;
+    };
+    window.addEventListener("wheel", cancelInitialRestore, { passive: true, once: true });
+    window.addEventListener("touchstart", cancelInitialRestore, { passive: true, once: true });
+    window.addEventListener("pointerdown", cancelInitialRestore, { passive: true, once: true });
+    const restore = (done) => {
+      if (!userInteracted) {
+        applyScrollTarget(initialScroll);
+      }
+      if (done) {
+        restoringInitialScroll = false;
+        sendScrollNow();
+      }
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => restore(false), { once: true });
+    } else {
+      restore(false);
+    }
+    if (document.readyState === "complete") {
+      requestAnimationFrame(() => restore(true));
+    } else {
+      window.addEventListener("load", () => {
+        restore(false);
+        requestAnimationFrame(() => restore(true));
+      }, { once: true });
+    }
+  }
+  window.addEventListener("scroll", scheduleScrollReport, { passive: true });
+  window.addEventListener("scrollend", () => {
+    if (!restoringInitialScroll) sendScrollNow();
+  }, { passive: true });
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    if (event.source !== parent || !message || message.type !== ${JSON.stringify(MANAGE_HTML_FRAME_SCROLL_TO)}) return;
+    if (typeof message.x !== "number" || typeof message.y !== "number") return;
+    restoringInitialScroll = false;
+    userInteracted = true;
+    applyScrollTarget({ x: Math.max(0, message.x), y: Math.max(0, message.y) });
+    requestAnimationFrame(sendScrollNow);
+  });
+  const navHotkeys = ${inlineScriptJson(navHotkeys)};
+  const matchesHotkey = (event, hotkey) => {
+    if (!hotkey || event.repeat) return false;
+    const keyMatches = hotkey.code ? event.code === hotkey.code || String(event.key).toLowerCase() === hotkey.key : String(event.key).toLowerCase() === hotkey.key;
+    return keyMatches && event.ctrlKey === hotkey.ctrl && event.altKey === hotkey.alt && event.shiftKey === hotkey.shift && event.metaKey === hotkey.meta;
+  };
+  if (navHotkeys && (navHotkeys.back || navHotkeys.forward)) {
+    window.addEventListener("keydown", (event) => {
+      let direction = null;
+      if (matchesHotkey(event, navHotkeys.back)) direction = "back";
+      else if (matchesHotkey(event, navHotkeys.forward)) direction = "forward";
+      if (!direction) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const pos = currentScroll();
+      parent.postMessage({ type: ${JSON.stringify(MANAGE_HTML_FRAME_NAVIGATE_HISTORY)}, direction, scrollX: pos.x, scrollY: pos.y }, "*");
+    }, true);
+  }
   const filesOrigin = ${JSON.stringify(MANAGE_DOCS_RESOURCE_ORIGIN)};
   document.addEventListener("click", (event) => {
     if (event.defaultPrevented || event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -389,7 +595,8 @@ export function buildManageHtmlFrameHelperScript(): string {
     try { url = new URL(href, document.baseURI); } catch { return; }
     if (url.origin === filesOrigin && /\\.html?$/i.test(url.pathname)) {
       event.preventDefault();
-      parent.postMessage({ type: ${JSON.stringify(MANAGE_HTML_FRAME_OPEN_DOCUMENT)}, href: url.href }, "*");
+      const pos = currentScroll();
+      parent.postMessage({ type: ${JSON.stringify(MANAGE_HTML_FRAME_OPEN_DOCUMENT)}, href: url.href, scrollX: pos.x, scrollY: pos.y }, "*");
     }
   }, true);
   const installAppScrollbars = ${installAppScrollbars.toString()};
@@ -408,12 +615,15 @@ export function buildManageHtmlFrameHelperScript(): string {
 }
 
 /** Puts the content policy and the helper script first in the document's head, ahead of everything the file wrote. */
-export function injectManageHtmlFrameHelper(documentValue: Document): void {
+export function injectManageHtmlFrameHelper(
+  documentValue: Document,
+  options: { initialScroll?: ManageHtmlScroll; navHotkeys?: ManageHtmlNavHotkeys } = {}
+): void {
   const head = documentValue.head || documentValue.documentElement;
   const script = documentValue.createElement('script');
   script.setAttribute('data-ghostex-manage-html-helper', 'true');
   // The srcdoc is serialized HTML, so nothing in the script may close its tag.
-  script.textContent = buildManageHtmlFrameHelperScript().replace(/<\/script/giu, '<\\/script');
+  script.textContent = buildManageHtmlFrameHelperScript(options).replace(/<\/script/giu, '<\\/script');
   head.prepend(script);
   const policy = documentValue.createElement('meta');
   policy.setAttribute('http-equiv', 'Content-Security-Policy');

@@ -165,9 +165,13 @@ pub(crate) fn gpui_chat_owned_hotkey_action_id(action_id: &str) -> bool {
 
 /// Hotkeys the Files view answers itself while it has focus (`native_docs/render.rs`), so the root
 /// and the native key router pass them by: outside Files their chord reaches whatever else binds it
-/// (Search in Files shares Cmd+Shift+F with Find Prompts).
+/// (Search in Files shares Cmd+Shift+F with Find Prompts; Back/Forward in Files share Cmd+[ / Cmd+]
+/// with session/project Back/Forward on macOS).
 pub(crate) fn gpui_files_owned_hotkey_action_id(action_id: &str) -> bool {
-    action_id == "searchProjectFiles"
+    matches!(
+        action_id,
+        "searchProjectFiles" | "navigateFilesBack" | "navigateFilesForward"
+    )
 }
 
 /// Hotkeys bound straight to an app action (paste, find, zoom, close, new window, Focus mode), at
@@ -301,6 +305,9 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     // CDXC:Docs 2026-10-25: Files' Search sidebar shares the chord while Files has focus
     // (`gpui_files_owned_hotkey_action_id`); mirrors packages/settings-catalog/src/hotkey_definitions.rs.
     ("searchProjectFiles", "cmd+shift+f"),
+    // CDXC:Docs 2026-11-24: Files' Back/Forward history while Files has focus (GitHub #733).
+    ("navigateFilesBack", "cmd+["),
+    ("navigateFilesForward", "cmd+]"),
     ("scrollTerminalToTop", ""),
     ("scrollTerminalToBottom", ""),
     /*
@@ -648,6 +655,24 @@ pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(
 }
 
 #[cfg(all(target_os = "macos", not(ghostex_web)))]
+pub(crate) fn gpui_files_navigation_hotkey_action_id_for_native_text(
+    hotkey_text: &str,
+) -> Option<String> {
+    let hotkey_text = normalized_gpui_hotkey_text(hotkey_text)?;
+    let snapshot = shared_settings::shared_sidebar_settings_snapshot();
+    for action_id in ["navigateFilesBack", "navigateFilesForward"] {
+        if gpui_normal_hotkey_key_in(&snapshot, action_id)
+            .and_then(|key| normalized_gpui_hotkey_text(&key))
+            .as_deref()
+            == Some(hotkey_text.as_str())
+        {
+            return Some(action_id.to_string());
+        }
+    }
+    None
+}
+
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn gpui_application_keyboard_command_for_native_text(
     hotkey_text: &str,
 ) -> Option<GpuiApplicationKeyboardCommand> {
@@ -717,6 +742,8 @@ pub(crate) fn gpui_normal_hotkey_context(action_id: &str) -> &'static str {
         // Files' HTML and Markdown files, and the Browser (CDXC:Docs 2026-11-14 DECISION in
         // packages/settings-catalog/src/hotkey_definitions.rs).
         "toggleAnnotate" => ANNOTATE_KEY_CONTEXT,
+        // Back and Forward in Files apply only while Files has focus (GitHub #733).
+        "navigateFilesBack" | "navigateFilesForward" => "NativeDocs",
         _ => GPUI_OUTSIDE_TERMINAL_KEY_CONTEXT,
     }
 }
@@ -941,21 +968,24 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
                 | "toggleSidebarCollapsed"
         ),
         GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::CefSurface(
-            FirstResponderCefSurface::ProjectWorkarea(_),
-        )) => matches!(
-            action_id,
-            "createSession"
-                | "openBrowserPane"
-                | "deferNotificationAndJumpNext"
-                | "focusLeft"
-                | "focusNextSession"
-                | "focusPreviousSession"
-                | "focusRight"
-                | "jumpToLatestUnreadNotification"
-                | "navigateHistoryBack"
-                | "navigateHistoryForward"
-                | "openNotifications"
-        ),
+            FirstResponderCefSurface::ProjectWorkarea(slot_key),
+        )) => {
+            matches!(
+                action_id,
+                "createSession"
+                    | "openBrowserPane"
+                    | "deferNotificationAndJumpNext"
+                    | "focusLeft"
+                    | "focusNextSession"
+                    | "focusPreviousSession"
+                    | "focusRight"
+                    | "jumpToLatestUnreadNotification"
+                    | "navigateHistoryBack"
+                    | "navigateHistoryForward"
+                    | "openNotifications"
+            ) || (slot_key == ProjectWorkareaCefSurfaceSlotKey::Manage
+                && matches!(action_id, "navigateFilesBack" | "navigateFilesForward"))
+        }
         // CDXC:Hotkeys 2026-11-20 WHY:
         // Previous/Next Session onto a session kept asleep (Wake sleeping sessions when selected off) released the hidden terminal, so the owner became `FirstResponder(None)`; the router passed Ctrl+Tab on and no responder ran the walk, leaving the keys dead on the sleeping card until a click. With no native surface holding the keyboard, the router runs the walk itself.
         GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::None) => {

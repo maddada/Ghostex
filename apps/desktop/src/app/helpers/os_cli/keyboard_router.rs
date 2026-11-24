@@ -418,6 +418,18 @@ pub(crate) fn route_gpui_native_keyboard_event(
             ));
         }
         let configured_action_id = native_hotkey_text.as_deref().and_then(|text| {
+            if matches!(
+                owner,
+                GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::CefSurface(
+                    FirstResponderCefSurface::ProjectWorkarea(
+                        ProjectWorkareaCefSurfaceSlotKey::Manage
+                    )
+                ))
+            ) && let Some(action_id) =
+                gpui_files_navigation_hotkey_action_id_for_native_text(text)
+            {
+                return Some(action_id);
+            }
             gpui_configured_hotkey_action_id_for_native_text(
                 text,
                 matches!(owner, GpuiKeyboardOwner::CompositedTerminal(_)),

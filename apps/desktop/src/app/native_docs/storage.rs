@@ -240,7 +240,10 @@ impl GhostexGpuiApp {
         // can close its file at once (a remote file outside the project, reopened after a restart);
         // set afterwards, it named that closed file, and a narrow Files pane showed only "Select a
         // file" with no list.
-        self.native_docs.active = active;
+        self.native_docs.active = active.clone();
+        if let Some(active) = active.as_deref() {
+            self.native_docs.history.seed_initial(active);
+        }
         for path in added {
             self.native_docs_read(&path, cx);
         }

@@ -10215,6 +10215,8 @@
         "toggleChatView": "alt+g",
         "openFindPrompts": "cmd+shift+f",
         "searchProjectFiles": "cmd+shift+f",
+        "navigateFilesBack": "cmd+[",
+        "navigateFilesForward": "cmd+]",
         "scrollTerminalToTop": "",
         "scrollTerminalToBottom": "",
         "splitSessionRight": "alt+shift+d",
@@ -15613,6 +15615,20 @@
       "title": "Search in Files",
       "description": "While the Files view has focus, search the text of every file in the project, like VS Code's Search. Elsewhere the same keys open Find Prompts.",
       "defaultKey": "cmd+shift+f",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "navigateFilesBack",
+      "title": "Back in Files",
+      "description": "While the Files view has focus, go back to the previous file at its scroll position. Elsewhere the same keys go back to the previous session or project.",
+      "defaultKey": "cmd+[",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "navigateFilesForward",
+      "title": "Forward in Files",
+      "description": "While the Files view has focus, go forward to the next file at its scroll position. Elsewhere the same keys go forward in session and project history.",
+      "defaultKey": "cmd+]",
       "noTerminalBinding": true
     },
     {

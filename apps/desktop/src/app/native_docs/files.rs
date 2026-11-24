@@ -531,8 +531,9 @@ impl GhostexGpuiApp {
         self.native_docs_notify(cx);
     }
 
-    /// Selects an open file (Open Files row).
+    /// Selects an open file (Open Files row or tab).
     pub(crate) fn native_docs_select(&mut self, path: &str, cx: &mut Context<Self>) {
+        self.native_docs_record_history_visit(path, cx);
         self.native_docs.active = Some(path.to_string());
         self.native_docs_close_drawer(cx);
         self.native_docs_persist_open_files(cx);

@@ -453,6 +453,22 @@ impl GhostexGpuiApp {
             // 2026-10-25 DECISION in packages/settings-catalog/src/hotkey_definitions.rs).
             .on_action(cx.listener(Self::native_docs_claim_hotkey))
             .on_key_down(cx.listener(Self::native_docs_key_down))
+            .on_mouse_down(
+                gpui::MouseButton::Navigate(gpui::NavigationDirection::Back),
+                cx.listener(|this, _, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    this.native_docs_navigate_history(true, cx);
+                }),
+            )
+            .on_mouse_down(
+                gpui::MouseButton::Navigate(gpui::NavigationDirection::Forward),
+                cx.listener(|this, _, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    this.native_docs_navigate_history(false, cx);
+                }),
+            )
             .hover_listener_mode(gpui::HoverListenerMode::InputModalityIndependent)
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 this.native_docs_drawer_hovered(*hovered, cx)

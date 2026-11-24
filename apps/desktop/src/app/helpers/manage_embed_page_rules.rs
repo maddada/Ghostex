@@ -185,8 +185,14 @@ pub(crate) fn manage_embed_request_allowed(
     match action {
         "read" if own_file => Ok(()),
         "save" if own_file && page.path.to_ascii_lowercase().ends_with(".excalidraw") => Ok(()),
-        "sendPageAnnotation" | "copyPageAnnotation" | "annotateLoad" | "annotateState"
-        | "annotateNotes" | "annotateToggle"
+        "sendPageAnnotation"
+        | "copyPageAnnotation"
+        | "annotateLoad"
+        | "annotateState"
+        | "annotateNotes"
+        | "annotateToggle"
+        | "scrollPosition"
+        | "navigateDocsHistory"
             if own_file =>
         {
             Ok(())

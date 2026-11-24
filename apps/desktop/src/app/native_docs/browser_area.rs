@@ -104,6 +104,7 @@ impl GhostexGpuiApp {
                 this.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
                 this.prune_project_workarea_runtime_cef_surfaces_for_current_gates(cx);
                 this.update_project_workarea_runtime_cef_surface_visibility(cx);
+                this.native_docs_apply_pending_html_scroll(cx);
             });
         });
     }

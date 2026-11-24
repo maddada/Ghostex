@@ -112,6 +112,9 @@ impl GhostexGpuiApp {
         }
         self.native_docs_ensure_watch(cx);
         self.native_docs_materialize_editors(window, cx);
+        if let Some(active) = self.native_docs.active.clone() {
+            self.native_docs_restore_document_scroll(&active, cx);
+        }
         self.native_docs_apply_search_reveal(window, cx);
         if self.native_docs.active != self.native_docs.highlighted_path {
             self.native_docs.highlighted_path = self.native_docs.active.clone();
@@ -237,6 +240,22 @@ impl GhostexGpuiApp {
                         // A click on the document closes a drawer or a peek.
                         this.native_docs_close_transient(cx);
                         this.focus_project_editor_surface(TitlebarMode::Manage, window, cx);
+                    }),
+                )
+                .on_mouse_down(
+                    MouseButton::Navigate(gpui::NavigationDirection::Back),
+                    cx.listener(|this, _, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        this.native_docs_navigate_history(true, cx);
+                    }),
+                )
+                .on_mouse_down(
+                    MouseButton::Navigate(gpui::NavigationDirection::Forward),
+                    cx.listener(|this, _, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        this.native_docs_navigate_history(false, cx);
                     }),
                 )
                 .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {

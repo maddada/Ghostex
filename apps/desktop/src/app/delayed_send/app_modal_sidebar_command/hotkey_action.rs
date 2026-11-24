@@ -149,6 +149,10 @@ impl GhostexGpuiApp {
                     self.run_configured_gpui_titlebar_action_index(action_index, window, cx);
                     return;
                 }
+                if matches!(action_id, "navigateFilesBack" | "navigateFilesForward") {
+                    self.navigate_focused_docs_history(action_id == "navigateFilesBack", cx);
+                    return;
+                }
                 if let Some(direction) =
                     navigation_history::navigation_history_hotkey_direction(action_id)
                 {
@@ -159,9 +163,11 @@ impl GhostexGpuiApp {
                     (navigation_history/controller.rs; the sidebar runtime until
                     2026-09-25): the keypress takes the exact same route as a
                     click on the titlebar arrows, unless a focused Browser pane
-                    takes it (navigate_focused_browser_history).
+                    or Files view takes it.
                     */
-                    if self.navigate_focused_browser_history(direction == "back", cx) {
+                    if self.navigate_focused_browser_history(direction == "back", cx)
+                        || self.navigate_focused_docs_history(direction == "back", cx)
+                    {
                         return;
                     }
                     self.request_navigation_history_navigation(direction, cx);

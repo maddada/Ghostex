@@ -27,6 +27,7 @@ pub(crate) mod format_bar;
 pub(crate) mod format_bar_window;
 pub(crate) mod grammars;
 pub(crate) mod gutter;
+pub(crate) mod history;
 pub(crate) mod json_view;
 pub(crate) mod list_keys;
 pub(crate) mod live;

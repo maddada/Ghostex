@@ -1021,6 +1021,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
             ("toggleChatView", J::Str("alt+g")),
             ("openFindPrompts", J::Str("cmd+shift+f")),
             ("searchProjectFiles", J::Str("cmd+shift+f")),
+            ("navigateFilesBack", J::Str("cmd+[")),
+            ("navigateFilesForward", J::Str("cmd+]")),
             ("scrollTerminalToTop", J::Str("")),
             ("scrollTerminalToBottom", J::Str("")),
             ("splitSessionRight", J::Str("alt+shift+d")),

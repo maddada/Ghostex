@@ -204,6 +204,9 @@ impl GhostexGpuiApp {
             self.native_docs
                 .documents
                 .retain(|document| document.path != path);
+            self.native_docs
+                .history
+                .remove_matching(|entry| entry == path);
             if self.native_docs.active.as_deref() == Some(path.as_str()) {
                 self.native_docs.active = None;
             }

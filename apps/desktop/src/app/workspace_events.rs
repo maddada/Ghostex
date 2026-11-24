@@ -90,10 +90,22 @@ impl GhostexGpuiApp {
                     self.dispatch_manage_files_answer(&page, &response.to_string(), cx);
                     return;
                 }
+                let request_scroll = |req: &serde_json::Value| {
+                    let x = req.get("scrollX").and_then(serde_json::Value::as_f64)?;
+                    let y = req.get("scrollY").and_then(serde_json::Value::as_f64)?;
+                    crate::app::native_docs::history::DocsScrollPosition::from_js(x, y)
+                };
                 // Native Docs' browser area: a link in an HTML file opens that file in Docs.
-                if let Ok(request) = serde_json::from_str::<serde_json::Value>(&payload)
-                    && manage_request_string(&request, "action").as_deref() == Some("openDocsFile")
-                {
+                if manage_request_string(&request, "action").as_deref() == Some("openDocsFile") {
+                    if let Some(scroll) = request_scroll(&request)
+                        && let Some(source_path) =
+                            crate::app::helpers::manage_embed_page_rules::manage_embed_url_param(
+                                &page.value,
+                                "path",
+                            )
+                    {
+                        self.native_docs_update_html_scroll(&source_path, scroll);
+                    }
                     if let Some(path) = manage_request_string(&request, "path") {
                         // A link inside an outside file names a file beside it on the resource
                         // origin; it opens by its real path, through a grant of its own.
@@ -110,6 +122,26 @@ impl GhostexGpuiApp {
                             None => self.native_docs_open_external(path, cx),
                         }
                     }
+                    return;
+                }
+                // Rendered HTML scroll updates and Back/Forward hotkey requests from the embed page.
+                if let Some(action) = manage_request_string(&request, "action")
+                    && matches!(action.as_str(), "scrollPosition" | "navigateDocsHistory")
+                {
+                    let request_id =
+                        manage_request_string(&request, "requestId").unwrap_or_default();
+                    let path = manage_request_string(&request, "path").unwrap_or_default();
+                    if let Some(scroll) = request_scroll(&request) {
+                        self.native_docs_update_html_scroll(&path, scroll);
+                    }
+                    if action == "navigateDocsHistory"
+                        && let Some(direction) = manage_request_string(&request, "direction")
+                        && matches!(direction.as_str(), "back" | "forward")
+                    {
+                        self.native_docs_navigate_history(direction == "back", cx);
+                    }
+                    let response = serde_json::json!({ "action": action, "requestId": request_id });
+                    self.dispatch_manage_files_answer(&page, &response.to_string(), cx);
                     return;
                 }
                 // Annotate on an HTML file (native_docs/annotate.rs): its state, notes, Copy and
