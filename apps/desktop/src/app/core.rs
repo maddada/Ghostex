@@ -196,6 +196,12 @@ pub struct GhostexGpuiApp {
     /// (gx_store/notifications/) whenever gxserver's feed changes. Render-path read only; see
     /// `notification_feed` for the ownership split.
     pub(crate) notification_feed_state: notification_feed::GpuiNotificationFeedState,
+    /// Keys (`GpuiNotificationFeedItem::key`) the user explicitly marked unread while the
+    /// Notifications panel is open, so closing the panel does not mark them read again.
+    pub(crate) notifications_panel_kept_unread: HashSet<String>,
+    /// Keys of unseen rows for which `markAllSeen` was already requested while the Notifications
+    /// panel is open, so an older daemon that refuses `markAllSeen` is not retried in a loop.
+    pub(crate) notifications_panel_seen_attempted: HashSet<String>,
     /// Last painted bounds of the titlebar bell, so the `openNotifications`
     /// hotkey can anchor the Notifications popup without a click.
     pub(crate) titlebar_notification_bell_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,

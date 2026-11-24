@@ -10,10 +10,10 @@ use crate::server::AppState;
 use super::store::{
     bounded_notification_body, clear_notification_feed, defer_session_notification,
     dismiss_notification, insert_notification_feed_row, mark_all_notifications_read,
-    mark_finished_notifications_seen, mark_notification_read, mark_notification_unread,
-    mark_session_notifications_read, notification_agent_icon, notification_exists,
-    read_notification_feed_state, unread_notification_session_ids, NewNotificationFeedRow,
-    NOTIFICATION_FEED_KIND_CUSTOM,
+    mark_all_notifications_seen, mark_finished_notifications_seen, mark_notification_read,
+    mark_notification_unread, mark_notifications_shown_read, mark_session_notifications_read,
+    notification_agent_icon, notification_exists, read_notification_feed_state,
+    unread_notification_session_ids, NewNotificationFeedRow, NOTIFICATION_FEED_KIND_CUSTOM,
 };
 use super::thread_read::acknowledge_read_notification_sessions;
 
@@ -46,6 +46,7 @@ pub(crate) fn update_notification_feed_endpoint(
         .map(str::trim)
         .unwrap_or_default();
     let mut read_session_ids = Vec::new();
+    let mut should_broadcast = true;
     match action {
         "markRead" | "markUnread" | "dismiss" => {
             let id = required_text(params, "notificationId")?;
@@ -75,6 +76,13 @@ pub(crate) fn update_notification_feed_endpoint(
             read_session_ids = unread_notification_session_ids(db, None)?;
             mark_all_notifications_read(db)?;
         }
+        "markAllSeen" => {
+            should_broadcast = mark_all_notifications_seen(db)? > 0;
+        }
+        "markShownRead" => {
+            let ids = optional_text_list(params, "notificationIds")?;
+            should_broadcast = mark_notifications_shown_read(db, &ids)? > 0;
+        }
         "markFinishedSeen" => {
             mark_finished_notifications_seen(db)?;
         }
@@ -93,7 +101,9 @@ pub(crate) fn update_notification_feed_endpoint(
         }
     }
     let feed = read_notification_feed_state(db)?;
-    broadcast_notification_feed_changed(state);
+    if should_broadcast {
+        broadcast_notification_feed_changed(state);
+    }
     acknowledge_read_notification_sessions(state, read_session_ids);
     Ok(feed)
 }
@@ -174,4 +184,22 @@ fn required_text(params: &Map<String, Value>, key: &str) -> DomainResult<String>
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .ok_or_else(|| DomainStateError::bad_request(format!("{key} is required.")))
+}
+
+fn optional_text_list(params: &Map<String, Value>, key: &str) -> DomainResult<Vec<String>> {
+    let Some(value) = params.get(key) else {
+        return Ok(Vec::new());
+    };
+    let Some(values) = value.as_array() else {
+        return Err(DomainStateError::bad_request(format!(
+            "{key} must be an array of strings."
+        )));
+    };
+    Ok(values
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .collect())
 }

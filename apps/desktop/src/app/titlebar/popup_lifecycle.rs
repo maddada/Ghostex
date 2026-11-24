@@ -196,23 +196,56 @@ impl GhostexGpuiApp {
         self.titlebar_popup_window = Some(popup_window);
         if kind == GpuiTitlebarPopupKind::Notifications {
             /*
-            CDXC:Notifications 2026-11-20 DECISION:
-            User: "make the notifications thingy lose the dot shown there if it's just a completion dot when I click to see the content there (marks as read)". Opening the bell reads every computer's "finished" rows so the badge drops to what still needs the user (a question, an approval, a failure, a message not sent). It does not touch the sessions: their blue "finished, not seen" dots clear when the session is opened, as before.
+            CDXC:Notifications 2026-11-24 DECISION:
+            Opening the bell panel clears the unread count badge right away by marking unseen rows
+            seen (`markAllSeen`), while rows keep their unread highlight until marked read or until
+            the panel closes (`markShownRead`).
             */
-            self.mark_finished_notifications_seen(cx);
+            self.notifications_panel_kept_unread.clear();
+            self.notifications_panel_seen_attempted.clear();
+            for item in &self.notification_feed_state.items {
+                if !item.read && !item.seen {
+                    self.notifications_panel_seen_attempted.insert(item.key());
+                }
+            }
+            self.notification_feed_state.mark_all_seen_optimistically();
+            self.mark_all_notifications_seen(cx);
         }
         cx.notify();
     }
 
-    /// Reads every computer's "finished" rows, when the bell's panel opens and again when it closes
-    /// (rows that arrived while it was open). See `gx_store_mark_finished_notifications_seen`.
-    fn mark_finished_notifications_seen(&mut self, cx: &mut gpui::Context<Self>) {
+    /// Marks unseen rows seen on every online computer when the bell's panel opens.
+    fn mark_all_notifications_seen(&mut self, cx: &mut gpui::Context<Self>) {
         self.request_notification_feed_command(
-            "markFinishedSeen",
+            "markAllSeen",
             None,
             ghostex_gx_core::NotificationFeedTab::All,
             cx,
         );
+    }
+
+    /// Marks every unread row that was shown in the bell panel as read when the panel closes
+    /// (except active approvals and rows the user explicitly marked unread while it was open).
+    fn mark_shown_notifications_read(&mut self, cx: &mut gpui::Context<Self>) {
+        let kept_unread = std::mem::take(&mut self.notifications_panel_kept_unread);
+        self.notifications_panel_seen_attempted.clear();
+        let mut by_machine: std::collections::BTreeMap<ghostex_gx_core::MachineId, Vec<String>> =
+            std::collections::BTreeMap::new();
+        for item in &mut self.notification_feed_state.items {
+            if !item.read && !item.awaiting_approval && !kept_unread.contains(&item.key()) {
+                item.read = true;
+                item.seen = true;
+                by_machine
+                    .entry(item.machine.clone())
+                    .or_default()
+                    .push(item.id.clone());
+            }
+        }
+        if by_machine.is_empty() {
+            return;
+        }
+        self.notification_feed_state.recount_from_items();
+        self.gx_store_mark_shown_notifications_read(by_machine, cx);
     }
 
     /// Shows the held popover `kind` once it has fitted itself: its glass and fade, on the next
@@ -321,7 +354,7 @@ impl GhostexGpuiApp {
             .as_ref()
             .is_some_and(|state| state.kind == GpuiTitlebarPopupKind::Notifications)
         {
-            self.mark_finished_notifications_seen(cx);
+            self.mark_shown_notifications_read(cx);
         }
         self.context_menu = None;
         self.titlebar_popup_menu = None;
@@ -356,7 +389,7 @@ impl GhostexGpuiApp {
                 self.restore_account_usage_keyboard_focus();
             }
             if kind == GpuiTitlebarPopupKind::Notifications {
-                self.mark_finished_notifications_seen(cx);
+                self.mark_shown_notifications_read(cx);
             }
             self.context_menu = None;
             self.titlebar_popup_menu = None;

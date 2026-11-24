@@ -45,7 +45,10 @@ pub enum NotificationFeedCommand {
     MarkRead,
     MarkUnread,
     MarkAllRead,
-    /// The bell panel opened: the "finished" rows go read, nothing that still needs the user does.
+    /// The bell panel opened (or a new row arrived while open): mark unseen rows seen to clear
+    /// the badge without clearing each row's unread highlight.
+    MarkAllSeen,
+    /// Legacy action kept for backwards compatibility.
     MarkFinishedSeen,
     ClearAll,
     JumpToLatestUnread,
@@ -60,6 +63,7 @@ impl NotificationFeedCommand {
             "markRead" => Self::MarkRead,
             "markUnread" => Self::MarkUnread,
             "markAllRead" => Self::MarkAllRead,
+            "markAllSeen" => Self::MarkAllSeen,
             "markFinishedSeen" => Self::MarkFinishedSeen,
             "clearAll" => Self::ClearAll,
             "jumpToLatestUnread" => Self::JumpToLatestUnread,
@@ -75,13 +79,14 @@ impl NotificationFeedCommand {
             Self::MarkRead => "markRead",
             Self::MarkUnread => "markUnread",
             Self::MarkAllRead => "markAllRead",
+            Self::MarkAllSeen => "markAllSeen",
             Self::MarkFinishedSeen => "markFinishedSeen",
             Self::ClearAll => "clearAll",
             _ => return None,
         })
     }
 
-    /// Whether the update names one row. `markAllRead`, `markFinishedSeen` and `clearAll` take nothing, and a
+    /// Whether the update names one row. `markAllRead`, `markAllSeen`, `markFinishedSeen` and `clearAll` take nothing, and a
     /// row command without a row id does nothing at all.
     pub fn takes_notification_id(self) -> bool {
         matches!(
@@ -122,10 +127,10 @@ fn normalize_item(value: &Value) -> Option<Value> {
     if let Some(entry) = raw.get("securityEntry").and_then(Value::as_u64) {
         item.insert("securityEntry".into(), Value::from(entry));
     }
-    item.insert(
-        "read".into(),
-        Value::Bool(raw.get("read") == Some(&Value::Bool(true))),
-    );
+    let read = raw.get("read") == Some(&Value::Bool(true));
+    let seen = raw.get("seen").and_then(Value::as_bool).unwrap_or(read);
+    item.insert("read".into(), Value::Bool(read));
+    item.insert("seen".into(), Value::Bool(seen));
     item.insert("sessionId".into(), Value::from(session_id));
     item.insert(
         "subtitle".into(),
@@ -139,7 +144,7 @@ fn normalize_item(value: &Value) -> Option<Value> {
 }
 
 /// The daemon's feed answer as the state message the bell reads:
-/// `{ items, nextUnreadId?, nextUnreadDeferredAt?, type, unreadCount }`. Anything that is not an object is the empty
+/// `{ items, nextUnreadId?, nextUnreadDeferredAt?, type, unreadCount, unseenCount }`. Anything that is not an object is the empty
 /// feed, as in the TypeScript, which posted it.
 ///
 /// CDXC:Notifications 2026-11-08 DECISION:
@@ -159,7 +164,9 @@ pub fn notification_feed_state_message(result: &Value) -> Value {
         .map(|items| items.iter().filter_map(normalize_item).collect())
         .unwrap_or_default();
     let unread = |item: &&Value| item["read"] != Value::Bool(true);
+    let unseen = |item: &&Value| unread(item) && item["seen"] != Value::Bool(true);
     let unread_count = items.iter().filter(unread).count() as u64;
+    let unseen_count = items.iter().filter(unseen).count() as u64;
     let next_unread_id = raw
         .and_then(|raw| text(raw, "nextUnreadId"))
         .filter(|id| !id.is_empty())
@@ -187,6 +194,7 @@ pub fn notification_feed_state_message(result: &Value) -> Value {
         Value::from(NOTIFICATION_FEED_STATE_MESSAGE_TYPE),
     );
     message.insert("unreadCount".into(), Value::from(unread_count));
+    message.insert("unseenCount".into(), Value::from(unseen_count));
     Value::Object(message)
 }
 

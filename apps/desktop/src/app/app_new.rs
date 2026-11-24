@@ -225,6 +225,8 @@ impl GhostexGpuiApp {
                 navigation_history_state: navigation_history::GpuiNavigationHistoryState::default(),
                 navigation_history: Default::default(),
                 notification_feed_state: notification_feed::GpuiNotificationFeedState::default(),
+                notifications_panel_kept_unread: HashSet::new(),
+                notifications_panel_seen_attempted: HashSet::new(),
                 titlebar_notification_bell_bounds: Rc::new(std::cell::Cell::new(None)),
                 titlebar_git_menu_state: None,
                 titlebar_actions_snapshot: Vec::new(),

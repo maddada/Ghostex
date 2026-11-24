@@ -199,6 +199,8 @@ pub(crate) struct GpuiNotificationFeedItem {
     pub(crate) created_at: String,
     pub(crate) created_at_epoch_secs: Option<i64>,
     pub(crate) read: bool,
+    /// Whether the bell panel has already shown this row (badge cleared), even while still unread.
+    pub(crate) seen: bool,
     pub(crate) awaiting_approval: bool,
     /// The session a click opens when it is not the row's own: a coordinator's thread's approval
     /// opens the coordinator, where the card is relayed (`openProjectId`, `openSessionId`;
@@ -246,6 +248,10 @@ impl GpuiNotificationFeedItem {
                 .filter(|id| !id.is_empty())
                 .map(str::to_string),
             read: value.get("read")?.as_bool()?,
+            seen: value
+                .get("seen")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or_else(|| value.get("read").and_then(serde_json::Value::as_bool).unwrap_or(false)),
             awaiting_approval: value
                 .get("awaitingApproval")
                 .and_then(serde_json::Value::as_bool)
@@ -270,10 +276,14 @@ impl GpuiNotificationFeedItem {
 /// newest first (gx-core `merged_notification_feed_message`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiNotificationFeedState {
-    /// Every online computer's unread rows: the bell's badge and the All tab.
+    /// Every online computer's unread rows.
     pub(crate) unread_count: usize,
     pub(crate) local_unread_count: usize,
     pub(crate) remote_unread_count: usize,
+    /// Unread rows not yet seen in the bell panel: drives the bell's badge count.
+    pub(crate) unseen_count: usize,
+    pub(crate) local_unseen_count: usize,
+    pub(crate) remote_unseen_count: usize,
     pub(crate) next_unread_id: Option<String>,
     pub(crate) next_unread_machine: ghostex_gx_core::MachineId,
     pub(crate) items: Vec<GpuiNotificationFeedItem>,
@@ -287,6 +297,9 @@ impl Default for GpuiNotificationFeedState {
             unread_count: 0,
             local_unread_count: 0,
             remote_unread_count: 0,
+            unseen_count: 0,
+            local_unseen_count: 0,
+            remote_unseen_count: 0,
             next_unread_id: None,
             next_unread_machine: ghostex_gx_core::MachineId::Local,
             items: Vec::new(),
@@ -296,6 +309,47 @@ impl Default for GpuiNotificationFeedState {
 }
 
 impl GpuiNotificationFeedState {
+    /// Recomputes unread/unseen totals and clears a stale jump target from `self.items`.
+    pub(crate) fn recount_from_items(&mut self) {
+        let count_unread = |local: bool| {
+            self.items
+                .iter()
+                .filter(|item| item.machine.is_local() == local && !item.read)
+                .count()
+        };
+        let count_unseen = |local: bool| {
+            self.items
+                .iter()
+                .filter(|item| item.machine.is_local() == local && !item.read && !item.seen)
+                .count()
+        };
+        self.local_unread_count = count_unread(true);
+        self.remote_unread_count = count_unread(false);
+        self.unread_count = self.local_unread_count + self.remote_unread_count;
+        self.local_unseen_count = count_unseen(true);
+        self.remote_unseen_count = count_unseen(false);
+        self.unseen_count = self.local_unseen_count + self.remote_unseen_count;
+        let next_still_unread = self.items.iter().any(|item| {
+            !item.read
+                && item.machine == self.next_unread_machine
+                && self.next_unread_id.as_deref() == Some(item.id.as_str())
+        });
+        if !next_still_unread {
+            self.next_unread_id = None;
+        }
+    }
+
+    /// Marks every row seen optimistically so the bell badge clears on the frame the panel opens
+    /// while every unread row keeps its highlight.
+    pub(crate) fn mark_all_seen_optimistically(&mut self) {
+        for item in &mut self.items {
+            item.seen = true;
+        }
+        self.unseen_count = 0;
+        self.local_unseen_count = 0;
+        self.remote_unseen_count = 0;
+    }
+
     /// Takes one row's unread count off the totals, as an optimistic edit does.
     pub(crate) fn note_read(&mut self, machine: &ghostex_gx_core::MachineId) {
         self.unread_count = self.unread_count.saturating_sub(1);
@@ -304,6 +358,7 @@ impl GpuiNotificationFeedState {
         } else {
             self.remote_unread_count = self.remote_unread_count.saturating_sub(1);
         }
+        self.recount_from_items();
     }
 
     /// Puts one row's unread count back on the totals.
@@ -314,6 +369,7 @@ impl GpuiNotificationFeedState {
         } else {
             self.remote_unread_count += 1;
         }
+        self.recount_from_items();
     }
 }
 
@@ -336,6 +392,31 @@ impl GpuiNotificationFeedState {
             .iter()
             .map(GpuiNotificationFeedItem::from_bridge_value)
             .collect::<Option<Vec<_>>>()?;
+        let unseen_count = message
+            .get("unseenCount")
+            .and_then(serde_json::Value::as_u64)
+            .map(|value| value as usize)
+            .unwrap_or_else(|| items.iter().filter(|item| !item.read && !item.seen).count());
+        let local_unseen_count = message
+            .get("localUnseenCount")
+            .and_then(serde_json::Value::as_u64)
+            .map(|value| value as usize)
+            .unwrap_or_else(|| {
+                items
+                    .iter()
+                    .filter(|item| item.machine.is_local() && !item.read && !item.seen)
+                    .count()
+            });
+        let remote_unseen_count = message
+            .get("remoteUnseenCount")
+            .and_then(serde_json::Value::as_u64)
+            .map(|value| value as usize)
+            .unwrap_or_else(|| {
+                items
+                    .iter()
+                    .filter(|item| !item.machine.is_local() && !item.read && !item.seen)
+                    .count()
+            });
         let next_unread_id = match message.get("nextUnreadId") {
             None | Some(serde_json::Value::Null) => None,
             Some(value) => Some(value.as_str()?.to_string()),
@@ -344,6 +425,9 @@ impl GpuiNotificationFeedState {
             unread_count,
             local_unread_count: count("localUnreadCount"),
             remote_unread_count: count("remoteUnreadCount"),
+            unseen_count,
+            local_unseen_count,
+            remote_unseen_count,
             next_unread_id,
             next_unread_machine: match message
                 .get("nextUnreadMachineId")
@@ -504,16 +588,33 @@ impl GhostexGpuiApp {
         if self.notification_feed_state == state {
             return;
         }
+        let notifications_open =
+            self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications);
+        let mut unseen_machines: Vec<ghostex_gx_core::MachineId> = Vec::new();
+        if notifications_open {
+            for item in &state.items {
+                let key = item.key();
+                if !item.read
+                    && !item.seen
+                    && !self.notifications_panel_kept_unread.contains(&key)
+                    && self.notifications_panel_seen_attempted.insert(key)
+                    && !unseen_machines.contains(&item.machine)
+                {
+                    unseen_machines.push(item.machine.clone());
+                }
+            }
+        }
         self.notification_feed_state = state.clone();
         self.deliver_reset_expiry_banners(&state, cx);
-        if self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications)
-            && let Some(handle) = self.titlebar_popup_window
-        {
+        if notifications_open && let Some(handle) = self.titlebar_popup_window {
             let state = self.notification_feed_for_panel(state);
             let _ = handle.update(cx, |popup, window, cx| {
                 popup.update_notifications_feed(state, cx);
                 window.refresh();
             });
+            if !unseen_machines.is_empty() {
+                self.gx_store_mark_machines_notifications_seen(unseen_machines, cx);
+            }
         }
         cx.notify();
     }
@@ -611,16 +712,20 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let scale = appearance.scale;
         let open = self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications);
-        let unread_count = self.notification_feed_state.unread_count;
-        let unread = || {
+        let badge_count = if open {
+            0
+        } else {
+            self.notification_feed_state.unseen_count
+        };
+        let unseen = || {
             self.notification_feed_state
                 .items
                 .iter()
-                .filter(|item| !item.read)
+                .filter(|item| !item.read && !item.seen)
         };
-        let badge_color = if unread().any(|item| item.awaiting_approval) {
+        let badge_color = if unseen().any(|item| item.awaiting_approval) {
             crate::app::native_sidebar::status::APPROVAL_COLOR
-        } else if unread().any(|item| item.kind.urgent()) {
+        } else if unseen().any(|item| item.kind.urgent()) {
             notification_urgent_color(appearance.light)
         } else {
             notification_attention_color(appearance.light)
@@ -738,7 +843,7 @@ impl GhostexGpuiApp {
                 NOTIFICATION_BELL_ICON_SIZE * scale,
                 icon_color,
             ))
-            .when(unread_count > 0, |this| {
+            .when(badge_count > 0, |this| {
                 this.child(
                     div()
                         .absolute()
@@ -758,7 +863,7 @@ impl GhostexGpuiApp {
                         .line_height(px(12.0 * scale))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(titlebar_background())
-                        .child(notification_feed_badge_label(unread_count)),
+                        .child(notification_feed_badge_label(badge_count)),
                 )
             })
             .into_any_element()

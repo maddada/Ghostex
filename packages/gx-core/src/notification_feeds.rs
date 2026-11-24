@@ -117,6 +117,13 @@ fn unread_count(message: &Value) -> u64 {
         .unwrap_or(0)
 }
 
+fn unseen_count(message: &Value) -> u64 {
+    message
+        .get("unseenCount")
+        .and_then(Value::as_u64)
+        .unwrap_or_else(|| unread_count(message))
+}
+
 /// "Windows is offline. …", or the plural for several computers.
 fn offline_notice(names: &[&str]) -> Option<String> {
     let (last, rest) = names.split_last()?;
@@ -142,6 +149,8 @@ pub fn merged_notification_feed_message(feeds: &[MachineNotificationFeed<'_>]) -
     let mut items: Vec<Value> = Vec::new();
     let mut local_unread = 0u64;
     let mut remote_unread = 0u64;
+    let mut local_unseen = 0u64;
+    let mut remote_unseen = 0u64;
     let mut candidates: Vec<JumpCandidate<'_>> = Vec::new();
     let mut offline_names: Vec<&str> = Vec::new();
     for feed in feeds {
@@ -164,8 +173,10 @@ pub fn merged_notification_feed_message(feeds: &[MachineNotificationFeed<'_>]) -
         }
         if feed.machine.is_local() {
             local_unread += unread_count(message);
+            local_unseen += unseen_count(message);
         } else {
             remote_unread += unread_count(message);
+            remote_unseen += unseen_count(message);
         }
         let rows = message
             .get("items")
@@ -228,6 +239,12 @@ pub fn merged_notification_feed_message(feeds: &[MachineNotificationFeed<'_>]) -
     );
     merged.insert("localUnreadCount".into(), Value::from(local_unread));
     merged.insert("remoteUnreadCount".into(), Value::from(remote_unread));
+    merged.insert(
+        "unseenCount".into(),
+        Value::from(local_unseen + remote_unseen),
+    );
+    merged.insert("localUnseenCount".into(), Value::from(local_unseen));
+    merged.insert("remoteUnseenCount".into(), Value::from(remote_unseen));
     if let Some(next) = next {
         merged.insert("nextUnreadId".into(), Value::from(next.id));
         if let Some(machine_id) = next.machine.remote_id() {
