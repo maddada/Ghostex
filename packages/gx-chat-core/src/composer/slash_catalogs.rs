@@ -832,6 +832,62 @@ pub(crate) const ANTIGRAVITY_NATIVE: &[SlashCommand] = &[
     },
 ];
 
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// A Native Claude chat drives `claude` in stream-json mode, which runs only the commands it lists in its start-up `slash_commands` (Claude Code 2.1.331; the rest of that list is skills, which the `/` list shows from the skills source). The full terminal catalog offered `/theme`, `/tui`, `/login`, `/exit` and the like, which reached the model as plain text, so `/theme` got "type it in the Claude Code prompt" (found testing Native Claude on Linux). These are the catalog's entries Claude lists, plus `/btw`, which the composer handles itself.
+const CLAUDE_NATIVE_NAMES: &[&str] = &[
+    "advisor",
+    "auto-mode-setup",
+    "autocompact",
+    "batch",
+    "btw",
+    "claude-api",
+    "clear",
+    "color",
+    "compact",
+    "config",
+    "context",
+    "debug",
+    "design",
+    "design-sync",
+    "doctor",
+    "effort",
+    "fast",
+    "fewer-permission-prompts",
+    "focus",
+    "goal",
+    "import",
+    "init",
+    "insights",
+    "list-agents",
+    "mcp",
+    "model",
+    "recap",
+    "reload-plugins",
+    "reload-skills",
+    "rename",
+    "run",
+    "run-skill-generator",
+    "schedule",
+    "security-review",
+    "skill-doctor",
+    "team-onboarding",
+    "ultrareview",
+    "update-config",
+    "usage",
+    "usage-credits",
+];
+
+/// The Claude catalog's entries a Native Claude chat can run (`CLAUDE_NATIVE_NAMES`), with the
+/// catalog's own descriptions.
+pub(crate) static CLAUDE_NATIVE: std::sync::LazyLock<Vec<SlashCommand>> =
+    std::sync::LazyLock::new(|| {
+        CLAUDE_CODE
+            .iter()
+            .filter(|command| CLAUDE_NATIVE_NAMES.contains(&command.name))
+            .copied()
+            .collect()
+    });
+
 /// CDXC:SessionChat 2026-10-17 WHY:
 /// Grok Build 1.0.62's own built-in commands (its `slash/commands/` registry, checked against the live `/` menu); skills and workflows reach the chat through the `$` picker. The earlier list named commands Grok never had (`/editor`, `/init`, `/models`, `/status`) or renamed (`/mcp` is `/mcps`).
 pub(crate) const GROK: &[SlashCommand] = &[
