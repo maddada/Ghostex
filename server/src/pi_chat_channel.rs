@@ -132,6 +132,27 @@ pub(crate) fn mark_approval_sync_needed(project_id: &str, session_id: &str) {
     }
 }
 
+/// Immediately drop any cached chat channel for `(project_id, session_id)` when its session
+/// sleeps or closes, so an immediate send does not hit the stale `LIVE_GRACE` window and wait on a
+/// dead host instead of waking the session.
+pub(crate) fn close_for_session(project_id: &str, session_id: &str) {
+    let target = key(project_id, session_id);
+    let removed = {
+        let mut channels = lock(&CHANNELS);
+        channels.remove(&target)
+    };
+    if let Some(channel) = removed {
+        channel.wake.notify_waiters();
+        log_channel(
+            "piChatChannel.closedOnLifecycle",
+            &target,
+            &channel.agent,
+            channel.version,
+            channel.pid,
+        );
+    }
+}
+
 /// Hands `kind` to the session's extension and waits for its acknowledgement. Blocking: call it
 /// from a blocking thread.
 pub(crate) fn request(

@@ -352,6 +352,11 @@ async fn run_reopen(
             .map(|(text, send_id, sent)| (text.as_str(), send_id.as_deref(), *sent));
         let reopened = apply_reopen(&db, &repository, &plan, watch).unwrap_or(false);
         if reopened {
+            crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+                &state,
+                &plan.thread_key.0,
+                &plan.thread_key.1,
+            );
             let _ = crate::server::schedule_presentation_session_delta(
                 &state,
                 &db,

@@ -101,6 +101,71 @@ pub(crate) async fn starting_session_refusal(
     }
 }
 
+/// Native (`acp-host`) counterpart to [`starting_session_refusal`]: when a message is sent to a
+/// Native session whose channel is not open, check whether its `zmx` daemon is missing (sleeping
+/// or resolved/closed) and wake it synchronously up to [`SEND_WAKE_WAIT`], or if the daemon is
+/// alive with an exited `acp-host`, kick start-heal immediately instead of waiting on the
+/// scheduler's 10-second backoff.
+pub(crate) async fn wake_missing_acp_session(
+    state: &AppState,
+    target: &SessionChatSendTarget,
+) -> Option<DomainStateError> {
+    if crate::acp::channel::is_switching(&target.project_id, &target.session_id) {
+        return None;
+    }
+    if provider_missing(state, &target.project_id, &target.session_id).await {
+        retire_stale_startup_sends(state, &target.project_id, &target.session_id);
+        let (wake_state, project_id, session_id) = (
+            state.clone(),
+            target.project_id.clone(),
+            target.session_id.clone(),
+        );
+        let mut wake = tokio::spawn(async move {
+            let outcome = wake_session(&wake_state, &project_id, &session_id).await;
+            record_wake(
+                &wake_state,
+                &project_id,
+                &session_id,
+                &outcome,
+                "The Native session's zmx daemon was not running when the message was sent.",
+            );
+            outcome
+        });
+        return match tokio::time::timeout(SEND_WAKE_WAIT, &mut wake).await {
+            Ok(Ok(outcome)) => Some(wake_refusal(outcome)),
+            Ok(Err(_)) | Err(_) => Some(starting(
+                "The session is waking up; Ghostex delivers the message once its agent is ready.",
+            )),
+        };
+    }
+    if crate::acp::channel::live(&target.project_id, &target.session_id, "send").is_none() {
+        let zmx_name = target.zmx_name.clone();
+        let host_running =
+            tokio::task::spawn_blocking(move || crate::acp::host_process_running(&zmx_name))
+                .await
+                .unwrap_or(true);
+        if !host_running {
+            let (heal_state, project_id, session_id) = (
+                state.clone(),
+                target.project_id.clone(),
+                target.session_id.clone(),
+            );
+            tokio::spawn(async move {
+                let _ = crate::session_chat_agent_restart::heal_failed_start(
+                    &heal_state,
+                    &project_id,
+                    &session_id,
+                )
+                .await;
+            });
+            return Some(starting(
+                "The Native host is restarting; Ghostex delivers the message once it is ready.",
+            ));
+        }
+    }
+    None
+}
+
 /// How long a send waits for the session it wakes before holding the message.
 const SEND_WAKE_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
 
@@ -442,18 +507,70 @@ pub(crate) fn retire_held_messages_of_closed_session_with_actor(
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };
-    let held: Vec<String> = crate::session_chat_queue::read_session_chat_queue_snapshot_with(
-        &db, project_id, session_id,
-    )
-    .queue
-    .into_iter()
-    .filter(|prompt| {
-        prompt.startup_send
-            && prompt.state == crate::session_chat_queue::SESSION_CHAT_QUEUE_STATE_QUEUED
-    })
-    .map(|prompt| prompt.id)
-    .collect();
+    let held_prompts: Vec<(String, String)> =
+        crate::session_chat_queue::read_session_chat_queue_snapshot_with(&db, project_id, session_id)
+            .queue
+            .into_iter()
+            .filter(|prompt| {
+                prompt.startup_send
+                    && prompt.state == crate::session_chat_queue::SESSION_CHAT_QUEUE_STATE_QUEUED
+            })
+            .map(|prompt| (prompt.id, prompt.text))
+            .collect();
     drop(db);
+    let held: Vec<String> = held_prompts.iter().map(|(id, _)| id.clone()).collect();
+    // When a coordinator resolves/closes a finished thread, drop retired held rows and any old
+    // `failed` ("Not delivered") rows from its queue table instead of leaving zombie failed rows
+    // that would resurface if the thread is later reopened. Still notify any external senders.
+    let resolved_thread_close = close_actor.is_some_and(|actor| {
+        matches!(
+            actor.close_source.as_str(),
+            "server.threadMarkedDone" | "server.coordinatorClosed"
+        )
+    });
+    if resolved_thread_close {
+        let removed = crate::session_chat_queue::drop_resolved_thread_queue_rows(
+            &state.paths,
+            project_id,
+            session_id,
+            &held,
+        );
+        if !removed.is_empty() {
+            crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+                state, project_id, session_id,
+            );
+        }
+        if !held_prompts.is_empty() {
+            let batch: Vec<crate::session_chat_queue_undelivered::UndeliveredPrompt<'_>> =
+                held_prompts
+                    .iter()
+                    .map(|(prompt_id, text)| {
+                        crate::session_chat_queue_undelivered::UndeliveredPrompt {
+                            prompt_id,
+                            text,
+                            reason: CLOSED_SESSION_RETIRE_REASON,
+                        }
+                    })
+                    .collect();
+            for (sender_project, sender_session) in
+                crate::session_chat_queue_undelivered::notify_senders_of_undelivered_agent_messages(
+                    &state.paths,
+                    state.metadata.server_id.as_str(),
+                    project_id,
+                    session_id,
+                    &batch,
+                    close_actor,
+                )
+            {
+                crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+                    state,
+                    &sender_project,
+                    &sender_session,
+                );
+            }
+        }
+        return;
+    }
     fail_held_messages_batch(
         state,
         project_id,

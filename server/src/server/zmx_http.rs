@@ -206,6 +206,23 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
             }
             if matches!(
                 endpoint_path.as_str(),
+                "/api/sleepSession" | "/api/killSession" | "/api/transitionSession"
+            ) && matches!(
+                output
+                    .result
+                    .pointer("/session/lifecycleState")
+                    .and_then(Value::as_str),
+                Some("sleeping" | "stopped")
+            ) {
+                if let Ok(lifecycle) = crate::zmx::read_lifecycle_params(&params) {
+                    crate::pi_chat_channel::close_for_session(
+                        &lifecycle.project_id,
+                        &lifecycle.session_id,
+                    );
+                }
+            }
+            if matches!(
+                endpoint_path.as_str(),
                 "/api/killSession" | "/api/transitionSession"
             ) && output
                 .result

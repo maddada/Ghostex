@@ -1996,6 +1996,111 @@ pub(crate) fn drop_queued_prompt(
     dropped
 }
 
+/// Removes stale `failed` ("Not delivered") rows for `(project_id, session_id)` inside the
+/// caller's connection/transaction when a resolved thread is reopened: rows retired on session
+/// close (`closed_reason`) or created at/before `before_iso` (the thread's resolve timestamp).
+/// Never touches `queued` or `sending` rows, and never touches rows created after `before_iso`.
+pub(crate) fn purge_stale_failed_prompts_in(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    before_iso: Option<&str>,
+    closed_reason: &str,
+) -> Result<Vec<String>, DomainStateError> {
+    let mut stmt = db
+        .prepare(
+            r#"
+            SELECT promptId
+            FROM session_chat_queued_prompts
+            WHERE projectId = ?1
+              AND sessionId = ?2
+              AND state = 'failed'
+              AND (errorMessage = ?3 OR (?4 IS NOT NULL AND createdAt <= ?4))
+            "#,
+        )
+        .map_err(sql_error)?;
+    let ids: Vec<String> = stmt
+        .query_map(params![project_id, session_id, closed_reason, before_iso], |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    drop(stmt);
+    if ids.is_empty() {
+        return Ok(ids);
+    }
+    for id in &ids {
+        db.execute(
+            "DELETE FROM session_chat_queued_prompts WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3",
+            params![id, project_id, session_id],
+        )
+        .map_err(sql_error)?;
+    }
+    bump_queue_version(db, project_id, session_id)?;
+    Ok(ids)
+}
+
+/// Removes the given retired `prompt_ids` plus any pre-existing `failed` rows when a resolved
+/// coordinator thread is closed, so dead rows from a finished task never linger in the queue.
+pub(crate) fn drop_resolved_thread_queue_rows(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+    prompt_ids: &[String],
+) -> Vec<String> {
+    let removed = open_gxserver_database(paths)
+        .ok()
+        .and_then(|db| {
+            with_write_tx(&db, |db| {
+                let mut ids: Vec<String> = Vec::new();
+                let mut stmt = db
+                    .prepare(
+                        "SELECT promptId FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2 AND state = 'failed'",
+                    )
+                    .map_err(sql_error)?;
+                for id in stmt
+                    .query_map(params![project_id, session_id], |row| row.get::<_, String>(0))
+                    .map_err(sql_error)?
+                    .flatten()
+                {
+                    ids.push(id);
+                }
+                drop(stmt);
+                for id in prompt_ids {
+                    if !ids.iter().any(|existing| existing == id) {
+                        ids.push(id.clone());
+                    }
+                }
+                if ids.is_empty() {
+                    return Ok(ids);
+                }
+                let mut deleted = Vec::new();
+                for id in &ids {
+                    let count = db
+                        .execute(
+                            "DELETE FROM session_chat_queued_prompts WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3",
+                            params![id, project_id, session_id],
+                        )
+                        .map_err(sql_error)?;
+                    if count > 0 {
+                        deleted.push(id.clone());
+                    }
+                }
+                if !deleted.is_empty() {
+                    bump_queue_version(db, project_id, session_id)?;
+                }
+                Ok(deleted)
+            })
+            .ok()
+        })
+        .unwrap_or_default();
+    for id in &removed {
+        crate::session_chat_queue_attachments::remove(paths, id);
+    }
+    removed
+}
+
 pub(crate) fn hold_queued_prompt_for_wake(
     paths: &GxserverPaths,
     project_id: &str,

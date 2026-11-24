@@ -1033,6 +1033,18 @@ async fn send_session_chat_message_locked(
                 .await;
             }
         }
+        // If the Native host is not connected because the session is sleeping, resolved/closed, or
+        // its host exited inside zmx, wake or restart it immediately on send (matching Terminal's
+        // `starting_session_refusal` path) rather than leaving the queued row idle until backoff.
+        let session_running =
+            crate::presentation::effective_lifecycle_state(&target.session) == "running";
+        if !session_running || live_acp_channel.is_none() {
+            if let Some(refusal) =
+                crate::session_chat_send_wake::wake_missing_acp_session(state, &target).await
+            {
+                return Err(refusal);
+            }
+        }
         // Keep strict FIFO order: if an earlier send is already queued for this Native session,
         // queue this normal send behind it rather than jumping ahead.
         if source == SessionChatMessageSource::Composer
