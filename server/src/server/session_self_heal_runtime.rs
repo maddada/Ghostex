@@ -497,6 +497,21 @@ async fn run_heal(state: &Arc<AppState>, due: &HealDue) -> HealOutcome {
         )
         .await;
     }
+    if crate::acp::session_is_acp(&session) {
+        // Ensure the dead Native host's agent child process group is completely gone before
+        // `/api/wakeSession` resumes the same conversation in a new host.
+        let paths = state.paths.clone();
+        let pid = key.0.clone();
+        let sid = key.1.clone();
+        let cleanup_res = tokio::task::spawn_blocking(move || {
+            crate::acp::ensure_dead_host_child_stopped(&paths, &pid, &sid)
+        })
+        .await
+        .unwrap_or_else(|err| Err(format!("Native child cleanup task failed: {err}")));
+        if let Err(message) = cleanup_res {
+            return HealOutcome::Failed(message);
+        }
+    }
     let routed = super::zmx_http::handle_zmx_lifecycle_http(
         state,
         "/api/wakeSession".to_string(),

@@ -411,6 +411,7 @@ fn is_known_command(name: &str) -> bool {
         "editor-daemon",
         "extensions",
         "acp-host",
+        "acp-child-watch",
         "prompt-editor",
         "state",
         "dump-state",
@@ -665,6 +666,14 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "extensions" => extensions::extensions_command(args),
         "acp-host" => {
             let code = crate::acp::host::run(args);
+            if code == 0 {
+                Ok(())
+            } else {
+                std::process::exit(code);
+            }
+        }
+        "acp-child-watch" => {
+            let code = crate::acp::run_watcher_command(args);
             if code == 0 {
                 Ok(())
             } else {

@@ -13,7 +13,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use serde_json::{json, Value};
@@ -1593,26 +1593,33 @@ fn cancel_all_pending_permissions(transport: &AcpTransport, state: &Mutex<HostSt
     }
 }
 
-fn stop_child_gracefully(transport: &AcpTransport, child: &mut Child, child_pid: &AtomicU32) {
+fn stop_child_gracefully(
+    transport: &AcpTransport,
+    child: &mut Child,
+    lifetime: &mut super::child_lifetime::ChildLifetime,
+    child_pid: &AtomicU32,
+) {
     transport.close_stdin();
     let deadline = SystemTime::now() + Duration::from_secs(2);
     loop {
         match child.try_wait() {
             Ok(Some(_)) => {
                 child_pid.store(0, Ordering::Release);
+                lifetime.cleanup();
                 return;
             }
             Ok(None) => {
                 if SystemTime::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    super::child_lifetime::force_kill_child(child);
                     child_pid.store(0, Ordering::Release);
+                    lifetime.cleanup();
                     return;
                 }
                 thread::sleep(Duration::from_millis(50));
             }
             Err(_) => {
                 child_pid.store(0, Ordering::Release);
+                lifetime.cleanup();
                 return;
             }
         }
@@ -1721,6 +1728,9 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("Invalid Native host command for {}", spec.family);
         return 1;
     };
+    let record_target = endpoint
+        .as_ref()
+        .map(super::child_lifetime::ChildRecordTarget::from_endpoint);
     let mut child = match super::child_lifetime::end_with_host(&mut Command::new(&prog))
         .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
         .envs(acp_envs)
@@ -1737,15 +1747,19 @@ pub fn run(args: &[String]) -> i32 {
             return 1;
         }
     };
+    let mut child_lifetime =
+        super::child_lifetime::ChildLifetime::attach(&child, record_target.as_ref());
     let child_pid = Arc::new(AtomicU32::new(child.id()));
     let Some(stdin) = child.stdin.take() else {
         eprintln!("Failed to open stdin pipe to Native host.");
-        let _ = child.kill();
+        super::child_lifetime::force_kill_child(&mut child);
+        child_lifetime.cleanup();
         return 1;
     };
     let Some(stdout) = child.stdout.take() else {
         eprintln!("Failed to open stdout pipe from Native host.");
-        let _ = child.kill();
+        super::child_lifetime::force_kill_child(&mut child);
+        child_lifetime.cleanup();
         return 1;
     };
     let stderr = child.stderr.take();
@@ -1770,39 +1784,14 @@ pub fn run(args: &[String]) -> i32 {
         let pid_sig = child_pid.clone();
         let down_sig = shutting_down.clone();
         let ep_sig = endpoint.clone();
+        let target_sig = record_target.clone();
         thread::spawn(move || {
             while !down_sig.load(Ordering::Acquire) {
                 if SIGNAL_TERMINATE.load(Ordering::Acquire) {
                     down_sig.store(true, Ordering::Release);
                     t_sig.close_stdin();
                     let pid = pid_sig.swap(0, Ordering::AcqRel);
-                    if pid != 0 {
-                        let cpid = pid as libc::pid_t;
-                        unsafe {
-                            libc::kill(cpid, libc::SIGTERM);
-                        }
-                        let mut reaped = false;
-                        let deadline = Instant::now() + Duration::from_secs(1);
-                        while Instant::now() < deadline {
-                            let waited =
-                                unsafe { libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG) };
-                            if waited > 0
-                                || (waited < 0
-                                    && std::io::Error::last_os_error().raw_os_error()
-                                        != Some(libc::EINTR))
-                            {
-                                reaped = true;
-                                break;
-                            }
-                            thread::sleep(Duration::from_millis(50));
-                        }
-                        if !reaped {
-                            unsafe {
-                                libc::kill(cpid, libc::SIGKILL);
-                                let _ = libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG);
-                            }
-                        }
-                    }
+                    super::child_lifetime::terminate_child_on_host_signal(pid, target_sig.as_ref());
                     if let Some(ep) = ep_sig.as_ref() {
                         ep.close_channel();
                     }
@@ -2118,7 +2107,7 @@ pub fn run(args: &[String]) -> i32 {
     });
     if let Err(err) = transport.call("initialize", init_params, ACP_RPC_TIMEOUT) {
         eprintln!("Native host initialize failed: {err}");
-        stop_child_gracefully(&transport, &mut child, &child_pid);
+        stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
         return 1;
     }
 
@@ -2161,7 +2150,7 @@ pub fn run(args: &[String]) -> i32 {
         Ok(res) => res,
         Err(err) => {
             eprintln!("Native session open failed: {err}");
-            stop_child_gracefully(&transport, &mut child, &child_pid);
+            stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
             return 1;
         }
     };
@@ -2875,7 +2864,7 @@ pub fn run(args: &[String]) -> i32 {
                         }
                     }
                     shutting_down.store(true, Ordering::Release);
-                    stop_child_gracefully(&transport, &mut child, &child_pid);
+                    stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
                     ep.ack(
                         id,
                         true,
@@ -2941,7 +2930,7 @@ pub fn run(args: &[String]) -> i32 {
     }
 
     shutting_down.store(true, Ordering::Release);
-    stop_child_gracefully(&transport, &mut child, &child_pid);
+    stop_child_gracefully(&transport, &mut child, &mut child_lifetime, &child_pid);
     if let Some(ep) = endpoint.as_ref() {
         ep.close_channel();
     }

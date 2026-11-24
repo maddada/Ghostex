@@ -588,6 +588,7 @@ impl Drop for ClaudeExitGuard {
 
 struct ClaudeProcess {
     child: Child,
+    lifetime: super::child_lifetime::ChildLifetime,
     transport: Arc<ClaudeTransport>,
 }
 
@@ -826,26 +827,33 @@ fn cancel_all_pending_claude(transport: &ClaudeTransport, state: &Mutex<ClaudeSt
     }
 }
 
-fn stop_claude_gracefully(transport: &ClaudeTransport, child: &mut Child, child_pid: &AtomicU32) {
+fn stop_claude_gracefully(
+    transport: &ClaudeTransport,
+    child: &mut Child,
+    lifetime: &mut super::child_lifetime::ChildLifetime,
+    child_pid: &AtomicU32,
+) {
     transport.close_stdin();
     let deadline = SystemTime::now() + Duration::from_secs(2);
     loop {
         match child.try_wait() {
             Ok(Some(_)) => {
                 child_pid.store(0, Ordering::Release);
+                lifetime.cleanup();
                 return;
             }
             Ok(None) => {
                 if SystemTime::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    super::child_lifetime::force_kill_child(child);
                     child_pid.store(0, Ordering::Release);
+                    lifetime.cleanup();
                     return;
                 }
                 thread::sleep(Duration::from_millis(50));
             }
             Err(_) => {
                 child_pid.store(0, Ordering::Release);
+                lifetime.cleanup();
                 return;
             }
         }
@@ -858,6 +866,7 @@ fn spawn_and_init_claude(
     parsed: &HostArgs,
     cwd: &str,
     spool_session_id: &str,
+    record_target: Option<&super::child_lifetime::ChildRecordTarget>,
     resume_session_id: Option<&str>,
     fork_session: bool,
     model: Option<&str>,
@@ -929,16 +938,19 @@ fn spawn_and_init_claude(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|err| format!("Failed to start `{prog} {}`: {err}", argv.join(" ")))?;
+    let mut lifetime = super::child_lifetime::ChildLifetime::attach(&child, record_target);
     child_pid.store(child.id(), Ordering::Release);
     state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = child.id();
     let Some(stdin) = child.stdin.take() else {
-        let _ = child.kill();
+        super::child_lifetime::force_kill_child(&mut child);
+        lifetime.cleanup();
         child_pid.store(0, Ordering::Release);
         state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         return Err("Claude child stdin unavailable.".to_string());
     };
     let Some(stdout) = child.stdout.take() else {
-        let _ = child.kill();
+        super::child_lifetime::force_kill_child(&mut child);
+        lifetime.cleanup();
         child_pid.store(0, Ordering::Release);
         state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         return Err("Claude child stdout unavailable.".to_string());
@@ -1630,7 +1642,7 @@ fn spawn_and_init_claude(
             process_gen.fetch_add(1, Ordering::AcqRel);
             *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
             state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
-            stop_claude_gracefully(&transport, &mut child, child_pid);
+            stop_claude_gracefully(&transport, &mut child, &mut lifetime, child_pid);
             return Err(format!("Claude Native initialize failed: {err}"));
         }
     }
@@ -1654,7 +1666,11 @@ fn spawn_and_init_claude(
         eprintln!("[Claude Native] Warning: could not sync approval level: {err}");
     }
 
-    Ok(ClaudeProcess { child, transport })
+    Ok(ClaudeProcess {
+        child,
+        lifetime,
+        transport,
+    })
 }
 
 /// Deterministically finish an interrupted Claude turn:
@@ -1670,6 +1686,7 @@ fn drain_or_restart_claude_turn(
     parsed: &HostArgs,
     cwd: &str,
     spool_session_id: &str,
+    record_target: Option<&super::child_lifetime::ChildRecordTarget>,
     state: &Arc<Mutex<ClaudeState>>,
     activity: &ClaudeActivityReporter,
     mode_sync_lock: &Arc<Mutex<()>>,
@@ -1707,7 +1724,7 @@ fn drain_or_restart_claude_turn(
     // Claude under a fresh generation so every future `result` maps 1:1 to a new turn.
     let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
     *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
-    stop_claude_gracefully(&proc.transport, &mut proc.child, child_pid);
+    stop_claude_gracefully(&proc.transport, &mut proc.child, &mut proc.lifetime, child_pid);
     let (resume_id, model, effort, read_only, level) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         s.working = false;
@@ -1727,6 +1744,7 @@ fn drain_or_restart_claude_turn(
         parsed,
         cwd,
         spool_session_id,
+        record_target,
         resume_id.as_deref(),
         false,
         model.as_deref(),
@@ -1761,6 +1779,7 @@ fn drain_or_restart_claude_turn(
                 parsed,
                 cwd,
                 spool_session_id,
+                record_target,
                 None,
                 false,
                 model.as_deref(),
@@ -1825,11 +1844,15 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let active_transport: Arc<Mutex<Option<Arc<ClaudeTransport>>>> = Arc::new(Mutex::new(None));
     let process_gen = Arc::new(AtomicU64::new(1));
 
+    let record_target = endpoint
+        .as_ref()
+        .map(super::child_lifetime::ChildRecordTarget::from_endpoint);
     let mut proc = match spawn_and_init_claude(
         spec,
         &parsed,
         &cwd,
         &spool_session_id,
+        record_target.as_ref(),
         parsed.resume_session_id.as_deref(),
         parsed.fork_session,
         parsed.model.as_deref(),
@@ -1857,6 +1880,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         let transport_sig = active_transport.clone();
         let down_sig = shutting_down.clone();
         let ep_sig = endpoint.clone();
+        let target_sig = record_target.clone();
         thread::spawn(move || {
             while !down_sig.load(Ordering::Acquire) {
                 if super::host::termination_requested() {
@@ -1869,33 +1893,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         t.close_stdin();
                     }
                     let pid = pid_sig.swap(0, Ordering::AcqRel);
-                    if pid != 0 {
-                        let cpid = pid as libc::pid_t;
-                        unsafe {
-                            libc::kill(cpid, libc::SIGTERM);
-                        }
-                        let deadline = Instant::now() + Duration::from_secs(1);
-                        let mut reaped = false;
-                        while Instant::now() < deadline {
-                            let waited =
-                                unsafe { libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG) };
-                            if waited > 0
-                                || (waited < 0
-                                    && std::io::Error::last_os_error().raw_os_error()
-                                        != Some(libc::EINTR))
-                            {
-                                reaped = true;
-                                break;
-                            }
-                            thread::sleep(Duration::from_millis(50));
-                        }
-                        if !reaped {
-                            unsafe {
-                                libc::kill(cpid, libc::SIGKILL);
-                                let _ = libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG);
-                            }
-                        }
-                    }
+                    super::child_lifetime::terminate_child_on_host_signal(pid, target_sig.as_ref());
                     if let Some(ep) = ep_sig.as_ref() {
                         ep.close_channel();
                     }
@@ -1948,7 +1946,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         if let Some(mut retry_user_msg) = retry_msg {
             let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
             *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
-            stop_claude_gracefully(&proc.transport, &mut proc.child, &child_pid);
+            stop_claude_gracefully(&proc.transport, &mut proc.child, &mut proc.lifetime, &child_pid);
             let (resume_id, model, effort, read_only, level) = {
                 let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                 s.child_pid = 0;
@@ -1968,6 +1966,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                 &parsed,
                 &cwd,
                 &spool_session_id,
+                record_target.as_ref(),
                 resume_id.as_deref(),
                 false,
                 model.as_deref(),
@@ -2041,7 +2040,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
             thread::sleep(Duration::from_millis(500));
             let new_gen = process_gen.fetch_add(1, Ordering::AcqRel) + 1;
             *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
-            stop_claude_gracefully(&proc.transport, &mut proc.child, &child_pid);
+            stop_claude_gracefully(&proc.transport, &mut proc.child, &mut proc.lifetime, &child_pid);
             let (resume_id, model, effort, read_only, level) = {
                 let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
                 s.working = false;
@@ -2064,6 +2063,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                 &parsed,
                 &cwd,
                 &spool_session_id,
+                record_target.as_ref(),
                 resume_id.as_deref(),
                 false,
                 model.as_deref(),
@@ -2184,6 +2184,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         &parsed,
                         &cwd,
                         &spool_session_id,
+                        record_target.as_ref(),
                         &state,
                         &activity,
                         &mode_sync_lock,
@@ -2498,6 +2499,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             &parsed,
                             &cwd,
                             &spool_session_id,
+                            record_target.as_ref(),
                             &state,
                             &activity,
                             &mode_sync_lock,
@@ -2611,7 +2613,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     }
                     shutting_down.store(true, Ordering::Release);
                     process_gen.fetch_add(1, Ordering::AcqRel);
-                    stop_claude_gracefully(&proc.transport, &mut proc.child, &child_pid);
+                    stop_claude_gracefully(&proc.transport, &mut proc.child, &mut proc.lifetime, &child_pid);
                     ep.ack(
                         id,
                         true,
@@ -2673,7 +2675,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
 
     shutting_down.store(true, Ordering::Release);
     process_gen.fetch_add(1, Ordering::AcqRel);
-    stop_claude_gracefully(&proc.transport, &mut proc.child, &child_pid);
+    stop_claude_gracefully(&proc.transport, &mut proc.child, &mut proc.lifetime, &child_pid);
     if let Some(ep) = endpoint.as_ref() {
         ep.close_channel();
     }

@@ -31,6 +31,8 @@ pub(crate) mod pending_switch;
 pub(crate) mod spec;
 
 pub use approval::{AcpApprovalLevel, SESSION_ACP_APPROVAL_LEVEL_KEY};
+pub(crate) use child_lifetime::ensure_dead_host_child_stopped;
+pub use child_lifetime::run_watcher_command;
 
 /// Settings key (comma-separated canonical agent families, e.g. `"claude,codex"`) recording
 /// per-agent dismissals of the chat strip's "Switch to Native" offer (`Q4770`).

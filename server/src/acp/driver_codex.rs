@@ -690,6 +690,7 @@ impl Drop for CodexExitGuard {
 
 struct CodexProcess {
     child: Child,
+    lifetime: super::child_lifetime::ChildLifetime,
     transport: Arc<CodexTransport>,
 }
 
@@ -699,6 +700,7 @@ struct CodexSpawnConfig {
     acp_envs: Vec<(String, String)>,
     cwd: String,
     spool_session_id: String,
+    record_target: Option<super::child_lifetime::ChildRecordTarget>,
 }
 
 /// Build `(approvalPolicy, approvalsReviewer, sandboxPolicy)` for Codex `turn/start` matching
@@ -801,16 +803,20 @@ fn spawn_and_init_codex(
                 cfg.argv.join(" ")
             )
         })?;
+    let mut lifetime =
+        super::child_lifetime::ChildLifetime::attach(&child, cfg.record_target.as_ref());
     child_pid.store(child.id(), Ordering::Release);
     state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = child.id();
     let Some(stdin) = child.stdin.take() else {
-        let _ = child.kill();
+        super::child_lifetime::force_kill_child(&mut child);
+        lifetime.cleanup();
         child_pid.store(0, Ordering::Release);
         state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         return Err("Codex app-server stdin unavailable.".to_string());
     };
     let Some(stdout) = child.stdout.take() else {
-        let _ = child.kill();
+        super::child_lifetime::force_kill_child(&mut child);
+        lifetime.cleanup();
         child_pid.store(0, Ordering::Release);
         state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
         return Err("Codex app-server stdout unavailable.".to_string());
@@ -858,7 +864,7 @@ fn spawn_and_init_codex(
         process_gen.fetch_add(1, Ordering::AcqRel);
         *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
         state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
-        stop_codex_gracefully(&transport, &mut child, child_pid);
+        stop_codex_gracefully(&transport, &mut child, &mut lifetime, child_pid);
         return Err(format!("Codex app-server initialize failed: {err}"));
     }
     let _ = transport.notify("initialized", json!({}));
@@ -1024,7 +1030,7 @@ fn spawn_and_init_codex(
             process_gen.fetch_add(1, Ordering::AcqRel);
             *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
             state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
-            stop_codex_gracefully(&transport, &mut child, child_pid);
+            stop_codex_gracefully(&transport, &mut child, &mut lifetime, child_pid);
             return Err(format!("Codex thread open/resume failed: {err}"));
         }
     };
@@ -1094,11 +1100,15 @@ fn spawn_and_init_codex(
         process_gen.fetch_add(1, Ordering::AcqRel);
         *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
         state.lock().unwrap_or_else(|p| p.into_inner()).child_pid = 0;
-        stop_codex_gracefully(&transport, &mut child, child_pid);
+        stop_codex_gracefully(&transport, &mut child, &mut lifetime, child_pid);
         return Err("Codex thread/fork did not return a forked thread id.".to_string());
     }
 
-    Ok(CodexProcess { child, transport })
+    Ok(CodexProcess {
+        child,
+        lifetime,
+        transport,
+    })
 }
 
 /// Wait briefly if `turn/start` is still in flight so `active_turn_id` can arrive, then cancel
@@ -1168,7 +1178,7 @@ fn restart_codex_process(
     *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
     if let Some(mut old) = proc_opt.take() {
         cancel_all_pending_codex(&old.transport, state);
-        stop_codex_gracefully(&old.transport, &mut old.child, child_pid);
+        stop_codex_gracefully(&old.transport, &mut old.child, &mut old.lifetime, child_pid);
     }
     let (resume_id, level, read_only, next_profile) = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -1279,7 +1289,7 @@ fn apply_codex_approval_level(
             *active_transport.lock().unwrap_or_else(|p| p.into_inner()) = None;
             if let Some(mut old) = proc_opt.take() {
                 cancel_all_pending_codex(&old.transport, state);
-                stop_codex_gracefully(&old.transport, &mut old.child, child_pid);
+                stop_codex_gracefully(&old.transport, &mut old.child, &mut old.lifetime, child_pid);
             }
             let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
             s.working = false;
@@ -1633,26 +1643,33 @@ fn cancel_all_pending_codex(transport: &CodexTransport, state: &Mutex<CodexState
     }
 }
 
-fn stop_codex_gracefully(transport: &CodexTransport, child: &mut Child, child_pid: &AtomicU32) {
+fn stop_codex_gracefully(
+    transport: &CodexTransport,
+    child: &mut Child,
+    lifetime: &mut super::child_lifetime::ChildLifetime,
+    child_pid: &AtomicU32,
+) {
     transport.close_stdin();
     let deadline = SystemTime::now() + Duration::from_secs(2);
     loop {
         match child.try_wait() {
             Ok(Some(_)) => {
                 child_pid.store(0, Ordering::Release);
+                lifetime.cleanup();
                 return;
             }
             Ok(None) => {
                 if SystemTime::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    super::child_lifetime::force_kill_child(child);
                     child_pid.store(0, Ordering::Release);
+                    lifetime.cleanup();
                     return;
                 }
                 thread::sleep(Duration::from_millis(50));
             }
             Err(_) => {
                 child_pid.store(0, Ordering::Release);
+                lifetime.cleanup();
                 return;
             }
         }
@@ -2401,12 +2418,16 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         (CodexDenyMode::None, None)
     };
 
+    let record_target = endpoint
+        .as_ref()
+        .map(super::child_lifetime::ChildRecordTarget::from_endpoint);
     let spawn_cfg = CodexSpawnConfig {
         prog,
         argv,
         acp_envs,
         cwd: cwd.clone(),
         spool_session_id,
+        record_target: record_target.clone(),
     };
 
     let file_instructions = parsed
@@ -2477,6 +2498,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
         let transport_sig = active_transport.clone();
         let down_sig = shutting_down.clone();
         let ep_sig = endpoint.clone();
+        let target_sig = record_target.clone();
         thread::spawn(move || {
             while !down_sig.load(Ordering::Acquire) {
                 if super::host::termination_requested() {
@@ -2489,33 +2511,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         t.close_stdin();
                     }
                     let pid = pid_sig.swap(0, Ordering::AcqRel);
-                    if pid != 0 {
-                        let cpid = pid as libc::pid_t;
-                        unsafe {
-                            libc::kill(cpid, libc::SIGTERM);
-                        }
-                        let deadline = Instant::now() + Duration::from_secs(1);
-                        let mut reaped = false;
-                        while Instant::now() < deadline {
-                            let waited =
-                                unsafe { libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG) };
-                            if waited > 0
-                                || (waited < 0
-                                    && std::io::Error::last_os_error().raw_os_error()
-                                        != Some(libc::EINTR))
-                            {
-                                reaped = true;
-                                break;
-                            }
-                            thread::sleep(Duration::from_millis(50));
-                        }
-                        if !reaped {
-                            unsafe {
-                                libc::kill(cpid, libc::SIGKILL);
-                                let _ = libc::waitpid(cpid, std::ptr::null_mut(), libc::WNOHANG);
-                            }
-                        }
-                    }
+                    super::child_lifetime::terminate_child_on_host_signal(pid, target_sig.as_ref());
                     if let Some(ep) = ep_sig.as_ref() {
                         ep.close_channel();
                     }
@@ -3521,7 +3517,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                     shutting_down.store(true, Ordering::Release);
                     process_gen.fetch_add(1, Ordering::AcqRel);
                     if let Some(mut old) = proc_opt.take() {
-                        stop_codex_gracefully(&old.transport, &mut old.child, &child_pid);
+                        stop_codex_gracefully(
+                            &old.transport,
+                            &mut old.child,
+                            &mut old.lifetime,
+                            &child_pid,
+                        );
                     }
                     ep.ack(
                         id,
@@ -3578,7 +3579,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     shutting_down.store(true, Ordering::Release);
     process_gen.fetch_add(1, Ordering::AcqRel);
     if let Some(mut old) = proc_opt.take() {
-        stop_codex_gracefully(&old.transport, &mut old.child, &child_pid);
+        stop_codex_gracefully(
+            &old.transport,
+            &mut old.child,
+            &mut old.lifetime,
+            &child_pid,
+        );
     }
     if let Some(ep) = endpoint.as_ref() {
         ep.close_channel();
