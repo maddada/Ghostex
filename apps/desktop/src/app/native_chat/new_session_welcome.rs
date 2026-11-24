@@ -13,38 +13,11 @@ and this module renders them. The sizes below come from the React welcome's
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::helpers::*;
-use crate::app::native_chat::cursor::ChatCursor as _;
 use crate::app::window::native_modal_kit::css_mix;
 use gpui::prelude::FluentBuilder as _;
-use gpui::{
-    AnyElement, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _,
-};
+use gpui::{AnyElement, Context, Hsla, IntoElement, ParentElement as _, Styled as _};
 use gpui::{div, img, px, rgb, svg};
 use serde_json::{Value, json};
-
-/// Starter prompts shown on a fresh Native Chat welcome so Day-0 users can send their first
-/// prompt in one click (`Q2` Day-0 First 5 Prompts).
-const STARTER_PROMPTS: [(&str, &str, &str); 3] = [
-    (
-        "starter-overview",
-        "Summarize this codebase",
-        "Give me a quick architecture overview of this project and where the main entry points live.",
-    ),
-    (
-        "starter-changes",
-        "Review recent changes",
-        "Review the recent git changes in this repo and flag any bugs or edge cases.",
-    ),
-    (
-        "starter-bug",
-        "Find and fix a bug",
-        "Help me investigate and fix a bug in this codebase. First, tell me how tests are run here.",
-    ),
-];
-
-/// Minimum pane height (unscaled) to show starter prompt chips and inline quick-settings toggles.
-const MIN_STARTER_PANE_HEIGHT: f32 = 360.0;
 
 /// `.ghostex-chat-new-session-agent`: the 3rem rounded card the mark sits in.
 const AGENT_CARD_SIZE: f32 = 48.0;
@@ -171,14 +144,11 @@ impl NativeChatView {
                         )
                     },
                 )
-                // Starter prompt chips, Prompt Queue hint, and inline top-friction settings toggles
-                // (`Q2` Day-0 First 5 Prompts) + tips card under a regular new chat's headline.
+                // The tips card (new_chat_tips.rs): under a regular new chat's headline only; a
+                // coordinator's welcome hides the headline and has its own intro.
                 .when(
                     welcome.get("showTitle").and_then(Value::as_bool) != Some(false),
-                    |this| {
-                        this.children(self.render_day0_starter_and_inline_toggles(p, cx))
-                            .children(self.render_new_chat_tips(p, cx))
-                    },
+                    |this| this.children(self.render_new_chat_tips(p, cx)),
                 )
                 .into_any_element();
         }
@@ -224,209 +194,6 @@ impl NativeChatView {
                 )
             })
             .into_any_element()
-    }
-
-    /// Starter prompt chips, Prompt Queue hint, and inline quick-settings toggles on a fresh
-    /// Native Chat so Day-0 users send their first prompt and adjust key preferences without
-    /// bouncing into the Settings modal.
-    fn render_day0_starter_and_inline_toggles(
-        &mut self,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        let s = p.scale;
-        let height = f32::from(self.bounds.get().size.height);
-        if height > 0.0 && height < MIN_STARTER_PANE_HEIGHT * s {
-            return None;
-        }
-        let wash = p.foreground.opacity(if p.light { 0.04 } else { 0.05 });
-        let hover_wash = p.foreground.opacity(if p.light { 0.08 } else { 0.1 });
-        let border = p.foreground.opacity(if p.light { 0.09 } else { 0.1 });
-
-        let chips = div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .justify_center()
-            .gap(px(6.0 * s))
-            .max_w(px(520.0 * s))
-            .children(STARTER_PROMPTS.into_iter().map(|(id, label, prompt)| {
-                div()
-                    .id(id)
-                    .role(gpui::Role::Button)
-                    .aria_label(label)
-                    .px(px(11.0 * s))
-                    .py(px(6.0 * s))
-                    .rounded(px(999.0 * s))
-                    .bg(wash)
-                    .border_1()
-                    .border_color(border)
-                    .chat_cursor_pointer()
-                    .hover(move |style| style.bg(hover_wash))
-                    .text_size(px(12.0 * s))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(p.foreground.opacity(0.88))
-                    .child(label)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.replace_draft(prompt, false, false, cx);
-                    }))
-            }));
-
-        let queue_hint = div()
-            .text_size(px(11.5 * s))
-            .text_color(p.muted.opacity(0.85))
-            .text_center()
-            .child("Keep typing while your agent works. Press Enter to queue follow-up prompts.");
-
-        let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
-        let settings = snapshot.object();
-        let skip_permissions = settings
-            .get("agentAcceptAllEnabled")
-            .and_then(Value::as_bool)
-            == Some(true);
-        let theme_raw = settings
-            .get("sidebarTheme")
-            .and_then(Value::as_str)
-            .unwrap_or("system");
-        let (theme_label, next_theme) = match theme_raw {
-            "plain-light" => ("Theme: Light", "system"),
-            "system" => ("Theme: System", "dark-2"),
-            _ => ("Theme: Dark", "plain-light"),
-        };
-        let quiet_view_on = settings
-            .get("chatQuietViewChats")
-            .and_then(Value::as_bool)
-            .unwrap_or(true);
-
-        let inline_pill =
-            |id: &'static str, icon_path: &'static str, label: String, active: bool| {
-                div()
-                    .id(id)
-                    .role(gpui::Role::Button)
-                    .aria_label(label.clone())
-                    .flex()
-                    .items_center()
-                    .gap(px(5.0 * s))
-                    .px(px(9.0 * s))
-                    .py(px(4.0 * s))
-                    .rounded(px(8.0 * s))
-                    .bg(if active {
-                        p.foreground.opacity(if p.light { 0.08 } else { 0.09 })
-                    } else {
-                        p.foreground.opacity(if p.light { 0.025 } else { 0.03 })
-                    })
-                    .border_1()
-                    .border_color(if active {
-                        p.foreground.opacity(if p.light { 0.16 } else { 0.18 })
-                    } else {
-                        p.foreground.opacity(if p.light { 0.07 } else { 0.08 })
-                    })
-                    .chat_cursor_pointer()
-                    .hover(move |style| style.bg(hover_wash))
-                    .child(
-                        svg()
-                            .path(icon_path)
-                            .size(px(12.5 * s))
-                            .text_color(p.foreground.opacity(if active { 0.88 } else { 0.62 })),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(11.5 * s))
-                            .text_color(p.foreground.opacity(if active { 0.9 } else { 0.72 }))
-                            .child(label),
-                    )
-            };
-
-        let inline_toggles = div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .justify_center()
-            .gap(px(6.0 * s))
-            .mt(px(2.0 * s))
-            .child(
-                inline_pill(
-                    "welcome-inline-approvals",
-                    "titlebar/bolt.svg",
-                    if skip_permissions {
-                        "Approvals: Skip permissions".to_string()
-                    } else {
-                        "Approvals: Ask first".to_string()
-                    },
-                    skip_permissions,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.host(
-                        "updateInlineSetting",
-                        json!({ "key": "agentAcceptAllEnabled", "value": !skip_permissions }),
-                        cx,
-                    );
-                })),
-            )
-            .child(
-                inline_pill(
-                    "welcome-inline-theme",
-                    "titlebar/palette.svg",
-                    theme_label.to_string(),
-                    false,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.host(
-                        "updateInlineSetting",
-                        json!({ "key": "sidebarTheme", "value": next_theme }),
-                        cx,
-                    );
-                })),
-            )
-            .child(
-                inline_pill(
-                    "welcome-inline-quiet-view",
-                    "titlebar/eye-off.svg",
-                    if quiet_view_on {
-                        "Quiet View: On".to_string()
-                    } else {
-                        "Quiet View: Off".to_string()
-                    },
-                    quiet_view_on,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.host(
-                        "updateInlineSetting",
-                        json!({ "key": "chatQuietViewChats", "value": !quiet_view_on }),
-                        cx,
-                    );
-                })),
-            )
-            .child(
-                inline_pill(
-                    "welcome-inline-find-prompts",
-                    "titlebar/file-search.svg",
-                    "Past prompts".to_string(),
-                    false,
-                )
-                .tooltip(|window, cx| {
-                    gpui_component::tooltip::Tooltip::new("Search by Prompt")
-                        .keys(super::composer::hotkey_chord(Some("openFindPrompts")))
-                        .build(window, cx)
-                })
-                .on_click(cx.listener(|_, _, _, cx| {
-                    cx.emit(super::state::NativeChatEvent::Host(
-                        json!({ "type": "open", "modal": "findPrompts" }),
-                    ));
-                })),
-            );
-
-        Some(
-            div()
-                .flex()
-                .flex_col()
-                .items_center()
-                .gap(px(8.0 * s))
-                .child(chips)
-                .child(queue_hint)
-                .child(inline_toggles)
-                .into_any_element(),
-        )
     }
 }
 
