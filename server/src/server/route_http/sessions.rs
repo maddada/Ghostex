@@ -632,6 +632,7 @@ pub(super) async fn route_sessions_http(
                 board_card_resolves_thread(&body_json).unwrap_or_default();
             coordinator_resolve::handle_resolve_coordinator_thread_http(
                 &state,
+                &caller,
                 "/api/resolveCoordinatorThread".to_string(),
                 request_id,
                 &json!({ "params": { "projectId": project_id, "sessionId": session_id, "resolved": true } }),
@@ -829,6 +830,7 @@ pub(super) async fn route_sessions_http(
         "/api/resolveCoordinatorThread" => {
             coordinator_resolve::handle_resolve_coordinator_thread_http(
                 &state,
+                &caller,
                 endpoint.path,
                 request_id,
                 &body_json,

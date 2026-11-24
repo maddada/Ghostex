@@ -228,6 +228,32 @@ pub(super) async fn route_agents_http(
                     }
                 }
             }
+            let mut body_json = body_json;
+            if matches!(
+                endpoint.path.as_str(),
+                "/api/killSession" | "/api/transitionSession"
+            ) {
+                if let crate::security::Principal::Session {
+                    project_id,
+                    session_id,
+                    ..
+                } = &caller
+                {
+                    if let Some(params) = body_json
+                        .get_mut("params")
+                        .and_then(Value::as_object_mut)
+                    {
+                        params.insert(
+                            crate::session_close_log::CLOSED_BY_PARAM.to_string(),
+                            Value::String(crate::ids::create_global_session_ref(
+                                state.metadata.server_id.as_str(),
+                                project_id,
+                                session_id,
+                            )),
+                        );
+                    }
+                }
+            }
             handle_zmx_lifecycle_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/reloadSessionAgent" => {

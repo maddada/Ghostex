@@ -175,7 +175,7 @@ async fn pass(
                 RemoteReport::Closed => "closed".to_string(),
                 RemoteReport::Stalled { due } => format!("stalled:{}", due.round),
                 RemoteReport::TurnEnded { due } => format!("turn-ended:{}", due.round),
-                RemoteReport::Undelivered(row) => format!("undelivered:{}", row.row_id),
+                RemoteReport::Undelivered(rows) => format!("undelivered:{}", rows[0].row_id),
             })
             .collect()
     })

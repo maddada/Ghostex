@@ -101,6 +101,29 @@ impl NativeChatView {
             .filter(|statuses| !statuses.is_empty())
             .unwrap_or_else(|| sole.as_array().expect("status row"));
         let subject = text(suppressed, "subject");
+        let delivery_retry = (subject == "delivery").then(|| {
+            let dn = &suppressed["deliveryNotice"];
+            let project_id = text(dn, "projectId");
+            let session_id = text(dn, "sessionId");
+            let prompt_ids: Vec<String> = dn["promptIds"]
+                .as_array()
+                .map(|ids| {
+                    ids.iter()
+                        .filter_map(Value::as_str)
+                        .map(str::trim)
+                        .filter(|id| !id.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default();
+            let preview = text(dn, "preview");
+            (!project_id.is_empty() && !session_id.is_empty() && !prompt_ids.is_empty())
+                .then_some((project_id, session_id, prompt_ids))
+                .map(|target| (target, preview))
+        });
+        let delivery_preview = (subject == "delivery")
+            .then(|| text(&suppressed["deliveryNotice"], "preview"))
+            .filter(|preview| !preview.is_empty());
         let rows = div()
             .flex()
             .flex_col()
@@ -108,19 +131,30 @@ impl NativeChatView {
             .min_w_0()
             .gap(px(SINGLE_LINE_CARD.stack_gap(p) * s))
             .children(statuses.iter().enumerate().map(|(index, status)| {
+                let retry = if index == 0 {
+                    delivery_retry
+                        .as_ref()
+                        .and_then(|opt| opt.as_ref().map(|(target, _)| target.clone()))
+                } else {
+                    None
+                };
                 self.status_row(
                     format!("status:{id}:{index}"),
+                    id,
                     &subject,
                     text(status, "label"),
                     text(status, "detail"),
                     &text(status, "tone"),
+                    delivery_preview.as_deref(),
+                    retry,
                     p,
+                    cx,
                 )
             }));
         if suppressed["expandable"] != true {
             return rows.into_any_element();
         }
-        self.expandable_status(id, rows, text(suppressed, "text"), p, cx)
+        self.expandable_status(id, &subject, rows, text(suppressed, "text"), p, cx)
     }
 
     /// A slash command's output with more than one line (gx-chat-core `command_output_note`): the
@@ -129,6 +163,7 @@ impl NativeChatView {
     fn expandable_status(
         &self,
         id: &str,
+        subject: &str,
         rows: gpui::Div,
         body: String,
         p: &ChatAppearance,
@@ -139,6 +174,7 @@ impl NativeChatView {
         let expanded = self.expanded.contains(&key);
         let motion = self.disclosure_frame(&key, expanded, cx);
         let toggle_key = key.clone();
+        let is_delivery = subject == "delivery";
         div()
             .flex()
             .flex_col()
@@ -166,46 +202,95 @@ impl NativeChatView {
                     })),
             )
             .when(expanded || motion.is_some(), |column| {
-                column.child(
-                    self.disclosure_body_motion(
-                        &key,
-                        motion,
-                        6.0 * s,
-                        self.nested_scroll(
-                            format!("suppressed-detail:{id}"),
-                            div()
-                                .min_w_0()
-                                .max_h(px(400.0 * s))
-                                .p(px(10.0 * s))
-                                .rounded(px(8.0 * s))
-                                .border_1()
-                                .border_color(p.border)
-                                .bg(p.input)
-                                .child(self.markdown(
-                                    format!("suppressed-body:{id}"),
-                                    fenced_verbatim_block(&body),
-                                    &Value::Null,
-                                    p,
-                                    cx,
-                                )),
-                        ),
-                    ),
-                )
+                let detail_view: AnyElement = if is_delivery {
+                    div()
+                        .min_w_0()
+                        .px(px(12.0 * s))
+                        .py(px(8.0 * s))
+                        .rounded(px(8.0 * s))
+                        .border_1()
+                        .border_color(p.border)
+                        .bg(p.input)
+                        .text_size(px(12.5 * s))
+                        .text_color(p.card_muted)
+                        .child(format!("First line: {body}"))
+                        .into_any_element()
+                } else {
+                    self.nested_scroll(
+                        format!("suppressed-detail:{id}"),
+                        div()
+                            .min_w_0()
+                            .max_h(px(400.0 * s))
+                            .p(px(10.0 * s))
+                            .rounded(px(8.0 * s))
+                            .border_1()
+                            .border_color(p.border)
+                            .bg(p.input)
+                            .child(self.markdown(
+                                format!("suppressed-body:{id}"),
+                                fenced_verbatim_block(&body),
+                                &Value::Null,
+                                p,
+                                cx,
+                            )),
+                    )
+                    .into_any_element()
+                };
+                column.child(self.disclosure_body_motion(&key, motion, 6.0 * s, detail_view))
             })
             .into_any_element()
     }
 
+    fn retry_delivery_notice(
+        &mut self,
+        notice_id: String,
+        project_id: String,
+        session_id: String,
+        prompt_ids: Vec<String>,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.retried_delivery_notices.insert(notice_id) {
+            return;
+        }
+        cx.notify();
+        let remote = self.config.remote.clone();
+        cx.background_executor()
+            .spawn(async move {
+                for prompt_id in prompt_ids {
+                    let params = json!({
+                        "projectId": project_id,
+                        "sessionId": session_id,
+                        "promptId": prompt_id,
+                        "retry": true,
+                    });
+                    let _ = super::rpc::request(
+                        remote.clone(),
+                        "/api/updateSessionChatQueuedPrompt",
+                        &params,
+                    )
+                    .await;
+                }
+            })
+            .detach();
+    }
+
     /// A status as a one-line card (`SINGLE_LINE_CARD`, cards.rs): a tile for what it is about
     /// with its tone as the badge (a green check, a red cross, none when neutral), the sentence on
-    /// one line with the whole of it on hover, and a trailing fact such as "exit code 1" as a pill.
+    /// one line with the whole of it on hover, and a trailing fact such as "exit code 1" as a pill
+    /// (or a Retry button for a delivery-failure notice whose failed queue rows can be retried).
+    #[allow(clippy::too_many_arguments)]
     fn status_row(
         &self,
         id: String,
+        message_id: &str,
         subject: &str,
         label: String,
         detail: String,
         tone_name: &str,
+        preview: Option<&str>,
+        retry_target: Option<(String, String, Vec<String>)>,
         p: &ChatAppearance,
+        cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
         let card = &*SINGLE_LINE_CARD;
@@ -214,6 +299,8 @@ impl NativeChatView {
             "command" => "titlebar/terminal-2.svg",
             // A prompt the agent's own hook refused (gx-chat-core `transcript/hook_blocked.rs`).
             "hook" => "titlebar/barrier-block.svg",
+            // A compact delivery-failure notice (gx-chat-core `transcript/delivery_notice.rs`).
+            "delivery" => "titlebar/alert-circle.svg",
             _ => "titlebar/adjustments-horizontal.svg",
         };
         let tile = match tone_name {
@@ -224,7 +311,58 @@ impl NativeChatView {
         // The tile's badge carries the tone; the pill stays muted (CDXC:SessionChat 2026-11-13 on
         // `tone_tile`, tone_card.rs).
         let detail_tone = p.card_muted;
-        let hint = SharedString::from(label.clone());
+        let hint = SharedString::from(match preview {
+            Some(first_line) if !first_line.is_empty() => format!("{label}\nFirst line: {first_line}"),
+            _ => label.clone(),
+        });
+        let retried = self.retried_delivery_notices.contains(message_id);
+        let trailing: Option<AnyElement> = if let Some((target_project, target_session, prompt_ids)) =
+            retry_target
+        {
+            if retried {
+                Some(
+                    card.pill(None, Some("Retried".to_string()), detail_tone, p)
+                        .into_any_element(),
+                )
+            } else {
+                let notice_id = message_id.to_string();
+                Some(
+                    div()
+                        .id(SharedString::from(format!("delivery-retry:{message_id}")))
+                        .role(gpui::Role::Button)
+                        .aria_label("Retry")
+                        .flex_shrink_0()
+                        .px(px(8.0 * s))
+                        .py(px(3.0 * s))
+                        .rounded(px(6.0 * s))
+                        .text_size(px(12.0 * s))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(p.primary)
+                        .bg(p.primary.opacity(if p.light { 0.12 } else { 0.16 }))
+                        .hover(|style| style.bg(p.primary.opacity(if p.light { 0.2 } else { 0.26 })))
+                        .chat_cursor_pointer()
+                        .child("Retry")
+                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+                            cx.stop_propagation();
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.retry_delivery_notice(
+                                notice_id.clone(),
+                                target_project.clone(),
+                                target_session.clone(),
+                                prompt_ids.clone(),
+                                cx,
+                            );
+                        }))
+                        .into_any_element(),
+                )
+            }
+        } else if !detail.is_empty() {
+            Some(card.pill(None, Some(detail), detail_tone, p).into_any_element())
+        } else {
+            None
+        };
         card.shell(div(), p)
             .id(SharedString::from(id))
             .role(gpui::Role::Status)
@@ -243,9 +381,7 @@ impl NativeChatView {
                     .text_color(p.foreground)
                     .child(label),
             )
-            .when(!detail.is_empty(), |row| {
-                row.child(card.pill(None, Some(detail), detail_tone, p))
-            })
+            .children(trailing)
             .tooltip(move |window, cx| {
                 gpui_component::tooltip::Tooltip::new(hint.clone()).build(window, cx)
             })

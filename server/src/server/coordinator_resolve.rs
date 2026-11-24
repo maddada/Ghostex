@@ -43,6 +43,7 @@ const REOPEN_WAKE_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
 /// SEE-ALSO: server/src/ghostex_cli/coordinator/threads.rs (`set_resolved`), apps/desktop/src/app/gx_store/coordinator_actions.rs (the desktop's rows), apps/mobile/app/src/screens/sessions-screen/use-sessions-screen-menus.tsx (the phone's, through the CLI).
 pub(crate) async fn handle_resolve_coordinator_thread_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -90,11 +91,32 @@ pub(crate) async fn handle_resolve_coordinator_thread_http(
     };
     let closed = lifecycle == "stopped";
     let session_body = json!({ "params": { "projectId": project_id, "sessionId": session_id } });
-    let close_body = json!({ "params": {
+    let closed_by_ref = match caller {
+        crate::security::Principal::Session {
+            project_id: caller_project,
+            session_id: caller_session,
+            ..
+        } => Some(crate::ids::create_global_session_ref(
+            state.metadata.server_id.as_str(),
+            caller_project,
+            caller_session,
+        )),
+        _ => params
+            .get(crate::session_close_log::CLOSED_BY_PARAM)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+    };
+    let mut close_params = json!({
         "projectId": project_id,
         "sessionId": session_id,
         "closeSource": "server.threadMarkedDone",
-    } });
+    });
+    if let Some(closed_by) = closed_by_ref {
+        close_params[crate::session_close_log::CLOSED_BY_PARAM] = json!(closed_by);
+    }
+    let close_body = json!({ "params": close_params });
     // Woken before it is reopened: an open thread whose session is still closed is reported to the
     // coordinator as closed and marked done again, and a sleeping one would leave a message waiting.
     // CDXC:Coordinators 2026-10-12 WHY: a sleeping thread is woken too; reopen used to wake only a closed (`stopped`) one, so it answered "Reopened" and left a sleeping thread asleep with a message waiting for it.

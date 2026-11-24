@@ -401,26 +401,34 @@ fn retire_stale_startup_sends(state: &AppState, project_id: &str, session_id: &s
     .map(|prompt| prompt.id)
     .collect();
     drop(db);
-    for prompt_id in stale {
-        fail_held_message(
-            state,
-            project_id,
-            session_id,
-            &prompt_id,
-            &format!(
-                "It waited more than {STARTUP_SEND_WAKE_MAX_AGE_HOURS} hours for the session to wake, so Ghostex stopped waking the session for it. Send it again if it is still needed."
-            ),
-        );
-    }
+    fail_held_messages_batch(
+        state,
+        project_id,
+        session_id,
+        &stale,
+        &format!(
+            "It waited more than {STARTUP_SEND_WAKE_MAX_AGE_HOURS} hours for the session to wake, so Ghostex stopped waking the session for it. Send it again if it is still needed."
+        ),
+        None,
+    );
 }
 
 /// CDXC:SessionChat 2026-10-14 WHY:
-/// Closing a session ends the messages it still holds for its agent. A held message wakes its session on the queue scheduler's backoff (2026-10-12 above), and nothing told it the session had been closed meanwhile: on 2026-10-14 a test agent created a throwaway Claude session whose agent could not start, sent it a message (held), then closed it with `ghostex kill`; 50 seconds later the wake retry brought it back as a running, untitled "Claude Session", and every time the user closed it again it came back. Closing (`/api/killSession`, the Close transition, from any client, the CLI or a cleanup sweep) now marks those messages Not sent, which also tells an agent sender through the queue's undelivered report. A message sent to a session after it was closed is a new ask and still wakes it.
+/// Closing a session ends the messages it still holds for its agent. A held message wakes its session on the queue scheduler's backoff (2026-10-12 above), and nothing told it the session had been closed meanwhile: on 2026-10-14 a test agent created a throwaway Claude session whose agent could not start, sent it a message (held), then closed it with `ghostex kill`; 50 seconds later the wake retry brought it back as a running, untitled "Claude Session", and every time the user closed it again it came back. Closing (`/api/killSession`, the Close transition, from any client, the CLI or a cleanup sweep) now marks those messages Not sent, which also tells an agent sender through the queue's undelivered report (unless the sender or its coordinator closed/resolved the session itself). A message sent to a session after it was closed is a new ask and still wakes it.
 /// SEE-ALSO: server/src/server/zmx_http.rs (`dispatch_zmx_lifecycle_http_blocking` calls this after a close).
 pub(crate) fn retire_held_messages_of_closed_session(
     state: &AppState,
     project_id: &str,
     session_id: &str,
+) {
+    retire_held_messages_of_closed_session_with_actor(state, project_id, session_id, None);
+}
+
+pub(crate) fn retire_held_messages_of_closed_session_with_actor(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    close_actor: Option<&crate::session_chat_queue_undelivered::CloseActor>,
 ) {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
@@ -437,13 +445,74 @@ pub(crate) fn retire_held_messages_of_closed_session(
     .map(|prompt| prompt.id)
     .collect();
     drop(db);
-    for prompt_id in held {
-        fail_held_message(
-            state,
+    fail_held_messages_batch(
+        state,
+        project_id,
+        session_id,
+        &held,
+        "The session was closed before its agent took this message, so Ghostex stopped waking it. Send it again if it is still needed.",
+        close_actor,
+    );
+}
+
+/// Marks a batch of held messages Not sent with `reason`, coalescing sender notices per target and
+/// suppressing notices when `close_actor` says the sender or its coordinator closed the session.
+fn fail_held_messages_batch(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    prompt_ids: &[String],
+    reason: &str,
+    close_actor: Option<&crate::session_chat_queue_undelivered::CloseActor>,
+) {
+    if prompt_ids.is_empty() {
+        return;
+    }
+    let mut failed: Vec<(String, String)> = Vec::new();
+    for prompt_id in prompt_ids {
+        let Ok(snapshot) = crate::session_chat_queue::fail_session_chat_queued_prompt(
+            &state.paths,
             project_id,
             session_id,
-            &prompt_id,
-            "The session was closed before its agent took this message, so Ghostex stopped waking it. Send it again if it is still needed.",
+            prompt_id,
+            reason,
+        ) else {
+            continue;
+        };
+        if let Some(prompt) = snapshot.queue.iter().find(|prompt| prompt.id == *prompt_id) {
+            failed.push((prompt.id.clone(), prompt.text.clone()));
+        }
+    }
+    if failed.is_empty() {
+        return;
+    }
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+        state, project_id, session_id,
+    );
+    let batch: Vec<crate::session_chat_queue_undelivered::UndeliveredPrompt<'_>> = failed
+        .iter()
+        .map(
+            |(prompt_id, text)| crate::session_chat_queue_undelivered::UndeliveredPrompt {
+                prompt_id,
+                text,
+                reason,
+            },
+        )
+        .collect();
+    for (sender_project, sender_session) in
+        crate::session_chat_queue_undelivered::notify_senders_of_undelivered_agent_messages(
+            &state.paths,
+            state.metadata.server_id.as_str(),
+            project_id,
+            session_id,
+            &batch,
+            close_actor,
+        )
+    {
+        crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+            state,
+            &sender_project,
+            &sender_session,
         );
     }
 }
@@ -456,37 +525,14 @@ fn fail_held_message(
     prompt_id: &str,
     reason: &str,
 ) {
-    let Ok(snapshot) = crate::session_chat_queue::fail_session_chat_queued_prompt(
-        &state.paths,
+    fail_held_messages_batch(
+        state,
         project_id,
         session_id,
-        prompt_id,
+        &[prompt_id.to_string()],
         reason,
-    ) else {
-        return;
-    };
-    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
-        state, project_id, session_id,
+        None,
     );
-    let Some(prompt) = snapshot.queue.iter().find(|prompt| prompt.id == prompt_id) else {
-        return;
-    };
-    if let Some((sender_project, sender_session)) =
-        crate::session_chat_queue_undelivered::notify_sender_of_undelivered_agent_message(
-            &state.paths,
-            state.metadata.server_id.as_str(),
-            project_id,
-            session_id,
-            &prompt.text,
-            reason,
-        )
-    {
-        crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
-            state,
-            &sender_project,
-            &sender_session,
-        );
-    }
 }
 
 /// CDXC:SessionChat 2026-10-11 WHY:

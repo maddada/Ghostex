@@ -548,7 +548,16 @@ pub(super) fn set_resolved(parsed: &ParsedArgs, resolved: bool) -> CliResult<()>
             &remote.session_id,
             if resolved { "resolve" } else { "reopen" },
         )?;
-        let session = json!({ "projectId": remote.project_id, "sessionId": remote.session_id });
+        let mut session = json!({ "projectId": remote.project_id, "sessionId": remote.session_id });
+        if close_session {
+            if let Some(map) = session.as_object_mut() {
+                crate::ghostex_cli::wait::insert_close_source(
+                    map,
+                    &parsed.flags,
+                    "cli.coordinatorResolve",
+                );
+            }
+        }
         // Its own computer closes or wakes the session, as for a thread here; while it is away
         // only the link here changes.
         let session_result = match (&remote.flags, close_session, resolved) {
@@ -591,14 +600,22 @@ pub(super) fn set_resolved(parsed: &ParsedArgs, resolved: bool) -> CliResult<()>
     let close_session = resolved && !parsed.flags.truthy("keepOpen");
     // gxserver wakes a thread it reopens and closes one it marks done
     // (server/src/server/coordinator_resolve.rs), the same for every client.
+    let mut resolve_params = json!({
+        "projectId": thread["projectId"],
+        "sessionId": thread["sessionId"],
+        "resolved": resolved,
+        "keepOpen": !close_session,
+    });
+    if let Some(caller) = std::env::var("GHOSTEX_GLOBAL_SESSION_REF")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        resolve_params[crate::session_close_log::CLOSED_BY_PARAM] = json!(caller);
+    }
     let result = call_gxserver_rpc(
         "/api/resolveCoordinatorThread",
-        &json!({
-            "projectId": thread["projectId"],
-            "sessionId": thread["sessionId"],
-            "resolved": resolved,
-            "keepOpen": !close_session,
-        }),
+        &resolve_params,
         &flags,
     )
     .map_err(|error| match (resolved, &error) {

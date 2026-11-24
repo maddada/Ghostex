@@ -649,7 +649,7 @@ impl SessionChatQueueRuntime {
             ) {
                 (self.publisher_factory)(&project_id, &session_id)();
                 if let Some(prompt) = snapshot.queue.iter().find(|prompt| prompt.id == prompt_id) {
-                    self.notify_sender(&project_id, &session_id, &prompt.text, &reason);
+                    self.notify_sender(&project_id, &session_id, &prompt.id, &prompt.text, &reason);
                 }
             }
             self.reset_gate(&session_queue_key(&project_id, &session_id));
@@ -1217,7 +1217,13 @@ impl SessionChatQueueRuntime {
                     .iter()
                     .find(|prompt| prompt.id == ready.prompt_id)
                 {
-                    self.notify_sender(&ready.project_id, &ready.session_id, &prompt.text, reason);
+                    self.notify_sender(
+                        &ready.project_id,
+                        &ready.session_id,
+                        &prompt.id,
+                        &prompt.text,
+                        reason,
+                    );
                 }
             }
         }
@@ -1596,13 +1602,21 @@ impl SessionChatQueueRuntime {
         crate::session_chat_queue::retain_queue_wait_reasons(|id| heads.contains(id));
     }
 
-    fn notify_sender(&self, project_id: &str, session_id: &str, text: &str, reason: &str) {
+    fn notify_sender(
+        &self,
+        project_id: &str,
+        session_id: &str,
+        prompt_id: &str,
+        text: &str,
+        reason: &str,
+    ) {
         if let Some((sender_project, sender_session)) =
             crate::session_chat_queue_undelivered::notify_sender_of_undelivered_agent_message(
                 &self.paths,
                 &self.server_id,
                 project_id,
                 session_id,
+                prompt_id,
                 text,
                 reason,
             )

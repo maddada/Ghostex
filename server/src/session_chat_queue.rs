@@ -1416,6 +1416,45 @@ pub(crate) fn enqueue_session_chat_prompt(
     append_prompt(None, db, project_id, session_id, text, startup_send, &[])
 }
 
+/// Replaces the text of a queued (not yet sending or failed) prompt in place, returning true if the
+/// row was still queued and updated. Used to coalesce multiple delivery-failure notices for the
+/// same target into one row.
+pub(crate) fn replace_queued_prompt_text(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    prompt_id: &str,
+    text: &str,
+) -> Result<bool, DomainStateError> {
+    validate_text(text)?;
+    with_write_tx(db, |db| {
+        let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+        let changed = db
+            .execute(
+                r#"
+                UPDATE session_chat_queued_prompts
+                SET text = ?4,
+                    updatedAt = ?5,
+                    version = ?6
+                WHERE promptId = ?1
+                  AND projectId = ?2
+                  AND sessionId = ?3
+                  AND state = 'queued'
+                "#,
+                params![
+                    prompt_id,
+                    project_id,
+                    session_id,
+                    text,
+                    now_iso(),
+                    next_version,
+                ],
+            )
+            .map_err(sql_error)?;
+        Ok(changed > 0)
+    })
+}
+
 fn update_prompt(
     db: &Connection,
     project_id: &str,

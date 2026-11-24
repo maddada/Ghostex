@@ -342,21 +342,23 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
             "Ghostex thread report: its session was closed, so it is marked done. `ghostex coordinator reopen {thread_ref}` or a message to it resumes the same conversation."
         ),
         ThreadReport::Undelivered { excerpt, evidence } => {
-            let mut body = format!(
-                "Ghostex thread report: your message did not reach it. Its transcript does not show the message you sent, and it is idle, so nothing is working on it.
-
-Your message began: {}",
-                excerpt.trim()
+            let short_line = ghostex_gx_chat_core::transcript::delivery_notice::short_first_line(
+                excerpt,
+                ghostex_gx_chat_core::transcript::delivery_notice::DELIVERY_NOTICE_PREVIEW_MAX_CHARS,
             );
-            if let Some(evidence) = evidence.map(str::trim).filter(|evidence| !evidence.is_empty()) {
-                body.push_str(&format!("
-
-Its chat shows: {evidence}"));
+            let mut body = match evidence.map(str::trim).filter(|evidence| !evidence.is_empty()) {
+                Some(evidence) => {
+                    format!("Ghostex thread report: message wasn't delivered ({evidence}).")
+                }
+                None => String::from(
+                    "Ghostex thread report: message wasn't delivered (the thread is idle without it in its transcript).",
+                ),
+            };
+            if !short_line.is_empty() {
+                body.push_str(&format!("\nFirst line: {short_line}"));
             }
             body.push_str(&format!(
-                "
-
-Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), then send the message again with ghostex agents send {thread_ref}. If it fails again, tell the user."
+                "\nRead its chat (`ghostex read-session-chat {thread_ref} --last 2 --format text`) before sending again."
             ));
             body
         }

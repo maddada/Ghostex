@@ -828,6 +828,12 @@ pub fn classify_suppressed_turn(message: &ChatMessage) -> Option<SuppressedTurn>
             tone: Some("error"),
         });
     }
+    if let Some(notice) = crate::transcript::delivery_notice::parse_delivery_notice(&text) {
+        return Some(SuppressedTurn::Status {
+            label: crate::transcript::delivery_notice::delivery_notice_label(&notice),
+            tone: Some("error"),
+        });
+    }
     // A `/btw` pair folded into one row (side_question.rs): a harness row, never a turn of its own.
     if crate::transcript::side_question::is_side_question_message(message) {
         return Some(SuppressedTurn::Collapsed {
@@ -1053,6 +1059,11 @@ pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
     }
     if let Some(blocked) = crate::transcript::hook_blocked::parse_hook_blocked_prompt(message) {
         return hook_blocked_note(&label, &blocked.reason);
+    }
+    if let Some(notice) = crate::transcript::delivery_notice::parse_delivery_notice(js_trim(
+        &joined_text(&message.blocks),
+    )) {
+        return crate::transcript::delivery_notice::delivery_notice_presentation(&notice);
     }
 
     // A background task's end never gets here: it is projected as the tool call it reports

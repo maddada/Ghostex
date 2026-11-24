@@ -214,11 +214,44 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
                 == Some("stopped")
             {
                 if let Ok(lifecycle) = crate::zmx::read_lifecycle_params(&params) {
-                    crate::session_chat_send_wake::retire_held_messages_of_closed_session(
+                    let close_actor =
+                        crate::session_chat_queue_undelivered::CloseActor::from_params(&params);
+                    crate::session_chat_send_wake::retire_held_messages_of_closed_session_with_actor(
                         state,
                         &lifecycle.project_id,
                         &lifecycle.session_id,
+                        Some(&close_actor),
                     );
+                    let (settled_senders, remote_notices) =
+                        crate::session_chat_send::settle_held_for_closed_session_with_actor(
+                            &db,
+                            state.metadata.server_id.as_str(),
+                            &lifecycle.project_id,
+                            &lifecycle.session_id,
+                            &close_actor,
+                        );
+                    for (sender_project, sender_session) in settled_senders {
+                        super::coordinator_runtime::republish_session_chat(
+                            state,
+                            &sender_project,
+                            &sender_session,
+                        );
+                    }
+                    for notice in remote_notices {
+                        if let Some(computer) = crate::connected_computers::find(&notice.server_id)
+                        {
+                            let _ = super::coordinator_remote_runtime::remote_rpc(
+                                &computer,
+                                "/api/sendSessionChatMessage",
+                                json!({
+                                    "projectId": notice.sender.0,
+                                    "sessionId": notice.sender.1,
+                                    "text": notice.notice,
+                                    "withNext": true,
+                                }),
+                            );
+                        }
+                    }
                     let closed_threads = super::coordinator_close::close_threads_with_coordinator(
                         state,
                         &db,

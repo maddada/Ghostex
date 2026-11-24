@@ -450,6 +450,8 @@ pub(crate) struct NativeChatView {
     pub(super) code_wrap_default: bool,
     /// The long fenced blocks the reader expanded to their full height (keyed like `code_wrap`).
     pub(super) code_expanded: HashSet<String>,
+    /// Delivery-failure status rows whose Retry button was clicked in this view.
+    pub(super) retried_delivery_notices: HashSet<String>,
     /// The composer's dictation session, made the first time the reader presses Dictate.
     pub(crate) dictation: super::dictation::Dictation,
     /// The microphone was pressed and the pointer has not left it since (`hover_dictation`).
@@ -784,6 +786,7 @@ impl NativeChatView {
             code_wrap: HashMap::new(),
             code_wrap_default: false,
             code_expanded: HashSet::new(),
+            retried_delivery_notices: HashSet::new(),
             dictation: None,
             dictate_pressed: Default::default(),
             list,

@@ -13,6 +13,7 @@ pub mod background_rows;
 pub mod chat_look;
 pub mod command_exits;
 pub mod deferred_work;
+pub mod delivery_notice;
 pub mod diff;
 pub mod document;
 pub mod file_change_rows;
