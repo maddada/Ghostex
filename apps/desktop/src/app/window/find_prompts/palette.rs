@@ -56,7 +56,7 @@ impl FindPalette {
 
     /// The theme roles over the derived colours (helpers/theme_roles.rs).
     fn with_theme_roles(mut self, light: bool) -> Self {
-        use crate::app::helpers::{theme_accent_rgba, theme_role_or_rgba};
+        use crate::app::helpers::theme_role_or_rgba;
         for line in [
             &mut self.border,
             &mut self.hairline,
@@ -68,7 +68,6 @@ impl FindPalette {
         }
         self.foreground = theme_role_or_rgba("text", light, self.foreground);
         self.muted = theme_role_or_rgba("mutedText", light, self.muted);
-        self.primary = theme_accent_rgba(light);
         self.destructive = theme_role_or_rgba("danger", light, self.destructive);
         self
     }

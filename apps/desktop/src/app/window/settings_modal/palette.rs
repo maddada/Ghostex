@@ -94,9 +94,7 @@ impl SettingsPalette {
             self.popup_hover = theme_role_or_rgba("hover", light, self.popup_hover);
             self.popup_background = theme_role_or_rgba("menu", light, self.popup_background);
         }
-        let accent = theme_accent_rgba(light);
-        self.settings_accent = accent;
-        self.primary = accent;
+        self.settings_accent = theme_accent_rgba(light);
         self.focus_border = theme_role_or_rgba("focusRing", light, self.focus_border);
         self.ring = theme_role_or_rgba("focusRing", light, self.ring);
         self.destructive = theme_role_or_rgba("danger", light, self.destructive);

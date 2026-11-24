@@ -167,6 +167,8 @@ impl GpuiNativeModeIntroModalWindow {
 
     fn render_stacked_buttons(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
+        let primary_fills = p.primary_button_fills();
+        let secondary_fills = neutral_button_fills(p.light);
         let primary = div()
             .id("native-mode-intro-turn-on")
             .role(gpui::Role::Button)
@@ -175,8 +177,8 @@ impl GpuiNativeModeIntroModalWindow {
             .h(px(36.0))
             .px(px(14.0))
             .rounded(px(MODAL_RADIUS_CONTROL))
-            .bg(hsla(p.primary))
-            .text_color(hsla(p.primary_foreground))
+            .bg(hsla(primary_fills.rest))
+            .text_color(hsla(p.primary_button_text()))
             .text_size(px(13.0))
             .line_height(px(18.0))
             .font_weight(FontWeight::MEDIUM)
@@ -184,7 +186,8 @@ impl GpuiNativeModeIntroModalWindow {
             .items_center()
             .justify_center()
             .cursor_pointer()
-            .hover(|style| style.opacity(0.92))
+            .hover(move |style| style.bg(hsla(primary_fills.hover)))
+            .active(move |style| style.bg(hsla(primary_fills.pressed)))
             .on_click(cx.listener(|this, _, window, cx| {
                 this.turn_on(window, cx);
             }))
@@ -198,7 +201,7 @@ impl GpuiNativeModeIntroModalWindow {
             .h(px(34.0))
             .px(px(14.0))
             .rounded(px(MODAL_RADIUS_CONTROL))
-            .bg(hsla(p.raised))
+            .bg(hsla(secondary_fills.rest))
             .text_color(hsla(p.foreground))
             .text_size(px(13.0))
             .line_height(px(18.0))
@@ -207,7 +210,8 @@ impl GpuiNativeModeIntroModalWindow {
             .items_center()
             .justify_center()
             .cursor_pointer()
-            .hover(|style| style.bg(hsla(p.raised_hover)))
+            .hover(move |style| style.bg(hsla(secondary_fills.hover)))
+            .active(move |style| style.bg(hsla(secondary_fills.pressed)))
             .on_click(cx.listener(|this, _, window, cx| {
                 this.dismiss(window, cx);
             }))

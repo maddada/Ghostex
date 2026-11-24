@@ -719,19 +719,19 @@ impl GpuiAppToastWindow {
         let show_external_hotkey = self.hovered_switch_button == Some("external");
 
         let primary_bg: Hsla = if light {
+            rgba(0x00000029).into()
+        } else {
+            rgba(0xffffff33).into()
+        };
+        let primary_hover_bg: Hsla = if light {
+            rgba(0x00000036).into()
+        } else {
+            rgba(0xffffff42).into()
+        };
+        let primary_fg: Hsla = if light {
             rgb(0x18181b).into()
         } else {
             rgb(0xf4f4f5).into()
-        };
-        let primary_hover_bg: Hsla = if light {
-            rgb(0x27272a).into()
-        } else {
-            rgb(0xffffff).into()
-        };
-        let primary_fg: Hsla = if light {
-            rgb(0xffffff).into()
-        } else {
-            rgb(0x111114).into()
         };
         let secondary_bg: Hsla = if light {
             rgba(0x18181b0d).into()

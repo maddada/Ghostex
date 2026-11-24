@@ -10,7 +10,7 @@ use super::account_switch_card_view::{
 use super::app::helpers::{apply_demo_theme_roles, demo_modal_surface_rgba};
 use super::native_modal_kit::{
     MODAL_RADIUS_CONTROL, MODAL_RADIUS_SECTION, ModalPalette, SwitchOff, SwitchShape, css_mix,
-    draw_switch_accent, hsla, neutral_button_fills, rgba_of,
+    draw_switch, hsla, neutral_button_fills, rgba_of,
 };
 use super::settings_modal::palette::SettingsPalette;
 use super::{DemoEnv, open_modal_window};
@@ -690,7 +690,7 @@ fn render_settings_modal(s: &SettingsPalette, compact: bool) -> AnyElement {
             .child(label)
     };
     let sw = |checked: bool| {
-        draw_switch_accent(
+        draw_switch(
             if compact {
                 SwitchShape::SMALL
             } else {
@@ -701,8 +701,7 @@ fn render_settings_modal(s: &SettingsPalette, compact: bool) -> AnyElement {
                 edge: Some(s.hairline),
                 thumb: if s.light { s.modal.solid_surface } else { s.muted },
             },
-            s.primary,
-            s.modal.primary_foreground,
+            s.light,
             checked,
             false,
         )

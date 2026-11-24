@@ -168,6 +168,23 @@ pub(crate) fn neutral_button_fills(light: bool) -> ButtonFills {
     }
 }
 
+/// The neutral filled primary button every main modal action uses (Rename, Save, Switch to Native,
+/// Create, Connect, Apply): one step brighter/stronger than [`neutral_button_fills`] (Cancel) with
+/// normal foreground text, never the theme accent or a stark white/black slab.
+pub(crate) fn primary_button_fills_for(light: bool) -> ButtonFills {
+    let ink = if light { 0x000000 } else { 0xffffff };
+    let (rest, hover, pressed) = if light {
+        (0.16, 0.21, 0.26)
+    } else {
+        (0.20, 0.26, 0.32)
+    };
+    ButtonFills {
+        rest: modal_rgba(ink, rest),
+        hover: modal_rgba(ink, hover),
+        pressed: modal_rgba(ink, pressed),
+    }
+}
+
 /// The filled destructive button (Remove, Delete, Disable): a tint of the destructive colour under
 /// the destructive label, one step stronger on hover and again while pressed.
 pub(crate) fn destructive_button_fills(destructive: Rgba, light: bool) -> ButtonFills {
@@ -269,7 +286,7 @@ impl ModalPalette {
     /// Menus the menus, Focus ring the focused field's border, and Success and Danger their
     /// colours. A role not set keeps the derived colour.
     pub(crate) fn with_theme_roles(mut self) -> Self {
-        use crate::app::helpers::{theme_accent_rgba, theme_role_or_rgba, theme_role_rgba};
+        use crate::app::helpers::{theme_role_or_rgba, theme_role_rgba};
         let light = self.light;
         self.hairline = theme_role_or_rgba("border", light, self.hairline);
         self.menu_border = theme_role_or_rgba("border", light, self.menu_border);
@@ -291,9 +308,6 @@ impl ModalPalette {
         self.focus_border = theme_role_or_rgba("focusRing", light, self.focus_border);
         self.destructive = theme_role_or_rgba("danger", light, self.destructive);
         self.success = theme_role_or_rgba("success", light, self.success);
-        let primary = theme_accent_rgba(light);
-        self.primary = primary;
-        self.primary_foreground = contrast_ink_on(primary);
         self
     }
 
@@ -377,25 +391,16 @@ impl ModalPalette {
         css_mix(self.primary, 0.88, rgb(0xffffff))
     }
 
-    /// The main button's fill (Save, Create, Rename, Switch to Native, Connect): uses the active
-    /// theme's primary/accent colour in both dark and light modes, shifting subtly on hover and
-    /// press, paired with WCAG-contrasting ink from [`Self::primary_button_text`].
+    /// The main button's fill (Save, Create, Rename, Switch to Native, Connect): a neutral wash
+    /// one step brighter/stronger than [`neutral_button_fills`] (Cancel) with normal foreground
+    /// text, never the theme accent or a harsh white/black slab.
     pub(crate) fn primary_button_fills(&self) -> ButtonFills {
-        let target = if self.light {
-            rgb(0x000000)
-        } else {
-            rgb(0xffffff)
-        };
-        ButtonFills {
-            rest: self.primary,
-            hover: css_mix(self.primary, 0.88, target),
-            pressed: css_mix(self.primary, 0.78, target),
-        }
+        primary_button_fills_for(self.light)
     }
 
     /// The label, icon and spinner colour on [`Self::primary_button_fills`].
     pub(crate) fn primary_button_text(&self) -> Rgba {
-        self.primary_foreground
+        self.foreground
     }
 
     /// The Windows modal window's system border: 16% ink over the surface, so it stays visible against the same-coloured app chrome.

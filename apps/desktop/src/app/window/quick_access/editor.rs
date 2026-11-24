@@ -214,37 +214,29 @@ fn editor_button<V: 'static>(
         .justify_center()
         .rounded(px(QUICK_ACCESS_RADIUS_CONTROL))
         .border_1()
-        .border_color(hsla(if primary {
-            p.hairline
-        } else {
-            rgba_of(p.hairline, 0.0)
-        }))
+        .border_color(hsla(rgba_of(p.hairline, 0.0)))
         .text_size(px(12.0))
-        .text_color(hsla(if primary {
-            p.solid_window
+        .text_color(hsla(p.foreground))
+        .bg(hsla(if primary {
+            crate::app::window::native_modal_kit::primary_button_fills_for(p.light).rest
         } else {
-            p.foreground
+            fills.rest
         }))
-        .bg(hsla(if primary { p.foreground } else { fills.rest }))
         .when(disabled, |this| this.opacity(0.45).cursor_default())
         .when(!disabled, |this| {
+            let primary_fills =
+                crate::app::window::native_modal_kit::primary_button_fills_for(p.light);
             this.cursor_pointer()
                 .hover(move |this| {
                     this.bg(hsla(if primary {
-                        Rgba {
-                            a: 0.88,
-                            ..p.foreground
-                        }
+                        primary_fills.hover
                     } else {
                         fills.hover
                     }))
                 })
                 .active(move |this| {
                     this.bg(hsla(if primary {
-                        Rgba {
-                            a: 0.76,
-                            ..p.foreground
-                        }
+                        primary_fills.pressed
                     } else {
                         fills.pressed
                     }))

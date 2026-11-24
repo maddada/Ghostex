@@ -72,11 +72,10 @@ pub(crate) fn settings_small_switch(
     checked: bool,
     disabled: bool,
 ) -> AnyElement {
-    draw_switch_accent(
+    draw_switch(
         SwitchShape::SMALL,
         super::controls::settings_switch_off(p),
-        p.primary,
-        p.modal.primary_foreground,
+        p.light,
         checked,
         disabled,
     )
