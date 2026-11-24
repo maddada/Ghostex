@@ -7,6 +7,7 @@
 **Ghostex 12.0 is the Native Chat update.** Chats with Claude Code, Codex and Antigravity now run Native: steadier, smoother streaming, faster, and they recover on their own. New chat users start on Native, more agents are moving to Native, and Terminal-based mode is now legacy.
 
 ### 💬 Native chat
+
 - **Native is the new way to chat with Claude Code, Codex and Antigravity.** Ghostex talks to the agent directly instead of reading a terminal, so replies stream smoothly, nothing gets lost in screen scraping, and chats use less CPU.
 - **Messages you send while the agent is working go in right away.** The agent keeps going with its current reply, approvals stay open, and your messages are answered in order. A message you queue on purpose says "Delivers when the current reply ends."
 - **Native chats heal themselves.** If an agent's host stops mid-reply, Ghostex notices within seconds, clears "working" and picks the same chat back up, and the old agent is always stopped first so only one agent ever writes to a chat.
@@ -19,21 +20,25 @@
 - **New chat users start on Native.** Terminal-based mode is marked legacy with a small dot in Settings > Agents, and it will go away in a future release.
 
 ### 🤖 Models
+
 - **The model picker always names the real model,** like Opus 5.5, GPT 6.2 Sol or Gemini 4 Neon, never "Default". With no pick, a chat starts on the newest Opus, Sol or Neon, and the model you pick becomes the default for new chats.
 - **Effort shows as dimmed text next to the model name,** the same in Native and Terminal-based chats.
 - **Settings > Agents has a Default model for each agent,** and switching between Native and Terminal-based keeps the model, effort and 1M context.
 
 ### 🔗 Share links
+
 - **Share a Live page or a localhost port with anyone through a link.** Turn it on in Settings > Sharing. Links expire after 24 hours by default, can have a passcode, and only reach that one page or port.
 - **People you share a Live page with can answer it.** They type their name once, their answers come back to your chat as "Answered by" them, and you can open each person's answers on the page.
 
 ### 📥 Inbox and notifications
+
 - **The Inbox is redesigned** with Pings, a Snoozed drawer and one Recent drawer for everything handled or done, with clearer icons.
 - **Live pages without questions get Done, or Send to agent once you type a comment.**
 - **The bell clears its number when you open it,** and rows stay highlighted until you close the popup or mark them read.
 - **Errors show above the Inbox,** and the Boosts tip sits inside the chat box.
 
 ### 🎨 Look and feel
+
 - **Modals are frosted glass that match your theme,** in every built-in theme, with calm neutral buttons instead of accent colors.
 - **The default theme's blue is lighter,** and the "Ask me anything" card on Main Hub matches the cards around it.
 - **Live page cards in chat are crisp and see-through,** and fold into compact rows in Summary mode.
@@ -42,16 +47,19 @@
 - **The chat box hint is one line,** and counts read correctly everywhere ("2 need you", "Every minute").
 
 ### 🧭 Main Hub and coordinators
+
 - **Main Hub is always on.** You can collapse it, and Autopilot's supervisor now lives inside it instead of showing as separate projects.
 - **Session details load section by section,** so the Overview opens right away.
 - **Clicking a ping opens it at its final size,** and wait reasons name what a thread waits on in plain words.
 
 ### 🧩 Extensions and accounts
+
 - **VS Code, Beads and Automate are now opt-in,** and Boosts and Find are easier to discover.
 - **CLIProxyAPI hubs have an Add account button** for Claude and Codex that works for hubs on other computers too, plus an Accounts card and setup guide.
 - **Workspaces can carry their own agent instructions and Claude connectors.**
 
 ### 🪟 Windows, Linux and macOS
+
 - **Windows: six PowerShell and launch problems are fixed,** and Entra ID accounts pair with the phone.
 - **Windows: Claude Code and Codex installed with npm start again with PowerShell 7** in threads, Ghostex Help and restored sessions, in Native and Terminal-based chats, instead of failing with "Invalid JSON provided to --settings".
 - **Windows: the extra thin line between the sidebar and the chat is gone** at scaled displays like 175%.
@@ -61,6 +69,7 @@
 - **Linux: dragging a window by its top band works on Hyprland,** and chats no longer flicker on NVIDIA under XWayland.
 
 ### 🩹 Fixes and polish
+
 - **Antigravity's sign-in menu shows the Finish signing in card,** and text that only looks like a login menu is no longer mistaken for one, thanks to @cagatay-io.
 - **An approval on a session's screen reads as needing you,** and closing one approval card no longer hides the next, thanks to @cagatay-io.
 - **The phone's terminal keyboard help matches how it works now,** thanks to @cagatay-io.
