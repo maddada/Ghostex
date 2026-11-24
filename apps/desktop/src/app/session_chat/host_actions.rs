@@ -310,6 +310,29 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        // Inline Day-0 quick-settings pills on the fresh Native Chat welcome
+        // (native_chat/new_session_welcome.rs): strict allowlist of top friction keys.
+        if action == "updateInlineSetting" {
+            if let Some(key) = message.get("key").and_then(serde_json::Value::as_str)
+                && matches!(
+                    key,
+                    "agentAcceptAllEnabled" | "sidebarTheme" | "chatQuietViewChats"
+                )
+                && let Some(value) = message.get("value").cloned()
+            {
+                let mut patch = serde_json::Map::new();
+                patch.insert(key.to_string(), value);
+                self.handle_gpui_app_modal_update_settings_patch_message(
+                    &serde_json::json!({
+                        "patch": patch,
+                        "source": "chat:inlineQuickSetting",
+                        "type": "updateSettingsPatch",
+                    }),
+                    cx,
+                );
+            }
+            return;
+        }
         // The coordinator board's view switch (native_chat/coordinator_board.rs): the Board pill
         // opens that view until it is switched again, on every chat and every computer.
         if action == "setCoordinatorBoardView" {

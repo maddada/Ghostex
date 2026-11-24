@@ -1,29 +1,36 @@
 {
   "tips": [
     {
-      "id": "report-a-bug-with-an-agent",
+      "id": "queue-follow-up-prompts",
       "first": 1,
+      "icon": "stack-push",
+      "title": "Queue your next prompts",
+      "body": "Keep typing while your agent works. Press Enter to queue follow-up prompts and it runs them in order."
+    },
+    {
+      "id": "report-a-bug-with-an-agent",
+      "first": 2,
       "icon": "bug",
       "title": "Found a bug? Tell us",
       "body": "Open the sidebar's menu > Send Bug / Feedback and turn on Collect more data with an agent."
     },
     {
       "id": "drag-session-to-split",
-      "first": 2,
+      "first": 3,
       "icon": "layout-columns",
       "title": "Split the view by dragging",
       "body": "Drag a session from the sidebar onto an edge of the chat to open it in a split beside it."
     },
     {
       "id": "start-a-coordinator",
-      "first": 3,
+      "first": 4,
       "icon": "coordinator-crown-points",
       "title": "Let a coordinator delegate",
       "body": "A coordinator hands work to threads and brings results back. Click the arrow beside New session and pick Coordinator."
     },
     {
       "id": "connect-a-device",
-      "first": 4,
+      "first": 5,
       "icon": "devices",
       "title": "Ghostex on your phone",
       "body": "Open the sidebar's menu > Connect a Phone and scan the code with the Ghostex app to follow your agents."
@@ -131,12 +138,6 @@
       "icon": "plus",
       "title": "Start anything from one picker",
       "body": "Click the arrow beside New session for the New Thread picker: pick an agent, Coordinator, Browser or Terminal."
-    },
-    {
-      "id": "toggle-chat-and-terminal",
-      "icon": "terminal-2",
-      "title": "Chat or terminal, your pick",
-      "body": "Click Terminal View in the chat bar to flip between chat and the agent's terminal. The agent keeps running."
     },
     {
       "id": "jump-to-latest-unread",

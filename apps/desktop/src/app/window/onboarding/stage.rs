@@ -8,12 +8,15 @@ use std::time::{Duration, Instant};
 
 pub(crate) const STAGE_WIDTH: f32 = 1672.0;
 pub(crate) const STAGE_HEIGHT: f32 = 941.0;
-pub(crate) const PANEL_COUNT: usize = 6;
-/// x of the hairline between the copy column and the preview column, per panel (`gr` in the prototype).
-pub(crate) const PANEL_DIVIDER_X: [f32; PANEL_COUNT] =
-    [759.0, 836.0, 796.0, 727.0, 756.0, STAGE_WIDTH];
-/// x of the Ghostex lockup and the footer, per panel (`h5` in the prototype).
-pub(crate) const PANEL_LOCKUP_X: [f32; PANEL_COUNT] = [46.0, 46.0, 48.0, 60.0, 46.0, 44.0];
+/// CDXC:Onboarding 2026-11-24 DECISION:
+/// Streamlined 3-step Day-0 flow (Agents -> Preferences -> Start chatting) with Native Chat as the
+/// default and zero terminal-based chat choice.
+pub(crate) const PANEL_COUNT: usize = 3;
+/// x of the hairline between the copy column and the preview column, per panel.
+/// Panel 1 (Agents) and Panel 3 (Start chatting) use a split stage; Panel 2 (Preferences) spans full width.
+pub(crate) const PANEL_DIVIDER_X: [f32; PANEL_COUNT] = [796.0, STAGE_WIDTH, 756.0];
+/// x of the Ghostex lockup and the footer, per panel.
+pub(crate) const PANEL_LOCKUP_X: [f32; PANEL_COUNT] = [48.0, 44.0, 46.0];
 pub(crate) const VEIL_LEFT: f32 = 727.0;
 /// Footer row: the Back button and the panel's forward action share this top edge and height.
 pub(crate) const FOOT_TOP: f32 = 848.0;
@@ -32,21 +35,35 @@ pub(crate) const FOOT_LEFT: f32 = 46.0;
 
 /// x of the footer's right edge for a panel.
 ///
-/// CDXC:Onboarding 2026-10-28 WHY:
-/// The footer used to end at each panel's own divider (759, 796, 727, 756), and Back started at
-/// each panel's lockup, so Back and Next jumped sideways between steps and a user paging with the
-/// mouse missed them. Panels 1-4 now share one footer that ends left of the narrowest divider;
-/// the full-width last panel keeps its footer at the stage's right edge.
+/// Split panels share one footer ending left of the narrowest divider so Back and Next stay aligned;
+/// a full-width panel keeps its footer at the stage's right edge.
 pub(crate) fn foot_right_x(panel: usize) -> f32 {
-    if panel >= PANEL_COUNT {
+    let divider = PANEL_DIVIDER_X
+        .get(panel.saturating_sub(1))
+        .copied()
+        .unwrap_or(STAGE_WIDTH);
+    if divider >= STAGE_WIDTH {
         STAGE_WIDTH - FOOT_RIGHT_INSET
     } else {
-        PANEL_DIVIDER_X[..PANEL_COUNT - 1]
+        PANEL_DIVIDER_X
             .iter()
             .copied()
+            .filter(|x| *x < STAGE_WIDTH)
             .fold(f32::INFINITY, f32::min)
             - FOOT_RIGHT_INSET
     }
+}
+
+/// `<FootActions panel>`: the panel's forward action on the footer row, right-aligned to the copy column.
+pub(crate) fn foot_actions(s: S, panel: usize) -> Div {
+    div()
+        .absolute()
+        .right(s.px(STAGE_WIDTH - foot_right_x(panel)))
+        .top(s.px(FOOT_TOP))
+        .h(s.px(FOOT_HEIGHT))
+        .flex()
+        .items_center()
+        .gap(s.px(24.0))
 }
 
 #[cfg(test)]
@@ -54,13 +71,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn next_stays_put_across_the_first_four_panels() {
-        let first = foot_right_x(1);
-        for panel in 2..PANEL_COUNT {
-            assert_eq!(foot_right_x(panel), first);
-        }
-        assert_eq!(first, 727.0 - FOOT_RIGHT_INSET);
-        assert_eq!(foot_right_x(PANEL_COUNT), STAGE_WIDTH - FOOT_RIGHT_INSET);
+    fn next_stays_put_across_split_panels() {
+        let split_right = foot_right_x(1);
+        assert_eq!(foot_right_x(3), split_right);
+        assert_eq!(split_right, 756.0 - FOOT_RIGHT_INSET);
+        assert_eq!(foot_right_x(2), STAGE_WIDTH - FOOT_RIGHT_INSET);
     }
 }
 

@@ -269,23 +269,12 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         bool,
         bool,
     ) = {
-        let three: &[&str] = &["claude", "codex", "cursor"];
+        let three: &[&str] = &["claude", "codex", "opencode", "antigravity"];
         // Antigravity installed and picked as the default (Chief of Staff runs on it).
         let with_antigravity: &[&str] = &["claude", "codex", "antigravity"];
         match state {
-            "look" | "make-it-yours" | "look-light" | "look-polar" | "look-animated"
-            | "look-transparent" => (
-                InitialPanel::Panel(2),
-                three,
-                false,
-                "none",
-                "off",
-                true,
-                false,
-                false,
-            ),
             "agents-default-missing" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(1),
                 &["claude", "cursor"],
                 false,
                 "none",
@@ -295,7 +284,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-antigravity" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(1),
                 with_antigravity,
                 false,
                 "none",
@@ -306,7 +295,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             ),
             "agents" | "agents-guide" | "agents-integration" | "agents-signed-out"
             | "agents-signing-in" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(1),
                 three,
                 false,
                 "none",
@@ -316,7 +305,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-scanning" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(1),
                 three,
                 false,
                 "none",
@@ -326,7 +315,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 true,
             ),
             "agents-already-connected" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(1),
                 three,
                 true,
                 "none",
@@ -336,7 +325,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-none-installed" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(1),
                 &[],
                 false,
                 "none",
@@ -346,7 +335,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-install-available" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(1),
                 &[],
                 false,
                 "ready",
@@ -356,7 +345,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-install-partial" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(1),
                 &["codex"],
                 false,
                 "ready",
@@ -366,7 +355,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-installing" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(1),
                 &[],
                 false,
                 "installing",
@@ -376,7 +365,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-install-failed" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(1),
                 &[],
                 false,
                 "failed",
@@ -385,69 +374,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
                 false,
             ),
-            "computer-use-installing" => (
-                InitialPanel::Panel(4),
-                three,
-                false,
-                "none",
-                "installing",
-                true,
-                false,
-                false,
-            ),
-            "computer-use-permissions" => (
-                InitialPanel::Panel(4),
-                three,
-                false,
-                "none",
-                "permissions",
-                true,
-                false,
-                false,
-            ),
-            "computer-use-on" => (
-                InitialPanel::Panel(4),
-                three,
-                false,
-                "none",
-                "on",
-                true,
-                false,
-                false,
-            ),
-            "workspace" | "workspace-agents" | "workspace-docs" | "workspace-code"
-            | "workspace-kanban" | "workspace-automate" | "computer-use" => (
-                InitialPanel::Panel(4),
-                three,
-                false,
-                "none",
-                "off",
-                true,
-                false,
-                false,
-            ),
-            "workspace-no-browser-skill" => (
-                InitialPanel::Panel(4),
-                three,
-                false,
-                "none",
-                "off",
-                false,
-                false,
-                false,
-            ),
-            "mobile" | "mobile-no-notify-send" | "mobile-after-setup" => (
-                InitialPanel::Panel(5),
-                three,
-                false,
-                "none",
-                "off",
-                true,
-                false,
-                false,
-            ),
-            "get-started" | "get-started-light" | "get-started-terminal-glass" => (
-                InitialPanel::Panel(6),
+            "get-started" | "preferences" | "get-started-light" | "get-started-glass" => (
+                InitialPanel::Panel(2),
                 three,
                 false,
                 "none",
@@ -457,7 +385,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "get-started-with-projects" => (
-                InitialPanel::Panel(6),
+                InitialPanel::Panel(2),
                 three,
                 false,
                 "none",
@@ -466,7 +394,27 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 true,
                 false,
             ),
-                        _ => (
+            "first-chat" => (
+                InitialPanel::Panel(3),
+                three,
+                false,
+                "none",
+                "off",
+                true,
+                false,
+                false,
+            ),
+            "first-chat-with-projects" => (
+                InitialPanel::Panel(3),
+                three,
+                false,
+                "none",
+                "off",
+                true,
+                true,
+                false,
+            ),
+            _ => (
                 InitialPanel::Panel(1),
                 three,
                 false,
@@ -846,77 +794,23 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     // States that start partway through an interaction.
     let host = host_for_window;
     match state {
-        "computer-use-installing" => with_view(&host, cx, |view, cx| {
-            view.preview_computer_use_installing(cx);
-            view.preview_workspace_computer_use(cx)
-        }),
-        "computer-use" | "computer-use-permissions" | "computer-use-on" => {
-            with_view(&host, cx, |view, cx| {
-                view.preview_workspace_computer_use(cx)
-            })
-        }
         "agents-guide" => with_view(&host, cx, |view, cx| view.preview_open_install_guide(cx)),
-        "mobile-after-setup" => with_view(&host, cx, |view, cx| view.preview_queue_devices(cx)),
         "get-started-light" => with_view(&host, cx, |view, cx| {
             let mut patch = serde_json::Map::new();
             patch.insert("sidebarTheme".into(), json!("plain-light"));
             patch.insert("lightThemePreset".into(), json!("teal"));
             view.preview_settings_patch(patch, cx)
         }),
-        "look-light" => with_view(&host, cx, |view, cx| {
-            let mut patch = serde_json::Map::new();
-            patch.insert("sidebarTheme".into(), json!("plain-light"));
-            patch.insert("windowArtLight".into(), json!("latte"));
-            patch.insert("windowArtDim".into(), json!(12));
-            patch.insert("windowGlassSidebarOpacityLight".into(), json!(80));
-            patch.insert("windowGlassWorkAreaTintLight".into(), json!(68));
-            view.preview_settings_patch(patch, cx)
-        }),
-        "look-polar" => with_view(&host, cx, |view, cx| {
-            view.preview_apply_look_theme("polar-night", cx)
-        }),
-        "look-animated" => with_view(&host, cx, |view, cx| {
-            let mut patch = serde_json::Map::new();
-            patch.insert("sidebarTheme".into(), json!("dark-2"));
-            patch.insert("windowArt".into(), json!("none"));
-            patch.insert("windowGlass".into(), json!("frosted"));
-            patch.insert("windowGlassSource".into(), json!("live"));
-            view.preview_settings_patch(patch, cx)
-        }),
-        "look-transparent" => with_view(&host, cx, |view, cx| {
-            let mut patch = serde_json::Map::new();
-            patch.insert("sidebarTheme".into(), json!("dark-2"));
-            patch.insert("windowArt".into(), json!("none"));
-            patch.insert("windowGlass".into(), json!("frosted"));
-            patch.insert("windowGlassSource".into(), json!("desktopAndWindows"));
-            view.preview_settings_patch(patch, cx)
-        }),
-        "get-started-terminal-glass" => with_view(&host, cx, |view, cx| {
+        "get-started-glass" => with_view(&host, cx, |view, cx| {
             let mut patch = serde_json::Map::new();
             patch.insert("sidebarTheme".into(), json!("dark-2"));
             patch.insert("darkThemePreset".into(), json!("indigo"));
-            patch.insert("preferredAgentInterface".into(), json!("terminal"));
             patch.insert("windowGlass".into(), json!("frosted"));
             patch.insert("windowGlassSidebarOpacityDark".into(), json!(60));
             patch.insert("windowGlassWorkAreaTintDark".into(), json!(70));
             view.preview_settings_patch(patch, cx)
         }),
         "agents-integration" => with_view(&host, cx, |view, cx| view.preview_right_tab(1, cx)),
-        "welcome-coordinators" => with_view(&host, cx, |view, cx| view.preview_welcome_tab(1, cx)),
-        "welcome-mobile" => with_view(&host, cx, |view, cx| view.preview_welcome_tab(2, cx)),
-        "workspace-agents" => with_view(&host, cx, |view, cx| view.preview_workspace_tab(None, cx)),
-        "workspace-docs" => with_view(&host, cx, |view, cx| {
-            view.preview_workspace_tab(Some(1), cx)
-        }),
-        "workspace-code" => with_view(&host, cx, |view, cx| {
-            view.preview_workspace_tab(Some(2), cx)
-        }),
-        "workspace-kanban" => with_view(&host, cx, |view, cx| {
-            view.preview_workspace_tab(Some(3), cx)
-        }),
-        "workspace-automate" => with_view(&host, cx, |view, cx| {
-            view.preview_workspace_tab(Some(4), cx)
-        }),
         "intro-video-offline" => {
             with_view(&host, cx, |view, cx| view.preview_intro_video_offline(cx))
         }

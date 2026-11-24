@@ -41,13 +41,13 @@ impl Preset {
 
     /// What the preset is for, as the first-run card and the Experience page say it.
     ///
-    /// CDXC:Experience 2026-11-15 DECISION:
-    /// Q3286, of the first-run card's words: Regular does show the mode picker; Regular hides the terminal button and shows the attach button instead; Advanced is for people who use terminals more.
+    /// CDXC:Experience 2026-11-24 DECISION:
+    /// User: "pls make native chat default for all new useres and dont even offerthem anything about terminal based chat which we're taking out soon". Supersedes the terminal-based chat wording of Q3286 while keeping the preset setting tables unchanged so existing users keep their controls.
     pub fn description(self) -> &'static str {
         match self {
             Preset::Chill => "A simple chat box and a calm chat. Good for checking in on your agents.",
-            Preset::Regular => "Pick the model, the mode and the effort as you chat. The terminal is in the ••• menu; the chat box shows attach instead.",
-            Preset::Advanced => "For people who use terminals more: the terminal button in the chat box and every detail on screen.",
+            Preset::Regular => "Pick the model, mode and effort as you chat, with file attach ready in the chat box.",
+            Preset::Advanced => "Every chat box control and detail on screen, including the context ring and last-active times.",
         }
     }
 

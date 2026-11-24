@@ -1,40 +1,41 @@
-//! Native GPUI Onboarding: the six-panel first-run flow (Welcome, Make it yours, Agents,
-//! Workspace, Mobile, Get started), the desktop twin of the React `OnboardingModal` in
-//! packages/core-ui/onboarding/.
+//! Native GPUI Onboarding: the streamlined 3-step Day-0 flow (Agents, Preferences, Start chatting)
+//! with Native Chat as the default for all new users and zero terminal-based chat choices.
 //!
-//! CDXC:AppModal 2026-09-28 DECISION:
-//! User: migrate every React modal to GPUI with GPUI-Kit components, looking and working exactly as
-//! now, so the app runs without CEF. The onboarding keeps its 1672x941 stage scaled to the window,
-//! its WebGL-look backgrounds (backdrop.rs), animated demos, arrow-key paging, own toast and popups,
-//! and talks to the app through `OnboardingCommand` instead of the modal host's bridge messages.
-//! SEE-ALSO: packages/core-ui/onboarding/ (the React twin and its CDXC:Onboarding decisions), apps/desktop/src/app/onboarding_modal_lifecycle.rs (open, first-run gating, host commands), apps/desktop/src/bin/native_modal_demo/onboarding.rs (standalone preview), apps/desktop/src/assets/onboarding.rs (icons and pictures).
+//! CDXC:Onboarding 2026-11-24 DECISION:
+//! User: "pls make native chat default for all new useres and dont even offerthem anything about
+//! terminal based chat which we're taking out soon". Streamlined from 5 panels to 3 Day-0 steps:
+//! 1. Agents (auto-detect CLIs, 1-click pick/install, live account sign-in check)
+//! 2. Preferences (inline Experience preset, Agent approvals, optional phone pairing, Appearance/Theme + Native Chat preview)
+//! 3. Start chatting (open or add a project and preview Native Chat + Prompt Queueing)
+//!
+//! Telemetry hook note (once `server/src/telemetry/` + `helpers/telemetry.rs` add `onboarding.step`):
+//! wire `started` in `new()`, `cli_detected` in `receive_agent_hook_status()`, `completed` in
+//! `finish()`, and `skipped` in `leave()`.
+//! SEE-ALSO: apps/desktop/src/app/onboarding_modal_lifecycle.rs (open, first-run gating, host commands), apps/desktop/src/bin/native_modal_demo/onboarding.rs (standalone preview), apps/desktop/src/assets/onboarding.rs (icons and pictures).
 mod agent_cli;
 mod agents;
 mod backdrop;
 mod extension;
+mod first_chat;
 pub(crate) mod fonts;
 mod get_started;
 mod install_guide;
 mod interact;
 mod intro_video;
 mod intro_web_view;
-mod look;
-mod mobile;
 pub(crate) mod model;
 mod primitives;
 mod scan_log;
 mod sign_in;
 mod stage;
 mod text;
-mod welcome;
-mod workspace;
-mod workspace_views;
 
 pub(crate) use agent_cli::AgentCliRequest;
 pub(crate) use model::{CatalogAgent, OnboardingSettings, ThemeSwatchPreset, ThemeTable};
 
 use agent_cli::CliRows;
 use agents::AgentsPanelState;
+use first_chat::FirstChatState;
 use get_started::GetStartedState;
 use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
@@ -43,7 +44,6 @@ use gpui::{
     KeyDownEvent, ObjectFit, ParentElement as _, Render, RenderImage, Styled as _, Window, div,
     img, px,
 };
-use mobile::MobileState;
 use model::{ComputerUseState, DetectedAgent, FlowState};
 use primitives::*;
 use serde_json::{Map, Value};
@@ -51,8 +51,6 @@ use stage::*;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use welcome::WelcomeState;
-use workspace::WorkspaceState;
 
 /// CDXC:Onboarding 2026-09-11 WHY:
 /// The onboarding renders a 1672x941 stage scaled to fit its window, so the frame keeps that aspect ratio at a size that still fits a 1440x900 screen with the menu bar and Dock.
@@ -256,12 +254,9 @@ pub(crate) struct GpuiOnboardingWindow {
     browser_skill_pending: Option<BrowserSkillPending>,
     cli_rows: CliRows,
     next_request_id: u64,
-    welcome: WelcomeState,
-    look: look::LookState,
     agents_panel: AgentsPanelState,
-    workspace: WorkspaceState,
-    mobile: MobileState,
     get_started: GetStartedState,
+    first_chat: FirstChatState,
     /// `MoreMenu` open on the Workspace preview.
     menu_open: bool,
     workspace_menu_opened: Instant,
@@ -337,12 +332,9 @@ impl GpuiOnboardingWindow {
             browser_skill_pending: None,
             cli_rows: CliRows::default(),
             next_request_id: 1,
-            welcome: WelcomeState::new(now),
-            look: look::LookState::default(),
             agents_panel: AgentsPanelState::new(now),
-            workspace: WorkspaceState::new(now),
-            mobile: MobileState::new(now),
             get_started: GetStartedState::default(),
+            first_chat: FirstChatState::new(now),
             menu_open: false,
             workspace_menu_opened: now,
             workspace_menu_dismissed: None,
@@ -359,6 +351,10 @@ impl GpuiOnboardingWindow {
         this.get_started.reset(&this.settings, this.system_light);
         // CDXC:Onboarding 2026-09-11 DECISION:
         // User: "if it's first run ever browser/docs is actually applied as default enabled; for regular current users if they revisit the onboarding by clicking on the setup button in the tips dropdown this shouldn't happen."
+        // CDXC:Onboarding 2026-11-24 DECISION:
+        // Brand-new users start straight in Native Chat (`preferredAgentInterface = "chat"`) with
+        // the Regular experience preset (`chatComposerTerminalButton = false`), while preserving
+        // any explicit preference an existing user already saved.
         if this.first_run {
             let mut patch = model::views_patch(&[
                 (model::ViewKey::Browser, true),
@@ -370,6 +366,31 @@ impl GpuiOnboardingWindow {
             // CDXC:Onboarding 2026-11-11 DECISION:
             // User, on the first-run page (step 8, Workspace): "keep this but make spaces enabled by default". A first run turns Spaces on, as it turns Browser and Files on; the setting's own default stays off, so nobody who already uses Ghostex finds Spaces turned on by an update.
             patch.insert("sidebarSpacesEnabled".to_string(), Value::Bool(true));
+            if !this.settings.preferred_interface_explicit {
+                patch.insert(
+                    "preferredAgentInterface".to_string(),
+                    Value::String("chat".to_string()),
+                );
+                let mut candidate = serde_json::Map::new();
+                candidate.insert(
+                    "preferredAgentInterface".to_string(),
+                    Value::String("chat".to_string()),
+                );
+                candidate.insert(
+                    "agentSessionMode".to_string(),
+                    Value::Object(this.settings.agent_session_mode.clone()),
+                );
+                if ghostex_settings_catalog::apply_fresh_install_native_defaults(&mut candidate)
+                    && let Some(modes) = candidate.remove("agentSessionMode")
+                {
+                    patch.insert("agentSessionMode".to_string(), modes);
+                }
+            }
+            for (key, value) in ghostex_settings_catalog::experience::writes_all(
+                ghostex_settings_catalog::experience::FIRST_RUN_PRESET,
+            ) {
+                patch.insert(key.to_string(), value);
+            }
             this.update_settings(patch, cx);
         }
         // The page only exposes a rescan, so detection and the CLI status are asked for on open.
@@ -405,8 +426,11 @@ impl GpuiOnboardingWindow {
     fn go(&mut self, next: usize, cx: &mut Context<Self>) {
         let next = next.clamp(1, PANEL_COUNT);
         let changed = next != self.panel;
-        if changed && self.panel == 3 {
+        if changed && self.panel == 1 {
             self.save_shown_default_agent(cx);
+        }
+        if changed && self.panel == 2 {
+            self.keep_experience(cx);
         }
         self.panel = next;
         if changed {
@@ -422,12 +446,9 @@ impl GpuiOnboardingWindow {
     fn mount_panel(&mut self, now: Instant, cx: &mut Context<Self>) {
         self.cli_rows.clear();
         match self.panel {
-            1 => self.welcome = WelcomeState::new(now),
-            2 => {}
-            3 => self.mount_agents_panel(now, cx),
-            4 => self.workspace = WorkspaceState::new(now),
-            5 => self.mobile = MobileState::new(now),
-            _ => self.get_started.reset(&self.settings, self.system_light),
+            1 => self.mount_agents_panel(now, cx),
+            2 => self.get_started.reset(&self.settings, self.system_light),
+            _ => self.first_chat = FirstChatState::new(now),
         }
     }
 
@@ -560,7 +581,7 @@ impl GpuiOnboardingWindow {
     }
 
     fn close_popup(&mut self, cx: &mut Context<Self>) {
-        if self.panel == 3 && self.agents_panel.guide_open {
+        if self.panel == 1 && self.agents_panel.guide_open {
             self.agents_panel.guide_open = false;
             self.cli_rows.clear_lazy();
         }
@@ -621,14 +642,12 @@ impl GpuiOnboardingWindow {
 
     /// A `ghostexCliStatus` payload.
     pub(crate) fn receive_cli_status(&mut self, payload: Value, cx: &mut Context<Self>) {
-        let before = self.computer_use_state();
         let installed = |key: &str| payload.get(key).and_then(Value::as_bool) == Some(true);
         if installed("cuaDriverInstalled") && installed("computerUseSkillInstalled") {
             self.computer_use_install_requested = false;
             self.computer_use_install_deadline = None;
         }
         self.cli_status = Some(payload);
-        self.after_computer_use_changed(before, cx);
         self.settle_browser_skill(cx);
         cx.notify();
     }
@@ -667,7 +686,6 @@ impl GpuiOnboardingWindow {
                 cx,
             );
         }
-        let before = self.computer_use_state();
         match action {
             // The Trycua installer's exit; a failure ends "installing" (the app already toasts it).
             Some("installCuaDriver") if !available => {
@@ -682,7 +700,6 @@ impl GpuiOnboardingWindow {
             }
             _ => return,
         }
-        self.after_computer_use_changed(before, cx);
         cx.notify();
     }
 
@@ -733,14 +750,12 @@ impl GpuiOnboardingWindow {
             && now >= deadline
         {
             // CDXC:Onboarding 2026-09-28 WHY: the React host rejected the skill install after 150 s without an answer; the same deadline ends "installing" here.
-            let before = self.computer_use_state();
             self.computer_use_install_deadline = None;
             self.computer_use_install_requested = false;
-            self.after_computer_use_changed(before, cx);
         }
         self.tick_cli_rows(now, cx);
         self.tick_intro_video(cx);
-        if self.panel == 3 {
+        if self.panel == 1 {
             self.tick_agents(now, cx);
             self.tick_sign_in(now, cx);
         }
@@ -862,7 +877,7 @@ impl GpuiOnboardingWindow {
         if self.popup_open() {
             return;
         }
-        if self.look_slider_key(key == "right", cx) || self.slider_key(key == "right", cx) {
+        if self.slider_key(key == "right", cx) {
             cx.stop_propagation();
             return;
         }
@@ -1229,12 +1244,9 @@ impl GpuiOnboardingWindow {
             self.render_intro_video(s, now, cx)
         } else {
             match self.panel {
-                1 => self.render_welcome(s, now, cx),
-                2 => self.render_look(s, now, cx),
-                3 => self.render_agents(s, now, window, cx),
-                4 => self.render_workspace(s, now, cx),
-                5 => self.render_mobile(s, now, cx),
-                _ => self.render_get_started(s, now, cx),
+                1 => self.render_agents(s, now, window, cx),
+                2 => self.render_get_started(s, now, cx),
+                _ => self.render_first_chat(s, now, cx),
             }
         };
         // `gxob-sceneIn`: 0.4s, fading in from 6px lower.
@@ -1363,18 +1375,6 @@ impl Render for GpuiOnboardingWindow {
 /// Entry points the preview binary uses to open a state partway through an interaction.
 #[allow(dead_code)]
 impl GpuiOnboardingWindow {
-    pub(crate) fn preview_computer_use_installing(&mut self, cx: &mut Context<Self>) {
-        let before = self.computer_use_state();
-        self.computer_use_install_requested = true;
-        self.after_computer_use_changed(before, cx);
-        cx.notify();
-    }
-
-    pub(crate) fn preview_workspace_computer_use(&mut self, cx: &mut Context<Self>) {
-        self.ws_show_computer_use();
-        cx.notify();
-    }
-
     pub(crate) fn preview_open_install_guide(&mut self, cx: &mut Context<Self>) {
         self.agents_panel.guide_open = true;
         self.agents_panel.guide_opened_at = Instant::now();
@@ -1390,16 +1390,6 @@ impl GpuiOnboardingWindow {
         cx.notify();
     }
 
-    pub(crate) fn preview_welcome_tab(&mut self, tab: usize, cx: &mut Context<Self>) {
-        self.welcome.tab = match tab {
-            1 => welcome::WelcomeTab::Coordinators,
-            2 => welcome::WelcomeTab::Mobile,
-            _ => welcome::WelcomeTab::Together,
-        };
-        self.welcome.tab_since = Instant::now();
-        cx.notify();
-    }
-
     pub(crate) fn preview_queue_devices(&mut self, cx: &mut Context<Self>) {
         self.flow.phone_queued = true;
         self.flow.computer_queued = true;
@@ -1411,18 +1401,8 @@ impl GpuiOnboardingWindow {
         patch: Map<String, Value>,
         cx: &mut Context<Self>,
     ) {
-        self.look.artworks_revealed = None;
         self.update_settings(patch, cx);
         self.get_started.reset(&self.settings, self.system_light);
-    }
-
-    pub(crate) fn preview_apply_look_theme(&mut self, id: &str, cx: &mut Context<Self>) {
-        self.apply_onboarding_gallery_theme(id, cx);
-    }
-
-    pub(crate) fn preview_workspace_tab(&mut self, view: Option<usize>, cx: &mut Context<Self>) {
-        self.preview_workspace(view.map(|index| model::VIEW_KEYS[index]));
-        cx.notify();
     }
 }
 

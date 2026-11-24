@@ -69,10 +69,12 @@ pub(crate) struct GpuiSidebarWorkspaceTerminalFocusMessage {
     pub(crate) keep_sleeping: bool,
 }
 
+/// CDXC:SessionChat 2026-11-24 DECISION:
+/// User: "pls make native chat default for all new useres and dont even offerthem anything about terminal based chat which we're taking out soon". Native Chat is the default interface variant whenever no explicit terminal override is specified; plain shell rows and explicit terminal actions still pass `Terminal`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum GpuiPreferredAgentInterface {
-    Chat,
     #[default]
+    Chat,
     Terminal,
 }
 

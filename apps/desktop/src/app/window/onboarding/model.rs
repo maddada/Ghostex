@@ -8,13 +8,14 @@ use serde_json::{Map, Value};
 pub(crate) const INSTALL_GUIDE_URL: &str =
     "https://github.com/maddada/Ghostex#supports-all-of-the-popular-agent-clis";
 
-/// CDXC:Onboarding 2026-09-28 DECISION:
-/// User: "We need to implement installing claude/codex/cursor/grok through the setup flow if not installed, and from the agents page in settings." These four always have a row on the Agents panel; a missing one shows an Install button that runs the same gxserver CLI job Settings > Agents uses, with each agent's official installer (PowerShell on Windows). Every other catalog agent installs from the Install guide popup.
-/// CDXC:Onboarding 2026-11-21 DECISION: User: Antigravity is "one of the fully supported options in the onboarding": a row of its own beside Claude and Codex, with its install, its sign-in check (server/src/agent_sign_in.rs) and the default pick, which Chief of Staff then runs on (Gemini Neon at High, server/src/chief/model.rs).
-pub(crate) const PRIMARY_AGENTS: [(&str, &str); 5] = [
+/// CDXC:Onboarding 2026-11-24 DECISION:
+/// Primary auto-detected CLIs on Step 1 of the streamlined 3-step Day-0 onboarding: top 4 active
+/// agents (Claude Code, Codex CLI, Antigravity CLI, OpenCode) plus Cursor Agent and Grok Build.
+pub(crate) const PRIMARY_AGENTS: [(&str, &str); 6] = [
     ("claude", "Claude Code"),
     ("codex", "Codex"),
     ("antigravity", "Antigravity"),
+    ("opencode", "OpenCode"),
     ("cursor", "Cursor Agent"),
     ("grok", "Grok Build"),
 ];
@@ -233,6 +234,8 @@ pub(crate) struct OnboardingSettings {
     pub(crate) notify: bool,
     pub(crate) preferred_interface: String,
     pub(crate) agent_session_mode: Map<String, Value>,
+    /// True when `preferredAgentInterface` was explicitly saved in the user's settings file.
+    pub(crate) preferred_interface_explicit: bool,
     pub(crate) default_prompt_agent_id: String,
     /// Agent approvals (`agentAcceptAllEnabled`): true is Skip permissions.
     pub(crate) accept_all: bool,
@@ -423,6 +426,10 @@ impl OnboardingSettings {
                 .and_then(Value::as_object)
                 .cloned()
                 .unwrap_or_default(),
+            preferred_interface_explicit: matches!(
+                text("preferredAgentInterface"),
+                Some("chat" | "terminal")
+            ),
             default_prompt_agent_id: text("defaultPromptAgentId")
                 .filter(|value| !value.is_empty())
                 .unwrap_or("claude")
@@ -550,6 +557,7 @@ impl OnboardingSettings {
         }
         if let Some(value) = text("preferredAgentInterface") {
             self.preferred_interface = value;
+            self.preferred_interface_explicit = true;
         }
         if let Some(modes) = patch.get("agentSessionMode").and_then(Value::as_object) {
             self.agent_session_mode = modes.clone();

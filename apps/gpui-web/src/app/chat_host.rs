@@ -614,6 +614,22 @@ impl GhostexGpuiApp {
                     }
                 }
             }
+            Some("updateInlineSetting") => {
+                if let Some(key) = message["key"].as_str()
+                    && matches!(
+                        key,
+                        "agentAcceptAllEnabled" | "sidebarTheme" | "chatQuietViewChats"
+                    )
+                    && !message["value"].is_null()
+                {
+                    let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
+                        .object()
+                        .clone();
+                    settings.insert(key.into(), message["value"].clone());
+                    crate::shared_settings::install(settings);
+                    cx.refresh_windows();
+                }
+            }
             // A chat's zoom chords. The page cannot save Settings, so the zoom changes every chat
             // on this page until it reloads.
             Some("setChatZoomPercent") => {

@@ -590,6 +590,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // identifiers unless they explicitly enable the pane overlay.
     ("showQuickModelPickerInTerminal", J::Bool(true)),
     ("showSessionIdInTerminalPanes", J::Bool(false)),
+    // CDXC:SessionChat 2026-11-24 DECISION:
+    // User: "pls make native chat default for all new useres and dont even offerthem anything about terminal based chat which we're taking out soon". Native Chat is the default for all new users and onboarding never offers terminal-based chat; existing users' saved `"terminal"` preferences stay respected until terminal-based chat is removed.
     ("preferredAgentInterface", J::Str("chat")),
     // No per-agent overrides: every agent follows the global Default Agent View
     // until the user picks a different view for that agent in Settings > Agents.
