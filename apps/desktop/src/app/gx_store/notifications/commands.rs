@@ -143,34 +143,51 @@ impl GhostexGpuiApp {
                 self.notifications_panel_kept_unread.clear();
                 if command == NotificationFeedCommand::MarkAllRead {
                     for item in &mut self.notification_feed_state.items {
+                        item.seen = true;
+                        self.gx_store.notifications.mark_item_seen(
+                            &item.machine,
+                            item.id.clone(),
+                            item.kind.wire_name(),
+                        );
                         if !item.awaiting_approval {
                             item.read = true;
-                            item.seen = true;
                         }
                     }
                 } else {
                     self.notification_feed_state
                         .items
                         .retain(|item| item.awaiting_approval);
+                    for item in &mut self.notification_feed_state.items {
+                        item.seen = true;
+                        self.gx_store.notifications.mark_item_seen(
+                            &item.machine,
+                            item.id.clone(),
+                            item.kind.wire_name(),
+                        );
+                    }
                 }
                 self.notification_feed_state.recount_from_items();
                 for machine in self.gx_store_notification_machines_on(tab) {
+                    self.gx_store.notifications.bump_epoch(&machine);
                     self.gx_store_update_notification_feed(
                         machine,
                         json!({ "action": action }),
                         cx,
                     );
                 }
+                cx.notify();
             }
             _ => {
                 let (Some(action), Some((machine, id))) = (command.update_action(), row) else {
                     return;
                 };
+                self.gx_store.notifications.bump_epoch(machine);
                 match command {
                     NotificationFeedCommand::MarkRead => {
                         self.mark_cached_notification_row_read(machine, id, true);
                     }
                     NotificationFeedCommand::MarkUnread => {
+                        self.gx_store.notifications.clear_item_seen(machine, id);
                         self.mark_cached_notification_row_read(machine, id, false);
                     }
                     NotificationFeedCommand::Dismiss => {
@@ -193,6 +210,7 @@ impl GhostexGpuiApp {
                     json!({ "action": action, "notificationId": id }),
                     cx,
                 );
+                cx.notify();
             }
         }
     }
@@ -217,6 +235,11 @@ impl GhostexGpuiApp {
             item.seen = read;
             if read {
                 self.notifications_panel_kept_unread.remove(&key);
+                self.gx_store.notifications.mark_item_seen(
+                    &item.machine,
+                    item.id.clone(),
+                    item.kind.wire_name(),
+                );
             } else {
                 self.notifications_panel_kept_unread.insert(key);
             }
@@ -232,11 +255,26 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         for machine in machines {
-            self.gx_store_update_notification_feed(
-                machine,
-                json!({ "action": "markAllSeen" }),
-                cx,
-            );
+            let Some(route) = self.gx_store_notification_feed_route(&machine) else {
+                continue;
+            };
+            let started_epoch = self.gx_store.notifications.bump_epoch(&machine);
+            cx.spawn(async move |this, cx| {
+                let Some(message) =
+                    update_notification_feed(route, json!({ "action": "markAllSeen" })).await
+                else {
+                    return;
+                };
+                let _ = this.update(cx, |this, cx| {
+                    // Ignore a late `markAllSeen` answer if a newer mutation (such as
+                    // `markShownRead` on close) has already started on this computer.
+                    if this.gx_store.notifications.epoch(&machine) != started_epoch {
+                        return;
+                    }
+                    this.gx_store_store_notification_feed(machine, message, cx);
+                });
+            })
+            .detach();
         }
     }
 
@@ -254,32 +292,37 @@ impl GhostexGpuiApp {
             let Some(route) = self.gx_store_notification_feed_route(&machine) else {
                 continue;
             };
+            let started_epoch = self.gx_store.notifications.begin_mark_read(&machine, &ids);
             cx.spawn(async move |this, cx| {
-                if let Some(message) = update_notification_feed(
+                let final_message = if let Some(message) = update_notification_feed(
                     route.clone(),
                     json!({ "action": "markShownRead", "notificationIds": ids }),
                 )
                 .await
                 {
-                    let _ = this.update(cx, |this, cx| {
-                        this.gx_store_store_notification_feed(machine, message, cx);
-                    });
-                    return;
-                }
-                let mut last = None;
-                for id in ids {
-                    let marked = update_notification_feed(
-                        route.clone(),
-                        json!({ "action": "markRead", "notificationId": id }),
-                    )
-                    .await;
-                    last = marked.or(last);
-                }
-                if let Some(message) = last {
-                    let _ = this.update(cx, |this, cx| {
-                        this.gx_store_store_notification_feed(machine, message, cx);
-                    });
-                }
+                    Some(message)
+                } else {
+                    let mut last = None;
+                    for id in ids {
+                        let marked = update_notification_feed(
+                            route.clone(),
+                            json!({ "action": "markRead", "notificationId": id }),
+                        )
+                        .await;
+                        last = marked.or(last);
+                    }
+                    last
+                };
+                let _ = this.update(cx, |this, cx| {
+                    this.gx_store.notifications.finish_mark_read(&machine);
+                    if let Some(message) = final_message {
+                        if this.gx_store.notifications.epoch(&machine) == started_epoch {
+                            this.gx_store_store_notification_feed(machine, message, cx);
+                        }
+                    } else if !this.gx_store.notifications.has_in_flight_mark_read(&machine) {
+                        this.gx_store_publish_notification_feeds(cx);
+                    }
+                });
             })
             .detach();
         }

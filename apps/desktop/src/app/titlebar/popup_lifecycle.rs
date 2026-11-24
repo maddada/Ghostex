@@ -203,10 +203,17 @@ impl GhostexGpuiApp {
             */
             self.notifications_panel_kept_unread.clear();
             self.notifications_panel_seen_attempted.clear();
+            let mut seen_rows: Vec<(ghostex_gx_core::MachineId, String, &'static str)> = Vec::new();
             for item in &self.notification_feed_state.items {
-                if !item.read && !item.seen {
-                    self.notifications_panel_seen_attempted.insert(item.key());
+                if !item.read {
+                    if !item.seen {
+                        self.notifications_panel_seen_attempted.insert(item.key());
+                    }
+                    seen_rows.push((item.machine.clone(), item.id.clone(), item.kind.wire_name()));
                 }
+            }
+            for (machine, id, kind) in seen_rows {
+                self.gx_store_mark_notification_item_seen(&machine, id, kind);
             }
             self.notification_feed_state.mark_all_seen_optimistically();
             self.mark_all_notifications_seen(cx);
@@ -231,20 +238,32 @@ impl GhostexGpuiApp {
         self.notifications_panel_seen_attempted.clear();
         let mut by_machine: std::collections::BTreeMap<ghostex_gx_core::MachineId, Vec<String>> =
             std::collections::BTreeMap::new();
+        let mut seen_rows: Vec<(ghostex_gx_core::MachineId, String, &'static str)> = Vec::new();
         for item in &mut self.notification_feed_state.items {
-            if !item.read && !item.awaiting_approval && !kept_unread.contains(&item.key()) {
-                item.read = true;
-                item.seen = true;
-                by_machine
-                    .entry(item.machine.clone())
-                    .or_default()
-                    .push(item.id.clone());
+            if kept_unread.contains(&item.key()) {
+                continue;
+            }
+            // Keep every shown row (including active approvals) marked seen optimistically before
+            // the popup closes so the bell badge never flashes back on the close frame.
+            item.seen = true;
+            if !item.read {
+                seen_rows.push((item.machine.clone(), item.id.clone(), item.kind.wire_name()));
+                if !item.awaiting_approval {
+                    item.read = true;
+                    by_machine
+                        .entry(item.machine.clone())
+                        .or_default()
+                        .push(item.id.clone());
+                }
             }
         }
+        for (machine, id, kind) in seen_rows {
+            self.gx_store_mark_notification_item_seen(&machine, id, kind);
+        }
+        self.notification_feed_state.recount_from_items();
         if by_machine.is_empty() {
             return;
         }
-        self.notification_feed_state.recount_from_items();
         self.gx_store_mark_shown_notifications_read(by_machine, cx);
     }
 

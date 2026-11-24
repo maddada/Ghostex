@@ -116,6 +116,20 @@ impl GpuiNotificationFeedKind {
         }
     }
 
+    pub(crate) fn wire_name(self) -> &'static str {
+        match self {
+            Self::Finished => "finished",
+            Self::NeedsInput => "needsInput",
+            Self::Bell => "bell",
+            Self::Custom => "custom",
+            Self::SendFailed => "sendFailed",
+            Self::Failed => "failed",
+            Self::ResetExpiring => "resetExpiring",
+            Self::ResetRedeemed => "resetRedeemed",
+            Self::Security => "security",
+        }
+    }
+
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Finished => "Finished",
@@ -582,27 +596,43 @@ impl GhostexGpuiApp {
         message: &serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(state) = GpuiNotificationFeedState::from_bridge_message(message) else {
+        let Some(mut state) = GpuiNotificationFeedState::from_bridge_message(message) else {
             return;
         };
-        if self.notification_feed_state == state {
-            return;
-        }
         let notifications_open =
             self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications);
         let mut unseen_machines: Vec<ghostex_gx_core::MachineId> = Vec::new();
+        let mut seen_rows: Vec<(ghostex_gx_core::MachineId, String, &'static str)> = Vec::new();
         if notifications_open {
-            for item in &state.items {
+            let mut marked_seen_locally = false;
+            for item in &mut state.items {
                 let key = item.key();
-                if !item.read
-                    && !item.seen
-                    && !self.notifications_panel_kept_unread.contains(&key)
-                    && self.notifications_panel_seen_attempted.insert(key)
-                    && !unseen_machines.contains(&item.machine)
+                if !item.read && !item.seen && !self.notifications_panel_kept_unread.contains(&key)
                 {
-                    unseen_machines.push(item.machine.clone());
+                    // Keep newly arrived rows optimistically seen while the panel is open so
+                    // closing the panel before `markAllSeen` returns never flashes the badge.
+                    item.seen = true;
+                    marked_seen_locally = true;
+                    seen_rows.push((item.machine.clone(), item.id.clone(), item.kind.wire_name()));
+                    if self.notifications_panel_seen_attempted.insert(key)
+                        && !unseen_machines.contains(&item.machine)
+                    {
+                        unseen_machines.push(item.machine.clone());
+                    }
                 }
             }
+            if marked_seen_locally {
+                state.recount_from_items();
+            }
+        }
+        for (machine, id, kind) in seen_rows {
+            self.gx_store_mark_notification_item_seen(&machine, id, kind);
+        }
+        if self.notification_feed_state == state {
+            if notifications_open && !unseen_machines.is_empty() {
+                self.gx_store_mark_machines_notifications_seen(unseen_machines, cx);
+            }
+            return;
         }
         self.notification_feed_state = state.clone();
         self.deliver_reset_expiry_banners(&state, cx);
