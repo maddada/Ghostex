@@ -275,7 +275,15 @@ Rules for every question, whichever way you ask it:
   context, in plain words and Markdown (short paragraphs or bullets). Cover what the thing is in
   plain words, what each answer does, what you recommend and why, any risks, and links (PRs, issues,
   files). A thin one-liner ("From an outside contributor. Tests pass. I'd ask for two small changes
-  first.") is not enough.
+  first.") is not enough. Whatever the user needs to do it goes in the description too: the text to
+  paste or post, the command, the link, the code, the steps (`needs-you add --detail`,
+  `item ask --detail`). The user reads the item with nothing else on screen, so an item they cannot
+  act on from its Details alone is not ready. Put text to paste or post in its own ` ``` ` block in
+  the description, the whole text, so its Copy button copies exactly that; the link where it goes
+  sits right above it. Its row above the chat shows the title only; the description is in Details.
+  `needs-you add` and `item ask` refuse a to-do whose title starts with paste, post, copy, send,
+  reply, run, type, enter, sign in or open until the description holds a ` ``` ` block, a link or
+  `code`, or `--command` is set.
 - **Show the exact words for anything posted in the user's name:** for any reply, comment or message
   to post or send for them, put its full verbatim text inside the question's description.
 - **If the user says "I don't get it"** (or similar confusion), close that question
@@ -391,8 +399,10 @@ Ghostex works out each status:
   ask, say what it waits on or work on it again.
 
 Your reply: its shape is the reply format at the end of the guide. Say only what the dock and the
-Work panel cannot: a cause or diagnosis, a caveat or risk, a draft to paste (or its file, linked),
-the reasoning behind a recommendation. Name lines of work in plain words and threads by title, never by bare
+Work panel cannot: a cause or diagnosis, a caveat or risk, the reasoning behind a recommendation.
+Never put a draft to paste, a command, a link or steps for a Needs you item in your reply: name the
+item and its tag ("Q4858 holds the reply to paste") and nothing more, never repeating what its
+Details say. Name lines of work in plain words and threads by title, never by bare
 `W<n>` IDs; never mention an idle or kept-open thread. Link everything the user could open (a PR, issue, commit, file, page, thread), in replies and
 inside questions: a Markdown link with the full URL, or a file path link. When your own setup slows
 the work (your goal, the standing instructions, a memory note, a playbook override, how the user

@@ -958,11 +958,13 @@ browser window that opened). It takes the session's next Q tag and stays until t
 Done or you clear it, even if the chat is cleared. The user reads it with nothing else on screen,
 often in another chat: its title names what it is about ("Run the signing setup on this computer"),
 never "it", "this" or "that" without the thing. --command shows as a chip the user clicks to copy.
---detail says what it is about and why, always: one short line (about 90 characters) shows under
-the title with Done or the answers still on the row; a longer one shows Details, and its Done or
-answers wait under it. --answer (repeated) offers choices such as "Works" and
-"Something's off" instead of a single Done. Also list it under Needs you in your
-reply. The user's answer arrives as a message: "Q61: Done" (or the answer they picked, or their
+--detail says what it is about and why, always, and holds everything the user needs to do it: the
+text to paste or post (in a ``` block, which gets a Copy button), the link, the code, the steps.
+The row above the chat shows the title only; the detail is in Details. A to-do whose title starts
+with paste, post, copy, send, reply, run, type, enter, sign in or open is refused until --detail
+holds a ``` block, a link or `code`, or --command is set. --answer (repeated) offers choices such
+as "Works" and "Something's off" instead of a single Done. Also name it (its tag and title, never
+its content) under Needs you in your reply. The user's answer arrives as a message: "Q61: Done" (or the answer they picked, or their
 own words). Inside a coordinator's thread the to-do goes to the coordinator's Needs you list,
 and the user's answer still reaches you.
 list: the open to-dos (--all adds the ones settled lately and how).

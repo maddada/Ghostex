@@ -170,6 +170,62 @@ impl NeedsYouRecord {
     }
 }
 
+/// First words of a to-do title that ask the user to paste, post, send or run something.
+const ACT_VERBS: &[&str] = &[
+    "paste", "post", "copy", "send", "reply", "run", "type", "enter", "sign in", "open",
+];
+
+/// Why a to-do (`needs-you add`, `item ask`) that asks the user to paste, post or run something
+/// is refused, or `None` when it may stand: it holds nothing to act on.
+///
+/// CDXC:Coordinators 2026-11-25 DECISION:
+/// A coordinator added "Paste the approved reply to Ajax in #general" with a one-line detail and
+/// put the reply and its link only in its chat answer; the user reads Needs you on its own, often
+/// on the phone, so the to-do was useless there. User: "there's a description field for these
+/// needs you/pings WHY NOT USE IT". On the needs-you-detail page (Q4860 "Refuse") the user chose a
+/// refusal over a warning, since the playbook rule alone had not held. So a to-do (no answers, or
+/// only Done) whose title starts with paste, post, copy, send, reply, run, type, enter, sign in or
+/// open is refused unless its detail holds a ``` block, a link or inline `code`, or it has a
+/// command. A decision question with real answers ("Send the release?" Send / Hold) passes.
+/// SEE-ALSO: server/src/coordinators/work.rs (`handle_work_request` "ask" arm),
+/// server/src/coordinators/user_handoff.rs (the guard this one is modelled on),
+/// server/src/coordinators/playbook.md ("Asking the user", Description bullet).
+pub(crate) fn paste_refusal(
+    title: &str,
+    detail: &str,
+    command: &str,
+    answers: &[String],
+) -> Option<String> {
+    let is_todo = answers
+        .iter()
+        .map(|answer| answer.trim().trim_start_matches('*').trim())
+        .filter(|answer| !answer.is_empty())
+        .all(|answer| answer.eq_ignore_ascii_case("done"));
+    if !is_todo || !command.trim().is_empty() {
+        return None;
+    }
+    let words: Vec<String> = title
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .take(2)
+        .map(str::to_lowercase)
+        .collect();
+    let first = words.first()?;
+    let two = words.join(" ");
+    ACT_VERBS
+        .iter()
+        .find(|verb| **verb == first.as_str() || **verb == two.as_str())?;
+    let has_link = detail.contains("http://") || detail.contains("https://");
+    let has_code = detail.contains("```") || detail.matches('`').count() >= 2;
+    if has_link || has_code {
+        return None;
+    }
+    let lead = title.split_whitespace().next().unwrap_or(title);
+    Some(format!(
+        "\"{lead} …\" asks the user to act, but --detail holds no text, link or command for it. Put the text to paste in a ``` block in --detail (and the link where it goes), or the link or `command` itself, or pass --command, so the user can do it from Details."
+    ))
+}
+
 /// What `needs-you add` asks for.
 pub(crate) struct NewItem {
     pub(crate) title: String,
@@ -201,6 +257,9 @@ impl NewItem {
             return Err(DomainStateError::bad_request(format!(
                 "Offer at most {MAX_ANSWERS} answers."
             )));
+        }
+        if let Some(refusal) = paste_refusal(&title, &self.detail, &self.command, &answers) {
+            return Err(DomainStateError::bad_request(refusal));
         }
         Ok(Self {
             title,

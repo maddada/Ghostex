@@ -31,5 +31,5 @@ pub(crate) use api::{
     route_board_answer, turn_ended, SESSION_NEEDS_YOU_ENDPOINT,
 };
 pub(crate) use runner::handle_board_command_op;
-pub(crate) use store::open_count;
+pub(crate) use store::{open_count, paste_refusal};
 pub(crate) use thread::{forward_answer, thread_ask_of};

@@ -1910,6 +1910,15 @@ pub fn handle_work_request(
                 if let Some(refusal) = super::ask_guard::ask_refusal(&words, &detail, &items) {
                     return Err(bad(refusal));
                 }
+                // A to-do that asks the user to paste, post or run something must hold it in its
+                // Details (Q4860 "Refuse"; the why is at `paste_refusal`).
+                let answers = split_answers(&param_text(params, "answers").unwrap_or_default());
+                let command = param_text(params, "command").unwrap_or_default();
+                if let Some(refusal) =
+                    crate::session_needs_you::paste_refusal(&words, &detail, &command, &answers)
+                {
+                    return Err(bad(refusal));
+                }
             }
             let tag = match param_text(params, "tag") {
                 Some(tag) => {
