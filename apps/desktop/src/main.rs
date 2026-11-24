@@ -344,6 +344,9 @@ fn main() {
     // The 2026-11-21 dark look is the default for a new install; an existing, set-up settings file
     // keeps the look it had (shared_settings/dark_look_default.rs). Before the first settings read too.
     shared_settings::dark_look_default::keep_old_dark_look_once();
+    // Move existing default-theme settings off the dark `#5581a9` accent to `#95d7f6` (and `#0c74a6`
+    // in light mode) once (shared_settings/dark_look_default.rs).
+    shared_settings::dark_look_default::migrate_default_theme_accent_once();
     // The CLIProxyAPI hub key files join a saved secret-folder list once (shared_settings/hub_secret_folders.rs).
     shared_settings::hub_secret_folders::add_hub_secret_folders_once();
     // Enable Experimental Features becomes one switch each, once (shared_settings/experimental_switches.rs).

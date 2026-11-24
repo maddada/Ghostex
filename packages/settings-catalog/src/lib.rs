@@ -541,6 +541,61 @@ pub fn keep_old_look_for_existing_settings(
     changed
 }
 
+/// Updates a saved default theme's `accent` role from the 2026-11-22 defaults (`#5581a9` dark,
+/// `#8da101` light) to `#95d7f6` (dark) and `#0c74a6` (light), only when that appearance still
+/// matches the built-in default preset and tint. Returns whether anything changed.
+///
+/// CDXC:Theming 2026-11-24 DECISION: User: the default theme's notification bell blue (`#5581a9`)
+/// is too dark; everyone using the default theme moves to `#95d7f6` (and matching `#0c74a6` in
+/// light mode). Run once at startup behind a marker file (`migrate_default_theme_accent_once` in
+/// apps/desktop/src/shared_settings/dark_look_default.rs) so any later manual choice is preserved.
+pub fn migrate_default_theme_accent(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    let matches_str = |key: &str, expected: &str| {
+        settings
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .is_none_or(|value| value.trim().eq_ignore_ascii_case(expected))
+    };
+    let dark_default = matches_str("darkThemePreset", "custom")
+        && matches_str("customSidebarTitlebarBackgroundTintColor", "#404e78");
+    let light_default = matches_str("lightThemePreset", "custom")
+        && matches_str("customSidebarTitlebarLightBackgroundTintColor", "#fcf3da");
+    let Some(roles) = settings
+        .get_mut(theme_roles::THEME_ROLES_SETTING)
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return false;
+    };
+    let mut changed = false;
+    let mut upgrade = |appearance: &str, allowed: bool, old: &str, new: &str| {
+        if !allowed {
+            return;
+        }
+        let Some(mode) = roles
+            .get_mut(appearance)
+            .and_then(serde_json::Value::as_object_mut)
+        else {
+            return;
+        };
+        if mode
+            .get("accent")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case(old))
+        {
+            mode.insert(
+                "accent".to_string(),
+                serde_json::Value::String(new.to_string()),
+            );
+            changed = true;
+        }
+    };
+    upgrade("dark", dark_default, "#5581a9", "#95d7f6");
+    upgrade("light", light_default, "#8da101", "#0c74a6");
+    changed
+}
+
 /// The dark-mode glass keys and their light-mode twins that Same for light and dark folds into one
 /// (CDXC:Settings 2026-10-29 DECISION, cleanup Q19, in packages/settings-catalog/src/general/theme.rs).
 pub const WINDOW_GLASS_LIGHT_DARK_PAIRS: [(&str, &str); 5] = [

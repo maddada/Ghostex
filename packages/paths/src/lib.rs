@@ -150,6 +150,14 @@ impl GhostexPaths {
             .join(format!("dark-look-default-{day}-migrated"))
     }
 
+    /// Written once the 2026-11-24 default theme accent update (`#5581a9` -> `#95d7f6` dark,
+    /// `#8da101` -> `#0c74a6` light) has run over an existing settings file
+    /// (`migrate_default_theme_accent_once` in the desktop app).
+    pub fn default_theme_accent_marker_file(&self) -> PathBuf {
+        self.state_dir
+            .join("default-theme-accent-2026-11-24-migrated")
+    }
+
     /// Written once the rail's on-by-default change has run over an existing settings file
     /// (`migrate_sidebar_rail_default_once` in the desktop app).
     pub fn sidebar_rail_default_marker_file(&self) -> PathBuf {

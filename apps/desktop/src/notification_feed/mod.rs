@@ -48,10 +48,13 @@ const NOTIFICATION_BELL_ICON: &str = "titlebar/bell.svg";
 const NOTIFICATION_BELL_ICON_SIZE: f32 = 15.0;
 /// The app-wide attention blue (`--attention-dot` in the shared theme).
 pub(crate) const NOTIFICATION_ATTENTION_BLUE: u32 = 0x95d7f6;
+/// Matching darker same-hue attention blue for light backgrounds (~5.0:1 on light chrome, ~5.2:1
+/// against white badge text), used when a neutral light theme sets no accent of its own.
+pub(crate) const NOTIFICATION_ATTENTION_BLUE_LIGHT: u32 = 0x0c74a6;
 /// CDXC:Notifications 2026-09-16 DECISION:
 /// User: make the "Project · Finished" meta line more visible in light mode.
-/// The fill/border accent stays #95d7f6 (unless the theme sets its own accent, CDXC:Theming 2026-11-17 below); this darker same-hue ink is only for unread meta text on pale unread cards.
-pub(crate) const NOTIFICATION_ATTENTION_BLUE_TEXT_LIGHT: u32 = 0x0d7eab;
+/// The fill/border accent stays #95d7f6 in dark mode (#0c74a6 in light mode, unless the theme sets its own accent, CDXC:Theming 2026-11-17 below); this darker same-hue ink is only for unread meta text on pale unread cards.
+pub(crate) const NOTIFICATION_ATTENTION_BLUE_TEXT_LIGHT: u32 = 0x0c74a6;
 /// CDXC:Notifications 2026-10-05 DECISION:
 /// User: banked reset expiry warnings are notified "using red color". Urgent rows swap the attention blue for this red on the card, and the bell's badge turns red while one is unread.
 pub(crate) const NOTIFICATION_URGENT_RED: u32 = 0xf87171;
@@ -62,7 +65,58 @@ pub(crate) const NOTIFICATION_URGENT_RED_TEXT_LIGHT: u32 = 0xc42b2b;
 ///
 /// CDXC:Theming 2026-11-17 DECISION: User, through the coordinator: "The notification dropdown stays blue after a theme is applied ... make it follow the applied theme (accent, surfaces, text, borders) like the rest of the app", and on 2026-11-17 (Q183) chose that a tinted preset with no Accent role moves the notifications off blue too, "using the preset's own accent". The attention blue (CDXC:Notifications 2026-09-11) takes the theme's own accent whenever the theme sets one: the Accent theme role, else the accent of a tint with a hue (`theme_own_accent_for_variant`). Only a neutral grey tint with no Accent role keeps the blue. The Danger role replaces the urgent red, laid over the work area as the accent is (`theme_role_over_work_area`); the sidebar's approval red is the sidebar's status colour and stays.
 pub(crate) fn notification_attention_color(light: bool) -> u32 {
-    theme_own_accent(light).unwrap_or(NOTIFICATION_ATTENTION_BLUE)
+    theme_own_accent(light).unwrap_or(if light {
+        NOTIFICATION_ATTENTION_BLUE_LIGHT
+    } else {
+        NOTIFICATION_ATTENTION_BLUE
+    })
+}
+
+fn srgb_channel_luminance(channel: f64) -> f64 {
+    if channel <= 0.03928 {
+        channel / 12.92
+    } else {
+        ((channel + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn relative_luminance_channels(r: f64, g: f64, b: f64) -> f64 {
+    0.2126 * srgb_channel_luminance(r)
+        + 0.7152 * srgb_channel_luminance(g)
+        + 0.0722 * srgb_channel_luminance(b)
+}
+
+fn relative_luminance_rgb(hex: u32) -> f64 {
+    relative_luminance_channels(
+        f64::from((hex >> 16) & 0xff) / 255.0,
+        f64::from((hex >> 8) & 0xff) / 255.0,
+        f64::from(hex & 0xff) / 255.0,
+    )
+}
+
+/// Readable ink for the bell's unread count over `badge_color`: picks dark ink (the dark chrome in
+/// dark mode, `#111622` in light mode) or white, whichever yields higher WCAG contrast against
+/// `badge_color`, so `#95d7f6` keeps crisp dark digits (~12:1) and darker fills like `#0c74a6` in
+/// light mode keep crisp white digits (~5.2:1).
+fn notification_badge_text_color(badge_color: u32, light: bool) -> gpui::Hsla {
+    let badge_lum = relative_luminance_rgb(badge_color);
+    let dark_ink = if light {
+        gpui::Hsla::from(rgb(0x111622))
+    } else {
+        titlebar_background()
+    };
+    let dark_rgba = gpui::Rgba::from(dark_ink);
+    let dark_lum = relative_luminance_channels(
+        f64::from(dark_rgba.r),
+        f64::from(dark_rgba.g),
+        f64::from(dark_rgba.b),
+    );
+    let contrast = |a: f64, b: f64| (a.max(b) + 0.05) / (a.min(b) + 0.05);
+    if contrast(badge_lum, dark_lum) >= contrast(badge_lum, 1.0) {
+        dark_ink
+    } else {
+        rgb(0xffffff).into()
+    }
 }
 
 fn theme_own_accent(light: bool) -> Option<u32> {
@@ -895,7 +949,7 @@ impl GhostexGpuiApp {
                         .text_size(px(9.0 * scale))
                         .line_height(px(12.0 * scale))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(titlebar_background())
+                        .text_color(notification_badge_text_color(badge_color, appearance.light))
                         .child(notification_feed_badge_label(badge_count)),
                 )
             })

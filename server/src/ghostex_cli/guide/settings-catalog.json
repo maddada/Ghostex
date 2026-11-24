@@ -4871,7 +4871,7 @@
       "type": "json",
       "default": {
         "dark": {
-          "accent": "#5581a9",
+          "accent": "#95d7f6",
           "focusRing": "#5581a9",
           "border": "8%",
           "divider": "6%",
@@ -4891,7 +4891,7 @@
         "light": {
           "text": "#5c6a72",
           "mutedText": "#939f91",
-          "accent": "#8da101",
+          "accent": "#0c74a6",
           "focusRing": "#8da101",
           "link": "#3a94c5",
           "success": "#8da101",
