@@ -108,6 +108,7 @@ pub async fn run_gxserver_foreground(
     }
     let storage = initialize_gxserver_storage(&paths)?;
     crate::storage::hold_gxserver_database_open(&paths)?;
+    crate::native_mode_default::seed_fresh_install_native_mode_once(&paths);
     let config = read_gxserver_config(&paths)?;
     let identity = ensure_gxserver_identity(&paths)?;
     // A project folder move a crash interrupted is finished or forgotten before anything is served.

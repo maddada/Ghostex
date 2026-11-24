@@ -164,6 +164,7 @@ impl NativeChatView {
                                 "agentName": click_agent_name,
                                 "nativeDefault": native_default,
                                 "working": working,
+                                "source": "pill",
                             }),
                             cx,
                         );

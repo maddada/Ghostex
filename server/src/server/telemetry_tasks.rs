@@ -23,16 +23,34 @@ pub(crate) fn spawn_telemetry_tasks(
     install_created_at: String,
 ) -> TelemetryTasks {
     crate::telemetry::init(state.paths.clone(), state.metadata.server_id.as_str());
+    let startup_settings = crate::shared_settings_file::read_shared_settings(&state.paths);
+    crate::telemetry::session_mode_state(
+        "app_start",
+        "server",
+        crate::telemetry::resolve_install_session_modes(startup_settings.as_ref()),
+    );
     let flush = crate::telemetry::spawn_flush_task(state.shutdown_tx.subscribe());
     let heartbeat_state = state.clone();
     let snapshot_state = state.clone();
+    let live_modes_state = state.clone();
     let heartbeat = crate::telemetry::spawn_heartbeat_task(
         state.paths.clone(),
         state.shutdown_tx.subscribe(),
         move || collect_heartbeat_snapshot(&heartbeat_state, &install_created_at),
         move || collect_settings_snapshot_facts(&snapshot_state),
+        move || collect_live_session_mode_counts(&live_modes_state),
     );
     TelemetryTasks { flush, heartbeat }
+}
+
+fn collect_live_session_mode_counts(
+    state: &Arc<AppState>,
+) -> crate::telemetry::LiveSessionModeCounts {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return crate::telemetry::LiveSessionModeCounts::default();
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    crate::telemetry::heartbeat::collect_live_session_mode_counts(&repository)
 }
 
 /*

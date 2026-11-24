@@ -1030,6 +1030,8 @@ pub(crate) async fn switch_to_cli(
     project_id: &str,
     session_id: &str,
     interrupt: bool,
+    telemetry_source: &'static str,
+    telemetry_client: &'static str,
 ) -> Result<Value, DomainStateError> {
     super::pending_switch::cancel(project_id, session_id);
     let _switch_guard = session_switch_lock(project_id, session_id)
@@ -1242,6 +1244,24 @@ pub(crate) async fn switch_to_cli(
         state, project_id, session_id,
     );
 
+    if let Some(family) = updated_session
+        .pointer("/runtimeSettings/acpFamily")
+        .and_then(Value::as_str)
+        .and_then(super::canonical_native_family)
+        .or_else(|| {
+            crate::session_chat_follower::session_chat_agent_for_session(&updated_session)
+                .as_deref()
+                .and_then(super::canonical_native_family)
+        })
+    {
+        crate::telemetry::session_mode_switched(
+            family,
+            "native_to_terminal",
+            telemetry_source,
+            telemetry_client,
+        );
+    }
+
     log(
         LogLevel::Info,
         "acp.switchedToCli",
@@ -1452,6 +1472,8 @@ pub(crate) async fn switch_to_acp(
     project_id: &str,
     session_id: &str,
     caller_is_user_device: bool,
+    telemetry_source: &'static str,
+    telemetry_client: &'static str,
 ) -> Result<Value, DomainStateError> {
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
@@ -1501,7 +1523,13 @@ pub(crate) async fn switch_to_acp(
 
     match check_session_safe_to_switch_now(state, project_id, session_id, &session).await {
         SwitchSafety::Busy(reason) => {
-            super::pending_switch::queue(project_id, session_id, caller_is_user_device);
+            super::pending_switch::queue(
+                project_id,
+                session_id,
+                caller_is_user_device,
+                telemetry_source,
+                telemetry_client,
+            );
             super::pending_switch::broadcast_state(state, project_id, session_id).await;
             log(
                 LogLevel::Info,
@@ -1534,13 +1562,21 @@ pub(crate) async fn switch_to_acp(
         session_id,
         caller_is_user_device,
         SwitchOrigin::Single,
+        telemetry_source,
+        telemetry_client,
     )
     .await
     {
         Ok(result) => Ok(result),
         Err(error) if error.code == "sessionBusy" => {
             // Session became busy while waiting for the per-session lock: queue safely instead of failing.
-            super::pending_switch::queue(project_id, session_id, caller_is_user_device);
+            super::pending_switch::queue(
+                project_id,
+                session_id,
+                caller_is_user_device,
+                telemetry_source,
+                telemetry_client,
+            );
             super::pending_switch::broadcast_state(state, project_id, session_id).await;
             Ok(json!({
                 "switched": false,
@@ -1564,6 +1600,8 @@ pub(crate) async fn switch_to_acp(
 pub(crate) async fn switch_eligible_sessions_to_acp(
     state: &AppState,
     caller_is_user_device: bool,
+    telemetry_source: &'static str,
+    telemetry_client: &'static str,
 ) -> Result<Value, DomainStateError> {
     const MAX_CONCURRENT_SWITCHES: usize = 6;
     const SOFT_WAIT: Duration = Duration::from_secs(25);
@@ -1663,6 +1701,8 @@ pub(crate) async fn switch_eligible_sessions_to_acp(
                     &session_id,
                     caller_is_user_device,
                     SwitchOrigin::Bulk,
+                    telemetry_source,
+                    telemetry_client,
                 )
                 .await
                 {
@@ -1815,6 +1855,8 @@ pub(crate) async fn execute_switch_to_acp(
     session_id: &str,
     caller_is_user_device: bool,
     origin: SwitchOrigin,
+    telemetry_source: &'static str,
+    telemetry_client: &'static str,
 ) -> Result<Value, DomainStateError> {
     let lock = session_switch_lock(project_id, session_id);
     // Bulk and queued switches must never stall behind a long-running Terminal send (e.g.
@@ -2227,6 +2269,15 @@ pub(crate) async fn execute_switch_to_acp(
     }
 
     super::pending_switch::broadcast_state(state, project_id, session_id).await;
+
+    if let Some(canonical) = super::canonical_native_family(&family) {
+        crate::telemetry::session_mode_switched(
+            canonical,
+            "terminal_to_native",
+            telemetry_source,
+            telemetry_client,
+        );
+    }
 
     log(
         LogLevel::Info,

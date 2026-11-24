@@ -367,6 +367,9 @@ pub const EVENT_RAIL_INTRO_SHOWN: &str = "rail_intro.shown";
 pub const EVENT_RAIL_INTRO_ANSWERED: &str = "rail_intro.answered";
 pub const EVENT_ONBOARDING_STEP: &str = "onboarding.step";
 pub const EVENT_RELIABILITY_ERROR: &str = "reliability.error";
+pub const EVENT_SESSION_MODE_STATE: &str = "session_mode.state";
+pub const EVENT_SESSION_MODE_SWITCHED: &str = "session_mode.switched";
+pub const EVENT_SESSION_MODE_DAILY_ROLLUP: &str = "session_mode.daily_rollup";
 
 /// Zero-PII onboarding funnel milestones emitted by desktop onboarding.
 pub const ONBOARDING_STEPS: &[&str] = &[
@@ -395,6 +398,25 @@ pub const RELIABILITY_ERROR_CATEGORIES: &[&str] = &[
     "wmx_start_failed",
     "zmx_attach_failed",
 ];
+
+/*
+CDXC:Telemetry 2026-11-24:
+Native mode adoption tracking (no PII: closed enums and counts only).
+- `session_mode.state`: per-install setting for each Native-capable agent (`antigravity_mode`,
+  `claude_mode`, `codex_mode` in `SESSION_MODES`) plus `preferred_view`, emitted on app start and
+  whenever those settings change (also written to `$set` person properties).
+- `session_mode.switched`: Terminal <-> Native switches with `agent`, `direction`, `source`
+  (`pill`, `more_menu`, `bulk_modal`, `settings`, `unknown`) and `client`.
+- `session_mode.daily_rollup`: daily counts of live sessions by agent family x mode plus switch
+  counts by direction x entry point since the last rollup.
+*/
+pub const NATIVE_AGENT_FAMILIES: &[&str] = &["antigravity", "claude", "codex"];
+pub const SESSION_MODES: &[&str] = &["native", "terminal"];
+pub const SESSION_MODE_STATE_TRIGGERS: &[&str] = &["app_start", "changed"];
+pub const SESSION_MODE_SWITCH_DIRECTIONS: &[&str] = &["native_to_terminal", "terminal_to_native"];
+pub const SESSION_MODE_SWITCH_SOURCES: &[&str] =
+    &["bulk_modal", "more_menu", "pill", "settings", "unknown"];
+pub const SESSION_MODE_CLIENTS: &[&str] = &["desktop", "mobile", "server"];
 
 /*
 CDXC:Telemetry 2026-11-20:
@@ -427,6 +449,7 @@ pub const CLIENT_PING_EVENTS: &[&str] = &[
     EVENT_RAIL_INTRO_ANSWERED,
     EVENT_ONBOARDING_STEP,
     EVENT_RELIABILITY_ERROR,
+    EVENT_SESSION_MODE_SWITCHED,
 ];
 
 const MAX_VERSION_LENGTH: usize = 32;
@@ -516,6 +539,9 @@ pub fn is_known_event(event: &str) -> bool {
             | EVENT_RAIL_INTRO_ANSWERED
             | EVENT_ONBOARDING_STEP
             | EVENT_RELIABILITY_ERROR
+            | EVENT_SESSION_MODE_STATE
+            | EVENT_SESSION_MODE_SWITCHED
+            | EVENT_SESSION_MODE_DAILY_ROLLUP
     )
 }
 
@@ -732,6 +758,52 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         }
         (EVENT_RELIABILITY_ERROR, "agent_id") => Some(PropertySpec::Enum(KNOWN_AGENT_IDS)),
         (EVENT_RELIABILITY_ERROR, "platform") => Some(PropertySpec::Enum(PLATFORMS)),
+        (EVENT_SESSION_MODE_STATE, "trigger") => {
+            Some(PropertySpec::Enum(SESSION_MODE_STATE_TRIGGERS))
+        }
+        (EVENT_SESSION_MODE_STATE, "client") => Some(PropertySpec::Enum(SESSION_MODE_CLIENTS)),
+        (EVENT_SESSION_MODE_STATE, "preferred_view") => Some(PropertySpec::Enum(INTERFACE_KINDS)),
+        (EVENT_SESSION_MODE_STATE, "antigravity_mode")
+        | (EVENT_SESSION_MODE_STATE, "claude_mode")
+        | (EVENT_SESSION_MODE_STATE, "codex_mode") => Some(PropertySpec::Enum(SESSION_MODES)),
+        (EVENT_SESSION_MODE_STATE, "native_agent_count") => Some(PropertySpec::Number),
+        (EVENT_SESSION_MODE_STATE, PERSON_SET_KEY) => Some(PropertySpec::PersonSet),
+        (EVENT_SESSION_MODE_SWITCHED, "agent") => Some(PropertySpec::Enum(NATIVE_AGENT_FAMILIES)),
+        (EVENT_SESSION_MODE_SWITCHED, "direction") => {
+            Some(PropertySpec::Enum(SESSION_MODE_SWITCH_DIRECTIONS))
+        }
+        (EVENT_SESSION_MODE_SWITCHED, "source") => {
+            Some(PropertySpec::Enum(SESSION_MODE_SWITCH_SOURCES))
+        }
+        (EVENT_SESSION_MODE_SWITCHED, "client") => Some(PropertySpec::Enum(SESSION_MODE_CLIENTS)),
+        (EVENT_SESSION_MODE_DAILY_ROLLUP, "preferred_view") => {
+            Some(PropertySpec::Enum(INTERFACE_KINDS))
+        }
+        (EVENT_SESSION_MODE_DAILY_ROLLUP, "antigravity_mode")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "claude_mode")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "codex_mode") => {
+            Some(PropertySpec::Enum(SESSION_MODES))
+        }
+        (EVENT_SESSION_MODE_DAILY_ROLLUP, "live_antigravity_native")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "live_antigravity_terminal")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "live_claude_native")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "live_claude_terminal")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "live_codex_native")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "live_codex_terminal")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "live_native_total")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "live_terminal_total")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_native_pill")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_native_more_menu")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_native_bulk_modal")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_native_settings")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_native_other")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_native_total")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_terminal_more_menu")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_terminal_settings")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_terminal_other")
+        | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_terminal_total") => {
+            Some(PropertySpec::Number)
+        }
         (EVENT_SETTINGS_SNAPSHOT, PERSON_SET_KEY) => Some(PropertySpec::PersonSet),
         (EVENT_SETTINGS_SNAPSHOT, key) => super::settings_snapshot::property_spec(key),
         _ => None,
@@ -756,6 +828,9 @@ fn person_property_spec(key: &str) -> Option<PropertySpec> {
         | "extension_count"
         | "remote_machine_count"
         | "days_since_install" => Some(PropertySpec::Number),
+        "antigravity_mode" | "claude_mode" | "codex_mode" => {
+            Some(PropertySpec::Enum(SESSION_MODES))
+        }
         // CDXC:Telemetry 2026-11-20: the few snapshot fields worth a breakdown on the person.
         key if super::settings_snapshot::PERSON_KEYS.contains(&key) => {
             super::settings_snapshot::property_spec(key)

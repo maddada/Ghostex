@@ -606,8 +606,35 @@ pub(super) async fn route_chat_http(
                 .get("interrupt")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
-            match crate::acp::channel::switch_to_cli(&state, &project_id, &session_id, interrupt)
-                .await
+            let telemetry_source = params
+                .get("source")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_SWITCH_SOURCES,
+                        value,
+                    )
+                })
+                .unwrap_or("more_menu");
+            let telemetry_client = params
+                .get("client")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_CLIENTS,
+                        value,
+                    )
+                })
+                .unwrap_or("server");
+            match crate::acp::channel::switch_to_cli(
+                &state,
+                &project_id,
+                &session_id,
+                interrupt,
+                telemetry_source,
+                telemetry_client,
+            )
+            .await
             {
                 Ok(result) => routed_json(
                     Some(endpoint.path),
@@ -646,6 +673,26 @@ pub(super) async fn route_chat_http(
                 .get("cancel")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
+            let telemetry_source = params
+                .get("source")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_SWITCH_SOURCES,
+                        value,
+                    )
+                })
+                .unwrap_or("unknown");
+            let telemetry_client = params
+                .get("client")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_CLIENTS,
+                        value,
+                    )
+                })
+                .unwrap_or("server");
             let outcome = if cancel {
                 crate::acp::channel::cancel_switch_to_acp(&state, &project_id, &session_id).await
             } else {
@@ -654,6 +701,8 @@ pub(super) async fn route_chat_http(
                     &project_id,
                     &session_id,
                     caller.is_user_device(),
+                    telemetry_source,
+                    telemetry_client,
                 )
                 .await
             };
@@ -678,9 +727,32 @@ pub(super) async fn route_chat_http(
                     },
                 ));
             }
+            let params = read_domain_rpc_params(&body_json).unwrap_or_default();
+            let telemetry_source = params
+                .get("source")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_SWITCH_SOURCES,
+                        value,
+                    )
+                })
+                .unwrap_or("bulk_modal");
+            let telemetry_client = params
+                .get("client")
+                .and_then(Value::as_str)
+                .and_then(|value| {
+                    crate::telemetry::taxonomy::match_enum(
+                        crate::telemetry::taxonomy::SESSION_MODE_CLIENTS,
+                        value,
+                    )
+                })
+                .unwrap_or("server");
             match crate::acp::channel::switch_eligible_sessions_to_acp(
                 &state,
                 caller.is_user_device(),
+                telemetry_source,
+                telemetry_client,
             )
             .await
             {

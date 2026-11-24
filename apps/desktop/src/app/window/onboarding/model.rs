@@ -232,6 +232,7 @@ pub(crate) struct OnboardingSettings {
     pub(crate) experience_values: Map<String, Value>,
     pub(crate) notify: bool,
     pub(crate) preferred_interface: String,
+    pub(crate) agent_session_mode: Map<String, Value>,
     pub(crate) default_prompt_agent_id: String,
     /// Agent approvals (`agentAcceptAllEnabled`): true is Skip permissions.
     pub(crate) accept_all: bool,
@@ -417,6 +418,11 @@ impl OnboardingSettings {
                 Some("terminal") => "terminal".to_string(),
                 _ => "chat".to_string(),
             },
+            agent_session_mode: object
+                .get("agentSessionMode")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default(),
             default_prompt_agent_id: text("defaultPromptAgentId")
                 .filter(|value| !value.is_empty())
                 .unwrap_or("claude")
@@ -544,6 +550,9 @@ impl OnboardingSettings {
         }
         if let Some(value) = text("preferredAgentInterface") {
             self.preferred_interface = value;
+        }
+        if let Some(modes) = patch.get("agentSessionMode").and_then(Value::as_object) {
+            self.agent_session_mode = modes.clone();
         }
         if let Some(value) = text("defaultPromptAgentId") {
             self.default_prompt_agent_id = value;

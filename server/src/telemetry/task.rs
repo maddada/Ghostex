@@ -15,8 +15,8 @@ every time someone quits Ghostex.
 
 use std::{
     sync::{
-        Arc, OnceLock,
         atomic::{AtomicBool, Ordering},
+        Arc, OnceLock,
     },
     time::Duration,
 };
@@ -65,7 +65,11 @@ fn flush_blocking() {
     */
     if !telemetry.is_enabled() {
         telemetry.drop_queue();
+        state::clear_pending_switches();
         return;
+    }
+    if let Ok(db) = crate::storage::open_gxserver_database(telemetry.paths()) {
+        state::persist_pending_switches(&db);
     }
     while !telemetry.queue_is_empty() {
         let mut batch = telemetry.take_batch();
@@ -107,25 +111,33 @@ pub fn spawn_flush_task(mut shutdown_rx: broadcast::Receiver<()>) -> tokio::task
 /// The daily heartbeat. Runs its due-check immediately at start (so an install
 /// that is only ever open for twenty minutes a day still reports), then on a
 /// 24h interval.
-pub fn spawn_heartbeat_task<F, G>(
+pub fn spawn_heartbeat_task<F, G, H>(
     paths: GxserverPaths,
     mut shutdown_rx: broadcast::Receiver<()>,
     collect: F,
     collect_snapshot: G,
+    collect_live_modes: H,
 ) -> tokio::task::JoinHandle<()>
 where
     F: Fn() -> Option<heartbeat::HeartbeatSnapshot> + Send + Sync + 'static,
     G: Fn() -> settings_snapshot::SnapshotFacts + Send + Sync + 'static,
+    H: Fn() -> super::capture::LiveSessionModeCounts + Send + Sync + 'static,
 {
     let collect = Arc::new(collect);
     let collect_snapshot: SnapshotCollector = Arc::new(collect_snapshot);
     let _ = SNAPSHOT_COLLECTOR.set(collect_snapshot.clone());
+    let collect_live_modes = Arc::new(collect_live_modes);
     tokio::spawn(async move {
         loop {
             let pass_paths = paths.clone();
             let pass_collect = collect.clone();
+            let pass_collect_live_modes = collect_live_modes.clone();
             let due = tokio::task::spawn_blocking(move || {
-                run_heartbeat_once(&pass_paths, pass_collect.as_ref())
+                run_heartbeat_once(
+                    &pass_paths,
+                    pass_collect.as_ref(),
+                    pass_collect_live_modes.as_ref(),
+                )
             })
             .await
             .unwrap_or(false);
@@ -200,9 +212,10 @@ pub(crate) fn note_accounts_discovered(discovered: &crate::accounts::model::Snap
     }
 }
 
-fn run_heartbeat_once<F>(paths: &GxserverPaths, collect: &F) -> bool
+fn run_heartbeat_once<F, H>(paths: &GxserverPaths, collect: &F, collect_live_modes: &H) -> bool
 where
     F: Fn() -> Option<heartbeat::HeartbeatSnapshot>,
+    H: Fn() -> super::capture::LiveSessionModeCounts,
 {
     if !gate::is_enabled(paths) {
         /*
@@ -216,6 +229,9 @@ where
             state::clear_built_in_extensions(&db);
             state::clear_cached_accounts(&db);
             state::clear_mobile_hello(&db);
+            state::clear_session_mode_switches(&db);
+        } else {
+            state::clear_pending_switches();
         }
         return false;
     }
@@ -248,6 +264,11 @@ where
         return false;
     }
     heartbeat::emit(&snapshot);
+    let settings = crate::shared_settings_file::read_shared_settings(paths);
+    let install_modes = super::capture::resolve_install_session_modes(settings.as_ref());
+    let live_modes = collect_live_modes();
+    let switches = state::take_daily_switches(&db);
+    super::capture::session_mode_daily_rollup(install_modes, live_modes, switches);
     let known = super::extensions::known_built_in_extensions();
     if let Some((previous_known, previous_on)) = state::read_built_in_extensions(&db) {
         for (id, enabled) in super::extensions::built_in_extension_changes(

@@ -288,6 +288,25 @@ pub(crate) fn record_gpui_reliability_error_telemetry(
     record_gpui_client_event_on_thread("reliability.error", properties);
 }
 
+/// Session mode toggled in desktop Settings (`agentSessionMode`): `agent` is a Native-capable
+/// family (`antigravity`, `claude`, `codex`), `direction` is `terminal_to_native` or
+/// `native_to_terminal`, `source` is `settings` (re-checked by gxserver's closed taxonomy).
+pub(crate) fn record_gpui_session_mode_switched_telemetry(
+    agent: &'static str,
+    direction: &'static str,
+    source: &'static str,
+) {
+    record_gpui_client_event_on_thread(
+        "session_mode.switched",
+        serde_json::json!({
+            "agent": agent,
+            "direction": direction,
+            "source": source,
+            "client": "desktop",
+        }),
+    );
+}
+
 /// `record_gpui_client_event` from where no executor is at hand (a settings read): the same body,
 /// posted from a short-lived thread.
 fn record_gpui_client_event_on_thread(event: &'static str, properties: serde_json::Value) {
@@ -454,7 +473,9 @@ fn sleep_before_retry(attempt: usize, deadline: Instant, advised: Option<Duratio
 }
 
 fn parse_client_event_http_response(response: &[u8]) -> Option<(u16, &str)> {
-    let split = response.windows(4).position(|window| window == b"\r\n\r\n")?;
+    let split = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")?;
     let headers = std::str::from_utf8(&response[..split]).ok()?;
     let status = headers
         .lines()

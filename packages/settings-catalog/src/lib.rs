@@ -348,6 +348,67 @@ pub fn switch_existing_settings_to_rail(
     true
 }
 
+/// Agent families that currently support Native mode (`agentSessionMode = "non-cli"`).
+pub const NATIVE_MODE_FAMILIES: [&str; 3] = ["antigravity", "claude", "codex"];
+
+/// True when `preferredAgentInterface` selects Chat (or is absent, since Chat is the default).
+pub fn preferred_interface_is_chat(settings: &serde_json::Map<String, serde_json::Value>) -> bool {
+    !matches!(
+        settings
+            .get("preferredAgentInterface")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim),
+        Some(value) if value.eq_ignore_ascii_case("terminal")
+    )
+}
+
+/// Applies the fresh-install Native default: when `preferredAgentInterface` is Chat (not Terminal),
+/// sets `agentSessionMode.<family> = "non-cli"` for every Native-capable family that does not
+/// already have an explicit `agentSessionMode` or legacy `agentAcpMode` entry. Returns `true` if
+/// `settings` changed.
+pub fn apply_fresh_install_native_defaults(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    if !preferred_interface_is_chat(settings) {
+        return false;
+    }
+    let legacy = settings
+        .get("agentAcpMode")
+        .and_then(serde_json::Value::as_object)
+        .cloned();
+    let mut modes = settings
+        .get("agentSessionMode")
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let mut changed = false;
+    for family in NATIVE_MODE_FAMILIES {
+        let has_explicit = modes
+            .get(family)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|v| !v.trim().is_empty());
+        let has_legacy = legacy
+            .as_ref()
+            .and_then(|map| map.get(family))
+            .and_then(serde_json::Value::as_bool)
+            .is_some();
+        if !has_explicit && !has_legacy {
+            modes.insert(
+                family.to_string(),
+                serde_json::Value::String("non-cli".to_string()),
+            );
+            changed = true;
+        }
+    }
+    if changed {
+        settings.insert(
+            "agentSessionMode".to_string(),
+            serde_json::Value::Object(modes),
+        );
+    }
+    changed
+}
+
 /// Marks an existing desktop install's settings so the one-time Native mode announcement modal
 /// opens once after updating. Returns `false` if the modal was already queued/shown or if Native
 /// mode is already on for Antigravity, Claude Code, and Codex.
@@ -365,7 +426,7 @@ pub fn mark_existing_settings_for_native_mode_intro(
         .get("agentSessionMode")
         .and_then(serde_json::Value::as_object)
         .is_some_and(|modes| {
-            ["antigravity", "claude", "codex"].iter().all(|family| {
+            NATIVE_MODE_FAMILIES.iter().all(|family| {
                 modes
                     .get(*family)
                     .and_then(serde_json::Value::as_str)

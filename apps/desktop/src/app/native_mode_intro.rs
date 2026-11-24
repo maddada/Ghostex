@@ -182,7 +182,7 @@ impl GhostexGpuiApp {
         let request = cx.background_executor().spawn(async move {
             crate::app::helpers::gpui_gxserver_rpc_result(
                 "/api/switchEligibleSessionsToAcp",
-                &json!({}),
+                &json!({ "source": "bulk_modal", "client": "desktop" }),
                 std::time::Duration::from_secs(45),
             )
         });

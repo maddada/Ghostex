@@ -77,6 +77,7 @@ pub(crate) mod machine_extensions;
 pub(crate) mod machine_integrations;
 pub(crate) mod managed_tools;
 pub(crate) mod memory_guard;
+pub(crate) mod native_mode_default;
 pub mod navigation_history;
 pub(crate) mod network_status;
 pub mod notification_feed;

@@ -12,8 +12,10 @@ noise suppression within one run, and losing them across a restart costs at most
 one extra event.
 */
 
+use std::sync::{LazyLock, Mutex};
+
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 pub const ANALYTICS_STATE_METADATA_KEY: &str = "analytics.state.v1";
 pub const LAST_HEARTBEAT_AT_KEY: &str = "lastHeartbeatAt";
@@ -21,6 +23,195 @@ pub const BUILT_IN_EXTENSIONS_ON_KEY: &str = "builtInExtensionsOn";
 pub const BUILT_IN_EXTENSIONS_KNOWN_KEY: &str = "builtInExtensionsKnown";
 pub const LAST_MOBILE_HELLO_AT_KEY: &str = "lastMobileHelloAt";
 pub const CACHED_ACCOUNTS_KEY: &str = "cachedAccounts";
+pub const SESSION_MODE_SWITCHES_KEY: &str = "sessionModeSwitches";
+
+/// Daily switch counters between Terminal and Native mode, grouped by direction and entry point.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SessionModeSwitchCounts {
+    pub to_native_pill: u64,
+    pub to_native_more_menu: u64,
+    pub to_native_bulk_modal: u64,
+    pub to_native_settings: u64,
+    pub to_native_other: u64,
+    pub to_terminal_more_menu: u64,
+    pub to_terminal_settings: u64,
+    pub to_terminal_other: u64,
+}
+
+impl SessionModeSwitchCounts {
+    pub fn is_empty(&self) -> bool {
+        self.to_native_total() == 0 && self.to_terminal_total() == 0
+    }
+
+    pub fn to_native_total(&self) -> u64 {
+        self.to_native_pill
+            + self.to_native_more_menu
+            + self.to_native_bulk_modal
+            + self.to_native_settings
+            + self.to_native_other
+    }
+
+    pub fn to_terminal_total(&self) -> u64 {
+        self.to_terminal_more_menu + self.to_terminal_settings + self.to_terminal_other
+    }
+
+    pub fn record(&mut self, direction: &str, source: &str) {
+        match (direction, source) {
+            ("terminal_to_native", "pill") => {
+                self.to_native_pill = self.to_native_pill.saturating_add(1)
+            }
+            ("terminal_to_native", "more_menu") => {
+                self.to_native_more_menu = self.to_native_more_menu.saturating_add(1);
+            }
+            ("terminal_to_native", "bulk_modal") => {
+                self.to_native_bulk_modal = self.to_native_bulk_modal.saturating_add(1);
+            }
+            ("terminal_to_native", "settings") => {
+                self.to_native_settings = self.to_native_settings.saturating_add(1);
+            }
+            ("terminal_to_native", _) => {
+                self.to_native_other = self.to_native_other.saturating_add(1);
+            }
+            ("native_to_terminal", "more_menu") => {
+                self.to_terminal_more_menu = self.to_terminal_more_menu.saturating_add(1);
+            }
+            ("native_to_terminal", "settings") => {
+                self.to_terminal_settings = self.to_terminal_settings.saturating_add(1);
+            }
+            ("native_to_terminal", _) => {
+                self.to_terminal_other = self.to_terminal_other.saturating_add(1);
+            }
+            _ => {}
+        }
+    }
+
+    pub fn merge(&mut self, other: &Self) {
+        self.to_native_pill = self.to_native_pill.saturating_add(other.to_native_pill);
+        self.to_native_more_menu = self
+            .to_native_more_menu
+            .saturating_add(other.to_native_more_menu);
+        self.to_native_bulk_modal = self
+            .to_native_bulk_modal
+            .saturating_add(other.to_native_bulk_modal);
+        self.to_native_settings = self
+            .to_native_settings
+            .saturating_add(other.to_native_settings);
+        self.to_native_other = self.to_native_other.saturating_add(other.to_native_other);
+        self.to_terminal_more_menu = self
+            .to_terminal_more_menu
+            .saturating_add(other.to_terminal_more_menu);
+        self.to_terminal_settings = self
+            .to_terminal_settings
+            .saturating_add(other.to_terminal_settings);
+        self.to_terminal_other = self
+            .to_terminal_other
+            .saturating_add(other.to_terminal_other);
+    }
+
+    fn from_value(value: &Value) -> Self {
+        let num = |key: &str| value.get(key).and_then(Value::as_u64).unwrap_or(0);
+        Self {
+            to_native_pill: num("toNativePill"),
+            to_native_more_menu: num("toNativeMoreMenu"),
+            to_native_bulk_modal: num("toNativeBulkModal"),
+            to_native_settings: num("toNativeSettings"),
+            to_native_other: num("toNativeOther"),
+            to_terminal_more_menu: num("toTerminalMoreMenu"),
+            to_terminal_settings: num("toTerminalSettings"),
+            to_terminal_other: num("toTerminalOther"),
+        }
+    }
+
+    fn to_value(&self) -> Value {
+        json!({
+            "toNativePill": self.to_native_pill,
+            "toNativeMoreMenu": self.to_native_more_menu,
+            "toNativeBulkModal": self.to_native_bulk_modal,
+            "toNativeSettings": self.to_native_settings,
+            "toNativeOther": self.to_native_other,
+            "toTerminalMoreMenu": self.to_terminal_more_menu,
+            "toTerminalSettings": self.to_terminal_settings,
+            "toTerminalOther": self.to_terminal_other,
+        })
+    }
+}
+
+static PENDING_SWITCH_COUNTS: LazyLock<Mutex<SessionModeSwitchCounts>> =
+    LazyLock::new(Mutex::default);
+
+/// Records one switch in memory without touching SQLite; flushed to `analytics.state.v1` by the
+/// telemetry background worker.
+pub fn record_pending_switch(direction: &str, source: &str) {
+    let mut counts = PENDING_SWITCH_COUNTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    counts.record(direction, source);
+}
+
+pub fn take_pending_switches() -> SessionModeSwitchCounts {
+    let mut counts = PENDING_SWITCH_COUNTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    std::mem::take(&mut *counts)
+}
+
+pub fn clear_pending_switches() {
+    let mut counts = PENDING_SWITCH_COUNTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *counts = SessionModeSwitchCounts::default();
+}
+
+/// Persists any in-memory switch counts into `analytics.state.v1` so they survive daemon restarts.
+pub fn persist_pending_switches(db: &Connection) {
+    let pending = take_pending_switches();
+    if pending.is_empty() {
+        return;
+    }
+    let mut stored = read_analytics_state(db)
+        .and_then(|state| {
+            state
+                .get(SESSION_MODE_SWITCHES_KEY)
+                .map(SessionModeSwitchCounts::from_value)
+        })
+        .unwrap_or_default();
+    stored.merge(&pending);
+    write_state_key(db, SESSION_MODE_SWITCHES_KEY, stored.to_value());
+}
+
+/// Returns the combined stored + in-memory switch counts since the last daily rollup and resets
+/// both to zero.
+pub fn take_daily_switches(db: &Connection) -> SessionModeSwitchCounts {
+    let pending = take_pending_switches();
+    let mut stored = read_analytics_state(db)
+        .and_then(|state| {
+            state
+                .get(SESSION_MODE_SWITCHES_KEY)
+                .map(SessionModeSwitchCounts::from_value)
+        })
+        .unwrap_or_default();
+    stored.merge(&pending);
+    if !stored.is_empty() {
+        update_state(db, |state| {
+            state.remove(SESSION_MODE_SWITCHES_KEY);
+        });
+    }
+    stored
+}
+
+/// Clears stored and pending switch counts (called while analytics are opted out).
+pub fn clear_session_mode_switches(db: &Connection) {
+    clear_pending_switches();
+    let Some(state) = read_analytics_state(db) else {
+        return;
+    };
+    if state.get(SESSION_MODE_SWITCHES_KEY).is_none() {
+        return;
+    }
+    update_state(db, |state| {
+        state.remove(SESSION_MODE_SWITCHES_KEY);
+    });
+}
 
 pub fn read_analytics_state(db: &Connection) -> Option<Value> {
     let text = db
@@ -100,7 +291,9 @@ pub fn clear_built_in_extensions(db: &Connection) {
 /// When this install last received an explicit `ghostex client-hello` from a mobile app.
 pub fn read_last_mobile_hello_at(db: &Connection) -> Option<chrono::DateTime<chrono::Utc>> {
     let value = read_analytics_state(db)?;
-    let raw = value.get(LAST_MOBILE_HELLO_AT_KEY).and_then(Value::as_str)?;
+    let raw = value
+        .get(LAST_MOBILE_HELLO_AT_KEY)
+        .and_then(Value::as_str)?;
     chrono::DateTime::parse_from_rfc3339(raw)
         .ok()
         .map(|parsed| parsed.with_timezone(&chrono::Utc))
@@ -158,10 +351,7 @@ pub fn read_cached_accounts(db: &Connection) -> Option<super::settings_snapshot:
     Some(report)
 }
 
-pub fn write_cached_accounts(
-    db: &Connection,
-    report: &super::settings_snapshot::AccountsReport,
-) {
+pub fn write_cached_accounts(db: &Connection, report: &super::settings_snapshot::AccountsReport) {
     let counts: serde_json::Map<String, Value> = report
         .counts
         .iter()

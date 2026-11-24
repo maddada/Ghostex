@@ -314,6 +314,9 @@ fn other_property_spec(key: &str) -> Option<PropertySpec> {
         "codex_plans" => PropertySpec::EnumList(taxonomy::CODEX_PLANS),
         "claude_top_plan" => PropertySpec::Enum(taxonomy::CLAUDE_PLANS),
         "codex_top_plan" => PropertySpec::Enum(taxonomy::CODEX_PLANS),
+        "antigravity_mode" | "claude_mode" | "codex_mode" => {
+            PropertySpec::Enum(taxonomy::SESSION_MODES)
+        }
         "store_extensions_installed" => PropertySpec::StoreExtensionVersionList,
         _ => return None,
     })
@@ -342,6 +345,9 @@ pub const PERSON_KEYS: &[&str] = &[
     "linux_desktop",
     "claude_top_plan",
     "codex_top_plan",
+    "antigravity_mode",
+    "claude_mode",
+    "codex_mode",
 ];
 
 /*
@@ -742,6 +748,10 @@ pub fn snapshot_properties(
         "custom_extensions_installed",
         PropertyValue::Enum(taxonomy::count_bucket(facts.custom_extensions_installed)),
     ));
+    let modes = super::capture::resolve_install_session_modes(settings);
+    properties.push(("antigravity_mode", PropertyValue::Enum(modes.antigravity)));
+    properties.push(("claude_mode", PropertyValue::Enum(modes.claude)));
+    properties.push(("codex_mode", PropertyValue::Enum(modes.codex)));
     let person: Vec<(&'static str, PropertyValue)> = properties
         .iter()
         .filter(|(key, _)| PERSON_KEYS.contains(key))

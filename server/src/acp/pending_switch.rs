@@ -26,6 +26,8 @@ const TICK: Duration = Duration::from_millis(500);
 pub(crate) struct PendingSwitchEntry {
     pub(crate) caller_is_user_device: bool,
     pub(crate) queued_at_ms: i64,
+    pub(crate) telemetry_source: &'static str,
+    pub(crate) telemetry_client: &'static str,
 }
 
 static PENDING_SWITCHES: LazyLock<Mutex<HashMap<(String, String), PendingSwitchEntry>>> =
@@ -52,11 +54,19 @@ pub(crate) fn is_pending(project_id: &str, session_id: &str) -> bool {
     is_in_flight(project_id, session_id)
 }
 
-pub(crate) fn queue(project_id: &str, session_id: &str, caller_is_user_device: bool) {
+pub(crate) fn queue(
+    project_id: &str,
+    session_id: &str,
+    caller_is_user_device: bool,
+    telemetry_source: &'static str,
+    telemetry_client: &'static str,
+) {
     let key = (project_id.to_string(), session_id.to_string());
     let entry = PendingSwitchEntry {
         caller_is_user_device,
         queued_at_ms: chrono::Utc::now().timestamp_millis(),
+        telemetry_source,
+        telemetry_client,
     };
     PENDING_SWITCHES
         .lock()
@@ -192,6 +202,8 @@ async fn tick(state: &Arc<AppState>) {
                         &sid,
                         entry.caller_is_user_device,
                         super::channel::SwitchOrigin::Queued,
+                        entry.telemetry_source,
+                        entry.telemetry_client,
                     )
                     .await;
                     IN_FLIGHT
@@ -202,7 +214,13 @@ async fn tick(state: &Arc<AppState>) {
                         if error.code == "sessionBusy" {
                             // A send or queued prompt grabbed the per-session lock right before us:
                             // put the queued switch back so it waits for the newly started turn.
-                            queue(&pid, &sid, entry.caller_is_user_device);
+                            queue(
+                                &pid,
+                                &sid,
+                                entry.caller_is_user_device,
+                                entry.telemetry_source,
+                                entry.telemetry_client,
+                            );
                         } else {
                             super::channel::log(
                                 LogLevel::Warn,

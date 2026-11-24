@@ -347,6 +347,9 @@ fn main() {
     // Move existing default-theme settings off the dark `#5581a9` accent to `#95d7f6` (and `#0c74a6`
     // in light mode) once (shared_settings/dark_look_default.rs).
     shared_settings::dark_look_default::migrate_default_theme_accent_once();
+    // Fresh installs whose preferred view is Chat default Native mode for Antigravity, Claude Code
+    // and Codex; existing installs and Terminal-preferred installs keep what they have.
+    shared_settings::native_mode_intro::seed_fresh_install_native_mode_once();
     // The CLIProxyAPI hub key files join a saved secret-folder list once (shared_settings/hub_secret_folders.rs).
     shared_settings::hub_secret_folders::add_hub_secret_folders_once();
     // Enable Experimental Features becomes one switch each, once (shared_settings/experimental_switches.rs).

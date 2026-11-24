@@ -451,6 +451,7 @@ impl NativeChatView {
                 "agentName": offer["agentName"],
                 "nativeDefault": offer["nativeDefault"],
                 "working": self.snapshot["working"] == true,
+                "source": "more_menu",
             },
         }))
     }

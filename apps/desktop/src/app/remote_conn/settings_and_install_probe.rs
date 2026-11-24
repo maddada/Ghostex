@@ -108,6 +108,39 @@ impl GhostexGpuiApp {
         else {
             return;
         };
+        #[cfg(not(ghostex_web))]
+        if source == "settings:control" {
+            let effective_native =
+                |obj: &serde_json::Map<String, serde_json::Value>, family: &str| match obj
+                    .get("agentSessionMode")
+                    .and_then(serde_json::Value::as_object)
+                    .and_then(|map| map.get(family))
+                    .and_then(serde_json::Value::as_str)
+                {
+                    Some(v) => v.eq_ignore_ascii_case("non-cli"),
+                    None => {
+                        obj.get("agentAcpMode")
+                            .and_then(serde_json::Value::as_object)
+                            .and_then(|map| map.get(family))
+                            .and_then(serde_json::Value::as_bool)
+                            == Some(true)
+                    }
+                };
+            for family in ghostex_settings_catalog::NATIVE_MODE_FAMILIES {
+                let prev = effective_native(&previous_settings_object, family);
+                let next = effective_native(write_result.snapshot.object(), family);
+                if prev != next {
+                    let direction = if next {
+                        "terminal_to_native"
+                    } else {
+                        "native_to_terminal"
+                    };
+                    crate::app::helpers::telemetry::record_gpui_session_mode_switched_telemetry(
+                        family, direction, "settings",
+                    );
+                }
+            }
+        }
 
         let next_agent_settings = write_result.snapshot.gxserver_agent_settings();
         let ghostty_config_backed_setting_keys_changed =

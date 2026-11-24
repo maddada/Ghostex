@@ -213,6 +213,55 @@ impl GpuiOnboardingWindow {
         self.update_settings(patch, cx);
     }
 
+    fn pick_preferred_interface(&mut self, view: &str, cx: &mut Context<Self>) {
+        let mut patch = serde_json::Map::new();
+        patch.insert(
+            "preferredAgentInterface".to_string(),
+            Value::String(view.to_string()),
+        );
+        // On a fresh install's onboarding, choosing Chat defaults Native mode for supported
+        // agents (Antigravity, Claude Code, Codex), while choosing Terminal clears the
+        // auto-seeded Native defaults so Terminal-first users stay on Terminal.
+        if self.first_run || !self.has_projects {
+            if view == "chat" {
+                let mut candidate = serde_json::Map::new();
+                candidate.insert(
+                    "preferredAgentInterface".to_string(),
+                    Value::String("chat".to_string()),
+                );
+                candidate.insert(
+                    "agentSessionMode".to_string(),
+                    Value::Object(self.settings.agent_session_mode.clone()),
+                );
+                if ghostex_settings_catalog::apply_fresh_install_native_defaults(&mut candidate)
+                    && let Some(modes) = candidate.remove("agentSessionMode")
+                {
+                    patch.insert("agentSessionMode".to_string(), modes);
+                }
+            } else if view == "terminal" {
+                let only_seeded_native = !self.settings.agent_session_mode.is_empty()
+                    && self
+                        .settings
+                        .agent_session_mode
+                        .iter()
+                        .all(|(family, mode)| {
+                            ghostex_settings_catalog::NATIVE_MODE_FAMILIES
+                                .contains(&family.as_str())
+                                && mode
+                                    .as_str()
+                                    .is_some_and(|v| v.eq_ignore_ascii_case("non-cli"))
+                        });
+                if only_seeded_native {
+                    patch.insert(
+                        "agentSessionMode".to_string(),
+                        Value::Object(serde_json::Map::new()),
+                    );
+                }
+            }
+        }
+        self.update_settings(patch, cx);
+    }
+
     /// CDXC:Onboarding 2026-09-23 DECISION:
     /// User: "lets somehow have a switch that lets you see just dark or just light themes no need to show all of them there / and by default we just pick the same color in the other scheme". Theme shows one appearance's cards behind a Dark | Light switch, and picking a look fills in the matching look for the other appearance until that one is picked by hand.
     fn pick_theme_preset(&mut self, dark: bool, preset: String, cx: &mut Context<Self>) {
@@ -406,11 +455,7 @@ impl GpuiOnboardingWindow {
                             interact::Keys::EnterSpace,
                             cx,
                             move |this, _, cx| {
-                                this.update_one(
-                                    "preferredAgentInterface",
-                                    Value::String(id.to_string()),
-                                    cx,
-                                );
+                                this.pick_preferred_interface(id, cx);
                             },
                         )
                     }),

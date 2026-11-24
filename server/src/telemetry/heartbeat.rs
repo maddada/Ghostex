@@ -257,6 +257,34 @@ pub fn collect_domain_counts(repository: &DomainRepository<'_>) -> DomainCounts 
     }
 }
 
+/// Counts live (running) sessions across Native-capable families (`antigravity`, `claude`, `codex`)
+/// split by Native vs Terminal mode, for the daily `session_mode.daily_rollup`.
+pub fn collect_live_session_mode_counts(
+    repository: &DomainRepository<'_>,
+) -> super::capture::LiveSessionModeCounts {
+    let sessions = repository.list_session_agent_facts().unwrap_or_default();
+    let mut counts = super::capture::LiveSessionModeCounts::default();
+    for session in &sessions {
+        if session.lifecycle_state != "running" {
+            continue;
+        }
+        let Some(agent_id) = session.agent_id.as_deref() else {
+            continue;
+        };
+        if agent_id.trim().is_empty() {
+            continue;
+        }
+        let report = super::capture::session_agent_report(&serde_json::json!({
+            "agentId": agent_id,
+            "runtimeSettings": { "agentCommand": session.agent_command },
+        }));
+        if let Some(family) = crate::acp::canonical_native_family(report.agent) {
+            counts.record(family, session.is_non_cli);
+        }
+    }
+    counts
+}
+
 /// The interface setting plus the remote-machine COUNT, read straight out of
 /// the shared settings file. Unknown or missing values normalize to the shipped
 /// defaults, which is what the app itself renders in that situation.

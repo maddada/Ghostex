@@ -759,7 +759,27 @@ pub(crate) async fn save_settings_patch(
     timeout_ms: u64,
 ) -> Result<Value, SettingsSaveError> {
     let settings_patch = payload.get("patch").and_then(Value::as_object).cloned();
-    match state
+    let patch_source = payload
+        .get("source")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let tracks_settings_switch = patch_source == "mobile:agentSessionMode"
+        || patch_source.starts_with("cli")
+        || patch_source == "settings:cli";
+    let before_modes = if tracks_settings_switch
+        && settings_patch
+            .as_ref()
+            .is_some_and(|p| p.contains_key("agentSessionMode"))
+    {
+        let existing = crate::shared_settings_file::read_shared_settings(&state.paths);
+        Some(crate::telemetry::resolve_install_session_modes(
+            existing.as_ref(),
+        ))
+    } else {
+        None
+    };
+    let result = match state
         .event_hub
         .dispatch_renderer_command("updateSettingsPatch".to_string(), payload, timeout_ms)
         .await
@@ -767,7 +787,7 @@ pub(crate) async fn save_settings_patch(
         Ok(result) => Ok(result),
         Err(error) if error.code == "dependencyUnavailable" && settings_patch.is_some() => {
             let paths = state.paths.clone();
-            let patch = settings_patch.unwrap_or_default();
+            let patch = settings_patch.clone().unwrap_or_default();
             match tokio::task::spawn_blocking(move || {
                 crate::headless_settings::save_settings_patch(&paths, &patch)
             })
@@ -792,7 +812,39 @@ pub(crate) async fn save_settings_patch(
             code: error.code.to_string(),
             message: error.message,
         }),
+    };
+    if result.is_ok() {
+        if let (Some(before), Some(patch)) = (before_modes, settings_patch.as_ref()) {
+            let mut merged = crate::shared_settings_file::read_shared_settings(&state.paths)
+                .and_then(|value| value.as_object().cloned())
+                .unwrap_or_default();
+            if let Some(modes_patch) = patch.get("agentSessionMode") {
+                merged.insert("agentSessionMode".to_string(), modes_patch.clone());
+            }
+            let after =
+                crate::telemetry::resolve_install_session_modes(Some(&Value::Object(merged)));
+            let client = if patch_source == "mobile:agentSessionMode" {
+                "mobile"
+            } else {
+                "server"
+            };
+            for (family, prev, next) in [
+                ("antigravity", before.antigravity, after.antigravity),
+                ("claude", before.claude, after.claude),
+                ("codex", before.codex, after.codex),
+            ] {
+                if prev != next {
+                    let direction = if next == "native" {
+                        "terminal_to_native"
+                    } else {
+                        "native_to_terminal"
+                    };
+                    crate::telemetry::session_mode_switched(family, direction, "settings", client);
+                }
+            }
+        }
     }
+    result
 }
 
 pub(crate) fn with_renderer_session_target(mut payload: Map<String, Value>) -> Map<String, Value> {

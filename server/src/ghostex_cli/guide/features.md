@@ -4094,10 +4094,13 @@ agent) and default view, duplicate it as a custom
 agent, install or update its CLI, see its installed version (and the newer one
 when available) and command output, or open its Install docs link. For agents
 that support Native mode (Claude Code, Codex, and Antigravity), the row also offers
-**Session mode** (`agentSessionMode`): **Terminal** (default, interactive
-terminal with instant switching between Chat and Terminal) or **Native**
-(structured host inside `zmx` that survives Ghostex reloads without terminal
-scraping). For a Native session, **Switch to Terminal** lives in the chat's
+**Session mode** (`agentSessionMode`): **Native** (default on new Chat-first installs;
+structured host inside `zmx` that is faster, more stable, and survives Ghostex reloads
+without terminal scraping) or **Terminal** (legacy interactive terminal with instant
+switching between Chat and Terminal; will be removed in a future release, and picking it
+in Settings shows an inline legacy warning). Existing installs and Terminal-first new
+installs keep their existing mode (existing installs see the one-time Native mode prompt).
+For a Native session, **Switch to Terminal** lives in the chat's
 More actions (`•••`) menu instead of the composer toolbar; choosing it asks
 first and explains that switching is not instant and interrupts any active turn
 before reopening the conversation in Terminal mode. On a Terminal chat for those

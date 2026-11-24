@@ -104,7 +104,14 @@ pub(crate) fn start_shared_settings_watch(state: Arc<AppState>) {
             else {
                 continue;
             };
+            let before_modes =
+                crate::telemetry::resolve_install_session_modes(watch.published.as_ref());
             if watch.read_done(identity, read) {
+                let after_modes =
+                    crate::telemetry::resolve_install_session_modes(watch.published.as_ref());
+                if after_modes != before_modes {
+                    crate::telemetry::session_mode_state("changed", "server", after_modes);
+                }
                 // CDXC:GrokBot 2026-11-19 WHY: notes queued while Grok Bot Integration was off go out as
                 // soon as it is switched back on, whichever way it was (Settings > Grok Bot,
                 // Settings > Extensions, `ghostex settings set`), not only on a Grok Bot page read.

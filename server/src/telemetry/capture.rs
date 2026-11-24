@@ -367,6 +367,255 @@ pub fn rail_intro_answered(chose: &'static str) {
     );
 }
 
+/// Per-install effective session mode setting for every Native-capable agent family, plus
+/// preferred view. Values are strictly closed enum members (`"native"` / `"terminal"`, `"chat"` /
+/// `"terminal"`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InstallSessionModes {
+    pub preferred_view: &'static str,
+    pub antigravity: &'static str,
+    pub claude: &'static str,
+    pub codex: &'static str,
+}
+
+impl InstallSessionModes {
+    pub fn native_agent_count(&self) -> usize {
+        [self.antigravity, self.claude, self.codex]
+            .into_iter()
+            .filter(|mode| *mode == "native")
+            .count()
+    }
+}
+
+pub fn resolve_install_session_modes(settings: Option<&Value>) -> InstallSessionModes {
+    let map = settings.and_then(Value::as_object);
+    let preferred_view = map
+        .and_then(|map| map.get("preferredAgentInterface"))
+        .and_then(Value::as_str)
+        .and_then(|value| taxonomy::match_enum(taxonomy::INTERFACE_KINDS, value))
+        .unwrap_or("chat");
+    let mode_for = |family: &str| {
+        if map.is_some_and(|map| crate::acp::agent_acp_enabled(map, family)) {
+            "native"
+        } else {
+            "terminal"
+        }
+    };
+    InstallSessionModes {
+        preferred_view,
+        antigravity: mode_for("antigravity"),
+        claude: mode_for("claude"),
+        codex: mode_for("codex"),
+    }
+}
+
+/// Per-install session mode state, emitted on app start and whenever `agentSessionMode` or
+/// `preferredAgentInterface` changes. Also refreshes the person profile (`$set`).
+pub fn session_mode_state(trigger: &'static str, client: &'static str, modes: InstallSessionModes) {
+    let person = PropertyValue::PersonSet(vec![
+        ("interface", PropertyValue::Enum(modes.preferred_view)),
+        ("antigravity_mode", PropertyValue::Enum(modes.antigravity)),
+        ("claude_mode", PropertyValue::Enum(modes.claude)),
+        ("codex_mode", PropertyValue::Enum(modes.codex)),
+    ]);
+    capture(
+        taxonomy::EVENT_SESSION_MODE_STATE,
+        &[
+            ("trigger", PropertyValue::Enum(trigger)),
+            ("client", PropertyValue::Enum(client)),
+            ("preferred_view", PropertyValue::Enum(modes.preferred_view)),
+            ("antigravity_mode", PropertyValue::Enum(modes.antigravity)),
+            ("claude_mode", PropertyValue::Enum(modes.claude)),
+            ("codex_mode", PropertyValue::Enum(modes.codex)),
+            (
+                "native_agent_count",
+                PropertyValue::Number(modes.native_agent_count() as f64),
+            ),
+            (taxonomy::PERSON_SET_KEY, person),
+        ],
+    );
+}
+
+/// Throttled `session_mode.state` for mobile connect (`client.connected` shares the same 1h window).
+pub fn session_mode_state_throttled(
+    trigger: &'static str,
+    client: &'static str,
+    modes: InstallSessionModes,
+) {
+    let person = PropertyValue::PersonSet(vec![
+        ("interface", PropertyValue::Enum(modes.preferred_view)),
+        ("antigravity_mode", PropertyValue::Enum(modes.antigravity)),
+        ("claude_mode", PropertyValue::Enum(modes.claude)),
+        ("codex_mode", PropertyValue::Enum(modes.codex)),
+    ]);
+    capture_throttled(
+        taxonomy::EVENT_SESSION_MODE_STATE,
+        &format!("{client}:{trigger}"),
+        CLIENT_CONNECTED_THROTTLE,
+        &[
+            ("trigger", PropertyValue::Enum(trigger)),
+            ("client", PropertyValue::Enum(client)),
+            ("preferred_view", PropertyValue::Enum(modes.preferred_view)),
+            ("antigravity_mode", PropertyValue::Enum(modes.antigravity)),
+            ("claude_mode", PropertyValue::Enum(modes.claude)),
+            ("codex_mode", PropertyValue::Enum(modes.codex)),
+            (
+                "native_agent_count",
+                PropertyValue::Number(modes.native_agent_count() as f64),
+            ),
+            (taxonomy::PERSON_SET_KEY, person),
+        ],
+    );
+}
+
+/// One Terminal <-> Native switch (live session switch or Settings mode toggle). Also accumulates
+/// into the daily rollup counter when analytics are enabled.
+pub fn session_mode_switched(
+    agent: &'static str,
+    direction: &'static str,
+    source: &'static str,
+    client: &'static str,
+) {
+    let Some(telemetry) = super::queue::handle() else {
+        return;
+    };
+    if !telemetry.is_enabled() {
+        return;
+    }
+    super::state::record_pending_switch(direction, source);
+    capture(
+        taxonomy::EVENT_SESSION_MODE_SWITCHED,
+        &[
+            ("agent", PropertyValue::Enum(agent)),
+            ("direction", PropertyValue::Enum(direction)),
+            ("source", PropertyValue::Enum(source)),
+            ("client", PropertyValue::Enum(client)),
+        ],
+    );
+}
+
+/// Live (running) sessions across Native-capable families, split by Native vs Terminal mode.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LiveSessionModeCounts {
+    pub antigravity_native: usize,
+    pub antigravity_terminal: usize,
+    pub claude_native: usize,
+    pub claude_terminal: usize,
+    pub codex_native: usize,
+    pub codex_terminal: usize,
+}
+
+impl LiveSessionModeCounts {
+    pub fn record(&mut self, family: &str, is_native: bool) {
+        match (family, is_native) {
+            ("antigravity", true) => self.antigravity_native += 1,
+            ("antigravity", false) => self.antigravity_terminal += 1,
+            ("claude", true) => self.claude_native += 1,
+            ("claude", false) => self.claude_terminal += 1,
+            ("codex", true) => self.codex_native += 1,
+            ("codex", false) => self.codex_terminal += 1,
+            _ => {}
+        }
+    }
+
+    pub fn native_total(&self) -> usize {
+        self.antigravity_native + self.claude_native + self.codex_native
+    }
+
+    pub fn terminal_total(&self) -> usize {
+        self.antigravity_terminal + self.claude_terminal + self.codex_terminal
+    }
+}
+
+/// Daily rollup of live sessions by agent family x mode and switches by direction x entry point.
+pub fn session_mode_daily_rollup(
+    modes: InstallSessionModes,
+    live: LiveSessionModeCounts,
+    switches: super::state::SessionModeSwitchCounts,
+) {
+    capture(
+        taxonomy::EVENT_SESSION_MODE_DAILY_ROLLUP,
+        &[
+            ("preferred_view", PropertyValue::Enum(modes.preferred_view)),
+            ("antigravity_mode", PropertyValue::Enum(modes.antigravity)),
+            ("claude_mode", PropertyValue::Enum(modes.claude)),
+            ("codex_mode", PropertyValue::Enum(modes.codex)),
+            (
+                "live_antigravity_native",
+                PropertyValue::Number(live.antigravity_native as f64),
+            ),
+            (
+                "live_antigravity_terminal",
+                PropertyValue::Number(live.antigravity_terminal as f64),
+            ),
+            (
+                "live_claude_native",
+                PropertyValue::Number(live.claude_native as f64),
+            ),
+            (
+                "live_claude_terminal",
+                PropertyValue::Number(live.claude_terminal as f64),
+            ),
+            (
+                "live_codex_native",
+                PropertyValue::Number(live.codex_native as f64),
+            ),
+            (
+                "live_codex_terminal",
+                PropertyValue::Number(live.codex_terminal as f64),
+            ),
+            (
+                "live_native_total",
+                PropertyValue::Number(live.native_total() as f64),
+            ),
+            (
+                "live_terminal_total",
+                PropertyValue::Number(live.terminal_total() as f64),
+            ),
+            (
+                "switches_to_native_pill",
+                PropertyValue::Number(switches.to_native_pill as f64),
+            ),
+            (
+                "switches_to_native_more_menu",
+                PropertyValue::Number(switches.to_native_more_menu as f64),
+            ),
+            (
+                "switches_to_native_bulk_modal",
+                PropertyValue::Number(switches.to_native_bulk_modal as f64),
+            ),
+            (
+                "switches_to_native_settings",
+                PropertyValue::Number(switches.to_native_settings as f64),
+            ),
+            (
+                "switches_to_native_other",
+                PropertyValue::Number(switches.to_native_other as f64),
+            ),
+            (
+                "switches_to_native_total",
+                PropertyValue::Number(switches.to_native_total() as f64),
+            ),
+            (
+                "switches_to_terminal_more_menu",
+                PropertyValue::Number(switches.to_terminal_more_menu as f64),
+            ),
+            (
+                "switches_to_terminal_settings",
+                PropertyValue::Number(switches.to_terminal_settings as f64),
+            ),
+            (
+                "switches_to_terminal_other",
+                PropertyValue::Number(switches.to_terminal_other as f64),
+            ),
+            (
+                "switches_to_terminal_total",
+                PropertyValue::Number(switches.to_terminal_total() as f64),
+            ),
+        ],
+    );
+}
+
 /// The desktop startup ping, forwarded from `/api/recordClientEvent`.
 pub fn app_launched(
     app_version: String,

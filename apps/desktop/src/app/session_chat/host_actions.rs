@@ -284,12 +284,18 @@ impl GhostexGpuiApp {
                 .and_then(serde_json::Value::as_bool)
                 == Some(true);
             let working = message.get("working").and_then(serde_json::Value::as_bool) == Some(true);
+            let source = match message.get("source").and_then(serde_json::Value::as_str) {
+                Some("pill") => "pill",
+                Some("more_menu") => "more_menu",
+                _ => "unknown",
+            };
             self.ask_and_switch_session_to_native(
                 session_id,
                 family,
                 agent_name,
                 native_default,
                 working,
+                source,
                 cx,
             );
             return;

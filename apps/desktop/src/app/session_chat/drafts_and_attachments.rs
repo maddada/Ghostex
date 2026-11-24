@@ -273,6 +273,8 @@ impl GhostexGpuiApp {
                 "projectId": key.project_id,
                 "sessionId": key.session_id,
                 "interrupt": true,
+                "source": "more_menu",
+                "client": "desktop",
             });
             cx.background_executor().spawn(async move {
                 gpui_gxserver_rpc_result(
@@ -288,6 +290,8 @@ impl GhostexGpuiApp {
                 "projectId": key.project_id,
                 "sessionId": key.session_id,
                 "interrupt": true,
+                "source": "more_menu",
+                "client": "desktop",
             });
             cx.background_executor().spawn(async move {
                 gpui_remote_gxserver_rpc_result(
@@ -340,6 +344,7 @@ impl GhostexGpuiApp {
         agent_name: String,
         native_default: bool,
         working: bool,
+        source: &'static str,
         cx: &mut gpui::Context<Self>,
     ) {
         let is_working = working
@@ -367,7 +372,13 @@ impl GhostexGpuiApp {
             checkbox,
             true,
             Box::new(move |app, use_as_default, cx| {
-                app.confirm_switch_session_to_native(session_id, family, use_as_default, cx);
+                app.confirm_switch_session_to_native(
+                    session_id,
+                    family,
+                    use_as_default,
+                    source,
+                    cx,
+                );
             }),
             cx,
         );
@@ -378,6 +389,7 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
         family: String,
         use_as_default: bool,
+        source: &'static str,
         cx: &mut gpui::Context<Self>,
     ) {
         let is_remote = self.agents_chat_local_key_for_session(session_id).is_none();
@@ -440,6 +452,8 @@ impl GhostexGpuiApp {
             let params = serde_json::json!({
                 "projectId": key.project_id,
                 "sessionId": key.session_id,
+                "source": source,
+                "client": "desktop",
             });
             cx.background_executor().spawn(async move {
                 gpui_gxserver_rpc_result(
@@ -454,6 +468,8 @@ impl GhostexGpuiApp {
             let params = serde_json::json!({
                 "projectId": key.project_id,
                 "sessionId": key.session_id,
+                "source": source,
+                "client": "desktop",
             });
             cx.background_executor().spawn(async move {
                 gpui_remote_gxserver_rpc_result(
