@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::composer::references::next_file_reference_index;
 use crate::composer::slash_commands::{
-    filter_slash_commands, slash_commands_for_agent, slash_heading_for_agent, slash_query,
-    SlashCommand,
+    filter_slash_commands, slash_commands_for_agent, slash_commands_for_session,
+    slash_heading_for_agent, slash_query, SlashCommand,
 };
 use crate::composer::text::Utf16Text;
 use crate::composer::trigger::{
@@ -113,6 +113,8 @@ pub fn suggestion_row_corners(index: usize, count: usize) -> (bool, bool) {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SuggestionSources {
     pub agent: Option<String>,
+    /// The chat is Native (structured host), whose `/` list is its own (`slash_commands_for_session`).
+    pub non_cli: bool,
     pub session_agent_id: Option<String>,
     /// The draft session's agent rows, for the `$` heading.
     pub available_agents: Vec<AvailableAgent>,
@@ -151,6 +153,7 @@ impl Default for SuggestionSources {
     fn default() -> Self {
         Self {
             agent: None,
+            non_cli: false,
             session_agent_id: None,
             available_agents: Vec::new(),
             skills: None,
@@ -228,11 +231,12 @@ pub fn picker_edges(
     draft: &str,
     caret: usize,
     agent: Option<&str>,
+    non_cli: bool,
     dismissed: SuggestionDismissals,
 ) -> (bool, bool) {
     let slash_open = match slash_query(draft) {
         Some(query) if !dismissed.slash => {
-            !filter_slash_commands(slash_commands_for_agent(agent), query).is_empty()
+            !filter_slash_commands(slash_commands_for_session(agent, non_cli), query).is_empty()
         }
         _ => false,
     };
@@ -254,7 +258,7 @@ pub fn composer_suggestions(
     dismissed: SuggestionDismissals,
     can_request_skills: bool,
 ) -> SuggestionMatches {
-    let commands = slash_commands_for_agent(sources.agent.as_deref());
+    let commands = slash_commands_for_session(sources.agent.as_deref(), sources.non_cli);
     let slash_query = slash_query(draft).map(str::to_string);
     let skills = sources.skills.clone().unwrap_or_default();
     let (slash_matches, slash_skills) = match &slash_query {
@@ -942,8 +946,7 @@ pub fn reply_mention_popup(
             Some(ReplyMentionPopup {
                 kind: SuggestionKind::Session,
                 trigger_start: trigger.start,
-                heading: section_heading
-                    .unwrap_or_else(|| SESSION_SUGGESTION_HEADING.to_string()),
+                heading: section_heading.unwrap_or_else(|| SESSION_SUGGESTION_HEADING.to_string()),
                 rows,
                 status: None,
                 loading: false,

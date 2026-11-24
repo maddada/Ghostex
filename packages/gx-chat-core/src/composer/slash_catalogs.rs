@@ -762,6 +762,26 @@ pub(crate) const CODEX: &[SlashCommand] = &[
     },
 ];
 
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// A Native Codex chat talks to Codex's app-server, which has no slash commands: only `/compact` is turned into its own request (`thread/compact/start` in server/src/acp/driver_codex.rs), and the composer completes `/btw` and `/mention` itself. Every other Codex command reached the model as plain text, so `/diff` answered "No changes to report." without looking (found testing Native Codex on Linux). A Native Codex chat offers only these.
+pub(crate) const CODEX_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "btw",
+        description: "Start a side conversation in an ephemeral fork",
+        insert_text: Some(crate::composer::side_chat::SIDE_CHAT_PREFIX),
+    },
+    SlashCommand {
+        name: "compact",
+        description: "Summarize conversation to save context",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "mention",
+        description: "Mention a file",
+        insert_text: Some("@"),
+    },
+];
+
 /// CDXC:SessionChat 2026-10-17 WHY:
 /// Grok Build 1.0.62's own built-in commands (its `slash/commands/` registry, checked against the live `/` menu); skills and workflows reach the chat through the `$` picker. The earlier list named commands Grok never had (`/editor`, `/init`, `/models`, `/status`) or renamed (`/mcp` is `/mcps`).
 pub(crate) const GROK: &[SlashCommand] = &[

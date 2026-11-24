@@ -14,6 +14,7 @@ use crate::state::ChatState;
 pub fn suggestion_sources(state: &ChatState) -> SuggestionSources {
     let mut sources = state.composer.sources.clone();
     sources.agent = state.session.agent.clone();
+    sources.non_cli = state.session.non_cli_mode;
     sources.session_agent_id = state.session.session_agent_id.clone();
     sources.available_agents = available_agents(state);
     sources.sessions = crate::transcript::session_mentions::session_choices(

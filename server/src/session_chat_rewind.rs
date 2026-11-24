@@ -1328,6 +1328,15 @@ async fn rewind_session_chat(
         );
         return Ok(result);
     }
+    // CDXC:SessionChat 2026-11-24 WHY: Claude Code and Codex rewinds type into the agent's own terminal dialog, and a Native chat's pane runs `ghostex acp-host` instead, so driving it timed out with "Codex is not showing its input box". Say so plainly instead (the chat hides Rewind there too: `agent_supports_rewind` in packages/gx-chat-core/src/transcript/presentation.rs).
+    if matches!(agent.as_deref(), Some("codex" | "claude" | "openclaude"))
+        && crate::acp::session_is_acp(&target.session)
+    {
+        return Err(DomainStateError {
+            code: "unsupportedAgent",
+            message: "Rewind isn't available in Native chats yet.".to_string(),
+        });
+    }
     if agent.as_deref() == Some("codex") {
         return codex::rewind(state, target, &message_id).await;
     }

@@ -131,8 +131,15 @@ pub fn message_can_rewind(message: &ChatMessage, copy_text: &str, suppressed: &V
 }
 
 /// Agents whose own rewind flow Ghostex drives; anything else never offers the action.
-pub fn agent_supports_rewind(agent: Option<&str>) -> bool {
-    matches!(agent, Some("claude") | Some("codex") | Some("opencode"))
+///
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// Claude Code and Codex rewinds are driven through the agent's own terminal dialog (`/rewind`, Escape Escape), which a Native chat does not have: its pane runs `ghostex acp-host`, so a Rewind from a Native Codex chat failed with "Codex is not showing its input box" (found testing Native Codex on Linux). Until Native gets a rewind of its own (Codex's app-server `thread/rollback`), a Native chat does not offer it. OpenCode's rewind goes through its own server, so it stays.
+pub fn agent_supports_rewind(agent: Option<&str>, non_cli_mode: bool) -> bool {
+    match agent {
+        Some("claude") | Some("codex") => !non_cli_mode,
+        Some("opencode") => true,
+        _ => false,
+    }
 }
 
 /// CDXC:SessionFork 2026-11-12 WHY:

@@ -532,6 +532,8 @@ fn codex_item_content_blocks(content: Option<&Value>) -> Vec<SessionChatBlock> {
             match record.get("type").and_then(Value::as_str) {
                 Some("Text") => extract_string(record.get("text")).map(text_block),
                 Some("skill") => None,
+                // CDXC:SessionChat 2026-11-24 WHY: A picture attached in a Native Codex chat is recorded as `{"type":"local_image","path":…}` in the UserMessage item, which the shared mapper does not know, so the user's own message showed without its picture and an image-only message vanished (found testing Native Codex on Linux).
+                Some("local_image") => crate::session_chat::image_ref_block(record),
                 _ => claude_content_block(record),
             }
         })
