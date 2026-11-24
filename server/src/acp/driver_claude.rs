@@ -918,7 +918,7 @@ fn spawn_and_init_claude(
         argv.push(effort.to_string());
     }
 
-    let mut child = Command::new(&prog)
+    let mut child = super::child_lifetime::end_with_host(&mut Command::new(&prog))
         .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
         .env_remove("CLAUDECODE")
         .envs(acp_envs)

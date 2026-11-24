@@ -1721,7 +1721,7 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("Invalid Native host command for {}", spec.family);
         return 1;
     };
-    let mut child = match Command::new(&prog)
+    let mut child = match super::child_lifetime::end_with_host(&mut Command::new(&prog))
         .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
         .envs(acp_envs)
         .args(&argv)

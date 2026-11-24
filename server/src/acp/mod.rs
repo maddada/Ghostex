@@ -23,6 +23,7 @@ use crate::session_chat_files::SESSION_CHAT_IMAGE_MAX_BYTES;
 
 pub mod approval;
 pub(crate) mod channel;
+mod child_lifetime;
 mod driver_claude;
 mod driver_codex;
 pub mod host;

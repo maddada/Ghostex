@@ -785,7 +785,7 @@ fn spawn_and_init_codex(
     process_gen: &Arc<AtomicU64>,
     my_gen: u64,
 ) -> Result<CodexProcess, String> {
-    let mut child = Command::new(&cfg.prog)
+    let mut child = super::child_lifetime::end_with_host(&mut Command::new(&cfg.prog))
         .env_remove(super::channel::ACP_CHANNEL_SECRET_ENV)
         .envs(cfg.acp_envs.iter().cloned())
         .args(&cfg.argv)
