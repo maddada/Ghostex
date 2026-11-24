@@ -36,6 +36,9 @@ impl GhostexGpuiApp {
         } else if action.command["type"] == "gbots" {
             // Main Hub's GBots rows and menus (native_sidebar/gbots_rows.rs).
             self.run_native_sidebar_gbots_command(&action.command, window, cx);
+        } else if action.command["type"] == "openAutopilotSettings" {
+            #[cfg(not(ghostex_web))]
+            self.open_gpui_settings_tab("autopilot", Some(window), cx);
         } else if action.command["type"] == "openNotifications" {
             // The sidebar menu carries Notifications only while the bell is out of the row, so the
             // dropdown hangs from the menu button instead of the bell's last painted spot. The

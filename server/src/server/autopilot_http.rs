@@ -300,6 +300,7 @@ fn read_view(
     let project_rows: Vec<Value> = projects
         .iter()
         .filter(|project| autopilot::main_project_of(project).is_none())
+        .filter(|project| !autopilot::is_supervisor_project(project))
         .filter(|project| project["isRecentProject"].as_bool() != Some(true))
         .filter_map(|project| {
             let project_id = project["projectId"].as_str()?;

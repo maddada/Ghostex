@@ -1,4 +1,6 @@
-//! A section heading's context menu. Only the Parked heading has one.
+//! A section heading's context menu (Parked and Autopilot).
+
+use serde_json::json;
 
 use crate::sidebar_view::view::{GroupView, SectionView};
 use crate::sidebar_view::SectionId;
@@ -11,7 +13,20 @@ use super::item::MenuItem;
 ///
 /// CDXC:Sessions 2026-10-09 DECISION:
 /// User: right-clicking the Parked header offers Sleep All and Close All. Both act on every parked session of the project, the ones a collapsed heading hides too.
-pub(crate) fn section_menu(group: &GroupView, section: &SectionView) -> Option<Vec<MenuItem>> {
+pub(crate) fn section_menu(
+    group: &GroupView,
+    section: &SectionView,
+    menu_panels: bool,
+) -> Option<Vec<MenuItem>> {
+    if section.id == SectionId::Autopilot {
+        return menu_panels.then(|| {
+            vec![MenuItem::row(
+                "Autopilot Settings…",
+                "settings",
+                MenuCommand::host(json!({ "type": "openAutopilotSettings" })),
+            )]
+        });
+    }
     if section.id != SectionId::Parked || section.member_ids.is_empty() || group.core.is_stale {
         return None;
     }

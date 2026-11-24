@@ -551,7 +551,7 @@ impl AutopilotTab {
             // User, on the old "It hasn't been needed yet" line: "why has this never been
             // needed??" It wakes only for what the rules can't settle, so the line says which.
             None => format!(
-                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice (when it answers questions). Until then the rules handle everything. It starts in an Autopilot project, hidden in your sidebar (Show hidden lists it).{}",
+                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice (when it answers questions). Until then the rules handle everything. Once started, its chat shows under Autopilot in Main Hub.{}",
                 if question_choice(&config) == "wait" {
                     " Questions wait for you, so they stay with you."
                 } else {
@@ -562,7 +562,7 @@ impl AutopilotTab {
                 let wakes = supervisor["wakes"].as_u64().unwrap_or(0);
                 let waiting = supervisor["waiting"].as_u64().unwrap_or(0);
                 format!(
-                    "Runs on {} in the Autopilot project. Woken {} time{}{}{}.",
+                    "Runs on {} under Autopilot in Main Hub. Woken {} time{}{}{}.",
                     if agent == "codex" { "Codex" } else { "Claude" },
                     wakes,
                     if wakes == 1 { "" } else { "s" },

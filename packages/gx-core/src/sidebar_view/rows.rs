@@ -363,6 +363,7 @@ pub(crate) fn session_row(
         lifecycle_state: lifecycle_state.to_string(),
         is_pinned: session.is_pinned || session.is_chief,
         is_chief: session.is_chief,
+        is_autopilot_supervisor: false,
         opened_by_chief: session
             .gbots_chat
             .as_ref()

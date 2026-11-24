@@ -598,7 +598,14 @@ impl SidebarViewModel {
                     (None, Some(workspace)) => workspace.shows_project(loaded, project_id),
                     (None, None) => true,
                 };
-                if !shown && meta.bot_profile(project_id).is_none() && !meta.is_gbot(project_id) {
+                let is_autopilot = loaded
+                    .project(project_id)
+                    .is_some_and(|project| project.autopilot_supervisor_project);
+                if !shown
+                    && meta.bot_profile(project_id).is_none()
+                    && !meta.is_gbot(project_id)
+                    && !is_autopilot
+                {
                     continue;
                 }
             }
@@ -770,9 +777,9 @@ impl SidebarViewModel {
             super::thread_fold::fold_cross_project_threads(&mut plans, &mut drawn_focus);
         }
 
-        // Chief of Staff's row and Ask Ghostex AI's chats join the home's group wherever their
-        // sessions live (`chief.rs`).
-        super::chief::lift_into_home(&mut plans);
+        // Chief of Staff's row, Ask Ghostex AI's chats, and Autopilot's supervisor sessions join
+        // the home's group wherever their sessions live (`chief.rs`).
+        super::chief::lift_into_home(&mut plans, &mut drawn_focus);
 
         // Every machine's projects in this one list (`merged.rs`), unless Separate by machine.
         let mut project_copies = std::collections::BTreeMap::new();
@@ -1015,10 +1022,15 @@ fn resolve_row(
     inputs: &SidebarInputs,
     context: &RowContext<'_>,
 ) -> Option<RowRef> {
+    let is_autopilot = store
+        .loaded(machine)
+        .and_then(|loaded| loaded.project(project_id))
+        .is_some_and(|project| project.autopilot_supervisor_project);
     if let Some(row) = state
         .rows
         .get(project_id)
         .and_then(|sessions| sessions.get(session_id))
+        .filter(|row| row.row.is_autopilot_supervisor == is_autopilot)
     {
         return Some(row.clone());
     }
@@ -1038,6 +1050,7 @@ fn resolve_row(
         inputs.host.local_delayed_sends.get(&sidebar_id),
         context,
     );
+    row.is_autopilot_supervisor = is_autopilot;
     row.cloud_box = row.cloud_box.map(|badge| badge.with_started_box(boxes));
     state.next_row_id += 1;
     state.work.rows_built += 1;
@@ -1302,6 +1315,7 @@ pub(super) fn project_context(
         work_tracker_github: project.work_tracker.as_deref() == Some("github"),
         is_home: project.is_home,
         is_help_home: project.is_help_home,
+        is_autopilot: project.autopilot_supervisor_project,
         gbot: project.gbots_bot.clone(),
         folder_problem: super::folder_problem::FolderProblemView::new(
             &project.title,

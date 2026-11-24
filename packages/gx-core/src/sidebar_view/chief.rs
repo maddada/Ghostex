@@ -179,34 +179,52 @@ fn chief_row_for(
 /// until its next New Chat, and its row still belongs at the top of Main Hub. Ask Ghostex AI's
 /// chats, which live in that same project (`is_help_home`), join the home group of their computer
 /// too while Main Hub is on, so turning it on moves nothing (CDXC:Chief 2026-11-19 in
-/// server/src/chief/home.rs); while it is off that project is the home itself.
-pub(crate) fn lift_into_home(plans: &mut [super::groups::GroupPlan]) {
+/// server/src/chief/home.rs); while it is off that project is the home itself. Autopilot's
+/// supervisor sessions (`is_autopilot`) join their computer's real Main Hub (`is_home &&
+/// !is_help_home`) under the Autopilot section; while Main Hub is off they stay hidden from the
+/// sidebar rather than keeping a Main Hub header open.
+pub(crate) fn lift_into_home(plans: &mut [super::groups::GroupPlan], focus: &mut FocusKey) {
     let is_home_plan = |plan: &super::groups::GroupPlan| {
         plan.kind == super::groups::GroupKind::Project
             && plan.project.as_ref().is_some_and(|project| project.is_home)
     };
-    let Some(home) = plans.iter().position(is_home_plan) else {
-        return;
+    let is_real_home_plan = |plan: &super::groups::GroupPlan| {
+        plan.kind == super::groups::GroupKind::Project
+            && plan
+                .project
+                .as_ref()
+                .is_some_and(|project| project.is_home && !project.is_help_home)
     };
-    for index in 0..plans.len() {
-        if index == home {
-            continue;
-        }
-        if let Some(at) = plans[index].rows.iter().position(|row| row.row.is_chief) {
-            let row = plans[index].rows.remove(at);
-            plans[home].rows.insert(0, row);
-            break;
+    if let Some(home) = plans.iter().position(is_home_plan) {
+        for index in 0..plans.len() {
+            if index == home {
+                continue;
+            }
+            if let Some(at) = plans[index].rows.iter().position(|row| row.row.is_chief) {
+                let source_group_id = plans[index].group_id.clone();
+                let row = plans[index].rows.remove(at);
+                if focus.active_group_id.as_deref() == Some(source_group_id.as_str())
+                    && focus.focused_session_id.as_deref()
+                        == row.row.key.as_ref().map(|key| key.session_id.as_str())
+                {
+                    focus.active_group_id = Some(plans[home].group_id.clone());
+                }
+                plans[home].rows.insert(0, row);
+                break;
+            }
         }
     }
     for index in 0..plans.len() {
         let plan = &plans[index];
-        let lifts = plan.kind == super::groups::GroupKind::Project
-            && plan
-                .project
-                .as_ref()
-                .is_some_and(|project| project.is_help_home && !project.is_home)
-            && !plan.rows.is_empty();
-        if !lifts {
+        if plan.kind != super::groups::GroupKind::Project || plan.rows.is_empty() {
+            continue;
+        }
+        let Some(project) = plan.project.as_ref() else {
+            continue;
+        };
+        let lifts_help = project.is_help_home && !project.is_home;
+        let lifts_autopilot = project.is_autopilot;
+        if !lifts_help && !lifts_autopilot {
             continue;
         }
         let machine = plan
@@ -214,7 +232,12 @@ pub(crate) fn lift_into_home(plans: &mut [super::groups::GroupPlan]) {
             .as_ref()
             .map(|remote| remote.machine_id.clone());
         let Some(target) = plans.iter().position(|candidate| {
-            is_home_plan(candidate)
+            let matches_home = if lifts_autopilot {
+                is_real_home_plan(candidate)
+            } else {
+                is_home_plan(candidate)
+            };
+            matches_home
                 && candidate
                     .remote_machine
                     .as_ref()
@@ -223,6 +246,11 @@ pub(crate) fn lift_into_home(plans: &mut [super::groups::GroupPlan]) {
         }) else {
             continue;
         };
+        let source_group_id = plans[index].group_id.clone();
+        let target_group_id = plans[target].group_id.clone();
+        if focus.active_group_id.as_deref() == Some(source_group_id.as_str()) {
+            focus.active_group_id = Some(target_group_id);
+        }
         let rows = std::mem::take(&mut plans[index].rows);
         plans[target].rows.extend(rows);
     }

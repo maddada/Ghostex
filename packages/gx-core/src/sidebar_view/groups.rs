@@ -60,6 +60,10 @@ pub(crate) struct ProjectContextInput {
     /// Ask Ghostex AI's project (`PresentationProject::is_help_home`): its chats are listed in
     /// Main Hub (`chief.rs` `lift_into_home`) and its own group is never drawn empty.
     pub(crate) is_help_home: bool,
+    /// Autopilot's supervisor system project (`PresentationProject::autopilot_supervisor_project`):
+    /// its sessions are listed under Autopilot in Main Hub while Main Hub is on, and its own
+    /// project group is never drawn.
+    pub(crate) is_autopilot: bool,
     /// The GBot this project is the folder of (`PresentationProject::gbots_bot`), drawn as the
     /// bot's row in Main Hub's GBots section (gbots.rs).
     pub(crate) gbot: Option<ghostex_gx_protocol::presentation::PresentationGbotsBot>,

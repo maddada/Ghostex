@@ -309,6 +309,17 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                             "gbotsProject",
                             project.get("gbotsProject"),
                         );
+                        // Autopilot's own supervisor project: additive boolean ignored by older phones (11.2.1+);
+                        // newer phones lift its supervisor session(s) into Main Hub and hide it from the projects list.
+                        if project
+                            .get("autopilotSupervisorProject")
+                            .and_then(Value::as_bool)
+                            == Some(true)
+                            || crate::autopilot::is_supervisor_project(project)
+                        {
+                            project_map
+                                .insert("autopilotSupervisorProject".to_string(), json!(true));
+                        }
                         // The Unified list names a project by its repository, so one repository on two computers is one project (packages/gx-core/src/unified_sidebar/repo.rs).
                         insert_present(
                             &mut project_map,

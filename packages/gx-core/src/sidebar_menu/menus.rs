@@ -301,6 +301,9 @@ impl<'a> SidebarMenus<'a> {
             menu_group.remote_machine_name = Some(machine_name);
             menu_group.can_create_session_group = false;
         }
+        if row.is_autopilot_supervisor {
+            menu_group.can_create_session_group = false;
+        }
         // A worktree session its parent project lists (`sidebar_view/worktree_fold.rs`) is the
         // worktree project's: its menus act there, and it joins no session group of the parent.
         if let Some(folded) = row.worktree.as_ref().and_then(|worktree| {
@@ -458,13 +461,14 @@ impl<'a> SidebarMenus<'a> {
         })
     }
 
-    /// A section heading's context menu, or `None` for a heading that has none (only Parked does).
+    /// A section heading's context menu, or `None` for a heading that has none (Parked and
+    /// Autopilot have one).
     pub fn section_menu(
         &self,
         group: &GroupView,
         section: &crate::sidebar_view::SectionView,
     ) -> Option<Vec<MenuItem>> {
-        super::section::section_menu(group, section)
+        super::section::section_menu(group, section, self.host.menu_panels)
     }
 
     /// A project header's context menu, with the buttons the header no longer draws (layout.rs

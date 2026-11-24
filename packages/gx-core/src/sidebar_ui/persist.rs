@@ -340,8 +340,8 @@ fn flag_map(keys: &BTreeSet<String>) -> Value {
     )
 }
 
-/// `normalizeProjectSessionSectionCollapseState`: only Pinned and Sessions are stored; every other
-/// heading takes the default the sidebar starts with.
+/// `normalizeProjectSessionSectionCollapseState`: Pinned, Sessions, and Autopilot (when
+/// collapsed) are stored; every other heading takes the default the sidebar starts with.
 fn normalize_section_collapse(value: Option<&Value>) -> BTreeMap<String, SectionCollapse> {
     let Some(Value::Object(object)) = value else {
         return BTreeMap::new();
@@ -355,6 +355,7 @@ fn normalize_section_collapse(value: Option<&Value>) -> BTreeMap<String, Section
                 storage_id.clone(),
                 SectionCollapse {
                     pinned: flag("pinned"),
+                    autopilot: flag("autopilot"),
                     sessions: flag("sessions"),
                     ..SectionCollapse::default()
                 },
@@ -363,16 +364,25 @@ fn normalize_section_collapse(value: Option<&Value>) -> BTreeMap<String, Section
         .collect()
 }
 
-/// `persistedProjectSessionSectionCollapseState`: the two persisted headings, nothing else.
+/// Persists one group's section collapse flags: `pinned` and `sessions` always, plus `autopilot`
+/// only when collapsed so envelopes without a collapsed Autopilot heading stay byte-identical.
+pub(super) fn persisted_group_section_collapse(sections: &SectionCollapse) -> Value {
+    let mut object = Map::new();
+    object.insert("pinned".to_string(), Value::Bool(sections.pinned));
+    if sections.autopilot {
+        object.insert("autopilot".to_string(), Value::Bool(true));
+    }
+    object.insert("sessions".to_string(), Value::Bool(sections.sessions));
+    Value::Object(object)
+}
+
+/// `persistedProjectSessionSectionCollapseState`: the persisted headings, nothing else.
 fn persisted_section_collapse(state: &BTreeMap<String, SectionCollapse>) -> Value {
     Value::Object(
         state
             .iter()
             .map(|(storage_id, sections)| {
-                (
-                    storage_id.clone(),
-                    json!({ "pinned": sections.pinned, "sessions": sections.sessions }),
-                )
+                (storage_id.clone(), persisted_group_section_collapse(sections))
             })
             .collect(),
     )

@@ -863,6 +863,9 @@ pub struct SessionRow {
     /// A computer's Chief of Staff (gxserver's `isChief`): pinned first in its group, ahead of
     /// every other pinned row (ordering.rs `sort_pinned`).
     pub is_chief: bool,
+    /// A session in an Autopilot supervisor system project (`autopilotSupervisorProject`), listed
+    /// under Main Hub's Autopilot section (`SectionId::Autopilot`).
+    pub is_autopilot_supervisor: bool,
     /// A GBot chat Chief of Staff opened (gxserver's `gbotsChat.openedBy`): its row carries a small
     /// "Chief" tag under the bot (apps/desktop/src/app/native_sidebar/gbots_rows.rs).
     pub opened_by_chief: bool,

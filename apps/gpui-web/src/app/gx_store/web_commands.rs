@@ -16,6 +16,7 @@ fn section_id(value: &str) -> Option<SectionId> {
     Some(match value {
         "browser" => SectionId::Browser,
         "pinned" => SectionId::Pinned,
+        "autopilot" => SectionId::Autopilot,
         "drafts" => SectionId::Drafts,
         "working" => SectionId::Working,
         "sessions" => SectionId::Sessions,

@@ -106,8 +106,11 @@ pub(crate) fn presents_as_home(project: &Value) -> bool {
 }
 
 /// Whether a session of `project` is listed under Main Hub: Ask Ghostex AI's project always (its
-/// chats are lifted into Main Hub while it is on), the home project while Main Hub is on. Its
-/// where pill and Session details name it "Main Hub" (session_details/environment.rs).
+/// chats are lifted into Main Hub while it is on), and the home project and Autopilot's supervisor
+/// project while Main Hub is on. Its where pill and Session details name it "Main Hub"
+/// (session_details/environment.rs).
 pub(crate) fn lists_under_main_hub(project: &Value) -> bool {
-    is_help_home_project(project) || (super::chief_shown() && is_home_project(project))
+    is_help_home_project(project)
+        || (super::chief_shown()
+            && (is_home_project(project) || crate::autopilot::is_supervisor_project(project)))
 }

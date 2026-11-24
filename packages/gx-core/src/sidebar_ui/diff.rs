@@ -16,8 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::persist::{
-    collapse_into_storage, stored_state_object, stored_version, write_sidebar_mode,
-    COLLAPSE_STORAGE_VERSION, HIDDEN_PROJECT_MACHINES_KEY,
+    collapse_into_storage, persisted_group_section_collapse, stored_state_object, stored_version,
+    write_sidebar_mode, COLLAPSE_STORAGE_VERSION, HIDDEN_PROJECT_MACHINES_KEY,
 };
 use crate::sidebar_view::{SectionCollapse, SidebarCollapseState, SidebarMode};
 
@@ -167,12 +167,12 @@ impl SidebarCollapseDiff {
             };
             for (storage_id, state) in &self.section_collapse {
                 match state {
-                    // Only the two headings that are stored; the rest go back to their defaults on
+                    // Only the persisted headings; the rest go back to their defaults on
                     // the next read, which is what the sidebar has always done.
                     Some(state) => {
                         sections.insert(
                             storage_id.clone(),
-                            json!({ "pinned": state.pinned, "sessions": state.sessions }),
+                            persisted_group_section_collapse(state),
                         );
                     }
                     None => {
