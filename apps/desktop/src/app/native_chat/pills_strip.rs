@@ -557,11 +557,116 @@ impl NativeChatView {
         )
     }
 
-    /// Whether the strip shows: a draft is offered, a page is hidden, Boosts are on (so the Boost
-    /// pill is reachable on a new chat too), or the transcript has rows and another pill, timer or
-    /// view chip calls for it.
+    /// The new-chat "No project" and "Coordinator" toggle pills at the strip's left end, matching
+    /// the existing strip pills in height, typography and neutral style.
+    ///
+    /// CDXC:NewSession 2026-11-24 DECISION:
+    /// User picked Q4833 A (left side of the composer's top bar, where the project/branch pill
+    /// sits once a chat starts) and Q4834 C (neutral fill plus check mark when on, no accent
+    /// colours). The phone draws the same pills in `apps/mobile/app/src/chat/native/cards/PillsStrip.tsx`.
+    fn draft_toggle_pills(&self, p: &ChatAppearance, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        if !self.draft_toggle_pills_shown() {
+            return Vec::new();
+        }
+        let s = p.scale;
+        let no_project = self.draft_is_no_project(cx);
+        let coordinator = self.draft_coordinator_mode;
+        let make_pill = |id: &'static str,
+                         label: &'static str,
+                         icon_off: &'static str,
+                         active: bool,
+                         tooltip: &'static str| {
+            let icon = if active {
+                "titlebar/check.svg"
+            } else {
+                icon_off
+            };
+            let ink = if active { p.foreground } else { p.card_muted };
+            div()
+                .id(id)
+                .role(gpui::Role::Button)
+                .aria_label(tooltip)
+                .aria_selected(active)
+                .flex()
+                .items_center()
+                .flex_shrink_0()
+                .gap(px(5.0 * s))
+                .h(px(super::chat_pills::PILL_HEIGHT * s))
+                .px(px(8.0 * s))
+                .py(px(2.0 * s))
+                .rounded_full()
+                .border(px(s))
+                .border_color(if active {
+                    p.foreground.opacity(0.28)
+                } else {
+                    p.foreground.opacity(0.1)
+                })
+                .when(active, |pill| {
+                    pill.bg(p.foreground.opacity(0.10))
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                })
+                .text_size(px(13.0 * s))
+                .line_height(px(19.0 * s))
+                .whitespace_nowrap()
+                .text_color(ink)
+                .chat_cursor_pointer()
+                .hover(move |style| {
+                    style.bg(p.foreground.opacity(if active { 0.14 } else { 0.06 }))
+                })
+                .tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(tooltip).build(window, cx)
+                })
+                .child(
+                    svg()
+                        .path(icon)
+                        .size(px(14.0 * s))
+                        .flex_shrink_0()
+                        .text_color(ink),
+                )
+                .child(label)
+        };
+        vec![
+            make_pill(
+                "chat-draft-no-project",
+                "No project",
+                crate::app::native_sidebar::chief_row_view::FLOWER_ICON,
+                no_project,
+                if no_project {
+                    "No project is on (saved in Main Hub). Click to pick a project"
+                } else {
+                    "No project: move this draft to Main Hub"
+                },
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                cx.stop_propagation();
+                this.toggle_draft_no_project(cx);
+            }))
+            .into_any_element(),
+            make_pill(
+                "chat-draft-coordinator",
+                "Coordinator",
+                "titlebar/coordinator-crown.svg",
+                coordinator,
+                if coordinator {
+                    "Coordinator is on. Click to switch back to a normal draft"
+                } else {
+                    "Start this draft as a Coordinator"
+                },
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                cx.stop_propagation();
+                this.toggle_draft_coordinator(cx);
+            }))
+            .into_any_element(),
+        ]
+    }
+
+    /// Whether the strip shows: a draft is offered, draft toggle pills are up, a page is hidden,
+    /// Boosts are on (so the Boost pill is reachable on a new chat too), or the transcript has
+    /// rows and another pill, timer or view chip calls for it.
     pub(super) fn pills_strip_shown(&self) -> bool {
         if self.saved_draft_offered()
+            || self.draft_toggle_pills_shown()
             || !self.minimized_pages.is_empty()
             || self.boost_pill_shown()
             || self.native_switch_chip_shown()
@@ -638,7 +743,8 @@ impl NativeChatView {
             return None;
         }
         let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list, p.scale);
-        let (where_pill, chips, pills) = if shown {
+        let (draft_pills, where_pill, chips, pills) = if shown {
+            let draft_pills = self.draft_toggle_pills(p, cx);
             let mut chips: Vec<AnyElement> = self.native_switch_chip(p, cx).into_iter().collect();
             chips.extend(self.saved_draft_pill_element(p, cx));
             chips.extend(self.view_chips(p, cx));
@@ -648,12 +754,13 @@ impl NativeChatView {
                 .set(self.where_pill_widths(p, cx));
             let tier = self.pills_strip.plan.borrow().where_tier;
             (
+                draft_pills,
                 self.where_pill_element(tier, p, cx),
                 chips,
                 self.strip_pills(p, cx),
             )
         } else {
-            (None, Vec::new(), Vec::new())
+            (Vec::new(), None, Vec::new(), Vec::new())
         };
         // The ↓ at the left of the pills, so it appearing moves none of them.
         let scrolling: Vec<(StripItem, AnyElement)> = (shown && left_bottom)
@@ -704,8 +811,18 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .gap(px(BAND_GAP * s))
-                    // The where pill, the Saved draft pill and the chips stay pinned left; the
-                    // pills fit in what is left beside them.
+                    // The draft toggle pills, the where pill, the Saved draft pill and the chips
+                    // stay pinned left; the pills fit in what is left beside them.
+                    .when(!draft_pills.is_empty(), |band| {
+                        band.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .flex_shrink_0()
+                                .gap(px(6.0 * s))
+                                .children(draft_pills),
+                        )
+                    })
                     .children(where_pill)
                     .when(!chips.is_empty(), |band| {
                         band.child(

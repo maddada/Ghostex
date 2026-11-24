@@ -1,8 +1,10 @@
 //! The bar on top of a new chat's message box: project › computer › where › detail, plus the draft's
-//! agent and model + effort, with each choice's hotkey shown on the bar while it is a draft.
-//! gx-chat-core decides the worktree/branch parts (`packages/gx-chat-core/src/menus/draft_worktree.rs`);
-//! this file measures the parts, draws them and opens their menus. The phone draws the worktree bar
-//! in `apps/mobile/app/src/chat/native/composer/WorktreeTray.tsx`.
+//! agent and model + effort, with each choice's shortcut shown in its hover tooltip.
+//! The draft's "No project" and "Coordinator" toggle pills live in the composer's own top strip
+//! (`pills_strip.rs`). gx-chat-core decides the worktree/branch parts
+//! (`packages/gx-chat-core/src/menus/draft_worktree.rs`); this file measures the parts, draws them
+//! and opens their menus. The phone draws the worktree bar in
+//! `apps/mobile/app/src/chat/native/composer/WorktreeTray.tsx`.
 //!
 //! The project and computer parts, and the base branch and worktree lists, open the search card
 //! in `draft_project_picker.rs`; the Cloud Box boot card is
@@ -53,10 +55,6 @@ const PART_PADDING: f32 = 6.0;
 const ICON: f32 = 13.0;
 const GAP: f32 = 5.0;
 const FONT: f32 = 13.0;
-/// Key cap styling for draft bar hotkeys.
-const KEY_CAP_FONT: f32 = 10.5;
-const KEY_CAP_HEIGHT: f32 = 16.0;
-const KEY_CAP_PADDING: f32 = 4.0;
 /// The › between place/where parts, with its margins.
 const SEPARATOR: f32 = 14.0;
 /// The vertical hairline between the place/where group and the agent/model group on one row.
@@ -86,10 +84,6 @@ enum PartAction {
     },
     /// The model and effort picker (`show_model_menu` / `show_option_menu`).
     Model,
-    /// Toggle "No project" mode (moves the draft to Main Hub when on, or back to a project when off).
-    ToggleNoProject,
-    /// Toggle "Coordinator" mode on this draft.
-    ToggleCoordinator,
 }
 
 #[derive(Clone)]
@@ -102,8 +96,6 @@ struct Part {
     label: String,
     suffix: Option<String>,
     muted: bool,
-    pill: bool,
-    pressed: bool,
     tooltip: String,
     hotkey: Option<&'static str>,
     action: PartAction,
@@ -179,6 +171,13 @@ impl NativeChatView {
         self.effective_draft_tray().is_some()
     }
 
+    /// Whether the draft's "No project" and "Coordinator" toggle pills should show in the
+    /// composer's pill strip (`pills_strip.rs`): while this draft is unsent and idle.
+    pub(super) fn draft_toggle_pills_shown(&self) -> bool {
+        self.effective_draft_tray()
+            .is_some_and(|tray| tray["busy"] != true && tray["status"].is_null())
+    }
+
     /// The Agent segment for a draft setup bar (`Option+A` / click opens the agent list).
     fn draft_agent_part(&self) -> Option<Part> {
         let current_id = self.snapshot["sessionAgentId"]
@@ -251,8 +250,6 @@ impl NativeChatView {
             label,
             suffix: None,
             muted: false,
-            pill: false,
-            pressed: false,
             hotkey: pickable.then_some("newChatPickAgent"),
             action: if pickable {
                 PartAction::Menu {
@@ -321,8 +318,6 @@ impl NativeChatView {
             label: display_label,
             suffix,
             muted: loading,
-            pill: false,
-            pressed: false,
             tooltip,
             hotkey: Some("openModelPicker"),
             action: PartAction::Model,
@@ -332,7 +327,7 @@ impl NativeChatView {
 
     /// Toggles Coordinator mode on this draft, showing the coordinator first-message card and a
     /// toast prompting the user to pick model/effort and click Send.
-    fn toggle_draft_coordinator(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn toggle_draft_coordinator(&mut self, cx: &mut Context<Self>) {
         self.draft_coordinator_mode = !self.draft_coordinator_mode;
         self.draft_setup_changed = true;
         if self.draft_coordinator_mode {
@@ -355,54 +350,12 @@ impl NativeChatView {
     }
 
     /// The setup bar's parts in two groups:
-    /// - Row 0: toggle pills (`No project`, `Coordinator`) plus place and where (`project`, `computer`, `where`, `branch/detail`)
+    /// - Row 0: place and where (`project`, `computer`, `where`, `branch/detail`)
     /// - Row 1: agent and model (`agent`, `model + effort`)
     fn tray_parts(&self, tray: &Value, cx: &Context<Self>) -> [Vec<Part>; 2] {
         let mut place = Vec::new();
         let no_project = self.draft_is_no_project(cx);
         let idle = tray["busy"] != true && tray["status"].is_null();
-        if idle {
-            place.push(Part {
-                id: "chat-draft-no-project",
-                glyph: no_project.then(|| "check".to_string()),
-                agent_icon: None,
-                star: false,
-                prefix: None,
-                label: "No project".to_string(),
-                suffix: None,
-                muted: !no_project,
-                pill: true,
-                pressed: no_project,
-                tooltip: if no_project {
-                    "No project is on (saved in Main Hub). Click to pick a project".to_string()
-                } else {
-                    "No project: move this draft to Main Hub".to_string()
-                },
-                hotkey: None,
-                action: PartAction::ToggleNoProject,
-                bounds: Rc::default(),
-            });
-            place.push(Part {
-                id: "chat-draft-coordinator",
-                glyph: Some("coordinator-crown".to_string()),
-                agent_icon: None,
-                star: false,
-                prefix: None,
-                label: "Coordinator".to_string(),
-                suffix: None,
-                muted: !self.draft_coordinator_mode,
-                pill: true,
-                pressed: self.draft_coordinator_mode,
-                tooltip: if self.draft_coordinator_mode {
-                    "Coordinator is on. Click to switch back to a normal draft".to_string()
-                } else {
-                    "Start this draft as a Coordinator".to_string()
-                },
-                hotkey: None,
-                action: PartAction::ToggleCoordinator,
-                bounds: Rc::default(),
-            });
-        }
         if no_project {
             // In "No project" mode, hide Project, Where and Branch/Worktree; keep only the machine picker.
             if let Some((label, local, pickable)) = self.draft_machine_part(cx) {
@@ -416,8 +369,6 @@ impl NativeChatView {
                     label,
                     suffix: None,
                     muted: !pickable,
-                    pill: false,
-                    pressed: false,
                     hotkey: pickable.then_some("newChatPickComputer"),
                     action: if pickable {
                         PartAction::Place { machines: true }
@@ -445,8 +396,6 @@ impl NativeChatView {
                     label: name,
                     suffix: None,
                     muted: false,
-                    pill: false,
-                    pressed: false,
                     hotkey: Some("newChatPickProject"),
                     action: PartAction::Place { machines: false },
                     bounds: self.draft_project_chip_bounds.clone(),
@@ -462,8 +411,6 @@ impl NativeChatView {
                         label,
                         suffix: None,
                         muted: !pickable,
-                        pill: false,
-                        pressed: false,
                         hotkey: pickable.then_some("newChatPickComputer"),
                         action: if pickable {
                             PartAction::Place { machines: true }
@@ -485,8 +432,6 @@ impl NativeChatView {
                     label: label.to_owned(),
                     suffix: None,
                     muted: false,
-                    pill: false,
-                    pressed: false,
                     tooltip: format!("Where it runs: {label}"),
                     hotkey: Some("newChatPickWhere"),
                     action: PartAction::Menu {
@@ -520,8 +465,6 @@ impl NativeChatView {
                     label: label.to_owned(),
                     suffix: None,
                     muted: !has_menu || detail["placeholder"] == true,
-                    pill: false,
-                    pressed: false,
                     tooltip: detail["tooltip"].as_str().unwrap_or(label).to_owned(),
                     hotkey: has_menu.then_some("newChatPickBranch"),
                     action: if let (true, Some(kind)) = (has_menu, list_kind) {
@@ -596,8 +539,6 @@ impl NativeChatView {
                     self.show_option_menu("model", bounds, window, cx);
                 }
             }
-            PartAction::ToggleNoProject => self.toggle_draft_no_project(cx),
-            PartAction::ToggleCoordinator => self.toggle_draft_coordinator(cx),
         }
     }
 
@@ -628,33 +569,17 @@ impl NativeChatView {
         }
     }
 
-    /// The visible key cap label on the bar for a draft part, when clickable and bound.
-    fn tray_part_key_cap(part: &Part, busy: bool) -> Option<String> {
-        let clickable = !busy && !matches!(part.action, PartAction::None);
-        if !clickable {
-            return None;
-        }
-        let chord = hotkey_chord(part.hotkey);
-        (!chord.is_empty()).then_some(chord)
-    }
-
     /// A part's natural width and the least it may be cut to, at the chat's zoom.
-    fn measure_tray_part(
-        &self,
-        part: &Part,
-        busy: bool,
-        p: &ChatAppearance,
-        window: &Window,
-    ) -> PartSize {
+    fn measure_tray_part(&self, part: &Part, p: &ChatAppearance, window: &Window) -> PartSize {
         let s = p.scale;
         let mut style = window.text_style();
         style.font_family = p.font.clone().into();
-        let text_width = |text: &str, size: f32| {
+        let text_width = |text: &str| {
             window
                 .text_system()
                 .shape_line(
                     text.to_owned().into(),
-                    px(size * s),
+                    px(FONT * s),
                     &[style.to_run(text.len())],
                     None,
                 )
@@ -662,31 +587,21 @@ impl NativeChatView {
                 .as_f32()
         };
         let has_icon = part.glyph.is_some() || part.agent_icon.is_some();
-        let pad = if part.pill { 8.0 } else { PART_PADDING };
-        let mut chrome = (pad * 2.0) * s + if part.pill { 2.0 } else { 0.0 };
+        let mut chrome = (PART_PADDING * 2.0) * s;
         if has_icon {
             chrome += (ICON + GAP) * s;
         }
         if let Some(prefix) = part.prefix.as_deref() {
-            chrome += text_width(prefix, FONT) + GAP * s;
+            chrome += text_width(prefix) + GAP * s;
         }
         if let Some(suffix) = part.suffix.as_deref() {
-            chrome += text_width(suffix, FONT) + GAP * s;
-        }
-        if let Some(key_cap) = Self::tray_part_key_cap(part, busy) {
-            chrome += GAP * s
-                + (KEY_CAP_PADDING * 2.0 + 2.0) * s
-                + text_width(&key_cap, KEY_CAP_FONT).ceil();
+            chrome += text_width(suffix) + GAP * s;
         }
         // A pixel of slack so a part measured whole is never drawn cut by rounding.
-        let words = text_width(&part.label, FONT).ceil() + 1.0;
+        let words = text_width(&part.label).ceil() + 1.0;
         PartSize {
             natural: chrome + words,
-            min: if part.pill {
-                chrome + words
-            } else {
-                chrome + words.min(MIN_WORDS * s)
-            },
+            min: chrome + words.min(MIN_WORDS * s),
         }
     }
 
@@ -706,7 +621,6 @@ impl NativeChatView {
         let tooltip = part.tooltip.clone();
         let hotkey = part.hotkey;
         let action = part.action.clone();
-        let key_cap = Self::tray_part_key_cap(&part, busy);
         let icon = if let Some(agent_icon) = part.agent_icon.as_deref() {
             Some(
                 svg()
@@ -723,8 +637,6 @@ impl NativeChatView {
                     .flex_shrink_0()
                     .text_color(if part.star {
                         rgb(STAR_COLOR).into()
-                    } else if part.pressed {
-                        p.primary
                     } else {
                         p.muted
                     })
@@ -737,25 +649,13 @@ impl NativeChatView {
             .aria_label(part.tooltip.clone())
             .flex_shrink_0()
             .when(cut, |this| this.w(px(width)))
-            .h(px(if part.pill { 22.0 } else { PART_HEIGHT } * s))
-            .px(px(if part.pill { 8.0 } else { PART_PADDING } * s))
+            .h(px(PART_HEIGHT * s))
+            .px(px(PART_PADDING * s))
             .flex()
             .items_center()
             .gap(px(GAP * s))
-            .when(part.pill, |this| {
-                this.rounded_full()
-                    .border_1()
-                    .border_color(if part.pressed {
-                        p.foreground.opacity(0.28)
-                    } else {
-                        p.border
-                    })
-                    .when(part.pressed, |pill| {
-                        pill.bg(p.border).font_weight(gpui::FontWeight::MEDIUM)
-                    })
-            })
-            .when(!part.pill, |this| this.rounded(px(6.0 * s)))
-            .text_size(px(if part.pill { 12.0 } else { FONT } * s))
+            .rounded(px(6.0 * s))
+            .text_size(px(FONT * s))
             .when(clickable, |this| {
                 let trigger = part.bounds.clone();
                 this.chat_cursor_pointer()
@@ -789,25 +689,6 @@ impl NativeChatView {
                         .whitespace_nowrap()
                         .text_color(p.muted)
                         .child(suffix),
-                )
-            })
-            .when_some(key_cap, |this, chord| {
-                this.child(
-                    div()
-                        .flex_shrink_0()
-                        .h(px(KEY_CAP_HEIGHT * s))
-                        .px(px(KEY_CAP_PADDING * s))
-                        .flex()
-                        .items_center()
-                        .rounded(px(4.0 * s))
-                        .border_1()
-                        .border_color(p.border)
-                        .bg(p.border.opacity(0.6))
-                        .text_size(px(KEY_CAP_FONT * s))
-                        .line_height(px(12.0 * s))
-                        .text_color(p.muted)
-                        .whitespace_nowrap()
-                        .child(chord),
                 )
             })
             .into_any_element()
@@ -869,11 +750,11 @@ impl NativeChatView {
         }
         let place_sizes: Vec<PartSize> = place_parts
             .iter()
-            .map(|part| self.measure_tray_part(part, busy, p, window))
+            .map(|part| self.measure_tray_part(part, p, window))
             .collect();
         let agent_sizes: Vec<PartSize> = agent_parts
             .iter()
-            .map(|part| self.measure_tray_part(part, busy, p, window))
+            .map(|part| self.measure_tray_part(part, p, window))
             .collect();
         // The room inside the tray: the box's width less the tray's inset, padding and border.
         let composer = self.composer_bounds.get().size.width.as_f32();
@@ -882,18 +763,7 @@ impl NativeChatView {
         } else {
             0.0
         };
-        let place_sep_total: f32 = place_parts
-            .windows(2)
-            .map(|pair| {
-                if pair[0].pill && pair[1].pill {
-                    GROUP_GAP * s
-                } else if pair[0].pill {
-                    GROUP_DIVIDER * s
-                } else {
-                    SEPARATOR * s
-                }
-            })
-            .sum();
+        let place_sep_total = SEPARATOR * s * place_parts.len().saturating_sub(1) as f32;
         let agent_gap_total = GROUP_GAP * s * agent_parts.len().saturating_sub(1) as f32;
         let divider_total = if !place_parts.is_empty() && !agent_parts.is_empty() {
             GROUP_DIVIDER * s
@@ -912,19 +782,6 @@ impl NativeChatView {
             && one_row_natural > available;
         let centered = measured && available < NARROW_WIDTH * s;
 
-        let place_between = |prev_pill: bool, curr_pill: bool| -> AnyElement {
-            if prev_pill && curr_pill {
-                div()
-                    .flex_shrink_0()
-                    .w(px(GROUP_GAP * s))
-                    .into_any_element()
-            } else if prev_pill {
-                Self::tray_group_divider(p)
-            } else {
-                Self::tray_separator(p)
-            }
-        };
-
         let breadcrumb = if !two_rows {
             let mut all_sizes = Vec::with_capacity(place_sizes.len() + agent_sizes.len());
             all_sizes.extend_from_slice(&place_sizes);
@@ -936,14 +793,11 @@ impl NativeChatView {
             );
             let split = place_parts.len();
             let mut cells = Vec::new();
-            let mut prev_pill = false;
             for (index, (part, width)) in place_parts.into_iter().zip(&widths[..split]).enumerate()
             {
-                let is_pill = part.pill;
                 if index > 0 {
-                    cells.push(place_between(prev_pill, is_pill));
+                    cells.push(Self::tray_separator(p));
                 }
-                prev_pill = is_pill;
                 cells.push(self.render_tray_part(
                     part,
                     *width,
@@ -985,13 +839,10 @@ impl NativeChatView {
             let place_widths = Self::fit_row_widths(&place_sizes, place_sep_total, available);
             let agent_widths = Self::fit_row_widths(&agent_sizes, agent_gap_total, available);
             let mut row_zero = Vec::new();
-            let mut prev_pill = false;
             for (index, (part, width)) in place_parts.into_iter().zip(place_widths).enumerate() {
-                let is_pill = part.pill;
                 if index > 0 {
-                    row_zero.push(place_between(prev_pill, is_pill));
+                    row_zero.push(Self::tray_separator(p));
                 }
-                prev_pill = is_pill;
                 row_zero.push(self.render_tray_part(
                     part,
                     width,
