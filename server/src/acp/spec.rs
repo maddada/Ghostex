@@ -174,10 +174,18 @@ pub struct AcpLaunchProfile {
 }
 
 /// Build the `ghostex acp-host` launch command with Ghostex's server-generated structured profile.
+///
+/// CDXC:AgentProviders 2026-11-24 WHY: `_cli_command` (the session's terminal-mode command) is no
+/// longer written as `--cli-command`. acp-host has ignored its value since the ACP account-wrapper
+/// fix (`build_acp_server_argv` and `build_cli_switch_argv_with_options` take `_cli_command`), so
+/// it only repeated `--model`/`--effort` and carried the terminal's `--dangerously-skip-permissions`
+/// into an Ask session's stored command, where `command_has_accept_all_flag` read the session as
+/// having run with accept-all (restore and launch-settings gates refused it from other devices).
+/// The approval level a Native session runs at is `--approval-level` alone.
 #[allow(clippy::too_many_arguments)]
 pub fn build_acp_host_launch_command_with_profile(
     family: &str,
-    cli_command: Option<&str>,
+    _cli_command: Option<&str>,
     resume_session_id: Option<&str>,
     approval_level: super::AcpApprovalLevel,
     writable_roots: &[String],
@@ -189,7 +197,6 @@ pub fn build_acp_host_launch_command_with_profile(
 ) -> String {
     build_acp_host_launch_command_for_platform(
         family,
-        cli_command,
         resume_session_id,
         approval_level,
         writable_roots,
@@ -205,7 +212,6 @@ pub fn build_acp_host_launch_command_with_profile(
 #[allow(clippy::too_many_arguments)]
 fn build_acp_host_launch_command_for_platform(
     family: &str,
-    cli_command: Option<&str>,
     resume_session_id: Option<&str>,
     approval_level: super::AcpApprovalLevel,
     writable_roots: &[String],
@@ -232,10 +238,6 @@ fn build_acp_host_launch_command_for_platform(
             quote_acp_launch_arg(family, false),
         ]
     };
-    if let Some(cmd) = cli_command.map(str::trim).filter(|s| !s.is_empty()) {
-        parts.push("--cli-command".to_string());
-        parts.push(quote_acp_launch_arg(cmd, windows));
-    }
     if let Some(id) = resume_session_id.map(str::trim).filter(|s| !s.is_empty()) {
         parts.push("--resume".to_string());
         parts.push(quote_acp_launch_arg(id, windows));
