@@ -1,8 +1,9 @@
 //! The "Switch to Native" pill chip in the chat box's pill strip (`Q4768`, `Q4770`, `Q4771`).
 //!
-//! Shown beside the Where pill on Terminal chats of Antigravity, Claude Code, and Codex for
-//! chat-first users until dismissed per agent or Native is enabled for that agent. Clicking mid-reply
-//! queues the switch and shifts the chip to a cancelable "Switching when done…" state.
+//! Shown beside the Where pill on Terminal chats (including coordinators) of Antigravity, Claude
+//! Code, and Codex for chat-first users until the chat is actually Native or dismissed per agent.
+//! Clicking mid-reply queues the switch and shifts the chip to a cancelable "Switches to Native
+//! when this reply ends" state.
 //!
 //! CDXC:AgentProviders 2026-11-24 SEE-ALSO:
 //! packages/gx-chat-core/src/extras/native_switch.rs (visibility rules),

@@ -4,10 +4,11 @@
 //! User picks (`native-announce`):
 //! - Q4768 (`strip-chip`): compact "Switch to Native" chip in the chat pill strip for chat-first
 //!   users on Terminal chats of Antigravity, Claude Code, and Codex, plus a manual row in `•••`.
-//! - Q4770 (`per-agent-dismiss`): clicking `×` hides the offer per agent, and enabling Native for
-//!   that agent retires the offer; manual switch stays in `•••`.
+//! - Q4770 (`per-agent-dismiss`): clicking `×` hides the offer per agent; manual switch stays in
+//!   `•••`. The chip stays visible on Terminal chats (including coordinators) even when Native is
+//!   already the default for new chats, until the chat itself is actually Native.
 //! - Q4771 (`queue-when-done`): clicking mid-reply queues the switch until the reply finishes and
-//!   shows a cancelable "Switching when done…" chip.
+//!   shows a cancelable "Switches to Native when this reply ends" chip.
 //! - Q4772 (`hide-threads-gate-remote`): hide the chip on coordinator threads (keep in `•••`); on
 //!   remote computers only show when that computer's gxserver advertises `nativeModeSwitchCapable`.
 
@@ -103,8 +104,10 @@ pub fn project(state: &ChatState) -> Option<NativeSwitchOffer> {
     };
 
     let queued = state.session.switch_to_native_queued;
-    let show_chip = queued
-        || (!state.session.is_coordinator_thread && chat_first && !dismissed && !native_default);
+    // Keep the strip chip visible on Terminal chats (including coordinators) even when Native is
+    // already the default for new chats, until this chat is actually Native (`non_cli_mode == true`)
+    // or the user explicitly dismisses the chip per agent.
+    let show_chip = queued || (!state.session.is_coordinator_thread && chat_first && !dismissed);
 
     Some(NativeSwitchOffer {
         family: family.to_string(),
