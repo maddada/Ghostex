@@ -73,6 +73,62 @@ fn heal_candidate(session: &Value) -> Option<(SessionKey, String)> {
     Some(((project_id, session_id), zmx_name))
 }
 
+/// Whether a running Native (`acp-host`) session's host process exited inside a still-live zmx
+/// daemon (not during an intentional account switch or Native<->Terminal mode switch).
+fn acp_host_exited_in_live_daemon(session: &Value, key: &SessionKey, zmx_name: &str) -> bool {
+    if !crate::acp::session_is_acp(session) {
+        return false;
+    }
+    if matches!(
+        session
+            .pointer("/runtimeSettings/accountSwitch/phase")
+            .and_then(Value::as_str),
+        Some("switching" | "resuming" | "continuing")
+    ) {
+        return false;
+    }
+    if crate::acp::pending_switch::is_in_flight(&key.0, &key.1) {
+        return false;
+    }
+    if crate::acp::channel::live(&key.0, &key.1, "send").is_some() {
+        return false;
+    }
+    !crate::acp::host_process_running(zmx_name)
+}
+
+/// Immediately clears a stale `"working"` activity claim when a Native host died mid-turn so the
+/// sidebar, coordinators, and interrupt button never sit stuck on `"working"` while self-heal
+/// confirms and restarts the host.
+fn clear_dead_acp_working_activity(state: &AppState, session: &Value, key: &SessionKey) {
+    if !crate::agents::stored_activity_is_working(session) {
+        return;
+    }
+    let agent_name = session
+        .pointer("/runtimeSettings/acpFamily")
+        .or_else(|| session.get("agentId"))
+        .and_then(Value::as_str)
+        .unwrap_or("antigravity")
+        .to_string();
+    let state = state.clone();
+    let project_id = key.0.clone();
+    let session_id = key.1.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut params = Map::new();
+        params.insert("projectId".to_string(), json!(project_id));
+        params.insert("sessionId".to_string(), json!(session_id));
+        params.insert("agentName".to_string(), json!(agent_name));
+        params.insert("eventName".to_string(), json!("Interrupt"));
+        params.insert("status".to_string(), json!("idle"));
+        params.insert("timestamp".to_string(), json!(now_ms()));
+        let _ = crate::server::dispatch_agent_http_blocking(
+            &state,
+            "/api/ingestAgentHookEvent".to_string(),
+            format!("acp-host-exited-{project_id}-{session_id}"),
+            params,
+        );
+    });
+}
+
 /// BLOCKING (one `zmx list`, a process scan every `AGENT_CHECK_EVERY_MS`, SQLite).
 fn tick(state: &AppState) -> Vec<HealDue> {
     if heal::server_stopping() {
@@ -128,14 +184,48 @@ fn tick(state: &AppState) -> Vec<HealDue> {
     );
     let sightings = candidates
         .into_iter()
-        .map(|(key, zmx_name, working)| Sighting {
-            daemon_alive: live.contains(&zmx_name),
-            agent_running: agents
-                .as_ref()
-                .filter(|_| check.contains(&key))
-                .map(|agents| agents.contains_key(&zmx_name)),
-            working,
-            key,
+        .map(|(key, zmx_name, working)| {
+            let session = sessions.iter().find(|s| {
+                text_field(s, "projectId").as_deref() == Some(key.0.as_str())
+                    && text_field(s, "sessionId").as_deref() == Some(key.1.as_str())
+            });
+            let zmx_alive = live.contains(&zmx_name);
+            if zmx_alive && session.is_some_and(crate::acp::session_is_acp) {
+                let session = session.expect("checked is_some_and");
+                if crate::acp::channel::live(&key.0, &key.1, "send").is_some() {
+                    return Sighting {
+                        daemon_alive: true,
+                        agent_running: Some(true),
+                        working,
+                        key,
+                    };
+                }
+                if acp_host_exited_in_live_daemon(session, &key, &zmx_name) {
+                    clear_dead_acp_working_activity(state, session, &key);
+                    return Sighting {
+                        daemon_alive: false,
+                        agent_running: Some(false),
+                        working,
+                        key,
+                    };
+                }
+                // Host is still booting or undergoing an intentional account/mode switch.
+                return Sighting {
+                    daemon_alive: true,
+                    agent_running: Some(true),
+                    working,
+                    key,
+                };
+            }
+            Sighting {
+                daemon_alive: zmx_alive,
+                agent_running: agents
+                    .as_ref()
+                    .filter(|_| check.contains(&key))
+                    .map(|agents| agents.contains_key(&zmx_name)),
+                working,
+                key,
+            }
         })
         .collect();
     let outcome = heal::observe(sightings, now);
@@ -299,8 +389,9 @@ fn log(state: &AppState, event: &str, level: LogLevel, key: &SessionKey, details
     });
 }
 
-/// The row as it is now, if it still says running with its daemon gone.
-fn still_dead(state: &AppState, key: &SessionKey) -> Option<Value> {
+/// The row as it is now, plus whether its zmx daemon is still alive (needing sleep before wake),
+/// if it still says running with its daemon or Native host gone.
+fn still_dead(state: &AppState, key: &SessionKey) -> Option<(Value, bool)> {
     if heal::server_stopping() {
         return None;
     }
@@ -315,7 +406,13 @@ fn still_dead(state: &AppState, key: &SessionKey) -> Option<Value> {
     let (_, zmx_name) = heal_candidate(&session)?;
     // The authoritative list, not the cached one: this decides a restart.
     let live = crate::zmx::read_zmx_existing_session_names().ok()?;
-    (!live.contains(&zmx_name)).then_some(session)
+    if !live.contains(&zmx_name) {
+        return Some((session, false));
+    }
+    if acp_host_exited_in_live_daemon(&session, key, &zmx_name) {
+        return Some((session, true));
+    }
+    None
 }
 
 /// One restart: read the row again, wake it (resume command, same account or the wake's account
@@ -370,10 +467,11 @@ async fn run_heal(state: &Arc<AppState>, due: &HealDue) -> HealOutcome {
     let key = &due.key;
     let read_state = state.clone();
     let read_key = key.clone();
-    let Some(session) = tokio::task::spawn_blocking(move || still_dead(&read_state, &read_key))
-        .await
-        .ok()
-        .flatten()
+    let Some((session, needs_sleep)) =
+        tokio::task::spawn_blocking(move || still_dead(&read_state, &read_key))
+            .await
+            .ok()
+            .flatten()
     else {
         return HealOutcome::Cancelled;
     };
@@ -382,12 +480,23 @@ async fn run_heal(state: &Arc<AppState>, due: &HealDue) -> HealOutcome {
         "sessionDaemonLost",
         LogLevel::Warn,
         key,
-        json!({ "attempt": due.attempt, "wasWorking": due.was_working }),
+        json!({ "attempt": due.attempt, "wasWorking": due.was_working, "acpHostExited": needs_sleep }),
     );
     if !crate::session_chat_queue_runtime::can_start_on_its_conversation(state, &session).await {
         return HealOutcome::Hopeless(GiveUpReason::NothingToResume);
     }
     let body = json!({ "params": { "projectId": key.0, "sessionId": key.1 } });
+    if needs_sleep {
+        // When `acp-host` exited back to the shell inside a live zmx daemon, tear down the empty
+        // shell daemon first so `/api/wakeSession` launches a fresh `acp-host` on the conversation.
+        let _ = super::zmx_http::handle_zmx_lifecycle_http(
+            state,
+            "/api/sleepSession".to_string(),
+            Uuid::new_v4().to_string(),
+            &body,
+        )
+        .await;
+    }
     let routed = super::zmx_http::handle_zmx_lifecycle_http(
         state,
         "/api/wakeSession".to_string(),

@@ -35,6 +35,21 @@ pub use approval::{AcpApprovalLevel, SESSION_ACP_APPROVAL_LEVEL_KEY};
 /// per-agent dismissals of the chat strip's "Switch to Native" offer (`Q4770`).
 pub const NATIVE_SWITCH_OFFER_DISMISSED_KEY: &str = "nativeSwitchOfferDismissedAgents";
 
+/// Whether a live `ghostex acp-host` child process is running inside `zmx_name`.
+/// Excludes `tree.root` (the `zmx` daemon itself) because its argv can retain the original
+/// startup command containing `"acp-host"` even after the host exited back to the shell.
+/// Unreadable process trees count as running so transient read errors never trigger a restart.
+pub(crate) fn host_process_running(zmx_name: &str) -> bool {
+    match crate::zmx::read_zmx_session_tree(zmx_name) {
+        Ok(Some(tree)) => tree
+            .processes
+            .iter()
+            .any(|process| process.pid != tree.root && process.command.contains("acp-host")),
+        Ok(None) => false,
+        Err(()) => true,
+    }
+}
+
 /// Canonical Native-capable agent family (`"antigravity"`, `"claude"`, or `"codex"`).
 pub fn canonical_native_family(agent_family: &str) -> Option<&'static str> {
     spec::spec_for_family(agent_family).map(|spec| spec.family)

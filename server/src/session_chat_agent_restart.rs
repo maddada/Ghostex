@@ -409,19 +409,10 @@ pub(crate) async fn heal_failed_start(
             return None;
         }
         let zmx_name = target.zmx_name.clone();
-        let host_running = tokio::task::spawn_blocking(move || {
-            match crate::zmx::read_zmx_session_tree(&zmx_name) {
-                Ok(Some(tree)) => tree.processes.iter().any(|process| {
-                    // Exclude the zmx daemon root itself: its argv can retain the original
-                    // startup script text containing "acp-host" even after the host exited.
-                    process.pid != tree.root && process.command.contains("acp-host")
-                }),
-                Ok(None) => false,
-                Err(()) => true,
-            }
-        })
-        .await
-        .unwrap_or(true);
+        let host_running =
+            tokio::task::spawn_blocking(move || crate::acp::host_process_running(&zmx_name))
+                .await
+                .unwrap_or(true);
         if host_running {
             return None;
         }

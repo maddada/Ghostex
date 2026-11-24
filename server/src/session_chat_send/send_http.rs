@@ -725,7 +725,58 @@ pub(crate) async fn handle_interrupt_session_chat_http(
                 StatusCode::OK,
                 rpc_success(request_id, json!({ "interrupted": true })),
             ),
-            Err(error) => domain_error_response(endpoint_path, request_id, error),
+            Err(error) => {
+                // If the Native host already exited back to the shell, stopping the turn has
+                // nothing to cancel; settle any stale `"working"` state to `"idle"` cleanly so
+                // the chat does not stay wedged on `"working"`.
+                let zmx_name = target.zmx_name.clone();
+                let host_running = tokio::task::spawn_blocking(move || {
+                    crate::acp::host_process_running(&zmx_name)
+                })
+                .await
+                .unwrap_or(true);
+                if !host_running {
+                    let agent_name = target
+                        .session
+                        .pointer("/runtimeSettings/acpFamily")
+                        .or_else(|| target.session.get("agentId"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("antigravity")
+                        .to_string();
+                    let state_bg = state.clone();
+                    let pid = target.project_id.clone();
+                    let sid = target.session_id.clone();
+                    let _ = tokio::task::spawn_blocking(move || {
+                        let mut params = Map::new();
+                        params.insert("projectId".to_string(), json!(pid));
+                        params.insert("sessionId".to_string(), json!(sid));
+                        params.insert("agentName".to_string(), json!(agent_name));
+                        params.insert("eventName".to_string(), json!("Interrupt"));
+                        params.insert("status".to_string(), json!("idle"));
+                        params.insert(
+                            "timestamp".to_string(),
+                            json!(chrono::Utc::now().timestamp_millis()),
+                        );
+                        let _ = crate::server::dispatch_agent_http_blocking(
+                            &state_bg,
+                            "/api/ingestAgentHookEvent".to_string(),
+                            format!("acp-abort-dead-host-{pid}-{sid}"),
+                            params,
+                        );
+                    })
+                    .await;
+                    routed_json(
+                        Some(endpoint_path),
+                        StatusCode::OK,
+                        rpc_success(
+                            request_id,
+                            json!({ "interrupted": true, "hostExited": true }),
+                        ),
+                    )
+                } else {
+                    domain_error_response(endpoint_path, request_id, error)
+                }
+            }
         };
     }
     // Pi and OMP (OMP shares Pi's transcript family) stop through the chat channel when their
