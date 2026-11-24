@@ -258,22 +258,31 @@ pub(crate) fn with_claude_settings(
     let Some(start) = command.rfind("--settings ") else {
         let mut settings = Map::new();
         edit(&mut settings)?;
-        return Some(format!(
+        return Some(for_launch_program(format!(
             "{command} --settings {}",
             quote_shell_arg(&Value::Object(settings).to_string())
-        ));
+        )));
     };
     let value_start = start + "--settings ".len();
     let (text, end) = read_quoted_word(command, value_start)?;
     let mut settings: Map<String, Value> = serde_json::from_str(&text).ok()?;
     edit(&mut settings)?;
     let settings = Value::Object(settings).to_string();
-    Some(format!(
+    Some(for_launch_program(format!(
         "{}{}{}",
         &command[..value_start],
         quote_shell_arg(&settings),
         &command[end..]
-    ))
+    )))
+}
+
+/// The settings written for the program the command runs: a `claude.cmd` takes the batch form of
+/// the PowerShell expression (`agent_cli/launch_path.rs`, `with_batch_native_args`, GitHub #737).
+fn for_launch_program(command: String) -> String {
+    #[cfg(windows)]
+    return crate::agent_cli::launch_path::with_batch_native_args(&command);
+    #[cfg(not(windows))]
+    command
 }
 
 /// The single-quoted shell word that starts at `start` (as `quote_shell_arg` writes it) and the

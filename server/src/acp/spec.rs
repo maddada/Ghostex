@@ -833,9 +833,28 @@ pub fn build_acp_server_argv(
         return Some((envs, wrapper.bin, args));
     }
 
-    let program = (*default_prog).to_string();
+    let program =
+        windows_batch_program(default_prog).unwrap_or_else(|| (*default_prog).to_string());
     let args: Vec<String> = acp_args.iter().map(|s| (*s).to_string()).collect();
     Some((envs, program, args))
+}
+
+/// The full path of `name`'s `.cmd` or `.bat` launcher on Windows, when that is what the PATH has.
+///
+/// CDXC:PlatformSupport 2026-11-24 WHY:
+/// GitHub #737: Rust's `Command::new("claude")` on Windows looks only for `claude.exe`, so on a PC where Claude Code came from npm (only `claude.cmd` on PATH) every Native session failed with "program not found". A batch file found this way is run by its path; Rust escapes its arguments for `cmd`, which carried Ghostex's `--settings` JSON through npm's `%*` intact (checked with Claude Code 2.1.331 on 2026-11-24).
+fn windows_batch_program(name: &str) -> Option<String> {
+    if !cfg!(windows) || cfg!(test) {
+        return None;
+    }
+    // The PATH `Command` searches: this process's own, not the registry's (`live_path::find`).
+    let directories: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|path| std::env::split_paths(&path).collect())
+        .unwrap_or_default();
+    let path = crate::platform::live_path::find_in(name, &directories)?;
+    let extension = path.extension().and_then(|extension| extension.to_str())?;
+    (extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat"))
+        .then(|| path.to_string_lossy().into_owned())
 }
 
 /// Build Ghostex's own server-side Claude `--settings` JSON strictly from Ghostex's structured

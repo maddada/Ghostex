@@ -61,6 +61,38 @@ pub(crate) fn rewrite_program(
     command.to_string()
 }
 
+/// `command` with its PowerShell native-argument expressions made right for a batch program when
+/// the program it runs is a `.cmd` or `.bat` file (`platform/shell.rs`,
+/// `powershell_native_args_for_batch`, GitHub #737).
+#[cfg(windows)]
+pub(crate) fn with_batch_native_args(command: &str) -> String {
+    let mut offset = 0;
+    let mut in_powershell_assignment = false;
+    while let Some((_, end, word)) = crate::agents::command_word(command, offset) {
+        offset = end;
+        if in_powershell_assignment {
+            in_powershell_assignment = !word.ends_with(';');
+            continue;
+        }
+        if word
+            .get(..5)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("$env:"))
+        {
+            in_powershell_assignment = !word.ends_with(';');
+            continue;
+        }
+        if word == "&" {
+            continue;
+        }
+        let word = word.to_ascii_lowercase();
+        if word.ends_with(".cmd") || word.ends_with(".bat") {
+            return crate::platform::shell::powershell_native_args_for_batch(command);
+        }
+        break;
+    }
+    command.to_string()
+}
+
 fn is_assignment(word: &str) -> bool {
     word.split_once('=').is_some_and(|(name, _)| {
         !name.is_empty()
@@ -192,7 +224,10 @@ pub(crate) fn with_reachable_program(command: &str) -> String {
         return command.to_string();
     }
     let home = crate::resume_lookup::home_dir();
-    rewrite_program(command, |name| reachable_launch_program(name, &home))
+    let command = rewrite_program(command, |name| reachable_launch_program(name, &home));
+    #[cfg(windows)]
+    let command = with_batch_native_args(&command);
+    command
 }
 
 #[cfg(test)]

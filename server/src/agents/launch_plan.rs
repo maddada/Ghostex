@@ -1756,7 +1756,7 @@ fn native_cli_command(command: &str) -> String {
     if cfg!(test) {
         return command.to_string();
     }
-    crate::agent_cli::launch_path::rewrite_program(command, |binary| {
+    let command = crate::agent_cli::launch_path::rewrite_program(command, |binary| {
         if !crate::agent_cli::catalog::CATALOG
             .iter()
             .any(|agent| agent.binary == binary)
@@ -1767,7 +1767,8 @@ fn native_cli_command(command: &str) -> String {
         let extension = path.extension().and_then(|extension| extension.to_str())?;
         (extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat"))
             .then(|| format!("{binary}.{extension}"))
-    })
+    });
+    crate::agent_cli::launch_path::with_batch_native_args(&command)
 }
 
 /// Validate supplied launch options before an empty or non-string value can be mistaken for an omitted option.
