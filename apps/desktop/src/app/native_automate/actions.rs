@@ -141,13 +141,25 @@ impl NativeAutomateView {
         cx.notify();
     }
 
+    /// CDXC:Automations 2026-11-25 WHY: GitHub #719: opening a run's session is how you check
+    /// it, but only the bell, Mark all read and Archive cleared unread, so the "N unread" badge
+    /// stayed up for runs the user had already read. Opening the session now marks it read too,
+    /// once the session has opened. Selecting a run in the list still does not, so the
+    /// unread-only list the badge opens keeps its rows while the user looks through them.
     pub(crate) fn open_run_session(&mut self, run: &AutomationRun, cx: &mut Context<Self>) {
         let project_id = self.target_project_id(Some(&run.project_id));
-        self.mutate_with_notice(
+        let unread = run.is_unread.then(|| run.clone());
+        self.mutate(
             AutomateRequest::OpenRunSession {
                 run_id: run.id.clone(),
                 project_id,
             },
+            move |this, cx| {
+                if let Some(run) = unread {
+                    this.mark_run_read(&run, cx);
+                }
+            },
+            |this, error, _| this.error_message = Some(error),
             cx,
         );
     }

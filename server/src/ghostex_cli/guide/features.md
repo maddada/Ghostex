@@ -5247,9 +5247,22 @@ prompt, a schedule (timer, once, interval, daily, weekly, or cron with a
 timezone), and an execution mode (local checkout, a fresh worktree with an
 optional setup command, or an existing agent thread). Runs are listed with
 status, transcript, and an archive action; a run must end with an
-`AUTOMATION_RESULT: <status>` line. Everything is also scriptable:
-`ghostex automations --help` documents `automation-save`,
-`automation-run-now`, `automation-set-enabled`, and `automation-state`.
+`AUTOMATION_RESULT: <status>` line.
+
+- **Unread runs**: a run that ends with findings, needs attention or failed,
+  or was skipped, is unread (a run with no findings is not). An unread run
+  has a small accent dot at the start of its row in Runs and Triage, and
+  Triage lists unread runs first. On the Automations tab each automation
+  shows "N unread"; click it to open Runs with only that automation's unread
+  runs, and Mark all read at the top.
+- **Clearing unread**: a run stops being unread when you open its session,
+  mark it read (the bell button on the run's row when you point at it, or in
+  its details on the right), use Mark all read, or archive it. Selecting
+  a run in the list on its own does not mark it read.
+
+Everything is also scriptable: `ghostex automations --help` documents
+`automation-save`, `automation-run-now`, `automation-set-enabled`,
+`automation-state`, `automation-mark-run-read` and `automation-archive-run`.
 
 ## Bots (Hermes agents)
 
