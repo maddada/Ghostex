@@ -119,7 +119,7 @@ pub(crate) fn tally_threads<'a>(
         if let Some(key) = row.key.as_ref() {
             parents.insert(key, parent);
         }
-        if row.awaiting_approval {
+        if row.thread_state.as_deref() != Some("done") && row.awaiting_approval {
             approvals.push(parent);
         }
         let tally = tallies.entry(parent.clone()).or_default();
@@ -399,14 +399,16 @@ pub(crate) fn nest_threads(
         }
     }
 
-    // A coordinator's team stack, folded or not: its own status and every thread under it.
+    // A coordinator's team stack, folded or not: its own status and every unresolved thread under it.
     let team_status: HashMap<usize, FoldedStatus> = (0..sessions.len())
         .filter(|index| children.contains_key(index))
         .map(|index| {
             let mut status = FoldedStatus::default();
             let mut stack = vec![index];
             while let Some(next) = stack.pop() {
-                status.add(&sessions[next].row);
+                if next == index || sessions[next].row.thread_state.as_deref() != Some("done") {
+                    status.add(&sessions[next].row);
+                }
                 stack.extend(children.get(&next).into_iter().flatten().copied());
             }
             (index, status)

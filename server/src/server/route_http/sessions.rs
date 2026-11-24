@@ -776,7 +776,26 @@ pub(super) async fn route_sessions_http(
                     }
                 }
             }
-            handle_domain_http(
+            let resolved_target = (path == "/api/setCoordinatorThreadResolved")
+                .then(|| body_json.get("params").and_then(Value::as_object))
+                .flatten()
+                .filter(|params| params.get("resolved").and_then(Value::as_bool) == Some(true))
+                .and_then(|params| {
+                    let project_id = params
+                        .get("projectId")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|v| !v.is_empty())?
+                        .to_string();
+                    let session_id = params
+                        .get("sessionId")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|v| !v.is_empty())?
+                        .to_string();
+                    Some((project_id, session_id))
+                });
+            let response = handle_domain_http(
                 &state,
                 endpoint.path,
                 request_id,
@@ -786,7 +805,17 @@ pub(super) async fn route_sessions_http(
                         &state, &path, db, repository, params,
                     )
                 },
-            )
+            );
+            if response.response.status().is_success() {
+                if let Some((project_id, session_id)) = resolved_target {
+                    crate::session_chat_send_failure::clear_send_failure(
+                        &state,
+                        &project_id,
+                        &session_id,
+                    );
+                }
+            }
+            response
         }
         path if crate::coordinators::REMOTE_THREAD_ENDPOINTS.contains(&path) => {
             let path = endpoint.path.clone();

@@ -931,12 +931,38 @@ pub fn fail_session_chat_queued_prompt(
     prompt_id: &str,
     reason: &str,
 ) -> Result<SessionChatQueueSnapshot, DomainStateError> {
+    fail_session_chat_queued_prompt_inner(paths, project_id, session_id, prompt_id, reason, true)
+}
+
+/// Marks a row `failed` without raising a send-failure card, red sidebar dot, or
+/// Notifications bell entry: used when retiring held rows because the session
+/// itself was deliberately closed.
+pub fn fail_session_chat_queued_prompt_quiet(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+    prompt_id: &str,
+    reason: &str,
+) -> Result<SessionChatQueueSnapshot, DomainStateError> {
+    fail_session_chat_queued_prompt_inner(paths, project_id, session_id, prompt_id, reason, false)
+}
+
+fn fail_session_chat_queued_prompt_inner(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+    prompt_id: &str,
+    reason: &str,
+    report_failure: bool,
+) -> Result<SessionChatQueueSnapshot, DomainStateError> {
     let db = open_gxserver_database(paths).map_err(internal_error)?;
     let bounded = bounded_reason(reason);
     fail_prompt(&db, project_id, session_id, prompt_id, &bounded)?;
-    crate::session_chat_send_failure::report_failed_row(
-        project_id, session_id, prompt_id, &bounded,
-    );
+    if report_failure {
+        crate::session_chat_send_failure::report_failed_row(
+            project_id, session_id, prompt_id, &bounded,
+        );
+    }
     read_snapshot(&db, project_id, session_id)
 }
 

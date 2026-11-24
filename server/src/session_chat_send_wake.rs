@@ -410,11 +410,15 @@ fn retire_stale_startup_sends(state: &AppState, project_id: &str, session_id: &s
             "It waited more than {STARTUP_SEND_WAKE_MAX_AGE_HOURS} hours for the session to wake, so Ghostex stopped waking the session for it. Send it again if it is still needed."
         ),
         None,
+        true,
     );
 }
 
+/// Reason stamped on held startup sends retired because the session itself was closed.
+pub(crate) const CLOSED_SESSION_RETIRE_REASON: &str = "The session was closed before its agent took this message, so Ghostex stopped waking it. Send it again if it is still needed.";
+
 /// CDXC:SessionChat 2026-10-14 WHY:
-/// Closing a session ends the messages it still holds for its agent. A held message wakes its session on the queue scheduler's backoff (2026-10-12 above), and nothing told it the session had been closed meanwhile: on 2026-10-14 a test agent created a throwaway Claude session whose agent could not start, sent it a message (held), then closed it with `ghostex kill`; 50 seconds later the wake retry brought it back as a running, untitled "Claude Session", and every time the user closed it again it came back. Closing (`/api/killSession`, the Close transition, from any client, the CLI or a cleanup sweep) now marks those messages Not sent, which also tells an agent sender through the queue's undelivered report (unless the sender or its coordinator closed/resolved the session itself). A message sent to a session after it was closed is a new ask and still wakes it.
+/// Closing a session ends the messages it still holds for its agent. A held message wakes its session on the queue scheduler's backoff (2026-10-12 above), and nothing told it the session had been closed meanwhile: on 2026-10-14 a test agent created a throwaway Claude session whose agent could not start, sent it a message (held), then closed it with `ghostex kill`; 50 seconds later the wake retry brought it back as a running, untitled "Claude Session", and every time the user closed it again it came back. Closing (`/api/killSession`, the Close transition, from any client, the CLI or a cleanup sweep) now marks those messages Not sent, which also tells an agent sender through the queue's undelivered report (unless the sender or its coordinator closed/resolved the session itself), without raising a red send-failure dot on the session that was just closed. A message sent to a session after it was closed is a new ask and still wakes it.
 /// SEE-ALSO: server/src/server/zmx_http.rs (`dispatch_zmx_lifecycle_http_blocking` calls this after a close).
 pub(crate) fn retire_held_messages_of_closed_session(
     state: &AppState,
@@ -430,6 +434,7 @@ pub(crate) fn retire_held_messages_of_closed_session_with_actor(
     session_id: &str,
     close_actor: Option<&crate::session_chat_queue_undelivered::CloseActor>,
 ) {
+    crate::session_chat_send_failure::clear_send_failure(state, project_id, session_id);
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };
@@ -450,8 +455,9 @@ pub(crate) fn retire_held_messages_of_closed_session_with_actor(
         project_id,
         session_id,
         &held,
-        "The session was closed before its agent took this message, so Ghostex stopped waking it. Send it again if it is still needed.",
+        CLOSED_SESSION_RETIRE_REASON,
         close_actor,
+        false,
     );
 }
 
@@ -464,19 +470,31 @@ fn fail_held_messages_batch(
     prompt_ids: &[String],
     reason: &str,
     close_actor: Option<&crate::session_chat_queue_undelivered::CloseActor>,
+    report_send_failure: bool,
 ) {
     if prompt_ids.is_empty() {
         return;
     }
     let mut failed: Vec<(String, String)> = Vec::new();
     for prompt_id in prompt_ids {
-        let Ok(snapshot) = crate::session_chat_queue::fail_session_chat_queued_prompt(
-            &state.paths,
-            project_id,
-            session_id,
-            prompt_id,
-            reason,
-        ) else {
+        let failed_result = if report_send_failure {
+            crate::session_chat_queue::fail_session_chat_queued_prompt(
+                &state.paths,
+                project_id,
+                session_id,
+                prompt_id,
+                reason,
+            )
+        } else {
+            crate::session_chat_queue::fail_session_chat_queued_prompt_quiet(
+                &state.paths,
+                project_id,
+                session_id,
+                prompt_id,
+                reason,
+            )
+        };
+        let Ok(snapshot) = failed_result else {
             continue;
         };
         if let Some(prompt) = snapshot.queue.iter().find(|prompt| prompt.id == *prompt_id) {
@@ -532,6 +550,7 @@ fn fail_held_message(
         &[prompt_id.to_string()],
         reason,
         None,
+        true,
     );
 }
 

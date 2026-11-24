@@ -173,6 +173,9 @@ pub(crate) async fn handle_resolve_coordinator_thread_http(
         Ok(result) => result,
         Err(error) => return fail(error),
     };
+    if resolved {
+        crate::session_chat_send_failure::clear_send_failure(state, &project_id, &session_id);
+    }
     if close_session && !closed {
         // Best-effort cleanup of leftover shells in OpenCode's shared background service so
         // resolving a finished OpenCode thread doesn't leave orphaned shells behind (GitHub #721).
