@@ -42,14 +42,32 @@ fn agent_writable_keys() -> &'static HashSet<String> {
     })
 }
 
+/// User-only settings that paired owner devices (this computer's apps and paired
+/// Ghostex phones, `Principal::is_owner_device()`) may sync through
+/// `updateSettingsPatch`, while agents (`Session`), Collab guests (`Guest`),
+/// extensions (`Extension`), and remote peers (`Peer`) remain blocked.
+const OWNER_DEVICE_ONLY_API_KEYS: &[&str] = &["analyticsEnabled"];
+
 /// The keys of `patch` the API may not change, in the patch's order. "Trust project folders
 /// automatically" may be turned off here but never on (packages/settings-catalog/src/folder_trust.rs).
 pub(crate) fn refused_keys(patch: &Map<String, Value>) -> Vec<String> {
+    refused_keys_for_caller(patch, false)
+}
+
+/// Like [`refused_keys`], additionally permitting [`OWNER_DEVICE_ONLY_API_KEYS`] when
+/// `caller_is_owner_device` is true (e.g. a paired Ghostex phone toggling Analytics in
+/// Mobile Settings and syncing it via `dispatchRendererCommand` -> `updateSettingsPatch`).
+pub(crate) fn refused_keys_for_caller(
+    patch: &Map<String, Value>,
+    caller_is_owner_device: bool,
+) -> Vec<String> {
     let allowed = agent_writable_keys();
     patch
         .iter()
         .filter(|(key, value)| {
-            !allowed.contains(key.as_str())
+            let key_allowed = allowed.contains(key.as_str())
+                || (caller_is_owner_device && OWNER_DEVICE_ONLY_API_KEYS.contains(&key.as_str()));
+            !key_allowed
                 || ghostex_settings_catalog::folder_trust::api_write_turns_on_folder_trust(
                     key, value,
                 )

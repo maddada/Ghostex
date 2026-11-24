@@ -83,6 +83,13 @@ pub fn search_keywords(key: &str) -> &'static [&'static str] {
             "accept all",
             "yolo",
         ],
+        "analyticsEnabled" => &[
+            "privacy",
+            "telemetry",
+            "posthog",
+            "tracking",
+            "do not track",
+        ],
         _ => &[],
     }
 }

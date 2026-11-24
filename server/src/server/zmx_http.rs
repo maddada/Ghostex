@@ -667,12 +667,19 @@ pub(crate) async fn handle_renderer_command_http(
             ),
         );
     }
-    // Only settings an agent may write pass the API (settings_agent_writable.rs).
+    // Only settings an agent may write pass the API (settings_agent_writable.rs);
+    // owner devices (including paired phones) may also sync owner-only UI toggles
+    // like `analyticsEnabled`.
     if action == "updateSettingsPatch" {
         let refused = payload
             .get("patch")
             .and_then(Value::as_object)
-            .map(crate::settings_agent_writable::refused_keys)
+            .map(|patch| {
+                crate::settings_agent_writable::refused_keys_for_caller(
+                    patch,
+                    caller.is_owner_device(),
+                )
+            })
             .unwrap_or_default();
         if !refused.is_empty() {
             let message = crate::settings_agent_writable::refusal_message(&refused);

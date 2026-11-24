@@ -239,6 +239,8 @@ pub(crate) struct OnboardingSettings {
     pub(crate) default_prompt_agent_id: String,
     /// Agent approvals (`agentAcceptAllEnabled`): true is Skip permissions.
     pub(crate) accept_all: bool,
+    /// Anonymous usage analytics (`analyticsEnabled`): default true.
+    pub(crate) analytics_enabled: bool,
     pub(crate) sidebar_theme: String,
     pub(crate) dark_theme_preset: String,
     pub(crate) light_theme_preset: String,
@@ -440,6 +442,7 @@ impl OnboardingSettings {
                 .take(120)
                 .collect(),
             accept_all: read_bool(object, "agentAcceptAllEnabled", false),
+            analytics_enabled: read_bool(object, "analyticsEnabled", true),
             sidebar_theme,
             dark_theme_preset: preset("darkThemePreset", &DARK_PRESETS),
             light_theme_preset: preset("lightThemePreset", &LIGHT_PRESETS),
@@ -570,6 +573,9 @@ impl OnboardingSettings {
         }
         if let Some(value) = patch.get("agentAcceptAllEnabled").and_then(Value::as_bool) {
             self.accept_all = value;
+        }
+        if let Some(value) = patch.get("analyticsEnabled").and_then(Value::as_bool) {
+            self.analytics_enabled = value;
         }
         if let Some(value) = text("sidebarTheme") {
             self.sidebar_theme = value;

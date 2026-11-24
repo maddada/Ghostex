@@ -179,16 +179,6 @@ impl GpuiOnboardingWindow {
             ));
         out.push(checklist.into_any_element());
 
-        // CDXC:Onboarding 2026-11-11 DECISION: mention anonymous usage analytics once in setup.
-        out.push(
-            abs(s, 46.0, 744.0, Some(670.0), None)
-                .child(
-                    sans(s, 13.0, 400.0, hex(0x8e97a8))
-                        .child("Ghostex sends anonymous usage analytics to get better."),
-                )
-                .into_any_element(),
-        );
-
         let cta_label = if has_projects {
             "Open Ghostex"
         } else {

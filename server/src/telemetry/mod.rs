@@ -49,15 +49,20 @@ mod tests;
 
 pub use capture::{
     boosts_used, client_connected, extension_installed, extension_toggled, extension_uninstalled,
-    mobile_keep_awake_connected, onboarding_step, prompt_sent,
+    install_weekly_count, mobile_keep_awake_connected, onboarding_step, prompt_sent,
     prompt_source_for_diagnostic_input_source, reliability_error, reliability_error_for_session,
     resolve_install_session_modes, session_mode_state, session_mode_switched, session_started,
     ClientPlatform, InstallSessionModes, LiveSessionModeCounts,
 };
 pub use client_events::record_client_event;
-pub use gate::{is_enabled, is_onboarding_held, status_reason, TelemetryStatusReason};
+pub use gate::{
+    is_enabled, is_hard_opted_out, is_onboarding_held, mode, status_reason, TelemetryMode,
+    TelemetryStatusReason,
+};
 pub use profile::ProfileSnapshot;
-pub use queue::{build_preview_event, handle, init, refresh_profile};
+pub use queue::{
+    build_preview_event, build_weekly_count_preview_event, handle, init, refresh_profile,
+};
 pub(crate) use task::note_accounts_discovered;
 pub use task::{purge_on_opt_out, spawn_flush_task, spawn_heartbeat_task, SHUTDOWN_FLUSH_TIMEOUT};
 

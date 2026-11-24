@@ -437,6 +437,7 @@ impl GpuiOnboardingWindow {
         }
         if changed && self.panel == 2 {
             self.keep_experience(cx);
+            self.persist_analytics_choice(cx);
         }
         self.panel = next;
         if changed {
@@ -510,6 +511,7 @@ impl GpuiOnboardingWindow {
             return;
         }
         self.save_shown_default_agent(cx);
+        self.persist_analytics_choice(cx);
         self.closed = true;
         let after = AfterSetup {
             pair_phone: self.flow.phone_queued,

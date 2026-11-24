@@ -366,9 +366,9 @@ How to use this file:
 - **Join Discord** `discord` (Settings UI row without a settings key; use `ghostex settings open`): Chat with the community and get help.
 - **View on GitHub** `github` (Settings UI row without a settings key; use `ghostex settings open`): View the source, releases, and report issues.
 - **Sponsor Ghostex** `sponsor` (Settings UI row without a settings key; use `ghostex settings open`): Support the continued development of Ghostex.
-### Privacy
+### Privacy & Analytics
 
-- **Anonymous analytics** `analyticsEnabled` (boolean, default true) [not agent-writable]: Send anonymous usage analytics. Settings has no switch for it: to turn analytics off, start Ghostex or gxserver with GHOSTEX_TELEMETRY_DISABLED=1 (or DO_NOT_TRACK=1, or the --no-analytics flag). Ask the user before changing it.
+- **Share 100% Fully Anonymous Usage Analytics to Support Ghostex Development** `analyticsEnabled` (boolean, default true) [not agent-writable]: Zero personal data. Helps us continue supporting and building Ghostex. Turning this off stops all usage tracking and keeps only 1 anonymous weekly active count (stop all with DO_NOT_TRACK=1 or --no-analytics).
 ### Internal state (not user settings)
 
 - **gpuiTitlebarActionCommandByProject** `gpuiTitlebarActionCommandByProject` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.

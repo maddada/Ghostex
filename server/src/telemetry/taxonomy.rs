@@ -336,6 +336,7 @@ pub const EXTENSION_TOGGLE_KINDS: &[&str] = &["built_in", "installed"];
 
 /// Event names. Only these reach PostHog.
 pub const EVENT_HEARTBEAT: &str = "heartbeat";
+pub const EVENT_INSTALL_WEEKLY_COUNT: &str = "install.weekly_count";
 pub const EVENT_APP_LAUNCHED: &str = "app.launched";
 pub const EVENT_CLIENT_CONNECTED: &str = "client.connected";
 pub const EVENT_SESSION_STARTED: &str = "session.started";
@@ -422,6 +423,10 @@ pub const SIDEBAR_LAYOUT_SOURCES: &[&str] = &["settings", "intro"];
 /// shape, not whatever it looked like on the day it first reported.
 pub const PERSON_SET_KEY: &str = "$set";
 
+/// PostHog's personless-event flag. Attached as `false` to `install.weekly_count`
+/// so the minimal weekly active install count never creates or updates a person profile.
+pub const PROCESS_PERSON_PROFILE_KEY: &str = "$process_person_profile";
+
 /// The events a client process is allowed to push over the loopback API: the
 /// desktop's two pings, plus the mobile hello that `ghostex client-hello`
 /// forwards. Everything else is dropped by `/api/recordClientEvent`.
@@ -501,6 +506,7 @@ pub fn is_known_event(event: &str) -> bool {
     matches!(
         event,
         EVENT_HEARTBEAT
+            | EVENT_INSTALL_WEEKLY_COUNT
             | EVENT_APP_LAUNCHED
             | EVENT_CLIENT_CONNECTED
             | EVENT_SESSION_STARTED
@@ -756,6 +762,8 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         | (EVENT_SESSION_MODE_DAILY_ROLLUP, "switches_to_terminal_total") => {
             Some(PropertySpec::Number)
         }
+        (EVENT_INSTALL_WEEKLY_COUNT, "analytics_enabled")
+        | (EVENT_INSTALL_WEEKLY_COUNT, PROCESS_PERSON_PROFILE_KEY) => Some(PropertySpec::Bool),
         (EVENT_SETTINGS_SNAPSHOT, PERSON_SET_KEY) => Some(PropertySpec::PersonSet),
         (EVENT_SETTINGS_SNAPSHOT, key) => super::settings_snapshot::property_spec(key),
         _ => None,
@@ -763,6 +771,9 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
 }
 
 fn property_spec(event: &str, key: &str) -> Option<PropertySpec> {
+    if event == EVENT_INSTALL_WEEKLY_COUNT {
+        return event_property_spec(event, key);
+    }
     event_property_spec(event, key).or_else(|| profile_property_spec(key))
 }
 

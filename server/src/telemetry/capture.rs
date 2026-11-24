@@ -40,16 +40,23 @@ fn agent_properties(agent: &'static str) -> Vec<(&'static str, PropertyValue)> {
 }
 
 /// Record client or agent-session activity for Q20's activity-gated daily
-/// heartbeat and settings snapshot. No-op when telemetry is uninitialized or
-/// opted out.
+/// heartbeat and Q29's activity-gated weekly active count. Kept strictly in
+/// memory until flushed (and never written to SQLite while `analyticsEnabled`
+/// is false). No-op when telemetry is uninitialized or hard opted out.
 fn note_active_usage() {
     let Some(telemetry) = super::queue::handle() else {
         return;
     };
-    if !telemetry.is_enabled() {
+    if super::gate::is_hard_opted_out(telemetry.paths()) {
         return;
     }
     super::state::record_activity();
+}
+
+/// Emit the disclosed minimal weekly active install count (`install.weekly_count`),
+/// carrying strictly `analytics_enabled` and `$process_person_profile: false` (Q29).
+pub fn install_weekly_count(analytics_enabled: bool) {
+    super::queue::capture_weekly_count(analytics_enabled);
 }
 
 /// Both client-attach and surface-open events are noisy by nature — a browser

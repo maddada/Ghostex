@@ -125,6 +125,9 @@ pub struct Catalog {
 
 /// Keys whose value must never be read or written by an agent, whatever their type.
 fn agent_denied_key(key: &str) -> bool {
+    if key == "analyticsEnabled" {
+        return true;
+    }
     let lowered = key.to_lowercase();
     ["token", "password", "secret", "apikey", "credential"]
         .iter()

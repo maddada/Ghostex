@@ -19,6 +19,7 @@ use serde_json::{json, Value};
 
 pub const ANALYTICS_STATE_METADATA_KEY: &str = "analytics.state.v1";
 pub const LAST_HEARTBEAT_AT_KEY: &str = "lastHeartbeatAt";
+pub const LAST_WEEKLY_COUNT_AT_KEY: &str = "lastWeeklyCountAt";
 pub const LAST_ACTIVITY_AT_KEY: &str = "lastActivityAt";
 pub const BUILT_IN_EXTENSIONS_ON_KEY: &str = "builtInExtensionsOn";
 pub const BUILT_IN_EXTENSIONS_KNOWN_KEY: &str = "builtInExtensionsKnown";
@@ -30,6 +31,13 @@ pub const SESSION_MODE_SWITCHES_KEY: &str = "sessionModeSwitches";
 /// which a due daily heartbeat may still emit. Prevents an idle daemon from
 /// phoning home overnight or over a weekend.
 pub const HEARTBEAT_ACTIVITY_RECENCY_HOURS: i64 = 2;
+
+/// Minimum cadence (days) for `install.weekly_count` (Q29).
+pub const WEEKLY_COUNT_STALE_DAYS: i64 = 7;
+
+/// Maximum idle window (days) within which client or agent-session activity
+/// qualifies an install for its weekly active count (Q29).
+pub const WEEKLY_COUNT_ACTIVITY_DAYS: i64 = 7;
 
 /// Daily switch counters between Terminal and Native mode, grouped by direction and entry point.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -198,11 +206,17 @@ pub fn persist_pending_activity(db: &Connection) {
     );
 }
 
-pub fn read_last_activity_at(db: &Connection) -> Option<chrono::DateTime<chrono::Utc>> {
-    let in_memory = ACTIVITY_TRACKER
+/// Reads only the in-memory activity timestamp without reading SQLite. Used in
+/// `weekly_count_only` mode so no activity timestamp is persisted to disk.
+pub fn read_in_memory_activity_at() -> Option<chrono::DateTime<chrono::Utc>> {
+    ACTIVITY_TRACKER
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .last_activity_at;
+        .last_activity_at
+}
+
+pub fn read_last_activity_at(db: &Connection) -> Option<chrono::DateTime<chrono::Utc>> {
+    let in_memory = read_in_memory_activity_at();
     let stored = read_analytics_state(db)
         .and_then(|value| {
             value
@@ -246,7 +260,7 @@ pub fn has_recent_activity_since_heartbeat(
 }
 
 /// Deletes the entire `analytics.state.v1` row from SQLite and clears all
-/// in-memory counters and activity timestamps (called immediately on opt-out, Q22).
+/// in-memory counters and activity timestamps (called immediately on hard opt-out).
 pub fn wipe_all_state(db: &Connection) {
     clear_pending_switches();
     clear_pending_activity();
@@ -256,6 +270,93 @@ pub fn wipe_all_state(db: &Connection) {
     ) {
         super::debug_log(format!("telemetry state wipe failed: {error}"));
     }
+}
+
+/// Wipes all product telemetry detail fields from `analytics.state.v1`
+/// (`lastHeartbeatAt`, `lastActivityAt`, `cachedAccounts`, `builtInExtensionsOn`,
+/// `builtInExtensionsKnown`, `lastMobileHelloAt`, `sessionModeSwitches`),
+/// retaining ONLY `lastWeeklyCountAt` so `install.weekly_count` never fires
+/// more than once every 7 days when the UI toggle is OFF (Q29).
+pub fn wipe_product_state(db: &Connection) {
+    clear_pending_switches();
+    let kept_weekly = read_analytics_state(db).and_then(|value| {
+        value
+            .get(LAST_WEEKLY_COUNT_AT_KEY)
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
+    match kept_weekly {
+        Some(ts) => {
+            let serialized = json!({ LAST_WEEKLY_COUNT_AT_KEY: ts }).to_string();
+            let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            if let Err(error) = db.execute(
+                r#"
+                INSERT INTO metadata (key, value, updatedAt)
+                VALUES (?1, ?2, ?3)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt
+                "#,
+                rusqlite::params![ANALYTICS_STATE_METADATA_KEY, serialized, now],
+            ) {
+                super::debug_log(format!("telemetry product state wipe failed: {error}"));
+            }
+        }
+        None => {
+            if let Err(error) = db.execute(
+                "DELETE FROM metadata WHERE key = ?1",
+                [ANALYTICS_STATE_METADATA_KEY],
+            ) {
+                super::debug_log(format!("telemetry state wipe failed: {error}"));
+            }
+        }
+    }
+}
+
+pub fn read_last_weekly_count_at(db: &Connection) -> Option<chrono::DateTime<chrono::Utc>> {
+    let value = read_analytics_state(db)?;
+    let raw = value
+        .get(LAST_WEEKLY_COUNT_AT_KEY)
+        .and_then(Value::as_str)?;
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .ok()
+        .map(|parsed| parsed.with_timezone(&chrono::Utc))
+}
+
+pub fn write_last_weekly_count_at(db: &Connection, sent_at: &str) {
+    write_state_key(
+        db,
+        LAST_WEEKLY_COUNT_AT_KEY,
+        Value::String(sent_at.to_string()),
+    );
+}
+
+pub fn weekly_count_is_due(
+    last_sent_at: Option<chrono::DateTime<chrono::Utc>>,
+    stale_days: i64,
+) -> bool {
+    let Some(last_sent_at) = last_sent_at else {
+        return true;
+    };
+    chrono::Utc::now().signed_duration_since(last_sent_at) >= chrono::Duration::days(stale_days)
+}
+
+/// True only when a Ghostex client or agent session was actively used AFTER the
+/// previous weekly count AND within `max_idle_days` (7 days) of `now`.
+pub fn has_recent_activity_since_weekly_count(
+    now: chrono::DateTime<chrono::Utc>,
+    last_activity_at: Option<chrono::DateTime<chrono::Utc>>,
+    last_weekly_count_at: Option<chrono::DateTime<chrono::Utc>>,
+    max_idle_days: i64,
+) -> bool {
+    let Some(activity) = last_activity_at else {
+        return false;
+    };
+    if let Some(previous) = last_weekly_count_at {
+        if activity <= previous {
+            return false;
+        }
+    }
+    let elapsed = now.signed_duration_since(activity);
+    elapsed <= chrono::Duration::days(max_idle_days) && elapsed >= chrono::Duration::minutes(-5)
 }
 
 /// Records one switch in memory without touching SQLite; flushed to `analytics.state.v1` by the

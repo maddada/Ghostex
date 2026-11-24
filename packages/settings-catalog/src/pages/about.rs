@@ -4,8 +4,20 @@ pub(crate) fn page() -> Page {
     Page {
         id: "about",
         title: "About",
-        sections: vec![about()],
+        sections: vec![about(), privacy()],
     }
+}
+
+pub(crate) fn privacy() -> Section {
+    section(
+        "privacy",
+        "Privacy & Analytics",
+        vec![row(
+            "analyticsEnabled",
+            "Share 100% Fully Anonymous Usage Analytics to Support Ghostex Development",
+            "Zero personal data. Helps us continue supporting and building Ghostex. Turning this off stops all usage tracking and keeps only 1 anonymous weekly active count (stop all with DO_NOT_TRACK=1 or --no-analytics).",
+        )],
+    )
 }
 
 pub(crate) fn about() -> Section {

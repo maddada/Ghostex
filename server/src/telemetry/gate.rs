@@ -34,6 +34,30 @@ const SETTINGS_CACHE_TTL: Duration = Duration::from_secs(5);
 pub const SETTINGS_FILE_NAME: &str = "native-sidebar-settings.json";
 pub const ONBOARDING_STATE_FILE_NAME: &str = "gpui-first-run-onboarding-state.json";
 
+/// The three outbound telemetry modes (Q29):
+/// - `Full`: anonymous product telemetry plus weekly active count (default ON).
+/// - `WeeklyCountOnly`: UI toggle OFF (`analyticsEnabled == false`, no hard opt-out).
+///   All product telemetry is dropped and wiped; at most 1 minimal `install.weekly_count`
+///   event is emitted per 7 active days.
+/// - `Off`: hard opt-out (`DO_NOT_TRACK=1`, `GHOSTEX_TELEMETRY_DISABLED=1`,
+///   `--no-analytics`, or remote SSH helper). Strictly 0 events ever.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TelemetryMode {
+    Full,
+    WeeklyCountOnly,
+    Off,
+}
+
+impl TelemetryMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::WeeklyCountOnly => "weekly_count_only",
+            Self::Off => "off",
+        }
+    }
+}
+
 /// Why telemetry is currently enabled, held, or disabled. Returned by the
 /// read-only `/api/telemetryPreview` endpoint so Settings > About can explain
 /// the exact state clearly.
@@ -268,7 +292,28 @@ fn read_settings_enum(
     )
 }
 
-/// The one question every capture and every flush asks.
+/// True when telemetry is hard-disabled by environment variable (`DO_NOT_TRACK=1`
+/// or `GHOSTEX_TELEMETRY_DISABLED=1`), `--no-analytics` launch flag, or remote SSH
+/// helper role. Hard opt-out emits strictly 0 events ever (not even weekly count).
+pub fn is_hard_opted_out(paths: &GxserverPaths) -> bool {
+    environment_opts_out()
+        || CLIENT_LAUNCH_OPT_OUT.load(Ordering::SeqCst)
+        || install_role_opts_out(paths)
+}
+
+/// Current 3-state telemetry mode (`full`, `weekly_count_only`, or `off`).
+pub fn mode(paths: &GxserverPaths) -> TelemetryMode {
+    if is_hard_opted_out(paths) {
+        return TelemetryMode::Off;
+    }
+    if settings_profile(paths).analytics_enabled {
+        TelemetryMode::Full
+    } else {
+        TelemetryMode::WeeklyCountOnly
+    }
+}
+
+/// The one question every product capture and every flush asks.
 pub fn is_enabled(paths: &GxserverPaths) -> bool {
     evaluate(paths).analytics_enabled
 }
@@ -284,10 +329,7 @@ pub fn evaluate(paths: &GxserverPaths) -> SettingsProfile {
     by environment or by install role must not stat the settings file on every
     capture attempt for an answer it already knows.
     */
-    if environment_opts_out()
-        || CLIENT_LAUNCH_OPT_OUT.load(Ordering::SeqCst)
-        || install_role_opts_out(paths)
-    {
+    if is_hard_opted_out(paths) {
         return SettingsProfile {
             analytics_enabled: false,
             interface: None,
@@ -359,7 +401,9 @@ pub(super) fn is_onboarding_held_with_released(
     if db_has_presentation_projects(&db) {
         return false;
     }
-    if super::state::read_last_heartbeat_at(&db).is_some() {
+    if super::state::read_last_heartbeat_at(&db).is_some()
+        || super::state::read_last_weekly_count_at(&db).is_some()
+    {
         return false;
     }
     true

@@ -79,12 +79,17 @@ pub(crate) async fn handle_telemetry_preview_http(
 }
 
 fn build_telemetry_preview(state: &Arc<AppState>) -> Value {
+    let mode = crate::telemetry::mode(&state.paths);
     let reason = crate::telemetry::status_reason(&state.paths);
-    let enabled = crate::telemetry::is_enabled(&state.paths);
-    let onboarding_pending = reason == crate::telemetry::TelemetryStatusReason::OnboardingPending;
-    let distinct_id = crate::telemetry::handle()
-        .map(crate::telemetry::queue::Telemetry::distinct_id_for_preview)
-        .unwrap_or_else(|| crate::telemetry::identity::read_existing_install_id(&state.paths));
+    let enabled = mode == crate::telemetry::TelemetryMode::Full;
+    let onboarding_pending = crate::telemetry::is_onboarding_held(&state.paths);
+    let distinct_id = if mode == crate::telemetry::TelemetryMode::Off {
+        None
+    } else {
+        crate::telemetry::handle()
+            .map(crate::telemetry::queue::Telemetry::distinct_id_for_preview)
+            .unwrap_or_else(|| crate::telemetry::identity::read_existing_install_id(&state.paths))
+    };
     let endpoint = crate::telemetry::handle()
         .map(|telemetry| telemetry.endpoint_url().to_string())
         .unwrap_or_else(|| crate::telemetry::client::PostHogEndpoint::from_environment().batch_url);
@@ -92,47 +97,64 @@ fn build_telemetry_preview(state: &Arc<AppState>) -> Value {
         .map(crate::telemetry::queue::Telemetry::queued_len)
         .unwrap_or(0);
 
-    let install_created_at = read_install_created_at(&state.paths);
-    let heartbeat_snapshot =
-        super::telemetry_tasks::collect_heartbeat_snapshot(state, &install_created_at);
-    let profile_snapshot = heartbeat_snapshot
-        .as_ref()
-        .map(|snapshot| {
-            crate::telemetry::ProfileSnapshot::from_counts(
-                snapshot.project_count,
-                snapshot.default_agent,
-            )
-        })
-        .or_else(|| crate::telemetry::handle().map(|telemetry| telemetry.read_profile()))
-        .unwrap_or_default();
+    let weekly_count = match mode {
+        crate::telemetry::TelemetryMode::Full => {
+            crate::telemetry::build_weekly_count_preview_event(distinct_id.as_deref(), true)
+        }
+        crate::telemetry::TelemetryMode::WeeklyCountOnly => {
+            crate::telemetry::build_weekly_count_preview_event(distinct_id.as_deref(), false)
+        }
+        crate::telemetry::TelemetryMode::Off => None,
+    };
 
-    let heartbeat = heartbeat_snapshot.as_ref().and_then(|snapshot| {
-        crate::telemetry::build_preview_event(
+    let (heartbeat, settings_snapshot) = if mode == crate::telemetry::TelemetryMode::Full {
+        let install_created_at = read_install_created_at(&state.paths);
+        let heartbeat_snapshot =
+            super::telemetry_tasks::collect_heartbeat_snapshot(state, &install_created_at);
+        let profile_snapshot = heartbeat_snapshot
+            .as_ref()
+            .map(|snapshot| {
+                crate::telemetry::ProfileSnapshot::from_counts(
+                    snapshot.project_count,
+                    snapshot.default_agent,
+                )
+            })
+            .or_else(|| crate::telemetry::handle().map(|telemetry| telemetry.read_profile()))
+            .unwrap_or_default();
+
+        let heartbeat = heartbeat_snapshot.as_ref().and_then(|snapshot| {
+            crate::telemetry::build_preview_event(
+                &state.paths,
+                &profile_snapshot,
+                distinct_id.as_deref(),
+                crate::telemetry::taxonomy::EVENT_HEARTBEAT,
+                &crate::telemetry::heartbeat::heartbeat_properties(snapshot),
+            )
+        });
+
+        let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
+        let facts = super::telemetry_tasks::collect_settings_snapshot_facts(state, false);
+        let settings_snapshot = crate::telemetry::build_preview_event(
             &state.paths,
             &profile_snapshot,
             distinct_id.as_deref(),
-            crate::telemetry::taxonomy::EVENT_HEARTBEAT,
-            &crate::telemetry::heartbeat::heartbeat_properties(snapshot),
-        )
-    });
-
-    let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
-    let facts = super::telemetry_tasks::collect_settings_snapshot_facts(state, false);
-    let settings_snapshot = crate::telemetry::build_preview_event(
-        &state.paths,
-        &profile_snapshot,
-        distinct_id.as_deref(),
-        crate::telemetry::taxonomy::EVENT_SETTINGS_SNAPSHOT,
-        &crate::telemetry::settings_snapshot::snapshot_properties(settings.as_ref(), &facts),
-    );
+            crate::telemetry::taxonomy::EVENT_SETTINGS_SNAPSHOT,
+            &crate::telemetry::settings_snapshot::snapshot_properties(settings.as_ref(), &facts),
+        );
+        (heartbeat, settings_snapshot)
+    } else {
+        (None, None)
+    };
 
     json!({
         "enabled": enabled,
+        "mode": mode.as_str(),
         "reason": reason.as_str(),
         "onboardingPending": onboarding_pending,
         "distinctId": distinct_id,
         "endpoint": endpoint,
         "queuedEventCount": queued_event_count,
+        "weeklyCount": weekly_count,
         "heartbeat": heartbeat,
         "settingsSnapshot": settings_snapshot,
     })

@@ -70,6 +70,9 @@ fn story_settings(state: &str) -> serde_json::Map<String, Value> {
     settings.insert("terminalFontSize".into(), json!(16));
     settings.insert("terminalFontWeight".into(), json!(400));
     settings.insert("terminalLineHeight".into(), json!(1.35));
+    if state == "about-telemetry-preview-weekly" {
+        settings.insert("analyticsEnabled".into(), json!(false));
+    }
     if state == "theme-colours" {
         settings.insert("sidebarTheme".into(), json!("system"));
         settings.insert(
@@ -247,6 +250,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 ..
             } => {
                 eprintln!("gxserver rpc: {path} {params}");
+                if path == "/api/telemetryPreview" {
+                    let result = telemetry_preview_demo(&host_state, &host_settings.borrow());
+                    cx.defer(move |cx| reply(Ok(result), cx));
+                    return;
+                }
                 if path == "/api/boosts" && host_state == "page-boosts" {
                     let result = forward_local_boosts(&params);
                     cx.defer(move |cx| reply(result, cx));
@@ -402,8 +410,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         }
         // Settings > Security scrolled to its log (with `{"securityLogsEnabled":true}`).
         "security-log" => json!({ "initialTab": "security", "initialSection": "log" }),
-        // Settings > About with its Reset all settings? confirmation open.
-        "about-reset-confirm" => json!({ "initialTab": "about" }),
+        // Settings > About with its Reset all settings? confirmation or telemetry preview open.
+        "about-reset-confirm"
+        | "about-telemetry-preview"
+        | "about-telemetry-preview-weekly"
+        | "about-telemetry-preview-off" => json!({ "initialTab": "about" }),
         // Settings > Interface scrolled to Theme colours, with a few colours set and More open.
         "theme-colours" => json!({ "initialTab": "theme", "initialSection": "themeColours" }),
         // Settings > Interface with Orchid Dusk's colours: Chat colours (and its Pick Color
@@ -916,5 +927,93 @@ fn orchestrator_playbook_rpc(
             view["savedFiles"] = json!(saved);
         }
         Some(Ok(view))
+    })
+}
+
+fn telemetry_preview_demo(state: &str, settings: &serde_json::Map<String, Value>) -> Value {
+    let distinct_id = "a7f3c91e-4b2d-4e8a-9c10-6f28d4b1e03a";
+    if state == "about-telemetry-preview-off" {
+        return json!({
+            "enabled": false,
+            "mode": "off",
+            "reason": "env_disabled",
+            "onboardingPending": false,
+            "distinctId": Value::Null,
+            "endpoint": "https://us.i.posthog.com/batch/",
+            "queuedEventCount": 0,
+            "weeklyCount": Value::Null,
+            "heartbeat": Value::Null,
+            "settingsSnapshot": Value::Null,
+        });
+    }
+    let analytics_enabled = settings
+        .get("analyticsEnabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    if !analytics_enabled || state == "about-telemetry-preview-weekly" {
+        return json!({
+            "enabled": false,
+            "mode": "weekly_count_only",
+            "reason": "settings_disabled",
+            "onboardingPending": false,
+            "distinctId": distinct_id,
+            "endpoint": "https://us.i.posthog.com/batch/",
+            "queuedEventCount": 0,
+            "weeklyCount": {
+                "event": "install.weekly_count",
+                "distinct_id": distinct_id,
+                "properties": {
+                    "analytics_enabled": false,
+                    "$process_person_profile": false,
+                }
+            },
+            "heartbeat": Value::Null,
+            "settingsSnapshot": Value::Null,
+        });
+    }
+    json!({
+        "enabled": true,
+        "mode": "full",
+        "reason": "enabled",
+        "onboardingPending": false,
+        "distinctId": distinct_id,
+        "endpoint": "https://us.i.posthog.com/batch/",
+        "queuedEventCount": 0,
+        "weeklyCount": {
+            "event": "install.weekly_count",
+            "distinct_id": distinct_id,
+            "properties": {
+                "analytics_enabled": true,
+                "$process_person_profile": false,
+            }
+        },
+        "heartbeat": {
+            "event": "heartbeat",
+            "distinct_id": distinct_id,
+            "properties": {
+                "server_version": env!("GHOSTEX_BUILD_MARKETING_VERSION"),
+                "platform": "macos",
+                "arch": "aarch64",
+                "os_version": "15",
+                "interface": "chat",
+                "default_agent": "claude",
+                "project_bucket": "3-5",
+                "project_count": 4,
+                "session_count": 12,
+                "running_session_count": 3,
+                "agents_used": ["claude", "codex"],
+                "days_since_install": 14,
+            }
+        },
+        "settingsSnapshot": {
+            "event": "settings.snapshot",
+            "distinct_id": distinct_id,
+            "properties": {
+                "appearance": "system",
+                "sidebar_layout": "rail",
+                "claude_mode": "native",
+                "codex_mode": "native",
+            }
+        }
     })
 }

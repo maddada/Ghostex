@@ -8337,9 +8337,9 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   colour squares (Dark and Light tabs), Colourfulness and one Transparency row
   (the simple choices from Settings > Themes), with a "More theme options
   in Settings → Themes" link that opens the Themes page. Turning
-  transparency on there also switches Appearance to Dark. The last panel also
-  says that Ghostex sends anonymous usage analytics (see "Usage analytics"
-  below for the launch option that turns them off). Setup asks for no project
+  transparency on there also switches Appearance to Dark. Step 2 also includes
+  the anonymous usage analytics toggle (see "Usage analytics" below for how it
+  works and how to stop all events completely). Setup asks for no project
   folder: Open Ghostex ends it and goes straight to the app, and when there is
   no project yet, Add Project opens. Closing the window instead (with no
   project yet) leaves setup unfinished and opens Add Project; it comes back on
@@ -8934,22 +8934,39 @@ touched). There is no setting for it.
 
 ## Usage analytics
 
-Ghostex sends minimal, anonymous usage analytics so we know which platforms,
-views, and coding agents people rely on and where reliability errors happen.
-Only Ghostex's service (`gxserver`) on your local computer sends them, to
-PostHog; the desktop app, web UI, and mobile apps never talk to PostHog
-directly. Events use a random per-install UUIDv4 (`analytics-install-id`)
+Ghostex sends minimal, anonymous usage analytics to help us continue supporting
+and building Ghostex. Only Ghostex's service (`gxserver`) on your local computer
+sends them, to PostHog; the desktop app, web UI, and mobile apps never talk to
+PostHog directly. Events use a random per-install UUIDv4 (`analytics-install-id`)
 instead of your name, email, machine name, or any third-party agent account id.
 PostHog performs country-only GeoIP lookup on ingest and discards raw client IP
 addresses. A server Ghostex installed on a remote computer over SSH
-(`analytics-role: remote`) never sends analytics.
+(`analytics-role: remote`) sends strictly 0 events ever.
 
 On a brand-new install, Ghostex holds all outbound analytics flushes so zero
 bytes leave your computer until first-run onboarding finishes or is skipped.
 Daily summary events (`heartbeat`, `session_mode.daily_rollup`, and
-`settings.snapshot`) are strictly activity-gated: they are only emitted when a
-Ghostex client (desktop, web, or mobile) or an agent session was actively used
-since the previous heartbeat, so an idle background daemon never phones home.
+`settings.snapshot`) and weekly active counts (`install.weekly_count`) are
+strictly activity-gated: they are only emitted when a Ghostex client (desktop,
+web, or mobile) or an agent session was actively used in that window, so an
+idle background daemon never phones home.
+
+Ghostex has three telemetry states:
+
+1. **Full anonymous analytics (default ON):** Shares anonymous usage counts,
+   OS/version, and closed-enum feature usage, plus `install.weekly_count`
+   (`analytics_enabled: true`).
+2. **Settings switch OFF (`analyticsEnabled: false`, on Onboarding Step 2 or in
+   Settings > About):** Stops all usage and feature tracking immediately, drops
+   queued product events, wipes `analytics.state.v1` detail fields (retaining
+   only `lastWeeklyCountAt`), and sends at most 1 anonymous weekly active count
+   (`install.weekly_count`: random install UUIDv4 + `analytics_enabled: false` +
+   `$process_person_profile: false`, zero other properties, only when used that
+   week). Your choice is preserved across "Reset all settings to defaults".
+3. **Complete opt-out (`DO_NOT_TRACK=1`, `GHOSTEX_TELEMETRY_DISABLED=1`, or
+   `--no-analytics`):** Sends strictly 0 events ever (stops even the weekly
+   active count completely), deletes the entire `analytics.state.v1` state row
+   from SQLite, and removes `analytics-install-id`.
 
 What is collected, all validated against a closed schema in
 `server/src/telemetry/taxonomy.rs` (see `ANALYTICS.md` in the repository root
@@ -9002,16 +9019,19 @@ theme hex colours, the picture or video you chose, raw client IP addresses
 (discarded by PostHog after country-only GeoIP), or anything you typed into a
 setting.
 
-To turn analytics off, use any of:
+To turn usage tracking off or stop all events completely:
 
-- `GHOSTEX_TELEMETRY_DISABLED=1` or `DO_NOT_TRACK=1` in the environment,
-- the `--no-analytics` flag on the desktop app or on `gxserver`, or
-- `"analyticsEnabled": false` in `native-sidebar-settings.json`.
+- **Settings switch (stops usage tracking; keeps 1 anonymous weekly count):**
+  Turn off **Share 100% Fully Anonymous Usage Analytics to Support Ghostex
+  Development** on Onboarding Step 2 or in **Settings > About** (sets
+  `"analyticsEnabled": false` in `native-sidebar-settings.json`).
+- **Complete opt-out (0 events ever, stops even the weekly count):** Start
+  Ghostex or `gxserver` with `DO_NOT_TRACK=1`, `GHOSTEX_TELEMETRY_DISABLED=1`,
+  or `--no-analytics`.
 
-Turning analytics off immediately drops any queued events, deletes the entire
-`analytics.state.v1` state row from SQLite, and removes `analytics-install-id`.
-Set `GHOSTEX_TELEMETRY_DEBUG=1` on `gxserver` to log the full outgoing JSON
-batch payloads to stderr for inspection.
+To inspect live outgoing payloads, open **Settings > About** and click **View
+what's sent**, or set `GHOSTEX_TELEMETRY_DEBUG=1` on `gxserver` to log the full
+outgoing JSON batch payloads to stderr.
 
 Quit Ghostex first when using launch flags or environment variables: a Ghostex
 that is already open ignores a new launch's options. On a Mac, for example:

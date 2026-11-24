@@ -32,8 +32,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 const CARDS_LEFT: f32 = 156.0;
-const CARDS_TOP: f32 = 290.0;
+const CARDS_TOP: f32 = 240.0;
 const CARDS_WIDTH: f32 = 1360.0;
+
+const ANALYTICS_TITLE: &str =
+    "Share 100% Fully Anonymous Usage Analytics to Support Ghostex Development";
+const ANALYTICS_SUBTITLE: &str = "Collects no personal data at all. Helps us continue supporting and building Ghostex. Completely free and MIT open-source. Turning this off stops all usage tracking (keeps only 1 anonymous weekly count; DO_NOT_TRACK=1 stops all).";
 
 #[derive(Default)]
 pub(crate) struct GetStartedState {
@@ -357,6 +361,86 @@ impl GpuiOnboardingWindow {
         cx.notify();
     }
 
+    fn toggle_analytics(&mut self, cx: &mut Context<Self>) {
+        let next = !self.settings.analytics_enabled;
+        self.update_one("analyticsEnabled", Value::Bool(next), cx);
+    }
+
+    /// Persist `analyticsEnabled` explicitly when advancing past Step 2 or finishing setup
+    /// so gxserver's pre-onboarding flush hold always releases with the user's choice on disk.
+    pub(super) fn persist_analytics_choice(&mut self, cx: &mut Context<Self>) {
+        self.update_one(
+            "analyticsEnabled",
+            Value::Bool(self.settings.analytics_enabled),
+            cx,
+        );
+    }
+
+    /// CDXC:Telemetry 2026-11-25 DECISION (Q24 = strip, Q29):
+    /// Compact privacy strip tucked right above the Back / Next footer on Step 2 with the
+    /// unified title, zero-personal-data + MIT open-source + 3-state explanation, and no
+    /// "check code" link ("remove check code here no need").
+    fn render_analytics_strip(&mut self, s: S, now: Instant, cx: &mut Context<Self>) -> AnyElement {
+        let analytics_on = self.settings.analytics_enabled;
+        let thumb = self.thumb("onboarding-analytics", analytics_on, now);
+        let analytics_switch = self.control(
+            s,
+            toggle(
+                s,
+                "onboarding-analytics-toggle",
+                analytics_on,
+                thumb,
+                ToggleSize::Lg,
+                false,
+            ),
+            "onboarding-analytics-toggle",
+            interact::Ring::new(17.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            |this, _, cx| {
+                cx.stop_propagation();
+                this.toggle_analytics(cx);
+            },
+        );
+        self.control(
+            s,
+            div()
+                .id("onboarding-analytics-strip")
+                .relative()
+                .w_full()
+                .py(s.px(12.0))
+                .px(s.px(18.0))
+                .rounded(s.px(12.0))
+                .border_1()
+                .border_color(white(0.10))
+                .bg(rgba(18, 21, 31, 0.85))
+                .flex()
+                .items_center()
+                .gap(s.px(14.0))
+                .cursor_pointer()
+                .child(
+                    ibox(s, 34.0, 9.0)
+                        .bg(rgba(28, 34, 51, 0.9))
+                        .border_color(white(0.11))
+                        .child(icon(s, "shield", 17.0, 1.6, hex(0x9fc0ff))),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(nm(s, 14.5, 600.0).child(ANALYTICS_TITLE))
+                        .child(ss(s, 12.5).mt(s.px(3.0)).child(ANALYTICS_SUBTITLE)),
+                )
+                .child(analytics_switch),
+            "onboarding-analytics-strip",
+            interact::Ring::new(12.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            |this, _, cx| this.toggle_analytics(cx),
+        )
+        .into_any_element()
+    }
+
     pub(super) fn render_get_started(
         &mut self,
         s: S,
@@ -367,14 +451,14 @@ impl GpuiOnboardingWindow {
         let shown_preset = self.experience_shown();
 
         let mut out = Vec::new();
-        out.push(eyebrow(s, 486.0, 146.0, Some(700.0), "Step 2 · Preferences").into_any_element());
+        out.push(eyebrow(s, 486.0, 108.0, Some(700.0), "Step 2 · Preferences").into_any_element());
         out.push(
             heading(
                 s,
                 336.0,
-                178.0,
+                138.0,
                 1000.0,
-                48.0,
+                46.0,
                 "Make Ghostex yours.",
                 None,
                 true,
@@ -382,7 +466,7 @@ impl GpuiOnboardingWindow {
             .into_any_element(),
         );
         out.push(
-            sub(s, 336.0, 248.0, 1000.0, 16.5, true)
+            sub(s, 336.0, 200.0, 1000.0, 16.0, true)
                 .child(
                     "Choose how much detail Native Chat shows, how agents ask before they act, and a look you like.",
                 )
@@ -504,11 +588,12 @@ impl GpuiOnboardingWindow {
             )
             .child(self.render_look_preview(s));
         let look_card = self.render_look_card(s, now, cx);
+        let analytics_strip = self.render_analytics_strip(s, now, cx);
         out.push(
             abs(s, CARDS_LEFT, CARDS_TOP, Some(CARDS_WIDTH), None)
                 .flex()
                 .flex_col()
-                .gap(s.px(28.0))
+                .gap(s.px(16.0))
                 .child(
                     div()
                         .flex()
@@ -517,6 +602,7 @@ impl GpuiOnboardingWindow {
                         .child(project_card)
                         .child(look_card),
                 )
+                .child(analytics_strip)
                 .into_any_element(),
         );
         out.push(
@@ -538,6 +624,7 @@ impl GpuiOnboardingWindow {
                     cx,
                     |this, _, cx| {
                         this.keep_experience(cx);
+                        this.persist_analytics_choice(cx);
                         this.go(3, cx);
                     },
                 ))

@@ -182,10 +182,12 @@ impl Telemetry {
     }
 
     /// Read the distinct id for read-only inspection (`POST /api/telemetryPreview`).
-    /// Returns `None` when disabled and no install id file exists on disk.
+    /// Returns `None` on hard opt-out (`DO_NOT_TRACK=1`, `GHOSTEX_TELEMETRY_DISABLED=1`,
+    /// `--no-analytics`, or remote helper). Returns an existing or in-memory random UUIDv4
+    /// without writing to disk in `full` and `weekly_count_only` modes.
     pub(crate) fn distinct_id_for_preview(&self) -> Option<String> {
-        if !self.is_enabled() {
-            return identity::read_existing_install_id(&self.paths);
+        if gate::is_hard_opted_out(&self.paths) {
+            return None;
         }
         Some(self.ensure_distinct_id(false))
     }
@@ -226,12 +228,16 @@ impl Telemetry {
         let settings = gate::evaluate(&self.paths);
         if !settings.analytics_enabled {
             /*
-            Disabled means DROP and WIPE, not defer: a queue or persisted state
-            that survives an opt-out would ship pre-opt-out activity if the user
-            ever opted back in.
+            Disabled means DROP and WIPE product events immediately, not defer:
+            a queue or persisted state that survives an opt-out would ship
+            pre-opt-out activity if the user ever opted back in.
             */
-            self.drop_queue();
-            self.clear_cached_identity();
+            if gate::is_hard_opted_out(&self.paths) {
+                self.drop_queue();
+                self.clear_cached_identity();
+            } else {
+                self.drop_product_events();
+            }
             super::task::purge_on_opt_out_if_needed(&self.paths);
             return;
         }
@@ -269,8 +275,57 @@ impl Telemetry {
         queue.push_back(queued);
     }
 
+    /// Enqueue the minimal disclosed weekly active install count (`install.weekly_count`).
+    /// Contains strictly `analytics_enabled` and `$process_person_profile: false` with zero
+    /// base, profile, OS, agent, feature, account, or settings properties (Q29).
+    /// Strictly blocked on hard opt-out (`DO_NOT_TRACK=1`, `GHOSTEX_TELEMETRY_DISABLED=1`,
+    /// `--no-analytics`, or remote helper).
+    pub(super) fn enqueue_weekly_count(&self, analytics_enabled: bool) {
+        if gate::is_hard_opted_out(&self.paths) {
+            self.drop_queue();
+            self.clear_cached_identity();
+            super::task::purge_on_opt_out_if_needed(&self.paths);
+            return;
+        }
+        let validated = match taxonomy::validate(
+            taxonomy::EVENT_INSTALL_WEEKLY_COUNT,
+            &[
+                ("analytics_enabled", PropertyValue::Bool(analytics_enabled)),
+                (
+                    taxonomy::PROCESS_PERSON_PROFILE_KEY,
+                    PropertyValue::Bool(false),
+                ),
+            ],
+        ) {
+            Ok(validated) => validated,
+            Err(reason) => {
+                super::debug_log(format!("telemetry weekly count dropped: {reason}"));
+                return;
+            }
+        };
+        let queued = QueuedEvent {
+            event: taxonomy::EVENT_INSTALL_WEEKLY_COUNT.to_string(),
+            properties: validated,
+            timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            attempts: 0,
+        };
+        let mut queue = self.lock_queue();
+        queue.retain(|item| item.event != taxonomy::EVENT_INSTALL_WEEKLY_COUNT);
+        while queue.len() >= MAX_QUEUED_EVENTS {
+            queue.pop_front();
+        }
+        queue.push_back(queued);
+    }
+
     pub(super) fn drop_queue(&self) {
         self.lock_queue().clear();
+    }
+
+    /// Drops all queued product events while preserving a pending minimal
+    /// `install.weekly_count` event (if any) when the UI toggle is OFF.
+    pub(super) fn drop_product_events(&self) {
+        self.lock_queue()
+            .retain(|queued| queued.event == taxonomy::EVENT_INSTALL_WEEKLY_COUNT);
     }
 
     pub(super) fn take_batch(&self) -> Vec<QueuedEvent> {
@@ -339,12 +394,44 @@ pub fn build_preview_event(
     }))
 }
 
+/// Build the exact minimal `install.weekly_count` preview payload without
+/// mutating the queue, SQLite, or disk. Used by `POST /api/telemetryPreview`.
+pub fn build_weekly_count_preview_event(
+    distinct_id: Option<&str>,
+    analytics_enabled: bool,
+) -> Option<Value> {
+    let validated = taxonomy::validate(
+        taxonomy::EVENT_INSTALL_WEEKLY_COUNT,
+        &[
+            ("analytics_enabled", PropertyValue::Bool(analytics_enabled)),
+            (
+                taxonomy::PROCESS_PERSON_PROFILE_KEY,
+                PropertyValue::Bool(false),
+            ),
+        ],
+    )
+    .ok()?;
+    Some(json!({
+        "event": taxonomy::EVENT_INSTALL_WEEKLY_COUNT,
+        "distinct_id": distinct_id,
+        "properties": Value::Object(validated),
+    }))
+}
+
 /// Replace the DB-derived profile fields. A no-op in a process that never
 /// initialised telemetry, like every one-shot CLI verb.
 pub fn refresh_profile(snapshot: ProfileSnapshot) {
     if let Some(telemetry) = handle() {
         telemetry.refresh_profile(snapshot);
     }
+}
+
+/// Enqueue `install.weekly_count` (Q29). A no-op when uninitialized or hard opted out.
+pub fn capture_weekly_count(analytics_enabled: bool) {
+    let Some(telemetry) = handle() else {
+        return;
+    };
+    telemetry.enqueue_weekly_count(analytics_enabled);
 }
 
 /// The one public emitter. A no-op when telemetry was never initialised (every
@@ -372,8 +459,12 @@ pub fn capture_throttled(
     never burns a window it will not use.
     */
     if !telemetry.is_enabled() {
-        telemetry.drop_queue();
-        telemetry.clear_cached_identity();
+        if gate::is_hard_opted_out(telemetry.paths()) {
+            telemetry.drop_queue();
+            telemetry.clear_cached_identity();
+        } else {
+            telemetry.drop_product_events();
+        }
         super::task::purge_on_opt_out_if_needed(telemetry.paths());
         return;
     }

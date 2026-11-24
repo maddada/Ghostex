@@ -74,21 +74,39 @@ pub(super) fn notify_activity() {
     }
 }
 
-/// Immediately drop the in-memory queue, clear cached identity and counters,
-/// delete the entire `analytics.state.v1` row from SQLite, and remove
-/// `analytics-install-id` from disk (Q22).
+/// Drop queued telemetry and wipe local state on opt-out (Q22, Q29):
+/// - Hard opt-out (`DO_NOT_TRACK=1`, `GHOSTEX_TELEMETRY_DISABLED=1`, `--no-analytics`,
+///   or remote helper): drops entire queue, clears cached identity, deletes
+///   `analytics-install-id`, clears all in-memory activity/switches, and deletes the
+///   entire `analytics.state.v1` row from SQLite.
+/// - UI toggle OFF (`analyticsEnabled == false`, no hard opt-out): drops all queued
+///   product events and wipes all `analytics.state.v1` detail fields (`cachedAccounts`,
+///   `builtInExtensions*`, `lastMobileHelloAt`, `lastHeartbeatAt`, `lastActivityAt`,
+///   `sessionModeSwitches`), retaining ONLY `lastWeeklyCountAt` so `install.weekly_count`
+///   never fires more than once every 7 days.
 pub fn purge_on_opt_out(paths: &GxserverPaths) {
+    let hard = gate::is_hard_opted_out(paths);
     if let Some(telemetry) = queue::handle() {
-        telemetry.drop_queue();
-        telemetry.clear_cached_identity();
+        if hard {
+            telemetry.drop_queue();
+            telemetry.clear_cached_identity();
+        } else {
+            telemetry.drop_product_events();
+        }
     }
     SNAPSHOT_NEEDS_ACCOUNTS.store(false, Ordering::SeqCst);
     super::capture::reset_mobile_hello_cache();
     state::clear_pending_switches();
-    state::clear_pending_activity();
-    identity::delete_install_id(paths);
+    if hard {
+        state::clear_pending_activity();
+        identity::delete_install_id(paths);
+    }
     if let Ok(db) = crate::storage::open_gxserver_database(paths) {
-        state::wipe_all_state(&db);
+        if hard {
+            state::wipe_all_state(&db);
+        } else {
+            state::wipe_product_state(&db);
+        }
         OPT_OUT_WIPED.store(true, Ordering::SeqCst);
     }
 }
@@ -121,13 +139,19 @@ fn flush_blocking() {
         return;
     };
     /*
-    The gate is consulted at FLUSH as well as at capture. A user who opts out
-    while events are already queued must not have those events sent, and all
-    local telemetry state is wiped immediately.
+    The gate is consulted at FLUSH as well as at capture. Hard opt-out emits
+    strictly 0 events ever. UI toggle OFF (`analyticsEnabled == false`, no hard
+    opt-out) drops all product events and wipes detail fields immediately, while
+    allowing a due minimal `install.weekly_count` event to flush (Q29).
     */
-    if !telemetry.is_enabled() {
+    if gate::is_hard_opted_out(telemetry.paths()) {
         purge_on_opt_out(telemetry.paths());
         return;
+    }
+    let full_enabled = telemetry.is_enabled();
+    if !full_enabled {
+        purge_on_opt_out_if_needed(telemetry.paths());
+        telemetry.drop_product_events();
     }
     /*
     Q19: Hold all PostHog flushes while first-run onboarding is unfinished so
@@ -142,9 +166,11 @@ fn flush_blocking() {
         }
         return;
     }
-    if let Ok(db) = crate::storage::open_gxserver_database(telemetry.paths()) {
-        state::persist_pending_switches(&db);
-        state::persist_pending_activity(&db);
+    if full_enabled {
+        if let Ok(db) = crate::storage::open_gxserver_database(telemetry.paths()) {
+            state::persist_pending_switches(&db);
+            state::persist_pending_activity(&db);
+        }
     }
     if telemetry.queue_is_empty() {
         return;
@@ -190,6 +216,7 @@ pub fn spawn_flush_task(mut shutdown_rx: broadcast::Receiver<()>) -> tokio::task
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum HeartbeatRunOutcome {
     Emitted,
+    WeeklyCountOnlyEmitted,
     NotDue(Duration),
     WaitingForActivity,
     OnboardingHeld,
@@ -263,7 +290,7 @@ where
             }
 
             match outcome {
-                HeartbeatRunOutcome::Emitted => {
+                HeartbeatRunOutcome::Emitted | HeartbeatRunOutcome::WeeklyCountOnlyEmitted => {
                     tokio::select! {
                         _ = shutdown_rx.recv() => break,
                         _ = tokio::time::sleep(HEARTBEAT_MAX_WAIT) => {}
@@ -343,6 +370,40 @@ pub(crate) fn note_accounts_discovered(discovered: &crate::accounts::model::Snap
     }
 }
 
+fn maybe_emit_weekly_count(
+    db: &rusqlite::Connection,
+    analytics_enabled: bool,
+    last_activity_at: Option<chrono::DateTime<chrono::Utc>>,
+) -> Option<HeartbeatRunOutcome> {
+    let last_weekly_count_at = state::read_last_weekly_count_at(db);
+    if !state::weekly_count_is_due(last_weekly_count_at, state::WEEKLY_COUNT_STALE_DAYS) {
+        let remaining = last_weekly_count_at
+            .and_then(|last| {
+                let due_at = last + chrono::Duration::days(state::WEEKLY_COUNT_STALE_DAYS);
+                due_at
+                    .signed_duration_since(chrono::Utc::now())
+                    .to_std()
+                    .ok()
+            })
+            .unwrap_or(HEARTBEAT_MAX_WAIT);
+        return Some(HeartbeatRunOutcome::NotDue(remaining));
+    }
+    if !state::has_recent_activity_since_weekly_count(
+        chrono::Utc::now(),
+        last_activity_at,
+        last_weekly_count_at,
+        state::WEEKLY_COUNT_ACTIVITY_DAYS,
+    ) {
+        return Some(HeartbeatRunOutcome::WaitingForActivity);
+    }
+    super::capture::install_weekly_count(analytics_enabled);
+    state::write_last_weekly_count_at(
+        db,
+        &chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    );
+    None
+}
+
 fn run_heartbeat_once<F, H>(
     paths: &GxserverPaths,
     collect: &F,
@@ -352,13 +413,31 @@ where
     F: Fn() -> Option<heartbeat::HeartbeatSnapshot>,
     H: Fn() -> super::capture::LiveSessionModeCounts,
 {
-    if !gate::is_enabled(paths) {
+    if gate::is_hard_opted_out(paths) {
         purge_on_opt_out(paths);
         return HeartbeatRunOutcome::Disabled;
     }
     if gate::is_onboarding_held(paths) {
+        if !gate::is_enabled(paths) {
+            purge_on_opt_out_if_needed(paths);
+        }
         return HeartbeatRunOutcome::OnboardingHeld;
     }
+    if !gate::is_enabled(paths) {
+        purge_on_opt_out_if_needed(paths);
+        let Ok(db) = crate::storage::open_gxserver_database(paths) else {
+            super::debug_log(
+                "telemetry weekly count could not open the state database".to_string(),
+            );
+            return HeartbeatRunOutcome::Skipped;
+        };
+        let last_activity_at = state::read_in_memory_activity_at();
+        if let Some(outcome) = maybe_emit_weekly_count(&db, false, last_activity_at) {
+            return outcome;
+        }
+        return HeartbeatRunOutcome::WeeklyCountOnlyEmitted;
+    }
+    reset_opt_out_wiped();
     /*
     CDXC:Telemetry 2026-08-27 (addendum v2, §3):
     Collect BEFORE the due-check, and refresh the per-event profile fields from
@@ -379,6 +458,8 @@ where
         return HeartbeatRunOutcome::Skipped;
     };
     state::persist_pending_activity(&db);
+    let last_activity_at = state::read_last_activity_at(&db);
+    let _ = maybe_emit_weekly_count(&db, true, last_activity_at);
     let last_heartbeat_at = state::read_last_heartbeat_at(&db);
     if !state::heartbeat_is_due(last_heartbeat_at, heartbeat::HEARTBEAT_STALE_HOURS) {
         let remaining = last_heartbeat_at
@@ -392,7 +473,6 @@ where
             .unwrap_or(HEARTBEAT_MAX_WAIT);
         return HeartbeatRunOutcome::NotDue(remaining);
     }
-    let last_activity_at = state::read_last_activity_at(&db);
     if !state::has_recent_activity_since_heartbeat(
         chrono::Utc::now(),
         last_activity_at,
