@@ -113,23 +113,16 @@ impl GpuiTitlebarReadingPanel {
         });
     }
 
-    fn open_notification(
-        &mut self,
-        key: String,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
+    /// CDXC:Notifications 2026-11-24 DECISION:
+    /// Clicking a notification row opens its target without marking the row read or closing the
+    /// bell popup, so the row keeps its unread highlight until the user marks it read manually or
+    /// clicks away / closes the bell popup.
+    fn open_notification(&mut self, key: String, cx: &mut gpui::Context<Self>) {
         let mut reveal_session_id = None;
         let mut row = None;
         if let Some(feed) = self.notifications_feed_mut()
             && let Some(index) = feed.items.iter().position(|item| item.key() == key)
         {
-            let machine = feed.items[index].machine.clone();
-            if !feed.items[index].read && !feed.items[index].awaiting_approval {
-                feed.items[index].read = true;
-                feed.items[index].seen = true;
-                feed.note_read(&machine);
-            }
             let item = &feed.items[index];
             let (project_id, session_id) = item.open_target();
             // An account row has no session to reveal; the store opens the account instead.
@@ -139,7 +132,7 @@ impl GpuiTitlebarReadingPanel {
                     SessionKey::remote(machine_id, project_id, session_id).to_sidebar_session_id()
                 }
             });
-            row = Some((machine, item.id.clone()));
+            row = Some((item.machine.clone(), item.id.clone()));
         }
         let Some(row) = row else {
             return;
@@ -151,7 +144,6 @@ impl GpuiTitlebarReadingPanel {
                 app.reveal_sidebar_session(&session_id, cx);
             });
         }
-        self.close_popup(window, cx);
     }
 
     fn dismiss_notification(&mut self, key: String, cx: &mut gpui::Context<Self>) {
@@ -964,7 +956,7 @@ impl GpuiTitlebarReadingPanel {
                 cx.listener(move |this, _: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
-                    this.open_notification(open_id.clone(), window, cx);
+                    this.open_notification(open_id.clone(), cx);
                 }),
             )
             .on_mouse_down(

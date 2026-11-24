@@ -66,6 +66,9 @@ pub(crate) struct RowFocusOptions {
     pub(crate) keep_sleeping: bool,
     /// The view to open the session in; `None` is the agent's Default Agent View.
     pub(crate) preferred_interface: Option<GpuiPreferredAgentInterface>,
+    /// Keep the session's attention unacknowledged (used when clicking a notification row in the
+    /// bell popup so opening the session does not mark its notification row read).
+    pub(crate) skip_acknowledge_attention: bool,
 }
 
 impl RowFocusOptions {
@@ -194,7 +197,9 @@ impl GhostexGpuiApp {
         let changes_project = self.gx_store.core.focus().active_project.as_ref() != Some(&project)
             || self.gx_store.focus_publish.quick_automations_since
                 == Some(self.gx_store.core.focus().local_stamp);
-        self.gx_store_acknowledge_attention(session.clone(), cx);
+        if !options.skip_acknowledge_attention {
+            self.gx_store_acknowledge_attention(session.clone(), cx);
+        }
         let preferred_interface = options
             .preferred_interface
             .or_else(|| self.gx_store_row_preferred_interface(&session));
@@ -287,7 +292,7 @@ impl GhostexGpuiApp {
                 open_remote_session_terminal(row_id, plan.keep_view, Some(interface));
         }
         self.gx_store.focus_perform.remote_sessions += 1;
-        if plan.live {
+        if plan.live && !options.skip_acknowledge_attention {
             self.gx_store_acknowledge_attention(session.clone(), cx);
         }
         self.receive_sidebar_native_project_path_action_payload(

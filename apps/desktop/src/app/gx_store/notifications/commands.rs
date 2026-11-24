@@ -104,11 +104,8 @@ impl GhostexGpuiApp {
                         .find(|item| item.id == id && &item.machine == machine)
                         .map(OpenTarget::from_feed_item)
                 });
-                if let Some((machine, id)) = row {
-                    self.mark_cached_notification_row_read(machine, id, true);
-                }
                 if let Some(target) = target {
-                    self.gx_store_open_notification(target, cx);
+                    self.gx_store_open_notification(target, false, cx);
                 }
             }
             NotificationFeedCommand::JumpToLatestUnread => {
@@ -125,7 +122,7 @@ impl GhostexGpuiApp {
                         // The runtime opened from the state it held after the read, which is the
                         // previous one when a read failed.
                         if let Some(target) = this.gx_store_next_unread_notification() {
-                            this.gx_store_open_notification(target, cx);
+                            this.gx_store_open_notification(target, true, cx);
                         }
                     });
                 })
@@ -443,7 +440,7 @@ impl GhostexGpuiApp {
                     merged_notification_feed_jump_target(&merged, Some((&machine, &session_id)))
                         .and_then(OpenTarget::from_message_item);
                 if let Some(target) = target {
-                    this.gx_store_open_notification(target, cx);
+                    this.gx_store_open_notification(target, true, cx);
                 }
             });
         })
@@ -461,11 +458,42 @@ impl GhostexGpuiApp {
             .map(OpenTarget::from_feed_item)
     }
 
-    /// Marks the row read on its computer, then focuses its session and reveals it in the sidebar,
-    /// the same way a sidebar click on that session does (a remote one opens on its computer). An
-    /// account row on this computer opens its account instead; a remote computer's accounts are
-    /// not this app's to open, so its account rows are only marked read.
-    fn gx_store_open_notification(&mut self, target: OpenTarget, cx: &mut gpui::Context<Self>) {
+    /// Focuses the row's session and reveals it in the sidebar, the same way a sidebar click on
+    /// that session does (a remote one opens on its computer). When `mark_read` is true (jump
+    /// hotkeys outside the bell panel), the row is marked read first and attention is acknowledged;
+    /// when `mark_read` is false (clicking a row inside the bell panel), the row stays unread and
+    /// highlighted until the user marks it read manually or closes the bell popup. An account row
+    /// on this computer opens its account instead, and a security row opens Settings > Security.
+    fn gx_store_open_notification(
+        &mut self,
+        target: OpenTarget,
+        mark_read: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !mark_read {
+            if target.security {
+                if target.machine.is_local() {
+                    self.open_gpui_settings_tab("security", None, cx);
+                }
+                return;
+            }
+            if let Some(account_id) = target.account_id {
+                if target.machine.is_local() {
+                    self.open_account_notification(&account_id, cx);
+                }
+                return;
+            }
+            let session = self.resolve_notification_open_session(&target);
+            self.gx_store_show_session_on_its_machine(
+                &session,
+                RowFocusOptions {
+                    skip_acknowledge_attention: true,
+                    ..RowFocusOptions::default()
+                },
+                cx,
+            );
+            return;
+        }
         let Some(route) = self.gx_store_notification_feed_route(&target.machine) else {
             return;
         };
@@ -507,10 +535,27 @@ impl GhostexGpuiApp {
             .detach();
             return;
         }
-        // The raw ids become the sidebar's session id: the session's CURRENT project when the
-        // daemon lists it, else the row's own, so a session the list does not draw still resolves.
-        let session = self
-            .gx_store
+        let session = self.resolve_notification_open_session(&target);
+        let machine = target.machine;
+        cx.spawn(async move |this, cx| {
+            let marked = update_notification_feed(route, mark_read).await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(message) = marked {
+                    this.gx_store_store_notification_feed(machine.clone(), message, cx);
+                }
+                // CDXC:Notifications 2026-10-18 DECISION:
+                // User: "when i click on a notification from another machine please switch the sidebar to show that other machine". The switch, the focus and the reveal are one shared step (gx_store/activation_focus.rs) that an OS banner's click takes too (issue #401: the banner used to focus only).
+                this.gx_store_show_session_on_its_machine(&session, RowFocusOptions::default(), cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Resolves a notification row's raw ids into the sidebar's `SessionKey`: the session's
+    /// CURRENT project when the daemon lists it, else the row's own, so a session the list does
+    /// not draw still resolves.
+    fn resolve_notification_open_session(&self, target: &OpenTarget) -> SessionKey {
+        self.gx_store
             .core
             .presentation()
             .loaded(&target.machine)
@@ -528,19 +573,6 @@ impl GhostexGpuiApp {
                 machine: target.machine.clone(),
                 project_id: target.project_id.clone(),
                 session_id: target.session_id.clone(),
-            });
-        let machine = target.machine;
-        cx.spawn(async move |this, cx| {
-            let marked = update_notification_feed(route, mark_read).await;
-            let _ = this.update(cx, |this, cx| {
-                if let Some(message) = marked {
-                    this.gx_store_store_notification_feed(machine.clone(), message, cx);
-                }
-                // CDXC:Notifications 2026-10-18 DECISION:
-                // User: "when i click on a notification from another machine please switch the sidebar to show that other machine". The switch, the focus and the reveal are one shared step (gx_store/activation_focus.rs) that an OS banner's click takes too (issue #401: the banner used to focus only).
-                this.gx_store_show_session_on_its_machine(&session, RowFocusOptions::default(), cx);
-            });
-        })
-        .detach();
+            })
     }
 }
