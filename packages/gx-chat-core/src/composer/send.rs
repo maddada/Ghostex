@@ -209,9 +209,11 @@ pub fn begin_named(
     for step in &steps {
         phases.push(match step {
             SubmissionStep::PushDraft { .. } => SendPhase::PushDraft,
-            SubmissionStep::Send { text: sent, .. } if sent == "/compact" && phases.len() > 2 => {
-                SendPhase::SendCompact
-            }
+            // CDXC:Drafts 2026-11-24 WHY: only Compact & Send's own `/compact` goes out without the
+            // draft's revision. A `/compact` the user typed is that draft and is sent with it, as
+            // the TypeScript controller did: taking it for Compact & Send's step left the draft
+            // unconsumed on gxserver, so every other device offered "/compact" back as a Saved
+            // draft (found testing Native Antigravity on Linux).
             SubmissionStep::Send { .. } if mode == SubmissionMode::Compact => {
                 SendPhase::SendCompact
             }
