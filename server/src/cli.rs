@@ -199,7 +199,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
 /// CDXC:VoiceMode 2026-10-20 SEE-ALSO: `voiceAgent` means `/api/voice` (conversation and dictation) and `/api/readVoiceAgent` exist (docs/2026-10-20/voice-mode/voice-agent-client-contract.md).
 /// CDXC:Notifications 2026-10-31 SEE-ALSO: `notificationStream` means `/api/events?stream=notifications` carries only notification feed changes and the daemon's start and stop (`notification_event_matches` in server/src/server/ws.rs); an older daemon would send that socket its whole hub, so the phone opens it only behind this flag and otherwise polls the feed.
 /// CDXC:Notifications 2026-11-01 SEE-ALSO: `pushNotifications` means `/api/registerPushToken` exists and this daemon pushes finished, needs-input and failed notices and agent starts to the registered phones (server/src/push/); the phone shows its push switches only behind this flag, since an older daemon has no such route.
-const ENDPOINT_CAPABILITIES: [&str; 18] = [
+const ENDPOINT_CAPABILITIES: [&str; 19] = [
     "sendRequestLedger",
     "voiceAgent",
     ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_NOTIFICATION_STREAM,
@@ -246,6 +246,9 @@ const ENDPOINT_CAPABILITIES: [&str; 18] = [
     // cancellation (`cancel: true`); gates the phone's one-time Native announcement sheet and remote
     // Switch to Native offers (CDXC:AgentProviders 2026-11-24).
     "nativeModeSwitch",
+    // Built-in public tunnel share links for Live pages and local ports (`/api/sharing`),
+    // capability-gated so older servers hide the Share action on the phone (CDXC:Sharing 2026-11-24).
+    "shareLinks",
 ];
 
 /// `gxserver endpoint` (`ghostex server endpoint`): the running daemon's local port and bearer token
@@ -1335,6 +1338,7 @@ mod tests {
                 Value::from("liveActivityPush"),
                 Value::from("pushAlertChoices"),
                 Value::from("nativeModeSwitch"),
+                Value::from("shareLinks"),
                 #[cfg(unix)]
                 Value::from("terminalPause"),
             ]

@@ -2165,6 +2165,32 @@ impl NativeChatView {
         } else {
             body
         };
+        let answered_by = text(row, "answeredBy");
+        let answered_by_chip = (!answered_by.is_empty()).then(|| {
+            let green: gpui::Hsla = gpui::rgb(if p.light { 0x168049 } else { 0x34d399 }).into();
+            div()
+                .flex_shrink_0()
+                .px(px(7.0 * s))
+                .py(px(1.5 * s))
+                .rounded_full()
+                .bg(green.opacity(if p.light { 0.12 } else { 0.16 }))
+                .border_1()
+                .border_color(green.opacity(0.32))
+                .flex()
+                .items_center()
+                .gap(px(4.0 * s))
+                .text_size(px(PROSE_SIZE * 0.84 * s))
+                .line_height(px(16.0 * s))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(green)
+                .child(
+                    svg()
+                        .path("titlebar/user.svg")
+                        .size(px(11.0 * s))
+                        .text_color(green),
+                )
+                .child(answered_by)
+        });
         let question = div()
             .flex_1()
             .min_w_0()
@@ -2183,6 +2209,7 @@ impl NativeChatView {
                 p,
                 cx,
             )))
+            .children(answered_by_chip)
             .children(sources_chip)
             .into_any_element();
         let pink_dot: gpui::Hsla =

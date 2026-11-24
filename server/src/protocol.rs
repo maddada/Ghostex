@@ -413,7 +413,10 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/collabGuestPageAnswers"
         // Installing Collab (with the owner's signed approval), updating and uninstalling it,
         // from the desktop, a desktop connected to this computer, or the phone.
-        | "/api/extensionComponents" => remote_allowed(path),
+        | "/api/extensionComponents"
+        // Built-in tunnel sharing for Live pages and localhost ports (server/src/sharing/http.rs);
+        // gated to the owner's computer and paired phones (`is_owner_device`).
+        | "/api/sharing" => remote_allowed(path),
         // The Collab component's calls (server/src/collab_shim/http.rs): no gxserver token, only
         // the host token gxserver handed the component on its stdin, checked by the handler.
         "/api/collabHost" => descriptor(

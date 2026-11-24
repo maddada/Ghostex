@@ -461,6 +461,13 @@ impl NativeChatView {
         };
         let gxv::PageRef { title, url, .. } = page;
         let export_url = page_id.as_ref().map(|_| url.clone());
+        let share_target = page_id.as_ref().map(|id| (id.clone(), title.clone()));
+        #[cfg(not(ghostex_web))]
+        let is_shared = page_id
+            .as_deref()
+            .is_some_and(crate::app::window::share_link_popover::is_page_shared);
+        #[cfg(ghostex_web)]
+        let is_shared = false;
         let bar_label = file.clone().unwrap_or_else(|| title.clone());
         let page_title = title.clone();
         let aria = format!("Open page {title}");
@@ -720,6 +727,48 @@ impl NativeChatView {
                         )
                         .child(done_label),
                 )
+            })
+            .when(is_shared, |this| {
+                let good = super::page_answers::answered_color(p);
+                this.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.0 * s))
+                        .flex_shrink_0()
+                        .px(px(8.0 * s))
+                        .py(px(2.0 * s))
+                        .rounded_full()
+                        .bg(good.opacity(0.14))
+                        .text_size(px(11.0 * s))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(good)
+                        .child(
+                            svg()
+                                .path("titlebar/world.svg")
+                                .size(px(11.0 * s))
+                                .text_color(good),
+                        )
+                        .child("Shared"),
+                )
+            })
+            .when_some(share_target, |this, (share_page_id, share_title)| {
+                #[cfg(not(ghostex_web))]
+                {
+                    this.child(share_link_button(
+                        key,
+                        share_page_id,
+                        share_title,
+                        is_shared,
+                        p,
+                        cx,
+                    ))
+                }
+                #[cfg(ghostex_web)]
+                {
+                    let _ = (share_page_id, share_title);
+                    this
+                }
             })
             .when_some(export_url, |this, export_url| {
                 this.child(export_button(key, export_url, p, cx))
@@ -1048,6 +1097,63 @@ fn export_button(
             #[cfg(ghostex_web)]
             this.invoke(action.clone(), cx);
             let _ = &this;
+        }))
+        .into_any_element()
+}
+
+#[cfg(not(ghostex_web))]
+fn share_link_button(
+    key: &str,
+    page_id: String,
+    title: String,
+    is_shared: bool,
+    p: &ChatAppearance,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    let s = p.scale;
+    let (rest, hover) = if p.light { (0.07, 0.11) } else { (0.10, 0.15) };
+    let hover_fill = p.foreground.opacity(hover);
+    let action = json!({
+        "type": "shareVisualPage",
+        "pageId": page_id,
+        "title": title,
+    });
+    let label = if is_shared { "Shared" } else { "Share" };
+    let tip = if is_shared {
+        "Manage shared link for this Live page"
+    } else {
+        "Share link: serve this Live page over a public tunnel"
+    };
+    div()
+        .id(SharedString::from(format!("visual-page-share:{key}")))
+        .role(gpui::Role::Button)
+        .aria_label(label)
+        .flex_shrink_0()
+        .h(px(28.0 * s))
+        .px(px(11.0 * s))
+        .flex()
+        .items_center()
+        .gap(px(5.0 * s))
+        .rounded(px(8.0 * s))
+        .bg(p.foreground.opacity(rest))
+        .text_color(p.foreground)
+        .text_size(px(12.5 * s))
+        .font_weight(FontWeight::MEDIUM)
+        .chat_cursor_pointer()
+        .hover(move |style| style.bg(hover_fill))
+        .tooltip(move |window, cx| {
+            gpui_component::tooltip::Tooltip::new(tip).build(window, cx)
+        })
+        .child(
+            svg()
+                .path("titlebar/link.svg")
+                .size(px(13.0 * s))
+                .text_color(p.foreground),
+        )
+        .child(label)
+        .on_click(cx.listener(move |_, _, _, cx| {
+            cx.stop_propagation();
+            cx.emit(super::state::NativeChatEvent::Host(action.clone()));
         }))
         .into_any_element()
 }

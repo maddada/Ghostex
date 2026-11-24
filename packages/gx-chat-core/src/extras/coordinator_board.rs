@@ -2368,6 +2368,8 @@ mod tests {
             replaced: false,
             prints: Vec::new(),
             rounds: Vec::new(),
+            outside_answerers: Vec::new(),
+            outside_answered_at: None,
             said: Vec::new(),
             title: format!("About {tag}?"),
             at: Some(at),

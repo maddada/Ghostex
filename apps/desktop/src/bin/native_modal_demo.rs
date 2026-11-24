@@ -187,6 +187,8 @@ mod settings_modal;
 // The chat header's Share popover (Ghostex Collab), drawn from the app's own view.
 #[path = "native_modal_demo/share_popover.rs"]
 mod share_popover_demo;
+#[path = "native_modal_demo/share_link_popover.rs"]
+mod share_link_popover_demo;
 #[path = "../app/window/share_popover_view.rs"]
 mod share_popover_view;
 // The work area header's jobs button and popover, drawn from the app's own view.
@@ -867,6 +869,8 @@ fn main() {
                 "notice-modal" => notice_modal_demo::open(&demo, cx),
                 "updates-menu" => updates_menu_demo::open(&demo, cx),
                 "share-popover" => share_popover_demo::open(&demo, cx),
+                "share-link-popover" => share_link_popover_demo::open(&demo, cx),
+                "share-inbox-ping" => share_link_popover_demo::open_inbox_ping(&demo, cx),
                 "jobs-popover" => jobs_popover_demo::open(&demo, cx),
                 "start-menu" => start_menu_demo::open(&demo, cx),
                 "start-menu-click" => start_menu_click_demo::open(&demo, cx),

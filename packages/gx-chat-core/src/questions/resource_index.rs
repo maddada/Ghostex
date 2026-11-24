@@ -335,6 +335,8 @@ pub fn add_linked_pages(askers: &mut Vec<Asker>, view: &IndexView) {
             at: entry.at_ms,
             prints: Vec::new(),
             rounds: Vec::new(),
+            outside_answerers: Vec::new(),
+            outside_answered_at: None,
         });
     }
 }

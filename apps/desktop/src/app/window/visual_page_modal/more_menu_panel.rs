@@ -50,6 +50,7 @@ pub(crate) fn menu_rows(snooze: bool, star: Option<bool>) -> Vec<MenuRow> {
         None => {}
     }
     rows.extend([
+        row("Share link…", "titlebar/link.svg"),
         row("Export page", "titlebar/file-down.svg"),
         row("Import answers", "titlebar/file-up.svg"),
         row("Open in browser", "titlebar/external-link.svg"),

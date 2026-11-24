@@ -13992,6 +13992,72 @@
       "agentWritable": false
     },
     {
+      "key": "sharingEnabled",
+      "title": "Enable sharing",
+      "subtitle": "Share individual Live pages or local dev server ports over temporary encrypted links. Turning this off stops every active share immediately.",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "switch",
+      "sectionTitle": "Sharing",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingProvider",
+      "title": "Provider",
+      "subtitle": "OpenTunnel by default: blind end-to-end TLS where the relay never reads your HTML, headers or cookies, with no account required.",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "provider",
+      "sectionTitle": "Tunnel provider",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingRelayUrl",
+      "title": "Relay URL",
+      "subtitle": "Optional self-hosted OpenTunnel API address (OPENTUNNEL_API). Leave blank to use the default hosted relay (https://opentunnel.xyz).",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "provider",
+      "sectionTitle": "Tunnel provider",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingDefaultExpiry",
+      "title": "Default link expiry",
+      "subtitle": "How long a new share link stays live: 1 hour, 24 hours (the default), 7 days, or Until stopped. Links stop immediately when stopped or when Ghostex quits.",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "defaults",
+      "sectionTitle": "New shares start with",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingDefaultPasscode",
+      "title": "Require passcode by default",
+      "subtitle": "Protect newly shared Live pages and local ports with a 6-digit passcode by default. Off by default; you can turn a passcode on per share.",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "defaults",
+      "sectionTitle": "New shares start with",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "sharingActiveShares",
+      "title": "Active share links",
+      "subtitle": "Every Live page and local port currently shared from this computer, with Copy link, Stop, and Stop all.",
+      "tab": "sharing",
+      "tabTitle": "Sharing",
+      "section": "active",
+      "sectionTitle": "Active shares",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "secretProviders",
       "title": "1Password accounts",
       "subtitle": "The 1Password accounts Ghostex reads keys and tokens from, so you can paste an op://vault/item/field reference instead of the key itself. Needs the 1Password CLI (op) with \"Integrate with 1Password CLI\" turned on in 1Password. Ghostex keeps only the account name; 1Password may ask you to unlock when a key is read.",

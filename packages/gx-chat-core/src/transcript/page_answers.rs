@@ -43,6 +43,11 @@ pub struct PageAnswers {
     /// page's questions (`ghostex_gx_visual::questions::page_answers_message_tagged`); empty for
     /// a form (its tags are on the form) and for answers sent before tags were written.
     pub tags: Vec<String>,
+    /// Who submitted these answers when submitted by an outside person via a shared Live page link.
+    pub by: Option<String>,
+    /// True when submitted by an outside visitor via a shared Live page link (does not lock out
+    /// the user from answering or overriding the page).
+    pub outside: bool,
 }
 
 fn attribute(head: &str, name: &str) -> Option<String> {
@@ -176,6 +181,7 @@ pub fn split_all_page_answers(text: &str) -> (Vec<PageAnswers>, String) {
 }
 
 /// Every page or question form a message's answers envelopes answer, in document order.
+/// Outside answers from shared Live page links are excluded so they never lock out the user.
 pub fn answers_page_ids(text: &str) -> Vec<String> {
     if !text.contains(OPEN) {
         return Vec::new();
@@ -183,6 +189,7 @@ pub fn answers_page_ids(text: &str) -> Vec<String> {
     split_all_page_answers(text)
         .0
         .into_iter()
+        .filter(|answers| !answers.outside)
         .map(|answers| answers.page_id)
         .collect()
 }
@@ -233,11 +240,18 @@ pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
     let tags = attribute(head, "tags")
         .map(|tags| tags.split_whitespace().map(str::to_string).collect())
         .unwrap_or_default();
+    let by = attribute(head, "by")
+        .map(|name| js_trim(&name).to_string())
+        .filter(|name| !name.is_empty());
+    let outside = attribute(head, "source").as_deref() == Some("shared-link")
+        || attribute(head, "outside").as_deref() == Some("true");
     Some(PageAnswers {
         page_id,
         title,
         answers,
         tags,
+        by,
+        outside,
     })
 }
 
@@ -248,8 +262,8 @@ pub(crate) fn is_unsent_or_failed(message: &ghostex_gx_protocol::ChatMessage) ->
 }
 
 /// The answers this transcript received, one per page or question form (the latest sent, where the
-/// first one arrived). Failed or unsent client recovery rows are excluded so they never settle
-/// an open form as answered before retry succeeds.
+/// first one arrived). Failed or unsent client recovery rows and outside visitor answers on shared
+/// Live pages are excluded so they never settle an open form or page before the user answers.
 pub fn page_answers_in<'a>(
     messages: impl IntoIterator<Item = &'a ghostex_gx_protocol::ChatMessage>,
 ) -> Vec<PageAnswers> {
@@ -259,7 +273,7 @@ pub fn page_answers_in<'a>(
         .filter(|message| message.role == ChatRole::User && !is_unsent_or_failed(message))
     {
         let (envelopes, _) = split_all_page_answers(&prose_markdown(&message.blocks));
-        for answers in envelopes {
+        for answers in envelopes.into_iter().filter(|answers| !answers.outside) {
             // A later answer to the same question replaces the earlier one in place: a one-click
             // answer changed after the agent read it (`questions/inline_answers.rs`).
             match found
@@ -541,13 +555,20 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
     };
     let more = rows.len().saturating_sub(MAX_ROWS);
     let summary = answers_summary(&rows);
-    json!({
+    let mut out = json!({
         "pageId": answers.page_id,
         "title": plain_words(&answers.title),
         "summary": summary,
         "rows": rows.into_iter().take(MAX_ROWS).collect::<Vec<_>>(),
         "more": more,
-    })
+    });
+    if let Some(by) = &answers.by {
+        out["by"] = json!(by);
+    }
+    if answers.outside {
+        out["outside"] = json!(true);
+    }
+    out
 }
 
 /// The folded card's count: "3 answered · 1 skipped", "3 answered", "4 skipped" (the reader's
@@ -650,6 +671,8 @@ mod tests {
                 "Plain one?": "Yes",
             }),
             tags: Vec::new(),
+            by: None,
+            outside: false,
         };
         let card = project_page_answers(&answers, None);
         assert_eq!(card["title"], "About the picker");

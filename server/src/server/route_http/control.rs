@@ -132,6 +132,16 @@ pub(super) async fn route_control_http(
         path if super::COLLAB_ENDPOINTS.contains(&path) => {
             super::handle_collab_http(&state, &caller, endpoint.path, request_id, &body_json).await
         }
+        path if crate::sharing::SHARING_ENDPOINTS.contains(&path) => {
+            crate::sharing::handle_sharing_http(
+                state,
+                &caller,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         path if super::AUTOPILOT_ENDPOINTS.contains(&path) => {
             super::handle_autopilot_http(&state, &caller, endpoint.path, request_id, &body_json)
                 .await

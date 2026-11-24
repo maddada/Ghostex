@@ -35,6 +35,7 @@ const ANSWERS_MAX_BYTES: u64 = 256 * 1024;
 
 #[derive(Clone, Copy)]
 enum MoreAction {
+    ShareLink,
     Export,
     Import,
     OpenInBrowser,
@@ -45,7 +46,7 @@ enum MoreAction {
 /// The menu's actions, in the order of the panel's rows (`more_menu_panel::menu_rows`): Snooze
 /// first while the page waits for answers.
 fn actions(snooze: bool, star: Option<bool>) -> Vec<MoreAction> {
-    let mut actions = Vec::with_capacity(5);
+    let mut actions = Vec::with_capacity(6);
     if snooze {
         actions.push(MoreAction::Snooze);
     }
@@ -53,6 +54,7 @@ fn actions(snooze: bool, star: Option<bool>) -> Vec<MoreAction> {
         actions.push(MoreAction::Star);
     }
     actions.extend([
+        MoreAction::ShareLink,
         MoreAction::Export,
         MoreAction::Import,
         MoreAction::OpenInBrowser,
@@ -210,6 +212,33 @@ impl GpuiVisualPageModalWindow {
         }
         self.close_more_menu(cx);
         match action {
+            MoreAction::ShareLink => {
+                if let Some(page_id) = self.page_id.clone() {
+                    let title = if self.title.trim().is_empty() {
+                        "Live page".to_string()
+                    } else {
+                        self.title.clone()
+                    };
+                    crate::app::window::share_link_popover::open_share_link_popover(
+                        crate::app::window::share_link_popover::ShareLinkTarget::Page {
+                            page_id,
+                            title,
+                        },
+                        self.remote.clone(),
+                        cx,
+                    );
+                } else {
+                    (self.host)(
+                        VisualPageModalCommand::Notice {
+                            level: "warning",
+                            title: "This page cannot be shared".to_string(),
+                            message: "Only published Live pages can be shared with a link."
+                                .to_string(),
+                        },
+                        cx,
+                    );
+                }
+            }
             MoreAction::Export => {
                 let end = self.url.find(['?', '#']).unwrap_or(self.url.len());
                 let url = format!("{}/export", self.url[..end].trim_end_matches('/'));

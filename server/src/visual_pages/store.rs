@@ -230,6 +230,44 @@ pub(super) fn store_answers(
     Ok(record)
 }
 
+/// Maximum number of outside visitor answer records stored per Live page.
+const MAX_OUTSIDE_ANSWER_RECORDS: usize = 50;
+
+/// Records answers submitted by an outside visitor through a shared Live page link, without
+/// marking `answeredAt` on the page so the owner can still answer or override and multiple
+/// outside visitors can each submit their own answers.
+pub(super) fn store_outside_answers(
+    gxserver_state_dir: &Path,
+    id: &str,
+    by: &str,
+    answers: &serde_json::Value,
+) -> Result<serde_json::Value, StoreAnswersError> {
+    let _guard = RECORD_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut record = read_record(gxserver_state_dir, id).ok_or(StoreAnswersError::NotFound)?;
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let entry = json!({
+        "by": by,
+        "answeredAt": now,
+        "answers": answers,
+    });
+    let list = record
+        .as_object_mut()
+        .ok_or(StoreAnswersError::NotFound)?
+        .entry("outsideAnswers")
+        .or_insert_with(|| json!([]));
+    if let Some(array) = list.as_array_mut() {
+        array.push(entry);
+        if array.len() > MAX_OUTSIDE_ANSWER_RECORDS {
+            let overflow = array.len() - MAX_OUTSIDE_ANSWER_RECORDS;
+            array.drain(0..overflow);
+        }
+    }
+    write_record(gxserver_state_dir, id, &record).map_err(StoreAnswersError::Io)?;
+    Ok(record)
+}
+
 /// Keeps what the reader has picked and written so far on the page's record, so closing and
 /// reopening the page (or a restart) brings it back; `null` forgets it. A page that was answered
 /// keeps its answers instead.

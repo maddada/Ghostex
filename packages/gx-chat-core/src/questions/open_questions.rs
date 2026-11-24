@@ -491,6 +491,8 @@ fn asker_from_entry(entry: &ResourceEntry) -> Asker {
         replaced: false,
         prints: Vec::new(),
         rounds: Vec::new(),
+        outside_answerers: Vec::new(),
+        outside_answered_at: None,
     }
 }
 
@@ -800,6 +802,8 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
                 title: String::new(),
                 answers: answers.clone(),
                 tags: Vec::new(),
+                by: None,
+                outside: false,
             })
         })
         .collect();
@@ -1391,6 +1395,8 @@ mod tests {
             replaced: false,
             prints: Vec::new(),
             rounds: Vec::new(),
+            outside_answerers: Vec::new(),
+            outside_answered_at: None,
             said: Vec::new(),
             title: format!("About {id}"),
             at,
@@ -2339,6 +2345,8 @@ mod paged_labels_tests {
                 replaced: false,
                 prints: Vec::new(),
                 rounds: Vec::new(),
+                outside_answerers: Vec::new(),
+                outside_answered_at: None,
                 said: Vec::new(),
                 title: format!("Asked {n}"),
                 at: Some(now - n * 60_000),

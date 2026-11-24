@@ -44,6 +44,7 @@ pub(crate) enum SettingsTabId {
     Autopilot,
     Boosts,
     Collab,
+    Sharing,
     Secrets,
     Security,
     Actions,
@@ -110,7 +111,7 @@ impl SettingsTabId {
     /// `RailTier`) ending with About, then the Extensions page (the catalog) at the rail's bottom with the pages
     /// that fold under it ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration,
     /// Connectors, Debugging, the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 36] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 37] = [
         SettingsTabId::Updates,
         SettingsTabId::Experience,
         SettingsTabId::Theme,
@@ -136,6 +137,7 @@ impl SettingsTabId {
         SettingsTabId::Remote,
         SettingsTabId::Sync,
         SettingsTabId::Collab,
+        SettingsTabId::Sharing,
         SettingsTabId::Notifications,
         SettingsTabId::PowerSleep,
         SettingsTabId::Security,
@@ -197,9 +199,10 @@ impl SettingsTabId {
             | SettingsTabId::Secrets
             | SettingsTabId::Integrations
             | SettingsTabId::GrokBot => RailTier::AgentsAccounts,
-            SettingsTabId::Remote | SettingsTabId::Sync | SettingsTabId::Collab => {
-                RailTier::Connections
-            }
+            SettingsTabId::Remote
+            | SettingsTabId::Sync
+            | SettingsTabId::Collab
+            | SettingsTabId::Sharing => RailTier::Connections,
             SettingsTabId::Notifications
             | SettingsTabId::PowerSleep
             | SettingsTabId::Security
@@ -262,6 +265,7 @@ impl SettingsTabId {
             SettingsTabId::Autopilot => "autopilot",
             SettingsTabId::Boosts => "boosts",
             SettingsTabId::Collab => "collab",
+            SettingsTabId::Sharing => "sharing",
             SettingsTabId::Secrets => "secrets",
             SettingsTabId::Security => "security",
             SettingsTabId::Actions => "actions",
@@ -319,6 +323,7 @@ impl SettingsTabId {
             SettingsTabId::Autopilot => "Autopilot",
             SettingsTabId::Boosts => "Boosts",
             SettingsTabId::Collab => "Collab",
+            SettingsTabId::Sharing => "Sharing",
             SettingsTabId::Secrets => "Secrets",
             SettingsTabId::Security => "Security",
             SettingsTabId::Actions => "Actions",
@@ -361,6 +366,7 @@ impl SettingsTabId {
             SettingsTabId::Autopilot => "modals/settings/plane.svg",
             SettingsTabId::Boosts => "modals/settings/sparkles.svg",
             SettingsTabId::Collab => "modals/settings/users-group.svg",
+            SettingsTabId::Sharing => "titlebar/link.svg",
             SettingsTabId::Secrets => "modals/settings/key.svg",
             SettingsTabId::Security => "modals/settings/shield-check.svg",
             SettingsTabId::Actions => "modals/settings/player-play.svg",

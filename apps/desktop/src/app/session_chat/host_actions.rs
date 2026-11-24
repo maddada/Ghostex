@@ -165,6 +165,38 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        if message.get("type").and_then(serde_json::Value::as_str) == Some("shareVisualPage") {
+            if let Some(page_id) = message
+                .get("pageId")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+            {
+                let title = message
+                    .get("title")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .unwrap_or("Live page")
+                    .to_string();
+                let remote = self
+                    .remote_project_for_terminal_target(GpuiEngineTerminalEventTarget::Agents(
+                        session_id,
+                    ))
+                    .and_then(|proj| {
+                        self.gpui_remote_gxserver_request_target(&proj.remote_machine_id)
+                    });
+                crate::app::window::share_link_popover::open_share_link_popover(
+                    crate::app::window::share_link_popover::ShareLinkTarget::Page {
+                        page_id: page_id.to_string(),
+                        title,
+                    },
+                    remote,
+                    cx,
+                );
+            }
+            return;
+        }
         if message.get("type").and_then(serde_json::Value::as_str) == Some("open")
             && message.get("modal").and_then(serde_json::Value::as_str) == Some("visualPage")
         {

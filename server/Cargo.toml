@@ -63,6 +63,12 @@ ring = "0.17"
 ghostex-owner-keys = { path = "../packages/owner-keys" }
 tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
 ureq = { version = "3.5", features = ["json"] }
+# CDXC:Sharing 2026-11-24 DECISION:
+# User chose OpenTunnel as the default built-in tunnel provider, embedded as the Rust library crate
+# behind a pluggable provider trait (server/src/sharing/). Pure Rust (tokio + rustls + ring).
+opentunnel = "0.6.2"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 # `fallible_uint`: rusqlite 0.38 moved the u64 column reads and writes (session counts, the scan cache) behind it.
 # CDXC:Deps 2026-11-21 DECISION: SQLite is compiled in (`bundled`) on every platform, macOS included. This replaces the CDXC:Release 2026-10-23 decision to link macOS's own /usr/lib/libsqlite3.dylib, which saved about 1.2 MB of DMG. rusqlite 0.41 and later (the fix for RUSTSEC-2026-0459, a SQLite page-cache bug) call `sqlite3_set_clientdata`, which needs SQLite 3.44, newer than any SQLite macOS ships (3.39 on macOS 13, 3.43.2 on macOS 15, checked in the 24A335 dyld shared cache). The user chose a compiled-in SQLite over staying on the vulnerable rusqlite 0.40. User 2026-11-22 (Q4463): ship the SQLite fix but keep macOS 14, so the macOS minimum does not change with it; a compiled-in SQLite needs no newer macOS.
 # SEE-ALSO: apps/desktop/Cargo.toml, packages/find/Cargo.toml, packages/project-docs/Cargo.toml, packages/client-storage-native/Cargo.toml.

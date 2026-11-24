@@ -119,6 +119,8 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     // Terminal -> Native switching with mid-reply queueing and cancellation
     // (`/api/switchSessionCliToAcp`, CDXC:AgentProviders 2026-11-24).
     "nativeModeSwitch",
+    // Built-in tunnel sharing for Live pages and localhost ports (`/api/sharing`, CDXC:Sharing 2026-11-24).
+    "shareLinks",
 ];
 
 pub const GXSERVER_MIGRATION_IDS: &[&str] = &[

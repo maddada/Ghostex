@@ -1635,26 +1635,49 @@ impl NativeChatView {
                                         p,
                                         cx,
                                     ))
-                                } else if !text(row, "count").is_empty() {
+                                } else if !text(row, "count").is_empty() || !text(row, "answeredBy").is_empty() {
                                     // Its count follows the page's draft while the card is drawn.
                                     if let Some(page_id) = key.strip_prefix("question:") {
                                         self.refresh_page_counts(page_id, cx);
                                     }
+                                    let count_text = text(row, "count");
+                                    let answered_by = text(row, "answeredBy");
+                                    let answered_by_chip = (!answered_by.is_empty()).then(|| {
+                                        let green: gpui::Hsla = gpui::rgb(if p.light { 0x168049 } else { 0x34d399 }).into();
+                                        div()
+                                            .flex_shrink_0()
+                                            .px(px(7.0 * s))
+                                            .py(px(1.5 * s))
+                                            .rounded_full()
+                                            .bg(green.opacity(if p.light { 0.12 } else { 0.16 }))
+                                            .border_1()
+                                            .border_color(green.opacity(0.32))
+                                            .text_size(px(TITLE_SIZE * 0.84 * s))
+                                            .line_height(px(16.0 * s))
+                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                            .text_color(green)
+                                            .whitespace_nowrap()
+                                            .child(answered_by)
+                                    });
                                     // A page's name, then how much it still asks (work_cards.rs
                                     // `page_count`); the name gives way first.
                                     element.child(
                                         div()
                                             .min_w_0()
                                             .flex()
+                                            .items_center()
                                             .gap(px(6.0 * s))
                                             .child(div().min_w_0().truncate().child(title.clone()))
-                                            .child(
-                                                div()
-                                                    .flex_shrink_0()
-                                                    .whitespace_nowrap()
-                                                    .text_color(p.card_muted)
-                                                    .child(text(row, "count")),
-                                            ),
+                                            .when(!count_text.is_empty(), |row_el| {
+                                                row_el.child(
+                                                    div()
+                                                        .flex_shrink_0()
+                                                        .whitespace_nowrap()
+                                                        .text_color(p.card_muted)
+                                                        .child(count_text),
+                                                )
+                                            })
+                                            .children(answered_by_chip),
                                     )
                                 } else {
                                     element.child(title.clone())

@@ -341,6 +341,10 @@ pub async fn run_gxserver_foreground(
         repository_clone_jobs: RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
+        share_manager: Arc::new(crate::sharing::ShareManager::new(
+            paths.root_dir.clone(),
+            local_port,
+        )),
         shutdown_tx: shutdown_tx.clone(),
         stale_activity_timers: Arc::new(Mutex::new(HashMap::new())),
         tailcat_runtime: TailcatRuntime::with_logger(logger.clone()),
@@ -540,6 +544,7 @@ pub async fn run_gxserver_foreground(
         .restore_waiting(&state.security);
     crate::collab_shim::http::approvals::start(state.clone());
     crate::collab_shim::sidecar::start_supervisor(state.clone());
+    crate::sharing::ShareManager::start_runtime(state.clone(), shutdown_tx.subscribe());
     coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());
     tokio::spawn(peer_http::start_peer_listener(state.clone()));
     // A sidebar extension's own server runs while it is on (CDXC:Extensions in extensions/sidebar.rs).

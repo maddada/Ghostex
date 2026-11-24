@@ -2460,7 +2460,7 @@ fn question_rows_of(
     askers
         .into_iter()
         .map(|asker| {
-            let at = asker.at.unwrap_or(now_ms);
+            let at = asker.outside_answered_at.or(asker.at).unwrap_or(now_ms);
             let form = matches!(asker.kind, crate::transcript::open_questions::AskerKind::Form);
             let open = asker.waiting(None);
             let noun = if open == 1 { "question" } else { "questions" };
@@ -2537,6 +2537,13 @@ fn question_rows_of(
                     // and the Work panel leave it out of Needs you (`questions::later::seen_on_open`).
                     if asker.seen_only && crate::questions::later::page_opened(state, &asker.id) {
                         row["opened"] = json!(true);
+                    }
+                    // CDXC:Sharing 2026-11-24 DECISION: an outside visitor answered this shared
+                    // Live page -> show it in the user's Inbox as a ping reading "Answered by <name>".
+                    if !asker.outside_answerers.is_empty() {
+                        let label = format!("Answered by {}", asker.outside_answerers.join(", "));
+                        row["answeredBy"] = json!(label);
+                        row["outsideAnswerers"] = json!(asker.outside_answerers);
                     }
                 }
                 // A form says how much it still asks after its name, as a page does, and both

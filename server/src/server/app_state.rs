@@ -75,6 +75,8 @@ pub(crate) struct AppState {
     /// Per-session model/effort detection cache (observer key → last detect).
     /// Detection spawns `zmx history`, so every trigger reads through this.
     pub(crate) session_chat_option_cache: Arc<Mutex<HashMap<String, SessionChatOptionCacheEntry>>>,
+    /// Built-in tunnel sharing for Live pages and localhost ports (`crate::sharing`).
+    pub(crate) share_manager: Arc<crate::sharing::ShareManager>,
     pub(crate) shutdown_tx: broadcast::Sender<()>,
     pub(crate) stale_activity_timers: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
     pub(crate) tailcat_runtime: TailcatRuntime,

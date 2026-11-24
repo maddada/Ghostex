@@ -804,6 +804,22 @@ How to use this file:
 
 - **Export settings** `settingsExport` (Settings UI row without a settings key; use `ghostex settings open`): Save your Ghostex settings to a JSON file to bring them to another computer. Secrets, sign-ins and settings that belong to this computer (folders, the glass picture, interface scale and zoom, these sync switches) stay out. Keyboard shortcuts come along for a computer of the same system.
 - **Import settings** `settingsImport` (Settings UI row without a settings key; use `ghostex settings open`): Apply a settings file exported on another computer. Ghostex shows how many settings change, and which, before anything is saved; settings this version doesn't have and values it can't use are skipped.
+## Sharing (tab `sharing`)
+
+### Sharing
+
+- **Enable sharing** `sharingEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Share individual Live pages or local dev server ports over temporary encrypted links. Turning this off stops every active share immediately.
+### Tunnel provider
+
+- **Provider** `sharingProvider` (Settings UI row without a settings key; use `ghostex settings open`): OpenTunnel by default: blind end-to-end TLS where the relay never reads your HTML, headers or cookies, with no account required.
+- **Relay URL** `sharingRelayUrl` (Settings UI row without a settings key; use `ghostex settings open`): Optional self-hosted OpenTunnel API address (OPENTUNNEL_API). Leave blank to use the default hosted relay (https://opentunnel.xyz).
+### New shares start with
+
+- **Default link expiry** `sharingDefaultExpiry` (Settings UI row without a settings key; use `ghostex settings open`): How long a new share link stays live: 1 hour, 24 hours (the default), 7 days, or Until stopped. Links stop immediately when stopped or when Ghostex quits.
+- **Require passcode by default** `sharingDefaultPasscode` (Settings UI row without a settings key; use `ghostex settings open`): Protect newly shared Live pages and local ports with a 6-digit passcode by default. Off by default; you can turn a passcode on per share.
+### Active shares
+
+- **Active share links** `sharingActiveShares` (Settings UI row without a settings key; use `ghostex settings open`): Every Live page and local port currently shared from this computer, with Copy link, Stop, and Stop all.
 ## Secrets (tab `secrets`)
 
 ### Secret providers
