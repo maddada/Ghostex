@@ -1,43 +1,36 @@
 {
   "tips": [
     {
-      "id": "queue-follow-up-prompts",
-      "first": 1,
-      "icon": "stack-push",
-      "title": "Queue your next prompts",
-      "body": "Keep typing while your agent works. Press Enter to queue follow-up prompts and it runs them in order."
-    },
-    {
       "id": "report-a-bug-with-an-agent",
-      "first": 2,
+      "first": 1,
       "icon": "bug",
       "title": "Found a bug? Tell us",
       "body": "Open the sidebar's menu > Send Bug / Feedback and turn on Collect more data with an agent."
     },
     {
       "id": "drag-session-to-split",
-      "first": 3,
+      "first": 2,
       "icon": "layout-columns",
       "title": "Split the view by dragging",
       "body": "Drag a session from the sidebar onto an edge of the chat to open it in a split beside it."
     },
     {
       "id": "start-a-coordinator",
-      "first": 4,
+      "first": 3,
       "icon": "coordinator-crown-points",
       "title": "Let a coordinator delegate",
       "body": "A coordinator hands work to threads and brings results back. Click the arrow beside New session and pick Coordinator."
     },
     {
       "id": "connect-a-device",
-      "first": 5,
+      "first": 4,
       "icon": "devices",
       "title": "Ghostex on your phone",
       "body": "Open the sidebar's menu > Connect a Phone and scan the code with the Ghostex app to follow your agents."
     },
     {
       "id": "use-boosts",
-      "first": 6,
+      "first": 5,
       "icon": "sparkles",
       "title": "Boost any prompt with *",
       "body": "Type * or click Boost above the chat box to ask for a Live page, a chart, a diagram, or a browser run in one click."
@@ -233,7 +226,7 @@
     },
     {
       "id": "find-session-by-prompt-text",
-      "first": 7,
+      "first": 6,
       "icon": "file-search",
       "title": "Find sessions by prompt",
       "body": "The sidebar's menu > Tools > Search by Prompt searches every prompt you sent. Pick one to resume that session."

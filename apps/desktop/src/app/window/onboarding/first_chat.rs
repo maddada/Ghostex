@@ -176,15 +176,6 @@ impl GpuiOnboardingWindow {
                 },
                 None,
                 true,
-            ))
-            .child(step_row(
-                false,
-                "3",
-                "Send a starter prompt and queue the next",
-                "Press Enter while your agent is working to queue follow-up prompts in order."
-                    .to_string(),
-                None,
-                true,
             ));
         out.push(checklist.into_any_element());
 
@@ -343,11 +334,7 @@ impl GpuiOnboardingWindow {
                 }),
             );
 
-        let composer_hint = if working {
-            "Type your next prompt and press Enter to queue…".to_string()
-        } else {
-            format!("Message {agent_name}…")
-        };
+        let composer_hint = format!("Message {agent_name}…");
 
         glass(s)
             .absolute()
