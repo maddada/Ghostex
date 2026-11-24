@@ -9,7 +9,7 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     ButtonSize, ButtonVariant, ROW_PADDING_X, RowSpec, SELECT_WIDTH, setting_row,
-    settings_button_sized, settings_icon, settings_list_item, settings_select,
+    settings_button_sized, settings_list_item, settings_select, wrapped_tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::AgentsTab;
@@ -24,7 +24,7 @@ use super::select::DropdownOption;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    Styled as _, Window, div, px,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
@@ -65,44 +65,24 @@ fn off_note(p: &SettingsPalette, name: &str) -> AnyElement {
         .into_any_element()
 }
 
-const TERMINAL_MODE_LEGACY_WARNING: &str = "Terminal mode is legacy. Native is faster and more stable, and Terminal will be removed in a future release.";
+const TERMINAL_MODE_LEGACY_WARNING: &str = "Terminal-based mode is legacy. Native is faster and more stable, and Terminal-based will be removed in a future release.";
 
-fn terminal_mode_legacy_warning(p: &SettingsPalette, agent_id: &str) -> AnyElement {
-    let amber = gpui::rgb(0xf59e0b);
-    let amber_text = gpui::rgb(if p.light { 0xb45309 } else { 0xfcd34d });
+fn terminal_mode_legacy_dot(p: &SettingsPalette, agent_id: &str) -> AnyElement {
+    let dot_color = gpui::rgb(if p.light { 0xd97706 } else { 0xfacc15 });
     div()
         .id(SharedString::from(format!(
-            "agent-session-mode-legacy-warning-{agent_id}"
+            "agent-session-mode-legacy-dot-{agent_id}"
         )))
-        .w_full()
-        .px(px(ROW_PADDING_X))
-        .pb(px(12.0))
-        .child(
-            h_flex()
-                .w_full()
-                .items_start()
-                .gap(px(8.0))
-                .px(px(10.0))
-                .py(px(8.0))
-                .rounded(px(8.0))
-                .border_1()
-                .border_color(hsla(css_fade(amber, 0.35)))
-                .bg(hsla(css_fade(amber, 0.08)))
-                .child(div().pt(px(1.5)).flex_shrink_0().child(settings_icon(
-                    icons::ALERT_TRIANGLE,
-                    14.0,
-                    amber_text,
-                )))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .text_size(px(12.0))
-                        .line_height(px(17.0))
-                        .text_color(hsla(amber_text))
-                        .child(TERMINAL_MODE_LEGACY_WARNING),
-                ),
-        )
+        .flex_shrink_0()
+        .size(px(18.0))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_default()
+        .aria_label(TERMINAL_MODE_LEGACY_WARNING)
+        .tooltip(wrapped_tooltip_text(TERMINAL_MODE_LEGACY_WARNING))
+        .child(div().size(px(8.0)).rounded_full().bg(hsla(dot_color)))
         .into_any_element()
 }
 
@@ -460,24 +440,25 @@ impl AgentsTab {
                     window,
                     cx,
                 );
+                let control = h_flex()
+                    .items_center()
+                    .gap(px(8.0))
+                    .when(current_mode == "agent-cli", |this| {
+                        this.child(terminal_mode_legacy_dot(p, &agent_id))
+                    })
+                    .child(select)
+                    .into_any_element();
                 let session_mode_row = setting_row(
                     p,
                     SharedString::from(format!("agent-session-mode-row-{agent_id}")),
                     RowSpec::new("Session mode").description(
-                        "Choose Native (faster, more stable structured host; switching to Terminal asks first and interrupts any active turn) or Terminal (legacy interactive terminal). Applies to new or resumed sessions.",
+                        "Choose Native (faster, more stable structured host; switching to Terminal-based asks first and interrupts any active turn) or Terminal-based (legacy interactive terminal). Applies to new or resumed sessions.",
                     ),
                     None,
-                    select,
+                    control,
                     cx,
                 );
-                let session_mode_block = v_flex()
-                    .w_full()
-                    .child(session_mode_row)
-                    .when(current_mode == "agent-cli", |this| {
-                        this.child(terminal_mode_legacy_warning(p, &agent_id))
-                    })
-                    .into_any_element();
-                children.push(panel_child(session_mode_block));
+                children.push(panel_child(session_mode_row));
             }
             if let Some(catalog) = crate::app::gx_chat::current_model_catalog() {
                 let model_family = ghostex_gx_chat_core::menus::catalog::canonical_model_family(

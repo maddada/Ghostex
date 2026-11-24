@@ -32,7 +32,7 @@ pub(crate) const NATIVE_MODE_INTRO_MODAL_INITIAL_HEIGHT: f32 = 340.0;
 
 const TITLE: &str = "Chat, straight from your agents.";
 const SUBTITLE: &str = "Native mode connects Antigravity, Claude Code and Codex directly instead of reading a terminal screen. More agents coming soon.";
-const FOOTER_NOTE: &str = "Terminal stays available; switch back any time.";
+const FOOTER_NOTE: &str = "Terminal-based stays available; switch back any time.";
 
 const CHIPS: [(&str, &str); 3] = [
     ("titlebar/shield-check.svg", "Greater stability"),

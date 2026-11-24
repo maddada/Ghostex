@@ -477,7 +477,7 @@ impl NativeChatView {
                 let (label, icon) = if id == "maximize" && self.maximized_window.is_some() {
                     ("Exit maximize", "titlebar/minimize.svg")
                 } else if id == "terminal" && self.snapshot["nonCliMode"] == true {
-                    ("Switch to Terminal", icon)
+                    ("Switch to Terminal-based", icon)
                 } else {
                     (label, icon)
                 };

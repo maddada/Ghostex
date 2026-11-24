@@ -233,7 +233,7 @@ pub(super) fn non_cli_mode_family(agent_id: &str, icon: Option<&str>) -> Option<
 pub(super) fn session_mode_options() -> Vec<SettingOption> {
     vec![
         SettingOption {
-            label: "Terminal".to_string(),
+            label: "Terminal-based".to_string(),
             value: "agent-cli".to_string(),
         },
         SettingOption {

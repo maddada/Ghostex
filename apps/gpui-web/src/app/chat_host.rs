@@ -69,7 +69,7 @@ impl GhostexGpuiApp {
                             .gpui_remote_gxserver_request_target(machine_id)
                             .map(Some)
                             .ok_or_else(|| {
-                                "Switching a remote Native session to Terminal is not available in the web build yet."
+                                "Switching a remote Native session to Terminal-based is not available in the web build yet."
                                     .to_string()
                             }),
                     };
@@ -78,7 +78,7 @@ impl GhostexGpuiApp {
                         Err(message) => {
                             self.dispatch_gpui_app_modal_toast(
                                 "warning",
-                                "Could not switch to Terminal",
+                                "Could not switch to Terminal-based",
                                 &message,
                                 cx,
                             );
@@ -87,15 +87,15 @@ impl GhostexGpuiApp {
                     };
                     let confirmation = if is_working {
                         ghostex_gx_core::CloseConfirmation {
-                            title: "Interrupt and switch to Terminal?".to_string(),
-                            message: "This session is running in Native mode and currently working. Switching to Terminal is not instant: Ghostex will interrupt the active turn and reopen the agent in Terminal mode.".to_string(),
+                            title: "Interrupt and switch to Terminal-based?".to_string(),
+                            message: "This session is running in Native mode and currently working. Switching to Terminal-based is not instant: Ghostex will interrupt the active turn and reopen the agent in Terminal-based mode.".to_string(),
                             confirm_label: "Interrupt & Switch".to_string(),
                         }
                     } else {
                         ghostex_gx_core::CloseConfirmation {
-                            title: "Switch to Terminal?".to_string(),
-                            message: "This session is running in Native mode. Switching to Terminal is not instant: Ghostex will stop the Native host and reopen the agent in Terminal mode.".to_string(),
-                            confirm_label: "Switch to Terminal".to_string(),
+                            title: "Switch to Terminal-based?".to_string(),
+                            message: "This session is running in Native mode. Switching to Terminal-based is not instant: Ghostex will stop the Native host and reopen the agent in Terminal-based mode.".to_string(),
+                            confirm_label: "Switch to Terminal-based".to_string(),
                         }
                     };
                     let params = json!({
@@ -408,7 +408,7 @@ impl GhostexGpuiApp {
                     )
                 } else {
                     format!(
-                        "Ghostex will reopen {agent_name} in Native mode. Your chat history stays, and you can switch back to Terminal anytime."
+                        "Ghostex will reopen {agent_name} in Native mode. Your chat history stays, and you can switch back to Terminal-based anytime."
                     )
                 };
                 let confirmation = ghostex_gx_core::CloseConfirmation {
@@ -1065,7 +1065,7 @@ impl GhostexGpuiApp {
                 Ok(_) => this.web_show_terminal(true, cx),
                 Err(err) => this.dispatch_gpui_app_modal_toast(
                     "warning",
-                    "Could not switch to Terminal",
+                    "Could not switch to Terminal-based",
                     &err.message,
                     cx,
                 ),

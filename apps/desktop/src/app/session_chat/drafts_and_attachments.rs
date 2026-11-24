@@ -210,15 +210,15 @@ impl GhostexGpuiApp {
         };
         let confirmation = if is_working {
             ghostex_gx_core::CloseConfirmation {
-                title: "Interrupt and switch to Terminal?".to_string(),
-                message: "This session is running in Native mode and currently working. Switching to Terminal is not instant: Ghostex will interrupt the active turn and reopen the agent in Terminal mode.".to_string(),
+                title: "Interrupt and switch to Terminal-based?".to_string(),
+                message: "This session is running in Native mode and currently working. Switching to Terminal-based is not instant: Ghostex will interrupt the active turn and reopen the agent in Terminal-based mode.".to_string(),
                 confirm_label: "Interrupt & Switch".to_string(),
             }
         } else {
             ghostex_gx_core::CloseConfirmation {
-                title: "Switch to Terminal?".to_string(),
-                message: "This session is running in Native mode. Switching to Terminal is not instant: Ghostex will stop the Native host and reopen the agent in Terminal mode.".to_string(),
-                confirm_label: "Switch to Terminal".to_string(),
+                title: "Switch to Terminal-based?".to_string(),
+                message: "This session is running in Native mode. Switching to Terminal-based is not instant: Ghostex will stop the Native host and reopen the agent in Terminal-based mode.".to_string(),
+                confirm_label: "Switch to Terminal-based".to_string(),
             }
         };
         self.gx_store_confirm_in_app(
@@ -325,7 +325,7 @@ impl GhostexGpuiApp {
                 Err(error) => {
                     this.dispatch_gpui_workspace_action_toast(
                         "error",
-                        "Could not switch to Terminal",
+                        "Could not switch to Terminal-based",
                         &error,
                         cx,
                     );
@@ -357,7 +357,7 @@ impl GhostexGpuiApp {
             )
         } else {
             format!(
-                "Ghostex will reopen {agent_name} in Native mode. Your chat history stays, and you can switch back to Terminal anytime."
+                "Ghostex will reopen {agent_name} in Native mode. Your chat history stays, and you can switch back to Terminal-based anytime."
             )
         };
         let confirmation = ghostex_gx_core::CloseConfirmation {

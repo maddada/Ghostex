@@ -4096,14 +4096,14 @@ when available) and command output, or open its Install docs link. For agents
 that support Native mode (Claude Code, Codex, and Antigravity), the row also offers
 **Session mode** (`agentSessionMode`): **Native** (default on new Chat-first installs;
 structured host inside `zmx` that is faster, more stable, and survives Ghostex reloads
-without terminal scraping) or **Terminal** (legacy interactive terminal with instant
+without terminal scraping) or **Terminal-based** (legacy interactive terminal with instant
 switching between Chat and Terminal; will be removed in a future release, and picking it
-in Settings shows an inline legacy warning). Existing installs and Terminal-first new
+in Settings shows a yellow dot next to the dropdown with a tooltip). Existing installs and Terminal-first new
 installs keep their existing mode (existing installs see the one-time Native mode prompt).
-For a Native session, **Switch to Terminal** lives in the chat's
+For a Native session, **Switch to Terminal-based** lives in the chat's
 More actions (`•••`) menu instead of the composer toolbar; choosing it asks
 first and explains that switching is not instant and interrupts any active turn
-before reopening the conversation in Terminal mode. On a Terminal chat for those
+before reopening the conversation in Terminal-based mode. On a Terminal-based chat for those
 agents, chat-first users also see a dismissible **Switch to Native** chip in the
 chat pill strip (and a **Switch to Native** item in the chat box's `•••` menu);
 confirming optionally sets Native as the default for new chats with that agent,
@@ -4114,7 +4114,7 @@ agent turn's closing answer in a rebuildable local SQLite FTS5 store, with a
 scope toggle for **All**, **Prompts**, or **Answers**. Session Handoff / Export
 also offers a **Final answers only** toggle (and `preset: "prompts_and_answers"`
 plus `/api/handoffToExistingSession` delta handovers tracked in
-`session_handovers`) for compact transfers between Terminal and Native
+`session_handovers`) for compact transfers between Terminal-based and Native
 sessions. Claude Code, Codex, Cursor Agent
 and Grok Build install through their official installers (PowerShell on
 Windows; Claude Code doesn't need Git for Windows to install). Pi installs with

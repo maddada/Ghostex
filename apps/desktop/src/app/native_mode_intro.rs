@@ -51,10 +51,10 @@ pub(crate) fn format_bulk_switch_summary(summary: &BulkSwitchSummary) -> String 
     let mut notes: Vec<String> = Vec::new();
     if summary.skipped_busy > 0 {
         notes.push(if summary.skipped_busy == 1 {
-            "1 is busy and stays in Terminal until you switch it".to_string()
+            "1 is busy and stays in Terminal-based until you switch it".to_string()
         } else {
             format!(
-                "{} are busy and stay in Terminal until you switch them",
+                "{} are busy and stay in Terminal-based until you switch them",
                 summary.skipped_busy
             )
         });
@@ -71,7 +71,7 @@ pub(crate) fn format_bulk_switch_summary(summary: &BulkSwitchSummary) -> String 
     }
     if summary.failed > 0 {
         notes.push(format!(
-            "{} could not switch and stayed in Terminal",
+            "{} could not switch and stayed in Terminal-based",
             summary.failed
         ));
     }
