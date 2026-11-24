@@ -346,10 +346,18 @@ pub(crate) fn transcript_line_records_prompt(
                     .and_then(Value::as_object)
                     .is_some_and(|attachment| {
                         attachment.get("type").and_then(Value::as_str) == Some("queued_command")
-                            && attachment
-                                .get("prompt")
-                                .and_then(Value::as_str)
-                                .is_some_and(|prompt| !prompt.trim().is_empty())
+                            && attachment.get("prompt").is_some_and(|prompt| match prompt {
+                                Value::String(text) => !text.trim().is_empty(),
+                                Value::Array(blocks) => blocks.iter().any(|block| {
+                                    block
+                                        .as_str()
+                                        .or_else(|| block.get("text").and_then(Value::as_str))
+                                        .is_some_and(|text| !text.trim().is_empty())
+                                        || block.get("type").and_then(Value::as_str)
+                                            == Some("image")
+                                }),
+                                _ => false,
+                            })
                     })
         })
 }

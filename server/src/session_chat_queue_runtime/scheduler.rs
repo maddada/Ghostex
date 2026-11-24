@@ -865,13 +865,24 @@ impl SessionChatQueueRuntime {
         let awaiting_startup = (draft || head.startup_send) && !pending_box;
         let acp_channel_live =
             crate::acp::channel::live(project_id, session_id, "send").is_some();
+        let acp_mid_turn_ready =
+            crate::acp::channel::live(project_id, session_id, "mid_turn_send").is_some();
         let acp_session = crate::acp::session_is_acp(&session) || acp_channel_live;
         if acp_session && !acp_channel_live {
             self.reset_gate(key);
             if awaiting_startup && self.composer_holds.wake_check_due(key, &head.id, now) {
                 (self.waker)(project_id, session_id, &head.id);
             }
-            return hold(head, WaitReason::Starting);
+            let reason = if crate::session_approval::session_awaits_answer(&session) {
+                WaitReason::Answer
+            } else if presentation_activity(&session, generated_at) == "working"
+                || self.transcript_lifecycle_is_working(key, &session)
+            {
+                WaitReason::Working
+            } else {
+                WaitReason::Starting
+            };
+            return hold(head, reason);
         }
         // A Pi or OMP whose chat channel is open takes the message through its own API, so its
         // input box need not be read off the screen (CDXC:PiChatChannel 2026-11-05).
@@ -1026,7 +1037,7 @@ impl SessionChatQueueRuntime {
         let working = !question_waits && presentation_activity(&session, generated_at) == "working";
         if !gateway_idle
             && !agent_gone
-            && !(working && startup_composer_ready && !acp_session)
+            && !(working && startup_composer_ready && (!acp_session || acp_mid_turn_ready))
             && (question_waits
                 || !session_chat_queue_activity_is_deliverable(&session, generated_at))
         {
@@ -1050,7 +1061,18 @@ impl SessionChatQueueRuntime {
             return hold(head, WaitReason::Settling);
         }
         if self.composer_holds.waiting(key, &head.id, now) {
-            return hold(head, WaitReason::Retrying);
+            let reason = if acp_session {
+                if question_waits {
+                    WaitReason::Answer
+                } else if working {
+                    WaitReason::Working
+                } else {
+                    WaitReason::Starting
+                }
+            } else {
+                WaitReason::Retrying
+            };
+            return hold(head, reason);
         }
         /*
         A trust dialog, a first-run setup screen, an update modal, a usage
@@ -1191,10 +1213,12 @@ impl SessionChatQueueRuntime {
             may_hold,
         )
         .await;
+        let mut kick_next = false;
         if let Ok(delivery) = &delivered {
             (self.publisher_factory)(&ready.project_id, &ready.session_id)();
-            if delivery.held_for_prompt {
-                // Waiting on the user's answer is no missing input box (session_chat_queue.rs).
+            if delivery.held_for_prompt || delivery.held_for_busy {
+                // Waiting on the user's answer or an active Native reply is no missing input box
+                // (session_chat_queue.rs).
                 self.composer_holds
                     .restart_clock(&key, &ready.prompt_id, Utc::now());
             } else if delivery.held {
@@ -1202,6 +1226,15 @@ impl SessionChatQueueRuntime {
                     .record(&key, &ready.prompt_id, ready.startup_send, Utc::now());
             } else {
                 self.composer_holds.clear(&key);
+            }
+            if delivery.sent
+                && delivery
+                    .snapshot
+                    .queue
+                    .iter()
+                    .any(|prompt| prompt.startup_send && prompt.state == "queued")
+            {
+                kick_next = true;
             }
             if let Some(reason) = delivery.error_message.as_deref() {
                 crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
@@ -1233,6 +1266,9 @@ impl SessionChatQueueRuntime {
         */
         self.reset_gate(&key);
         self.finish_delivery(&key);
+        if kick_next {
+            kick_session_chat_queue();
+        }
     }
 
     /// The transcript read happens outside the `gates` lock, which deliveries also take.

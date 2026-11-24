@@ -404,6 +404,9 @@ pub struct SessionChatQueueDelivery {
     /// (session_chat_send/guarded_write.rs): the row waits for the user's answer, which is no
     /// missing input box and spends none of the scheduler's two-minute budget.
     pub held_for_prompt: bool,
+    /// The hold was a running Native agent that must finish its current reply first: waits
+    /// without spending the missing-input-box budget.
+    pub held_for_busy: bool,
     pub error_message: Option<String>,
     pub snapshot: SessionChatQueueSnapshot,
 }
@@ -803,60 +806,65 @@ impl ClaimedDelivery {
         )
         .await;
         let db = open_gxserver_database(paths).map_err(internal_error)?;
-        let (held, held_for_prompt, error_message, snapshot) = with_write_tx(&db, |db| {
-            let mut held = false;
-            // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: "Send now" and automatic account
-            // recovery deliver without the scheduler's hold, so a row the guard refused (a prompt appeared
-            // as it went out) ended Not sent while its words said it would go out once the prompt is
-            // answered. Whoever delivers it, such a row goes back to the queue and the scheduler sends it
-            // once the prompt is answered.
-            let held_for_prompt = outcome
-                .as_ref()
-                .err()
-                .is_some_and(crate::session_chat_send::refused_for_prompt);
-            let error_message = match &outcome {
-                // A delivery that restarted the agent made this row a startup send; it waits for the new
-                // input box whichever caller delivered it.
-                Err(error)
-                    if (hold_when_composer_missing && error.code == "composerNotReady")
-                        || held_for_prompt
-                        || error.code
-                            == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
-                {
-                    let next_version = bump_queue_version(db, project_id, session_id)? as i64;
-                    db.execute(
-                        r#"
+        let (held, held_for_prompt, held_for_busy, error_message, snapshot) =
+            with_write_tx(&db, |db| {
+                let mut held = false;
+                // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: "Send now" and automatic account
+                // recovery deliver without the scheduler's hold, so a row the guard refused (a prompt appeared
+                // as it went out) ended Not sent while its words said it would go out once the prompt is
+                // answered. Whoever delivers it, such a row goes back to the queue and the scheduler sends it
+                // once the prompt is answered.
+                let held_for_prompt = outcome
+                    .as_ref()
+                    .err()
+                    .is_some_and(crate::session_chat_send::refused_for_prompt);
+                let held_for_busy = outcome.as_ref().err().is_some_and(|error| {
+                    error.code == crate::session_chat_send_wake::SESSION_CHAT_AGENT_BUSY
+                });
+                let error_message = match &outcome {
+                    // A delivery that restarted the agent made this row a startup send; it waits for the new
+                    // input box whichever caller delivered it.
+                    Err(error)
+                        if (hold_when_composer_missing && error.code == "composerNotReady")
+                            || held_for_prompt
+                            || held_for_busy
+                            || error.code
+                                == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
+                    {
+                        let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+                        db.execute(
+                            r#"
                     UPDATE session_chat_queued_prompts
                     SET state = 'queued', errorMessage = NULL, version = ?4
                     WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3 AND state = 'sending'
                     "#,
-                        params![prompt_id, project_id, session_id, next_version],
-                    )
-                    .map_err(sql_error)?;
-                    held = true;
-                    None
-                }
-                Ok(()) => {
-                    bump_queue_version(db, project_id, session_id)?;
-                    db.execute(
-                        r#"
+                            params![prompt_id, project_id, session_id, next_version],
+                        )
+                        .map_err(sql_error)?;
+                        held = true;
+                        None
+                    }
+                    Ok(()) => {
+                        bump_queue_version(db, project_id, session_id)?;
+                        db.execute(
+                            r#"
                     DELETE FROM session_chat_queued_prompts
                     WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
                     "#,
-                        params![prompt_id, project_id, session_id],
-                    )
-                    .map_err(sql_error)?;
-                    None
-                }
-                Err(error) => {
-                    let message = bounded_reason(&error.message);
-                    fail_prompt(db, project_id, session_id, prompt_id, &message)?;
-                    Some(message)
-                }
-            };
-            let snapshot = read_snapshot(db, project_id, session_id)?;
-            Ok((held, held_for_prompt, error_message, snapshot))
-        })?;
+                            params![prompt_id, project_id, session_id],
+                        )
+                        .map_err(sql_error)?;
+                        None
+                    }
+                    Err(error) => {
+                        let message = bounded_reason(&error.message);
+                        fail_prompt(db, project_id, session_id, prompt_id, &message)?;
+                        Some(message)
+                    }
+                };
+                let snapshot = read_snapshot(db, project_id, session_id)?;
+                Ok((held, held_for_prompt, held_for_busy, error_message, snapshot))
+            })?;
         if outcome.is_ok() {
             crate::session_chat_queue_attachments::mark_delivered(paths, prompt_id);
             crate::session_chat_queue_attachments::sweep(paths, &db);
@@ -870,6 +878,7 @@ impl ClaimedDelivery {
             sent: error_message.is_none() && !held,
             held,
             held_for_prompt,
+            held_for_busy,
             error_message,
             snapshot,
         })

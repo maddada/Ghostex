@@ -16,6 +16,9 @@ pub struct AcpAgentSpec {
     pub cli_resume_flag: &'static str,
     /// Optional flag added to the interactive CLI when accept-all permissions are enabled.
     pub cli_accept_all_flag: Option<&'static str>,
+    /// Whether the Native protocol supports sending a follow-up user message while a turn is
+    /// already running without cancelling the active turn.
+    pub supports_mid_turn_prompt: bool,
 }
 
 const ANTIGRAVITY_SPEC: AcpAgentSpec = AcpAgentSpec {
@@ -29,6 +32,7 @@ const ANTIGRAVITY_SPEC: AcpAgentSpec = AcpAgentSpec {
     default_cli_bin: "agy",
     cli_resume_flag: "--conversation",
     cli_accept_all_flag: Some("--dangerously-skip-permissions"),
+    supports_mid_turn_prompt: true,
 };
 
 const CLAUDE_SPEC: AcpAgentSpec = AcpAgentSpec {
@@ -52,6 +56,7 @@ const CLAUDE_SPEC: AcpAgentSpec = AcpAgentSpec {
     default_cli_bin: "claude",
     cli_resume_flag: "--resume",
     cli_accept_all_flag: Some("--dangerously-skip-permissions"),
+    supports_mid_turn_prompt: true,
 };
 
 const CODEX_SPEC: AcpAgentSpec = AcpAgentSpec {
@@ -68,6 +73,7 @@ const CODEX_SPEC: AcpAgentSpec = AcpAgentSpec {
     default_cli_bin: "codex",
     cli_resume_flag: "resume",
     cli_accept_all_flag: Some("--dangerously-bypass-approvals-and-sandbox"),
+    supports_mid_turn_prompt: true,
 };
 
 pub fn spec_for_family(family: &str) -> Option<&'static AcpAgentSpec> {

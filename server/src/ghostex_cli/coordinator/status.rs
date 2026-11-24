@@ -516,6 +516,35 @@ fn full_report(global_ref: &str, stored: &str, flags: &Flags) -> Option<String> 
     (text.len() > stored.len() && text.trim_start().starts_with(&start)).then_some(text)
 }
 
+/// Pending messages waiting in a thread's chat queue (`state == "queued"` or `"sending"`).
+fn queued_messages_summary(session: &Value, flags: &Flags) -> Option<(usize, Option<String>)> {
+    let result = call_gxserver_rpc(
+        "/api/readSessionChatQueue",
+        &json!({
+            "globalRef": session["globalRef"],
+            "projectId": session["projectId"],
+            "sessionId": session["sessionId"],
+        }),
+        flags,
+    )
+    .ok()?;
+    let pending: Vec<&Value> = result["queue"]
+        .as_array()?
+        .iter()
+        .filter(|row| matches!(agents::text(row, "state"), "queued" | "sending"))
+        .collect();
+    if pending.is_empty() {
+        return None;
+    }
+    let wait_reason = pending
+        .iter()
+        .find_map(|row| {
+            let reason = agents::text(row, "waitReason").trim();
+            (!reason.is_empty()).then(|| reason.to_string())
+        });
+    Some((pending.len(), wait_reason))
+}
+
 /// `coordinator thread <ref>` (also `status thread <ref>`): one thread in a few lines.
 pub(super) fn thread_brief(parsed: &ParsedArgs, reference: Option<&str>) -> CliResult<()> {
     let reference = reference.ok_or_else(|| {
@@ -547,6 +576,7 @@ pub(super) fn thread_brief(parsed: &ParsedArgs, reference: Option<&str>) -> CliR
     let tool = (state == "working")
         .then(|| last_tool_call(&global_ref, &flags))
         .flatten();
+    let queued = queued_messages_summary(&session, &flags);
     let stored = agents::text(&thread, "lastReport").to_string();
     let report = if stored.is_empty() || state == "working" {
         stored
@@ -560,6 +590,12 @@ pub(super) fn thread_brief(parsed: &ParsedArgs, reference: Option<&str>) -> CliR
         out["lastToolCall"] = json!(tool);
         out["reportSections"] = json!(report_sections(&report));
         out["reportBytes"] = json!(report.len());
+        if let Some((count, wait_reason)) = &queued {
+            out["queuedCount"] = json!(count);
+            if let Some(reason) = wait_reason {
+                out["queuedWaitReason"] = json!(reason);
+            }
+        }
         print_json(&out);
         return Ok(());
     }
@@ -609,6 +645,20 @@ pub(super) fn thread_brief(parsed: &ParsedArgs, reference: Option<&str>) -> CliR
                 }
             );
         }
+    }
+    if let Some((count, wait_reason)) = &queued {
+        let detail = match (state.as_str(), wait_reason.as_deref()) {
+            ("working", None) => "queued until its turn ends".to_string(),
+            (_, Some(reason)) if reason.contains("current reply") => {
+                "queued until its turn ends".to_string()
+            }
+            (_, Some(reason)) => reason.to_string(),
+            (_, None) => "waiting for the agent".to_string(),
+        };
+        println!(
+            "Queued: {count} message{} ({detail})",
+            if *count == 1 { "" } else { "s" }
+        );
     }
     let waiting_for = agents::text(&thread, "waitingFor");
     if !waiting_for.is_empty() {

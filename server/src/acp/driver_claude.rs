@@ -1012,7 +1012,8 @@ fn spawn_and_init_claude(
                             }
                         }
                         "system" => {
-                            if msg.get("subtype").and_then(Value::as_str) == Some("init") {
+                            let subtype = msg.get("subtype").and_then(Value::as_str);
+                            if subtype == Some("init") {
                                 let _mode_guard =
                                     mode_lock_out.lock().unwrap_or_else(|p| p.into_inner());
                                 let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
@@ -1037,6 +1038,28 @@ fn spawn_and_init_claude(
                                     .filter(|m| !m.is_empty())
                                 {
                                     s.native_mode = pm.to_string();
+                                }
+                            } else if subtype == Some("status")
+                                && msg.get("status").and_then(Value::as_str) == Some("requesting")
+                            {
+                                // When a mid-turn `user` message arrives just as a reply finishes
+                                // without another tool call, Claude emits `result` for turn 1 and
+                                // immediately begins a follow-up turn with `system/status: requesting`.
+                                // Track that follow-up turn so its `result` is not ignored and live
+                                // activity stays `working` until it finishes.
+                                let started = {
+                                    let mut s = st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                    if !s.working {
+                                        s.working = true;
+                                        s.last_turn_interrupted = false;
+                                        s.clear_live_turn_output();
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                };
+                                if started {
+                                    act_out.sync();
                                 }
                             }
                         }
@@ -1098,24 +1121,36 @@ fn spawn_and_init_claude(
                                     }
                                 }
                                 "message_start" => {
-                                    if let Some(usage) = ev.pointer("/message/usage") {
-                                        let used = usage
-                                            .get("input_tokens")
-                                            .and_then(Value::as_u64)
-                                            .unwrap_or(0)
-                                            + usage
-                                                .get("cache_read_input_tokens")
+                                    let started = {
+                                        let mut s =
+                                            st_out.lock().unwrap_or_else(|p| p.into_inner());
+                                        let flipped = if !s.working && !s.last_turn_interrupted {
+                                            s.working = true;
+                                            true
+                                        } else {
+                                            false
+                                        };
+                                        if let Some(usage) = ev.pointer("/message/usage") {
+                                            let used = usage
+                                                .get("input_tokens")
                                                 .and_then(Value::as_u64)
                                                 .unwrap_or(0)
-                                            + usage
-                                                .get("cache_creation_input_tokens")
-                                                .and_then(Value::as_u64)
-                                                .unwrap_or(0);
-                                        if used > 0 {
-                                            let mut s =
-                                                st_out.lock().unwrap_or_else(|p| p.into_inner());
-                                            s.usage_used_tokens = Some(used);
+                                                + usage
+                                                    .get("cache_read_input_tokens")
+                                                    .and_then(Value::as_u64)
+                                                    .unwrap_or(0)
+                                                + usage
+                                                    .get("cache_creation_input_tokens")
+                                                    .and_then(Value::as_u64)
+                                                    .unwrap_or(0);
+                                            if used > 0 {
+                                                s.usage_used_tokens = Some(used);
+                                            }
                                         }
+                                        flipped
+                                    };
+                                    if started {
+                                        act_out.sync();
                                     }
                                 }
                                 _ => {}
@@ -1628,6 +1663,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let capabilities = json!([
         "acp",
         "send",
+        "mid_turn_send",
         "abort",
         "approve",
         "answer_question",
@@ -1982,9 +2018,12 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
-                    let is_working = state.lock().unwrap_or_else(|p| p.into_inner()).working;
-                    if is_working && !interrupt {
-                        ep.ack(id, false, Value::Null, Some("ACP_AGENT_BUSY"));
+                    let (is_working, has_pending) = {
+                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        (s.working, !s.pending_requests.is_empty())
+                    };
+                    if !interrupt && has_pending {
+                        ep.ack(id, false, Value::Null, Some("ACP_AGENT_WAITING_INPUT"));
                         continue;
                     }
                     let content = match build_claude_user_content(&gx_paths, &text, &images) {
@@ -1994,6 +2033,43 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             continue;
                         }
                     };
+                    if is_working && !interrupt {
+                        let sid = state
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .native_session_id
+                            .clone();
+                        let mut user_msg = json!({
+                            "type": "user",
+                            "message": {
+                                "role": "user",
+                                "content": content,
+                            }
+                        });
+                        if let Some(sid_str) = sid.as_deref() {
+                            user_msg["session_id"] = json!(sid_str);
+                        }
+                        println!("\r\n[Claude Native] Queued mid-turn message...");
+                        let _ = std::io::stdout().flush();
+                        match proc.transport.write_json(&user_msg) {
+                            Ok(()) => {
+                                ep.ack(
+                                    id,
+                                    true,
+                                    json!({
+                                        "accepted": true,
+                                        "midTurn": true,
+                                        "sessionId": sid,
+                                    }),
+                                    None,
+                                );
+                            }
+                            Err(err) => {
+                                ep.ack(id, false, Value::Null, Some(&err));
+                            }
+                        }
+                        continue;
+                    }
                     if is_working && interrupt {
                         if let Err(err) = drain_or_restart_claude_turn(
                             &mut proc,

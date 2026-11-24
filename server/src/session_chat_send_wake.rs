@@ -17,6 +17,10 @@ use crate::storage::open_gxserver_database;
 /// it into a delivery that waits for the agent instead of an error.
 pub(crate) const SESSION_CHAT_SESSION_STARTING: &str = "sessionStarting";
 
+/// Refusal code when a running Native agent cannot accept another message until its current reply
+/// ends (or an earlier message is already queued ahead of it while working).
+pub(crate) const SESSION_CHAT_AGENT_BUSY: &str = "agentBusy";
+
 /// The first line the restore script prints before it runs the agent's resume command
 /// (`wrap_restored_terminal_resume_command` in agents/helpers.rs).
 const RESTORE_BANNER: &str = "Restoring session...";
@@ -574,6 +578,14 @@ pub(crate) fn holds_until_agent_takes_input(error: &DomainStateError) -> bool {
         || error.code == crate::session_chat_send::SESSION_CHAT_PROMPT_WAITING_CODE
 }
 
+pub(crate) fn has_pending_startup_send(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> bool {
+    startup_send_held(state, project_id, session_id)
+}
+
 fn startup_send_pending(state: &AppState, target: &SessionChatSendTarget) -> bool {
     startup_send_held(state, &target.project_id, &target.session_id)
 }
@@ -787,24 +799,37 @@ pub(crate) fn queue_startup_send(
     target: &SessionChatSendTarget,
     text: &str,
 ) -> RoutedResponse {
+    queue_startup_send_with_reason(state, endpoint_path, request_id, params, target, text, None)
+}
+
+pub(crate) fn queue_startup_send_with_reason(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    params: &Map<String, Value>,
+    target: &SessionChatSendTarget,
+    text: &str,
+    queued_reason: Option<&str>,
+) -> RoutedResponse {
     // CDXC:SessionChat 2026-11-10 WHY: an agent that resends a message while the first copy still
     // waits for the starting agent (GitHub #531: a coordinator whose send printed no status) gets the
     // held copy back instead of a second one. The chat box (a `draftVersion`) is left alone: a
     // person may mean to send the same words twice.
     if params.get("draftVersion").is_none_or(Value::is_null) {
         if let Some(held) = held_startup_send_with_text(state, target, text) {
+            let mut payload = json!({
+                "queued": true,
+                "textBytes": text.len(),
+                "queuedPromptId": held,
+                "alreadyHeld": true,
+            });
+            if let Some(reason) = queued_reason {
+                payload["queuedReason"] = json!(reason);
+            }
             return routed_json(
                 Some(endpoint_path),
                 StatusCode::OK,
-                rpc_success(
-                    request_id,
-                    json!({
-                        "queued": true,
-                        "textBytes": text.len(),
-                        "queuedPromptId": held,
-                        "alreadyHeld": true,
-                    }),
-                ),
+                rpc_success(request_id, payload),
             );
         }
     }
@@ -822,17 +847,18 @@ pub(crate) fn queue_startup_send(
                 &target.project_id,
                 &target.session_id,
             );
+            let mut payload = json!({
+                "queued": true,
+                "textBytes": text.len(),
+                "queuedPromptId": result.value.pointer("/prompt/id"),
+            });
+            if let Some(reason) = queued_reason {
+                payload["queuedReason"] = json!(reason);
+            }
             routed_json(
                 Some(endpoint_path),
                 StatusCode::OK,
-                rpc_success(
-                    request_id,
-                    json!({
-                        "queued": true,
-                        "textBytes": text.len(),
-                        "queuedPromptId": result.value.pointer("/prompt/id"),
-                    }),
-                ),
+                rpc_success(request_id, payload),
             )
         }
         Err(error) => domain_error_response(endpoint_path, request_id, error),

@@ -45,6 +45,11 @@ pub(super) fn print_send_receipt(result: &Value, full: bool, body_file: Option<&
     if result["reopenedThread"] == true {
         compact["reopenedThread"] = json!(true);
     }
+    if text(result, "status") == "queued" || text(result, "queuedReason") == "agentBusy" {
+        compact["note"] = json!("queued until its turn ends");
+    } else if text(result, "queuedReason") == "waitingForAnswer" {
+        compact["note"] = json!("queued until its pending question or approval is answered");
+    }
     println!("{compact}");
 }
 
@@ -217,13 +222,14 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
     }
     let receipt = receipt(&result);
     let compacted = compacted_first_note(&result);
+    let queued_reason = result["queuedReason"].as_str();
     let (status, note) = if args.delivery == Delivery::Queue {
         (
             "queued",
             if duplicate {
                 "This request id was already queued; Ghostex did not queue it again."
             } else {
-                "Held in the recipient's queue until its current turn finishes and its input is ready."
+                "Queued until its turn ends. Ghostex delivers it as soon as the current reply finishes and its input is ready."
             },
         )
     } else if duplicate {
@@ -235,15 +241,41 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
             ("accepted", "This request id was already sent; Ghostex did not type it again. The recipient's transcript does not show it yet. Read its chat before sending a new message.")
         }
     } else if result["alreadyHeld"] == json!(true) {
-        ("pending", "The same message is already waiting for the recipient to start, so Ghostex did not queue it again; it is typed once the recipient's input box appears.")
+        match queued_reason {
+            Some("agentBusy") => (
+                "queued",
+                "The same message is already queued until its turn ends, so Ghostex did not queue it again.",
+            ),
+            Some("waitingForAnswer") => (
+                "pending",
+                "The same message is already waiting for the recipient's pending question or approval to be answered, so Ghostex did not queue it again.",
+            ),
+            _ => (
+                "pending",
+                "The same message is already waiting for the recipient to start, so Ghostex did not queue it again; it is typed once the recipient's input box appears.",
+            ),
+        }
     } else if let Some(note) = compacted.as_deref() {
         ("pending", note)
     } else if transcript_shows(&read_payload, &body, &rows_before, &flags) {
         ("delivered", "The recipient's transcript shows the message.")
     } else if !receipt["queuedPromptId"].is_null() {
-        ("pending", "The recipient is still starting; Ghostex types the message as soon as its input box appears. Read its chat before sending it again.")
+        match queued_reason {
+            Some("agentBusy") => (
+                "queued",
+                "Queued until its turn ends. Ghostex delivers it as soon as the current reply finishes; do not send it again.",
+            ),
+            Some("waitingForAnswer") => (
+                "pending",
+                "Queued until the recipient's pending question or approval is answered. Do not send it again.",
+            ),
+            _ => (
+                "pending",
+                "The recipient is still starting; Ghostex types the message as soon as its input box appears. Read its chat before sending it again.",
+            ),
+        }
     } else {
-        ("accepted", "Ghostex typed and submitted the message, but the recipient's transcript does not show it yet; a busy agent takes it at its next input boundary. Read its chat before sending it again.")
+        ("accepted", "Ghostex sent the message, but the recipient's transcript does not show it yet; a busy agent takes it at its next step. Read its chat before sending it again.")
     };
     if let Some(sender) = &sender {
         if status == "delivered" {
@@ -262,7 +294,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
             );
         }
     }
-    Ok(json!({
+    let mut out = json!({
         "ok": true,
         "status": status,
         "note": note,
@@ -278,7 +310,11 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         "receipt": receipt,
         // The full receipt retains the message for older consumers and for scripts whose text is unavailable to the chat card.
         "message": body,
-    }))
+    });
+    if let Some(reason) = queued_reason {
+        out["queuedReason"] = json!(reason);
+    }
+    Ok(out)
 }
 
 /// `--with-next`: gxserver holds the message and types it right after the next message the

@@ -930,7 +930,11 @@ impl AcpTransport {
         self.write_json(&msg)
     }
 
-    fn call(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+    fn start_call(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> Result<(u64, mpsc::Receiver<Value>), String> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
         self.pending
@@ -950,6 +954,16 @@ impl AcpTransport {
                 .remove(&id);
             return Err(err);
         }
+        Ok((id, rx))
+    }
+
+    fn finish_call(
+        &self,
+        id: u64,
+        method: &str,
+        rx: mpsc::Receiver<Value>,
+        timeout: Duration,
+    ) -> Result<Value, String> {
         match rx.recv_timeout(timeout) {
             Ok(resp) => {
                 if let Some(error) = resp.get("error") {
@@ -970,6 +984,11 @@ impl AcpTransport {
                 Err(format!("Native host request `{method}` timed out."))
             }
         }
+    }
+
+    fn call(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+        let (id, rx) = self.start_call(method, params)?;
+        self.finish_call(id, method, rx, timeout)
     }
 
     fn respond_to_agent(&self, rpc_id: Value, result: Value) -> Result<(), String> {
@@ -2147,7 +2166,7 @@ pub fn run(args: &[String]) -> i32 {
     // 3. Main command poll loop against `/api/agentChatChannel`.
     // Survives every `gxserver` reload cleanly without restarting the ACP subprocess.
     let mut switch_to_cli_requested = false;
-    let capabilities = json!([
+    let mut caps = vec![
         "acp",
         "send",
         "abort",
@@ -2156,8 +2175,12 @@ pub fn run(args: &[String]) -> i32 {
         "model",
         "mode",
         "state",
-        "switch_to_cli"
-    ]);
+        "switch_to_cli",
+    ];
+    if spec.supports_mid_turn_prompt {
+        caps.push("mid_turn_send");
+    }
+    let capabilities = json!(caps);
     let channel_agent = format!("acp:{}", spec.family);
     let mut reconnecting = false;
 
@@ -2528,9 +2551,13 @@ pub fn run(args: &[String]) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
-                    let (is_working, sid) = {
+                    let (is_working, has_pending_perm, sid) = {
                         let s = state.lock().unwrap_or_else(|p| p.into_inner());
-                        (s.working, s.native_session_id.clone())
+                        (
+                            s.working,
+                            !s.pending_permissions.is_empty(),
+                            s.native_session_id.clone(),
+                        )
                     };
                     let Some(sid) = sid else {
                         ep.ack(
@@ -2541,7 +2568,11 @@ pub fn run(args: &[String]) -> i32 {
                         );
                         continue;
                     };
-                    if is_working && !interrupt {
+                    if !interrupt && has_pending_perm {
+                        ep.ack(id, false, Value::Null, Some("ACP_AGENT_WAITING_INPUT"));
+                        continue;
+                    }
+                    if is_working && !interrupt && !spec.supports_mid_turn_prompt {
                         ep.ack(id, false, Value::Null, Some("ACP_AGENT_BUSY"));
                         continue;
                     }
@@ -2552,6 +2583,7 @@ pub fn run(args: &[String]) -> i32 {
                             continue;
                         }
                     };
+                    let is_mid_turn = is_working && !interrupt;
                     if is_working && interrupt {
                         state
                             .lock()
@@ -2567,20 +2599,61 @@ pub fn run(args: &[String]) -> i32 {
                             thread::sleep(Duration::from_millis(50));
                         }
                     }
-                    cancel_all_pending_permissions(&transport, &state);
-                    let turn_gen = {
+                    if !is_mid_turn {
+                        cancel_all_pending_permissions(&transport, &state);
+                    }
+                    // Bump `turn_generation` AND write `session/prompt` to stdin synchronously on
+                    // the poll loop thread before acking, so rapid mid-turn sends preserve strict
+                    // FIFO wire order and any superseded `session/prompt` response from the agent
+                    // sees a stale generation instead of clearing `working`.
+                    let (prev_working, prev_gen, turn_gen) = {
                         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                        let prev_working = s.working;
+                        let prev_gen = s.turn_generation;
                         s.turn_generation = s.turn_generation.wrapping_add(1);
                         s.working = true;
                         s.last_turn_interrupted = false;
-                        s.clear_live_turn_output();
-                        s.turn_generation
+                        if !is_mid_turn {
+                            s.clear_live_turn_output();
+                        }
+                        (prev_working, prev_gen, s.turn_generation)
                     };
-                    activity.sync();
+                    let (rpc_id, rx) = match transport.start_call(
+                        "session/prompt",
+                        json!({
+                            "sessionId": sid,
+                            "prompt": blocks,
+                        }),
+                    ) {
+                        Ok(pair) => pair,
+                        Err(err) => {
+                            {
+                                let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                if s.turn_generation == turn_gen {
+                                    s.turn_generation = prev_gen;
+                                    s.working = prev_working;
+                                }
+                            }
+                            activity.sync();
+                            ep.ack(id, false, Value::Null, Some(&err));
+                            continue;
+                        }
+                    };
+                    if is_mid_turn {
+                        println!("\r\n[Native] Delivered mid-turn message...");
+                    } else {
+                        println!("\r\n[Native] Turn started...");
+                        activity.sync();
+                    }
+                    let _ = std::io::stdout().flush();
                     ep.ack(
                         id,
                         true,
-                        json!({ "accepted": true, "sessionId": sid }),
+                        json!({
+                            "accepted": true,
+                            "midTurn": is_mid_turn,
+                            "sessionId": sid,
+                        }),
                         None,
                     );
 
@@ -2588,14 +2661,10 @@ pub fn run(args: &[String]) -> i32 {
                     let st_turn = state.clone();
                     let act_turn = activity.clone();
                     thread::spawn(move || {
-                        println!("\r\n[Native] Turn started...");
-                        let _ = std::io::stdout().flush();
-                        let res = t_turn.call(
+                        let res = t_turn.finish_call(
+                            rpc_id,
                             "session/prompt",
-                            json!({
-                                "sessionId": sid,
-                                "prompt": blocks,
-                            }),
+                            rx,
                             Duration::from_secs(60 * 60),
                         );
                         let stop_reason = match &res {
@@ -2618,8 +2687,6 @@ pub fn run(args: &[String]) -> i32 {
                             }
                             Err(err) => format!("error: {err}"),
                         };
-                        println!("[Native] Turn finished ({stop_reason}).");
-                        let _ = std::io::stdout().flush();
                         let was_cancelled = matches!(
                             stop_reason.to_ascii_lowercase().as_str(),
                             "cancelled" | "canceled" | "interrupted" | "aborted"
@@ -2646,6 +2713,8 @@ pub fn run(args: &[String]) -> i32 {
                             );
                         }
                         if is_current_turn {
+                            println!("[Native] Turn finished ({stop_reason}).");
+                            let _ = std::io::stdout().flush();
                             act_turn.sync();
                         }
                     });

@@ -2359,6 +2359,7 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
     let capabilities = json!([
         "acp",
         "send",
+        "mid_turn_send",
         "steer",
         "abort",
         "approve",
@@ -2863,11 +2864,6 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                         .get("interrupt")
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
-                    let is_working = state.lock().unwrap_or_else(|p| p.into_inner()).working;
-                    if is_working && !interrupt {
-                        ep.ack(id, false, Value::Null, Some("ACP_AGENT_BUSY"));
-                        continue;
-                    }
                     let mut input = Vec::new();
                     let mut img_err = None;
                     for raw in &images {
@@ -2894,6 +2890,111 @@ pub(super) fn run(spec: &AcpAgentSpec, parsed: HostArgs) -> i32 {
                             "text": text,
                         }));
                     }
+                    if !interrupt {
+                        // Wait briefly if `turn/start` is still returning `active_turn_id`.
+                        let wait_until = Instant::now() + Duration::from_secs(2);
+                        while Instant::now() < wait_until {
+                            let awaiting = {
+                                let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                s.working && s.awaiting_turn_start && s.active_turn_id.is_none()
+                            };
+                            if !awaiting {
+                                break;
+                            }
+                            thread::sleep(Duration::from_millis(25));
+                        }
+                        let (is_working, has_pending, tid_mid, active_turn_id) = {
+                            let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                            (
+                                s.working,
+                                !s.pending_requests.is_empty(),
+                                s.thread_id.clone(),
+                                s.active_turn_id.clone(),
+                            )
+                        };
+                        if has_pending {
+                            ep.ack(id, false, Value::Null, Some("ACP_AGENT_WAITING_INPUT"));
+                            continue;
+                        }
+                        if is_working {
+                            let steer_result = match (
+                                proc_opt.as_ref(),
+                                tid_mid.as_deref(),
+                                active_turn_id.as_deref(),
+                            ) {
+                                (Some(proc), Some(tid_ref), Some(active_tid)) => {
+                                    Some(proc.transport.call(
+                                        "turn/steer",
+                                        json!({
+                                            "threadId": tid_ref,
+                                            "expectedTurnId": active_tid,
+                                            "input": input.clone(),
+                                        }),
+                                        Duration::from_secs(10),
+                                    ))
+                                }
+                                _ => None,
+                            };
+                            match steer_result {
+                                Some(Ok(_)) => {
+                                    println!("\r\n[Codex Native] Steered active turn...");
+                                    let _ = std::io::stdout().flush();
+                                    ep.ack(
+                                        id,
+                                        true,
+                                        json!({
+                                            "accepted": true,
+                                            "midTurn": true,
+                                            "steered": true,
+                                            "sessionId": tid_mid,
+                                        }),
+                                        None,
+                                    );
+                                    continue;
+                                }
+                                Some(Err(err)) => {
+                                    // If the turn just completed as we called `turn/steer`, wait
+                                    // briefly for `turn/completed` to settle and fall through to
+                                    // `turn/start`; if the turn is still running, never cancel it.
+                                    let settle_until = Instant::now() + Duration::from_millis(300);
+                                    while Instant::now() < settle_until {
+                                        if !state.lock().unwrap_or_else(|p| p.into_inner()).working
+                                        {
+                                            break;
+                                        }
+                                        thread::sleep(Duration::from_millis(25));
+                                    }
+                                    let (still_working, now_pending) = {
+                                        let s = state.lock().unwrap_or_else(|p| p.into_inner());
+                                        (s.working, !s.pending_requests.is_empty())
+                                    };
+                                    if now_pending {
+                                        ep.ack(
+                                            id,
+                                            false,
+                                            Value::Null,
+                                            Some("ACP_AGENT_WAITING_INPUT"),
+                                        );
+                                        continue;
+                                    }
+                                    if still_working {
+                                        eprintln!(
+                                            "[Codex Native] Warning: turn/steer failed while turn active: {err}"
+                                        );
+                                        ep.ack(id, false, Value::Null, Some("ACP_AGENT_BUSY"));
+                                        continue;
+                                    }
+                                }
+                                None => {
+                                    if state.lock().unwrap_or_else(|p| p.into_inner()).working {
+                                        ep.ack(id, false, Value::Null, Some("ACP_AGENT_BUSY"));
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    let is_working = state.lock().unwrap_or_else(|p| p.into_inner()).working;
                     if is_working && interrupt {
                         // Interrupt-and-send ALWAYS calls `turn/interrupt` and waits for
                         // `turn/completed` (restarting app-server if it does not stop in time) so

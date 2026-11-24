@@ -612,6 +612,36 @@ collapses for ordinary user rows, so routing them through the same rule keeps
 one source of truth instead of an `origin.kind` whitelist that silently drops
 turns whenever the harness adds a kind.
 */
+/// Extract the prompt text from a Claude `queued_command` attachment. Terminal mode stores
+/// `attachment.prompt` as a plain JSON string, while Native (`stream-json` input) stores it as an
+/// array of content blocks (`[{"type":"text","text":"..."}]`).
+fn extract_claude_queued_command_prompt(value: Option<&Value>) -> Option<String> {
+    match value? {
+        Value::String(text) => Some(text.clone()),
+        Value::Array(items) => {
+            let mut parts: Vec<&str> = Vec::new();
+            for item in items {
+                match item {
+                    Value::String(text) if !text.is_empty() => parts.push(text),
+                    Value::Object(block) => {
+                        let kind = block.get("type").and_then(Value::as_str);
+                        if matches!(kind, None | Some("text") | Some("input_text")) {
+                            if let Some(text) = block.get("text").and_then(Value::as_str) {
+                                if !text.is_empty() {
+                                    parts.push(text);
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            (!parts.is_empty()).then(|| parts.join("\n"))
+        }
+        _ => None,
+    }
+}
+
 fn decode_claude_queued_command(
     record: &Map<String, Value>,
     fallback_id: &str,
@@ -620,7 +650,9 @@ fn decode_claude_queued_command(
     if attachment.get("type").and_then(Value::as_str) != Some(CLAUDE_QUEUED_COMMAND_ATTACHMENT) {
         return None;
     }
-    let prompt = strip_claude_pasted_content_envelopes(&extract_string(attachment.get("prompt"))?);
+    let prompt = strip_claude_pasted_content_envelopes(&extract_claude_queued_command_prompt(
+        attachment.get("prompt"),
+    )?);
     if prompt.trim().is_empty() {
         return None;
     }

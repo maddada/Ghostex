@@ -246,9 +246,15 @@ pub(crate) async fn send(
                 .to_string(),
         }),
         Err(ChannelError::Failed(message)) if message == "ACP_AGENT_BUSY" => Err(DomainStateError {
-            code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
-            message: "The Native agent is currently working on a turn. Your message is queued and will send as soon as it finishes.".to_string(),
+            code: crate::session_chat_send_wake::SESSION_CHAT_AGENT_BUSY,
+            message: "The agent is currently replying. Your message is queued and delivers when the current reply ends.".to_string(),
         }),
+        Err(ChannelError::Failed(message)) if message == "ACP_AGENT_WAITING_INPUT" => {
+            Err(DomainStateError {
+                code: crate::session_chat_send::SESSION_CHAT_PROMPT_WAITING_CODE,
+                message: "The agent is waiting for your answer. Your message is queued and delivers once you answer.".to_string(),
+            })
+        }
         Err(ChannelError::Failed(message)) => Err(DomainStateError {
             code: "invalidState",
             message,

@@ -91,9 +91,9 @@ impl WaitReason {
             Self::StartFailed => "Waiting: the agent couldn't start. Start it again to send this.",
             Self::Starting => "Waiting for the agent to start.",
             Self::Compacting => "Waiting for the agent to finish compacting the conversation.",
-            Self::Working => "Waiting for the agent to finish its turn.",
+            Self::Working => "Delivers when the current reply ends.",
             Self::Answer => "Waiting for you to answer the agent's question.",
-            Self::Settling => "Waiting for the agent to settle after its turn.",
+            Self::Settling => "Delivers once the current reply finishes.",
             Self::InputBox(InputBoxStep::Reading) => {
                 "Waiting: the agent's input box can't be read yet, trying again."
             }
@@ -287,7 +287,7 @@ mod tests {
         assert_eq!(HeadWait::observe(&mut wait, "Q1", &working, at(59)), None);
         assert_eq!(
             HeadWait::observe(&mut wait, "Q1", &working, at(60)),
-            Some("Waiting for the agent to finish its turn.")
+            Some("Delivers when the current reply ends.")
         );
         // The turn ends and the box cannot be read: the words move with the ladder at once.
         let reading = WaitReason::InputBox(InputBoxStep::after(0));

@@ -442,13 +442,14 @@ pub(super) async fn send_session_chat_message_attempt(
             CLAUDE_QUESTION_OPEN,
             &[],
         );
-        return crate::session_chat_send_wake::queue_startup_send(
+        return crate::session_chat_send_wake::queue_startup_send_with_reason(
             state,
             endpoint_path,
             request_id,
             &params,
             &target,
             &text,
+            Some("waitingForAnswer"),
         );
     }
     match crate::session_chat_queue_runtime::send_session_chat_message_with_draft(
@@ -471,16 +472,39 @@ pub(super) async fn send_session_chat_message_attempt(
                 json!({ "queued": true, "textBytes": text_bytes }),
             ),
         ),
-        Err(error)
-            if error.code == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
-        {
-            crate::session_chat_send_wake::queue_startup_send(
+        Err(error) if error.code == crate::session_chat_send_wake::SESSION_CHAT_AGENT_BUSY => {
+            crate::session_chat_send_wake::queue_startup_send_with_reason(
                 state,
                 endpoint_path,
                 request_id,
                 &params,
                 &target,
                 &text,
+                Some("agentBusy"),
+            )
+        }
+        Err(error)
+            if error.code == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
+        {
+            let reason = if crate::session_approval::session_awaits_answer(&target.session) {
+                Some("waitingForAnswer")
+            } else if crate::presentation::presentation_activity(
+                &target.session,
+                &chrono::Utc::now().to_rfc3339(),
+            ) == "working"
+            {
+                Some("agentBusy")
+            } else {
+                Some("starting")
+            };
+            crate::session_chat_send_wake::queue_startup_send_with_reason(
+                state,
+                endpoint_path,
+                request_id,
+                &params,
+                &target,
+                &text,
+                reason,
             )
         }
         Err(error) if crate::session_chat_send_wake::holds_until_agent_takes_input(&error) => {
@@ -492,13 +516,16 @@ pub(super) async fn send_session_chat_message_attempt(
                 &error.message,
                 &[],
             );
-            crate::session_chat_send_wake::queue_startup_send(
+            let reason = (error.code == crate::session_chat_send::SESSION_CHAT_PROMPT_WAITING_CODE)
+                .then_some("waitingForAnswer");
+            crate::session_chat_send_wake::queue_startup_send_with_reason(
                 state,
                 endpoint_path,
                 request_id,
                 &params,
                 &target,
                 &text,
+                reason,
             )
         }
         // CDXC:SessionChat 2026-10-31 WHY: a chat box send names its draft revision, and only the chat

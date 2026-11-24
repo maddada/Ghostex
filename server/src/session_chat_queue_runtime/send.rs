@@ -1017,6 +1017,36 @@ async fn send_session_chat_message_locked(
                 .await;
             }
         }
+        // Keep strict FIFO order: if an earlier send is already queued for this Native session,
+        // queue this normal send behind it rather than jumping ahead.
+        if source == SessionChatMessageSource::Composer
+            && !interrupt
+            && crate::session_chat_send_wake::has_pending_startup_send(
+                state,
+                &target.project_id,
+                &target.session_id,
+            )
+        {
+            if crate::session_approval::session_awaits_answer(&target.session) {
+                return Err(DomainStateError {
+                    code: crate::session_chat_send::SESSION_CHAT_PROMPT_WAITING_CODE,
+                    message: "An earlier message is waiting for your answer; this message is queued behind it.".to_string(),
+                });
+            }
+            let generated_at = chrono::Utc::now().to_rfc3339();
+            if crate::presentation::presentation_activity(&target.session, &generated_at)
+                == "working"
+            {
+                return Err(DomainStateError {
+                    code: crate::session_chat_send_wake::SESSION_CHAT_AGENT_BUSY,
+                    message: "An earlier message is queued while the agent replies; this message is queued behind it.".to_string(),
+                });
+            }
+            return Err(DomainStateError {
+                code: crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING,
+                message: "An earlier message is waiting for the agent to start.".to_string(),
+            });
+        }
         if interrupt {
             crate::session_chat_send::record_session_chat_interrupt(
                 state,
