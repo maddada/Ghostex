@@ -212,11 +212,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// The sidebar's New session button (native_sidebar/new_session_row.rs): the picker's first
-    /// row, the agent picked last, started in the open project without the picker, as the
-    /// desktop's New Agent Session does (new_agent_session.rs). Before any agent is known the
-    /// picker opens instead.
+    /// The sidebar's New session button (native_sidebar/new_session_row.rs): immediately creates a
+    /// draft in the open session's project (or Main Hub when none is open), with no picker.
     pub(crate) fn start_new_agent_session(&mut self, cx: &mut Context<Self>) {
+        let target_group_id = self.gx_store_new_session_default_group_id();
         let hud_agents = self
             .new_thread_picker_agents
             .clone()
@@ -226,16 +225,39 @@ impl GhostexGpuiApp {
                     .as_ref()
                     .and_then(|snapshot| snapshot.hud["agents"].as_array().cloned())
             })
+            .or_else(|| {
+                self.gx_store_launch_hud()
+                    .and_then(|hud| hud["agents"].as_array().cloned())
+            })
             .unwrap_or_default();
         let primary = crate::app::gx_store::read_primary_agent_launcher_id();
         let Some(agent) = rows::order_new_thread_picker_agents(&hud_agents, primary.as_deref())
             .into_iter()
             .next()
         else {
-            self.open_gpui_new_thread_picker(cx);
             return;
         };
-        let message = json!({ "type": "runSidebarAgent", "agentId": agent.agent_id });
+        // If already viewing an untouched draft in the target project, focus its composer instead
+        // of recreating it.
+        if let Some(open) = self.open_session.clone()
+            && target_group_id
+                .as_deref()
+                .and_then(ghostex_gx_core::ProjectKey::parse_sidebar_group_id)
+                .is_some_and(|project| open.project_key() == project)
+            && self.gx_store_is_tracked_untouched_draft(&open)
+            && self.gx_store_draft_chat_view_untouched(&open, cx)
+            && let Some((_, view)) = self.native_chats.get(&open).cloned()
+        {
+            view.update(cx, |view, cx| {
+                view.focus_requested = true;
+                cx.notify();
+            });
+            return;
+        }
+        let mut message = json!({ "type": "runSidebarAgent", "agentId": agent.agent_id });
+        if let Some(group_id) = target_group_id {
+            message["groupId"] = json!(group_id);
+        }
         self.dispatch_gpui_sidebar_host_message(message, cx);
     }
 

@@ -60,6 +60,38 @@ impl FoldKeys {
     }
 }
 
+/// Whether a chat action mutates a draft's setup or content so leaving the draft keeps it instead
+/// of removing it as untouched.
+fn action_marks_draft_changed(action_type: &str) -> bool {
+    matches!(
+        action_type,
+        "selectOption"
+            | "restartInMode"
+            | "modelMenuPick"
+            | "modelMenuTrait"
+            | "accounts"
+            | "switchDraftAgent"
+            | "switchDraftRunLocation"
+            | "setDraftWorktree"
+            | "setDraftCloudBox"
+            | "attachmentsStarted"
+            | "attachPaths"
+            | "insertAttachments"
+            | "insertSkill"
+            | "appendToDraft"
+            | "insertDictation"
+            | "useIncomingDraft"
+            | "send"
+            | "queue"
+            | "compact"
+            | "stash"
+            | "saveNote"
+            | "editNote"
+            | "toggleBoost"
+            | "toggleAutopilot"
+    )
+}
+
 #[derive(Clone)]
 pub(crate) struct NativeChatConfig {
     /// `"local"` for a chat on this computer, the saved machine's settings id otherwise. The Rust
@@ -402,6 +434,10 @@ pub(crate) struct NativeChatView {
     /// The chat zoom this view's transcript rows were last measured at (zoom.rs).
     pub(super) drawn_zoom_percent: Option<f32>,
     pub(crate) draft: String,
+    /// True once the user changed any setup option (model, effort, worktree, branch, agent,
+    /// account, attachments, etc.) on this draft, so leaving it keeps the draft instead of
+    /// removing it as untouched.
+    pub(crate) draft_setup_changed: bool,
     /// The worktree tray's project search, while it is open.
     pub(super) draft_project_picker: Option<super::draft_project_picker::DraftProjectPicker>,
     pub(super) draft_project_chip_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
@@ -618,6 +654,7 @@ impl NativeChatView {
             input_window: None,
             input_focus_listeners: Vec::new(),
             option_menu: None,
+            draft_setup_changed: false,
             draft_project_picker: None,
             draft_project_chip_bounds: Default::default(),
             draft_machine_chip_bounds: Default::default(),
@@ -1016,9 +1053,37 @@ impl NativeChatView {
         cx.notify();
     }
 
+    /// Whether this chat is still an untouched draft: no text typed, no setup options changed,
+    /// nothing sent, queued, or attached.
+    pub(crate) fn is_untouched_draft(&self) -> bool {
+        !self.draft_setup_changed
+            && self.draft.trim().is_empty()
+            && self.items.is_empty()
+            && self.sent_rows_listed == 0
+            && !self.pending_send
+            && self.held_send.is_none()
+            && self.failed_uploads.is_empty()
+            && self.snapshot["queue"]["prompts"]
+                .as_array()
+                .is_none_or(Vec::is_empty)
+            && self.snapshot["attachments"]
+                .as_array()
+                .is_none_or(Vec::is_empty)
+            && self.snapshot["composer"]["attachments"]
+                .as_array()
+                .is_none_or(Vec::is_empty)
+    }
+
     pub(crate) fn invoke(&mut self, action: Value, cx: &mut Context<Self>) {
         // A pick in the dock ask panel's ⋯ menu closes the panel as it goes (dock_ask_modal.rs).
         let action = self.unwrap_dock_ask_command(action, cx);
+        if action
+            .get("type")
+            .and_then(Value::as_str)
+            .is_some_and(action_marks_draft_changed)
+        {
+            self.draft_setup_changed = true;
+        }
         self.hold_for_answer(&action, cx);
         self.note_resource_modal_send(&action);
         if action.get("type").and_then(Value::as_str) == Some("removeQueue") {

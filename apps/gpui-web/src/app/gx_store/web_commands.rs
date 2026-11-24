@@ -302,6 +302,7 @@ impl GhostexGpuiApp {
             }),
             cx,
         );
+        self.gx_store_prune_untouched_drafts(cx);
         // The Git state follows the active project, as the desktop's workspace reconcile does.
         let active = self.gpui_app_modal_active_project_id();
         if active != self.web_host.git_active_project {

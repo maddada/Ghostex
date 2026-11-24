@@ -288,6 +288,7 @@ impl GhostexGpuiApp {
             }),
             cx,
         );
+        self.gx_store_prune_untouched_drafts(cx);
     }
 
     /// The desktop acknowledges a session's attention once its pane settles; the page tracks no attention of its own, so the daemon's state is what the row shows.

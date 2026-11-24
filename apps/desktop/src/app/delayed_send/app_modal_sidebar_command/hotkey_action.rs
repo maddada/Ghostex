@@ -27,12 +27,8 @@ impl GhostexGpuiApp {
                 else {
                     return;
                 };
-                // The New Thread picker is a native GPUI window, not an app-modal page.
-                if action_id == "openNewThreadPalette" {
-                    self.toggle_gpui_new_thread_picker(cx);
-                    return;
-                }
-                if action_id == "createAgentSession" {
+                // Cmd+N and New Agent Session both create a draft directly with no picker.
+                if matches!(action_id, "openNewThreadPalette" | "createAgentSession") {
                     self.start_new_agent_session(cx);
                     return;
                 }

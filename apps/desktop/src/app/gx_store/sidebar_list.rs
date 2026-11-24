@@ -419,6 +419,7 @@ impl GhostexGpuiApp {
     /// day as `spaces`, `isActive`, `sections`, `isFocused`, `isVisible` on an update with no store
     /// change. Gate: the "focus moves without a frame" section of gx-core `sidebar_replay`.
     pub(crate) fn gx_store_sidebar_focus_moved(&mut self, cx: &mut gpui::Context<Self>) {
+        self.gx_store_prune_untouched_drafts(cx);
         self.gx_store_update_sidebar_list(cx);
     }
 

@@ -638,6 +638,7 @@ impl NativeChatView {
         ) else {
             return;
         };
+        self.draft_setup_changed = true;
         let draft = PendingDraftMove {
             from_machine_id: self.config.machine_id.clone(),
             from_project_id: self.config.project_id.clone(),

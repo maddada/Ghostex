@@ -103,13 +103,13 @@ struct PublishedFocus {
 }
 
 impl FocusPublish {
-    fn unplaced_for(&self, stamp: u64) -> Option<&UnplacedSelection> {
+    pub(super) fn unplaced_for(&self, stamp: u64) -> Option<&UnplacedSelection> {
         self.unplaced
             .as_ref()
             .filter(|held| held.stamp == stamp && held.at.elapsed() < UNPLACED_HOLD)
     }
 
-    fn quick_automations_open(&self, stamp: u64) -> bool {
+    pub(super) fn quick_automations_open(&self, stamp: u64) -> bool {
         self.quick_automations_since == Some(stamp)
     }
 }
@@ -415,6 +415,7 @@ impl GhostexGpuiApp {
     pub(crate) fn gx_store_open_quick_automations(&mut self, cx: &mut gpui::Context<Self>) {
         let stamp = self.gx_store.core.focus().local_stamp;
         self.gx_store.focus_publish.quick_automations_since = Some(stamp);
+        self.gx_store_prune_untouched_drafts(cx);
         self.gx_store_publish_workspace_focus(cx);
     }
 

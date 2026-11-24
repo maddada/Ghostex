@@ -49,6 +49,58 @@ pub(in crate::app) fn with_moved_draft_text(
 }
 
 impl GhostexGpuiApp {
+    /// The project a one-click New session (button or Cmd+N) lands in: the open session's project
+    /// when there is one (ignoring Quick Automations and hidden system projects drawn under Main
+    /// Hub), else this computer's Main Hub (`is_home && !is_help_home`), else the active project
+    /// or the first non-hidden local project.
+    pub(crate) fn gx_store_new_session_default_group_id(&self) -> Option<String> {
+        let presentation = self.gx_store.core.presentation();
+        let is_hidden_system_project = |project: &ProjectKey| {
+            project.project_id == ghostex_gx_core::QUICK_AUTOMATIONS_PROJECT_ID
+                || presentation
+                    .loaded(&project.machine)
+                    .and_then(|loaded| loaded.project(&project.project_id))
+                    .is_some_and(|row| {
+                        row.is_help_home
+                            || row.gbots_project
+                            || row.gbots_bot.is_some()
+                            || row.autopilot_supervisor_project
+                    })
+        };
+        if let Some(session) = self.gx_store.core.focus().focused_session.as_ref() {
+            let project = session.project_key();
+            if !is_hidden_system_project(&project) {
+                return Some(project.to_sidebar_group_id());
+            }
+        }
+        if let Some(local) = presentation.loaded(&MachineId::Local) {
+            if let Some(home) = local
+                .projects()
+                .iter()
+                .find(|project| project.is_home && !project.is_help_home)
+            {
+                return Some(ProjectKey::local(home.project_id.clone()).to_sidebar_group_id());
+            }
+        }
+        if let Some(project) = self.gx_store.core.focus().active_project.as_ref()
+            && !is_hidden_system_project(project)
+        {
+            return Some(project.to_sidebar_group_id());
+        }
+        presentation.loaded(&MachineId::Local).and_then(|local| {
+            local
+                .projects()
+                .iter()
+                .find(|project| {
+                    !project.is_help_home
+                        && !project.gbots_project
+                        && project.gbots_bot.is_none()
+                        && !project.autopilot_supervisor_project
+                })
+                .map(|project| ProjectKey::local(project.project_id.clone()).to_sidebar_group_id())
+        })
+    }
+
     /// One row per repository across the machines this app holds, for the tray and the "+" of a
     /// group. It reads the store directly, so it answers with the Project sidebar selected too.
     pub(crate) fn gx_store_project_choices(&self) -> Vec<UnifiedProjectChoice> {
