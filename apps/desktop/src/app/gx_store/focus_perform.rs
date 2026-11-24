@@ -608,6 +608,7 @@ mod tests {
             keep_view: false,
             keep_sleeping: true,
             preferred_interface: Some(GpuiPreferredAgentInterface::Chat),
+            skip_acknowledge_attention: false,
         }));
     }
 
