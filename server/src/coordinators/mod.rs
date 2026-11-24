@@ -41,6 +41,7 @@ mod stale_report;
 mod stall;
 mod state;
 mod stopped_by_restart;
+mod subagent_output;
 mod thread_messages;
 mod thread_reads;
 mod title;

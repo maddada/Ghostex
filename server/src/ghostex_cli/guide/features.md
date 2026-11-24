@@ -1562,7 +1562,12 @@ where they are while you open, change and close views.
   it may be stuck on a hung command. Hovering it says "Not moving", Ghostex adds
   a notification and plays its own not-moving sound (silent when Agent finished
   sound is Off), and the dot clears as soon as the session shows output again.
-  A long build or test whose output is still coming does not count. A
+  A long build or test whose output is still coming does not count, and neither
+  does an OMP, Claude or Codex session on this computer waiting on its subagents
+  while one of them still writes new chat rows that this computer records (a
+  subagent that has stopped too, or whose progress only shows on its screen, lets
+  the dot come); a coordinator's thread on another computer is judged by its own
+  output only. A
   coordinator's thread is nudged first ("Still working?") and its coordinator is
   told so it can heal it, so a thread gets the dot only 8 minutes after that
   nudge; its board card shows a red "Not moving" chip too. While this computer
@@ -1571,7 +1576,10 @@ where they are while you open, change and close views.
   network is back. A "not moving" or "idle" report that waited in the
   coordinator's queue (for example while its input box could not be read) is
   dropped instead of delivered late when the thread has since moved on,
-  finished, or been closed or marked done.
+  finished, or been closed or marked done. The queue checks this from time to
+  time while the report waits, not at the moment it is delivered, so a report
+  can still arrive after its thread has moved on. Reports about a thread on
+  another computer are not checked.
 - A new session goes straight into Drafts, below Pinned and above Sessions,
   and stays there until its first message is sent or its agent starts
   working, whether it is empty or holds unsent text. Drafts starts collapsed,
