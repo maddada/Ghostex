@@ -4,7 +4,7 @@ Usage:
                         [--thread <session-ref>]... [--link <url|path>] [--release <name>] [--json]
   ghostex work item now <W7> "<where it stands>" [--thread <session-ref>]... [--json]
   ghostex work item step <W7> "<step>" [--done] [--chore] [--json]
-  ghostex work item ask <W7> "<title>" [--detail "<the rest>"]
+  ghostex work item ask <W7> "<title>" [--detail "<the rest>"] [--command "<ghostex ...>"]
                         [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
                         [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex work item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]

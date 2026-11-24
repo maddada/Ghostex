@@ -2547,7 +2547,7 @@ impl NativeChatView {
         if row["commandLines"] == true {
             return self.dock_command_block(key, row, p, cx);
         }
-        self.dock_command_chip(key, &text(row, "command"), p, cx)
+        self.dock_command_strip(key, row, p, cx)
     }
 
     /// An approval's command (gx-chat-core extras/dock_approvals.rs): its first lines, wrapped, never
@@ -2678,6 +2678,453 @@ impl NativeChatView {
         )
     }
 
+    /// A Needs you to-do's command strip on a dock row: copy-only chip for non-runnable commands,
+    /// or the neutral command strip with Copy + "Run it" (and live status while running).
+    fn dock_command_strip(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let strip = self.needs_you_command_strip(key, row, true, p, cx)?;
+        let s = p.scale;
+        Some(
+            div()
+                .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
+                .pr(px(DOCK_ROW_PAD_X * s))
+                .pb(px(6.0 * s))
+                .w_full()
+                .min_w_0()
+                .child(strip)
+                .into_any_element(),
+        )
+    }
+
+    /// Layout A ("Command strip with button") for a Needs you to-do or coordinator ask.
+    ///
+    /// Renders either the quiet Copy-only chip (when the command is outside the Ghostex allowlist),
+    /// the ready command strip with Copy + "Run it", or live status (running, waiting for Touch ID /
+    /// password / sign-in / approval, done automatically, or failed/stopped with Retry).
+    pub(super) fn needs_you_command_strip(
+        &self,
+        key: &str,
+        row: &Value,
+        compact: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let raw_command = text(row, "command");
+        let trimmed = raw_command.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let run_action = row["runCommand"].clone();
+        let stop_action = row["stopCommand"].clone();
+        let run = &row["commandRun"];
+        let run_state = text(run, "state");
+        let can_run = run_action.is_object();
+        let s = p.scale;
+
+        // Non-allowlisted commands stay as the quiet Copy-only chip.
+        if !can_run && run_state.is_empty() {
+            return self.dock_command_chip(key, trimmed, p, cx);
+        }
+
+        let display_cmd = ghostex_gx_chat_core::extras::needs_you_command::display_command(trimmed);
+        let run_cmd = {
+            let from_run = text(run, "command");
+            if from_run.trim().is_empty() {
+                display_cmd.clone()
+            } else {
+                from_run
+            }
+        };
+        let copied = display_cmd.clone();
+        let prefix = if compact { "dock-cmd" } else { "modal-cmd" };
+
+        let quiet_btn = |id: String, label: String, icon: Option<&'static str>| {
+            div()
+                .id(gpui::SharedString::from(id))
+                .role(gpui::Role::Button)
+                .chat_cursor_pointer()
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .gap(px(4.0 * s))
+                .px(px(if compact { 6.0 } else { 7.0 } * s))
+                .py(px(if compact { 3.0 } else { 4.0 } * s))
+                .rounded(px(6.0 * s))
+                .text_size(px(12.0 * s))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(p.card_muted)
+                .hover(|style| {
+                    style
+                        .bg(p.foreground.opacity(0.07))
+                        .text_color(p.foreground)
+                })
+                .when_some(icon, |btn, path| {
+                    btn.child(
+                        svg()
+                            .path(path)
+                            .flex_shrink_0()
+                            .size(px(11.0 * s))
+                            .text_color(p.card_muted),
+                    )
+                })
+                .child(label)
+        };
+
+        let neutral_btn = |id: String, label: String, icon: &'static str| {
+            div()
+                .id(gpui::SharedString::from(id))
+                .role(gpui::Role::Button)
+                .chat_cursor_pointer()
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .gap(px(5.0 * s))
+                .px(px(if compact { 8.0 } else { 10.0 } * s))
+                .py(px(if compact { 3.0 } else { 4.0 } * s))
+                .rounded(px(6.0 * s))
+                .bg(p.foreground.opacity(0.08))
+                .border_1()
+                .border_color(p.foreground.opacity(0.14))
+                .text_size(px(12.0 * s))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(p.strengthened(p.prose))
+                .hover(|style| style.bg(p.foreground.opacity(0.14)))
+                .child(
+                    svg()
+                        .path(icon)
+                        .flex_shrink_0()
+                        .size(px(10.0 * s))
+                        .text_color(p.strengthened(p.prose)),
+                )
+                .child(label)
+        };
+
+        // Ready state: quiet rounded bar with monospace command, Copy, and neutral "Run it".
+        if run_state.is_empty() {
+            let copy_text = copied.clone();
+            let copy_btn = quiet_btn(
+                format!("{prefix}-copy:{key}"),
+                "Copy".to_string(),
+                Some("titlebar/copy.svg"),
+            )
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Copy command").build(window, cx)
+            })
+            .on_click(cx.listener(move |_, _, _, cx| {
+                cx.stop_propagation();
+                crate::app::helpers::gpui_copy_to_clipboard(
+                    gpui::ClipboardItem::new_string(copy_text.clone()),
+                    cx,
+                );
+            }));
+
+            let run_btn = neutral_btn(
+                format!("{prefix}-run:{key}"),
+                "Run it".to_string(),
+                "titlebar/player-play.svg",
+            )
+            .on_click(cx.listener(move |this, _, _, cx| {
+                cx.stop_propagation();
+                this.invoke(run_action.clone(), cx);
+            }));
+
+            return Some(
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(8.0 * s))
+                    .px(px(if compact { 8.0 } else { 10.0 } * s))
+                    .py(px(if compact { 5.0 } else { 7.0 } * s))
+                    .rounded(px(if compact { 8.0 } else { 10.0 } * s))
+                    .bg(p.foreground.opacity(0.05))
+                    .border_1()
+                    .border_color(p.foreground.opacity(0.09))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .when(compact, |el| el.truncate())
+                            .when(!compact, |el| el.whitespace_normal())
+                            .font_family(super::fonts::CHAT_MONO)
+                            .text_size(px(PROSE_SIZE * 0.9 * s))
+                            .text_color(p.strengthened(p.prose))
+                            .child(display_cmd),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .gap(px(4.0 * s))
+                            .child(copy_btn)
+                            .child(run_btn),
+                    )
+                    .into_any_element(),
+            );
+        }
+
+        // Live / finished states: running, waiting (Touch ID / password / sign-in), succeeded, failed/stopped.
+        let output = text(run, "output");
+        let hint_title = text(run, "hintTitle");
+        let hint_body = text(run, "hint");
+        let error_text = text(run, "error");
+        let out_key = format!("command-run-output:{key}");
+        let output_open = !output.trim().is_empty() && self.expanded.contains(&out_key);
+
+        let (dot_color, status_label, default_hint, show_stop, show_retry) = match run_state
+            .as_str()
+        {
+            "running" => (
+                p.card_muted.opacity(0.8),
+                format!("Running {run_cmd}\u{2026}"),
+                "Started on this computer. Output stays tucked away unless you open it."
+                    .to_string(),
+                true,
+                false,
+            ),
+            "waiting" => (
+                gpui::Hsla::from(gpui::rgb(0xe5a00d)),
+                if hint_title.is_empty() {
+                    "Waiting for Touch ID or your password".to_string()
+                } else {
+                    hint_title.clone()
+                },
+                if hint_body.is_empty() {
+                    "Use Touch ID or enter your password on this computer to approve. Ghostex will finish automatically once you approve.".to_string()
+                } else {
+                    hint_body.clone()
+                },
+                true,
+                false,
+            ),
+            "succeeded" => (
+                gpui::Hsla::from(gpui::rgb(0x30a46c)),
+                "Done automatically".to_string(),
+                "The command succeeded and your agent was told Done.".to_string(),
+                false,
+                false,
+            ),
+            "stopped" => (
+                p.card_muted,
+                if error_text.is_empty() {
+                    "Stopped before it finished.".to_string()
+                } else {
+                    error_text.clone()
+                },
+                String::new(),
+                false,
+                can_run,
+            ),
+            _ => (
+                gpui::Hsla::from(gpui::rgb(0xe5484d)),
+                if error_text.is_empty() {
+                    "Command did not finish cleanly.".to_string()
+                } else {
+                    error_text.clone()
+                },
+                String::new(),
+                false,
+                can_run,
+            ),
+        };
+
+        let mut actions: Vec<AnyElement> = Vec::new();
+        if !output.trim().is_empty() {
+            let toggle_label = if output_open {
+                "Hide output".to_string()
+            } else if run_state == "succeeded" {
+                "View output".to_string()
+            } else {
+                "Show output".to_string()
+            };
+            let toggle_key = out_key.clone();
+            actions.push(
+                quiet_btn(format!("{prefix}-out:{key}"), toggle_label, None)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        if !this.expanded.remove(&toggle_key) {
+                            this.expanded.insert(toggle_key.clone());
+                        }
+                        cx.notify();
+                    }))
+                    .into_any_element(),
+            );
+        }
+        if show_stop && stop_action.is_object() {
+            actions.push(
+                quiet_btn(format!("{prefix}-stop:{key}"), "Stop".to_string(), None)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(stop_action.clone(), cx);
+                    }))
+                    .into_any_element(),
+            );
+        }
+        if show_retry {
+            let copy_text = copied.clone();
+            actions.push(
+                quiet_btn(
+                    format!("{prefix}-copy-err:{key}"),
+                    "Copy".to_string(),
+                    Some("titlebar/copy.svg"),
+                )
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    cx.stop_propagation();
+                    crate::app::helpers::gpui_copy_to_clipboard(
+                        gpui::ClipboardItem::new_string(copy_text.clone()),
+                        cx,
+                    );
+                }))
+                .into_any_element(),
+            );
+            actions.push(
+                neutral_btn(
+                    format!("{prefix}-retry:{key}"),
+                    "Retry".to_string(),
+                    "titlebar/refresh.svg",
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.invoke(run_action.clone(), cx);
+                }))
+                .into_any_element(),
+            );
+        }
+
+        let status_indicator = if run_state == "succeeded" {
+            svg()
+                .path("titlebar/check.svg")
+                .flex_shrink_0()
+                .size(px(12.0 * s))
+                .text_color(dot_color)
+                .into_any_element()
+        } else {
+            div()
+                .flex_shrink_0()
+                .size(px(8.0 * s))
+                .rounded_full()
+                .bg(dot_color)
+                .into_any_element()
+        };
+
+        let show_hint = !default_hint.is_empty() && (!compact || run_state == "waiting");
+
+        Some(
+            div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(5.0 * s))
+                .px(px(if compact { 8.0 } else { 11.0 } * s))
+                .py(px(if compact { 6.0 } else { 8.0 } * s))
+                .rounded(px(if compact { 8.0 } else { 10.0 } * s))
+                .bg(p.foreground.opacity(0.05))
+                .border_1()
+                .border_color(p.foreground.opacity(0.09))
+                .child(
+                    div()
+                        .w_full()
+                        .min_w_0()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(8.0 * s))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .items_center()
+                                .gap(px(7.0 * s))
+                                .child(status_indicator)
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .when(compact, |el| el.truncate())
+                                        .when(!compact, |el| el.whitespace_normal())
+                                        .text_size(px(12.5 * s))
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .text_color(p.strengthened(p.prose))
+                                        .child(status_label),
+                                ),
+                        )
+                        .when(!actions.is_empty(), |row| {
+                            row.child(
+                                div()
+                                    .flex_shrink_0()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(4.0 * s))
+                                    .children(actions),
+                            )
+                        }),
+                )
+                .when(show_hint, |box_el| {
+                    box_el.child(
+                        div()
+                            .w_full()
+                            .min_w_0()
+                            .whitespace_normal()
+                            .text_size(px(12.0 * s))
+                            .line_height(px(17.0 * s))
+                            .text_color(p.card_muted)
+                            .child(default_hint),
+                    )
+                })
+                .when(output_open, |box_el| {
+                    box_el.child(
+                        div()
+                            .w_full()
+                            .min_w_0()
+                            .max_h(px(160.0 * s))
+                            .overflow_hidden()
+                            .px(px(8.0 * s))
+                            .py(px(6.0 * s))
+                            .rounded(px(7.0 * s))
+                            .bg(p.foreground.opacity(0.04))
+                            .border_1()
+                            .border_color(p.foreground.opacity(0.08))
+                            .font_family(super::fonts::CHAT_MONO)
+                            .text_size(px(11.5 * s))
+                            .line_height(px(16.0 * s))
+                            .text_color(p.card_muted)
+                            .flex()
+                            .flex_col()
+                            .children(
+                                output
+                                    .trim_end()
+                                    .lines()
+                                    .rev()
+                                    .take(12)
+                                    .collect::<Vec<_>>()
+                                    .into_iter()
+                                    .rev()
+                                    .map(|line| {
+                                        div().min_w_0().whitespace_normal().child(
+                                            if line.is_empty() {
+                                                " ".to_string()
+                                            } else {
+                                                line.to_string()
+                                            },
+                                        )
+                                    }),
+                            ),
+                    )
+                })
+                .into_any_element(),
+        )
+    }
+
     /// A Needs you to-do's command (`ghostex needs-you add --command`) under its title, as one
     /// quiet chip in the chat's monospace that copies it on a click; `None` for a row with none.
     /// Its own click target beside the row's, never over it (gx-chat-core `extras::needs_you`).
@@ -2696,9 +3143,6 @@ impl NativeChatView {
         let copied = command.to_string();
         Some(
             div()
-                .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
-                .pr(px(DOCK_ROW_PAD_X * s))
-                .pb(px(6.0 * s))
                 .flex()
                 .min_w_0()
                 .child(

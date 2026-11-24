@@ -34,7 +34,7 @@ USAGE
                               [--release <name>] [--json]
   ghostex coordinator item now <W7> "<where it stands>" [--thread <thread-ref>]... [--json]
   ghostex coordinator item step <W7> "<step>" [--done] [--chore] [--json]
-  ghostex coordinator item ask <W7> "<title>" --detail "<what and why>"
+  ghostex coordinator item ask <W7> "<title>" --detail "<what and why>" [--command "<ghostex ...>"]
                               [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
                               [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]

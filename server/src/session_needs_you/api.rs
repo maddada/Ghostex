@@ -57,7 +57,7 @@ pub(crate) fn insert_needs_you(frame: &mut Map<String, Value>, project_id: &str,
         .lock()
         .ok()
         .and_then(|frames| frames.get(&key).cloned());
-    let value = cached.unwrap_or_else(|| {
+    let mut value = cached.unwrap_or_else(|| {
         let paths = crate::paths::get_gxserver_paths(None);
         let record = crate::storage::open_gxserver_database(&paths)
             .ok()
@@ -75,17 +75,29 @@ pub(crate) fn insert_needs_you(frame: &mut Map<String, Value>, project_id: &str,
         }
         value
     });
+    let command_runs = super::runner::runs_for_session(project_id, session_id);
+    if !command_runs.is_empty() {
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert("commandRuns".to_string(), Value::Object(command_runs));
+        }
+    }
     frame.insert("needsYou".to_string(), value);
 }
 
 /// The tags of the open to-dos, in memory: wakes an SSH-only long-poller when a row opens or closes.
 pub(crate) fn needs_you_identity(project_id: &str, session_id: &str) -> String {
-    frames()
+    let items = frames()
         .lock()
         .ok()
         .and_then(|frames| frames.get(&frame_key(project_id, session_id)).cloned())
         .map(|value| value["items"].to_string())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let runs = super::runner::identity_for_session(project_id, session_id);
+    if runs.is_empty() {
+        items
+    } else {
+        format!("{items}#{runs}")
+    }
 }
 
 /// The highest tag this session's to-dos ever took (`Q61` is 61), 0 for none, so a coordinator's

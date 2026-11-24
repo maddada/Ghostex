@@ -39,17 +39,11 @@ pub fn has_items(state: &ChatState) -> bool {
             .is_some_and(|items| !items.is_empty())
 }
 
-/// The description an opened row shows: the agent's detail, then the command as a code block
-/// (which has its own copy button there).
+/// The description an opened row shows: the agent's detail (the command itself is rendered in its
+/// own command strip under the detail with Copy and Run it).
 fn body(item: &Value) -> String {
     let detail = text(item, "detail").trim();
-    let command = text(item, "command").trim();
-    let markdown = match (detail.is_empty(), command.is_empty()) {
-        (_, true) => detail.to_string(),
-        (true, false) => format!("```sh\n{command}\n```"),
-        (false, false) => format!("{detail}\n\n```sh\n{command}\n```"),
-    };
-    crate::transcript::native_markdown::ask_markdown(&markdown)
+    crate::transcript::native_markdown::ask_markdown(detail)
 }
 
 /// The live and snoozed rows, each with when it was asked (or when its snooze ends).
@@ -121,6 +115,8 @@ pub fn rows_split(
         let snooze = super::work_cards::snooze_choices(
             |hours| json!({ "type": "snoozeWorkAsk", "key": key, "item": tag, "ask": "", "hours": hours }),
         );
+        let command = text(item, "command");
+        let runnable = super::needs_you_command::can_run_command(command);
         let mut row = json!({
             "key": key,
             "kind": "ask",
@@ -131,10 +127,21 @@ pub fn rows_split(
             "titleRuns": crate::questions::form_links::word_runs(title),
             "body": body(item),
             // A to-do with a detail shows Details on its row, its answers in the panel
-            // (`work_cards::details_fields`); its command chip stays on the row.
+            // (`work_cards::details_fields`); its command strip stays on the row and in the panel.
             "details": super::work_cards::details_fields(text(item, "detail")).0,
             "preview": super::work_cards::details_fields(text(item, "detail")).1,
-            "command": text(item, "command"),
+            "command": command,
+            "runCommand": if runnable {
+                super::needs_you_command::run_action(&key, tag, "")
+            } else {
+                Value::Null
+            },
+            "stopCommand": if runnable {
+                super::needs_you_command::stop_action(&key, tag, "")
+            } else {
+                Value::Null
+            },
+            "commandRun": super::needs_you_command::current_run(state, &key),
             "age": crate::transcript::message_time::age_label(now_ms, at),
             "detail": [],
             "buttons": buttons,

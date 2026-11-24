@@ -218,6 +218,8 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::SnoozeWorkAsk
         | ActionKind::SetWorkTopic
         | ActionKind::UnsnoozeWorkAsk
+        | ActionKind::RunNeedsYouCommand
+        | ActionKind::StopNeedsYouCommand
         | ActionKind::ShowInChat
         | ActionKind::HideWorkDock
         | ActionKind::ShowWorkDock
@@ -416,6 +418,8 @@ fn clears_error(kind: &ActionKind) -> bool {
         | ActionKind::SnoozeWorkAsk
         | ActionKind::SetWorkTopic
         | ActionKind::UnsnoozeWorkAsk
+        | ActionKind::RunNeedsYouCommand
+        | ActionKind::StopNeedsYouCommand
         | ActionKind::ShowInChat
         | ActionKind::HideWorkDock
         | ActionKind::ShowWorkDock
@@ -500,6 +504,8 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::SnoozeWorkAsk
             | ActionKind::SetWorkTopic
             | ActionKind::UnsnoozeWorkAsk
+            | ActionKind::RunNeedsYouCommand
+            | ActionKind::StopNeedsYouCommand
             | ActionKind::ShowInChat
             | ActionKind::HideWorkDock
             | ActionKind::ShowWorkDock

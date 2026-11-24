@@ -119,6 +119,7 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
         ("steps", "steps"),
         ("tag", "tag"),
         ("detail", "detail"),
+        ("command", "command"),
     ] {
         if let Some(value) = flag_text(&parsed.flags, flag) {
             params.insert(key.into(), json!(value));

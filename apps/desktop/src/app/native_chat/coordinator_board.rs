@@ -365,6 +365,15 @@ fn dock_card_height(dock: &Value) -> f32 {
             .sum::<f32>()
             .max(1.0);
         6.0 + 8.0 + code_lines * 18.0 + if more > 0 { 22.0 } else { 0.0 } + 6.0
+    } else if dock["commandRun"].is_object() {
+        let state = text(&dock["commandRun"], "state");
+        if state == "waiting" {
+            6.0 + 74.0 + 6.0
+        } else {
+            6.0 + 38.0 + 6.0
+        }
+    } else if dock["runCommand"].is_object() {
+        6.0 + 34.0 + 6.0
     } else {
         6.0 + 19.0 + 6.0
     };

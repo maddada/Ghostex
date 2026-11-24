@@ -180,6 +180,12 @@ pub fn handle_with_ids(
                 })),
             }]
         }
+        ActionKind::RunNeedsYouCommand => {
+            crate::extras::needs_you_command::handle_run(state, action, next_request_id())
+        }
+        ActionKind::StopNeedsYouCommand => {
+            crate::extras::needs_you_command::handle_stop(state, action, next_request_id())
+        }
         // A dock row's "Show in chat": scrolls to the reply of the turn that asked or changed it,
         // only because the reader pressed it (work_cards.rs `show_in_chat`).
         ActionKind::ShowInChat => {

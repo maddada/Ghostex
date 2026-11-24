@@ -26,6 +26,7 @@ pub mod minimap;
 pub mod minimap_rail;
 pub mod native_switch;
 pub mod needs_you;
+pub mod needs_you_command;
 pub mod new_chat_tips;
 pub mod panels;
 pub mod relayed_approvals;

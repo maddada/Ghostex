@@ -167,6 +167,11 @@ pub struct PanelsState {
     pub collab_typing_at: f64,
     pub collab_typing_on: bool,
     pub collab_typing_request: Option<u64>,
+    /// Optimistic/settled Needs you one-click command runs, keyed by card row key
+    /// (`extras::needs_you_command`).
+    pub command_runs: std::collections::BTreeMap<String, serde_json::Value>,
+    /// In-flight `runCommand` / `stopCommand` RPCs by request id: `(row_key, is_stop)`.
+    pub command_run_requests: std::collections::BTreeMap<u64, (String, bool)>,
 }
 
 impl Default for PanelsState {
@@ -208,6 +213,8 @@ impl Default for PanelsState {
             collab_typing_at: 0.0,
             collab_typing_on: false,
             collab_typing_request: None,
+            command_runs: Default::default(),
+            command_run_requests: Default::default(),
         }
     }
 }

@@ -639,6 +639,29 @@ pub(super) async fn route_sessions_http(
             )
             .await
         }
+        // Owner-initiated one-click command runs on Needs you cards and coordinator asks.
+        "/api/coordinatorBoard"
+            if matches!(
+                body_json
+                    .get("params")
+                    .and_then(|params| params.get("op"))
+                    .and_then(Value::as_str),
+                Some("runCommand" | "stopCommand")
+            ) =>
+        {
+            let caller = caller.clone();
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |repository, db, params, _| {
+                    crate::session_needs_you::handle_board_command_op(
+                        &state, &caller, db, repository, params,
+                    )
+                },
+            )
+        }
         // `ghostex message show` and `list`: the user's numbered messages (chat_message_numbers.rs).
         crate::chat_message_numbers::CHAT_MESSAGES_ENDPOINT => {
             crate::chat_message_numbers::handle_chat_messages_http(

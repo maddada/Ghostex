@@ -91,6 +91,8 @@ action_kinds! {
     SnoozeWorkAsk => "snoozeWorkAsk",
     SetWorkTopic => "setWorkTopic",
     UnsnoozeWorkAsk => "unsnoozeWorkAsk",
+    RunNeedsYouCommand => "runNeedsYouCommand",
+    StopNeedsYouCommand => "stopNeedsYouCommand",
     ShowInChat => "showInChat",
     HideWorkDock => "hideWorkDock",
     ShowWorkDock => "showWorkDock",

@@ -130,6 +130,10 @@ fn settle_with_ids(
                 answer.clone(),
             ) {
                 effects.extend(more);
+            } else if let Some(more) =
+                crate::extras::needs_you_command::settle_rpc(state, *request_id, answer.clone())
+            {
+                effects.extend(more);
             } else if coordinator_threads::settle_read(
                 &mut state.extras.panels,
                 *request_id,

@@ -1002,7 +1002,19 @@ impl NativeChatView {
             );
             first_body = false;
         }
-        let has_body = has_text || !first_body;
+        let command_strip = self.needs_you_command_strip(&key, &row, false, p, cx);
+        let has_command_strip = command_strip.is_some();
+        if let Some(strip) = command_strip {
+            column = column.child(
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .mt(px(if first_body { body_lead } else { 8.0 } * s))
+                    .child(strip),
+            );
+            first_body = false;
+        }
+        let has_body = has_text || !first_body || has_command_strip;
 
         // The foot: item pills and threads at the left, the answers (never folded: the panel has
         // room to wrap them) and Reply after a divider at the right; Open / Reply for a row that

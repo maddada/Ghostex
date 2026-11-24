@@ -17,6 +17,7 @@
 //! server/src/agents/ghostex_note.rs (`NEEDS_YOU_NOTE`).
 
 mod api;
+mod runner;
 mod store;
 mod thread;
 
@@ -29,5 +30,6 @@ pub(crate) use api::{
     handle_needs_you_request, highest_tag, insert_needs_you, needs_you_identity,
     route_board_answer, turn_ended, SESSION_NEEDS_YOU_ENDPOINT,
 };
+pub(crate) use runner::handle_board_command_op;
 pub(crate) use store::open_count;
 pub(crate) use thread::{forward_answer, thread_ask_of};

@@ -1419,9 +1419,21 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 "itemPills": item_pills(&items, item, ask_tag),
                 "buttons": card["buttons"],
                 "busy": card["busy"],
-                // A command to run, from a thread's `ghostex needs-you add --command`: the row's
-                // chip that copies it (`extras::needs_you`).
+                // A command to run, from `ghostex needs-you add --command` or
+                // `ghostex coordinator item ask --command`: rendered as the command strip with
+                // Copy and "Run it" when allowlisted (`extras::needs_you_command`).
                 "command": text(ask, "command"),
+                "runCommand": if super::needs_you_command::can_run_command(text(ask, "command")) {
+                    super::needs_you_command::run_action(&key, text(item, "ref"), ask_tag)
+                } else {
+                    Value::Null
+                },
+                "stopCommand": if super::needs_you_command::can_run_command(text(ask, "command")) {
+                    super::needs_you_command::stop_action(&key, text(item, "ref"), ask_tag)
+                } else {
+                    Value::Null
+                },
+                "commandRun": super::needs_you_command::current_run(state, &key),
                 // The words sent from here as its Reply, which its Reply button shows until gxserver
                 // settles it (an answer picked from its buttons is marked on that button instead).
                 "replied": replied_words(ask, answers.get(&key).map(String::as_str)),
