@@ -7058,10 +7058,11 @@ by Ghostex, so the computer, the web page and the phone agree.
 The ? pill on the chat's working row opens Chat Resources, a list of the chat's
 generated content: Ghostex forms, Live pages (with or without questions) and Ghostex visuals,
 each row marked by its icon. A small dropdown at the top right, on the header's
-line, picks what it shows: All, Pages, Forms or Visuals, with their counts. Questions
-sit in folding sections (Unanswered, For later, Answered, Withdrawn), pages that
-ask nothing under Pages and charts under Charts, newest first, each with its
-title, tags and time; click a row to jump to it.
+line, picks what it shows: All, Pages, Forms or Visuals, with their counts. Items
+sit in folding groups (Unanswered, Earlier, and for a coordinator Worker pages):
+Unanswered lists waiting questions and For later items oldest first, while Earlier
+holds answered forms, pages, visuals, and withdrawn or canceled items newest first,
+each with its icon, title, tags and time; click a row to open or jump to it.
 On the computer the list opens when you rest the pointer on the pill, and a click
 on the pill still steps to the previous unanswered question; on the phone a tap
 opens it. The pill says just Resources and stays while the chat has anything to
