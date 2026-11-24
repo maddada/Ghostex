@@ -1381,6 +1381,41 @@ pub(crate) fn session_native_switch_family(session: &Value) -> Result<String, Do
     Ok(family)
 }
 
+/// The Native approval level matching the permission mode a live Terminal session runs in right
+/// now, for a Terminal -> Native switch to start the Native host in it. `None` (Manual, Plan, Ask
+/// for approval, or nothing detected) leaves the session at its usual starting level.
+///
+/// CDXC:AgentProviders 2026-11-25 WHY:
+/// GitHub #746: a Terminal-based Claude chat keeps the mode picked with Shift+Tab or the chat box
+/// (Auto, Accept edits, Bypass) for as long as its terminal runs, so users without Accept all were
+/// rarely asked. The 12.0 "Turn on Native mode" bulk switch carried the running model and effort
+/// over but not that mode, so every switched chat restarted in Manual and asked before each edit
+/// and command. The mode is read from the same transcript and launch evidence as the model
+/// (Claude's `permissionMode`, Codex's `/permissions` profile) and only fills a session that has
+/// no remembered level, on a switch the user's own device asked for.
+fn terminal_approval_level(
+    family: &str,
+    selection: &crate::session_chat_options::SessionChatDetectedSelection,
+) -> Option<super::AcpApprovalLevel> {
+    let value = |choice: Option<&crate::session_chat_options::SessionChatDetectedChoice>| {
+        choice.map(|c| c.value.trim().to_string())
+    };
+    match family {
+        "claude" => match value(selection.mode.as_ref())?.as_str() {
+            "accept-edits" => Some(super::AcpApprovalLevel::AutoEdits),
+            "auto" => Some(super::AcpApprovalLevel::Auto),
+            "bypass" => Some(super::AcpApprovalLevel::FullAccess),
+            _ => None,
+        },
+        "codex" => match value(selection.permissions.as_ref())?.as_str() {
+            "approve-for-me" => Some(super::AcpApprovalLevel::Auto),
+            "full-access" => Some(super::AcpApprovalLevel::FullAccess),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// True when the user explicitly placed this session in Terminal mode (`switch_to_cli` writes
 /// `nonCliMode: false, acpMode: false`). Bulk switch always respects this choice.
 pub(crate) fn session_explicitly_terminal(session: &Value) -> bool {
@@ -1989,14 +2024,21 @@ pub(crate) async fn execute_switch_to_acp(
     // 2b. Snapshot the live Terminal session's model and effort right before sleeping it so a
     //     Terminal -> Native switch carries the exact running model, effort, and Claude 1M context
     //     over to the Native host (including changes made via `/model` inside the terminal).
-    let detected_terminal_choice: Option<(String, Option<String>, Option<u64>)> = if was_running {
+    //     The terminal's current permission mode rides along too (`terminal_approval_level`).
+    let (detected_terminal_choice, detected_terminal_level): (
+        Option<(String, Option<String>, Option<u64>)>,
+        Option<super::AcpApprovalLevel>,
+    ) = if was_running {
         let detector = crate::session_chat_options::SessionChatOptionDetector::new(state);
         let pid_det = project_id.to_string();
         let sid_det = session_id.to_string();
         let fam_det = family.clone();
         tokio::task::spawn_blocking(move || {
             let detected = detector.detect_blocking(&pid_det, &sid_det, Some(&fam_det), true);
-            let selection = detected.options.as_ref().map(|opts| &opts.selection)?;
+            let Some(selection) = detected.options.as_ref().map(|opts| &opts.selection) else {
+                return (None, None);
+            };
+            let level = terminal_approval_level(&fam_det, selection);
             let model = selection
                 .model
                 .as_ref()
@@ -2011,13 +2053,12 @@ pub(crate) async fn execute_switch_to_acp(
                 .map(|e| e.value.trim().to_string())
                 .filter(|e| !e.is_empty());
             let window_size = selection.context_usage.as_ref().and_then(|u| u.window_size);
-            model.map(|m| (m, effort, window_size))
+            (model.map(|m| (m, effort, window_size)), level)
         })
         .await
-        .ok()
-        .flatten()
+        .unwrap_or((None, None))
     } else {
-        None
+        (None, None)
     };
 
     // 3. Persist Native runtimeSettings while capturing exact prior values for clean rollback.
@@ -2134,6 +2175,11 @@ pub(crate) async fn execute_switch_to_acp(
             runtime_settings.insert(
                 super::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
                 json!(super::AcpApprovalLevel::Ask.as_str()),
+            );
+        } else if let Some(level) = detected_terminal_level.filter(|_| !has_stored_level) {
+            runtime_settings.insert(
+                super::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
+                json!(level.as_str()),
             );
         }
         runtime_settings.insert(super::SESSION_NON_CLI_ACTIVE_KEY.to_string(), json!(true));

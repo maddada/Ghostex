@@ -4111,6 +4111,10 @@ agents, chat-first users also see a dismissible **Switch to Native** chip in the
 chat pill strip (and a **Switch to Native** item in the chat box's `•••` menu);
 confirming optionally sets Native as the default for new chats with that agent,
 and clicking mid-reply queues the switch until the reply finishes.
+A running Terminal-based chat that switches to Native keeps the mode it was in: Claude
+Code's Auto, Accept edits or Bypass permissions, or Codex's Approve for me or Full
+permissions, become the Native chat's Auto, Auto-edits or Full permissions. A chat in
+Manual or Plan starts in its usual Native mode.
 
 Prompt history search (**Find**, `ghostex f`) indexes both your prompts and each
 agent turn's closing answer in a rebuildable local SQLite FTS5 store, with a
