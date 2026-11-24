@@ -20,6 +20,8 @@ mod scale_tests;
 mod spaces;
 mod status_groups;
 #[cfg(test)]
+mod status_groups_tests;
+#[cfg(test)]
 mod tests;
 mod tree;
 

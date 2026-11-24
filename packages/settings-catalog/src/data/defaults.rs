@@ -1086,3 +1086,14 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("commandsPanelAutoMinimize", J::Bool(true)),
     ("commandsPanelAutoMinimizeDelaySeconds", J::Num(60.0)),
 ];
+
+#[cfg(test)]
+mod group_sessions_by_tags_tests {
+    /// Off until someone turns it on, so people who use tags as they are see no change.
+    #[test]
+    fn group_sessions_by_tags_is_off_by_default() {
+        let default = crate::default_value("groupSessionsByTags")
+            .map(|value| crate::ToJson::to_json(value).to_value());
+        assert_eq!(default, Some(serde_json::json!(false)));
+    }
+}
