@@ -8,6 +8,11 @@ pub(crate) mod element;
 /// The chat host's computer icons (`app/gx_chat/session_directory.rs`): the preview has no
 /// computers, so every one wears the plain computer.
 pub(crate) mod gx_chat {
+    pub(crate) fn current_model_catalog()
+    -> Option<ghostex_gx_chat_core::menus::catalog::AgentModelCatalog> {
+        None
+    }
+
     pub(crate) mod session_directory {
         pub(crate) fn machine_icon(_machine_id: &str) -> &'static str {
             "titlebar/device-desktop.svg"

@@ -13,9 +13,10 @@ use gpui::{
 use serde_json::Value;
 use std::time::Duration;
 
-/// Matches `MODAL_RADIUS_SECTION` / `MODAL_RADIUS_CONTROL` in `native_modal_kit/palette.rs`.
-const CARD_RADIUS: f32 = 12.0;
-const TILE_RADIUS: f32 = 8.0;
+/// Matches the composer / glass card visual language: soft outer corners (`18px`) with crisp
+/// nested tile corners (`10px`).
+const CARD_RADIUS: f32 = 18.0;
+const TILE_RADIUS: f32 = 10.0;
 /// Matches `sidebar_titlebar_background_is_light` (`theme_colours.rs`) and mobile `isLightBackground`.
 const LIGHT_LUMINANCE_THRESHOLD: f32 = 0.54;
 
@@ -24,6 +25,8 @@ const LIGHT_LUMINANCE_THRESHOLD: f32 = 0.54;
 pub(crate) struct AccountSwitchCardLook {
     pub(crate) background: Hsla,
     pub(crate) card_panel: Hsla,
+    pub(crate) composer_background: Hsla,
+    pub(crate) composer_border: Hsla,
     pub(crate) border: Hsla,
     pub(crate) input_border: Hsla,
     pub(crate) foreground: Hsla,
@@ -83,19 +86,37 @@ struct Palette {
 
 impl Palette {
     fn new(p: &AccountSwitchCardLook) -> Self {
-        // Composite the theme's card surface onto the work-area base and keep it opaque so chat
-        // text directly behind the centered card never bleeds through (CDXC:Theming 2026-11-20 on
-        // `ChatAppearance::over_content_fill`).
-        let surface = p.background.alpha(1.0).blend(p.card_panel).alpha(1.0);
+        // Match the composer / pill strip glass look: near-black translucent glass in dark mode
+        // (`composer_background`, e.g. Polar Night's `base+6%/80%`), and crisp warm-light glass in
+        // light mode (`card_panel`), falling back to a composited fill when `chatBox` is a faint
+        // wash so background chat text never crowds the card.
+        let base = p.background.alpha(1.0);
+        let surface = if p.light {
+            let solid = base.blend(p.card_panel);
+            if p.window_glass {
+                solid.alpha(0.94)
+            } else {
+                solid.alpha(1.0)
+            }
+        } else if p.window_glass {
+            if p.composer_background.a >= 0.72 {
+                p.composer_background
+            } else {
+                base.blend(p.composer_background).alpha(0.84)
+            }
+        } else {
+            base.blend(p.composer_background).alpha(1.0)
+        };
+        // Faint raised surfaces matching the composer pill strip's tint (`STRIP_TINT = 0.035`).
         let tile = if p.light {
             gpui::black().opacity(0.035)
         } else {
-            gpui::white().opacity(0.055)
+            gpui::white().opacity(0.038)
         };
-        let line = if p.window_glass && p.light {
-            p.border
-        } else {
+        let line = if p.light && !p.window_glass {
             p.input_border
+        } else {
+            p.composer_border
         };
         let accent_ink = if relative_luminance(Rgba::from(p.accent)) > LIGHT_LUMINANCE_THRESHOLD {
             gpui::rgb(0x141518).into()
@@ -104,11 +125,11 @@ impl Palette {
         };
         Self {
             backdrop: if p.light {
-                rgba(0x00000040)
+                rgba(0x00000038)
             } else if p.window_glass {
-                Rgba::from(p.background.opacity(0.6))
+                Rgba::from(p.background.opacity(0.42))
             } else {
-                rgba(0x00000094)
+                rgba(0x00000088)
             },
             surface,
             tile,
@@ -116,7 +137,7 @@ impl Palette {
             track: if p.light {
                 gpui::black().opacity(0.08)
             } else {
-                gpui::white().opacity(0.10)
+                gpui::white().opacity(0.09)
             },
             foreground: p.foreground,
             text: p.prose,

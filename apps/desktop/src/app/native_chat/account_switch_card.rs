@@ -47,6 +47,8 @@ impl NativeChatView {
         let look = AccountSwitchCardLook {
             background: appearance.background,
             card_panel: appearance.card_panel,
+            composer_background: appearance.composer_background,
+            composer_border: appearance.composer_border,
             border: appearance.border,
             input_border: appearance.input_border,
             foreground: appearance.foreground,

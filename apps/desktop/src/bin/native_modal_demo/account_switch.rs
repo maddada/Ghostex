@@ -1,8 +1,10 @@
 //! Account-switch card preview (`GHOSTEX_NATIVE_MODAL_DEMO=account-switch`): draws the chat's
 //! own `account_switch_card_view::render_account_switch_overlay` over a default-theme chat surface
-//! using Ghostex's built-in default theme tokens (Polar Night Dark / Everforest Light) from
-//! `ghostex_settings_catalog`. States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): `switching` (default),
-//! `resuming`, `settled`, `failed`.
+//! (Polar Night Dark with its wallpaper and composer/pill strip, or Everforest Light) using
+//! Ghostex's built-in default theme tokens from `ghostex_settings_catalog`.
+//! States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): `switching` (default), `compare` (card over the
+//! wallpaper directly above the composer without a dimming scrim over the composer, for side-by-side
+//! comparison), `resuming`, `failed`.
 
 use super::account_switch_card_view::{
     AccountSwitchCardHooks, AccountSwitchCardLook, render_account_switch_overlay,
@@ -15,10 +17,12 @@ use ghostex_settings_catalog::theme_colours::{
 };
 use ghostex_settings_catalog::theme_roles::roles_for;
 use gpui::{
-    App, AppContext as _, Context, Hsla, IntoElement, ParentElement as _, Render, Rgba, Styled as _,
-    Window, div, px, rgb,
+    AnyElement, App, AppContext as _, Context, FontWeight, Hsla, IntoElement, ObjectFit,
+    ParentElement as _, Render, Rgba, Styled as _, StyledImage as _, Window, div, img, px, rgb,
+    svg,
 };
 use serde_json::{Map, Value, json};
+use std::path::PathBuf;
 
 const PREVIEW_WIDTH: f32 = 1650.0;
 const PREVIEW_HEIGHT: f32 = 962.0;
@@ -27,6 +31,14 @@ struct AccountSwitchPreview {
     state: String,
     light: bool,
     glass: bool,
+    art_path: Option<PathBuf>,
+}
+
+fn find_polar_night_art() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    let path = PathBuf::from(home)
+        .join(".local/share/ghostex/components/theme-art/polar-night-a7184e97.webp");
+    path.is_file().then_some(path)
 }
 
 fn default_chat_look(light: bool, glass: bool) -> AccountSwitchCardLook {
@@ -62,6 +74,17 @@ fn default_chat_look(light: bool, glass: bool) -> AccountSwitchCardLook {
     } else {
         lifted(0.035, 0.0)
     };
+    let mut composer_background: Hsla = if glass {
+        if light {
+            gpui::black().opacity(0.04)
+        } else {
+            gpui::white().opacity(0.06)
+        }
+    } else if light {
+        raised(0.3)
+    } else {
+        lifted(0.03, 0.0)
+    };
     let mut border: Hsla = if glass {
         if light {
             gpui::black().opacity(0.08)
@@ -70,6 +93,15 @@ fn default_chat_look(light: bool, glass: bool) -> AccountSwitchCardLook {
         }
     } else {
         lifted(0.062, 0.095)
+    };
+    let mut composer_border: Hsla = if glass {
+        if light {
+            gpui::black().opacity(0.08)
+        } else {
+            gpui::white().opacity(0.08)
+        }
+    } else {
+        lifted(0.08, 0.067)
     };
     let mut input_border: Hsla = if light {
         toward(0.0, 0.095)
@@ -89,6 +121,7 @@ fn default_chat_look(light: bool, glass: bool) -> AccountSwitchCardLook {
     };
     if let Some(c) = role_hsla("border") {
         border = c;
+        composer_border = c;
         input_border = c;
     }
     if let Some(c) = role_hsla("text") {
@@ -101,6 +134,9 @@ fn default_chat_look(light: bool, glass: bool) -> AccountSwitchCardLook {
     if let Some(c) = role_hsla("surface") {
         card_panel = c;
     }
+    if let Some(c) = role_hsla("chatBox") {
+        composer_background = c;
+    }
     if let Some(c) = role_hsla("accent") {
         accent = background.blend(c);
     }
@@ -109,6 +145,8 @@ fn default_chat_look(light: bool, glass: bool) -> AccountSwitchCardLook {
     AccountSwitchCardLook {
         background,
         card_panel,
+        composer_background,
+        composer_border,
         border,
         input_border,
         foreground,
@@ -192,54 +230,260 @@ fn fixture_card(state: &str) -> Value {
     }
 }
 
+/// Realistic mock of the chat composer and pill strip (same tokens as `composer.rs` /
+/// `pills_strip.rs`) so the account-switch card can be inspected directly beside it over the
+/// wallpaper.
+fn demo_composer(look: &AccountSwitchCardLook) -> AnyElement {
+    let strip_tint = if look.light {
+        gpui::black().opacity(0.035)
+    } else {
+        gpui::white().opacity(0.035)
+    };
+    let pill = |label: &str| {
+        div()
+            .h(px(25.0))
+            .px(px(9.0))
+            .flex()
+            .items_center()
+            .gap(px(5.0))
+            .rounded(px(8.0))
+            .border_1()
+            .border_color(look.composer_border)
+            .bg(strip_tint)
+            .text_size(px(12.0))
+            .text_color(look.foreground)
+            .child(label.to_string())
+    };
+    div()
+        .w(px(740.0))
+        .flex()
+        .flex_col()
+        .rounded(px(22.0))
+        .border_1()
+        .border_color(look.composer_border)
+        .bg(look.composer_background)
+        .overflow_hidden()
+        .child(
+            div()
+                .w_full()
+                .h(px(36.0))
+                .px(px(12.0))
+                .flex()
+                .items_center()
+                .gap(px(6.0))
+                .bg(strip_tint)
+                .border_b_1()
+                .border_color(look.composer_border)
+                .child(pill("Ghostex"))
+                .child(pill("main"))
+                .child(div().flex_1())
+                .child(pill("Resources"))
+                .child(pill("Workers · 11"))
+                .child(pill("Autopilot"))
+                .child(pill("Stashed 3")),
+        )
+        .child(
+            div()
+                .w_full()
+                .px(px(16.0))
+                .pt(px(14.0))
+                .pb(px(12.0))
+                .flex()
+                .flex_col()
+                .gap(px(18.0))
+                .child(
+                    div()
+                        .text_size(px(14.0))
+                        .text_color(look.muted)
+                        .child("Send a follow-up message..."),
+                )
+                .child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(6.0))
+                                .text_size(px(12.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(look.foreground)
+                                .child(
+                                    svg()
+                                        .path("agent-icons/claude.svg")
+                                        .size(px(14.0))
+                                        .text_color(look.brand_color),
+                                )
+                                .child("Default (recommended)"),
+                        )
+                        .child(
+                            div()
+                                .size(px(28.0))
+                                .rounded(px(9.0))
+                                .bg(if look.light {
+                                    look.accent
+                                } else {
+                                    rgb(0xe5e5e5).into()
+                                })
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .text_size(px(13.0))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(if look.light {
+                                    gpui::white()
+                                } else {
+                                    rgb(0x141518).into()
+                                })
+                                .child("↑"),
+                        ),
+                ),
+        )
+        .into_any_element()
+}
+
 impl Render for AccountSwitchPreview {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let look = default_chat_look(self.light, self.glass);
         let card = fixture_card(&self.state);
+        let compare = self.state == "compare";
+        let wallpaper = (!self.light).then(|| self.art_path.clone()).flatten();
+
+        let mut root = div()
+            .relative()
+            .size_full()
+            .bg(look.background)
+            .font_family(look.font.clone());
+
+        // Paint the Polar Night wallpaper with the app's exact `window_art_backdrop` dimming (45%)
+        // and work-area tint (67%) so dark previews show real glass over the artwork.
+        if let Some(path) = wallpaper {
+            root = root
+                .child(
+                    img(path)
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size_full()
+                        .object_fit(ObjectFit::Cover),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size_full()
+                        .bg(gpui::black().opacity(0.45)),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size_full()
+                        .bg(look.background.opacity(0.67)),
+                );
+        }
+
         let overlay = render_account_switch_overlay(
             &card,
             PREVIEW_WIDTH,
             &look,
             AccountSwitchCardHooks::default(),
         );
-        // Simulate a chat pane with a realistic transcript behind the overlay so card surface,
-        // backdrop, contrast and shadow read just like the live app.
-        div()
-            .relative()
-            .size_full()
-            .bg(look.background)
-            .font_family(look.font.clone())
-            .child(
+
+        if compare {
+            // Side-by-side comparison: card over the Polar Night wallpaper with the live composer
+            // and pill strip right below it at full brightness so surface, glass translucency,
+            // border, radius, tiles and text hierarchy compare directly.
+            root.child(
                 div()
+                    .relative()
                     .size_full()
                     .flex()
                     .flex_col()
                     .items_center()
-                    .justify_center()
-                    .gap(px(20.0))
-                    .px(px(120.0))
+                    .pt(px(52.0))
                     .child(
                         div()
-                            .w(px(760.0))
-                            .p(px(16.0))
-                            .rounded(px(12.0))
-                            .border_1()
-                            .border_color(look.border)
-                            .bg(look.card_panel)
-                            .text_size(px(14.0))
-                            .text_color(look.prose)
-                            .child("Rate limit reached on Claude account SP. Switching to account 70 and resuming the conversation."),
-                    )
-                    .child(
-                        div()
-                            .w(px(760.0))
-                            .text_size(px(14.0))
-                            .line_height(px(22.0))
-                            .text_color(look.muted)
-                            .child("Checking usage limits across connected Claude accounts and verifying shared conversation history before switching profiles."),
+                            .w(px(740.0))
+                            .flex()
+                            .flex_col()
+                            .gap(px(10.0))
+                            .child(
+                                div()
+                                    .text_size(px(13.0))
+                                    .text_color(look.muted)
+                                    .child("Worked for 29s · 1 message sent · 1 tool call"),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(14.0))
+                                    .line_height(px(21.0))
+                                    .text_color(look.prose)
+                                    .child("Rate limit reached on Claude account SP. Switching to account 70 and resuming the conversation."),
+                            ),
                     ),
             )
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .pb(px(190.0))
+                    .child(overlay),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .right_0()
+                    .bottom(px(32.0))
+                    .flex()
+                    .justify_center()
+                    .child(demo_composer(&look)),
+            )
+        } else {
+            root.child(
+                div()
+                    .relative()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .justify_between()
+                    .py(px(40.0))
+                    .child(
+                        div()
+                            .w(px(740.0))
+                            .flex()
+                            .flex_col()
+                            .gap(px(12.0))
+                            .mt(px(40.0))
+                            .child(
+                                div()
+                                    .text_size(px(13.0))
+                                    .text_color(look.muted)
+                                    .child("Worked for 29s · 1 message sent · 1 tool call"),
+                            )
+                            .child(
+                                div()
+                                    .p(px(16.0))
+                                    .rounded(px(14.0))
+                                    .border_1()
+                                    .border_color(look.composer_border)
+                                    .bg(look.composer_background)
+                                    .text_size(px(14.0))
+                                    .text_color(look.prose)
+                                    .child("Rate limit reached on Claude account SP. Switching to account 70 and resuming the conversation."),
+                            ),
+                    )
+                    .child(demo_composer(&look)),
+            )
             .child(overlay)
+        }
     }
 }
 
@@ -250,6 +494,7 @@ pub(crate) fn open(demo: &DemoEnv, cx: &mut App) {
     let glass = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_GLASS")
         .map(|value| value.trim() != "0")
         .unwrap_or(true);
+    let art_path = find_polar_night_art();
     let _ = open_modal_window(
         PREVIEW_WIDTH,
         PREVIEW_HEIGHT,
@@ -258,6 +503,7 @@ pub(crate) fn open(demo: &DemoEnv, cx: &mut App) {
                 state,
                 light,
                 glass,
+                art_path,
             })
         },
         cx,
