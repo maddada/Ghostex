@@ -7,6 +7,7 @@ pub(crate) mod state;
 pub(crate) mod transcript;
 
 mod account_switch_card;
+mod account_switch_card_view;
 mod actions;
 mod agent_fleet;
 mod agent_tasks;
