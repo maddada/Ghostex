@@ -1308,7 +1308,11 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             ReportKind::Finished { cut_off } => {
                 use crate::notification_feed::body::{finished_turn_reply, FinishedTurnReply};
                 let session = report.session.clone();
-                let reported_ms = report.thread.reported_at.as_deref().and_then(parse_iso_ms_opt);
+                let reported_ms = report
+                    .thread
+                    .reported_at
+                    .as_deref()
+                    .and_then(parse_iso_ms_opt);
                 // A reply we already forwarded is not this turn's report.
                 let reply = tokio::task::spawn_blocking(move || {
                     session
