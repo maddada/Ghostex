@@ -4,13 +4,15 @@ use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
 
 use crate::state::ChatRow;
 
-/// The row's text; `transcript/noise.rs` draws it like the interrupted-turn marker.
-pub const AGENT_RESTARTED_TEXT: &str = "Stopped when the agent restarted";
+/// The row's text: gxserver's own interrupted-turn row's (`INTERRUPTED_STATUS_TEXT` in
+/// server/src/session_chat.rs), so it is classified, placed and drawn as that row is
+/// (`transcript/noise.rs`): "Agent was interrupted", per the 2026-10-16 decision there.
+const AGENT_RESTARTED_TEXT: &str = "Conversation interrupted";
 
 /// The id prefix of an [`with_agent_restart_rows`] row.
 const AGENT_RESTART_ID_PREFIX: &str = "agent-restart:";
 
-/// `transcript` with a "Stopped when the agent restarted" row after the last row written at or
+/// `transcript` with an interrupted-turn row after the last row written at or
 /// before each of `restarted_at` (epoch ms, oldest first).
 ///
 /// CDXC:SessionChat 2026-11-24 WHY: a Native host that dies mid-turn leaves nothing in the agent's own transcript (Claude records the killed tool's "Exit code 137" and stops), so the turn just ended at its tool call. gxserver records each restart it made after such a death (server/src/session_chat_agent_restarts.rs, sent as `agentRestartedAt`) and the row is placed here by time. A restart older than the first row shown belongs to history that is not loaded or was cleared, so it is left out rather than drawn at the top.

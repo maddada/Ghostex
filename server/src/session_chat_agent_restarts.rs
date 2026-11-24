@@ -6,7 +6,7 @@ use rusqlite::{params, Connection};
 /// The chat shows at most this many restart marks per session (the newest).
 const KEPT_RESTARTS: i64 = 50;
 
-/// CDXC:SessionChat 2026-11-24 WHY: a Native host that dies mid-turn leaves nothing in the agent's own transcript (Claude records the killed tool's "Exit code 137" and stops), so the chat showed a turn that just ended at its tool call. gxserver records the restart time here and sends it as `agentRestartedAt`; the chat core draws "Stopped when the agent restarted" at that time (`with_agent_restart_rows` in packages/gx-chat-core/src/transcript/agent_restarts.rs). A table, not a runtimeSettings key, because reloads, account switches and launches rewrite runtimeSettings.
+/// CDXC:SessionChat 2026-11-24 WHY: a Native host that dies mid-turn leaves nothing in the agent's own transcript (Claude records the killed tool's "Exit code 137" and stops), so the chat showed a turn that just ended at its tool call. gxserver records the restart time here and sends it as `agentRestartedAt`; the chat core draws its interrupted-turn marker ("Agent was interrupted") at that time (`with_agent_restart_rows` in packages/gx-chat-core/src/transcript/agent_restarts.rs). A table, not a runtimeSettings key, because reloads, account switches and launches rewrite runtimeSettings.
 pub(crate) fn record_agent_restarted_mid_turn(
     db: &Connection,
     project_id: &str,
