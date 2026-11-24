@@ -1182,25 +1182,10 @@ impl GpuiCreateWorktreeModalWindow {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let p = self.palette;
-        // `--secondary` / `--secondary-foreground`: oklch(27.4% .006 286) and oklch(98.5%)
-        // in dark, #f1f1f1 / #262626 in light (modals-light.css (deleted 2026-11-06)).
-        let (secondary, secondary_foreground) = if p.light {
-            (rgb(0xf1f1f1), rgb(0x262626))
+        let (fills, text) = if primary {
+            (p.primary_button_fills(), p.primary_button_text())
         } else {
-            (rgb(0x27272a), rgb(0xfafafa))
-        };
-        let (background, text, hover) = if primary {
-            {
-                let fills = p.primary_button_fills();
-                (fills.rest, p.primary_button_text(), fills.hover)
-            }
-        } else {
-            // `hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]`.
-            (
-                secondary,
-                secondary_foreground,
-                css_mix(secondary, 0.95, p.foreground),
-            )
+            (neutral_button_fills(p.light), p.foreground)
         };
         h_flex()
             .id(id)
@@ -1212,7 +1197,7 @@ impl GpuiCreateWorktreeModalWindow {
             .items_center()
             .justify_center()
             .rounded(px(MODAL_RADIUS_CONTROL))
-            .bg(hsla(background))
+            .bg(hsla(fills.rest))
             .text_size(px(13.0))
             .line_height(px(20.0))
             .text_color(hsla(text))
@@ -1220,7 +1205,8 @@ impl GpuiCreateWorktreeModalWindow {
             .when(disabled, |this| this.opacity(0.5).cursor_default())
             .when(!disabled, |this| {
                 this.cursor_pointer()
-                    .hover(move |this| this.bg(hsla(hover)))
+                    .hover(move |this| this.bg(hsla(fills.hover)))
+                    .active(move |this| this.bg(hsla(fills.pressed)))
                     .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
                         on_click(this, window, cx);
                     }))

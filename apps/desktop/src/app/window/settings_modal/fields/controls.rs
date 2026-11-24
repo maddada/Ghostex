@@ -225,8 +225,8 @@ pub(crate) enum ButtonVariant {
     /// `variant='ghost'`: borderless and unfilled at rest, for icon-only buttons; a labelled
     /// ghost button draws as `Outline`.
     Ghost,
-    /// The stock shadcn primary of a dialog portaled out of Settings (Pick Color's Done): the
-    /// filled `--primary` with medium text and the 10px `rounded-lg` corners.
+    /// Neutral filled primary button across Settings and dialogs, one step brighter than the
+    /// neutral fill with medium text and 10px corners.
     Primary,
     /// `variant='destructive'` on a Settings page: the destructive colour on a 20% (dark) or 10%
     /// (light) tint of itself, one step stronger on hover.
@@ -286,7 +286,7 @@ fn button_colors(p: &SettingsPalette, variant: ButtonVariant) -> ButtonFills {
                 pressed: hover,
             }
         }
-        // Shared theme-accent primary button across all modals and Settings dialogs.
+        // Shared neutral primary button across all modals and Settings dialogs.
         ButtonVariant::Primary => p.modal.primary_button_fills(),
         ButtonVariant::Destructive => destructive_button_fills(p.destructive, p.light),
         // A dialog portaled out of Settings keeps the light tint in both appearances.

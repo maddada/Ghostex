@@ -280,11 +280,11 @@ impl ModalPalette {
     }
 
     /// The theme roles over the derived colours (helpers/theme_roles.rs): Borders paints the
-    /// hairlines and menu borders, Grey text the muted text, Accent the primary button and
-    /// checked controls, Cards/Controls/Hover the opaque fills when glass is off (under glass
-    /// panels and fields keep translucent ink washes so they never stack into an opaque slab),
-    /// Menus the menus, Focus ring the focused field's border, and Success and Danger their
-    /// colours. A role not set keeps the derived colour.
+    /// hairlines and menu borders, Grey text the muted text, Cards/Controls/Hover the opaque
+    /// fills when glass is off (under glass panels and fields keep translucent ink washes so they
+    /// never stack into an opaque slab), Menus the menus, Focus ring the focused field's border,
+    /// and Success and Danger their colours. A role not set keeps the derived colour. Primary
+    /// buttons and switches stay neutral (`primary_button_fills_for`, `draw_switch`).
     pub(crate) fn with_theme_roles(mut self) -> Self {
         use crate::app::helpers::{theme_role_or_rgba, theme_role_rgba};
         let light = self.light;

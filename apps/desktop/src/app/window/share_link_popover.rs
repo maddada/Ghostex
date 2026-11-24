@@ -742,7 +742,8 @@ impl Render for ShareLinkPopoverWindow {
                                                 .child(url),
                                         ),
                                 )
-                                .child(
+                                .child({
+                                    let copy_fills = p.primary_button_fills();
                                     div()
                                         .id("share-popover-copy-link")
                                         .role(gpui::Role::Button)
@@ -751,7 +752,7 @@ impl Render for ShareLinkPopoverWindow {
                                         .h(px(32.0))
                                         .px(px(12.0))
                                         .rounded(px(8.0))
-                                        .bg(hsla(p.primary_button_fills().rest))
+                                        .bg(hsla(copy_fills.rest))
                                         .text_color(hsla(p.primary_button_text()))
                                         .text_size(px(12.5))
                                         .font_weight(FontWeight::MEDIUM)
@@ -759,6 +760,8 @@ impl Render for ShareLinkPopoverWindow {
                                         .items_center()
                                         .gap(px(5.0))
                                         .cursor_pointer()
+                                        .hover(move |this| this.bg(hsla(copy_fills.hover)))
+                                        .active(move |this| this.bg(hsla(copy_fills.pressed)))
                                         .child(
                                             svg()
                                                 .path(if link_copied {
@@ -775,8 +778,8 @@ impl Render for ShareLinkPopoverWindow {
                                                 copy_url.clone(),
                                             ));
                                             this.flash_copied("link", cx);
-                                        })),
-                                ),
+                                        }))
+                                }),
                         ),
                 );
 
