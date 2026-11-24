@@ -192,6 +192,10 @@ fn tick(state: &AppState) -> Vec<HealDue> {
             let zmx_alive = live.contains(&zmx_name);
             if zmx_alive && session.is_some_and(crate::acp::session_is_acp) {
                 let session = session.expect("checked is_some_and");
+                // A Native turn held on an approval is still a turn: if its host dies there, the
+                // turn is cut off like a running one (`record_agent_restarted_mid_turn`).
+                let working =
+                    working || crate::session_approval::session_awaits_approval(session, &now_iso);
                 if crate::acp::channel::live(&key.0, &key.1, "send").is_some() {
                     return Sighting {
                         daemon_alive: true,
