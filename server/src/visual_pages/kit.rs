@@ -101,7 +101,7 @@ pub(super) const KIT_STYLE: &str = r#"<style id="ghostex-kit">
 gx-page,gx-questions{display:grid;grid-template-columns:minmax(var(--gx-gutter),1fr) minmax(0,var(--gx-text-width)) minmax(var(--gx-gutter),1fr);row-gap:20px;align-content:start;padding:56px 0 88px;font-size:15px;line-height:1.65;color:var(--gx-text);overflow-wrap:break-word}
 gx-page{display:grid}
 gx-page>*,gx-questions>*{grid-column:2;min-width:0}
-/* The Done footer (SEEN_FOOTER) inside a page's own layout takes the page's width, not gutters of its own. */
+/* The seen-only footer (SEEN_FOOTER) inside a page's own layout takes the page's width, not gutters of its own. */
 gx-page gx-questions[data-gx-seen]{grid-template-columns:0 minmax(0,1fr) 0;padding:36px 0 0}
 gx-page>gx-wide,gx-questions>gx-wide{grid-column:1/-1;justify-self:center;box-sizing:border-box;width:min(100% - 2*var(--gx-gutter),var(--gx-wide-width));display:flex;flex-direction:column;align-items:center;gap:20px}
 gx-page>gx-wide[size=full],gx-questions>gx-wide[size=full]{width:100%}
@@ -268,6 +268,11 @@ html[data-gx-theme=light] .gx-ref{color:#5f9878}
 .gx-send{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px;padding:10px 14px;border:1px solid var(--gx-card-border);border-radius:16px;background:var(--gx-footer);box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15)}
 .gx-send-button{display:inline-flex;align-items:center;gap:6px;margin-left:auto;height:28px;box-sizing:border-box;padding:0 11px;font:inherit;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--gx-control);background:var(--gx-control);color:var(--gx-bg);cursor:pointer}
 .gx-send-button>svg{width:14px;height:14px;flex:none}
+.gx-send-button.gx-send-seen{display:inline-grid;place-items:center}
+.gx-send-button.gx-send-seen>.gx-btn-state{grid-area:1/1;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;max-width:100%}
+.gx-send-button.gx-send-seen>.gx-btn-state>svg{width:14px;height:14px;flex:none}
+.gx-send-button.gx-send-seen>.gx-btn-state>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gx-send-button.gx-send-seen[data-gx-mode=archive]>.gx-btn-send,.gx-send-button.gx-send-seen[data-gx-mode=send]>.gx-btn-archive{visibility:hidden;pointer-events:none}
 .gx-send-button:hover:not(:disabled){opacity:.9}
 .gx-send-button:disabled{opacity:.5;cursor:default}
 .gx-skip-all{display:inline-flex;align-items:center;gap:6px;margin-left:auto;height:28px;box-sizing:border-box;padding:0 11px;font:inherit;font-size:13px;font-weight:500;border-radius:8px;border:1px solid transparent;background:color-mix(in srgb,var(--gx-fg) 9%,transparent);color:var(--gx-text);cursor:pointer}
@@ -947,14 +952,16 @@ function tidyCards(questions,ties){
   return cards;
 }
 function setup(root){
-  /* A page that asks nothing and waits to be seen (SEEN_FOOTER below): the same footer with no questions, a reply box and Done. */
+  /* A page that asks nothing and waits to be seen (SEEN_FOOTER below): the same footer with no questions, a reply box and Archive (switching live to Send to agent when the box has a reply). */
   var seen=root.hasAttribute("data-gx-seen");
-  var used={},questions=[],options=[];
+  var used={},questions=[],options=[],exported=false,archiveState=null,sendState=null,archiveLabel=null,sendLabel=null;
+  function hasReply(){return !!(seen&&notes&&notes.value.trim());}
   function collect(){var out={};questions.forEach(function(q){q.collect(out);});if(seen)out.seen=true;var t=notes&&notes.value.trim();if(t)out[notesKey]=t;return out;}
   function restore(answers){questions.forEach(function(q){q.restore(answers);});if(notes)notes.value=typeof answers[notesKey]==="string"?answers[notesKey]:"";}
   function syncOptions(){options.forEach(function(o){o.sync();});}
+  function syncSeenButton(){if(!seen||exported||!archiveState||!sendState||button.disabled)return;var sending=hasReply();button.setAttribute("data-gx-mode",sending?"send":"archive");archiveState.setAttribute("aria-hidden",sending?"true":"false");sendState.setAttribute("aria-hidden",sending?"false":"true");button.setAttribute("data-gx-tip",sending?"Send to agent":"Archive");button.setAttribute("aria-label",sending?"Send to agent":"Archive");}
   /* The reader's picks so far are kept on the host (PAGE_API's draft), so closing and reopening the page loses nothing. */
-  function changed(){syncOptions();if(window.ghostex&&ghostex.__saveDraft)ghostex.__saveDraft("kit",collect());}
+  function changed(){syncOptions();syncSeenButton();if(window.ghostex&&ghostex.__saveDraft)ghostex.__saveDraft("kit",collect());}
   addRowChoices(root);
   questions=Array.prototype.map.call(root.querySelectorAll("gx-question"),function(qe,index){return question(qe,index,used,changed);});
   var explicit=bindOptions(questions),rowTies=bindRows(questions,changed),auto=autoTie(questions,explicit.concat(rowTies));
@@ -1000,13 +1007,13 @@ function setup(root){
   }
   var bar=el("div","gx-send"),button=el("button","gx-send-button"),label=el("span",null,root.getAttribute("submit")||"Send answers"),status=el("span","gx-send-status"),info=el("button","gx-send-info");
   /* The sentence about blank questions is an (i) icon with the quick tooltip, not a line of text beside the buttons (the SessionChat 2026-10-24 DECISION in apps/desktop/src/app/native_chat/ask_card.rs `ask_info_hint`). Any status message replaces the icon. */
-  var infoText=seen?"The agent is told you saw the page, with your reply if you write one.":"Questions you leave blank are sent as skipped.";info.type="button";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);info.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/></svg>';status.append(info);
+  var infoText=seen?"Archives the page when blank, or sends your reply to the agent and archives it.":"Questions you leave blank are sent as skipped.";info.type="button";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);info.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/></svg>';status.append(info);
   var mac=/Mac|iPhone|iPad/.test(navigator.platform||"");
   /* The shortcuts show in the kit's tooltip as key caps, the keys this platform uses, not on the buttons. */
   button.setAttribute("data-gx-tip",seen?"Archive":"Send answers");button.setAttribute("data-gx-tip-keys",mac?"⌘ Enter":"Ctrl Enter");
   /* Skip all: sends at once with every question as skipped and no notes, whatever is picked or typed (see the SessionChat DECISION on SKIPPED in packages/gx-visual/src/questions.rs). */
   var skipAll=el("button","gx-skip-all");skipAll.type="button";skipAll.append(el("span",null,"Skip all"));skipAll.setAttribute("data-gx-tip","Skip all");skipAll.setAttribute("data-gx-tip-keys",mac?"⌘ ⇧ Enter":"Ctrl Shift Enter");
-  button.type="button";if(seen)button.insertAdjacentHTML("afterbegin",'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>');button.append(label);if(seen)bar.append(status,button);else bar.append(status,skipAll,button);if(notesCard)root.append(notesCard);root.append(bar);
+  button.type="button";if(seen){var archiveText=root.getAttribute("submit")||"Archive";button.classList.add("gx-send-seen");button.setAttribute("data-gx-mode","archive");button.setAttribute("aria-label",archiveText);archiveState=el("span","gx-btn-state gx-btn-archive");archiveState.insertAdjacentHTML("afterbegin",'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>');archiveLabel=el("span",null,archiveText);archiveState.append(archiveLabel);sendState=el("span","gx-btn-state gx-btn-send");sendLabel=el("span",null,"Send to agent");sendState.append(sendLabel);sendState.setAttribute("aria-hidden","true");button.append(archiveState,sendState);bar.append(status,button);}else{button.append(label);bar.append(status,skipAll,button);}if(notesCard)root.append(notesCard);root.append(bar);
   skipAll.addEventListener("click",function(){
     if(button.disabled)return;
     var out={};questions.forEach(function(q){out[q.key]=SKIPPED;});
@@ -1014,7 +1021,7 @@ function setup(root){
     send(out,function(){restore({});root.querySelectorAll("textarea").forEach(function(t){t.value="";});});
   });
   var dictStop=null;
-  function lock(){if(dictStop)dictStop();questions.forEach(function(q){q.lock();});if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent=seen?"Archived":"Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?"Archived. The agent was told.":"Sent to the agent.";}
+  function lock(){if(dictStop)dictStop();questions.forEach(function(q){q.lock();});var replied=hasReply();if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();if(seen&&archiveState&&sendState){button.setAttribute("data-gx-mode",replied?"send":"archive");archiveState.setAttribute("aria-hidden",replied?"true":"false");sendState.setAttribute("aria-hidden",replied?"false":"true");archiveLabel.textContent="Archived";sendLabel.textContent="Sent";button.setAttribute("aria-label",replied?"Sent":"Archived");}else{label.textContent=seen?"Archived":"Sent";}button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?(replied?"Sent to the agent and archived.":"Archived. The agent was told."):"Sent to the agent.";}
   /* CDXC:SessionChat 2026-11-11 DECISION:
      User: "please show number of questions answered so far in bottom right corner always". A page with questions shows "3 of 10 answered" in a small glass pill fixed at the window's bottom right, whatever the scroll, updated as the reader answers. A question counts as answered as the tile's check and Send count it (`gx-has-answer`): a choice picked, or a note or text written; one left blank counts as not answered, also after Skip all. All answered turns it green. (2026-11-12: it stays fully on screen: User, on an Android phone's page sheet where the pill's right end was cut off by the screen's edge: "make questions bottom right not off screen pls". Its margin is the page's own gutter (16px on a phone, 24px otherwise) or the safe area, it shrinks with an ellipsis if the screen is narrower than its text, and the script places it by the visual viewport, so a web view whose layout is wider than the screen cannot push it off.) The page gets room at its end (the gutter plus 34px; measured from the pill since 2026-11-15, below), so scrolled to the bottom the pill sits below the send bar instead of on it. The floating window, a browser tab and the phone's page sheet all get it from here.
      CDXC:SessionChat 2026-11-15 DECISION: User, with a screenshot of a page on their Android foldable where the "1 of 2 answered" pill sat over an option card, among cards that overflowed and overlapped: "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." Asked whether the pill should fade whenever content is under it or always show, the user answered "Always show", so the "always" above stands: the pill never hides. It cannot hide a control: clicks and taps go through it (`pointer-events:none`), and the page's room at its end is measured from the pill itself (its margin, its height at the current text size and a 12px gap), so scrolled to the end every card, the send bar and its buttons sit clear above it. Supersedes the fading pill tried the same day. */
@@ -1073,9 +1080,10 @@ function setup(root){
   if(!window.ghostex){button.disabled=true;skipAll.remove();status.textContent="This Ghostex can't send answers from a page; type them in the chat.";return;}
   if(ghostex.answered){restore(ghostex.answers||{});lock();return;}
   /* An exported page has no Ghostex to send to: Send becomes Export answers, which shows the answers to copy or download, and the page stays open for more (exported.rs). */
-  var exported=!!ghostex.exported;
-  if(exported){var svg=button.querySelector("svg");if(svg)svg.remove();label.textContent="Export answers";button.setAttribute("data-gx-tip","Export answers");skipAll.remove();infoText=seen?"Exports that you saw the page, with your reply if you write one.":"Questions you leave blank are exported as skipped.";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);}
+  exported=!!ghostex.exported;
+  if(exported){if(seen){button.classList.remove("gx-send-seen");button.removeAttribute("data-gx-mode");button.removeAttribute("aria-label");archiveState=sendState=null;button.textContent="";button.append(label);}else{var svg=button.querySelector("svg");if(svg)svg.remove();}label.textContent="Export answers";button.setAttribute("data-gx-tip","Export answers");skipAll.remove();infoText=seen?"Exports that you saw the page, with your reply if you write one.":"Questions you leave blank are exported as skipped.";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);}
   var saved=ghostex.__draft&&ghostex.__draft("kit");if(saved&&typeof saved==="object"){restore(saved);syncOptions();}
+  syncSeenButton();
   /* Pasted images: see the Clipboard DECISIONs on KIT_SCRIPT. */
   var pendingImages=0,kept={},keptSize=0,savedThumbs=ghostex.__draft&&ghostex.__draft("thumbs");
   function keepSmall(k,d){if(typeof d==="string"&&/^data:image\//.test(d)&&!kept[k]){small[k]=kept[k]=d;keptSize+=d.length;}}
@@ -1154,13 +1162,14 @@ function setup(root){
   }
   allPills();
   /* A newer draft than the one the page was served came after it loaded (PAGE_API's "gx-draft", sent only before the reader changed anything): show it. */
-  document.addEventListener("gx-draft",function(){if(button.disabled)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();});
+  document.addEventListener("gx-draft",function(){if(button.disabled)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();syncSeenButton();});
   function send(out,sent){
     if(pendingImages){status.classList.add("gx-error");status.textContent="Wait for the pasted image to finish saving.";return;}
     if(exported){status.classList.remove("gx-error");ghostex.submit(out).then(function(){status.textContent="Answers exported. Send them back to whoever shared this page.";});return;}
-    button.disabled=true;status.classList.remove("gx-error");status.textContent="Sending…";
+    var sendingReply=hasReply();
+    button.disabled=true;status.classList.remove("gx-error");status.textContent=seen&&!sendingReply?"Archiving\u2026":"Sending\u2026";
     /* A send that can't reach Ghostex keeps trying with everything left as typed, and says so (PAGE_API's submit). */
-    ghostex.submit(out,function(message){status.classList.add("gx-error");status.textContent=message;}).then(function(){if(sent)sent();lock();},function(error){button.disabled=false;status.classList.add("gx-error");status.textContent=error&&error.message||"Your answers were not sent.";});
+    ghostex.submit(out,function(message){status.classList.add("gx-error");status.textContent=message;}).then(function(){if(sent)sent();lock();},function(error){button.disabled=false;syncSeenButton();status.classList.add("gx-error");status.textContent=error&&error.message||"Your answers were not sent.";});
   }
   button.addEventListener("click",function(){send(collect());});
   /* Ctrl+Enter (Cmd+Enter on macOS) presses the send button from anywhere on the page, a note box included; with Shift it presses Skip all. */
@@ -1478,7 +1487,7 @@ function setupMentions(){
   },true);
   ["scroll","resize"].forEach(function(name){addEventListener(name,function(){if(mentionState&&mentionMenu&&mentionMenu.classList.contains("gx-m-on"))placeMention(mentionState.target);},true);});
 }
-/* SEEN_FOOTER: a page that asks nothing, published to wait until the reader has looked at it (`awaitsSeen`, server/src/visual_pages/publish.rs), ends with a reply box and Archive, which send `{"seen": true, "reply": …}` as its answers. It goes at the very end of the page, so the reader reaches the end to press it. */
+/* SEEN_FOOTER: a page that asks nothing, published to wait until the reader has looked at it (`awaitsSeen`, server/src/visual_pages/publish.rs), ends with a reply box and Archive (which switches live to Send to agent when the reader types a reply), sending `{"seen": true, "reply": …}` as its answers. It goes at the very end of the page, so the reader reaches the end to press it. */
 function seenFooter(){var r=document.createElement("gx-questions");r.setAttribute("data-gx-seen","");r.setAttribute("submit","Archive");(document.querySelector("gx-page")||document.body).append(r);setup(r);}
 function init(){followPaint();addThemeSwitch();setupTabs();var root=document.querySelector("gx-questions");if(root)setup(root);else if(window.ghostex&&ghostex.awaitsSeen)seenFooter();setupMentions();}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();

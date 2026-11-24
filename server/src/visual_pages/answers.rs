@@ -115,16 +115,20 @@ pub(crate) async fn submit(
     let message = tagged_answers_message(&state_dir, &id, &title, &answers);
     let (error, wait_for_idle) = deliver(
         &state,
-        project_id,
-        session_id,
+        project_id.clone(),
+        session_id.clone(),
         message,
         format!("visual-page-{id}"),
     )
     .await;
     let state_dir = state.paths.root_dir.clone();
     let noted = error.clone();
-    let _ =
-        tokio::task::spawn_blocking(move || note_delivery(&state_dir, &id, noted.as_deref())).await;
+    let refresh_state = state.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        note_delivery(&state_dir, &id, noted.as_deref());
+        crate::session_chat_open_questions::refresh(&refresh_state, &project_id, &session_id, None);
+    })
+    .await;
     match error {
         None => reply(
             StatusCode::OK,
