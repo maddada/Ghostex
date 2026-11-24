@@ -22,8 +22,9 @@ Its hooks name that file (`transcriptPath`) and the conversation
     MODEL / PLANNER_RESPONSE         any of thinking, content, tool_calls in ONE step
     MODEL / <tool type> or GENERIC   the tool's result text (RUN_COMMAND,
                                      VIEW_FILE, … before 1.1.24; GENERIC after)
-    SYSTEM / CONVERSATION_HISTORY,
-    SYSTEM / CHECKPOINT              harness bookkeeping, never shown
+    SYSTEM / CHECKPOINT              a compaction's summary, shown as a
+                                     "Context compacted" row
+    SYSTEM / CONVERSATION_HISTORY    harness bookkeeping, never shown
 
 A planner step carries the model's thinking AND its answer or tool calls in one
 record, while the chat contract decodes one message per line, so the thinking
@@ -538,7 +539,11 @@ fn step_row(record: &Map<String, Value>, part: &str, extra: Map<String, Value>) 
 /// Mirror rows for one raw step, in display order.
 ///
 /// CDXC:SessionChat 2026-10-25 DECISION: User, reporting a regression in agy's chat ("I no longer have a little chat bubble that says how many tool calls, and I can click on it to see those calls. Those are now hidden behind all the thinking"), picked Q549 A: agy's thinking is a thinking row like every other agent's, drawn as the slim "Thought" line with the calls it made listed below it, and opening on click. Supersedes the 2026-09-03 choice to mirror it as the assistant's own text (`narration: true`), which the chat drew as a heading that hid the calls after it.
-fn mirror_rows_for_step(record: &Map<String, Value>, awaits_background_tasks: bool) -> Vec<Value> {
+fn mirror_rows_for_step(
+    record: &Map<String, Value>,
+    awaits_background_tasks: bool,
+    ends_compact_turn: bool,
+) -> Vec<Value> {
     let source = record
         .get("source")
         .and_then(Value::as_str)
@@ -568,8 +573,8 @@ fn mirror_rows_for_step(record: &Map<String, Value>, awaits_background_tasks: bo
         }
         ("MODEL", "PLANNER_RESPONSE") => {
             let mut rows = Vec::new();
-            if let Some(thinking) =
-                step_text(record, "thinking").filter(|text| !text.trim().is_empty())
+            if let Some(thinking) = step_text(record, "thinking")
+                .filter(|text| !text.trim().is_empty() && !is_placeholder_thinking(text))
             {
                 rows.extend(row(
                     "reasoning",
@@ -610,8 +615,38 @@ fn mirror_rows_for_step(record: &Map<String, Value>, awaits_background_tasks: bo
             }
             row("tool", extra).into_iter().collect()
         }
+        // CDXC:SessionChat 2026-11-24 WHY: agy compacts (`/compact`, or on its own near the
+        // context limit) by writing a CHECKPOINT step holding the summary ("# Resuming from a
+        // compaction"). The mirror dropped it as bookkeeping, so a `/compact` showed nothing after
+        // the prompt and its turn never read as finished. It becomes the "Context compacted" row
+        // Codex, Copilot and Hermes chats show, and ends the turn when it answers a `/compact`.
+        ("SYSTEM", "CHECKPOINT") => {
+            let mut extra = Map::new();
+            if ends_compact_turn {
+                extra.insert("endsTurn".into(), Value::Bool(true));
+            }
+            row("compaction", extra).into_iter().collect()
+        }
         _ => Vec::new(),
     }
+}
+
+/// CDXC:SessionChat 2026-11-24 WHY:
+/// agy (1.5.15) writes this sentence as a step's thinking when it has none to show, and the chat drew it as a "Thought" row on most turns, saying nothing. Only the exact sentence is dropped; real thinking that starts the same way stays.
+const ANTIGRAVITY_PLACEHOLDER_THINKING: &[&str] = &["I'm thinking through how to approach this."];
+
+fn is_placeholder_thinking(text: &str) -> bool {
+    let text = text.trim();
+    ANTIGRAVITY_PLACEHOLDER_THINKING
+        .iter()
+        .any(|placeholder| text == *placeholder)
+}
+
+/// Whether a user step is agy's `/compact`, whose turn ends at the compaction with no reply.
+fn is_compact_command(record: &Map<String, Value>) -> bool {
+    step_text(record, "content")
+        .map(|content| antigravity_user_text(&content))
+        .is_some_and(|text| text.trim() == "/compact")
 }
 
 /// The whole mirror for a raw log. Only complete lines are read: the CLI
@@ -625,6 +660,8 @@ fn build_mirror(raw: &[u8]) -> Vec<u8> {
     let text = String::from_utf8_lossy(complete);
     let mut out = Vec::with_capacity(complete.len());
     let mut background_tasks = BackgroundTasks::default();
+    // A `/compact` waiting for its compaction: no model step has answered it yet.
+    let mut compact_pending = false;
     for line in text.lines() {
         if line.trim().is_empty() {
             continue;
@@ -637,8 +674,19 @@ fn build_mirror(raw: &[u8]) -> Vec<u8> {
         rows.extend(mirror_rows_for_step(
             &record,
             background_tasks.any_running(),
+            compact_pending,
         ));
         background_tasks.observe(&record);
+        match (
+            record.get("source").and_then(Value::as_str),
+            record.get("type").and_then(Value::as_str),
+        ) {
+            (Some("USER_EXPLICIT"), Some("USER_INPUT")) => {
+                compact_pending = is_compact_command(&record)
+            }
+            (Some("MODEL"), _) | (Some("SYSTEM"), Some("CHECKPOINT")) => compact_pending = false,
+            _ => {}
+        }
         for row in rows {
             if let Ok(serialized) = serde_json::to_vec(&row) {
                 out.extend_from_slice(&serialized);
