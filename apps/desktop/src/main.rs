@@ -333,6 +333,8 @@ fn main() {
     // The rail is the default; an existing settings file is switched to it and gets the one-time
     // Meet the rail pop-up (shared_settings/sidebar_rail_default.rs).
     shared_settings::sidebar_rail_default::migrate_sidebar_rail_default_once();
+    // Queue the one-time Native mode announcement modal for existing installs after updating.
+    shared_settings::native_mode_intro::migrate_native_mode_intro_once();
     // With the rail on, the bell is in the sidebar's top bar; the bell 11.12.0 saved with the
     // rail's pins comes off them once (shared_settings/sidebar_rail_bell.rs).
     shared_settings::sidebar_rail_bell::migrate_sidebar_rail_bell_once();

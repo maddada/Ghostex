@@ -666,6 +666,32 @@ pub(super) async fn route_chat_http(
                 Err(error) => domain_error_response(endpoint.path, request_id, error),
             }
         }
+        "/api/switchEligibleSessionsToAcp" => {
+            if !caller.is_user_device() {
+                return Ok(domain_error_response(
+                    endpoint.path,
+                    request_id,
+                    DomainStateError {
+                        code: "forbidden",
+                        message: "Only your own devices can bulk-switch sessions to Native mode."
+                            .to_string(),
+                    },
+                ));
+            }
+            match crate::acp::channel::switch_eligible_sessions_to_acp(
+                &state,
+                caller.is_user_device(),
+            )
+            .await
+            {
+                Ok(result) => routed_json(
+                    Some(endpoint.path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result),
+                ),
+                Err(error) => domain_error_response(endpoint.path, request_id, error),
+            }
+        }
         "/api/exportSessionTranscript" => {
             handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
                 .await

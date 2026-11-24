@@ -39,7 +39,7 @@ use crate::workspace_groups::{SessionGroupOp, SessionGroupRequest};
 /// others' buttons pair devices, install updates or write settings for real.
 /// SEE-ALSO: apps/desktop/src/app/sidebar_rail/intro.rs (`open_sidebar_rail_intro_preview`),
 /// server/src/ghostex_cli/debug.rs.
-pub const DEBUG_SHOW_MODALS: [&str; 1] = ["rail-intro"];
+pub const DEBUG_SHOW_MODALS: [&str; 2] = ["rail-intro", "native-mode-intro"];
 
 /// The tabs `ghostex settings open --tab` may name, each a `SettingsTabId` id
 /// (apps/desktop/src/app/window/settings_modal/model.rs). Keep in lockstep with

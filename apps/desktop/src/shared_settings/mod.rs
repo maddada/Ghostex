@@ -41,6 +41,7 @@ pub(crate) mod ghostty_config_file;
 pub(crate) mod ghostty_config_migration;
 pub(crate) mod ghostty_config_values;
 pub(crate) mod hub_secret_folders;
+pub(crate) mod native_mode_intro;
 pub(crate) mod normalize;
 pub(crate) mod service;
 pub(crate) mod sidebar_rail_bell;

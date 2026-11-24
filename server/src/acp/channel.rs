@@ -975,6 +975,120 @@ pub(crate) async fn switch_to_acp(
     execute_switch_to_acp(state, project_id, session_id, caller_is_user_device).await
 }
 
+/// Bulk-switch every safe existing Terminal session (Antigravity, Claude Code, Codex) to Native
+/// mode for the desktop first-launch Native mode modal (`Q4773`/`Q4774`).
+///
+/// Switches idle standalone sessions and idle coordinators right away. Skips worker threads under
+/// coordinators (they switch when reloaded or newly created) and skips any session actively
+/// working mid-turn (without queueing).
+pub(crate) async fn switch_eligible_sessions_to_acp(
+    state: &AppState,
+    caller_is_user_device: bool,
+) -> Result<Value, DomainStateError> {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let (to_switch, skipped_working, skipped_threads) = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, server_id.as_str());
+        let sessions = repository.list_sessions_excluding_stopped(None)?;
+        let now = crate::presentation::now_iso();
+        let mut to_switch: Vec<(String, String)> = Vec::new();
+        let mut skipped_working: usize = 0;
+        let mut skipped_threads: usize = 0;
+
+        for session in sessions {
+            let Some(project_id) = session.get("projectId").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(session_id) = session.get("sessionId").and_then(Value::as_str) else {
+                continue;
+            };
+            let family = session
+                .pointer("/runtimeSettings/acpFamily")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&session));
+            let Some(family) = family.filter(|f| super::supports_acp(f)) else {
+                continue;
+            };
+            let _ = family;
+            if super::session_is_acp(&session) {
+                continue;
+            }
+            if crate::coordinators::read_thread(&db, project_id, session_id)
+                .ok()
+                .flatten()
+                .is_some()
+            {
+                skipped_threads += 1;
+                continue;
+            }
+            let running = crate::presentation::effective_lifecycle_state(&session) == "running";
+            let working =
+                running && crate::presentation::presentation_activity(&session, &now) == "working";
+            if working {
+                skipped_working += 1;
+                continue;
+            }
+            to_switch.push((project_id.to_string(), session_id.to_string()));
+        }
+
+        Ok::<_, DomainStateError>((to_switch, skipped_working, skipped_threads))
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Could not scan sessions for Native mode: {error}"),
+    })??;
+
+    let mut switched: usize = 0;
+    let mut failed: usize = 0;
+    for (project_id, session_id) in to_switch {
+        super::pending_switch::cancel(&project_id, &session_id);
+        match execute_switch_to_acp(state, &project_id, &session_id, caller_is_user_device).await {
+            Ok(_) => switched += 1,
+            Err(error) => {
+                failed += 1;
+                log(
+                    LogLevel::Warn,
+                    "acp.bulkSwitchToAcpSkipped",
+                    json!({
+                        "projectId": project_id,
+                        "sessionId": session_id,
+                        "code": error.code,
+                        "message": error.message,
+                    }),
+                );
+            }
+        }
+    }
+
+    let deferred = skipped_working + skipped_threads + failed;
+    log(
+        LogLevel::Info,
+        "acp.switchEligibleSessionsToAcp",
+        json!({
+            "switched": switched,
+            "deferred": deferred,
+            "skippedWorking": skipped_working,
+            "skippedThreads": skipped_threads,
+            "failed": failed,
+        }),
+    );
+
+    Ok(json!({
+        "switched": switched,
+        "deferred": deferred,
+        "skippedWorking": skipped_working,
+        "skippedThreads": skipped_threads,
+    }))
+}
+
 /// Cancel a queued Terminal-to-Native switch before the turn finishes (`Q4771`).
 pub(crate) async fn cancel_switch_to_acp(
     state: &AppState,

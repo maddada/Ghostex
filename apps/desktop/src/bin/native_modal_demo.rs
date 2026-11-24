@@ -154,6 +154,10 @@ mod popup_dismissal;
 mod rail_intro_demo;
 #[path = "../app/window/rail_intro_modal.rs"]
 mod rail_intro_modal;
+#[path = "native_modal_demo/native_mode_intro.rs"]
+mod native_mode_intro_demo;
+#[path = "../app/window/native_mode_intro_modal.rs"]
+mod native_mode_intro_modal;
 #[path = "native_modal_demo/remote_gxserver_install.rs"]
 mod remote_gxserver_install_demo;
 #[path = "../app/window/remote_gxserver_install_modal.rs"]
@@ -884,6 +888,7 @@ fn main() {
                 "new-gbot" => new_gbot_demo::open(&demo, cx),
                 "new-bot" => new_bot_demo::open(&demo, cx),
                 "rail-intro" => rail_intro_demo::open(&demo, cx),
+                "native-mode-intro" => native_mode_intro_demo::open(&demo, cx),
                 "close-buttons" => close_buttons_demo::open(&demo, cx),
                 "browser-route-icon" => browser_route_icon_demo::open(&demo, cx),
                 "page-window-band" => page_window_band_demo::open(&demo, cx),

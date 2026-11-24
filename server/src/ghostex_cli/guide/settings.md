@@ -383,6 +383,7 @@ How to use this file:
 - **appIconSourceId** `appIconSourceId` (text, default (empty)) [advanced, not agent-writable]: App-managed state saved with the settings; not a user preference.
 - **sidebarRailPins** `sidebarRailPins` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **sidebarRailIntro** `sidebarRailIntro` (text, default (empty)) [not agent-writable]: App-managed state saved with the settings; not a user preference.
+- **nativeModeIntro** `nativeModeIntro` (text, default (empty)) [not agent-writable]: App-managed state saved with the settings; not a user preference.
 - **unifiedProjectOrder** `unifiedProjectOrder` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **coordinatorBoardCollapsedColumns** `coordinatorBoardCollapsedColumns` (text, default done) [not agent-writable]: App-managed state saved with the settings; not a user preference.
 - **customSidebarTitlebarLightBackgroundColor** `customSidebarTitlebarLightBackgroundColor` (text, default #f4f4f5) [not agent-writable]: App-managed state saved with the settings; not a user preference.

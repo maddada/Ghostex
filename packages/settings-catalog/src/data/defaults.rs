@@ -624,6 +624,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ),
     // "pending" while an existing user's one-time "Meet the rail" intro has not been answered; set by `switch_existing_settings_to_rail`, "done" once it has opened. No Settings row.
     ("sidebarRailIntro", J::Str("")),
+    // One-time desktop first-launch modal announcing Native mode (`""` | `"pending"` | `"done"`).
+    ("nativeModeIntro", J::Str("")),
     ("unifiedWorkingSection", J::Bool(true)),
     ("unifiedGroupByProject", J::Bool(false)),
     ("unifiedSessionOrder", J::Str("recent")),

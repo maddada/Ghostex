@@ -158,6 +158,12 @@ impl GhostexPaths {
         self.state_dir.join("sidebar-rail-default-migrated-v2")
     }
 
+    /// Written once the Native mode first-launch announcement check has run over an existing
+    /// settings file (`migrate_native_mode_intro_once` in the desktop app).
+    pub fn native_mode_intro_marker_file(&self) -> PathBuf {
+        self.state_dir.join("native-mode-intro-migrated-v1")
+    }
+
     /// Written once Notifications has been taken off the rail's saved pins, which 11.12.0 wrote
     /// from its old defaults (`migrate_sidebar_rail_bell_once` in the desktop app).
     pub fn sidebar_rail_bell_marker_file(&self) -> PathBuf {

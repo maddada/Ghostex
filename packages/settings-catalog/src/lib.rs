@@ -348,6 +348,44 @@ pub fn switch_existing_settings_to_rail(
     true
 }
 
+/// Marks an existing desktop install's settings so the one-time Native mode announcement modal
+/// opens once after updating. Returns `false` if the modal was already queued/shown or if Native
+/// mode is already on for Antigravity, Claude Code, and Codex.
+pub fn mark_existing_settings_for_native_mode_intro(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    if settings
+        .get("nativeModeIntro")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| !value.is_empty())
+    {
+        return false;
+    }
+    let already_all_native = settings
+        .get("agentSessionMode")
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|modes| {
+            ["antigravity", "claude", "codex"].iter().all(|family| {
+                modes
+                    .get(*family)
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|v| v.eq_ignore_ascii_case("non-cli"))
+            })
+        });
+    if already_all_native {
+        settings.insert(
+            "nativeModeIntro".to_string(),
+            serde_json::Value::String("done".to_string()),
+        );
+        return true;
+    }
+    settings.insert(
+        "nativeModeIntro".to_string(),
+        serde_json::Value::String("pending".to_string()),
+    );
+    true
+}
+
 /// Takes Notifications off the rail's saved pins (`sidebarRailPins`). Returns whether it changed
 /// anything; a file without saved pins, or whose pins lack it, is left alone.
 ///

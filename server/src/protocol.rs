@@ -732,6 +732,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/setSessionChatView"
         | "/api/switchSessionAcpToCli"
         | "/api/switchSessionCliToAcp"
+        | "/api/switchEligibleSessionsToAcp"
         /*
         CDXC:TranscriptExport 2026-08-20:
         Exporting a transcript is remote-allowed for the same reason reading a
