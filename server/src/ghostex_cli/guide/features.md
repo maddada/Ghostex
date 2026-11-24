@@ -4115,6 +4115,13 @@ A running Terminal-based chat that switches to Native keeps the mode it was in: 
 Code's Auto, Accept edits or Bypass permissions, or Codex's Approve for me or Full
 permissions, become the Native chat's Auto, Auto-edits or Full permissions. A chat in
 Manual or Plan starts in its usual Native mode.
+A Native chat with no mode picked in its Mode menu follows Settings > Agents: Agent
+approvals, the agent's Permission mode, and a bypass flag in the agent's command
+(Claude's `--dangerously-skip-permissions`, Codex's
+`--dangerously-bypass-approvals-and-sandbox`) count as Full permissions, as in
+Terminal-based mode. 12.0 saved Ask on every Native chat by itself; the first start of
+12.1.1 drops that saved Ask so those chats follow settings again (an Ask picked in the
+Mode menu from 12.1.1 on is kept).
 
 Prompt history search (**Find**, `ghostex f`) indexes both your prompts and each
 agent turn's closing answer in a rebuildable local SQLite FTS5 store, with a

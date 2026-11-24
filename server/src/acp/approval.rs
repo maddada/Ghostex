@@ -25,6 +25,12 @@ use crate::domain::DomainStateError;
 /// Session `runtimeSettings` key storing the remembered ACP approval level for this session.
 pub const SESSION_ACP_APPROVAL_LEVEL_KEY: &str = "acpApprovalLevel";
 
+/// Session `runtimeSettings` key, `true` when the saved `acpApprovalLevel` was picked by the user
+/// (the chat's Mode menu, phone or `ghostex` CLI, all through `channel.rs` `set_approval_level`)
+/// rather than saved by Ghostex itself; the one-time 12.0 cleanup keeps a picked `ask`
+/// (CDXC:NativeApprovals 2026-11-25 in `acp/approval_migration.rs`).
+pub const SESSION_ACP_APPROVAL_LEVEL_PICKED_KEY: &str = "acpApprovalLevelPicked";
+
 const MAX_SYMLINK_HOPS: usize = 40;
 const MAX_RAW_INPUT_DEPTH: usize = 16;
 
@@ -327,6 +333,7 @@ pub fn guard_create_session_params(
         .and_then(Value::as_object_mut)
     {
         runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
+        runtime.remove(SESSION_ACP_APPROVAL_LEVEL_PICKED_KEY);
         if !is_user_device {
             // Non-user-device callers may never spoof GBot chat metadata (`gbot` / `gbotHome`),
             // which Non-CLI `launch_plan.rs` reads to raise starting `acpApprovalLevel`.
@@ -469,15 +476,19 @@ pub fn guard_update_session_params(
                     );
                 }
             }
-            // Always keep the stored `acpApprovalLevel` so `/api/updateSession` cannot diverge
-            // from `acp::channel::set_approval_level`.
-            match stored_runtime.and_then(|m| m.get(SESSION_ACP_APPROVAL_LEVEL_KEY)) {
-                Some(val) => {
-                    incoming_runtime
-                        .insert(SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(), val.clone());
-                }
-                None => {
-                    incoming_runtime.remove(SESSION_ACP_APPROVAL_LEVEL_KEY);
+            // Always keep the stored `acpApprovalLevel` (and whether the user picked it) so
+            // `/api/updateSession` cannot diverge from `acp::channel::set_approval_level`.
+            for key in [
+                SESSION_ACP_APPROVAL_LEVEL_KEY,
+                SESSION_ACP_APPROVAL_LEVEL_PICKED_KEY,
+            ] {
+                match stored_runtime.and_then(|m| m.get(key)) {
+                    Some(val) => {
+                        incoming_runtime.insert(key.to_string(), val.clone());
+                    }
+                    None => {
+                        incoming_runtime.remove(key);
+                    }
                 }
             }
         }

@@ -263,6 +263,21 @@ pub async fn run_gxserver_foreground(
         version: version.clone(),
     };
     let migration = create_gxserver_migration_status(&storage);
+    // Before any Native host can reconnect and be handed its saved level (approval_migration.rs).
+    if let Some((cleared, resolved)) =
+        crate::acp::approval_migration::clear_automatic_ask_once(&paths, &metadata.server_id)
+    {
+        let _ = logger.log(GxserverLogInput {
+            level: crate::logging::LogLevel::Warn,
+            event: "nativeAutomaticAskCleared".to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(json!({ "cleared": cleared, "givenSettingsLevel": resolved })),
+        });
+    }
     let event_hub = GxserverEventHub::new(metadata.server_id.clone());
     crate::agent_model_catalog::start(
         paths.clone(),

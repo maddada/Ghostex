@@ -429,12 +429,14 @@ pub(crate) async fn set_model(
     })
 }
 
-/// Persist the remembered ACP approval level on the session's `runtimeSettings` in `state.db`.
+/// Persist the remembered ACP approval level on the session's `runtimeSettings` in `state.db`,
+/// with `picked` recording whether the user chose it (`acpApprovalLevelPicked`).
 pub(crate) async fn persist_approval_level(
     state: &AppState,
     project_id: &str,
     session_id: &str,
     level: super::AcpApprovalLevel,
+    picked: bool,
 ) -> Result<(), DomainStateError> {
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
@@ -462,6 +464,14 @@ pub(crate) async fn persist_approval_level(
             super::SESSION_ACP_APPROVAL_LEVEL_KEY.to_string(),
             json!(value),
         );
+        if picked {
+            runtime_settings.insert(
+                super::approval::SESSION_ACP_APPROVAL_LEVEL_PICKED_KEY.to_string(),
+                json!(true),
+            );
+        } else {
+            runtime_settings.remove(super::approval::SESSION_ACP_APPROVAL_LEVEL_PICKED_KEY);
+        }
         let mut update = Map::new();
         update.insert("projectId".to_string(), json!(pid));
         update.insert("sessionId".to_string(), json!(sid));
@@ -912,7 +922,7 @@ async fn set_approval_level_locked(
     check_approval_level_change_allowed(state, project_id, session_id, level, is_user_device)
         .await?;
 
-    let previous_level = {
+    let (previous_level, previous_picked) = {
         let paths = state.paths.clone();
         let server_id = state.metadata.server_id.clone();
         let pid = project_id.to_string();
@@ -921,7 +931,16 @@ async fn set_approval_level_locked(
             let db = open_gxserver_database(&paths).ok()?;
             let repo = DomainRepository::new(&db, server_id.as_str());
             let session = repo.get_session(&pid, &sid).ok().flatten()?;
-            super::approval::stored_session_approval_level(&session)
+            Some((
+                super::approval::stored_session_approval_level(&session).unwrap_or_default(),
+                session
+                    .pointer(&format!(
+                        "/runtimeSettings/{}",
+                        super::approval::SESSION_ACP_APPROVAL_LEVEL_PICKED_KEY
+                    ))
+                    .and_then(Value::as_bool)
+                    == Some(true),
+            ))
         })
         .await
         .ok()
@@ -930,7 +949,7 @@ async fn set_approval_level_locked(
     };
 
     // Persist BEFORE pushing to `acp-host` so channel open/reconnect can never read a stale level.
-    persist_approval_level(state, project_id, session_id, level).await?;
+    persist_approval_level(state, project_id, session_id, level, true).await?;
 
     if live(project_id, session_id, "mode").is_some() {
         match request(
@@ -959,8 +978,14 @@ async fn set_approval_level_locked(
                 // up to a stronger previous level, so a subsequent wake/restart cannot resurrect
                 // the stronger approval policy.
                 if !super::AcpApprovalLevel::may_transition_without_owner(previous_level, level) {
-                    let _ =
-                        persist_approval_level(state, project_id, session_id, previous_level).await;
+                    let _ = persist_approval_level(
+                        state,
+                        project_id,
+                        session_id,
+                        previous_level,
+                        previous_picked,
+                    )
+                    .await;
                 }
                 return Err(DomainStateError {
                     code: crate::session_chat_codex_picker::UNSUPPORTED_SELECTION_CODE,
