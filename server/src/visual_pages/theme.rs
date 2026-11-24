@@ -102,19 +102,26 @@ pub(super) const THEME_STYLE: &str = concat!(
     // In the desktop's page window the backdrop fades into its top colour at the top edge, which the
     // window's header above the page paints (CDXC:SessionChat 2026-11-04 DECISION below).
     ":where(:root[data-gx-floating]){--gx-backdrop-fade:linear-gradient(var(--gx-backdrop-top),transparent 56px),}",
-    "html{background-color:var(--background);background-image:var(--gx-backdrop-fade,) var(--gx-backdrop,none);background-attachment:fixed;min-height:100%;color:var(--foreground);font-family:var(--font-sans);",
+    "html{background-attachment:fixed;min-height:100%;color:var(--foreground);font-family:var(--font-sans);",
     "font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}",
+    // Default backdrop for Ghostex-themed pages; omitted while a card thumbnail is captured
+    // (`data-gx-thumbnail`) so the stored PNG stays transparent and composites cleanly over the
+    // chat card's own glass or theme surface. Wrapped in `:where()` so a page's own background
+    // rule always wins, both live and in thumbnails.
+    ":where(html:not([data-gx-thumbnail])){background-color:var(--background);background-image:var(--gx-backdrop-fade,) var(--gx-backdrop,none)}",
     // The picture behind the app's glass or art backdrop, when the desktop's page window hands one
     // over (apps/desktop/src/app/window/visual_page_modal/glass.rs), dimmed under the page's cards.
-    "html[data-gx-glass]{background-image:linear-gradient(var(--gx-glass-dim),var(--gx-glass-dim)),var(--gx-glass-picture);",
+    "html[data-gx-glass]:not([data-gx-thumbnail]){background-image:linear-gradient(var(--gx-glass-dim),var(--gx-glass-dim)),var(--gx-glass-picture);",
     "background-size:auto,var(--gx-glass-size,cover);background-position:0 0,var(--gx-glass-position,center);background-repeat:no-repeat;background-attachment:fixed}",
     "body{margin:0;padding:16px}",
     // A page laid out by the template's container (kit.rs) has its own gutters.
     ":where(body:has(>gx-page,>gx-questions)){padding:0}",
     // The desktop's page window holds its controls in a 36px band over the page's top edge
     // (apps/desktop/src/app/window/visual_page_modal.rs `TOP_BAND_HEIGHT`), so a floating page
-    // starts that much lower and the template's 56px top padding drops by as much.
+    // starts that much lower and the template's 56px top padding drops by as much. Thumbnail
+    // captures use the same compact top padding so card previews show content instead of a blank top band.
     "html[data-gx-floating] gx-page,html[data-gx-floating] gx-questions{padding-top:20px}",
+    "html[data-gx-thumbnail] gx-page,html[data-gx-thumbnail] gx-questions{padding-top:20px}",
     // macOS pulls a page past its ends with a rubber band, and what that shows is the browser's
     // own solid colour, never the page's picture (CDXC:SessionChat 2026-11-05 DECISION below).
     "html[data-gx-floating]{overscroll-behavior:none}",
@@ -314,7 +321,8 @@ mod tests {
         assert!(THEME_STYLE.contains(
             ":where(:root[data-gx-floating]){--gx-backdrop-fade:linear-gradient(var(--gx-backdrop-top),transparent 56px),}"
         ));
-        assert!(THEME_STYLE
-            .contains("html{background-color:var(--background);background-image:var(--gx-backdrop-fade,) var(--gx-backdrop,none);"));
+        assert!(THEME_STYLE.contains(
+            ":where(html:not([data-gx-thumbnail])){background-color:var(--background);background-image:var(--gx-backdrop-fade,) var(--gx-backdrop,none)}"
+        ));
     }
 }

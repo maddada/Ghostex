@@ -33,7 +33,7 @@ pub(crate) fn prune_old_pages(
     gxserver_state_dir: &Path,
     now: std::time::SystemTime,
 ) -> crate::storage_cleanup::Tally {
-    use crate::storage_cleanup::{is_older, remove_file, Since, Tally};
+    use crate::storage_cleanup::{Since, Tally, is_older, remove_file};
     let dir = visual_pages_dir(gxserver_state_dir);
     let mut tally = Tally::default();
     let Ok(entries) = fs::read_dir(&dir) else {
@@ -53,7 +53,7 @@ pub(crate) fn prune_old_pages(
         if !old {
             continue;
         }
-        for extension in ["html", "json", "png"] {
+        for extension in ["html", "json", "png", "dark.png", "light.png"] {
             let path = dir.join(format!("{id}.{extension}"));
             if let Ok(metadata) = fs::metadata(&path) {
                 remove_file(&path, &metadata, &mut tally);
@@ -389,6 +389,8 @@ pub(super) fn note_thumbnail(
     gxserver_state_dir: &Path,
     id: &str,
     answered: bool,
+    theme: Option<&str>,
+    transparent: bool,
 ) -> Result<serde_json::Value, StoreAnswersError> {
     let _guard = RECORD_WRITE_LOCK
         .lock()
@@ -397,6 +399,16 @@ pub(super) fn note_thumbnail(
     record["thumbnailAt"] =
         json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     record["thumbnailAnswered"] = json!(answered);
+    match theme {
+        Some("dark") => record["thumbnailDarkTransparent"] = json!(transparent),
+        Some("light") => record["thumbnailLightTransparent"] = json!(transparent),
+        _ => {
+            if let Some(fields) = record.as_object_mut() {
+                fields.remove("thumbnailDarkTransparent");
+                fields.remove("thumbnailLightTransparent");
+            }
+        }
+    }
     if let Some(fields) = record.as_object_mut() {
         fields.remove("thumbnailOutdated");
     }
@@ -536,10 +548,12 @@ mod tests {
             Ok(true)
         ));
         assert_eq!(notes(dir.path()), "from the phone");
-        assert!(read_record(dir.path(), ID)
-            .unwrap()
-            .get("draftEditedAt")
-            .is_none());
+        assert!(
+            read_record(dir.path(), ID)
+                .unwrap()
+                .get("draftEditedAt")
+                .is_none()
+        );
         assert!(matches!(
             store_draft(dir.path(), ID, &json!({"notes": "b"}), Some(1)),
             Ok(true)

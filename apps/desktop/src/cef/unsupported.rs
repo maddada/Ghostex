@@ -250,6 +250,14 @@ impl CefBrowser {
         None
     }
 
+    pub fn evaluate_page_script(&self, _script: &str) -> Option<PageSettled> {
+        None
+    }
+
+    pub fn set_default_background_transparent(&self, _transparent: bool) -> Option<PageSettled> {
+        None
+    }
+
     pub fn new(
         _parent_native_view: *mut std::ffi::c_void,
         _url: &str,

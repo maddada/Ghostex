@@ -53,6 +53,8 @@ enum AnswerKind {
     ScreenshotData,
     /// `Runtime.evaluate`'s string value.
     EvaluatedString,
+    /// Any successful DevTools response (e.g. `Emulation.setDefaultBackgroundColorOverride`).
+    Ack,
 }
 
 impl AnswerKind {
@@ -60,6 +62,7 @@ impl AnswerKind {
         let found = match self {
             Self::ScreenshotData => value.get("data"),
             Self::EvaluatedString => value.get("result")?.get("value"),
+            Self::Ack => return Some("ok".to_string()),
         };
         found?.as_str().map(str::to_string)
     }
@@ -128,16 +131,44 @@ impl CefBrowser {
     /// `timeout_ms`, whichever comes first (`PAGE_SETTLED_SCRIPT`). `None` when the request could
     /// not be sent.
     pub fn wait_for_page_settled(&self, timeout_ms: u64) -> Option<PageSettled> {
-        let params = cef::dictionary_value_create()?;
         let script = PAGE_SETTLED_SCRIPT.replace("__TIMEOUT__", &timeout_ms.to_string());
+        self.evaluate_page_script(&script)
+    }
+
+    /// Evaluates an async JS expression in the page and returns its string result.
+    pub fn evaluate_page_script(&self, script: &str) -> Option<PageSettled> {
+        let params = cef::dictionary_value_create()?;
         params.set_string(
             Some(&CefString::from("expression")),
-            Some(&CefString::from(script.as_str())),
+            Some(&CefString::from(script)),
         );
         params.set_bool(Some(&CefString::from("awaitPromise")), 1);
         params.set_bool(Some(&CefString::from("returnByValue")), 1);
         let (settled, registration) =
             self.ask_dev_tools("Runtime.evaluate", params, AnswerKind::EvaluatedString)?;
+        Some(PageSettled {
+            settled,
+            _registration: registration,
+        })
+    }
+
+    /// Sets or clears Chromium's default viewport background override so `Page.captureScreenshot`
+    /// produces a transparent RGBA PNG when the page has no painted background of its own.
+    pub fn set_default_background_transparent(&self, transparent: bool) -> Option<PageSettled> {
+        let params = cef::dictionary_value_create()?;
+        if transparent {
+            let mut color = cef::dictionary_value_create()?;
+            color.set_int(Some(&CefString::from("r")), 0);
+            color.set_int(Some(&CefString::from("g")), 0);
+            color.set_int(Some(&CefString::from("b")), 0);
+            color.set_double(Some(&CefString::from("a")), 0.0);
+            params.set_dictionary(Some(&CefString::from("color")), Some(&mut color));
+        }
+        let (settled, registration) = self.ask_dev_tools(
+            "Emulation.setDefaultBackgroundColorOverride",
+            params,
+            AnswerKind::Ack,
+        )?;
         Some(PageSettled {
             settled,
             _registration: registration,

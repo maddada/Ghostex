@@ -351,6 +351,21 @@ impl CefSurface {
         self.browser.wait_for_page_settled(timeout_ms)
     }
 
+    /// Evaluates an async JS expression in the page and returns its string result
+    /// (`cef/shell/page_screenshot.rs`).
+    pub(crate) fn evaluate_page_script(&self, script: &str) -> Option<cef::PageSettled> {
+        self.browser.evaluate_page_script(script)
+    }
+
+    /// Overrides the viewport default background to transparent (or clears the override) for
+    /// transparent PNG capture (`cef/shell/page_screenshot.rs`).
+    pub(crate) fn set_default_background_transparent(
+        &self,
+        transparent: bool,
+    ) -> Option<cef::PageSettled> {
+        self.browser.set_default_background_transparent(transparent)
+    }
+
     pub(crate) fn browser_identifier(&self) -> i32 {
         self.browser.identifier()
     }

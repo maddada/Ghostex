@@ -55,11 +55,18 @@ static VISUAL: std::sync::LazyLock<PageCardVisual> = std::sync::LazyLock::new(||
 const CARD_GROUP: &str = "chat-page-card";
 /// How long after the card opens its page in the floating window it asks for the new picture.
 const PICTURE_AFTER_OPEN: Duration = Duration::from_secs(4);
+/// Desktop/web preview max height: shows header + KPI cards cleanly on wide chat cards while
+/// shrinking smoothly to the thumbnail's 1.6 aspect ratio on narrow sidebars/panes.
+const DESKTOP_PREVIEW_MAX_HEIGHT: f32 = 276.0;
+/// Subtle bottom fade height for the cropped preview edge (short enough not to obscure content).
+const DESKTOP_FADE_HEIGHT: f32 = 34.0;
 
 /// One page's picture as this view knows it.
 #[derive(Default)]
 struct Thumbnail {
     image: Option<Arc<gpui::Image>>,
+    /// True when the stored PNG has a transparent background composited onto the card's backdrop.
+    transparent: bool,
     /// The picture is the page's current one (or there will be none); nothing more to ask.
     settled: bool,
     /// A read is out, or the wait before the next one is running.
@@ -68,11 +75,11 @@ struct Thumbnail {
     url: String,
 }
 
-/// The pictures of the transcript's page cards, by page id and whether the page was answered when
-/// the card asked (an answered page is pictured again).
+/// The pictures of the transcript's page cards, by `(page_id, answered, light)` so switching theme
+/// or answering a page fetches the matching picture cleanly.
 #[derive(Default)]
 pub(crate) struct PageThumbnails {
-    entries: RefCell<HashMap<(String, bool), Thumbnail>>,
+    entries: RefCell<HashMap<(String, bool, bool), Thumbnail>>,
 }
 
 impl PageThumbnails {
@@ -194,8 +201,10 @@ impl NativeChatView {
             cx.spawn(async move |this, cx| {
                 timer.await;
                 let _ = this.update(cx, |this, cx| {
+                    let light = ChatAppearance::current(&this.snapshot).light;
+                    let theme = if light { "light" } else { "dark" };
                     this.invoke(
-                        json!({"type": "loadPageThumbnail", "pageId": page_id, "fresh": true}),
+                        json!({"type": "loadPageThumbnail", "pageId": page_id, "theme": theme, "fresh": true}),
                         cx,
                     )
                 });
@@ -231,9 +240,10 @@ impl NativeChatView {
         page_id: &str,
         url: &str,
         answered: bool,
+        light: bool,
         cx: &Context<Self>,
-    ) -> Option<Arc<gpui::Image>> {
-        let key = (page_id.to_string(), answered);
+    ) -> Option<(Arc<gpui::Image>, bool)> {
+        let key = (page_id.to_string(), answered, light);
         let mut entries = self.visual.page_thumbnails.entries.borrow_mut();
         let entry = entries.entry(key).or_default();
         if entry.url.is_empty() {
@@ -242,18 +252,25 @@ impl NativeChatView {
         if !entry.settled && !entry.asking {
             entry.asking = true;
             let page_id = page_id.to_string();
+            let theme = if light { "light" } else { "dark" };
             // Asked on the next turn of the loop, because this runs while the row is rendering.
             cx.spawn(async move |this, cx| {
                 let _ = this.update(cx, |this, cx| {
-                    this.invoke(json!({"type": "loadPageThumbnail", "pageId": page_id}), cx)
+                    this.invoke(
+                        json!({"type": "loadPageThumbnail", "pageId": page_id, "theme": theme}),
+                        cx,
+                    )
                 });
             })
             .detach();
         }
-        entry.image.clone()
+        entry
+            .image
+            .as_ref()
+            .map(|image| (image.clone(), entry.transparent))
     }
 
-    /// The core's `pageThumbnail` answer (`{pageId, png, settled, retryInMs}`).
+    /// The core's `pageThumbnail` answer (`{pageId, png, settled, retryInMs, theme, transparent}`).
     pub(super) fn receive_page_thumbnail(&mut self, params: &Value, cx: &mut Context<Self>) {
         let page_id = params["pageId"].as_str().unwrap_or_default().to_string();
         if page_id.is_empty() {
@@ -265,6 +282,12 @@ impl NativeChatView {
             .map(|bytes| Arc::new(gpui::Image::from_bytes(ImageFormat::Png, bytes)));
         let settled = params["settled"].as_bool().unwrap_or(true);
         let retry = params["retryInMs"].as_u64();
+        let response_light = match params["theme"].as_str() {
+            Some("light") => Some(true),
+            Some("dark") => Some(false),
+            _ => None,
+        };
+        let transparent = params["transparent"].as_bool().unwrap_or(false);
         // The page has no picture and is new enough to be pictured unopened: the card that asked
         // is drawn, so the desktop pictures it in the background. Each answer offers it again (the
         // desktop takes each page once per run), so a page let go for now is offered again.
@@ -275,16 +298,23 @@ impl NativeChatView {
         let mut replaced = Vec::new();
         {
             let mut entries = self.visual.page_thumbnails.entries.borrow_mut();
-            for ((id, _), entry) in entries.iter_mut() {
+            for ((id, _, entry_light), entry) in entries.iter_mut() {
                 if *id != page_id {
                     continue;
                 }
-                // A stale picture stays up until its replacement arrives.
-                if let Some(image) = &image
-                    && let Some(old) = entry.image.replace(image.clone())
-                    && old.id != image.id
+                if let Some(target_light) = response_light
+                    && *entry_light != target_light
                 {
-                    replaced.push(old);
+                    continue;
+                }
+                // A stale picture stays up until its replacement arrives.
+                if let Some(image) = &image {
+                    entry.transparent = transparent;
+                    if let Some(old) = entry.image.replace(image.clone())
+                        && old.id != image.id
+                    {
+                        replaced.push(old);
+                    }
                 }
                 entry.settled = settled;
                 if picture_unopened && !entry.url.is_empty() {
@@ -311,8 +341,10 @@ impl NativeChatView {
                 timer.await;
                 let _ = this.update(cx, |this, cx| {
                     let mut entries = this.visual.page_thumbnails.entries.borrow_mut();
-                    for ((id, _), entry) in entries.iter_mut() {
-                        if *id == page_id {
+                    for ((id, _, entry_light), entry) in entries.iter_mut() {
+                        if *id == page_id
+                            && response_light.is_none_or(|target| *entry_light == target)
+                        {
                             entry.asking = false;
                         }
                     }
@@ -446,7 +478,7 @@ impl NativeChatView {
         };
         let picture = page_id
             .as_deref()
-            .and_then(|page_id| self.page_thumbnail(page_id, &page.url, answered, cx));
+            .and_then(|page_id| self.page_thumbnail(page_id, &page.url, answered, p.light, cx));
         let detail = match &page.file {
             Some(file) => format!("Live page · {file}"),
             None => "Live page".to_string(),
@@ -553,32 +585,54 @@ impl NativeChatView {
         } else {
             bar.into_any_element()
         };
+        let preview_bg = if p.window_glass {
+            if p.light {
+                gpui::white().opacity(0.32)
+            } else {
+                gpui::black().opacity(0.22)
+            }
+        } else {
+            p.background
+        };
+        let fade_bottom = if p.window_glass {
+            if p.light {
+                gpui::white().opacity(0.48)
+            } else {
+                p.background.opacity(0.68)
+            }
+        } else {
+            window_bg
+        };
+        let has_picture = picture.is_some();
         let preview = div()
             .relative()
             .w_full()
-            .h(px(v.preview_height * s))
             .overflow_hidden()
-            // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the dark
-            // preview area is the code blocks' wash (`glass_wash`), not the opaque near-black chat
-            // background. Light mode and glass off keep the chat background.
-            .bg(if p.window_glass && !p.light {
-                crate::app::helpers::glass_wash(p.light, 1.0)
-            } else {
-                p.background
+            .bg(preview_bg)
+            .when(p.window_glass, |this| {
+                this.border_b(px(1.0)).border_color(p.border.opacity(0.6))
             })
             .map(|this| match picture {
-                // As wide as the card, cut at the bottom: the top of the page is what it opens on.
-                Some(picture) => this.child(
-                    img(picture)
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .w_full()
-                        .aspect_ratio(v.thumbnail_width / v.thumbnail_height)
-                        .object_fit(gpui::ObjectFit::Fill),
-                ),
+                // Full width at the stored 1.6 aspect ratio, clipped cleanly at max height so wide
+                // desktop cards reveal KPI cards/content while narrow panes avoid blank bottom gaps.
+                Some((picture, _transparent)) => this
+                    .flex()
+                    .flex_col()
+                    .max_h(px(DESKTOP_PREVIEW_MAX_HEIGHT * s))
+                    .child(
+                        div()
+                            .flex_none()
+                            .w_full()
+                            .aspect_ratio(v.thumbnail_width / v.thumbnail_height)
+                            .child(
+                                img(picture)
+                                    .size_full()
+                                    .object_fit(gpui::ObjectFit::Fill),
+                            ),
+                    ),
                 // No picture yet: a page icon and the file name.
                 None => this
+                    .h(px(v.preview_height * s))
                     .flex()
                     .flex_col()
                     .items_center()
@@ -599,20 +653,22 @@ impl NativeChatView {
                             .child(placeholder_label),
                     ),
             })
-            // Painted, not masked: a plain div with no id takes no input.
-            .child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .right_0()
-                    .bottom_0()
-                    .h(px(v.fade_height * s))
-                    .bg(gpui::linear_gradient(
-                        180.0,
-                        gpui::linear_color_stop(window_bg.opacity(0.0), 0.0),
-                        gpui::linear_color_stop(window_bg, 1.0),
-                    )),
-            )
+            // Subtle bottom fade when a picture is shown: softens the clip edge without hiding cards.
+            .when(has_picture, |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(px(DESKTOP_FADE_HEIGHT * s))
+                        .bg(gpui::linear_gradient(
+                            180.0,
+                            gpui::linear_color_stop(fade_bottom.opacity(0.0), 0.0),
+                            gpui::linear_color_stop(fade_bottom, 1.0),
+                        )),
+                )
+            })
             .child(
                 div()
                     .absolute()
