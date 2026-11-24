@@ -837,6 +837,9 @@ impl NativeChatView {
         // A reasoning headline owns the tools that followed it, so it renders them itself and the
         // run below must not render them a second time.
         let mut tools_rendered = false;
+        // Whether the lead itself rendered as a one-line card (a running thought inside an opened
+        // Quiet View Working line).
+        let mut lead_is_card = false;
         // Settings > Chat > Tool call cards: the calls and edits are one card after the text, which
         // owns none of them (`tool_card.rs`).
         let tool_card = message["toolCard"].is_object();
@@ -855,7 +858,12 @@ impl NativeChatView {
             if card {
                 // A running thought folds the calls it made behind its line, as a reply's sentence
                 // does (gx-chat-core `thinkingCard.calls`); any other card leaves them to the run
-                // below.
+                // below. Inside an opened Working line it renders as a single-line card.
+                lead_is_card =
+                    ghostex_gx_chat_core::transcript::thinking_card::is_working_thought_card(
+                        message,
+                        self.quiet_working_here(),
+                    );
                 row = row.child(self.thinking_card(&id, message, body.clone(), p, cx));
                 tools_rendered = message["thinkingCard"]["calls"].is_string();
             } else if reasoning && tools {
@@ -1008,7 +1016,7 @@ impl NativeChatView {
         }
         // Whether the part last added is a one-line card: two cards in a row are a row gap apart
         // (`SINGLE_LINE_CARD.gap_above`), whichever kinds they are.
-        let mut card_above = false;
+        let mut card_above = lead_is_card;
         if p.quiet_style() && !tools_rendered && !tool_card {
             // Agent work Reduced or Quiet: the edit line comes right after the work line,
             // with no gap between them (quiet_work.rs). The quiet style's lines are never cards.

@@ -433,6 +433,7 @@ impl NativeChatView {
                         }
                     }
                     self.quiet_boxed = true;
+                    self.quiet_working = line.running;
                     self.quiet_turn = lines.turns.get(&index).cloned();
                     let content = match tail {
                         Some(tail) => {
@@ -442,6 +443,7 @@ impl NativeChatView {
                         None => self.item_content(item, next, true, p, window, cx),
                     };
                     self.quiet_boxed = false;
+                    self.quiet_working = false;
                     self.quiet_turn = None;
                     nested.push(content);
                     // The rail runs on to the next row of the line, as far below as its parts sit
@@ -616,6 +618,12 @@ impl NativeChatView {
     /// card) nor as quiet steps.
     pub(super) fn quiet_boxed_here(&self) -> bool {
         self.quiet_boxed && !self.in_work_fold && !self.quiet_steps
+    }
+
+    /// Whether the rows drawn now sit directly inside an opened Quiet View Working line (the
+    /// running stretch, where thoughts draw as single-line cards like plain tool-call groups).
+    pub(super) fn quiet_working_here(&self) -> bool {
+        self.quiet_boxed_here() && self.quiet_working
     }
 
     /// The space between two one-line cards drawn now: the rail's `RAIL_ROW_GAP` in an opened

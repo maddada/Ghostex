@@ -8,11 +8,15 @@
 //! calls, `thinkingRow` for every thought; the user's decision is in its
 //! `transcript/thinking_card.rs`). The phone's `ThinkingLine` in `MessageRow.tsx` is the same row.
 
+use super::cards::{SINGLE_LINE_CARD, TITLE_ROW_GAP, card_hover_fill};
 use super::disclosure_body::{DisclosureRail, disclosure_body};
-use super::tool_run::{DESCRIBED_LABEL_OPACITY, ROW_PAD_X, TILE};
+use super::tool_run::{DESCRIBED_LABEL_OPACITY, ROW_PAD_X, TILE, boxed_header_corners};
 use super::transcript::text;
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
+use ghostex_gx_chat_core::transcript::thinking_card::{
+    is_working_thought_card, working_card_key, working_card_open_default,
+};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
@@ -24,9 +28,11 @@ use serde_json::Value;
 const OPEN_CAP: f32 = 288.0;
 
 impl NativeChatView {
-    /// The thought as one closed line. `message["thinkingCard"]` (present on the running turn and
-    /// on settled thoughts outside a turn fold that own tool calls) supplies the live flag, the
-    /// preview line and the label of the calls it folds; any other thought reads its `thinkingRow`.
+    /// The thought as one closed line, or inside an opened Quiet View Working line as the shared
+    /// single-line card matching plain tool-call groups (`boxed_thinking_card`).
+    /// `message["thinkingCard"]` (present on the running turn and on settled thoughts outside a
+    /// turn fold that own tool calls) supplies the live flag, the preview line and the label of
+    /// the calls it folds; any other thought reads its `thinkingRow`.
     pub(super) fn thinking_card(
         &mut self,
         id: &str,
@@ -35,6 +41,9 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        if is_working_thought_card(message, self.quiet_working_here()) {
+            return self.boxed_thinking_card(id, message, body, p, cx);
+        }
         let s = p.scale;
         let card = &message["thinkingCard"];
         let live = card["live"] == true;
@@ -201,6 +210,182 @@ impl NativeChatView {
             .pb(px(6.0 * s))
             .child(column)
             .into_any_element()
+    }
+
+    /// A running thought inside an opened Quiet View Working line, styled as the same
+    /// `SINGLE_LINE_CARD` as a plain "N tool calls" group (`tool_run.rs` `boxed_card_heading`).
+    ///
+    /// CDXC:SessionChat 2026-11-24 DECISION: User (Q4839 A, Q4840 "working only", Q4841 "build"):
+    /// "when thought is collapsed just show single line truncated. when i expand fade out that line
+    /// that's truncated and show full thoughts inside the card below the header". Inside an opened
+    /// Working line, collapsed shows the 44px card header (brain tile, title, one truncated preview
+    /// line, and "N tool calls" pill on the right); expanding fades out that truncated preview line
+    /// with the disclosure motion and reveals the full wrapped thought inside the card below the
+    /// header hairline, followed by its tool calls when present. Phone matches (`BoxedThinkingCard`
+    /// in `MessageRow.tsx`).
+    fn boxed_thinking_card(
+        &mut self,
+        id: &str,
+        message: &Value,
+        body: String,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let card = &message["thinkingCard"];
+        let row = &message["thinkingRow"];
+        let live = card["live"] == true;
+        let preview = match text(card, "preview") {
+            preview if preview.is_empty() => text(row, "preview"),
+            preview => preview,
+        };
+        let title = if live { "Thinking…" } else { "Thought" };
+        let calls = card["calls"].as_str().map(str::to_string);
+        let key = working_card_key(id);
+        let expanded = self.is_expanded(&key, working_card_open_default(message));
+        let motion = self.disclosure_frame(&key, expanded, cx);
+        let open_progress = match motion {
+            Some(frame) => frame.log.clamp(0.0, 1.0),
+            None if expanded => 1.0,
+            None => 0.0,
+        };
+        let preview_opacity = (1.0 - open_progress).clamp(0.0, 1.0);
+        let body_shown = expanded || motion.is_some();
+        let shape = &*SINGLE_LINE_CARD;
+        let hover = card_hover_fill(p);
+        let toggle_key = key.clone();
+
+        let header = boxed_header_corners(
+            div()
+                .id(SharedString::from(format!("{key}:header")))
+                .role(gpui::Role::Button)
+                .aria_label(if preview.is_empty() {
+                    title.to_string()
+                } else {
+                    format!("{title} {preview}")
+                })
+                .aria_expanded(expanded)
+                .flex()
+                .items_center()
+                .w_full()
+                .min_w_0()
+                .gap(px(TITLE_ROW_GAP * s))
+                .px(px(shape.padding_x * s))
+                .h(px(shape.header_height(s)))
+                .text_color(p.foreground)
+                .chat_cursor_pointer()
+                .hover(move |style| style.bg(hover)),
+            body_shown,
+            p,
+        )
+        .child(shape.tile("titlebar/brain.svg", p))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .flex_1()
+                .min_w_0()
+                .gap(px(6.0 * s))
+                .child(
+                    shape
+                        .title(div().flex_shrink_0().text_color(p.foreground), p)
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(super::chat_text_look::PROSE_SIZE * s))
+                        .line_height(px(20.0 * s))
+                        .text_color(p.prose.opacity(DESCRIBED_LABEL_OPACITY * preview_opacity))
+                        .when(preview_opacity > 0.01 && !preview.is_empty(), |this| {
+                            this.child(preview)
+                        }),
+                ),
+        )
+        .when_some(calls.clone(), |this, label| {
+            this.child(shape.pill(None, Some(label), p.muted, p))
+        })
+        .on_click(cx.listener(move |view, _, _, cx| {
+            view.toggle_marker_disclosure(toggle_key.clone(), expanded, cx)
+        }))
+        .into_any_element();
+
+        let mut parts = vec![header];
+        if body_shown {
+            let body_key = SharedString::from(format!("{key}:body"));
+            if live {
+                let handle = self
+                    .nested_scrolls
+                    .borrow_mut()
+                    .entry(body_key.clone())
+                    .or_default()
+                    .clone();
+                if handle.offset().y <= -handle.max_offset().y + px(2.0) {
+                    handle.scroll_to_bottom();
+                }
+            }
+            let lane = p.thinking_lane();
+            let thought = div()
+                .w_full()
+                .min_w_0()
+                .px(px(shape.padding_x * s))
+                .pt(px(10.0 * s))
+                .pb(px(11.0 * s))
+                .child(self.nested_scroll(
+                    body_key,
+                    div().min_w_0().max_h(px(OPEN_CAP * s)).child(self.markdown(
+                        format!("thinking-card-body:{id}"),
+                        body,
+                        &message["markdownReferences"],
+                        &lane,
+                        cx,
+                    )),
+                ));
+            let tool_rows = if calls.is_some() {
+                self.boxed_card_tool_rows(message, p, cx)
+            } else {
+                None
+            };
+            let card_body = div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .border_t_1()
+                .border_color(shape.hairline(p))
+                .child(thought)
+                .children(tool_rows)
+                .into_any_element();
+            parts.push(self.disclosure_body_motion(&key, motion, 0.0, card_body));
+        } else if calls.is_some()
+            && let Some(pictures) = self.read_picture_strip(
+                &format!("{key}:read"),
+                &message["readImages"],
+                super::read_pictures::FOLDED_CALLS_INSET,
+                p.background,
+                p,
+                cx,
+            )
+        {
+            parts.push(
+                div()
+                    .px(px(shape.padding_x * s))
+                    .pb(px(8.0 * s))
+                    .child(pictures)
+                    .into_any_element(),
+            );
+        }
+
+        let column = div()
+            .w_full()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .children(parts);
+        shape.shell(column, p).into_any_element()
     }
 
     /// "N tool calls" and the chevron at the end of a running thought's line, which open or close

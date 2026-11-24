@@ -14,6 +14,8 @@
 //! CDXC:SessionChat 2026-11-02 DECISION: User, asked whether the calls under a running thought stay in view or fold the way Claude's steps fold under its sentences: "Fold them like Claude, for every agent". While a turn runs, a thought that owns calls folds them behind its line the way an agent's sentence folds its calls behind its chevron: the line ends with "N tool calls" and a chevron that opens them, on the same default as a sentence's calls (open in detailed or verbose mode, closed in Simple mode, and open while one of them waits on an approval through `toolsOpen`), separate from the click on the line that opens the thought's text. Supersedes the 2026-10-24 rule that "the calls a thought made stay in view below it". Inside a turn's work fold the calls stay listed flat (`toolsFlat`, the 2026-10-21 decision in `tool_rows.rs`), and with Tool call cards on they stay the card after it.
 //!
 //! CDXC:SessionChat 2026-11-22 WHY: A turn without a final assistant reply (a coordinator turn between thread reports, a turn that ended on tool calls, or a non-working beat before the reply lands) stays outside `CompletedWork`, so its rows are drawn with `Draw::Row` (`toolsFlat` unset) while `RunningThinking` no longer marks them. In Antigravity sessions, where every tool-calling planner step splits its multi-paragraph thinking into a `Reasoning` row right ahead of the tool call, renderers (`native_chat/transcript.rs` and the phone's `MessageRow.tsx`) then hit `else if reasoning && tools`, dumping all paragraphs of `reasoning.headline` inline beside a bare chevron with the tool call underneath. Marking any non-running `Draw::Row` reasoning row that owns unflattened tools with a closed `thinkingCard` (`live: false`, `preview` from `thinkingRow`, and `calls` when it folds regular tool calls) keeps every renderer (desktop, GPUI Web, and phone WASM) on the slim `Thought` row with separate call folding.
+//!
+//! CDXC:SessionChat 2026-11-24 DECISION: User, picking Q4839 A, Q4840 "working only", and Q4841 "build" on the working-line thought card mockups: "when thought is collapsed just show single line truncated. when i expand fade out that line that's truncated and show full thoughts inside the card below the header". Inside an opened Working line (Quiet View's running stretch), every running thought draws as the shared single-line card (`SINGLE_LINE_CARD`) styled like the plain "N tool calls" card: brain tile, "Thought" (or "Thinking…"), one truncated preview line, and "N tool calls" as a pill on the right when it owns calls. Expanding fades out that truncated header preview line and reveals the full wrapped thought inside the card below the header, followed by its tool calls when present. Other chat views keep the slim one-line row. Drawn by desktop/web `native_chat/thinking_card.rs` and phone `MessageRow.tsx` (`BoxedThinkingCard`).
 use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 use serde_json::{json, Value};
@@ -182,6 +184,25 @@ pub fn thinking_row(body: &str) -> Value {
             || preview.chars().count() > CLOSED_LINE_CHARS,
         "preview": preview,
     })
+}
+
+/// Whether `message` renders as the boxed Working-line thought card (`SINGLE_LINE_CARD`) instead
+/// of the slim one-line row: only running thoughts (`thinkingCard`) directly inside an opened
+/// Working line (Q4839 A, Q4840 "working only", Q4841 "build").
+pub fn is_working_thought_card(message: &Value, in_working_line: bool) -> bool {
+    in_working_line && message["thinkingCard"].is_object()
+}
+
+/// The unified disclosure key of a boxed Working-line thought card (opens both the full wrapped
+/// thought and any tool calls it owns).
+pub fn working_card_key(id: &str) -> String {
+    format!("thinking-card:{id}")
+}
+
+/// Whether a boxed Working-line thought card starts open: closed by default like the plain
+/// "N tool calls" card, opening on its own only when one of its calls waits on an approval.
+pub fn working_card_open_default(message: &Value) -> bool {
+    message["toolsOpen"] == true
 }
 
 #[cfg(test)]

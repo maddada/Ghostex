@@ -281,12 +281,18 @@ fn message_segments(
     if body.is_empty() {
         tool_segments(message, folds, in_work_fold, out);
     } else if reasoning && message["thinkingCard"].is_object() {
-        // A thought drawn as a slim Thought line (`thinking_card.rs`): closed, its one-line
-        // preview is visible; opened behind `thinking-card:<id>`, both desktop and mobile hide
-        // the preview and show only its full body. Its folded calls (when `thinkingCard.calls` is
-        // set) open behind `reasoning:<id>`.
+        // A thought drawn as a slim Thought line or, inside an opened Working line, as a boxed
+        // card (`thinking_card.rs`): closed, its one-line preview is visible; opened behind
+        // `thinking-card:<id>`, both desktop and mobile hide/fade out the preview and show its
+        // full body (and, inside an opened Working line, its tool calls in the same card). Outside
+        // Working its folded calls (when `thinkingCard.calls` is set) open behind `reasoning:<id>`.
         let calls_key = format!("reasoning:{id}");
-        if folds.open(&format!("thinking-card:{id}"), false) {
+        let card_key = crate::transcript::thinking_card::working_card_key(&id);
+        let card_open = folds.open(
+            &card_key,
+            crate::transcript::thinking_card::working_card_open_default(message),
+        );
+        if card_open {
             out.push(markdown(body));
         } else {
             let preview = match str_of(&message["thinkingCard"], "preview") {
@@ -299,7 +305,7 @@ fn message_segments(
             });
         }
         if message["thinkingCard"]["calls"].is_string() {
-            if folds.open(&calls_key, tools_default) {
+            if card_open || folds.open(&calls_key, tools_default) {
                 tool_segments(message, folds, in_work_fold, out);
             }
         } else if flat || has_tools {

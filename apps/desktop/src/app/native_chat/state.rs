@@ -207,6 +207,9 @@ pub(crate) struct NativeChatView {
     /// True while an opened Quiet View line's rows render (quiet_view.rs): a row's tool calls,
     /// a tool card or plain rows, sit in the "Message to" card's shell (`SINGLE_LINE_CARD.shell`).
     pub(super) quiet_boxed: bool,
+    /// True while an opened Quiet View Working line's rows render (`line.running`): running
+    /// thoughts sit in `SINGLE_LINE_CARD.shell` like plain tool-call groups (`thinking_card.rs`).
+    pub(super) quiet_working: bool,
     /// How the finished turn row an opened Quiet View line is drawing right now looks there
     /// (gx-chat-core `QuietTurnLook`); the turn's row takes it, so nothing nested in it sees it.
     pub(super) quiet_turn: Option<ghostex_gx_chat_core::transcript::quiet_view::QuietTurnLook>,
@@ -691,6 +694,7 @@ impl NativeChatView {
             hide_file_changes: false,
             quiet_steps: false,
             quiet_boxed: false,
+            quiet_working: false,
             quiet_turn: None,
             quiet_card_header: false,
             quiet_card_flush: false,
