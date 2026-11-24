@@ -47,3 +47,34 @@ pub(crate) fn read_agent_restarted_at(
     times.reverse();
     times
 }
+
+/// Settles an open `Working` transcript lifecycle to `Interrupted` when the session is no longer
+/// working and gxserver recorded a mid-turn restart or user Stop at or after that turn started.
+///
+/// CDXC:SessionChat 2026-11-24 WHY: Antigravity (`agy`) writes no closing row to its transcript
+/// on user Stop (`session/cancel`), and a killed Native host leaves no closing row either, so the
+/// transcript tail's last `user` row kept `lifecycle.state = "working"` until the next turn.
+/// Only settles while `!working` so a new turn started within the same whole-second transcript
+/// timestamp is never flipped back to `interrupted`.
+pub(crate) fn settle_interrupted_lifecycle(
+    lifecycle: &mut Option<crate::session_chat::SessionChatTurnLifecycle>,
+    working: bool,
+    restarted_at: &[i64],
+) {
+    if working {
+        return;
+    }
+    let Some(current) = lifecycle.as_mut() else {
+        return;
+    };
+    if current.state != crate::session_chat::SessionChatTurnLifecycleState::Working {
+        return;
+    }
+    let Some(&latest) = restarted_at.last() else {
+        return;
+    };
+    if current.timestamp.is_none_or(|ts| latest >= ts) {
+        current.state = crate::session_chat::SessionChatTurnLifecycleState::Interrupted;
+        current.timestamp = Some(latest);
+    }
+}

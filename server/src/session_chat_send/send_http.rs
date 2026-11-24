@@ -178,15 +178,21 @@ pub(super) async fn send_session_chat_message_attempt(
             }
             return match key {
                 "escape" => {
+                    let antigravity_was_active = antigravity_turn_active(&target.session);
                     // Record the user interrupt BEFORE awaiting ACP abort so any idle/stop event
                     // posted while the driver unwinds never races ahead and enters `attention`.
                     record_session_chat_interrupt(state, &target, &request_id);
                     match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
-                        Ok(()) => routed_json(
-                            Some(endpoint_path),
-                            StatusCode::OK,
-                            rpc_success(request_id, json!({ "queued": true, "textBytes": 0 })),
-                        ),
+                        Ok(()) => {
+                            if antigravity_was_active {
+                                record_antigravity_user_interrupt(state, &target);
+                            }
+                            routed_json(
+                                Some(endpoint_path),
+                                StatusCode::OK,
+                                rpc_success(request_id, json!({ "queued": true, "textBytes": 0 })),
+                            )
+                        }
                         Err(error) => domain_error_response(endpoint_path, request_id, error),
                     }
                 }
@@ -549,6 +555,35 @@ pub(super) async fn send_session_chat_message_attempt(
     }
 }
 
+fn antigravity_turn_active(session: &Value) -> bool {
+    if session_chat_agent_for_session(session).as_deref() != Some("antigravity") {
+        return false;
+    }
+    let now_iso = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    crate::session_chat_follower::session_chat_hook_working(session)
+        || crate::session_approval::session_awaits_approval(session, &now_iso)
+}
+
+/// Records an interrupted-turn timestamp for Antigravity, whose CLI writes no closing row on
+/// cancel, so the chat draws "Agent was interrupted" and settles `lifecycle` to `interrupted`
+/// like Claude and Codex (`session_chat_agent_restarts.rs`).
+fn record_antigravity_user_interrupt(state: &AppState, target: &SessionChatSendTarget) {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    if let Ok(db) = crate::storage::open_gxserver_database(&state.paths) {
+        let _ = crate::session_chat_agent_restarts::record_agent_restarted_mid_turn(
+            &db,
+            &target.project_id,
+            &target.session_id,
+            now_ms,
+        );
+    }
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+        state,
+        &target.project_id,
+        &target.session_id,
+    );
+}
+
 /// What a chat interrupt changes besides the keys it types: shared by Stop and by interrupt and
 /// send.
 pub(crate) fn record_session_chat_interrupt(
@@ -556,6 +591,8 @@ pub(crate) fn record_session_chat_interrupt(
     target: &SessionChatSendTarget,
     request_id: &str,
 ) {
+    let non_acp_antigravity_active =
+        !crate::acp::session_is_acp(&target.session) && antigravity_turn_active(&target.session);
     // The interrupt is an Escape as far as the activity state machine is
     // concerned: it ends the hook-backed working claim the way the
     // terminal-pane Escape key does (see the escape branch in
@@ -596,6 +633,9 @@ pub(crate) fn record_session_chat_interrupt(
         &target.project_id,
         &target.session_id,
     );
+    if non_acp_antigravity_active {
+        record_antigravity_user_interrupt(state, target);
+    }
 }
 
 /// Clears any pending user-interrupt suppression once a new chat message has been delivered
@@ -718,13 +758,19 @@ pub(crate) async fn handle_interrupt_session_chat_http(
                 .await;
             }
         }
+        let antigravity_was_active = antigravity_turn_active(&target.session);
         record_session_chat_interrupt(state, &target, &request_id);
         return match crate::acp::channel::abort(&target.project_id, &target.session_id).await {
-            Ok(()) => routed_json(
-                Some(endpoint_path),
-                StatusCode::OK,
-                rpc_success(request_id, json!({ "interrupted": true })),
-            ),
+            Ok(()) => {
+                if antigravity_was_active {
+                    record_antigravity_user_interrupt(state, &target);
+                }
+                routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, json!({ "interrupted": true })),
+                )
+            }
             Err(error) => {
                 // If the Native host already exited back to the shell, stopping the turn has
                 // nothing to cancel; settle any stale `"working"` state to `"idle"` cleanly so
@@ -765,6 +811,9 @@ pub(crate) async fn handle_interrupt_session_chat_http(
                         );
                     })
                     .await;
+                    if antigravity_was_active {
+                        record_antigravity_user_interrupt(state, &target);
+                    }
                     routed_json(
                         Some(endpoint_path),
                         StatusCode::OK,

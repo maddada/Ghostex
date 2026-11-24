@@ -1282,6 +1282,11 @@ pub(crate) async fn handle_read_session_chat_http(
                     &mut messages,
                     &mut lifecycle,
                 );
+                crate::session_chat_agent_restarts::settle_interrupted_lifecycle(
+                    &mut lifecycle,
+                    working,
+                    &queue.agent_restarted_at,
+                );
             }
             /*
             CDXC:SessionChat 2026-09-10 DECISION:
