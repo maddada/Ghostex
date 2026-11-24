@@ -757,12 +757,58 @@ pub(crate) fn ignored_owner_command_tokens(
             } else {
                 ignored.push(tok.to_string());
             }
+        } else if let width @ 1.. =
+            full_access_flag_width(family, tok, base_tokens.get(i + 1).map(String::as_str))
+        {
+            // Honored as Full permissions (`owner_command_requests_full_access`), not ignored.
+            i += width - 1;
         } else {
             ignored.push(tok.to_string());
         }
         i += 1;
     }
     ignored
+}
+
+/// How many tokens at `tok` (1, or 2 for `--permission-mode bypassPermissions`) start the
+/// family's CLI with approvals off; 0 when `tok` is not such a flag.
+fn full_access_flag_width(family: &str, tok: &str, next: Option<&str>) -> usize {
+    match family {
+        "claude" => match tok {
+            "--dangerously-skip-permissions" | "--permission-mode=bypassPermissions" => 1,
+            "--permission-mode" if next == Some("bypassPermissions") => 2,
+            _ => 0,
+        },
+        "codex" => match tok {
+            "--dangerously-bypass-approvals-and-sandbox" | "--yolo" => 1,
+            _ => 0,
+        },
+        _ => 0,
+    }
+}
+
+/// True when the owner's saved agent command (Settings > Agents, `agent_config.command`) starts
+/// the CLI with approvals off: Claude `--dangerously-skip-permissions` (or `--permission-mode
+/// bypassPermissions`), Codex `--dangerously-bypass-approvals-and-sandbox` (or `--yolo`).
+///
+/// CDXC:NativeApprovals 2026-11-25 DECISION:
+/// Brief (12.1.1 patch, Discord report "with 12.0 it keeps asking permission for every single tool call since i turned it to native mode"): a bypass flag typed into the agent's command in Settings > Agents was dropped by Native with only an "ignored" note, so Native asked before every tool while the same command ran without asking in Terminal mode. Native now reads that flag as the agent's Full permissions choice at launch and resume, in the same place and order Terminal mode applies it (`resolve_session_launch_command_for_workspace`): a per-chat or per-agent Permission mode of Keep default or Auto still wins (Terminal strips the flag for those), as does a level picked in the chat's Mode menu. Chosen over a one-time migration into Permission mode: Full permissions because it rewrites nothing the user typed, keeps the command identical in both modes, and needs no settings sync or phone change; only the owner's own devices can save such a command (`sidebar_hud/mutations.rs` refuses it from agents and peers).
+pub(crate) fn owner_command_requests_full_access(
+    family: &str,
+    owner_command: Option<&str>,
+) -> bool {
+    let Some(raw) = owner_command.map(str::trim).filter(|s| !s.is_empty()) else {
+        return false;
+    };
+    let tokens = tokenize_cli_command(raw);
+    let (_, base_tokens) = split_leading_env_assignments(tokens);
+    (1..base_tokens.len()).any(|i| {
+        full_access_flag_width(
+            family,
+            base_tokens[i].as_str(),
+            base_tokens.get(i + 1).map(String::as_str),
+        ) > 0
+    })
 }
 
 /// Resolve Ghostex's own CLIProxyAPI hub profile directory (`~/.claude-profiles/ghostex-<id>` or

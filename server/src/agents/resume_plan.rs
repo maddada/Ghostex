@@ -510,6 +510,7 @@ pub(crate) fn to_agent_resume_input(
         Some(crate::acp::AcpApprovalLevel::Ask)
     } else {
         crate::acp::approval::resolve_explicit_starting_level(
+            agent_id.as_deref().unwrap_or_default(),
             &runtime_settings,
             &agent_config,
             &launch_settings,

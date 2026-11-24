@@ -559,10 +559,15 @@ pub fn stored_session_approval_level(session: &Value) -> Option<AcpApprovalLevel
 /// 1. Remembered per-session level (`runtimeSettings.acpApprovalLevel`), when present.
 /// 2. Per-launch / per-agent / global `acceptAllMode` when it enables skip-permissions
 ///    (`"enabled"` / `"acceptAll"`, or inherited `agentAcceptAllEnabled: true`) -> `Some(FullAccess)`.
-/// 3. Keep default (`acceptAllMode: "disabled"`, or `"inherit"` / absent with
+/// 3. Inherited (`"inherit"` / absent) with the agent's saved command in Settings > Agents
+///    starting its CLI with approvals off (Claude `--dangerously-skip-permissions`, Codex
+///    `--dangerously-bypass-approvals-and-sandbox`) -> `Some(FullAccess)`, as Terminal mode runs it
+///    (CDXC:NativeApprovals 2026-11-25 in `acp/spec.rs` `owner_command_requests_full_access`).
+/// 4. Keep default (`acceptAllMode: "disabled"`, or `"inherit"` / absent with
 ///    `agentAcceptAllEnabled: false`) -> `None`, so `acp-host` keeps the agent CLI's own default
 ///    approval mode (e.g. Claude's `permissions.defaultMode` or Codex's `config.toml`).
 pub fn resolve_explicit_starting_level(
+    family: &str,
     runtime_settings: &Map<String, Value>,
     agent_config: &Map<String, Value>,
     launch_settings: &Map<String, Value>,
@@ -584,23 +589,29 @@ pub fn resolve_explicit_starting_level(
     explicit_override(read_trimmed_str(launch_settings, "acceptAllMode"))
         .or_else(|| explicit_override(read_trimmed_str(agent_config, "acceptAllMode")))
         .unwrap_or_else(|| {
-            global_settings
+            (global_settings
                 .get("agentAcceptAllEnabled")
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
-                .then_some(AcpApprovalLevel::FullAccess)
+                || crate::acp::spec::owner_command_requests_full_access(
+                    family,
+                    read_trimmed_str(agent_config, "command"),
+                ))
+            .then_some(AcpApprovalLevel::FullAccess)
         })
 }
 
 /// Resolve a concrete starting approval level for an ACP session, falling back to `Ask` when
 /// Ghostex keeps the CLI default.
 pub fn resolve_starting_level(
+    family: &str,
     runtime_settings: &Map<String, Value>,
     agent_config: &Map<String, Value>,
     launch_settings: &Map<String, Value>,
     global_settings: &Map<String, Value>,
 ) -> AcpApprovalLevel {
     resolve_explicit_starting_level(
+        family,
         runtime_settings,
         agent_config,
         launch_settings,

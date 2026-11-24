@@ -769,6 +769,7 @@ pub(crate) fn create_agent_session_params_for_project(
                                 })
                             } else {
                                 crate::acp::approval::resolve_explicit_starting_level(
+                                    fam,
                                     &runtime_settings,
                                     &agent_config,
                                     &launch_settings,
