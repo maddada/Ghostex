@@ -3,7 +3,7 @@ use std::{
     path::Path,
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{
     constants::GXSERVER_PROTOCOL_VERSION,
@@ -424,7 +424,20 @@ pub(crate) fn start_session_provider_with_observed_state(
             ),
         })
     };
-    let start = run_zmx_start_command(&zmx_name, &zmx.executable_path, command)?;
+    let start = match run_zmx_start_command(&zmx_name, &zmx.executable_path, command) {
+        Ok(start) => start,
+        Err(error) => {
+            crate::telemetry::reliability_error_for_session(
+                if cfg!(windows) {
+                    "wmx_start_failed"
+                } else {
+                    "session_launch_failed"
+                },
+                &probed_session,
+            );
+            return Err(error);
+        }
+    };
     // CDXC:SessionChat 2026-09-28 WHY: A new terminal is not the screen a slash command's output was being read from. A capture left open read the restore banner as that command's result and replaced it (observed 2026-09-28 with Hermes's `/compress`).
     crate::session_chat_app_command::stop_local_command_output(
         &lifecycle.project_id,

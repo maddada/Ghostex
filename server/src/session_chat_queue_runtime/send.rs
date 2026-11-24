@@ -953,13 +953,29 @@ async fn send_session_chat_message_locked(
             Ok::<_, DomainStateError>(archive)
         })
         .await
-        .map_err(|_| crate::session_chat_opencode::error("OpenCode delivery task failed."))??;
+        .map_err(|_| crate::session_chat_opencode::error("OpenCode delivery task failed."))
+        .and_then(|result| result);
+        let archive = match archive {
+            Ok(archive) => archive,
+            Err(error) => {
+                crate::telemetry::reliability_error("prompt_delivery_failed", Some("opencode"));
+                return Err(error);
+            }
+        };
         if let Some(command) = archive {
             crate::session_chat_local_command::persist_session_chat_local_command(
                 project_id, session_id, &command,
             );
         }
         crate::session_chat_opencode::invalidate(&id);
+        let prompt_source = prompt_source_for_message_source(source);
+        crate::telemetry::prompt_sent(&target.session, prompt_source);
+        crate::telemetry::boosts_used(
+            &target.session,
+            prompt_source,
+            boosts_built_in,
+            boosts_custom,
+        );
         promote_draft_session_after_send(state, project_id, session_id);
         unpark_session_after_send(state, project_id, session_id);
         crate::session_chat_returned_prompt::record_session_chat_send_submitted(
@@ -1694,6 +1710,10 @@ async fn send_session_chat_message_locked(
                 message: error.message,
             });
         }
+        crate::telemetry::reliability_error_for_session(
+            "prompt_delivery_failed",
+            &target.session,
+        );
         let reason = crate::session_chat_send_failure::send_failure_reason(
             &error.message,
             heal_gave_up.as_deref(),
@@ -1780,14 +1800,7 @@ async fn send_session_chat_message_locked(
     are all that leave; the prompt text is not in scope for the emitter and
     cannot be.
     */
-    let prompt_source = match source {
-        SessionChatMessageSource::Composer => "chat",
-        SessionChatMessageSource::AutomaticQueue
-        | SessionChatMessageSource::AutomaticRecovery
-        | SessionChatMessageSource::AccountSwitch(_)
-        | SessionChatMessageSource::ManualQueue => "queue",
-        SessionChatMessageSource::GhostexNote => "ghostexNote",
-    };
+    let prompt_source = prompt_source_for_message_source(source);
     crate::telemetry::prompt_sent(&target.session, prompt_source);
     crate::telemetry::boosts_used(
         &target.session,
@@ -1874,4 +1887,15 @@ async fn send_session_chat_message_locked(
         );
     }
     Ok(text.len())
+}
+
+fn prompt_source_for_message_source(source: SessionChatMessageSource) -> &'static str {
+    match source {
+        SessionChatMessageSource::Composer => "chat",
+        SessionChatMessageSource::AutomaticQueue
+        | SessionChatMessageSource::AutomaticRecovery
+        | SessionChatMessageSource::AccountSwitch(_)
+        | SessionChatMessageSource::ManualQueue => "queue",
+        SessionChatMessageSource::GhostexNote => "ghostexNote",
+    }
 }

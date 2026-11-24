@@ -4,8 +4,8 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU64, Ordering},
         LazyLock, Mutex,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -14,7 +14,7 @@ use serde_json::Value;
 
 use crate::domain::DomainRepository;
 use crate::server::read_runtime_text;
-use crate::session_chat_notice::{agent_start_failure_notice, SessionChatTerminalNotice};
+use crate::session_chat_notice::{SessionChatTerminalNotice, agent_start_failure_notice};
 
 /// How long a session must keep showing a failed start before the card appears. A zsh with
 /// Powerlevel10k draws its cached instant prompt while `.zshrc` loads, before the agent's process
@@ -39,7 +39,26 @@ pub(crate) fn detect_agent_start_failure(
     match failure {
         Some(notice) => {
             let since = *first_seen.entry(key).or_insert_with(Instant::now);
-            (since.elapsed() >= START_FAILURE_SETTLE).then_some(notice)
+            if since.elapsed() >= START_FAILURE_SETTLE {
+                let category = if notice
+                    .error_lines
+                    .as_deref()
+                    .and_then(crate::session_chat_notice::missing_start_command)
+                    .is_some()
+                {
+                    "cli_not_found"
+                } else {
+                    "session_launch_failed"
+                };
+                if let Ok(Some(session)) = repository.get_session(project_id, session_id) {
+                    crate::telemetry::reliability_error_for_session(category, &session);
+                } else {
+                    crate::telemetry::reliability_error(category, None);
+                }
+                Some(notice)
+            } else {
+                None
+            }
         }
         None => {
             first_seen.remove(&key);
@@ -423,8 +442,7 @@ fn with_missing_agent_command(notice: SessionChatTerminalNotice) -> SessionChatT
 }
 
 /// What a start failure's card says when the chat's file is on disk with nothing in it (`transcript_has_records`): Try again resumes the same empty file.
-pub(crate) const LOST_CHAT_DETAIL: &str =
-    "Its saved chat is empty, so it can't reopen. This happens when the computer shuts down before saving; start a new chat.";
+pub(crate) const LOST_CHAT_DETAIL: &str = "Its saved chat is empty, so it can't reopen. This happens when the computer shuts down before saving; start a new chat.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Transcript {

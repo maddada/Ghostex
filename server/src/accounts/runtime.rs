@@ -104,6 +104,7 @@ impl AccountRuntime {
             &mut *SNAPSHOT.write().unwrap_or_else(|e| e.into_inner()),
             next.clone(),
         );
+        crate::telemetry::note_accounts_discovered(&next);
         // A reset used outside Ghostex (or one whose Redeem answer was lost) shows first here.
         for (provider, account) in
             super::reset_used::reset_early(&previous, &next, chrono::Utc::now())

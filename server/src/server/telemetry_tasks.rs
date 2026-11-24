@@ -100,7 +100,7 @@ and the account fields are left out.
 fn collect_settings_snapshot_facts(
     state: &Arc<AppState>,
 ) -> crate::telemetry::settings_snapshot::SnapshotFacts {
-    use crate::telemetry::settings_snapshot::{AccountsReport, SnapshotFacts};
+    use crate::telemetry::settings_snapshot::SnapshotFacts;
     let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
     let remote_machine_count = settings
         .as_ref()
@@ -108,32 +108,29 @@ fn collect_settings_snapshot_facts(
         .and_then(Value::as_array)
         .map(Vec::len)
         .unwrap_or(0);
-    let workspace_count = open_gxserver_database(&state.paths)
-        .ok()
-        .and_then(|db| crate::workspaces::read_sidebar_workspaces(&db).ok())
+    let db = open_gxserver_database(&state.paths).ok();
+    let workspace_count = db
+        .as_ref()
+        .and_then(|db| crate::workspaces::read_sidebar_workspaces(db).ok())
         .and_then(|value| value.get("workspaces")?.as_object().map(|map| map.len()));
     let discovered = crate::accounts::runtime::current_snapshot();
-    let accounts = discovered.fetched_at.map(|_| {
-        let mut report = AccountsReport::default();
-        for account in &discovered.accounts {
-            *report.counts.entry(account.provider.id()).or_default() += 1;
-            let plans = match account.provider {
-                crate::accounts::model::Provider::Claude => &mut report.claude_plans,
-                crate::accounts::model::Provider::Codex => &mut report.codex_plans,
-            };
-            if let Some(plan) = account.plan {
-                if !plans.contains(&plan) {
-                    plans.push(plan);
+    let live_accounts = crate::telemetry::settings_snapshot::accounts_report_from_discovered(
+        &state.paths,
+        &discovered,
+    );
+    let accounts = match live_accounts {
+        Some(report) => {
+            if let Some(db) = db.as_ref() {
+                if crate::telemetry::is_enabled(&state.paths) {
+                    crate::telemetry::state::write_cached_accounts(db, &report);
                 }
             }
+            Some(report)
         }
-        report.claude_plans.sort_unstable();
-        report.codex_plans.sort_unstable();
-        if let Some(counts) = crate::accounts::usage_only::provider_counts(&state.paths) {
-            report.counts.extend(counts);
-        }
-        report
-    });
+        None => db
+            .as_ref()
+            .and_then(|db| crate::telemetry::state::read_cached_accounts(db)),
+    };
     crate::telemetry::extensions::load_official_store_ids(&state.paths.extensions_dir);
     let mut store_extensions = Vec::new();
     let mut custom_extensions_installed = 0;

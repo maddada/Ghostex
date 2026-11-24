@@ -57,6 +57,7 @@ pub const KNOWN_AGENT_IDS: &[&str] = &[
     "pi",
     "qoder",
     "rovodev",
+    "zcode",
 ];
 
 /// The bucket an unknown agent id becomes. Custom agent ids are user-authored
@@ -132,6 +133,7 @@ pub const SURFACES: &[&str] = &[
     "find",
     "kanban",
     "mobile_add_project",
+    "mobile_beads",
     "mobile_browser",
     "mobile_changes",
     "mobile_files",
@@ -363,6 +365,36 @@ pub const EVENT_SETTINGS_SNAPSHOT: &str = "settings.snapshot";
 pub const EVENT_SIDEBAR_LAYOUT_CHANGED: &str = "sidebar_layout.changed";
 pub const EVENT_RAIL_INTRO_SHOWN: &str = "rail_intro.shown";
 pub const EVENT_RAIL_INTRO_ANSWERED: &str = "rail_intro.answered";
+pub const EVENT_ONBOARDING_STEP: &str = "onboarding.step";
+pub const EVENT_RELIABILITY_ERROR: &str = "reliability.error";
+
+/// Zero-PII onboarding funnel milestones emitted by desktop onboarding.
+pub const ONBOARDING_STEPS: &[&str] = &[
+    "cli_detected",
+    "completed",
+    "first_prompt",
+    "first_session",
+    "project_added",
+    "project_opened",
+    "skipped",
+    "started",
+];
+
+/// Closed set of anonymous reliability failure categories. Never carries raw
+/// paths, prompts, error messages, or stack traces.
+pub const RELIABILITY_ERROR_CATEGORIES: &[&str] = &[
+    "cli_not_found",
+    "daemon_bootstrap_failed",
+    "loopback_telemetry_failed",
+    "mobile_connect_failed",
+    "native_chat_init_failed",
+    "prompt_delivery_failed",
+    "provider_auth_failed",
+    "session_launch_failed",
+    "update_failed",
+    "wmx_start_failed",
+    "zmx_attach_failed",
+];
 
 /*
 CDXC:Telemetry 2026-11-20:
@@ -393,6 +425,8 @@ pub const CLIENT_PING_EVENTS: &[&str] = &[
     EVENT_SIDEBAR_LAYOUT_CHANGED,
     EVENT_RAIL_INTRO_SHOWN,
     EVENT_RAIL_INTRO_ANSWERED,
+    EVENT_ONBOARDING_STEP,
+    EVENT_RELIABILITY_ERROR,
 ];
 
 const MAX_VERSION_LENGTH: usize = 32;
@@ -480,6 +514,8 @@ pub fn is_known_event(event: &str) -> bool {
             | EVENT_SIDEBAR_LAYOUT_CHANGED
             | EVENT_RAIL_INTRO_SHOWN
             | EVENT_RAIL_INTRO_ANSWERED
+            | EVENT_ONBOARDING_STEP
+            | EVENT_RELIABILITY_ERROR
     )
 }
 
@@ -689,6 +725,13 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         }
         (EVENT_RAIL_INTRO_SHOWN, "layout") => Some(PropertySpec::Enum(SIDEBAR_LAYOUTS)),
         (EVENT_RAIL_INTRO_ANSWERED, "chose") => Some(PropertySpec::Enum(SIDEBAR_LAYOUTS)),
+        (EVENT_ONBOARDING_STEP, "step") => Some(PropertySpec::Enum(ONBOARDING_STEPS)),
+        (EVENT_ONBOARDING_STEP, "platform") => Some(PropertySpec::Enum(PLATFORMS)),
+        (EVENT_RELIABILITY_ERROR, "category") => {
+            Some(PropertySpec::Enum(RELIABILITY_ERROR_CATEGORIES))
+        }
+        (EVENT_RELIABILITY_ERROR, "agent_id") => Some(PropertySpec::Enum(KNOWN_AGENT_IDS)),
+        (EVENT_RELIABILITY_ERROR, "platform") => Some(PropertySpec::Enum(PLATFORMS)),
         (EVENT_SETTINGS_SNAPSHOT, PERSON_SET_KEY) => Some(PropertySpec::PersonSet),
         (EVENT_SETTINGS_SNAPSHOT, key) => super::settings_snapshot::property_spec(key),
         _ => None,

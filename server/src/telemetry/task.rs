@@ -13,7 +13,13 @@ returning, so the events from the last 30 seconds of a session are not lost
 every time someone quits Ghostex.
 */
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        Arc, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 
 use tokio::sync::broadcast;
 
@@ -23,6 +29,15 @@ use super::{client, extensions::ExtensionRef, gate, heartbeat, queue, settings_s
 
 pub const DEFAULT_FLUSH_INTERVAL: Duration = Duration::from_secs(30);
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+/// Brief non-blocking defer for `settings.snapshot` on daemon startup when no
+/// cached or live account snapshot exists yet, giving the desktop app's initial
+/// account refresh a window to populate Claude/Codex plans.
+const SETTINGS_SNAPSHOT_ACCOUNTS_WAIT: Duration = Duration::from_secs(20);
+
+type SnapshotCollector = Arc<dyn Fn() -> settings_snapshot::SnapshotFacts + Send + Sync>;
+
+static SNAPSHOT_COLLECTOR: OnceLock<SnapshotCollector> = OnceLock::new();
+static SNAPSHOT_NEEDS_ACCOUNTS: AtomicBool = AtomicBool::new(false);
 
 /// How long the caller may wait for the shutdown flush before giving up.
 /// Bounded, because a hung network must not delay quitting the app.
@@ -103,20 +118,47 @@ where
     G: Fn() -> settings_snapshot::SnapshotFacts + Send + Sync + 'static,
 {
     let collect = Arc::new(collect);
-    let collect_snapshot = Arc::new(collect_snapshot);
+    let collect_snapshot: SnapshotCollector = Arc::new(collect_snapshot);
+    let _ = SNAPSHOT_COLLECTOR.set(collect_snapshot.clone());
     tokio::spawn(async move {
         loop {
             let pass_paths = paths.clone();
             let pass_collect = collect.clone();
-            let pass_collect_snapshot = collect_snapshot.clone();
-            let _ = tokio::task::spawn_blocking(move || {
-                run_heartbeat_once(
-                    &pass_paths,
-                    pass_collect.as_ref(),
-                    pass_collect_snapshot.as_ref(),
-                );
+            let due = tokio::task::spawn_blocking(move || {
+                run_heartbeat_once(&pass_paths, pass_collect.as_ref())
             })
-            .await;
+            .await
+            .unwrap_or(false);
+
+            if due {
+                let pass_snapshot = collect_snapshot.clone();
+                let mut facts = tokio::task::spawn_blocking(move || pass_snapshot())
+                    .await
+                    .ok();
+                if facts.as_ref().is_some_and(|facts| facts.accounts.is_none()) {
+                    tokio::select! {
+                        _ = shutdown_rx.recv() => break,
+                        _ = tokio::time::sleep(SETTINGS_SNAPSHOT_ACCOUNTS_WAIT) => {}
+                    }
+                    let pass_snapshot = collect_snapshot.clone();
+                    facts = tokio::task::spawn_blocking(move || pass_snapshot())
+                        .await
+                        .ok();
+                }
+                if let Some(facts) = facts {
+                    let pass_paths = paths.clone();
+                    let _ = tokio::task::spawn_blocking(move || {
+                        if !gate::is_enabled(&pass_paths) {
+                            return;
+                        }
+                        let settings =
+                            crate::shared_settings_file::read_shared_settings(&pass_paths);
+                        settings_snapshot::emit(settings.as_ref(), &facts);
+                        SNAPSHOT_NEEDS_ACCOUNTS.store(facts.accounts.is_none(), Ordering::SeqCst);
+                    })
+                    .await;
+                }
+            }
 
             tokio::select! {
                 _ = shutdown_rx.recv() => break,
@@ -126,10 +168,41 @@ where
     })
 }
 
-fn run_heartbeat_once<F, G>(paths: &GxserverPaths, collect: &F, collect_snapshot: &G)
+/// Called after `accounts::runtime::AccountRuntime::discover_all` populates
+/// account plans. Persists the anonymous counts/plan enums for future startup
+/// snapshots and emits a follow-up `settings.snapshot` once if today's startup
+/// snapshot went out before any accounts were discovered.
+pub(crate) fn note_accounts_discovered(discovered: &crate::accounts::model::Snapshot) {
+    let Some(telemetry) = queue::handle() else {
+        return;
+    };
+    if !telemetry.is_enabled() {
+        return;
+    }
+    let Some(report) = crate::telemetry::settings_snapshot::accounts_report_from_discovered(
+        telemetry.paths(),
+        discovered,
+    ) else {
+        return;
+    };
+    if let Ok(db) = crate::storage::open_gxserver_database(telemetry.paths()) {
+        state::write_cached_accounts(&db, &report);
+    }
+    if SNAPSHOT_NEEDS_ACCOUNTS.swap(false, Ordering::SeqCst) {
+        if let Some(collect_snapshot) = SNAPSHOT_COLLECTOR.get() {
+            let settings = crate::shared_settings_file::read_shared_settings(telemetry.paths());
+            let mut facts = collect_snapshot();
+            if facts.accounts.is_none() {
+                facts.accounts = Some(report);
+            }
+            settings_snapshot::emit(settings.as_ref(), &facts);
+        }
+    }
+}
+
+fn run_heartbeat_once<F>(paths: &GxserverPaths, collect: &F) -> bool
 where
     F: Fn() -> Option<heartbeat::HeartbeatSnapshot>,
-    G: Fn() -> settings_snapshot::SnapshotFacts,
 {
     if !gate::is_enabled(paths) {
         /*
@@ -137,10 +210,14 @@ where
         list while analytics are off, so switches made then are never reported once they are on
         again; the first snapshot after only records the list.
         */
+        SNAPSHOT_NEEDS_ACCOUNTS.store(false, Ordering::SeqCst);
+        super::capture::reset_mobile_hello_cache();
         if let Ok(db) = crate::storage::open_gxserver_database(paths) {
             state::clear_built_in_extensions(&db);
+            state::clear_cached_accounts(&db);
+            state::clear_mobile_hello(&db);
         }
-        return;
+        return false;
     }
     /*
     CDXC:Telemetry 2026-08-27 (addendum v2, §3):
@@ -154,7 +231,7 @@ where
     a second DB reader.
     */
     let Some(snapshot) = collect() else {
-        return;
+        return false;
     };
     queue::refresh_profile(super::profile::ProfileSnapshot::from_counts(
         snapshot.project_count,
@@ -162,27 +239,15 @@ where
     ));
     let Ok(db) = crate::storage::open_gxserver_database(paths) else {
         super::debug_log("telemetry heartbeat could not open the state database".to_string());
-        return;
+        return false;
     };
     if !state::heartbeat_is_due(
         state::read_last_heartbeat_at(&db),
         heartbeat::HEARTBEAT_STALE_HOURS,
     ) {
-        return;
+        return false;
     }
     heartbeat::emit(&snapshot);
-    /*
-    CDXC:Telemetry 2026-11-20:
-    The settings snapshot rides the heartbeat's once-a-day clock rather than
-    keeping one of its own, so an install sends both or neither and the two
-    always describe the same day. A built-in extension switched on or off since
-    the last snapshot becomes an `extension.enabled` / `extension.disabled`
-    here: built-in extensions are settings any client can change (the desktop,
-    the web build, the phone, `ghostex settings`), and this is the one place
-    that sees every one of them. The first snapshot only records the list.
-    */
-    let settings = crate::shared_settings_file::read_shared_settings(paths);
-    settings_snapshot::emit(settings.as_ref(), &collect_snapshot());
     let known = super::extensions::known_built_in_extensions();
     if let Some((previous_known, previous_on)) = state::read_built_in_extensions(&db) {
         for (id, enabled) in super::extensions::built_in_extension_changes(
@@ -199,4 +264,5 @@ where
         &db,
         &chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     );
+    true
 }

@@ -13,12 +13,14 @@ one extra event.
 */
 
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub const ANALYTICS_STATE_METADATA_KEY: &str = "analytics.state.v1";
 pub const LAST_HEARTBEAT_AT_KEY: &str = "lastHeartbeatAt";
 pub const BUILT_IN_EXTENSIONS_ON_KEY: &str = "builtInExtensionsOn";
 pub const BUILT_IN_EXTENSIONS_KNOWN_KEY: &str = "builtInExtensionsKnown";
+pub const LAST_MOBILE_HELLO_AT_KEY: &str = "lastMobileHelloAt";
+pub const CACHED_ACCOUNTS_KEY: &str = "cachedAccounts";
 
 pub fn read_analytics_state(db: &Connection) -> Option<Value> {
     let text = db
@@ -92,6 +94,99 @@ pub fn clear_built_in_extensions(db: &Connection) {
     update_state(db, |state| {
         state.remove(BUILT_IN_EXTENSIONS_KNOWN_KEY);
         state.remove(BUILT_IN_EXTENSIONS_ON_KEY);
+    });
+}
+
+/// When this install last received an explicit `ghostex client-hello` from a mobile app.
+pub fn read_last_mobile_hello_at(db: &Connection) -> Option<chrono::DateTime<chrono::Utc>> {
+    let value = read_analytics_state(db)?;
+    let raw = value.get(LAST_MOBILE_HELLO_AT_KEY).and_then(Value::as_str)?;
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .ok()
+        .map(|parsed| parsed.with_timezone(&chrono::Utc))
+}
+
+pub fn write_last_mobile_hello_at(db: &Connection, seen_at: &str) {
+    write_state_key(
+        db,
+        LAST_MOBILE_HELLO_AT_KEY,
+        Value::String(seen_at.to_string()),
+    );
+}
+
+pub fn clear_mobile_hello(db: &Connection) {
+    let Some(state) = read_analytics_state(db) else {
+        return;
+    };
+    if state.get(LAST_MOBILE_HELLO_AT_KEY).is_none() {
+        return;
+    }
+    update_state(db, |state| {
+        state.remove(LAST_MOBILE_HELLO_AT_KEY);
+    });
+}
+
+/// Cached anonymous account counts and plan enums from the last account discovery,
+/// so a daily `settings.snapshot` sent at daemon startup before a client opens
+/// still populates `claude_plans` / `claude_top_plan` / `codex_plans` / `codex_top_plan`.
+pub fn read_cached_accounts(db: &Connection) -> Option<super::settings_snapshot::AccountsReport> {
+    let value = read_analytics_state(db)?;
+    let cached = value.get(CACHED_ACCOUNTS_KEY)?.as_object()?;
+    let mut report = super::settings_snapshot::AccountsReport::default();
+    if let Some(counts) = cached.get("counts").and_then(Value::as_object) {
+        for provider in ["claude", "codex", "cursor", "gemini", "copilot"] {
+            if let Some(count) = counts.get(provider).and_then(Value::as_u64) {
+                report.counts.insert(provider, count as usize);
+            }
+        }
+    }
+    let read_plans = |key: &str, table: &'static [&'static str]| -> Vec<&'static str> {
+        let mut plans: Vec<&'static str> = cached
+            .get(key)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter_map(|plan| super::taxonomy::match_enum(table, plan))
+            .collect();
+        plans.sort_unstable();
+        plans.dedup();
+        plans
+    };
+    report.claude_plans = read_plans("claudePlans", super::taxonomy::CLAUDE_PLANS);
+    report.codex_plans = read_plans("codexPlans", super::taxonomy::CODEX_PLANS);
+    Some(report)
+}
+
+pub fn write_cached_accounts(
+    db: &Connection,
+    report: &super::settings_snapshot::AccountsReport,
+) {
+    let counts: serde_json::Map<String, Value> = report
+        .counts
+        .iter()
+        .map(|(provider, count)| ((*provider).to_string(), json!(*count)))
+        .collect();
+    write_state_key(
+        db,
+        CACHED_ACCOUNTS_KEY,
+        json!({
+            "counts": counts,
+            "claudePlans": report.claude_plans,
+            "codexPlans": report.codex_plans,
+        }),
+    );
+}
+
+pub fn clear_cached_accounts(db: &Connection) {
+    let Some(state) = read_analytics_state(db) else {
+        return;
+    };
+    if state.get(CACHED_ACCOUNTS_KEY).is_none() {
+        return;
+    }
+    update_state(db, |state| {
+        state.remove(CACHED_ACCOUNTS_KEY);
     });
 }
 

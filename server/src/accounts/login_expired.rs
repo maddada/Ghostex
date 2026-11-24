@@ -14,14 +14,14 @@ use crate::{
     notification_feed::{
         broadcast_notification_feed_changed,
         store::{
-            insert_notification_feed_row, notification_agent_icon, NewNotificationFeedRow,
-            NOTIFICATION_FEED_KIND_CUSTOM,
+            NOTIFICATION_FEED_KIND_CUSTOM, NewNotificationFeedRow, insert_notification_feed_row,
+            notification_agent_icon,
         },
     },
     server::AppState,
 };
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// What Settings > Accounts and `ghostex accounts` say about a marked account.
 pub(crate) const NOTICE: &str =
@@ -270,8 +270,10 @@ fn mark(
         .map(|found| found.email.clone())
         .unwrap_or_default();
     let name = account.name.clone();
+    let provider_id = account.provider.id();
     store::write(db, &registry)?;
     state.accounts.invalidate();
+    crate::telemetry::reliability_error("provider_auth_failed", Some(provider_id));
     log(
         state,
         "accountLoginExpired",

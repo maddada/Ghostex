@@ -199,8 +199,9 @@ pub fn heartbeat_properties(snapshot: &HeartbeatSnapshot) -> Vec<(&'static str, 
     ]
 }
 
-/// Counts from the domain tables. Recent projects are the user-visible project
-/// list (hidden and carrier rows already excluded by `list_recent_projects`).
+/// Counts from the domain tables. Active projects are the user-visible project
+/// list (parked Recent Projects, hidden projects, and Remote Attach carrier rows
+/// are excluded by `should_include_presentation_project`).
 pub struct DomainCounts {
     pub project_count: usize,
     pub session_count: usize,
@@ -211,8 +212,12 @@ pub struct DomainCounts {
 
 pub fn collect_domain_counts(repository: &DomainRepository<'_>) -> DomainCounts {
     let project_count = repository
-        .list_recent_projects()
-        .map(|projects| projects.len())
+        .with_projects(|projects| {
+            projects
+                .iter()
+                .filter(|project| crate::presentation::should_include_presentation_project(project))
+                .count()
+        })
         .unwrap_or(0);
     // Three columns per row answer every count, so the registry is not hydrated.
     let sessions = repository.list_session_agent_facts().unwrap_or_default();

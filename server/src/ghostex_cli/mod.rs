@@ -401,6 +401,7 @@ fn is_known_command(name: &str) -> bool {
         "hold-sessions-awake",
         "hold-session-chat-grid",
         "client-hello",
+        "client-view",
         "wake",
         "focus",
         "floating-editor",

@@ -21,8 +21,9 @@ use super::{
     capture::{self, ClientPlatform},
     extensions::{self, ExtensionRef},
     taxonomy::{
-        self, EVENT_APP_LAUNCHED, EVENT_CLIENT_CONNECTED, EVENT_RAIL_INTRO_ANSWERED,
-        EVENT_RAIL_INTRO_SHOWN, EVENT_SIDEBAR_LAYOUT_CHANGED, EVENT_SURFACE_OPENED,
+        self, EVENT_APP_LAUNCHED, EVENT_CLIENT_CONNECTED, EVENT_ONBOARDING_STEP,
+        EVENT_RAIL_INTRO_ANSWERED, EVENT_RAIL_INTRO_SHOWN, EVENT_RELIABILITY_ERROR,
+        EVENT_SIDEBAR_LAYOUT_CHANGED, EVENT_SURFACE_OPENED,
     },
 };
 
@@ -64,6 +65,23 @@ pub fn record_client_event(body: &Value) {
         EVENT_RAIL_INTRO_ANSWERED => {
             if let Some(chose) = enum_property(properties, "chose", taxonomy::SIDEBAR_LAYOUTS) {
                 capture::rail_intro_answered(chose);
+            }
+        }
+        EVENT_ONBOARDING_STEP => {
+            if let Some(step) = enum_property(properties, "step", taxonomy::ONBOARDING_STEPS) {
+                capture::onboarding_step(step);
+            }
+        }
+        EVENT_RELIABILITY_ERROR => {
+            if let Some(category) =
+                enum_property(properties, "category", taxonomy::RELIABILITY_ERROR_CATEGORIES)
+            {
+                let agent_id = properties
+                    .and_then(|properties| properties.get("agent_id"))
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|value| taxonomy::normalize_agent_id(Some(value)));
+                capture::reliability_error(category, agent_id);
             }
         }
         _ => {}
