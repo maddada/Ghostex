@@ -923,6 +923,37 @@ pub(crate) const OPENCODE_NATIVE: &[SlashCommand] = &[
     },
 ];
 
+/// Built-in slash commands that `grok agent stdio` supports over ACP (omitting `/always-approve`,
+/// which bypasses Ghostex's permission mode, and `/context`, which completes silently over ACP).
+pub(crate) const GROK_NATIVE: &[SlashCommand] = &[
+    SlashCommand {
+        name: "compact",
+        description: "Compress conversation history to save context window",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "deep-research",
+        description:
+            "Research with bounded parallel agents, cross-check evidence, and write a cited report",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "goal",
+        description: "Set, manage, or check an autonomous goal",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "session-info",
+        description: "Show session details (model, turns, context usage)",
+        insert_text: None,
+    },
+    SlashCommand {
+        name: "workflow",
+        description: "Launch a saved workflow, list runs, or manage a run",
+        insert_text: None,
+    },
+];
+
 /// CDXC:SessionChat 2026-10-17 WHY:
 /// Grok Build 1.0.62's own built-in commands (its `slash/commands/` registry, checked against the live `/` menu); skills and workflows reach the chat through the `$` picker. The earlier list named commands Grok never had (`/editor`, `/init`, `/models`, `/status`) or renamed (`/mcp` is `/mcps`).
 pub(crate) const GROK: &[SlashCommand] = &[

@@ -362,6 +362,12 @@ fn provider_skill_roots(agent_id: &str) -> &'static [&'static [&'static str]] {
             &[".gemini", "antigravity-cli", "skills"],
             &[".gemini", "antigravity", "skills"],
         ],
+        "grok" | "grok-build" => &[
+            &[".grok", "skills"],
+            &[".agents", "skills"],
+            &[".claude", "skills"],
+            &[".codex", "skills"],
+        ],
         "amp" => &[
             &[".config", "agents", "skills"],
             &[".config", "amp", "skills"],
@@ -459,6 +465,15 @@ fn project_skill_roots(agent_id: &str) -> (&'static [&'static [&'static str]], P
                 &["_agent", "skills"],
             ],
             Folder,
+        ),
+        "grok" | "grok-build" => (
+            &[
+                &[".grok", "skills"],
+                &[".agents", "skills"],
+                &[".claude", "skills"],
+                &[".codex", "skills"],
+            ],
+            RepositoryRoot,
         ),
         "amp" => (
             &[&[".agents", "skills"], &[".claude", "skills"]],

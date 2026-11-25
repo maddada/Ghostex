@@ -1452,6 +1452,11 @@ fn terminal_approval_level(
             "full-access" => Some(super::AcpApprovalLevel::FullAccess),
             _ => None,
         },
+        "grok" => match value(selection.mode.as_ref())?.as_str() {
+            "auto-review" => Some(super::AcpApprovalLevel::Auto),
+            "always-approve" => Some(super::AcpApprovalLevel::FullAccess),
+            _ => None,
+        },
         _ => None,
     }
 }

@@ -1222,6 +1222,21 @@ pub(crate) async fn run_provider_model_picker_job(
                 .await
             }
         }
+        _ if crate::acp::channel::live(project_id, session_id, "model").is_some() => {
+            async {
+                if !plan.model.is_empty() || !plan.effort.is_empty() {
+                    crate::acp::channel::set_model(
+                        project_id,
+                        session_id,
+                        &plan.model,
+                        &plan.effort,
+                    )
+                    .await?;
+                }
+                Ok(())
+            }
+            .await
+        }
         _ => driver.drive_provider(&plan).await,
     };
     if let Err(error) = &outcome {

@@ -307,6 +307,7 @@ fn acp_terminal_notice(
             "codex" => "Codex",
             "antigravity" => "Antigravity",
             "opencode" => "OpenCode",
+            "grok" => "Grok Build",
             _ => "Claude Code",
         };
         return Some(
@@ -351,6 +352,7 @@ fn acp_terminal_notice(
                 "antigravity" => "Antigravity",
                 "claude" => "Claude Code",
                 "opencode" => "OpenCode",
+                "grok" => "Grok Build",
                 _ => "Agent",
             };
             let lower_code = code.unwrap_or_default().to_ascii_lowercase();
@@ -549,6 +551,9 @@ pub(super) fn acp_family_for_session(agent_id: Option<&str>, session: Option<&Va
     }
     if lower.contains("opencode") {
         return "opencode".to_string();
+    }
+    if lower.contains("grok") {
+        return "grok".to_string();
     }
     ghostex_gx_chat_core::menus::catalog::canonical_model_family(raw).to_string()
 }
@@ -909,6 +914,63 @@ pub fn detect_session_chat_terminal_state(
                         crate::session_chat_agent_fleet::SessionChatAgentFleet::new(agents),
                     );
                 }
+            }
+        } else if let Some(fleet_val) = acp_state.get("agentFleet").filter(|v| v.is_object()) {
+            let agents: Vec<crate::session_chat_agent_fleet::SessionChatSubAgent> = fleet_val
+                .get("agents")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|item| {
+                            let name = item.get("name").and_then(Value::as_str)?.to_string();
+                            let working =
+                                item.get("status").and_then(Value::as_str) == Some("working");
+                            Some(crate::session_chat_agent_fleet::SessionChatSubAgent {
+                                id: item.get("id").and_then(Value::as_str).map(str::to_string),
+                                started_at: item
+                                    .get("startedAt")
+                                    .and_then(Value::as_i64)
+                                    .unwrap_or(0),
+                                working,
+                                done: item
+                                    .get("done")
+                                    .and_then(Value::as_bool)
+                                    .unwrap_or(!working),
+                                name,
+                                model: item
+                                    .get("model")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
+                                effort: item
+                                    .get("effort")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
+                                task: item.get("task").and_then(Value::as_str).map(str::to_string),
+                                elapsed_seconds: item.get("elapsedSeconds").and_then(Value::as_u64),
+                                tokens: item
+                                    .get("tokens")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
+                                nested: item
+                                    .get("nested")
+                                    .and_then(Value::as_u64)
+                                    .map(|n| n as u32),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !agents.is_empty() {
+                let mut fleet = crate::session_chat_agent_fleet::SessionChatAgentFleet::new(agents);
+                if let Some(detected_at) = fleet_val
+                    .get("detectedAt")
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.trim().is_empty())
+                {
+                    fleet.detected_at = detected_at.to_string();
+                }
+                detection.fleet = Some(fleet);
+                detection.fleet_observed = true;
             }
         }
         detection.composer.state =

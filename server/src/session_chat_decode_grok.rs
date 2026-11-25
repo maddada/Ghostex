@@ -22,6 +22,25 @@ the shared edit-tool table that renders a diff from the call's input is keyed by
 exactly those labels.
 */
 fn grok_tool_name(update: &Map<String, Value>) -> String {
+    if grok_tool_meta(update)
+        .and_then(|meta| extract_string(meta.get("name")))
+        .as_deref()
+        == Some("use_tool")
+    {
+        if let Some(tool_name) = update
+            .get("rawInput")
+            .and_then(|v| v.get("tool_name"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if let Some((server, tool)) = tool_name.split_once("__") {
+                if !server.is_empty() && !tool.is_empty() {
+                    return format!("{server}:{tool}");
+                }
+            }
+        }
+    }
     grok_tool_meta(update)
         .and_then(|meta| {
             extract_string(meta.get("label")).or_else(|| extract_string(meta.get("name")))
@@ -74,6 +93,17 @@ fn grok_tool_result_output(update: &Map<String, Value>) -> String {
     let Some(raw_output) = update.get("rawOutput").filter(|value| !value.is_null()) else {
         return String::new();
     };
+    if let Some(record) = as_record(Some(raw_output)) {
+        if record.get("type").and_then(Value::as_str) == Some("MCP") {
+            if let Some(output) = as_record(record.get("output")) {
+                if let Some(text) = extract_string(output.get("Error"))
+                    .or_else(|| extract_string(output.get("OkayOutput")))
+                {
+                    return text;
+                }
+            }
+        }
+    }
     as_record(Some(raw_output))
         .and_then(|record| {
             record

@@ -23,7 +23,7 @@ use crate::app::window::{
 };
 
 const SETTINGS_INTRO_KEY: &str = "nativeModeIntro";
-const NATIVE_FAMILIES: [&str; 3] = ["antigravity", "claude", "codex"];
+const NATIVE_FAMILIES: [&str; 4] = ["antigravity", "claude", "codex", "grok"];
 
 /// Opened in this run already (by any window), so a second window never opens it twice before the
 /// settings file catches up.

@@ -861,8 +861,27 @@ pub(crate) fn build_agent_resume_command(
                 )
             })
         }
-        "grok" => exact_reference
-            .map(|reference| format!("{agent_command} -r {}", quote_shell_double_arg(&reference))),
+        "grok" => {
+            if input.acp_mode {
+                return Some(
+                    crate::acp::spec::build_acp_host_launch_command_with_profile(
+                        "grok",
+                        Some(&agent_command),
+                        exact_reference.as_deref(),
+                        input.acp_approval_level,
+                        &[],
+                        input.acp_model.as_deref(),
+                        input.acp_effort.as_deref(),
+                        false,
+                        input.acp_read_only,
+                        &input.acp_profile,
+                    ),
+                );
+            }
+            exact_reference.map(|reference| {
+                format!("{agent_command} -r {}", quote_shell_double_arg(&reference))
+            })
+        }
         "freebuff" => exact_reference.map(|reference| {
             format!(
                 "{agent_command} --continue {}",

@@ -86,12 +86,24 @@ const OPENCODE_SPEC: AcpAgentSpec = AcpAgentSpec {
     supports_mid_turn_prompt: true,
 };
 
+const GROK_SPEC: AcpAgentSpec = AcpAgentSpec {
+    family: "grok",
+    display_name: "Grok Build",
+    // Native Grok CLI ACP server over stdio with xAI extensions (`driver_grok.rs`).
+    acp_argv: &["grok", "--permission-mode", "default", "agent", "stdio"],
+    default_cli_bin: "grok",
+    cli_resume_flag: "-r",
+    cli_accept_all_flag: Some("--always-approve"),
+    supports_mid_turn_prompt: true,
+};
+
 pub fn spec_for_family(family: &str) -> Option<&'static AcpAgentSpec> {
     match family.trim().to_ascii_lowercase().as_str() {
         "antigravity" | "antigravity-cli" | "agy" => Some(&ANTIGRAVITY_SPEC),
         "claude" | "claude-code" => Some(&CLAUDE_SPEC),
         "codex" | "codex-cli" => Some(&CODEX_SPEC),
         "opencode" | "opencode-cli" => Some(&OPENCODE_SPEC),
+        "grok" | "grok-build" => Some(&GROK_SPEC),
         _ => None,
     }
 }
@@ -137,6 +149,11 @@ pub fn transcript_path_for_session(family: &str, native_session_id: &str) -> Opt
         ),
         "opencode" => crate::session_chat_opencode::safe_id(native_session_id)
             .then(|| super::driver_opencode::mirror_path(native_session_id)),
+        "grok" => crate::session_chat_paths::resolve_session_chat_transcript_path(
+            crate::session_chat::SessionChatTranscriptAgent::Grok,
+            Some(native_session_id),
+            None,
+        ),
         _ => None,
     }
 }
@@ -672,7 +689,10 @@ pub(crate) fn extract_safe_model_and_effort_from_command(
     family: &str,
     cmd: &str,
 ) -> (Option<String>, Option<String>) {
-    if !matches!(family, "claude" | "codex" | "antigravity" | "opencode") {
+    if !matches!(
+        family,
+        "claude" | "codex" | "antigravity" | "opencode" | "grok"
+    ) {
         return (None, None);
     }
     let tokens = tokenize_cli_command(cmd);
@@ -696,11 +716,15 @@ pub(crate) fn extract_safe_model_and_effort_from_command(
                 }
                 i += 1;
             }
-        } else if let Some(v) = tok.strip_prefix("--effort=") {
+        } else if let Some(v) = tok.strip_prefix("--effort=").or_else(|| {
+            (family == "grok")
+                .then(|| tok.strip_prefix("--reasoning-effort="))
+                .flatten()
+        }) {
             if effort.is_none() && is_safe_model_or_effort_token(v) {
                 effort = Some(v.trim().to_string());
             }
-        } else if tok == "--effort" {
+        } else if tok == "--effort" || (family == "grok" && tok == "--reasoning-effort") {
             if let Some(next) = base_tokens.get(i + 1) {
                 if effort.is_none() && is_safe_model_or_effort_token(next) {
                     effort = Some(next.trim().to_string());
@@ -726,6 +750,7 @@ pub(crate) fn ignored_owner_command_tokens(
         "codex" => "codex",
         "antigravity" => "agy",
         "opencode" => "opencode",
+        "grok" => "grok",
         _ => return Vec::new(),
     };
     let Some(raw) = owner_command.map(str::trim).filter(|s| !s.is_empty()) else {
@@ -758,11 +783,18 @@ pub(crate) fn ignored_owner_command_tokens(
             .strip_prefix("--model=")
             .or_else(|| tok.strip_prefix("-m="))
             .or_else(|| tok.strip_prefix("--effort="))
+            .or_else(|| {
+                (family == "grok")
+                    .then(|| tok.strip_prefix("--reasoning-effort="))
+                    .flatten()
+            })
         {
             if !is_safe_model_or_effort_token(v) {
                 ignored.push(tok.to_string());
             }
-        } else if matches!(tok, "--model" | "-m" | "--effort") {
+        } else if matches!(tok, "--model" | "-m" | "--effort")
+            || (family == "grok" && tok == "--reasoning-effort")
+        {
             if let Some(next) = base_tokens.get(i + 1) {
                 if !is_safe_model_or_effort_token(next) {
                     ignored.push(tok.to_string());
@@ -800,6 +832,11 @@ fn full_access_flag_width(family: &str, tok: &str, next: Option<&str>) -> usize 
         },
         "opencode" => match tok {
             "--auto" | "--yolo" | "--dangerously-skip-permissions" => 1,
+            _ => 0,
+        },
+        "grok" => match tok {
+            "--always-approve" | "--permission-mode=bypassPermissions" => 1,
+            "--permission-mode" if next == Some("bypassPermissions") => 2,
             _ => 0,
         },
         _ => 0,
@@ -1009,6 +1046,8 @@ fn cli_switch_permission_args(
     match (family, level) {
         ("claude", Auto) => &["--permission-mode", "auto"],
         ("claude", AutoEdits) => &["--permission-mode", "acceptEdits"],
+        ("grok", Auto) => &["--permission-mode", "auto"],
+        ("grok", AutoEdits) => &["--permission-mode", "acceptEdits"],
         ("codex", Auto) => &["--approve-for-me"],
         ("codex", AutoEdits) => &[
             "--sandbox",
@@ -1157,6 +1196,15 @@ pub fn build_cli_switch_argv_with_options(
             inner_args.push("--effort".to_string());
             inner_args.push(e.to_string());
         }
+    } else if spec.family == "grok" {
+        if let Some(m) = model {
+            inner_args.push("--model".to_string());
+            inner_args.push(m.to_string());
+        }
+        if let Some(e) = effort {
+            inner_args.push("--reasoning-effort".to_string());
+            inner_args.push(e.to_string());
+        }
     }
 
     let codex_deny = if spec.family == "codex" {
@@ -1166,7 +1214,7 @@ pub fn build_cli_switch_argv_with_options(
     };
 
     if read_only {
-        if spec.family == "claude" {
+        if spec.family == "claude" || spec.family == "grok" {
             inner_args.push("--permission-mode".to_string());
             inner_args.push("plan".to_string());
         } else if spec.family == "codex" {
