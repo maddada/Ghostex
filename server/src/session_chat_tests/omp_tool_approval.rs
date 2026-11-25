@@ -109,17 +109,21 @@ fn omp_approval_names_only_the_command_the_dialog_shows() {
     assert_eq!(notice.approval_command.as_deref(), Some("echo cap-b"));
     assert_eq!(notice.to_value()["approvalCommand"], "echo cap-b");
 
-    // OMP 18.15.0 cuts a long command at the box edge instead of wrapping it.
+    // OMP 18.15.0 cuts a long command at the box edge instead of wrapping it. A cut command can
+    // stand for several requests, so the dialog has no rows on the chat's card: it is the terminal
+    // card (CDXC:SessionChat 2026-11-25 in session_chat_omp_blocking.rs `omp_shown_request`).
     let shown = "echo dies-ist-ein-sehr-langer-befehl-der-im-dialog-umbrechen-soll-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…";
     let truncated = OMP_APPROVAL.replace("echo cap-b", shown);
     let notice =
         classify_session_chat_terminal_notice(Some("omp"), &truncated).expect("truncated notice");
-    assert_eq!(notice.approval_command.as_deref(), Some(shown));
+    assert_eq!(notice.kind, SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED);
+    assert!(notice.choices.is_empty());
 }
 
 #[test]
-fn omp_approval_keeps_visible_command_lines_and_spacing() {
-    // A multi-line request in the captured frame shape, not a claimed OMP wrap capture.
+fn omp_approval_with_a_command_over_several_lines_is_a_terminal_card() {
+    // A multi-line request in the captured frame shape, not a claimed OMP wrap capture: which
+    // spaces the lines dropped cannot be read back, so the dialog has no rows on the chat's card.
     let screen = OMP_APPROVAL
         .replace("echo cap-b", "printf 'one  two'")
         .replace(

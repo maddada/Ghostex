@@ -80,6 +80,15 @@ pub fn relay_card(session: &Value) -> Option<Value> {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    // OMP's card for an approval it leaves to the terminal (a dialog that does not show what it
+    // asks): relayed like a permission prompt, so the coordinator's card says to answer in the
+    // terminal, with no Allow or Deny, which gxserver would refuse.
+    let terminal_only_omp = notice_kind == "ompInputBlocked"
+        && notice
+            .as_ref()
+            .and_then(|notice| notice.get("title"))
+            .and_then(Value::as_str)
+            == Some(crate::session_chat_omp_blocking::OMP_TOOL_APPROVAL_TITLE);
     let (kind, key) = match &stored {
         Some(prompt) if crate::connectors::is_connector_card(prompt) => (
             "connector",
@@ -93,6 +102,7 @@ pub fn relay_card(session: &Value) -> Option<Value> {
             let kind = match notice_kind.as_str() {
                 "permissionPrompt" => "permission",
                 "trustPrompt" => "trust",
+                "ompInputBlocked" if terminal_only_omp => "permission",
                 _ => return None,
             };
             let detected_at = notice
@@ -114,8 +124,10 @@ pub fn relay_card(session: &Value) -> Option<Value> {
         }
     }
     // A Connectors card is the stored prompt alone; the others draw the screen's rows when it
-    // shows the prompt (a trust question has nothing else).
-    if kind != "connector" && matches!(notice_kind.as_str(), "permissionPrompt" | "trustPrompt") {
+    // shows the prompt (a trust question has nothing else), or OMP's terminal-only card.
+    if kind != "connector"
+        && (matches!(notice_kind.as_str(), "permissionPrompt" | "trustPrompt") || terminal_only_omp)
+    {
         if let Some(notice) = notice {
             card["notice"] = notice;
         }

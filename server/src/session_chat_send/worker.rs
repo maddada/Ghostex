@@ -742,32 +742,36 @@ pub(super) async fn run_session_chat_send_worker(
                     summary,
                     allow,
                 } => {
-                    let key = capture_session_terminal_text(&zmx_name)
-                        .await
-                        .and_then(|screen| {
-                            crate::session_chat_omp_blocking::omp_card_answer_key(
-                                &screen, &tool, &summary, allow,
-                            )
-                        });
-                    let Some(key) = key else {
-                        outcome = Err(SessionChatSendError::not_attempted(
-                            "OMP's approval changed before the answer could be sent.".to_string(),
-                        ));
-                        break;
-                    };
-                    if let Err(error) = write_session_chat_payload(
+                    if let Err(error) = write_omp_approval_keys(
                         &project_id,
                         &session_id,
                         &zmx_name,
                         &source,
-                        &key,
+                        |screen| {
+                            crate::session_chat_omp_blocking::omp_card_answer_key(
+                                screen, &tool, &summary, allow,
+                            )
+                        },
                     )
                     .await
                     {
-                        outcome = Err(SessionChatSendError::new(
-                            SessionChatSendFailure::Write,
-                            error,
-                        ));
+                        outcome = Err(error);
+                        break;
+                    }
+                }
+                SessionChatSendStep::GuardOmpApprovalRow(pick) => {
+                    if let Err(error) = write_omp_approval_keys(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        |screen| {
+                            crate::session_chat_omp_blocking::omp_row_answer_key(screen, &pick)
+                        },
+                    )
+                    .await
+                    {
+                        outcome = Err(error);
                         break;
                     }
                 }
@@ -1537,4 +1541,29 @@ pub(super) async fn run_session_chat_send_worker(
             let _ = completion.send(outcome);
         }
     }
+}
+
+/// Reads the screen and types the keys `keys` reads off that same capture; types nothing when the
+/// screen cannot be read (`OMP_APPROVAL_UNREAD`) or the keys find no dialog they belong to
+/// (`OMP_APPROVAL_CHANGED`).
+async fn write_omp_approval_keys(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    source: &str,
+    keys: impl FnOnce(&str) -> Option<String>,
+) -> Result<(), SessionChatSendError> {
+    let Some(screen) = capture_session_terminal_text(zmx_name).await else {
+        return Err(SessionChatSendError::not_attempted(
+            OMP_APPROVAL_UNREAD.to_string(),
+        ));
+    };
+    let Some(key) = keys(&screen) else {
+        return Err(SessionChatSendError::not_attempted(
+            OMP_APPROVAL_CHANGED.to_string(),
+        ));
+    };
+    write_session_chat_payload(project_id, session_id, zmx_name, source, &key)
+        .await
+        .map_err(|error| SessionChatSendError::new(SessionChatSendFailure::Write, error))
 }

@@ -1966,6 +1966,9 @@ Once Ghostex has the answer, the row says Approved or Denied (or the words you
 picked, such as "Yes, and don't ask again for …") and the command for a few seconds, then leaves; the list above the chat box is
 the only bar there, with the agent's status on its top line. While the chat box
 is maximized, or a question card is open, the approval shows as its own card.
+An OMP approval that Ghostex cannot firmly tie to its request (for example one
+that shows only "Allow tool: <name>") shows "OMP is waiting for tool approval"
+with Open terminal instead of answer buttons: answer it in the terminal.
 **Quote or reply to part of the chat**: select any text in the chat (a reply,
 your own message, tool output or code) and a small bar of buttons shows by
 where you let go: Copy, Add to Chat (puts the text in the chat box as a quote)

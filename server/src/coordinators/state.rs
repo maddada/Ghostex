@@ -593,8 +593,9 @@ pub struct ThreadScreenWait {
     notice_resets_at: Option<String>,
     /// True when the usage-limit notice says it continues automatically at reset.
     notice_auto_recover: bool,
-    /// The notice itself, as a chat frame carries it, for a permission prompt or a folder-trust
-    /// question: the card its coordinator's chat relays (relay.rs).
+    /// The notice itself, as a chat frame carries it, for a permission prompt (OMP's approval that
+    /// the chat leaves to the terminal included) or a folder-trust question: the card its
+    /// coordinator's chat relays (relay.rs).
     notice: Option<Value>,
 }
 
@@ -607,7 +608,8 @@ fn notice_wait_kind(notice: &SessionChatTerminalNotice) -> ThreadWaitKind {
         SESSION_CHAT_NOTICE_EMPRYO_SIGN_IN if notice.blocks_input() => ThreadWaitKind::SignIn,
         SESSION_CHAT_NOTICE_USAGE_LIMIT => ThreadWaitKind::UsageLimit,
         SESSION_CHAT_NOTICE_AGENT_EXITED => ThreadWaitKind::AgentExited,
-        _ if notice.permission_request.is_some()
+        _ if notice.is_permission_request()
+            || notice.permission_request.is_some()
             || notice
                 .approval_command
                 .as_deref()
@@ -777,17 +779,19 @@ impl ThreadScreenWait {
                 from_notice: true,
                 blocking,
                 user_approval,
-                asks: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
-                approval: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
+                // OMP's approval that the chat leaves to the terminal is a screen approval like a
+                // permission prompt (`is_screen_approval`, CDXC:SessionChat 2026-11-25 in
+                // session_chat_omp_blocking.rs); its relayed card carries the notice, whose card
+                // points to the terminal and offers no answers.
+                asks: notice.is_screen_approval(),
+                approval: notice.is_screen_approval(),
                 agent_gone: notice.kind == SESSION_CHAT_NOTICE_AGENT_EXITED,
                 at_limit: at_limit(notice),
                 short_summary: notice_short_summary(notice, kind),
                 notice_resets_at: notice_resets_at(notice),
                 notice_auto_recover: notice_auto_recover(notice),
-                notice: matches!(
-                    notice.kind.as_str(),
-                    SESSION_CHAT_NOTICE_PERMISSION_PROMPT | SESSION_CHAT_NOTICE_TRUST_PROMPT
-                )
+                notice: (notice.kind == SESSION_CHAT_NOTICE_TRUST_PROMPT
+                    || notice.is_screen_approval())
                 .then(|| notice.to_value()),
             });
         }

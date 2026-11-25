@@ -174,13 +174,20 @@ pub(crate) fn choices(card: &Value) -> Vec<Choice> {
         ..
     }) = prompt
     {
-        let mut allow = json!({ "kind": "approval", "approvalSend": "1", "promptTool": tool });
+        // Allow and Deny both name the card they answer (its tool, summary and call), so gxserver
+        // types neither into a newer request the thread shows by then (CDXC:SessionChat 2026-11-25
+        // in server/src/session_chat_send/answer_http.rs).
+        let mut shown = json!({ "kind": "approval", "promptTool": tool });
         if let Some(summary) = summary {
-            allow["promptSummary"] = json!(summary);
+            shown["promptSummary"] = json!(summary);
         }
         if let Some(id) = tool_use_id {
-            allow["toolUseId"] = json!(id);
+            shown["toolUseId"] = json!(id);
         }
+        let mut allow = shown.clone();
+        allow["approvalSend"] = json!("1");
+        let mut deny = shown;
+        deny["approvalSend"] = json!("");
         return vec![
             Choice {
                 label: "Allow".to_string(),
