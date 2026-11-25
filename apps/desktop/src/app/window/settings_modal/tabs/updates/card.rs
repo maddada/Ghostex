@@ -290,7 +290,7 @@ impl LinuxUpdate {
         match (&self.command, self.appimage, self.here) {
             (Some(_), _, true) => "This command needs your password, so Ghostex can't run it for you. Run it in a terminal; any agent can check it first.".to_string(),
             (Some(_), _, false) => format!(
-                "This command needs a password on {}, so Ghostex can't run it for you. Run it in a terminal there; any agent can check it first.",
+                "It needs a password on {}, so Ghostex can't run it. Any agent can check it first.",
                 self.computer
             ),
             (None, true, true) => {
