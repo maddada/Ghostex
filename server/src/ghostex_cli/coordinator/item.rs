@@ -251,6 +251,7 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
             let done = switch(parsed, "done", &mut words);
             let holds = switch(parsed, "holds", &mut words);
             let chore = switch(parsed, "chore", &mut words);
+            let multiple = switch(parsed, "multiple", &mut words);
             let line = words.get(1).cloned();
             match verb {
                 "now" => {
@@ -288,6 +289,10 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
                             ))?),
                         );
                         params.insert("holds".into(), json!(holds));
+                        // `--multiple`: the user ticks any of the answers and sends them at once.
+                        if multiple {
+                            params.insert("multiple".into(), json!(true));
+                        }
                         // `--answer` repeated keeps each answer whole, commas and all.
                         let each = repeated(args, "answer");
                         if !each.is_empty() {
@@ -357,9 +362,14 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
                 .cloned()
                 .unwrap_or(Value::Null);
             println!(
-                "{name} asks {}: {}{}",
+                "{name} asks {}: {}{}{}",
                 agents::text(&ask, "tag"),
                 agents::text(&ask, "text"),
+                if ask["multiple"] == true {
+                    " (pick any)"
+                } else {
+                    ""
+                },
                 if ask["holds"] == true {
                     " (holds the work up)"
                 } else {
@@ -525,10 +535,10 @@ fn print_item(item: &Value, full: bool) {
             "      ? {} {}{}  ({state})",
             agents::text(ask, "tag"),
             agents::text(ask, "text"),
-            if answers.is_empty() {
-                String::new()
-            } else {
-                format!(" [{}]", answers.join(" | "))
+            match (answers.is_empty(), ask["multiple"] == true) {
+                (true, _) => String::new(),
+                (false, true) => format!(" [pick any: {}]", answers.join(" | ")),
+                (false, false) => format!(" [{}]", answers.join(" | ")),
             }
         );
         let detail = agents::text(ask, "detail");

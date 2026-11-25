@@ -57,6 +57,70 @@ fn answer_menu_rows(answers: &[Value]) -> Vec<Value> {
         .collect()
 }
 
+/// Whether an ask's answers are ticked together in one Choices menu (`item ask --multiple`, gx-chat-core
+/// extras/work_cards.rs `ask_buttons`) rather than each sending itself.
+pub(super) fn answers_multiple(answers: &[Value]) -> bool {
+    answers.iter().any(|answer| answer["multiple"] == true)
+}
+
+/// A pick-several ask's own key (`work-ask:W5:Q12`), which its ticks are kept under, the same on
+/// every surface that shows it (the dock's row, its pop-up, the Work panel's card).
+fn pick_key(answers: &[Value]) -> String {
+    answers
+        .iter()
+        .find(|answer| answer["multiple"] == true)
+        .map(|answer| text(&answer["command"], "key"))
+        .unwrap_or_default()
+}
+
+/// The Choices menu of a pick-several ask: a box per answer (ticked when in `ticked`), the
+/// recommended ones starred, then the foot with its Send. A box only ticks; Send answers with
+/// every ticked one at once (`NativeChatView::send_ask_picks`).
+///
+/// CDXC:Coordinators 2026-11-25 DECISION:
+/// User, picking variant C "Checkboxes in the Choices menu" (question-style-page Q4933): "has to
+/// be inside choices". The card keeps its one Choices button, which reads "Choices: 2" once some
+/// are ticked; the menu lists the answers with a box each and "Send 2" at its foot. No summary of
+/// the picks shows anywhere else (the user said no).
+fn pick_menu_rows(answers: &[Value], ticked: &[String], surface: &str) -> Vec<Value> {
+    let key = pick_key(answers);
+    let choices: Vec<&Value> = answers
+        .iter()
+        .filter(|answer| answer["multiple"] == true && answer["command"].is_object())
+        .collect();
+    let mut rows: Vec<Value> = choices
+        .iter()
+        .map(|answer| {
+            let label = text(answer, "label");
+            json!({
+                "label": label,
+                "pick": true,
+                "picked": ticked.contains(&label),
+                "recommended": answer["recommended"] == true,
+            })
+        })
+        .collect();
+    if let Some(first) = choices.first() {
+        rows.push(json!({
+            "pickSend": {
+                "key": key,
+                "surface": surface,
+                "command": first["command"],
+            },
+        }));
+    }
+    rows
+}
+
+/// The Choices button's words: "Choices", or "Choices: 2" once two are ticked (or were sent).
+fn choices_label(count: usize) -> String {
+    if count == 0 {
+        CHOOSE_ANSWER.to_string()
+    } else {
+        format!("{CHOOSE_ANSWER}: {count}")
+    }
+}
+
 /// A closed card's answer button's width (unscaled), as `work_compact_answers` draws it: its
 /// label, 8px sides and border, then its check, reply arrow or star (`mark`).
 fn compact_answer_width(label: &str, mark: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
@@ -109,6 +173,16 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> Vec<AnyElement> {
         let s = p.scale;
+        // A pick-several ask's answers are one Choices menu with a box each, and stay one here too.
+        if answers_multiple(answers) {
+            let (several, rest): (Vec<Value>, Vec<Value>) = answers
+                .iter()
+                .cloned()
+                .partition(|answer| answer["multiple"] == true);
+            let mut buttons = vec![self.answers_dropdown(key, &several, busy, p, cx)];
+            buttons.extend(self.work_answer_buttons(&format!("{key}:rest"), &rest, busy, p, cx));
+            return buttons;
+        }
         answers
             .iter()
             .enumerate()
@@ -242,10 +316,24 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let locked = busy || answers.iter().all(|answer| answer["locked"] == true);
-        let rows = answer_menu_rows(answers);
+        let multiple = answers_multiple(answers);
+        let (rows, label) = if multiple {
+            let ticked = self.ask_ticks(answers);
+            (
+                pick_menu_rows(answers, &ticked, key),
+                choices_label(ticked.len()),
+            )
+        } else {
+            (answer_menu_rows(answers), CHOOSE_ANSWER.to_string())
+        };
+        let count = if multiple {
+            rows.len().saturating_sub(1)
+        } else {
+            rows.len()
+        };
         self.dock_tone_button(
             gpui::SharedString::from(format!("work-answers-choose:{key}")),
-            CHOOSE_ANSWER,
+            &label,
             None,
             ToneButton::Secondary,
             None,
@@ -253,8 +341,8 @@ impl NativeChatView {
             p,
         )
         .aria_label(format!(
-            "{CHOOSE_ANSWER}, {}",
-            ghostex_gx_protocol::plural(rows.len(), "answer", "answers")
+            "{label}, {}",
+            ghostex_gx_protocol::plural(count, "answer", "answers")
         ))
         .child(
             svg()
@@ -295,6 +383,64 @@ impl NativeChatView {
         } else {
             self.show_chat_menu_in_window_at(rows, at, ANSWERS_MENU_MAX, window, cx);
         }
+    }
+
+    /// The answers ticked in a pick-several ask's Choices menu, in the order it shows them: those
+    /// sent from here once it is answered (each reads `picked`), else the ones ticked so far.
+    fn ask_ticks(&self, answers: &[Value]) -> Vec<String> {
+        let sent: Vec<String> = answers
+            .iter()
+            .filter(|answer| answer["multiple"] == true && answer["picked"] == true)
+            .map(|answer| text(answer, "label"))
+            .collect();
+        if !sent.is_empty() {
+            return sent;
+        }
+        let ticked = self
+            .board
+            .ask_picks
+            .get(&pick_key(answers))
+            .cloned()
+            .unwrap_or_default();
+        answers
+            .iter()
+            .map(|answer| text(answer, "label"))
+            .filter(|label| ticked.contains(label))
+            .collect()
+    }
+
+    /// A box ticked or cleared in a pick-several ask's Choices menu (option_menu/render.rs): kept
+    /// until its Send, so the Choices button can say how many.
+    pub(super) fn set_ask_ticks(&mut self, key: &str, ticked: Vec<String>, cx: &mut Context<Self>) {
+        if ticked.is_empty() {
+            self.board.ask_picks.remove(key);
+        } else {
+            self.board.ask_picks.insert(key.to_string(), ticked);
+        }
+        cx.notify();
+    }
+
+    /// A pick-several ask's Send: one answer naming every ticked one (`picks`, in the menu's
+    /// order), which the chat core records and sends as "W5 Q12: macOS, Windows"
+    /// (gx-chat-core extras/coordinator_board.rs `answer`). The ask's pop-up closes as an answer
+    /// button's press closes it.
+    pub(super) fn send_ask_picks(
+        &mut self,
+        send: &Value,
+        picks: Vec<String>,
+        cx: &mut Context<Self>,
+    ) {
+        if picks.is_empty() || !send["command"].is_object() {
+            return;
+        }
+        let mut command = send["command"].clone();
+        command["picks"] = json!(picks);
+        self.board.ask_picks.remove(&text(send, "key"));
+        self.invoke(command, cx);
+        if text(send, "surface").starts_with("dock-ask:") {
+            self.close_dock_ask_modal(cx);
+        }
+        cx.notify();
     }
 
     /// Reply as one more of an ask's answers, last after them in their look (`work_answer_buttons`,
@@ -645,9 +791,11 @@ impl NativeChatView {
         let choices_width: f32 =
             choices.iter().map(|index| widths[*index]).sum::<f32>() + gaps(choices.len());
         let choose_width = compact_answer_width(CHOOSE_ANSWER, 15.0, p, cx);
-        let fold = choices_width > choose_width
-            && widths.iter().sum::<f32>() + gaps(answers.len()) > room
-            && !answers.iter().any(|answer| answer["picked"] == true);
+        let multiple = answers_multiple(answers);
+        let fold = multiple
+            || (choices_width > choose_width
+                && widths.iter().sum::<f32>() + gaps(answers.len()) > room
+                && !answers.iter().any(|answer| answer["picked"] == true));
         let mut row = div()
             .flex_shrink(1.0)
             .min_w_0()
@@ -659,7 +807,23 @@ impl NativeChatView {
                 .iter()
                 .map(|index| answers[*index].clone())
                 .collect();
-            let rows = answer_menu_rows(&choices);
+            let (rows, label, count) = if multiple {
+                let ticked = self.ask_ticks(&choices);
+                (
+                    pick_menu_rows(&choices, &ticked, key),
+                    choices_label(ticked.len()),
+                    choices.len(),
+                )
+            } else {
+                let rows = answer_menu_rows(&choices);
+                let count = rows.len();
+                (rows, CHOOSE_ANSWER.to_string(), count)
+            };
+            let locked = choices
+                .iter()
+                .all(|answer| answer["locked"] == true || answer["picked"] == true)
+                && multiple
+                && choices.iter().any(|answer| answer["picked"] == true);
             row = row.child(
                 div()
                     .id(gpui::SharedString::from(format!(
@@ -667,8 +831,8 @@ impl NativeChatView {
                     )))
                     .role(gpui::Role::Button)
                     .aria_label(format!(
-                        "{CHOOSE_ANSWER}, {}",
-                        ghostex_gx_protocol::plural(rows.len(), "answer", "answers")
+                        "{label}, {}",
+                        ghostex_gx_protocol::plural(count, "answer", "answers")
                     ))
                     .h(px(24.0 * s))
                     .px(px(8.0 * s))
@@ -678,11 +842,11 @@ impl NativeChatView {
                     .gap(px(4.0 * s))
                     .rounded(px(7.0 * s))
                     .border(px(s))
-                    .chat_filled(p.neutral_button_fills(), !rows.is_empty())
+                    .chat_filled(p.neutral_button_fills(), !rows.is_empty() && !locked)
                     .text_size(px(PROSE_SIZE * s))
                     .text_color(p.foreground)
-                    .chat_cursor_pointer()
-                    .child(div().whitespace_nowrap().child(CHOOSE_ANSWER))
+                    .when(!locked, |this| this.chat_cursor_pointer())
+                    .child(div().whitespace_nowrap().child(label))
                     .child(
                         svg()
                             .path("titlebar/chevron-down.svg")
@@ -693,7 +857,9 @@ impl NativeChatView {
                     .on_click(
                         cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                             cx.stop_propagation();
-                            this.show_answers_menu(rows.clone(), event.position(), window, cx);
+                            if !locked {
+                                this.show_answers_menu(rows.clone(), event.position(), window, cx);
+                            }
                         }),
                     ),
             );

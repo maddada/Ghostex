@@ -252,8 +252,17 @@ pub struct WorkAsk {
     /// the agent to write a easy to understand title, and then the description can describe
     /// more". `item ask W7 "<title>" --detail "<the rest>"`.
     pub detail: String,
-    /// One-click answers, the recommended one ending in `*` ("Yes*,No"); "" for a task.
+    /// One-click answers, the recommended ones ending in `*` ("Yes*,No"); "" for a task.
     pub answers: String,
+    /// The user may tick several of `answers` and send them together (`item ask --multiple`): its
+    /// card's Choices menu has a box per answer and a Send, and the answer reads "macOS, Windows".
+    ///
+    /// CDXC:Coordinators 2026-11-25 DECISION:
+    /// User, picking variant C "Checkboxes in the Choices menu" for a Needs you ask with several
+    /// answers (question-style-page Q4933): "has to be inside choices". The card keeps its one
+    /// Choices button; nothing is sent until Send, and single-answer asks stay as they were.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub multiple: bool,
     /// The work stops until the user does it: the item is Blocked while it is open.
     pub holds: bool,
     /// A file or link with the steps to follow.
@@ -1110,9 +1119,30 @@ pub fn mark_answers(answers: &str, recommended: &str) -> String {
     mark_answer_list(&split_answers(answers), recommended)
 }
 
-/// A list of answers (`--answer` repeated, commas allowed) with the recommended one marked, as
-/// stored: commas escaped, joined with commas.
+/// A list of answers (`--answer` repeated, commas allowed) with the recommended ones marked, as
+/// stored: commas escaped, joined with commas. `recommended` names one answer, or several split on
+/// commas (`--recommended macOS,Windows` on a `--multiple` ask), a `\,` being a comma inside one.
 pub fn mark_answer_list(answers: &[String], recommended: &str) -> String {
+    let recommended = recommended.trim();
+    // One answer that holds a comma ("Too small to read, simplify it") is that answer, not two.
+    let whole = answers.iter().any(|answer| {
+        answer
+            .trim()
+            .trim_end_matches('*')
+            .eq_ignore_ascii_case(recommended)
+    });
+    let several = if whole {
+        Vec::new()
+    } else {
+        split_answers(recommended)
+    };
+    let is_recommended = |answer: &str| {
+        !recommended.is_empty()
+            && (answer.eq_ignore_ascii_case(recommended)
+                || several
+                    .iter()
+                    .any(|named| !named.is_empty() && answer.eq_ignore_ascii_case(named)))
+    };
     answers
         .iter()
         .map(|answer| answer.trim())
@@ -1120,7 +1150,7 @@ pub fn mark_answer_list(answers: &[String], recommended: &str) -> String {
         .map(|answer| {
             let answer = answer.trim_end_matches('*');
             let escaped = answer.replace(',', "\\,");
-            if !recommended.is_empty() && answer.eq_ignore_ascii_case(recommended.trim()) {
+            if is_recommended(answer) {
                 format!("{escaped}*")
             } else {
                 escaped
@@ -1139,6 +1169,9 @@ fn ask_value(ask: &WorkAsk) -> Value {
         "open": ask.is_open(),
         "askedAt": ask.asked_at,
     });
+    if ask.multiple {
+        out["multiple"] = json!(true);
+    }
     for (key, value) in [
         ("detail", &ask.detail),
         ("steps", &ask.steps),
@@ -1981,11 +2014,20 @@ pub fn handle_work_request(
             if item.asks.iter().any(|ask| ask.is_open() && ask.tag == tag) {
                 return Err(bad(format!("{name} already asks {tag}.")));
             }
+            let multiple = params.get("multiple").and_then(Value::as_bool) == Some(true);
+            if multiple
+                && parse_answers(&param_text(params, "answers").unwrap_or_default()).len() < 2
+            {
+                return Err(bad(
+                    "--multiple needs at least two answers: give them with --answers \"A,B,C\".",
+                ));
+            }
             item.asks.push(WorkAsk {
                 tag: tag.clone(),
                 text: words.clone(),
                 detail,
                 answers: param_text(params, "answers").unwrap_or_default(),
+                multiple,
                 holds: params.get("holds").and_then(Value::as_bool) == Some(true),
                 steps: param_text(params, "steps").unwrap_or_default(),
                 asked_at: now.clone(),
@@ -2146,14 +2188,63 @@ pub fn handle_work_request(
                 prune(db, key)?;
                 return Ok((answer(&item, threads, db, key), true));
             }
+            // A pick-several ask's answer is the ticked answers (`picks`, or `given` split on its
+            // commas), each one it offers, kept in the order it shows them: "macOS, Windows".
+            let picks: Vec<String> = params
+                .get("picks")
+                .and_then(Value::as_array)
+                .map(|picks| {
+                    picks
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(|pick| pick.trim().to_string())
+                        .filter(|pick| !pick.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let several = item.asks.iter().position(|ask| {
+                ask.multiple
+                    && wanted.as_ref().is_some_and(|tag| ask.tag == *tag)
+                    && !parse_answers(&ask.answers)
+                        .iter()
+                        .any(|choice| choice["label"] == given.as_str())
+            });
+            let given = match several {
+                Some(index) => {
+                    let offered: Vec<String> = parse_answers(&item.asks[index].answers)
+                        .iter()
+                        .map(|choice| choice["label"].as_str().unwrap_or_default().to_string())
+                        .collect();
+                    let picks = if picks.is_empty() {
+                        given.split(',').map(|pick| pick.trim().to_string()).collect()
+                    } else {
+                        picks
+                    };
+                    if let Some(stray) = picks.iter().find(|pick| !offered.contains(pick)) {
+                        return Err(bad(format!("{name} offers no answer {stray}.")));
+                    }
+                    let joined = offered
+                        .iter()
+                        .filter(|label| picks.contains(label))
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    if joined.is_empty() {
+                        return Err(bad("Say the answer."));
+                    }
+                    joined
+                }
+                None => given,
+            };
             let ask = item
                 .asks
                 .iter_mut()
                 .filter(|ask| wanted.as_ref().is_none_or(|tag| ask.tag == *tag))
                 .find(|ask| {
-                    parse_answers(&ask.answers)
-                        .iter()
-                        .any(|choice| choice["label"] == given.as_str())
+                    (ask.multiple && several.is_some())
+                        || parse_answers(&ask.answers)
+                            .iter()
+                            .any(|choice| choice["label"] == given.as_str())
                 })
                 .ok_or_else(|| bad(format!("{name} offers no answer {given}.")))?;
             if !ask.answered.is_empty() || !ask.is_open() {

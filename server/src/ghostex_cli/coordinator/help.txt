@@ -36,7 +36,7 @@ USAGE
   ghostex coordinator item step <W7> "<step>" [--done] [--chore] [--json]
   ghostex coordinator item ask <W7> "<title>" --detail "<what and why>" [--command "<ghostex ...>"]
                               [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
-                              [--holds] [--steps <file|url>] [--tag Q12] [--json]
+                              [--multiple [--recommended A,B]] [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
   ghostex coordinator item wait <W7> --on <W8|Q12|release|ota|rebuild|"words">... [--until <when>] ["<line>"] [--json]
   ghostex coordinator item delivered <release|ota|rebuild> [<name>] [--json]
@@ -337,7 +337,10 @@ WORK ITEMS
   user only this way, with a ```questions form or with a page: never with
   answer links (ghostex-answer:) in your reply. One-click answers
   with --answers (commas split them; write \, for a comma inside an answer,
-  or give each with --answer "Too small to read, simplify it"), the steps to
+  or give each with --answer "Too small to read, simplify it"); --multiple
+  lets the user tick several of them in its Choices menu and send them
+  together ("W7 Q12: macOS, Windows", in the order shown), and --recommended
+  then takes several (--recommended macOS,Windows); the steps to
   follow with --steps, and --holds when the work
   stops until they do it. An ask settles when the user answers it (its card,
   or "Q12: yes" in the chat for a tag asked there), with --done Q12 when the

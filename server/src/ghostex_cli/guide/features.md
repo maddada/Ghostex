@@ -4713,7 +4713,11 @@ version of the Projects features in Cursor and Claude Code.
   back exactly those rows and takes back what the agent would have been told. A
   row's answers and Reply always stay on one line: when they don't fit, the
   answers fold into one **Choose an answer** dropdown beside Reply (the same on
-  the Work panel's cards). Words you type in a Reply and don't send stay with
+  the Work panel's cards). A question that takes several answers always shows
+  one **Choices** button: its menu (a sheet on the phone) has a box beside each
+  answer and **Send** at its foot with the count ("Send 2"), the button reads
+  **Choices: 2** once you tick some, and nothing goes until you press Send;
+  the coordinator then gets "W5 Q12: macOS, Windows". Words you type in a Reply and don't send stay with
   that row, also when you click away, press Escape, open another row's Reply or
   quit and reopen Ghostex: Reply on it again shows them, and its Reply says
   **Draft** meanwhile. Sending them, or the question being answered or

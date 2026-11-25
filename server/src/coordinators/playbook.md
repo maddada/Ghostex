@@ -253,8 +253,10 @@ everything they need to decide**. Never write answer links (`ghostex-answer:`) i
 - **It belongs to a line of work:**
   `ghostex coordinator item ask W<n> "<title>" --detail "<full context to decide>" --answers "A,B" --recommended A`.
   Its row above the chat box is the question.
-- **No line of work fits, or several questions, a text answer, multi-select, or choices that need a
-  line of detail:** a Ghostex form, a ` ```questions ` block in your reply holding every open
+  When the user may pick several answers, add `--multiple` (`--recommended A,B` marks each one you
+  recommend); the answer arrives as "W<n> Q<n>: A, B".
+- **No line of work fits, or several questions, a text answer, or choices that need a line of
+  detail:** a Ghostex form, a ` ```questions ` block in your reply holding every open
   question (`ghostex visual --help` has the format), each with a `"title"` and a `"detail"`.
 - **Something to look at** (mockups, layouts, a comparison): a Live page (`ghostex show`;
   `ghostex visual guide pages`), each question right under the mockups it asks about; its `<title>`
@@ -289,7 +291,8 @@ Rules for every question, whichever way you ask it:
 - **Choices: one question per dimension.** When the options differ in more than one way (a look, a
   layout, extras), ask one question for each kind of choice, never one long list that mixes them, so
   "A's look with D's layout and G's extra" is three picks instead of Other and a note. Make a
-  question pick any (`multiple` in a form or page) unless its choices truly exclude each other, and
+  question pick any (`multiple` in a form or page, `item ask --multiple` on a line of work) unless
+  its choices truly exclude each other, and
   when it is pick one, say why in its description ("one surface only"). Say there that a mix is
   welcome in the note. In a pick-any question, mark every choice you recommend. `visual check` warns
   about a pick-one list that looks like several kinds of choice. When the answers arrive, open your

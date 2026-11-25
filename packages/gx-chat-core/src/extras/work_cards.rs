@@ -855,14 +855,26 @@ fn clock(at: i64, context: &ChatContext) -> String {
 /// An open ask's buttons: its one-click answers, or Mark done for a task. Each records the answer
 /// with gxserver once and then tells the coordinator ("W3 Q2: Now"), as a board card's answer
 /// does (`coordinator_board::answer`).
+///
+/// A pick-several ask's (`item ask --multiple`) buttons each say `multiple`: the clients fold them
+/// into one Choices menu with a box per answer and a Send that answers with every ticked one
+/// (`picks` on [`coordinator_board::answer`](super::coordinator_board::answer)), and each ticked
+/// one sent from here reads picked.
 fn ask_buttons(item: &Value, ask: &Value, key: &str, picked: Option<&str>) -> Vec<Value> {
     let reference = text(item, "ref");
     let tag = text(ask, "tag");
+    let multiple = ask["multiple"] == true;
+    let sent_here = |label: &str| {
+        picked == Some(label)
+            || (multiple
+                && picked.is_some_and(|picked| several_picks(picked).any(|one| one == label)))
+    };
     let button = |label: &str, recommended: bool| {
         json!({
             "label": label,
             "recommended": recommended,
-            "picked": picked == Some(label),
+            "multiple": multiple,
+            "picked": sent_here(label),
             "command": {
                 "type": "coordinatorBoardAnswer",
                 "key": key,
@@ -929,17 +941,26 @@ fn done_button(item: &Value, key: &str, picked: bool) -> Value {
     })
 }
 
+/// The answers a pick-several ask's Send gave ("macOS, Windows"), one at a time.
+fn several_picks(picked: &str) -> impl Iterator<Item = &str> {
+    picked.split(", ").map(str::trim)
+}
+
 /// The words a Reply sent for an ask from here: this client's pick when it is none of the ask's
-/// own answers, "" otherwise.
+/// own answers (nor, on a pick-several ask, a list of them), "" otherwise.
 fn replied_words(ask: &Value, picked: Option<&str>) -> String {
     let Some(picked) = picked else {
         return String::new();
     };
-    let preset = ask["answers"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .any(|answer| text(answer, "label") == picked);
+    let offered = |label: &str| {
+        ask["answers"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|answer| text(answer, "label") == label)
+    };
+    let preset = offered(picked)
+        || (ask["multiple"] == true && several_picks(picked).all(|one| offered(one)));
     if preset || (picked == "Done" && ask["answers"].as_array().is_none_or(Vec::is_empty)) {
         String::new()
     } else {
@@ -1180,6 +1201,7 @@ fn ask_card(
         "line": line,
         "chips": ask_chips,
         "buttons": buttons,
+        "multiple": ask["multiple"] == true,
         "busy": picked.is_some() && ask["open"] == true,
         // A settled ask's line: a check once answered or done.
         "foldStatus": if ask["open"] == true { ask_status } else { "finished" },
@@ -1418,6 +1440,8 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 "waitedBy": waited_by(&items, item, ask_tag),
                 "itemPills": item_pills(&items, item, ask_tag),
                 "buttons": card["buttons"],
+                // Its answers are ticked in one Choices menu and sent together (`ask_buttons`).
+                "multiple": ask["multiple"] == true,
                 "busy": card["busy"],
                 // A command to run, from `ghostex needs-you add --command` or
                 // `ghostex coordinator item ask --command`: rendered as the command strip with

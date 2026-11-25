@@ -535,11 +535,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
     // A work item's own chips: usage-limit reset pill, who has the ball, its steps, what it asks
     // (work_panel.rs). Preserve any click command and tooltip carried on the chip.
     for chip in row["workChips"].as_array().into_iter().flatten() {
-        let mut built = tag(
-            text(chip, "kind"),
-            text(chip, "label"),
-            text(chip, "tone"),
-        );
+        let mut built = tag(text(chip, "kind"), text(chip, "label"), text(chip, "tone"));
         if let Some(command) = chip.get("command").filter(|c| c.is_object()) {
             built.command = command.clone();
         }
@@ -1869,11 +1865,12 @@ pub fn show_item(state: &mut ChatState, item: u64) -> Vec<crate::effect::Effect>
     Vec::new()
 }
 
-/// `coordinatorBoardAnswer {key, item, label, text, ask?}`: one of a card's answers (a board card's,
+/// `coordinatorBoardAnswer {key, item, label, text, ask?, picks?}`: one of a card's answers (a board card's,
 /// or a work item ask card's, which names its `ask` tag; "Done" on a task). It is recorded with
 /// gxserver first (op `answer`, which refuses a second answer from any client), and only then sent
 /// to the coordinator as a message ("B4: Yes"), without touching the chat box. A card already
-/// answered here takes no second click. A Dismiss (op `cancel`, no `text`) is only recorded.
+/// answered here takes no second click. A Dismiss (op `cancel`, no `text`) is only recorded. A
+/// pick-several ask's Send names its ticked answers in `picks` instead of `label` and `text`.
 ///
 /// CDXC:Coordinators 2026-11-05 WHY:
 /// The coordinator received "B7: Yes" three times for one decision: three clicks a second and six
@@ -1887,7 +1884,24 @@ pub fn answer(
     request_id: u64,
 ) -> Option<crate::effect::Effect> {
     let field = |name: &str| params.get(name).and_then(Value::as_str).unwrap_or_default();
-    let (key, item, label, text) = (field("key"), field("item"), field("label"), field("text"));
+    // A pick-several ask's Send (`picks`, in the order its menu shows them): one answer naming
+    // every ticked one, which reaches the coordinator as "W5 Q12: macOS, Windows".
+    let picks: Vec<&str> = params
+        .get("picks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|pick| !pick.trim().is_empty())
+        .collect();
+    let joined = picks.join(", ");
+    let several = format!("{} {}: {joined}", field("item"), field("ask"));
+    let (key, item) = (field("key"), field("item"));
+    let (label, text) = if picks.is_empty() {
+        (field("label"), field("text"))
+    } else {
+        (joined.as_str(), several.as_str())
+    };
     // A Dismiss (`cancel`) is recorded and sends the agent nothing: gxserver tells it with the next
     // message it gets anyway (server/src/session_chat_dismissed.rs, where the decision lives).
     let cancel = field("op") == "cancel";
@@ -1923,6 +1937,9 @@ pub fn answer(
     let ask = field("ask");
     if !ask.is_empty() {
         body["ask"] = json!(ask);
+    }
+    if !picks.is_empty() {
+        body["picks"] = json!(picks);
     }
     state
         .extras

@@ -584,6 +584,10 @@ pub(crate) struct CoordinatorBoardView {
     /// Each opened card's answers line width at its last paint (unscaled), by card key: what
     /// decides whether its answers fold into one dropdown (`board_card_buttons`).
     answer_rooms: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
+    /// The answers ticked so far in a pick-several ask's Choices menu, by the ask's key
+    /// (`work-ask:W5:Q12`), in the order the menu shows them: nothing is sent until its Send
+    /// (work_actions.rs `pick_menu_rows`).
+    pub(super) ask_picks: std::collections::HashMap<String, Vec<String>>,
     /// Keyboard-focused row index in the Session Inbox (`focusSessionInbox`, arrows/Enter/E/S/Esc).
     pub(super) inbox_focus: Option<usize>,
     /// Focus handle for the Session Inbox keyboard triage mode.

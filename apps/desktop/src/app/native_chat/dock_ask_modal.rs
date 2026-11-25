@@ -1038,9 +1038,18 @@ impl NativeChatView {
                 })
                 .collect()
         } else {
+            // A pick-several ask's Choices only opens its menu, so the panel stays; its Send
+            // closes the panel (work_actions.rs `send_ask_picks`).
+            let multiple = super::work_actions::answers_multiple(&answers);
             self.work_answer_buttons(&format!("dock-ask:{key}"), &answers, busy, p, cx)
                 .into_iter()
-                .map(|button| self.closes_panel(button, cx))
+                .map(|button| {
+                    if multiple {
+                        button
+                    } else {
+                        self.closes_panel(button, cx)
+                    }
+                })
                 .collect()
         };
         if let Some(answer) = &reply_answer {

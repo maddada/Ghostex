@@ -4,6 +4,11 @@ use serde_json::Value;
 
 /// A switch row's switch, unscaled (`SwitchShape::REGULAR`).
 const SWITCH_WIDTH: f32 = 32.0;
+/// A pick-several ask's box (render.rs), unscaled.
+const PICK_BOX: f32 = 13.0;
+/// The foot of a pick-several ask's Choices menu: its 2px gap and hairline, 6px above its 26px
+/// Send and 2px under it (render.rs `render_pick_send`).
+const PICK_SEND_HEIGHT: f32 = 37.0;
 
 /// The box sizes of a menu panel's plain rows, in unscaled pixels.
 #[derive(Clone, Copy)]
@@ -107,6 +112,8 @@ fn natural_width(rows: &[Value], appearance: &ChatAppearance, cx: &App) -> f32 {
                 m.icon + m.row_gap
             } else if row["dot"].is_string() {
                 6.0 + m.row_gap
+            } else if row["pick"] == true {
+                PICK_BOX + m.row_gap
             } else {
                 0.0
             };
@@ -116,6 +123,9 @@ fn natural_width(rows: &[Value], appearance: &ChatAppearance, cx: &App) -> f32 {
                 .unwrap_or(0.0);
             let badge = if row["badge"].is_string() {
                 super::render::BADGE_SIZE + 6.0
+            } else if row["pick"] == true && row["recommended"] == true {
+                // Its star, 10px after a 6px gap.
+                16.0
             } else {
                 0.0
             };
@@ -191,6 +201,9 @@ pub(super) fn measure_rows(
             if row["separator"] == true {
                 return Ok(m.separator);
             }
+            if row["pickSend"].is_object() {
+                return Ok(PICK_SEND_HEIGHT);
+            }
             if let Some(tiles) = row["quick"].as_array() {
                 let inner = width - m.chrome();
                 return Ok(quick_row_height(tiles, inner, |label| {
@@ -209,6 +222,8 @@ pub(super) fn measure_rows(
                 m.icon + m.row_gap
             } else if row["dot"].is_string() {
                 6.0 + m.row_gap
+            } else if row["pick"] == true {
+                PICK_BOX + m.row_gap
             } else {
                 0.0
             };

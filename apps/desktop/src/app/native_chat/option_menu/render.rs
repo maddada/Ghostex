@@ -20,6 +20,15 @@ impl ChatOptionMenuPanel {
         let Some(row) = self.rows.get(index) else {
             return;
         };
+        // A pick-several ask's box ticks or clears and leaves the menu up; its foot's Send answers.
+        if row["pick"] == true {
+            self.toggle_pick(index, cx);
+            return;
+        }
+        if row["pickSend"].is_object() {
+            self.send_picks(index, cx);
+            return;
+        }
         if row["disabled"] == true
             || row["heading"] == true
             || row["separator"] == true
@@ -93,6 +102,113 @@ impl ChatOptionMenuPanel {
                     .update(cx, |menu, cx| menu.close(Some(command), cx));
             }
         }
+    }
+
+    /// The labels of the ticked boxes, in the order the menu shows them.
+    fn ticked_picks(&self) -> Vec<String> {
+        self.rows
+            .iter()
+            .filter(|row| row["pick"] == true && row["picked"] == true)
+            .filter_map(|row| row["label"].as_str().map(str::to_owned))
+            .collect()
+    }
+
+    /// Ticks or clears one box of a pick-several ask's Choices menu (work_actions.rs
+    /// `pick_menu_rows`) and tells the chat, whose Choices button then reads "Choices: 2".
+    fn toggle_pick(&mut self, index: usize, cx: &mut Context<Self>) {
+        let rows = std::sync::Arc::make_mut(&mut self.rows);
+        let Some(row) = rows.get_mut(index) else {
+            return;
+        };
+        row["picked"] = serde_json::json!(row["picked"] != true);
+        let key = self
+            .rows
+            .iter()
+            .find_map(|row| row["pickSend"]["key"].as_str().map(str::to_owned))
+            .unwrap_or_default();
+        let ticked = self.ticked_picks();
+        let chat = self.menu.read(cx).chat.clone();
+        cx.defer(move |cx| {
+            let _ = chat.update(cx, |chat, cx| chat.set_ask_ticks(&key, ticked, cx));
+        });
+        cx.notify();
+    }
+
+    /// The Choices menu's Send: the ask is answered with every ticked box, and the menu closes.
+    fn send_picks(&mut self, index: usize, cx: &mut Context<Self>) {
+        let picks = self.ticked_picks();
+        if picks.is_empty() {
+            return;
+        }
+        let send = self.rows[index]["pickSend"].clone();
+        let chat = self.menu.read(cx).chat.clone();
+        self.menu.update(cx, |menu, cx| menu.close(None, cx));
+        cx.defer(move |cx| {
+            let _ = chat.update(cx, |chat, cx| chat.send_ask_picks(&send, picks, cx));
+        });
+    }
+
+    /// The foot of a pick-several ask's Choices menu: a hairline, then Send with how many are
+    /// ticked ("Send 2"), at the right, in the chat's primary button look (never the accent).
+    fn render_pick_send(
+        &self,
+        index: usize,
+        appearance: &ChatAppearance,
+        border: gpui::Hsla,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
+        let scale = appearance.scale;
+        let count = self.ticked_picks().len();
+        let label = if count == 0 {
+            "Send".to_string()
+        } else {
+            format!("Send {count}")
+        };
+        let (fill, ink) = if appearance.light {
+            (gpui::rgb(0x292929), gpui::rgb(0xfcfcfc))
+        } else {
+            (gpui::rgb(0xfcfcfc), gpui::rgb(0x292929))
+        };
+        let selected = self.selected == Some(index);
+        div()
+            .flex_shrink_0()
+            .h(px(self.heights[index] * scale))
+            .pt(px(6.0 * scale))
+            .px(px(4.0 * scale))
+            .pb(px(2.0 * scale))
+            .border_t_1()
+            .border_color(border)
+            .flex()
+            .justify_end()
+            .items_start()
+            .child(
+                div()
+                    .id(format!("option-menu-pick-send-{index}"))
+                    .role(gpui::Role::Button)
+                    .aria_label(label.clone())
+                    .h(px(26.0 * scale))
+                    .px(px(10.0 * scale))
+                    .flex()
+                    .items_center()
+                    .rounded(px(6.0 * scale))
+                    .bg(fill)
+                    .text_color(ink)
+                    .text_size(px(12.0 * scale))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .when(count == 0, |button| button.opacity(0.42))
+                    .when(count > 0, |button| {
+                        button
+                            .cursor_pointer()
+                            .hover(|button| button.opacity(0.88))
+                            .when(selected, |button| button.opacity(0.88))
+                    })
+                    .child(label)
+                    .on_click(cx.listener(move |this, _, _window, cx| {
+                        cx.stop_propagation();
+                        this.send_picks(index, cx);
+                    })),
+            )
+            .into_any_element()
     }
 
     /// A tile of the session menu's quick row (gx-core sidebar_menu/layout.rs) runs its own command.
@@ -416,6 +532,10 @@ impl Render for ChatOptionMenuPanel {
                 body = body.child(self.render_quick_row(index, tiles, foreground, hover, cx));
                 continue;
             }
+            if row["pickSend"].is_object() {
+                body = body.child(self.render_pick_send(index, &appearance, border, cx));
+                continue;
+            }
             let label = row["label"].as_str().unwrap_or_default().to_owned();
             let description = row["description"].as_str().map(str::to_owned);
             let badge = row["badge"].as_str().map(str::to_owned);
@@ -491,6 +611,44 @@ impl Render for ChatOptionMenuPanel {
                 .on_click(
                     cx.listener(move |this, _, window, cx| this.activate(index, true, window, cx)),
                 );
+            // A pick-several ask's box: an outline, filled with a check once ticked.
+            if row["pick"] == true {
+                let ticked = row["picked"] == true;
+                item = item
+                    .role(gpui::Role::MenuItemCheckBox)
+                    .aria_toggled(if ticked {
+                        gpui::Toggled::True
+                    } else {
+                        gpui::Toggled::False
+                    })
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .size(px(13.0 * scale))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(3.5 * scale))
+                            .border_1()
+                            .border_color(if ticked {
+                                gpui::Hsla::from(foreground)
+                            } else {
+                                gpui::Hsla::from(foreground).opacity(0.45)
+                            })
+                            .when(ticked, |check| {
+                                check.bg(foreground).child(
+                                    svg()
+                                        .path("titlebar/check.svg")
+                                        .size(px(10.0 * scale))
+                                        .text_color(gpui::rgb(if appearance.light {
+                                            0xfcfcfc
+                                        } else {
+                                            0x292929
+                                        })),
+                                )
+                            }),
+                    );
+            }
             let icon_path = row["iconPath"].as_str().map(str::to_owned).or_else(|| {
                 row["icon"]
                     .as_str()
@@ -556,6 +714,19 @@ impl Render for ChatOptionMenuPanel {
                             .items_center()
                             .gap(px(6.0 * scale))
                             .child(div().min_w_0().text_ellipsis().child(label))
+                            // A pick-several ask's recommended answer keeps its star.
+                            .when(row["pick"] == true && row["recommended"] == true, |this| {
+                                this.child(
+                                    svg()
+                                        .path("titlebar/star-filled.svg")
+                                        .flex_shrink_0()
+                                        .size(px(10.0 * scale))
+                                        .text_color(
+                                            super::super::ask_card::ask_color(&appearance)
+                                                .opacity(0.75),
+                                        ),
+                                )
+                            })
                             // A count after the label (Stash prompt): the chat's filled count badge.
                             .when_some(badge, |this, badge| {
                                 this.child(
