@@ -33,7 +33,8 @@ const USAGE: &str = "Usage: cargo xtask test-server <command>
   env <name>    print those env lines again: only them on stdout (the help goes to stderr), so
                 `eval \"$(cargo xtask test-server env <name>)\"` loads them; never `source <(...)`,
                 which macOS /bin/bash 3.2 reads as empty
-  stop <name>   close its sessions, stop it, and remove any LaunchAgent it created
+  stop <name>   close its sessions, stop it, remove any LaunchAgent it created, and end anything still
+                running its programs (a `ghostex web` started from its env.sh)
   remove <name> stop it and delete its folder
   list          show the test servers and whether they run";
 
@@ -1429,7 +1430,7 @@ fn env_lines(server: &Server) -> Res<String> {
 fn env_help(server: &Server) -> String {
     let env_file = shell_quote(&server.folder.join("env.sh").display().to_string());
     format!(
-        "\nUse it from any shell (each agent Bash call is a new shell, so prefix every call):\n  source {env_file}\n  ghostex sessions\n  ghostex create-agent claude --project-id <id>\n  ghostex web --dist-dir \"$PWD/apps/gpui-web/www/dist\" --no-open --port <free port>\nOr: eval \"$(cargo xtask test-server env {name})\". Never source <(...): macOS /bin/bash 3.2 reads it as empty, and the shell stays on the real gxserver.\n\nWhen done: cargo xtask test-server stop {name}   (or remove {name} to delete its folder too)\n",
+        "\nUse it from any shell (each agent Bash call is a new shell, so prefix every call):\n  source {env_file}\n  ghostex sessions\n  ghostex create-agent claude --project-id <id>\n  ghostex web --dist-dir \"$PWD/apps/gpui-web/www/dist\" --no-open --port <free port>\nOr: eval \"$(cargo xtask test-server env {name})\". Never source <(...): macOS /bin/bash 3.2 reads it as empty, and the shell stays on the real gxserver.\n\nWhen done: cargo xtask test-server stop {name}   (or remove {name} to delete its folder too); it also ends a `ghostex web` you started from this env.\nStop anything else you started by its pid, never with pkill/killall by pattern: macOS pkill reads every word after the first pattern as one more pattern.\n",
         name = server.name
     )
 }
@@ -1492,7 +1493,10 @@ fn stop(server: &Server) -> Res {
                 .is_some_and(|prefix| name.starts_with(prefix))
         })
         .collect();
-    let killed = kill_leftover_daemons(&own_names);
+    let mut killed = kill_leftover_daemons(&own_names);
+    let signalled: Vec<i32> = killed.iter().map(|(pid, _)| *pid).collect();
+    killed.extend(kill_own_programs(server, &signalled));
+    let killed: Vec<String> = killed.into_iter().map(|(_, what)| what).collect();
     println!(
         "Test server {} stopped{}{}.",
         server.name,
@@ -1505,7 +1509,7 @@ fn stop(server: &Server) -> Res {
             String::new()
         } else {
             format!(
-                "; killed zmx processes that outlived their closed session: {}",
+                "; killed its processes that outlived it: {}",
                 killed.join(", ")
             )
         }
@@ -1620,14 +1624,66 @@ fn wait_for_zmx_exit(zmx_names: &[String], timeout: Duration) {
     }
 }
 
-fn kill_leftover_daemons(zmx_names: &[String]) -> Vec<String> {
+fn kill_leftover_daemons(zmx_names: &[String]) -> Vec<(i32, String)> {
     zmx_processes(zmx_names)
         .into_iter()
         .map(|(pid, what)| {
             kill_pid(pid, false);
-            format!("zmx {what} (pid {pid})")
+            (pid, format!("zmx {what} (pid {pid})"))
         })
         .collect()
+}
+
+/// Ends whatever still runs one of this server's own programs (a `ghostex web` started after sourcing its env.sh, a
+/// `zmx attach` client), so a thread never has to stop them by a name pattern.
+///
+/// CDXC:Build 2026-11-25 WHY: a thread cleaned up its detached `ghostex web` servers with
+/// `pkill -f "web --dist-dir" -P 1`. macOS pkill reads every word after the first pattern as another pattern, so it
+/// sent SIGTERM to every process of the user whose command line held "1" or "-P": the zmx daemon of every running
+/// session on the user's real gxserver (17 agents' terminals ended at 05:14:52 and were restarted), the tailcat
+/// helpers, app shims and system extensions. A process is matched here by the real path of its executable, which
+/// lies inside this server's own `gxserver/` folder, never by its command line, so nothing of the user's or of
+/// another server is ever signalled.
+fn kill_own_programs(server: &Server, signalled: &[i32]) -> Vec<(i32, String)> {
+    let Ok(package) = fs::canonicalize(server.folder.join("gxserver")) else {
+        return Vec::new();
+    };
+    let me = std::process::id() as i32;
+    let processes =
+        stdout_if_ok(Command::new("ps").args(["-axwwo", "pid=,command="])).unwrap_or_default();
+    processes
+        .lines()
+        .filter_map(|line| {
+            let (pid, command) = line.trim().split_once(' ')?;
+            let pid = pid
+                .parse::<i32>()
+                .ok()
+                .filter(|pid| *pid != me && !signalled.contains(pid))?;
+            executable_path(pid).filter(|path| path.starts_with(&package))?;
+            kill_pid(pid, false);
+            let command: String = command.trim().chars().take(80).collect();
+            Some((pid, format!("{command} (pid {pid})")))
+        })
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn executable_path(pid: i32) -> Option<PathBuf> {
+    use std::os::unix::ffi::OsStrExt;
+    let mut buffer = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    let length =
+        unsafe { libc::proc_pidpath(pid, buffer.as_mut_ptr().cast(), buffer.len() as u32) };
+    (length > 0).then(|| PathBuf::from(std::ffi::OsStr::from_bytes(&buffer[..length as usize])))
+}
+
+#[cfg(target_os = "linux")]
+fn executable_path(pid: i32) -> Option<PathBuf> {
+    fs::read_link(format!("/proc/{pid}/exe")).ok()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn executable_path(_pid: i32) -> Option<PathBuf> {
+    None
 }
 
 fn list() -> Res<i32> {
