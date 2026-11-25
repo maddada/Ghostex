@@ -103,9 +103,14 @@ impl GpuiVisualPageModalWindow {
         )
     }
 
-    /// Draws the open menu again (its Star page row changed).
+    /// Draws the open menu again at the height of its rows (Snooze, Star page or the page's age
+    /// changed).
     pub(super) fn refresh_more_menu(&mut self, cx: &mut Context<Self>) {
-        if self.more_menu.is_some() {
+        // Snooze or Star page may have come or gone since the menu opened: its height follows its
+        // rows, so no row is cut off and no gap is left at the bottom.
+        let menu_height = px(height(&self.more_menu_lines()));
+        if let Some(menu) = self.more_menu.as_mut() {
+            menu.frame.size.height = menu_height;
             self.show_more_menu(cx);
         }
         cx.notify();
@@ -157,7 +162,7 @@ impl GpuiVisualPageModalWindow {
                     "visual-page-more-menu",
                     menu_ink(light),
                     lines.clone(),
-                    menu.snooze.then_some(0),
+                    (menu.snooze && snooze).then_some(0),
                     Rc::new(move |index, cx| {
                         let Some(action) = actions(snooze, star).get(index).copied() else {
                             return;
