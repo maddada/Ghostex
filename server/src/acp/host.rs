@@ -3311,6 +3311,9 @@ pub fn run(args: &[String]) -> i32 {
                     let t_turn = transport.clone();
                     let st_turn = state.clone();
                     let act_turn = activity.clone();
+                    let turn_family = spec.family;
+                    let turn_sid = sid.clone();
+                    let turn_prompt_text = text.clone();
                     thread::spawn(move || {
                         let res = t_turn.finish_call(
                             rpc_id,
@@ -3342,9 +3345,10 @@ pub fn run(args: &[String]) -> i32 {
                             stop_reason.to_ascii_lowercase().as_str(),
                             "cancelled" | "canceled" | "interrupted" | "aborted"
                         );
-                        let (is_current_turn, orphaned_perms) = {
+                        let (is_current_turn, orphaned_perms, streamed_reply) = {
                             let mut s = st_turn.lock().unwrap_or_else(|p| p.into_inner());
                             if s.turn_generation == turn_gen {
+                                let reply = s.live_stream_text.clone();
                                 s.working = false;
                                 if was_cancelled {
                                     s.last_turn_interrupted = true;
@@ -3352,14 +3356,26 @@ pub fn run(args: &[String]) -> i32 {
                                 s.clear_live_turn_output();
                                 let drained: Vec<HostPendingPermission> =
                                     s.pending_permissions.drain(..).collect();
-                                (true, drained)
+                                (true, drained, reply)
                             } else {
-                                (false, Vec::new())
+                                (false, Vec::new(), String::new())
                             }
                         };
                         for entry in orphaned_perms {
                             let cancel_body = entry.cancel_response();
                             let _ = t_turn.respond_to_agent(entry.perm.rpc_id, cancel_body);
+                        }
+                        if is_current_turn
+                            && !was_cancelled
+                            && turn_family == "hermes"
+                            && turn_prompt_text.trim_start().starts_with('/')
+                            && !streamed_reply.trim().is_empty()
+                        {
+                            crate::session_chat_hermes::append_native_slash_exchange(
+                                &turn_sid,
+                                &turn_prompt_text,
+                                &streamed_reply,
+                            );
                         }
                         if is_current_turn {
                             println!("[Native] Turn finished ({stop_reason}).");

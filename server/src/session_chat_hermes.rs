@@ -29,7 +29,7 @@ use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -127,6 +127,7 @@ fn hermes_mirror_dir() -> PathBuf {
 struct HermesMirrorCursor {
     last_row_id: i64,
     visible_count: i64,
+    last_local_bytes: u64,
     written: HashSet<HermesMirrorKey>,
     last_timestamp: f64,
 }
@@ -432,6 +433,146 @@ fn read_hermes_rows(
     rows.collect()
 }
 
+fn hermes_local_mirror_path(session_id: &str) -> PathBuf {
+    hermes_mirror_dir().join(format!("{session_id}.local.jsonl"))
+}
+
+fn read_hermes_local_rows(local_path: &Path) -> Vec<HermesMessageRow> {
+    let Ok(raw) = fs::read_to_string(local_path) else {
+        return Vec::new();
+    };
+    let mut rows = Vec::new();
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(val) = serde_json::from_str::<Value>(trimmed) else {
+            continue;
+        };
+        let Some(row_id) = val.get("rowId").and_then(Value::as_i64) else {
+            continue;
+        };
+        let Some(role) = val.get("role").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(timestamp) = val.get("timestamp").and_then(Value::as_f64) else {
+            continue;
+        };
+        let content = val
+            .get("content")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        rows.push(HermesMessageRow {
+            row_id,
+            role: role.to_string(),
+            content,
+            tool_calls: None,
+            tool_name: None,
+            tool_call_id: None,
+            timestamp,
+            finish_reason: None,
+            reasoning: None,
+            reasoning_content: None,
+            message_items: None,
+            display_kind: None,
+            display_text: None,
+            compaction_summary: false,
+            visible: true,
+        });
+    }
+    rows
+}
+
+fn merge_hermes_rows(
+    db_rows: Vec<HermesMessageRow>,
+    local_rows: Vec<HermesMessageRow>,
+) -> Vec<HermesMessageRow> {
+    if local_rows.is_empty() {
+        return db_rows;
+    }
+    if db_rows.is_empty() {
+        return local_rows;
+    }
+    let mut tagged: Vec<(f64, u8, usize, HermesMessageRow)> =
+        Vec::with_capacity(db_rows.len() + local_rows.len());
+    for (idx, row) in db_rows.into_iter().enumerate() {
+        tagged.push((row.timestamp, 0, idx, row));
+    }
+    for (idx, row) in local_rows.into_iter().enumerate() {
+        tagged.push((row.timestamp, 1, idx, row));
+    }
+    tagged.sort_by(|a, b| {
+        a.0.total_cmp(&b.0)
+            .then_with(|| a.1.cmp(&b.1))
+            .then_with(|| a.2.cmp(&b.2))
+    });
+    tagged.into_iter().map(|(_, _, _, row)| row).collect()
+}
+
+/// Record a Hermes Native local slash-command exchange (`/status`, `/help`, `/version`,
+/// `/tools`, `/usage`, `/context`, etc.) that `hermes acp` handled locally by streaming
+/// `agent_message_chunk` without writing rows to `state.db`.
+pub(crate) fn append_native_slash_exchange(session_id: &str, prompt: &str, response: &str) {
+    let prompt = prompt.trim();
+    let response = response.trim();
+    if !is_safe_hermes_session_id(session_id) || prompt.is_empty() || response.is_empty() {
+        return;
+    }
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0);
+    // Skip if Hermes already persisted this exact prompt to `state.db` recently.
+    if let Some(connection) = open_hermes_state_db(session_id) {
+        let already_in_db = connection
+            .query_row(
+                "SELECT content, timestamp FROM messages \
+                 WHERE session_id = ?1 AND role = 'user' \
+                 ORDER BY id DESC LIMIT 1",
+                rusqlite::params![session_id],
+                |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, f64>(1)?)),
+            )
+            .ok()
+            .is_some_and(|(content, ts)| {
+                content.as_deref().map(str::trim) == Some(prompt) && (now_secs - ts).abs() <= 15.0
+            });
+        if already_in_db {
+            return;
+        }
+    }
+    let local_path = hermes_local_mirror_path(session_id);
+    let Some(parent) = local_path.parent() else {
+        return;
+    };
+    if fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    let now_ms = (now_secs * 1000.0) as i64;
+    let user_row = json!({
+        "rowId": -(now_ms.saturating_mul(2)),
+        "role": "user",
+        "timestamp": now_secs,
+        "content": prompt,
+    });
+    let assistant_row = json!({
+        "rowId": -(now_ms.saturating_mul(2).saturating_add(1)),
+        "role": "assistant",
+        "timestamp": now_secs + 0.001,
+        "content": response,
+    });
+    if let Ok(mut file) = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&local_path)
+    {
+        let _ = writeln!(file, "{user_row}");
+        let _ = writeln!(file, "{assistant_row}");
+        let _ = file.flush();
+    }
+    let _ = sync_hermes_transcript_mirror(session_id);
+}
+
 /// One sync pass for one session. Returns the mirror path once the session has
 /// at least one visible row; `None` before the first prompt (the follower keeps
 /// polling with status "starting", exactly as for an agent whose transcript
@@ -441,14 +582,22 @@ fn sync_hermes_transcript_mirror(session_id: &str) -> Option<PathBuf> {
         return None;
     }
     let mirror_path = hermes_mirror_dir().join(format!("{session_id}.jsonl"));
-    let connection = open_hermes_state_db(session_id)?;
-    let queries = hermes_mirror_queries(&connection)?;
-    let (visible_count, max_row_id) = connection
-        .query_row(&queries.count, rusqlite::params![session_id], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-        })
-        .ok()?;
-    if visible_count == 0 {
+    let local_path = hermes_local_mirror_path(session_id);
+    let local_bytes = fs::metadata(&local_path).map(|m| m.len()).unwrap_or(0);
+    let db_state = open_hermes_state_db(session_id).and_then(|connection| {
+        let queries = hermes_mirror_queries(&connection)?;
+        let (visible_count, max_row_id) = connection
+            .query_row(&queries.count, rusqlite::params![session_id], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+            })
+            .ok()?;
+        Some((connection, queries, visible_count, max_row_id))
+    });
+    let (visible_count, max_row_id) = db_state
+        .as_ref()
+        .map(|(_, _, v, m)| (*v, *m))
+        .unwrap_or((0, 0));
+    if visible_count == 0 && local_bytes == 0 {
         return None;
     }
 
@@ -459,7 +608,9 @@ fn sync_hermes_transcript_mirror(session_id: &str) -> Option<PathBuf> {
     let mirror_exists = mirror_path.is_file();
     let up_to_date = mirror_exists
         && cursors.get(session_id).is_some_and(|cursor| {
-            cursor.last_row_id == max_row_id && cursor.visible_count == visible_count
+            cursor.last_row_id == max_row_id
+                && cursor.visible_count == visible_count
+                && cursor.last_local_bytes == local_bytes
         });
     if up_to_date {
         return Some(mirror_path);
@@ -467,15 +618,18 @@ fn sync_hermes_transcript_mirror(session_id: &str) -> Option<PathBuf> {
     // Taken out until this pass succeeds, so a failed write leaves the next pass a rebuild.
     let cursor = cursors.remove(session_id).filter(|_| mirror_exists);
 
-    let appended_rows = match &cursor {
-        Some(cursor) if max_row_id > cursor.last_row_id => {
-            read_hermes_rows(&connection, &queries, session_id, cursor.last_row_id, true).ok()?
+    let appended_rows = match (&cursor, &db_state) {
+        (Some(cursor), Some((connection, queries, _, _)))
+            if max_row_id > cursor.last_row_id && cursor.last_local_bytes == local_bytes =>
+        {
+            read_hermes_rows(connection, queries, session_id, cursor.last_row_id, true).ok()?
         }
         _ => Vec::new(),
     };
-    let pure_append = cursor
-        .as_ref()
-        .is_some_and(|cursor| visible_count == cursor.visible_count + appended_rows.len() as i64);
+    let pure_append = cursor.as_ref().is_some_and(|cursor| {
+        cursor.last_local_bytes == local_bytes
+            && visible_count == cursor.visible_count + appended_rows.len() as i64
+    });
     let mut cursor = cursor.filter(|_| pure_append).unwrap_or_default();
 
     fs::create_dir_all(mirror_path.parent()?).ok()?;
@@ -487,12 +641,23 @@ fn sync_hermes_transcript_mirror(session_id: &str) -> Option<PathBuf> {
         file.write_all(cursor.render_rows(&appended_rows).as_bytes())
             .ok()?;
     } else {
-        // Cold start, rewind or in-place compaction: rebuild the whole mirror
+        // Cold start, rewind, local slash command or in-place compaction: rebuild the whole mirror
         // from every row, hidden ones included (see `render_rows`), and swap it
         // in by rename so no reader ever sees a torn file. The new inode is what
         // tells the follower the content was replaced.
-        let rows = read_hermes_rows(&connection, &queries, session_id, 0, false).ok()?;
-        let temp_path = mirror_path.with_extension("jsonl.tmp");
+        let db_rows = match &db_state {
+            Some((connection, queries, v, _)) if *v > 0 => {
+                read_hermes_rows(connection, queries, session_id, 0, false).ok()?
+            }
+            _ => Vec::new(),
+        };
+        let local_rows = if local_bytes > 0 {
+            read_hermes_local_rows(&local_path)
+        } else {
+            Vec::new()
+        };
+        let rows = merge_hermes_rows(db_rows, local_rows);
+        let temp_path = mirror_path.with_extension(format!("jsonl.{}.tmp", std::process::id()));
         let mut file = fs::File::create(&temp_path).ok()?;
         file.write_all(cursor.render_rows(&rows).as_bytes()).ok()?;
         drop(file);
@@ -500,6 +665,7 @@ fn sync_hermes_transcript_mirror(session_id: &str) -> Option<PathBuf> {
     }
     cursor.last_row_id = max_row_id;
     cursor.visible_count = visible_count;
+    cursor.last_local_bytes = local_bytes;
     cursors.insert(session_id.to_string(), cursor);
     Some(mirror_path)
 }
