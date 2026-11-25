@@ -4224,7 +4224,8 @@ Agents with that computer picked. From a terminal, `ghostex agent-hooks status`,
 uninstall <agent>` (or `--all`) do what the Session resume hooks card does; add
 `--computer <name>` to run them on a connected computer.
 Agent approvals (Keep default or Full permissions) is a
-per-machine default with per-agent (including Auto for Claude Code and Codex) and per-project overrides. Actions (Settings > Actions)
+per-machine default with per-agent (including Auto for Claude Code, Codex and
+Antigravity) and per-project overrides. Actions (Settings > Actions)
 are saved terminal commands or browser URLs shown on project headers and in
 the header’s Quick Actions button, which shows the name and icon of the Action
 you used last and runs it again on click (its caret opens the full list; it

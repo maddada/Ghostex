@@ -204,8 +204,8 @@ pub(super) fn supports_accept_all(agent_id: &str, icon: Option<&str>) -> bool {
     default_agent_by_icon(icon).is_some_and(|agent| accept_all_spec_is_set(&agent.agent_id))
 }
 
-/// Per-agent Permission mode options (with muted descriptions). Claude Code and Codex offer Auto
-/// in addition to Use app default, Keep default, and Full permissions.
+/// Per-agent Permission mode options (with muted descriptions). Claude Code, Codex and Antigravity
+/// offer Auto in addition to Use app default, Keep default, and Full permissions.
 pub(super) fn permission_mode_options(
     agent_id: &str,
     icon: Option<&str>,
@@ -239,6 +239,9 @@ pub(super) fn permission_mode_options(
         Some("codex") => Some(
             "Approve for me (on-request with auto review in Native; --approve-for-me in Terminal-based).",
         ),
+        Some("antigravity") => {
+            Some("Starts new sessions in Antigravity Auto mode (Native and Terminal-based).")
+        }
         _ => None,
     } {
         options.push((
@@ -262,12 +265,21 @@ pub(super) fn permission_mode_options(
     options
 }
 
-/// Canonical family for agents that offer the per-agent Auto permission mode choice (Claude Code
-/// and Codex, including custom agents that work like them).
+/// Canonical family for agents that offer the per-agent Auto permission mode choice (Claude Code,
+/// Codex and Antigravity, including custom agents that work like them).
+///
+/// CDXC:AgentProviders 2026-11-25 DECISION:
+/// GitHub #755: Native Antigravity started at Ask under Keep default. The user picked "add Auto for
+/// Antigravity in Settings" on top of Keep default following Antigravity's own setting
+/// (2e88d8005). Antigravity has its own Auto mode (approve edits and safe commands, ask before
+/// irreversible actions): Native picks it from the modes `agy acp` advertises, and Terminal-based
+/// launches add `agy --mode auto` (server/src/agents/accept_all.rs `apply_auto_permission_mode`),
+/// never the skip-all `--dangerously-skip-permissions`, which stays Full permissions.
 pub(super) fn auto_permission_family(agent_id: &str, icon: Option<&str>) -> Option<&'static str> {
     let check = |value: &str| match value.trim().to_ascii_lowercase().as_str() {
         "claude" | "claude-code" => Some("claude"),
         "codex" | "codex-cli" => Some("codex"),
+        "antigravity" | "antigravity-cli" | "agy" => Some("antigravity"),
         _ => None,
     };
     check(agent_id).or_else(|| icon.and_then(check))
