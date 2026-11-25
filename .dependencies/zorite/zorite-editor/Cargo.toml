@@ -31,3 +31,16 @@ gpui-bidi = { path = "../gpui-bidi", version = "0.1" }
 # The standalone demo needs a platform backend to open a real window (the `gpui`
 # crate alone has no app entry point in this setup — it's split into
 # `gpui_platform`, same as the host app). Shared workspace spec, one graph.
+# Local change: vendoring dropped the demo's dev-dependencies, so it didn't build and broke
+# `cargo test -p zorite-editor`. A dev-dependency can't come back (cargo then refuses to test
+# the crate from apps/desktop, where it isn't a workspace member), so the backend is optional
+# behind the `demo` feature the example requires: `cargo run -p zorite-editor --example demo
+# --features demo`. Upstream's `os-spellcheck` isn't vendored; the demo runs without spell-check.
+gpui_platform = { workspace = true, optional = true, features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+
+[features]
+demo = ["dep:gpui_platform"]
+
+[[example]]
+name = "demo"
+required-features = ["demo"]

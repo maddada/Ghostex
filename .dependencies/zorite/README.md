@@ -25,6 +25,10 @@ for the block-drag grip and the hover chevrons; and table controls (`caret_table
 
 Also marked `Local change`: `replace_and_mark_text_in_range` converts the input method's selection
 relative to the marked text, so a dead-key accent (`´`, `¨`) no longer leaves the caret inside the
-character (Ghostex #749).
+character (Ghostex #749). The `demo` example needs the `demo` feature and runs without upstream's
+`os-spellcheck`, so a plain `cargo test -p zorite-editor` builds; run the demo from this folder
+with the toolchain `apps/desktop/rust-toolchain.toml` pins (`cargo +<that version> run -p
+zorite-editor --example demo --features demo`). `heading_nested_in_list_item` checks nesting
+against the bare heading instead of upstream's heading numbers.
 
 The Zorite application is GPL and none of its code is here.

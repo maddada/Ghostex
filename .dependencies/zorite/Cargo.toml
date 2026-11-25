@@ -8,3 +8,5 @@ members = ["zorite-editor", "zorite-markdown", "gpui-bidi", "ratex-gpui"]
 
 [workspace.dependencies]
 gpui = { path = "../zed/crates/gpui" }
+# Local change: the zorite-editor demo's platform backend, from the same GPUI checkout.
+gpui_platform = { path = "../zed/crates/gpui_platform" }
