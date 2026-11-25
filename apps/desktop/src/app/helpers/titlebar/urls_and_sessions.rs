@@ -31,6 +31,15 @@ pub(crate) fn cef_parent_native_view(window: &Window) -> Result<*mut std::ffi::c
     Ok(native_view)
 }
 
+/// The address an agent's page may be sent to the default browser at (#762: the toast's External
+/// browser switch and agents' opens with it on): only a web page, so a `file:` or app link an
+/// agent named never reaches the system opener, which would launch it.
+pub(crate) fn default_browser_page_url(value: &str) -> Option<String> {
+    let url = normalize_address(value)?;
+    let lower = url.to_ascii_lowercase();
+    (lower.starts_with("http://") || lower.starts_with("https://")).then_some(url)
+}
+
 pub(crate) fn normalize_address(value: &str) -> Option<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {

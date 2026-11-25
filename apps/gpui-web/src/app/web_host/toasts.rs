@@ -359,6 +359,7 @@ impl GhostexGpuiApp {
         let description = request.subtitle.clone();
         let switch_request = GpuiSwitchRequestToast {
             external_url: request.external_url.clone(),
+            external_browser: request.external_browser == Some(true),
             icon: request.icon.clone(),
             primary_label,
             machine_id,
@@ -571,22 +572,61 @@ impl GhostexGpuiApp {
         self.accept_gpui_switch_request_toast(None, cx)
     }
 
-    pub(crate) fn open_gpui_switch_request_external(&mut self, cx: &mut Context<Self>) -> bool {
-        let url = self
+    /// Flips a visible page toast's External browser switch (#762, Q5026): it is the computer's
+    /// "Agents open pages in" (on = My default browser, off = Ghostex Browser), saved through
+    /// gxserver as the toast's Always is. A page opened here always goes to this browser, so on
+    /// the web page the switch decides where agents' later pages open on the computer.
+    pub(crate) fn toggle_gpui_switch_request_external_browser(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let mut flipped = None;
+        if let Some(toast) = self
             .web_host
             .toasts
             .toasts
-            .iter()
+            .iter_mut()
             .find(|toast| toast.id == GPUI_SWITCH_REQUEST_TOAST_ID)
-            .and_then(|toast| match &toast.action {
-                Some(GpuiAppToastAction::SwitchRequest(sr)) => sr.external_url.clone(),
-                _ => None,
-            });
-        let Some(url) = url else {
+            && let Some(GpuiAppToastAction::SwitchRequest(sr)) = &mut toast.action
+            && sr.external_url.is_some()
+        {
+            sr.external_browser = !sr.external_browser;
+            flipped = Some((sr.external_browser, sr.machine_id.is_none()));
+        }
+        let Some((on, local)) = flipped else {
             return false;
         };
-        self.remove_gpui_app_toast(GPUI_SWITCH_REQUEST_TOAST_ID, cx);
-        crate::app::helpers::gpui_open_external_url(&url, cx);
+        if local {
+            let value = if on {
+                "system-default-browser"
+            } else {
+                "internal-browser"
+            };
+            let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
+                .object()
+                .clone();
+            settings.insert(
+                "agentPreviewBrowser".to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
+            crate::shared_settings::install(settings);
+            cx.spawn(async move |_, _| {
+                let _ = crate::app::gx_store::gx_rpc(
+                    None,
+                    "/api/dispatchRendererCommand",
+                    serde_json::json!({
+                        "action": "updateSettingsPatch",
+                        "payload": {
+                            "patch": { "agentPreviewBrowser": value },
+                            "source": "toast:external-browser",
+                        },
+                    }),
+                )
+                .await;
+            })
+            .detach();
+        }
+        self.sync_web_toasts(cx);
         true
     }
 
@@ -609,7 +649,7 @@ impl GhostexGpuiApp {
             .as_deref()
             .is_some_and(|chord| web_keystroke_matches_chord(&event.keystroke, chord, mac))
         {
-            return self.open_gpui_switch_request_external(cx);
+            return self.toggle_gpui_switch_request_external_browser(cx);
         }
         false
     }

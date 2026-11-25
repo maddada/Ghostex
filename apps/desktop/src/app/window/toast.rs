@@ -186,6 +186,8 @@ pub(crate) struct GpuiSwitchRequestToast {
     pub(crate) machine_id: Option<String>,
     pub(crate) primary_label: String,
     pub(crate) external_url: Option<String>,
+    /// The External browser switch (#762): Open and Always open the page in the default browser.
+    pub(crate) external_browser: bool,
     pub(crate) icon: Option<String>,
     pub(crate) started_at_ms: u64,
     pub(crate) remaining_ms: u64,
@@ -888,28 +890,42 @@ impl GpuiAppToastWindow {
             });
 
         if sr.external_url.is_some() {
+            // CDXC:SwitchRequests 2026-11-26 DECISION: User (Q5026 = A, Q5027 = A, #762): the
+            // Open external button became an External browser switch at the left of the row
+            // (toast-toggle.html). It is "Agents open pages in" (on = My default browser, off =
+            // Ghostex Browser), saved as it flips, and Open and Always honour it. A remote
+            // computer's toast flips it for that toast only: this app saves this computer's
+            // settings. The `openSwitchRequestExternal` hotkey flips it.
             let app_external = self.app.clone();
+            let external_on = sr.external_browser;
             let external_tooltip = match &external_hotkey {
-                Some(hotkey) => format!("Open in default browser ({hotkey})"),
-                None => "Open in default browser".to_string(),
+                Some(hotkey) => format!("Open agents' pages in your default browser ({hotkey})"),
+                None => "Open agents' pages in your default browser".to_string(),
             };
-            let external_button = div()
+            let (track_bg, track_border, knob_bg): (Hsla, Hsla, Hsla) = match (external_on, light) {
+                (true, true) => (
+                    rgb(0x262626).into(),
+                    gpui::transparent_black(),
+                    rgb(0xffffff).into(),
+                ),
+                (true, false) => (
+                    rgb(0xe5e5e5).into(),
+                    gpui::transparent_black(),
+                    rgb(0x171717).into(),
+                ),
+                (false, _) => (secondary_bg, secondary_border, colors.description),
+            };
+            let external_switch = div()
                 .id("ghostex-gpui-switch-request-external")
                 .flex_shrink_0()
                 .h(px(26.0))
-                .px(px(10.0))
-                .rounded(px(6.0))
-                .border_1()
-                .border_color(secondary_border)
-                .bg(secondary_bg)
+                .flex()
+                .items_center()
+                .gap(px(7.0))
                 .text_color(colors.title)
                 .text_size(px(12.0))
                 .font_weight(FontWeight::MEDIUM)
-                .flex()
-                .items_center()
-                .gap(px(5.0))
                 .cursor_pointer()
-                .hover(move |button| button.bg(secondary_hover_bg))
                 .on_hover(cx.listener(|this, hovered, _, cx| {
                     this.set_hovered_switch_button("external", *hovered, cx);
                 }))
@@ -929,12 +945,32 @@ impl GpuiAppToastWindow {
                         let app = app_external.clone();
                         cx.defer(move |cx| {
                             let _ = app.update(cx, |app, cx| {
-                                app.open_gpui_switch_request_external(cx);
+                                app.toggle_gpui_switch_request_external_browser(cx);
                             });
                         });
                     }),
                 )
-                .child("Open external")
+                .child(
+                    div()
+                        .relative()
+                        .flex_shrink_0()
+                        .w(px(26.0))
+                        .h(px(16.0))
+                        .rounded(px(5.0))
+                        .border_1()
+                        .border_color(track_border)
+                        .bg(track_bg)
+                        .child(
+                            div()
+                                .absolute()
+                                .top(px(1.0))
+                                .left(px(if external_on { 11.0 } else { 1.0 }))
+                                .size(px(12.0))
+                                .rounded(px(3.5))
+                                .bg(knob_bg),
+                        ),
+                )
+                .child("External browser")
                 .when(show_external_hotkey, |button| {
                     button.when_some(external_hotkey.clone(), |button, hotkey| {
                         button.child(
@@ -948,8 +984,8 @@ impl GpuiAppToastWindow {
             // CDXC:SwitchRequests 2026-11-26 DECISION: User (Q5021 = B, Q5022 = A, #762): an
             // agent's page open gets "Always" after Open: it opens the page as Open does and turns
             // on "Let agents open and switch pages without asking" (Settings > Browser), so later
-            // page opens come on screen without this toast. Neutral like Open external; Open stays
-            // the one strong button. Not on a remote computer's toast: the setting is read by the
+            // page opens come on screen without this toast. Neutral; Open stays the one strong
+            // button. Not on a remote computer's toast: the setting is read by the
             // gxserver the agent runs on, and this one only saves this computer's settings.
             let always_button = (sr.machine_id.is_none()
                 && matches!(
@@ -1018,7 +1054,8 @@ impl GpuiAppToastWindow {
                         .items_center()
                         .justify_end()
                         .gap(px(6.0))
-                        .child(external_button)
+                        .child(external_switch)
+                        .child(div().flex_1())
                         .child(primary_button)
                         .children(always_button),
                 )

@@ -1834,10 +1834,13 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     // toast is shown, Cmd+Shift+J keeps focusing the sidebar. Open external uses Cmd+Shift+E
     // because Cmd+Shift+O is already bound to New Agent Session (and Ctrl+Shift+X is reserved for
     // strikethrough on Windows/Linux). Both are rebindable here.
+    // CDXC:SwitchRequests 2026-11-26 DECISION: User (Q5026 = A, #762): Open external became the
+    // toast's External browser switch, so `openSwitchRequestExternal` (id kept for saved
+    // bindings) flips that switch; Cmd+Shift+J still presses Open, which honours it.
     HotkeyDefinition {
         id: "acceptSwitchRequestToast",
         title: "Accept Switch Request Toast",
-        description: "Accept the visible switch-request toast (Switch or Open) when an agent asks to change what you are looking at.",
+        description: "Accept the visible switch-request toast (Switch or Open) when an agent asks to change what you are looking at. A page opens in your default browser while the toast's External browser switch is on.",
         default_key: "cmd+shift+j",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
@@ -1846,8 +1849,8 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "openSwitchRequestExternal",
-        title: "Open Switch Request Externally",
-        description: "Open a visible browser switch-request toast in your default external browser instead of Ghostex's built-in Browser.",
+        title: "Toggle External Browser on a Page Toast",
+        description: "Turn the External browser switch on a visible agent page toast on or off. It is Settings > Browser > Agents open pages in: on opens agents' pages in your default browser, off in Ghostex's Browser.",
         default_key: "cmd+shift+e",
         windows_linux_default_key: None,
         alternate_default_keys: &[],

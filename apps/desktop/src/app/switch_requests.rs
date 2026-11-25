@@ -5,9 +5,9 @@
 //! `openBrowser`, `openBrowserPane`, `openPaths`, `openSettings`, and `renameCommand` focus hops)
 //! never steal focus. They appear as a clickable inline pill at the bottom-center of the existing
 //! toast stack (latest wins, 8s auto-dismiss paused on hover, always shown even in Do Not Disturb
-//! or Quiet mode). Browser opens include a second "Open external" button. Hotkeys `Cmd+Shift+J`
-//! (accept) and `Cmd+Shift+X` (open external) work while the toast is visible and are rebindable
-//! in Settings > Hotkeys.
+//! or Quiet mode). Browser opens include an External browser switch (#762: it is "Agents open
+//! pages in"). Hotkeys `Cmd+Shift+J` (accept) and `Cmd+Shift+E` (flip the switch) work while the
+//! toast is visible and are rebindable in Settings > Hotkeys.
 
 use ghostex_gx_core::protocol::{RendererCommand, SwitchRequest};
 use ghostex_gx_core::{MachineId, ProjectKey, SessionKey};
@@ -49,6 +49,7 @@ impl GhostexGpuiApp {
         };
         let switch_request = GpuiSwitchRequestToast {
             external_url: request.external_url.clone(),
+            external_browser: request.external_browser == Some(true),
             icon: request.icon.clone(),
             primary_label,
             machine_id,
@@ -145,6 +146,17 @@ impl GhostexGpuiApp {
         let Some(sr) = self.take_gpui_switch_request_toast(cx) else {
             return false;
         };
+        // The External browser switch is on (#762): the page goes to the default browser. Only a
+        // web address; anything else opens in Ghostex's Browser as Open always did.
+        if sr.external_browser
+            && let Some(page) = sr
+                .external_url
+                .as_deref()
+                .and_then(crate::app::helpers::default_browser_page_url)
+        {
+            gpui_open_external_url(&page, cx);
+            return true;
+        }
         if let Some(remote_machine_id) = sr.machine_id.as_deref() {
             self.perform_remote_switch_request(remote_machine_id, &sr.request, window, cx);
             return true;
@@ -198,23 +210,44 @@ impl GhostexGpuiApp {
         self.accept_gpui_switch_request_toast(None, cx)
     }
 
-    /// Opens a visible browser switch-request toast's URL in the default external browser instead
-    /// of Ghostex's built-in Browser (`Open external` button or `openSwitchRequestExternal`
-    /// hotkey). Returns `true` if a browser switch-request toast was visible and handled.
-    pub(crate) fn open_gpui_switch_request_external(&mut self, cx: &mut Context<Self>) -> bool {
-        let url = self
+    /// Flips a visible page toast's External browser switch (the switch, or the
+    /// `openSwitchRequestExternal` hotkey). On a toast from this computer it saves "Agents open
+    /// pages in" (`agentPreviewBrowser`): on is My default browser, off is Ghostex Browser (#762,
+    /// Q5026). Returns `true` if a page toast was visible.
+    pub(crate) fn toggle_gpui_switch_request_external_browser(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let mut flipped = None;
+        if let Some(toast) = self
             .app_toasts
-            .iter()
+            .iter_mut()
             .find(|toast| toast.id == GPUI_SWITCH_REQUEST_TOAST_ID)
-            .and_then(|toast| match &toast.action {
-                Some(GpuiAppToastAction::SwitchRequest(sr)) => sr.external_url.clone(),
-                _ => None,
-            });
-        let Some(url) = url else {
+            && let Some(GpuiAppToastAction::SwitchRequest(sr)) = &mut toast.action
+            && sr.external_url.is_some()
+        {
+            sr.external_browser = !sr.external_browser;
+            flipped = Some((sr.external_browser, sr.machine_id.is_none()));
+        }
+        let Some((on, local)) = flipped else {
             return false;
         };
-        self.remove_gpui_app_toast(GPUI_SWITCH_REQUEST_TOAST_ID, cx);
-        gpui_open_external_url(&url, cx);
+        if local {
+            let value = if on {
+                "system-default-browser"
+            } else {
+                "internal-browser"
+            };
+            self.handle_gpui_app_modal_update_settings_patch_message(
+                &json!({
+                    "patch": { "agentPreviewBrowser": value },
+                    "source": "toast:external-browser",
+                    "type": "updateSettingsPatch",
+                }),
+                cx,
+            );
+        }
+        self.sync_gpui_app_toast_window(cx);
         true
     }
 

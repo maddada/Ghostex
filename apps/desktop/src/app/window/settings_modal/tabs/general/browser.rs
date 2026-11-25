@@ -38,7 +38,7 @@ fn agents_section(
         s,
         AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING,
         "Let agents open and switch pages without asking",
-        "When an agent opens a page, the Browser shows it right away instead of asking with a toast first. The toast's Always button turns this on.",
+        "When an agent opens a page, it opens right away, where Agents open pages in says, instead of asking with a toast first. The toast's Always button turns this on.",
         false,
         cx,
     ));
@@ -47,7 +47,7 @@ fn agents_section(
         s,
         "agentPreviewBrowser",
         "Agents open pages in",
-        "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here.",
+        "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here. The External browser switch on an agent's page toast sets this too.",
         g.options("AGENT_PREVIEW_BROWSER_OPTIONS"),
         None,
         false,

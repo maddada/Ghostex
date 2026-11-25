@@ -3075,7 +3075,7 @@
     {
       "key": "agentPagesOpenWithoutAsking",
       "title": "Let agents open and switch pages without asking",
-      "subtitle": "When an agent opens a page, the Browser shows it right away instead of asking with a toast first. The toast's Always button turns this on.",
+      "subtitle": "When an agent opens a page, it opens right away, where Agents open pages in says, instead of asking with a toast first. The toast's Always button turns this on.",
       "tab": "browser",
       "tabTitle": "Browser",
       "section": "browserAgents",
@@ -3087,7 +3087,7 @@
     {
       "key": "agentPreviewBrowser",
       "title": "Agents open pages in",
-      "subtitle": "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here.",
+      "subtitle": "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here. The External browser switch on an agent's page toast sets this too.",
       "tab": "browser",
       "tabTitle": "Browser",
       "section": "browserAgents",
@@ -16509,14 +16509,14 @@
     {
       "id": "acceptSwitchRequestToast",
       "title": "Accept Switch Request Toast",
-      "description": "Accept the visible switch-request toast (Switch or Open) when an agent asks to change what you are looking at.",
+      "description": "Accept the visible switch-request toast (Switch or Open) when an agent asks to change what you are looking at. A page opens in your default browser while the toast's External browser switch is on.",
       "defaultKey": "cmd+shift+j",
       "terminalDefaultKey": "cmd+shift+j"
     },
     {
       "id": "openSwitchRequestExternal",
-      "title": "Open Switch Request Externally",
-      "description": "Open a visible browser switch-request toast in your default external browser instead of Ghostex's built-in Browser.",
+      "title": "Toggle External Browser on a Page Toast",
+      "description": "Turn the External browser switch on a visible agent page toast on or off. It is Settings > Browser > Agents open pages in: on opens agents' pages in your default browser, off in Ghostex's Browser.",
       "defaultKey": "cmd+shift+e",
       "terminalDefaultKey": "cmd+shift+e"
     }

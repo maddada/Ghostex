@@ -200,6 +200,11 @@ pub struct SwitchRequest {
     pub session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_url: Option<String>,
+    /// Page opens: whether the computer's "Agents open pages in" (`agentPreviewBrowser`) is My
+    /// default browser, which the toast's External browser switch shows and sets (#762). Absent
+    /// from older servers and on other toasts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_browser: Option<bool>,
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub created_at: String,
 }

@@ -44,16 +44,19 @@ pub(crate) fn is_agent_switch_request_action(action: &str) -> bool {
 /// its payload named, and it goes into the security log (quietly: no bell, no phone) once the app
 /// answered (`record_agent_open` in browser_agent_limits.rs).
 ///
-/// Returns true when `payload` is an agent session's background open, pinned in place.
+/// Returns true when `payload` is an agent session's background open, pinned in place. Any other
+/// agent page open may be marked for the default browser here (`mark_agent_default_browser_open`).
 pub(crate) fn pin_agent_background_browser_open(
     state: &AppState,
     caller: &Principal,
     action: &str,
     payload: &mut Map<String, Value>,
 ) -> bool {
-    if !matches!(action, "openBrowser" | "openBrowserPane")
-        || payload.get("background") != Some(&Value::Bool(true))
-    {
+    if !matches!(action, "openBrowser" | "openBrowserPane") {
+        return false;
+    }
+    if payload.get("background") != Some(&Value::Bool(true)) {
+        mark_agent_default_browser_open(state, caller, payload);
         return false;
     }
     let Some((project_id, _)) = caller_agent_session(state, caller) else {
@@ -83,6 +86,38 @@ pub(crate) fn agent_page_opens_allowed(state: &AppState, action: &str) -> bool {
                 .get(ghostex_settings_catalog::help::AGENT_PAGES_OPEN_WITHOUT_ASKING_SETTING)
                 .and_then(Value::as_bool)
         }) == Some(true)
+}
+
+/// "Agents open pages in" (`agentPreviewBrowser`) is My default browser: the toast's External
+/// browser switch is on.
+pub(crate) fn agent_pages_open_in_default_browser(state: &AppState) -> bool {
+    crate::shared_settings_file::read_shared_settings(&state.paths).and_then(|settings| {
+        settings
+            .get("agentPreviewBrowser")
+            .and_then(Value::as_str)
+            .map(|value| value == "system-default-browser")
+    }) == Some(true)
+}
+
+/// CDXC:SwitchRequests 2026-11-26 DECISION:
+/// User (Q5026 = A, Q5027 = A, #762): the toast's External browser switch is "Agents open pages
+/// in": on is My default browser. With it on and "Let agents open and switch pages without
+/// asking" on, an agent's page open skips the toast (`agent_page_opens_allowed`) and opens in the
+/// default browser, so the payload going to the app says so (`defaultBrowser`, read by the
+/// `OpenBrowser` verb). Decided here, where the caller is known to be an agent session, so the
+/// user's own `ghostex browser open` and opens through the toast are never redirected.
+fn mark_agent_default_browser_open(
+    state: &AppState,
+    caller: &Principal,
+    payload: &mut Map<String, Value>,
+) {
+    payload.remove("defaultBrowser");
+    if caller_agent_session(state, caller).is_some()
+        && agent_page_opens_allowed(state, "openBrowser")
+        && agent_pages_open_in_default_browser(state)
+    {
+        payload.insert("defaultBrowser".to_string(), Value::Bool(true));
+    }
 }
 
 /// Returns `Some((project_id, session_id))` when the caller is an agent session whose switch
@@ -152,6 +187,7 @@ pub(crate) fn emit_focus_session_toast(
         project_id: target_project_id,
         session_id: target_session_id,
         external_url: None,
+        external_browser: None,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     broadcast_switch_request(state, &request);
@@ -377,6 +413,8 @@ pub(crate) fn emit_renderer_command_toast(
         requester_title,
         project_id,
         session_id,
+        external_browser: matches!(action, "openBrowser" | "openBrowserPane")
+            .then(|| agent_pages_open_in_default_browser(state)),
         external_url,
         created_at: chrono::Utc::now().to_rfc3339(),
     };

@@ -1224,7 +1224,7 @@ impl GhostexGpuiApp {
             return self.accept_gpui_switch_request_toast(Some(window), cx);
         }
         if action_id == "openSwitchRequestExternal" {
-            return self.open_gpui_switch_request_external(cx);
+            return self.toggle_gpui_switch_request_external_browser(cx);
         }
         self.handle_gpui_app_modal_sidebar_command(
             serde_json::json!({

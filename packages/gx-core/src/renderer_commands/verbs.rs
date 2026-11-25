@@ -170,6 +170,9 @@ pub enum RendererVerb {
         /// `ghostex browser open --background`: load the page in a tab of its project without
         /// showing it, focusing it or announcing it (#762).
         background: bool,
+        /// gxserver marked an agent's open for the default browser: "Agents open pages in" is My
+        /// default browser and agents may open pages without asking (#762, Q5027).
+        default_browser: bool,
     },
     /// `listBrowserPages`: one project's Browser pages, for the browser tools of an agent in it
     /// (`ghostex browser mcp`).
@@ -558,6 +561,7 @@ fn open_browser(core: &Core, payload: &Value) -> Result<RendererVerb, RendererCo
         url: url.to_string(),
         agent_session: trimmed(payload, "agentSessionId"),
         background: payload.get("background").and_then(Value::as_bool) == Some(true),
+        default_browser: payload.get("defaultBrowser").and_then(Value::as_bool) == Some(true),
     })
 }
 

@@ -52,7 +52,7 @@ impl GhostexGpuiApp {
                     return;
                 }
                 if action_id == "openSwitchRequestExternal" {
-                    let _ = self.open_gpui_switch_request_external(cx);
+                    let _ = self.toggle_gpui_switch_request_external_browser(cx);
                     return;
                 }
                 if gpui_focused_chat_hotkey_action_id(action_id) {

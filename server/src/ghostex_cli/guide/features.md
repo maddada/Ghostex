@@ -387,7 +387,13 @@ view from the strip.
   token. Chromium's
   remote DevTools port stays closed, so other programs on the computer cannot
   drive Ghostex's pages, unless Settings > Debugging > Show debug UI controls
-  was on when Ghostex started. Its tabs sit in the view panel's tab strip, in
+  was on when Ghostex started. When an agent opens a page, a toast asks first:
+  **Open** shows it, **Always** shows it and lets agents open pages without
+  asking from then on, and the **External browser** switch at the toast's left
+  (Cmd+Shift+E) sends Open, Always and later agent pages to your default
+  browser instead. The switch is Settings > Browser > Agents open pages in, and
+  Always is Let agents open and switch pages without asking, which only you can
+  turn on. The phone's toast has the same switch and Always. Its tabs sit in the view panel's tab strip, in
   the same row as the view tabs, and stay there while you are in another view, so clicking one comes
   back to Browser with that tab in front. Each tab shows its page icon and
   title, closes with its own x or a middle click, and drags anywhere along the

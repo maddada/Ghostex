@@ -124,6 +124,7 @@ impl GhostexGpuiApp {
                         project_id: Some(session.key.project_id.clone()),
                         session_id: Some(session.key.session_id.clone()),
                         external_url: None,
+                        external_browser: None,
                         created_at: command.created_at.clone(),
                     };
                     self.show_gpui_switch_request_toast(session.key.machine.clone(), request, cx);
@@ -257,7 +258,23 @@ impl GhostexGpuiApp {
                 url,
                 agent_session,
                 background,
+                default_browser,
             } => {
+                // gxserver marks an agent's open this way only when the user set "Agents open
+                // pages in" to My default browser (the toast's External browser switch) and let
+                // agents open pages without asking (#762, Q5027).
+                if default_browser
+                    && !background
+                    && let Some(page) = crate::app::helpers::default_browser_page_url(&url)
+                {
+                    crate::app::helpers::gpui_open_external_url(&page, cx);
+                    return Ok(json!({
+                        "accepted": true,
+                        "action": action,
+                        "defaultBrowser": true,
+                        "ok": true,
+                    }));
+                }
                 let mut payload = json!({
                     "reuse": reuse,
                     "type": GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE,
